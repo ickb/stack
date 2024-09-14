@@ -12,12 +12,13 @@ import {
   I8Header,
   I8Script,
   addCells,
+  addCkbChange,
   addWitnessPlaceholder,
   binarySearch,
+  calculateTxFee,
   capacitySifter,
   chainConfigFrom,
   ckbDelta,
-  hex,
   isChain,
   isDaoDeposit,
   isDaoWithdrawalRequest,
@@ -25,11 +26,13 @@ import {
   lockExpanderFrom,
   maturityDiscriminator,
   since,
+  txSize,
   type ChainConfig,
   type ConfigAdapter,
 } from "@ickb/lumos-utils";
 import {
   ICKB_SOFT_CAP_PER_DEPOSIT,
+  addIckbUdtChange,
   addOwnedWithdrawalRequestsChange,
   addReceiptDepositsChange,
   addWithdrawalRequestGroups,
@@ -47,7 +50,6 @@ import {
   ickbRequestWithdrawalFrom,
   ickbSifter,
   limitOrderScript,
-  orderFrom,
   orderMelt,
   orderSatisfy,
   orderSifter,
@@ -56,16 +58,12 @@ import {
   type ExtendedDeposit,
   type MyOrder,
   type Order,
-  type OrderRatio,
 } from "@ickb/v1-core";
 
 async function main() {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
   if (!isChain(CHAIN)) {
     throw Error("Invalid env CHAIN: " + CHAIN);
-  }
-  if (CHAIN === "mainnet") {
-    throw Error("Not yet ready for mainnet...");
   }
   if (!BOT_PRIVATE_KEY) {
     throw Error("Empty env BOT_PRIVATE_KEY");
@@ -113,12 +111,12 @@ async function main() {
         receipts,
         wrGroups: matureWrGroups,
       });
-      const availableCkbBalance = ckbDelta(baseTx, 0n, config);
+      const availableCkbBalance = ckbDelta(baseTx, config);
       const ickbUdtBalance = ickbDelta(baseTx, config);
       const unavailableFunds = base({
         wrGroups: notMatureWrGroups,
       });
-      const unavailableCkbBalance = ckbDelta(unavailableFunds, 0n, config);
+      const unavailableCkbBalance = ckbDelta(unavailableFunds, config);
       const ckbBalance = availableCkbBalance + unavailableCkbBalance;
 
       executionLog.balance = {
@@ -147,7 +145,7 @@ async function main() {
           origins,
           matches,
         );
-        const ckbGain = ckbDelta(onlyOrders, 0n, config);
+        const ckbGain = ckbDelta(onlyOrders, config);
         const ickbUdtGain = ickbDelta(onlyOrders, config);
 
         const tx = finalize(
@@ -167,7 +165,7 @@ async function main() {
               ? negInf
               : ickb2Ckb(ickbUdtGain, tipHeader) +
                 ckbGain -
-                3n * ckbDelta(tx, 0n, config); //tx fee
+                3n * ckbDelta(tx, config); //tx fee
         return Object.freeze({ ...combination, tx, gain });
       }
 
@@ -196,7 +194,7 @@ async function main() {
           withdrawals,
         };
         executionLog.txFee = {
-          fee: fmtCkb(ckbDelta(tx, 0n, config)),
+          fee: fmtCkb(ckbDelta(tx, config)),
           feeRate,
         };
 
@@ -218,7 +216,7 @@ async function main() {
     executionLog.ElapsedSeconds = Math.round(
       (new Date().getTime() - startTime.getTime()) / 1000,
     );
-    console.log(JSON.stringify(executionLog, replacer, " ") + ",");
+    console.log(JSON.stringify(executionLog, replacer, " "));
   }
 }
 
@@ -474,7 +472,7 @@ function convertAttempt(
   tx: TransactionSkeletonType,
   depositAmount: bigint,
   ickbPool: Readonly<MyExtendedDeposit[]>,
-  tipHeader: Readonly<I8Header>,
+  _tipHeader: Readonly<I8Header>,
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
@@ -500,14 +498,22 @@ function convertAttempt(
     }
   }
 
-  tx = addChange(
-    tx,
-    quantity > 0 && !isCkb2Udt ? 0n : 1000n * CKB,
-    tipHeader,
-    feeRate,
-    account,
-    chainConfig,
-  );
+  let freeCkb: bigint, freeIckbUdt: bigint;
+  ({ tx, freeCkb, freeIckbUdt } = addChange(tx, feeRate, account, chainConfig));
+
+  if (freeIckbUdt < 0n) {
+    return TransactionSkeleton();
+  }
+
+  if (quantity > 0 && !isCkb2Udt) {
+    if (freeCkb < 0n) {
+      return TransactionSkeleton();
+    }
+  } else {
+    if (freeCkb < 1000n * CKB) {
+      return TransactionSkeleton();
+    }
+  }
 
   if (quantity > 0 && tx.outputs.size > 64) {
     return TransactionSkeleton();
@@ -518,73 +524,32 @@ function convertAttempt(
 
 function addChange(
   tx: TransactionSkeletonType,
-  reservedCapacity: bigint,
-  tipHeader: Readonly<I8Header>,
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
 ) {
   const { lockScript: accountLock, preSigner: addPlaceholders } = account;
   const { config } = chainConfig;
-
-  // Add as usual receipts and owner cells
+  let freeCkb, freeIckbUdt;
   tx = addReceiptDepositsChange(tx, accountLock, config);
   tx = addOwnedWithdrawalRequestsChange(tx, accountLock, config);
-
-  // Add ickb udt and ckb change cells as dual ratio liquidity provider limit order
-  const freeIckbUdt = ickbDelta(tx, config);
-  if (freeIckbUdt < 0n) {
-    return TransactionSkeleton();
-  }
-  const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(tipHeader);
-  const ckbToUdt: OrderRatio = {
-    ckbMultiplier,
-    // Ask for a 0.05% fee for providing this liquidity
-    udtMultiplier: udtMultiplier - (5n * udtMultiplier) / 10000n,
-  };
-  const udtToCkb: OrderRatio = {
-    ckbMultiplier,
-    // Ask for a 0.05% fee for providing this liquidity
-    udtMultiplier: udtMultiplier + (5n * udtMultiplier) / 10000n,
-  };
-
-  let { master, order } = orderFrom(
+  ({ tx, freeIckbUdt } = addIckbUdtChange(tx, accountLock, config));
+  ({ tx, freeCkb } = addCkbChange(
+    tx,
     accountLock,
+    (txWithDummyChange: TransactionSkeletonType) => {
+      const baseFee = calculateTxFee(
+        txSize(addPlaceholders(txWithDummyChange)),
+        feeRate,
+      );
+      // Use a fee that is multiple of N=1249
+      const N = 1249n;
+      return ((baseFee + (N - 1n)) / N) * N;
+    },
     config,
-    0n,
-    freeIckbUdt,
-    ckbToUdt,
-    udtToCkb,
-  );
+  ));
 
-  if (reservedCapacity > 0) {
-    master = I8Cell.from({
-      ...master,
-      capacity: hex(reservedCapacity + BigInt(master.cellOutput.capacity)),
-    });
-  }
-
-  const txWithPlaceholders = addPlaceholders(
-    addCells(tx, "append", [], [master, order]),
-  );
-
-  const freeCkb = ckbDelta(txWithPlaceholders, feeRate, config);
-  if (freeCkb < 0n) {
-    return TransactionSkeleton();
-  }
-
-  if (freeCkb > 0n) {
-    order = I8Cell.from({
-      ...order,
-      capacity: hex(freeCkb + BigInt(order.cellOutput.capacity)),
-    });
-    tx = addPlaceholders(addCells(tx, "append", [], [master, order]));
-  } else {
-    //freeCkb == 0n
-    tx = txWithPlaceholders;
-  }
-
-  return tx;
+  return { tx, freeCkb, freeIckbUdt };
 }
 
 function base({
@@ -774,6 +739,7 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
   }
 
   function signer(tx: TransactionSkeletonType) {
+    tx = preSigner(tx);
     tx = prepareSigningEntries(tx, { config });
     const message = tx.get("signingEntries").get(0)!.message; //How to improve in case of multiple locks?
     const sig = key.signRecoverable(message!, privateKey);
@@ -792,3 +758,77 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
 }
 
 main();
+
+//Unused functions
+
+//Notes:
+// - Adding change cells as liquidity provider orders has a little issue: if no more orders come or the bot is stopped,
+//   and enough time passes, the bot may lose some capital as iCKB value increase and other bots
+//   fulfill the now under-valued price. Maybe it will be made available again under a flag.
+// function addLiquidityProviderChange(
+//   tx: TransactionSkeletonType,
+//   reservedCapacity: bigint,
+//   tipHeader: Readonly<I8Header>,
+//   feeRate: bigint,
+//   account: ReturnType<typeof secp256k1Blake160>,
+//   chainConfig: ChainConfig,
+// ) {
+//   const { lockScript: accountLock, preSigner: addPlaceholders } = account;
+//   const { config } = chainConfig;
+
+//   // Add ickb udt and ckb change cells as dual ratio liquidity provider limit order
+//   const freeIckbUdt = ickbDelta(tx, config);
+//   if (freeIckbUdt < 0n) {
+//     return TransactionSkeleton();
+//   }
+//   const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(tipHeader);
+//   const ckbToUdt: OrderRatio = {
+//     ckbMultiplier,
+//     // Ask for a 0.05% fee for providing this liquidity
+//     udtMultiplier: udtMultiplier - (5n * udtMultiplier) / 10000n,
+//   };
+//   const udtToCkb: OrderRatio = {
+//     ckbMultiplier,
+//     // Ask for a 0.05% fee for providing this liquidity
+//     udtMultiplier: udtMultiplier + (5n * udtMultiplier) / 10000n,
+//   };
+
+//   let { master, order } = orderFrom(
+//     accountLock,
+//     config,
+//     0n,
+//     freeIckbUdt,
+//     ckbToUdt,
+//     udtToCkb,
+//   );
+
+//   if (reservedCapacity > 0) {
+//     master = I8Cell.from({
+//       ...master,
+//       capacity: hex(reservedCapacity + BigInt(master.cellOutput.capacity)),
+//     });
+//   }
+
+//   const txWithPlaceholders = addPlaceholders(
+//     addCells(tx, "append", [], [master, order]),
+//   );
+
+//   const txfee = calculateTxFee(txSize(txWithPlaceholders), feeRate);
+//   const freeCkb = ckbDelta(txWithPlaceholders, config) - txfee;
+//   if (freeCkb < 0n) {
+//     return TransactionSkeleton();
+//   }
+
+//   if (freeCkb > 0n) {
+//     order = I8Cell.from({
+//       ...order,
+//       capacity: hex(freeCkb + BigInt(order.cellOutput.capacity)),
+//     });
+//     tx = addPlaceholders(addCells(tx, "append", [], [master, order]));
+//   } else {
+//     //freeCkb == 0n
+//     tx = txWithPlaceholders;
+//   }
+
+//   return tx;
+// }
