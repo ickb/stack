@@ -1,5 +1,9 @@
 # iCKB v1 bot
 
+Currently the Bot is able to fully use only a single deposit worth of capital. More capital will not create issues, just it'll not be used effectively.
+
+**Rule of thumb**: Initial bot funding capital should be between 125k CKB and 135k CKB.
+
 ## Run the limit order fulfillment bot on testnet
 
 1. Download this repo in a folder of your choice:  
