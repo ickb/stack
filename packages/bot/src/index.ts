@@ -137,6 +137,18 @@ async function main() {
       };
       executionLog.ratio = ickbExchangeRatio(tipHeader);
 
+      const standardDeposit = ckbSoftCapPerDeposit(tipHeader);
+      const minCKB = (21n * standardDeposit) / 20n;
+
+      if (ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader) <= minCKB) {
+        executionLog.error =
+          "The bot must have more than " +
+          fmtCkb(minCKB) +
+          " CKB worth of capital to be able to operate, shutting down...";
+        console.log(JSON.stringify(executionLog, replacer, " "));
+        return;
+      }
+
       function evaluate(combination: Combination) {
         let { i, j, origins, matches } = combination;
         const onlyOrders = addCells(
@@ -172,8 +184,8 @@ async function main() {
       const { tx, matches } = bestPartialFilling(
         orders,
         evaluate,
-        ckbSoftCapPerDeposit(tipHeader) / 10n,
-        ICKB_SOFT_CAP_PER_DEPOSIT / 10n,
+        standardDeposit / 100n,
+        ICKB_SOFT_CAP_PER_DEPOSIT / 100n,
       );
       if (isPopulated(tx)) {
         // console.log(JSON.stringify(tx, undefined, 2));
@@ -371,23 +383,38 @@ function finalize(
   //58 = 64 - 6, 6 are the estimated change cells added later
   const daoLimit = 58 - tx.outputs.size;
 
-  //Keep most balance in SUDT
-  //Ideally keep a CKB balance between one and three deposits, with two deposits being the perfect spot
+  //Keep most balance in UDT
+  //Ideally keep a CKB balance between 2k CKB and 120k CKB
   let isCkb2Udt = true;
   let maxAmount = 0n;
   const standardDeposit = ckbSoftCapPerDeposit(tipHeader);
   if (daoLimit <= 0) {
     //Do nothing...
-  } else if (ckbBalance < standardDeposit * 2n) {
+  } else if (ckbBalance < 2000n * CKB) {
     isCkb2Udt = false;
-    maxAmount = ckb2Ickb(standardDeposit * 2n - ckbBalance, tipHeader);
-  } else if (ckbBalance > standardDeposit * 3n) {
+    maxAmount = ckb2Ickb(standardDeposit, tipHeader);
+  } else if (ckbBalance >= (21n * standardDeposit) / 20n) {
     isCkb2Udt = true;
-    maxAmount = ckbBalance - 2n * standardDeposit;
+    maxAmount = standardDeposit;
   }
 
+  // //Keep most balance in UDT
+  // //Ideally keep a CKB balance between one and three deposits, with two deposits being the perfect spot
+  // let isCkb2Udt = true;
+  // let maxAmount = 0n;
+  // const standardDeposit = ckbSoftCapPerDeposit(tipHeader);
+  // if (daoLimit <= 0) {
+  //   //Do nothing...
+  //   } else if (ckbBalance < standardDeposit * 2n) {
+  //   isCkb2Udt = false;
+  //   maxAmount = ckb2Ickb(standardDeposit * 2n - ckbBalance, tipHeader);
+  // } else if (ckbBalance > standardDeposit * 3n) {
+  //   isCkb2Udt = true;
+  //   maxAmount = ckbBalance - 2n * standardDeposit;
+  // }
+
   // //Keep most balance in CKB
-  // //Ideally keep a SUDT balance between one and three deposits, with two deposits being the perfect spot
+  // //Ideally keep a UDT balance between one and three deposits, with two deposits being the perfect spot
   // const ickbUdtBalance = a[ickbMark].estimated;
   // if (daoLimit <= 0) {
   //     //Do nothing...
