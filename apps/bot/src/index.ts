@@ -103,6 +103,8 @@ async function main() {
         feeRate,
       } = await getL1State(account, chainConfig);
 
+      // console.log(JSON.stringify(orders, replacer, " "));
+
       // Calculate balances and baseTx
       const baseTx = base({
         capacities,
@@ -757,7 +759,7 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
     args: key.publicKeyToBlake160(publicKey),
   });
 
-  const address = encodeToAddress(lockScript);
+  const address = encodeToAddress(lockScript, { config });
 
   const expander = lockExpanderFrom(lockScript);
 
