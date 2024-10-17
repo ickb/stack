@@ -19,6 +19,7 @@ import {
   capacitySifter,
   chainConfigFrom,
   ckbDelta,
+  hex,
   isChain,
   isDaoDeposit,
   isDaoWithdrawalRequest,
@@ -59,6 +60,7 @@ import {
   type MyOrder,
   type Order,
 } from "@ickb/v1-core";
+import type { Cell, Transaction } from "@ckb-lumos/base";
 
 async function main() {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
@@ -618,22 +620,25 @@ async function getL1State(
   const tipHeaderPromise = rpc.getTipHeader();
 
   // Prefetch headers
-  const wanted = new Set<string>();
+  const wantedHeaders = new Set<string>();
   const deferredGetHeader = (blockNumber: string) => {
-    wanted.add(blockNumber);
+    wantedHeaders.add(blockNumber);
     return headerPlaceholder;
   };
-  const { notIckbs } = ickbSifter(
-    mixedCells,
-    expander,
-    deferredGetHeader,
-    config,
-  );
-  const headersPromise = getHeadersByNumber(wanted, chainConfig);
+  ickbSifter(mixedCells, expander, deferredGetHeader, config);
+  const headersPromise = getHeadersByNumber(wantedHeaders, chainConfig);
 
-  // Do potentially costly operations
-  const { capacities, notCapacities } = capacitySifter(notIckbs, expander);
-  const { myOrders, orders } = orderSifter(notCapacities, expander, config);
+  // Prefetch txs outputs
+  const wantedTxsOutputs = new Set<string>();
+  const deferredGetTxsOutputs = (txHash: string) => {
+    wantedTxsOutputs.add(txHash);
+    return [];
+  };
+  orderSifter(mixedCells, expander, deferredGetTxsOutputs, config);
+  const txsOutputsPromise = getTxsOutputs(wantedTxsOutputs, chainConfig);
+
+  // Sift capacities
+  const { capacities, notCapacities } = capacitySifter(mixedCells, expander);
 
   // Await for headers
   const headers = await headersPromise;
@@ -644,8 +649,9 @@ async function getL1State(
     receipts,
     withdrawalRequestGroups,
     ickbPool: pool,
+    notIckbs,
   } = ickbSifter(
-    mixedCells,
+    notCapacities,
     expander,
     (blockNumber) => headers.get(blockNumber)!,
     config,
@@ -668,6 +674,17 @@ async function getL1State(
     chain === "devnet" ? undefined : { length: 16, index: 3, number: 0 };
   // Sort the ickbPool based on the tip header
   let ickbPool = ickbPoolSifter(pool, tipHeader, minLock, maxLock);
+
+  // Await for txsOutputs
+  const txsOutputs = await txsOutputsPromise;
+
+  // Sift through Orders
+  const { myOrders, orders } = orderSifter(
+    notIckbs,
+    expander,
+    (txHash) => txsOutputs.get(txHash) ?? [],
+    config,
+  );
 
   return {
     capacities,
@@ -699,6 +716,55 @@ async function getMixedCells(
     )
   ).flat();
 }
+
+async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
+  const { rpc } = chainConfig;
+
+  const result = new Map<string, Readonly<Cell[]>>();
+  const batch = rpc.createBatchRequest();
+  for (const txHash of txHashes) {
+    const outputs = _knownTxsOutputs.get(txHash);
+    if (outputs !== undefined) {
+      result.set(txHash, outputs);
+      continue;
+    }
+    batch.add("getTransaction", txHash);
+  }
+
+  if (batch.length === 0) {
+    return _knownTxsOutputs;
+  }
+
+  for (const tx of (await batch.exec()).map(
+    ({ transaction: tx }: { transaction: Transaction }) => tx,
+  )) {
+    result.set(
+      tx.hash!,
+      Object.freeze(
+        tx.outputs.map(({ lock, type, capacity }, index) =>
+          Object.freeze(<Cell>{
+            cellOutput: Object.freeze({
+              lock: Object.freeze(lock),
+              type: Object.freeze(type),
+              capacity: Object.freeze(capacity),
+            }),
+            data: Object.freeze(tx.outputsData[index] ?? "0x"),
+            outPoint: Object.freeze({
+              txHash: tx.hash!,
+              index: hex(index),
+            }),
+          }),
+        ),
+      ),
+    );
+  }
+
+  const frozenResult = Object.freeze(result);
+  _knownTxsOutputs = frozenResult;
+  return frozenResult;
+}
+
+let _knownTxsOutputs = Object.freeze(new Map<string, Readonly<Cell[]>>());
 
 async function getHeadersByNumber(
   wanted: Set<string>,
