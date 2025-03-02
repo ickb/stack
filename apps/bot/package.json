@@ -1,7 +1,15 @@
 {
-  "name": "@ickb/v1-bot",
-  "version": "1.4.2",
+  "name": "@ickb/bot",
+  "version": "1.4.3",
   "description": "A bot that fulfills iCKB limit orders",
+  "author": "phroi",
+  "license": "MIT",
+  "private": false,
+  "homepage": "https://github.com/ickb/bot",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ickb/bot.git"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node --env-file=env/${CHAIN}/.env dist/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json"
@@ -10,9 +18,14 @@
     "/dist",
     "/src"
   ],
-  "keywords": [],
-  "author": "phroi",
-  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/node": "^22.13.8",
+    "eslint": "^9.21.0",
+    "prettier": "^3.5.2",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.25.0"
+  },
   "dependencies": {
     "@ckb-lumos/base": "^0.23.0",
     "@ckb-lumos/ckb-indexer": "^0.23.0",
@@ -23,14 +36,5 @@
     "@ckb-lumos/helpers": "^0.23.0",
     "@ickb/lumos-utils": "1.4.2",
     "@ickb/v1-core": "1.4.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.7.6",
-    "typescript": "next",
-    "eslint": "^9.12.0",
-    "@typescript-eslint/eslint-plugin": "canary",
-    "@typescript-eslint/parser": "canary",
-    "prettier": "^3.3.3"
-  },
-  "packageManager": "pnpm@9.12.2+sha256.2ef6e547b0b07d841d605240dce4d635677831148cd30f6d564b8f4f928f73d2"
+  }
 }
