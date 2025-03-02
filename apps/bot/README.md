@@ -48,7 +48,7 @@ RPC_URL=http://127.0.0.1:8114/
 
 ```bash
 export CHAIN=testnet;
-pnpm run start;
+pnpm run forcestart;
 ```
 
 ## Licensing
