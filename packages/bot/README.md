@@ -1,4 +1,4 @@
-# iCKB v1 bot
+# iCKB bot
 
 Currently the Bot is able to fully use only a single deposit worth of capital. More capital will not create issues, just it'll not be used effectively.
 
@@ -9,13 +9,13 @@ Currently the Bot is able to fully use only a single deposit worth of capital. M
 1. Download this repo in a folder of your choice:  
 
 ```bash
-git clone https://github.com/ickb/v1-bot.git
+git clone https://github.com/ickb/bot.git
 ```
 
 2. Enter into the repo folder:
 
 ```bash
-cd v1-bot
+cd bot
 ```
 
 3. Install dependencies:
@@ -53,4 +53,4 @@ pnpm run start;
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/v1-bot) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/bot) and it is released under the [MIT License](./LICENSE).
