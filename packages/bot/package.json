@@ -10,9 +10,11 @@
     "type": "git",
     "url": "git://github.com/ickb/bot.git"
   },
+  "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node --env-file=env/${CHAIN}/.env dist/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json"
+    "start": "node --env-file=env/${CHAIN}/.env dist/esm/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
+    "forcestart": "while true; do pnpm start; sleep 10; done"
   },
   "files": [
     "/dist",
