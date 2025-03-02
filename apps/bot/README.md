@@ -53,4 +53,4 @@ pnpm run start;
 
 ## Licensing
 
-The license for this repository is the MIT License, see the [`LICENSE`](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/v1-bot) and it is released under the [MIT License](./LICENSE).
