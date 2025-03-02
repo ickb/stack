@@ -228,10 +228,11 @@ async function main() {
         continue;
       }
     } catch (e) {
-      if (e) {
-        executionLog.error = e;
+      if (e instanceof Object && "stack" in e) {
+        /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
+        executionLog.error = { ...e, stack: e.stack ?? "" };
       } else {
-        executionLog.message = "Empty";
+        executionLog.error = e ?? "Empty Error";
       }
     }
     executionLog.ElapsedSeconds = Math.round(
