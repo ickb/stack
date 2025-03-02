@@ -60,10 +60,13 @@ import {
   type MyOrder,
   type Order,
 } from "@ickb/v1-core";
-import type { Cell, Transaction } from "@ckb-lumos/base";
+import type { Cell, Header, Transaction } from "@ckb-lumos/base";
 
 async function main() {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
+  if (!CHAIN) {
+    throw Error("Invalid env CHAIN: Empty");
+  }
   if (!isChain(CHAIN)) {
     throw Error("Invalid env CHAIN: " + CHAIN);
   }
@@ -84,12 +87,13 @@ async function main() {
   const account = secp256k1Blake160(BOT_PRIVATE_KEY, config);
   const sleepInterval = Number(BOT_SLEEP_INTERVAL) * 1000;
 
-  while (true) {
+  for (;;) {
     await new Promise((r) => setTimeout(r, 2 * Math.random() * sleepInterval));
     console.log();
 
-    let executionLog: any = {};
-    let startTime = new Date();
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const executionLog: Record<string, any> = {};
+    const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
     try {
       const {
@@ -147,14 +151,14 @@ async function main() {
       if (ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader) <= minCKB) {
         executionLog.error =
           "The bot must have more than " +
-          fmtCkb(minCKB) +
+          String(fmtCkb(minCKB)) +
           " CKB worth of capital to be able to operate, shutting down...";
         console.log(JSON.stringify(executionLog, replacer, " "));
         return;
       }
 
       function evaluate(combination: Combination) {
-        let { i, j, origins, matches } = combination;
+        const { i, j, origins, matches } = combination;
         const onlyOrders = addCells(
           TransactionSkeleton(),
           "append",
@@ -222,9 +226,9 @@ async function main() {
       } else {
         continue;
       }
-    } catch (e: any) {
+    } catch (e) {
       if (e) {
-        executionLog.error = { ...e, stack: e.stack ?? "" };
+        executionLog.error = e;
       } else {
         executionLog.message = "Empty";
       }
@@ -246,14 +250,14 @@ function replacer(_: unknown, value: unknown) {
 
 const negInf = -1n * (1n << 64n);
 
-type Combination = {
+interface Combination {
   i: number;
   j: number;
-  origins: Readonly<I8Cell[]>;
-  matches: Readonly<I8Cell[]>;
+  origins: readonly I8Cell[];
+  matches: readonly I8Cell[];
   tx: TransactionSkeletonType;
   gain: bigint;
-};
+}
 
 function bestPartialFilling(
   orders: Order[],
@@ -266,8 +270,8 @@ function bestPartialFilling(
 
   const alreadyVisited = new Map<string, Combination>();
   const from = (i: number, j: number): Combination => {
-    let key = `${i}-${j}`;
-    let cached = alreadyVisited.get(key);
+    const key = `${String(i)}-${String(j)}`;
+    const cached = alreadyVisited.get(key);
     if (cached) {
       return cached;
     }
@@ -344,7 +348,7 @@ function partialsFrom(
       let match: I8Cell;
       let isFulfilled = false;
 
-      let new_origins = Object.freeze(origins.concat([o.cell]));
+      const new_origins = Object.freeze(origins.concat([o.cell]));
       while (!isFulfilled) {
         ckbAllowance += ckbAllowanceStep;
         udtAllowance += udtAllowanceStep;
@@ -362,9 +366,9 @@ function partialsFrom(
 
       origins = new_origins;
       fulfilled = matches;
-    } catch (e: any) {
+    } catch (e) {
       // Skip orders whose ckbMinMatch is too high to be matched by base allowance Step
-      if (!e || e.message !== errorAllowanceTooLow) {
+      if (!(e instanceof Error) || e.message !== errorAllowanceTooLow) {
         throw e;
       }
     }
@@ -450,7 +454,7 @@ function convert(
   isCkb2Udt: boolean,
   maxAmount: bigint,
   depositAmount: bigint,
-  deposits: Readonly<ExtendedDeposit[]>,
+  deposits: readonly ExtendedDeposit[],
   tipHeader: Readonly<I8Header>,
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
@@ -502,7 +506,7 @@ function convertAttempt(
   maxAmount: bigint,
   tx: TransactionSkeletonType,
   depositAmount: bigint,
-  ickbPool: Readonly<MyExtendedDeposit[]>,
+  ickbPool: readonly MyExtendedDeposit[],
   _tipHeader: Readonly<I8Header>,
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
@@ -517,10 +521,11 @@ function convertAttempt(
       }
       tx = ickbDeposit(tx, quantity, depositAmount, config);
     } else {
-      if (ickbPool.length < quantity) {
+      const d = ickbPool[quantity - 1];
+      if (ickbPool.length < quantity || !d) {
         return TransactionSkeleton();
       }
-      maxAmount -= ickbPool[quantity - 1].ickbCumulative;
+      maxAmount -= d.ickbCumulative;
       if (maxAmount < 0n) {
         return TransactionSkeleton();
       }
@@ -653,7 +658,7 @@ async function getL1State(
   } = ickbSifter(
     notCapacities,
     expander,
-    (blockNumber) => headers.get(blockNumber)!,
+    (blockNumber) => headers.get(blockNumber) ?? headerPlaceholder,
     config,
   );
 
@@ -662,7 +667,13 @@ async function getL1State(
   const { mature: matureWrGroups, notMature: notMatureWrGroups } =
     maturityDiscriminator(
       withdrawalRequestGroups,
-      (g) => g.ownedWithdrawalRequest.cellOutput.type![since],
+      (g) => {
+        const type = g.ownedWithdrawalRequest.cellOutput.type;
+        if (!type) {
+          return "0x0";
+        }
+        return type[since];
+      },
       tipHeader,
     );
 
@@ -673,7 +684,7 @@ async function getL1State(
   const maxLock =
     chain === "devnet" ? undefined : { length: 16, index: 3, number: 0 };
   // Sort the ickbPool based on the tip header
-  let ickbPool = ickbPoolSifter(pool, tipHeader, minLock, maxLock);
+  const ickbPool = ickbPoolSifter(pool, tipHeader, minLock, maxLock);
 
   // Await for txsOutputs
   const txsOutputs = await txsOutputsPromise;
@@ -720,7 +731,7 @@ async function getMixedCells(
 async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
   const { rpc } = chainConfig;
 
-  const result = new Map<string, Readonly<Cell[]>>();
+  const result = new Map<string, readonly Cell[]>();
   const batch = rpc.createBatchRequest();
   for (const txHash of txHashes) {
     const outputs = _knownTxsOutputs.get(txHash);
@@ -738,11 +749,15 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
   for (const tx of (await batch.exec()).map(
     ({ transaction: tx }: { transaction: Transaction }) => tx,
   )) {
+    const txHash = tx.hash;
+    if (!txHash) {
+      throw Error("Empty tx hash");
+    }
     result.set(
-      tx.hash!,
+      txHash,
       Object.freeze(
         tx.outputs.map(({ lock, type, capacity }, index) =>
-          Object.freeze(<Cell>{
+          Object.freeze({
             cellOutput: Object.freeze({
               lock: Object.freeze(lock),
               type: Object.freeze(type),
@@ -750,10 +765,10 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
             }),
             data: Object.freeze(tx.outputsData[index] ?? "0x"),
             outPoint: Object.freeze({
-              txHash: tx.hash!,
+              txHash: txHash,
               index: hex(index),
             }),
-          }),
+          } as Cell),
         ),
       ),
     );
@@ -764,7 +779,7 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
   return frozenResult;
 }
 
-let _knownTxsOutputs = Object.freeze(new Map<string, Readonly<Cell[]>>());
+let _knownTxsOutputs = Object.freeze(new Map<string, readonly Cell[]>());
 
 async function getHeadersByNumber(
   wanted: Set<string>,
@@ -787,7 +802,9 @@ async function getHeadersByNumber(
     return _knownHeaders;
   }
 
-  for (const h of await batch.exec()) {
+  const headers = (await batch.exec()) as Header[];
+
+  for (const h of headers) {
     result.set(h.number, I8Header.from(h));
   }
 
@@ -821,6 +838,7 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
   const publicKey = key.privateToPublic(privateKey);
 
   const lockScript = I8Script.from({
+    /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
     ...config.defaultScript("SECP256K1_BLAKE160"),
     args: key.publicKeyToBlake160(publicKey),
   });
@@ -836,8 +854,11 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
   function signer(tx: TransactionSkeletonType) {
     tx = preSigner(tx);
     tx = prepareSigningEntries(tx, { config });
-    const message = tx.get("signingEntries").get(0)!.message; //How to improve in case of multiple locks?
-    const sig = key.signRecoverable(message!, privateKey);
+    const message = tx.get("signingEntries").get(0)?.message;
+    if (!message) {
+      throw Error("Empty message to sign");
+    }
+    const sig = key.signRecoverable(message, privateKey);
 
     return sealTransaction(tx, [sig]);
   }
@@ -852,78 +873,4 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
   };
 }
 
-main();
-
-//Unused functions
-
-//Notes:
-// - Adding change cells as liquidity provider orders has a little issue: if no more orders come or the bot is stopped,
-//   and enough time passes, the bot may lose some capital as iCKB value increase and other bots
-//   fulfill the now under-valued price. Maybe it will be made available again under a flag.
-// function addLiquidityProviderChange(
-//   tx: TransactionSkeletonType,
-//   reservedCapacity: bigint,
-//   tipHeader: Readonly<I8Header>,
-//   feeRate: bigint,
-//   account: ReturnType<typeof secp256k1Blake160>,
-//   chainConfig: ChainConfig,
-// ) {
-//   const { lockScript: accountLock, preSigner: addPlaceholders } = account;
-//   const { config } = chainConfig;
-
-//   // Add ickb udt and ckb change cells as dual ratio liquidity provider limit order
-//   const freeIckbUdt = ickbDelta(tx, config);
-//   if (freeIckbUdt < 0n) {
-//     return TransactionSkeleton();
-//   }
-//   const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(tipHeader);
-//   const ckbToUdt: OrderRatio = {
-//     ckbMultiplier,
-//     // Ask for a 0.05% fee for providing this liquidity
-//     udtMultiplier: udtMultiplier - (5n * udtMultiplier) / 10000n,
-//   };
-//   const udtToCkb: OrderRatio = {
-//     ckbMultiplier,
-//     // Ask for a 0.05% fee for providing this liquidity
-//     udtMultiplier: udtMultiplier + (5n * udtMultiplier) / 10000n,
-//   };
-
-//   let { master, order } = orderFrom(
-//     accountLock,
-//     config,
-//     0n,
-//     freeIckbUdt,
-//     ckbToUdt,
-//     udtToCkb,
-//   );
-
-//   if (reservedCapacity > 0) {
-//     master = I8Cell.from({
-//       ...master,
-//       capacity: hex(reservedCapacity + BigInt(master.cellOutput.capacity)),
-//     });
-//   }
-
-//   const txWithPlaceholders = addPlaceholders(
-//     addCells(tx, "append", [], [master, order]),
-//   );
-
-//   const txfee = calculateTxFee(txSize(txWithPlaceholders), feeRate);
-//   const freeCkb = ckbDelta(txWithPlaceholders, config) - txfee;
-//   if (freeCkb < 0n) {
-//     return TransactionSkeleton();
-//   }
-
-//   if (freeCkb > 0n) {
-//     order = I8Cell.from({
-//       ...order,
-//       capacity: hex(freeCkb + BigInt(order.cellOutput.capacity)),
-//     });
-//     tx = addPlaceholders(addCells(tx, "append", [], [master, order]));
-//   } else {
-//     //freeCkb == 0n
-//     tx = txWithPlaceholders;
-//   }
-
-//   return tx;
-// }
+await main();
