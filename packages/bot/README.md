@@ -1,8 +1,8 @@
 # iCKB bot
 
-Currently the Bot is able to fully use only a single deposit worth of capital. More capital will not create issues, just it'll not be used effectively.
+Currently the Bot tries to minimize the amount of iCKB holdings, actively looking to convert them to CKB. This is to maximize the CKB liquidity that the bot can offer in case of a iCKB to CKB liquidity crunch, such as [when the redemptions overcome the short term availability of mature deposits](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369/14).
 
-**Rule of thumb**: Initial bot funding capital should be between 125k CKB and 135k CKB.
+**Rule of thumb**: Initial bot funding capital should be at least 130k CKB.
 
 ## Run the limit order fulfillment bot on testnet
 
