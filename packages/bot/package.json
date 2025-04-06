@@ -13,20 +13,18 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "lint": "eslint ./src",
     "start": "node --env-file=env/${CHAIN}/.env dist/esm/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
-    "forcestart": "while true; do pnpm start; sleep 10; done"
+    "forcestart": "while true; do pnpm start; sleep 10; done",
+    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint"
   },
-  "files": [
-    "/dist",
-    "/src"
-  ],
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "@types/node": "^22.13.8",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.2",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.25.0"
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^22.14.0",
+    "eslint": "^9.24.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.29.0"
   },
   "dependencies": {
     "@ckb-lumos/base": "^0.23.0",

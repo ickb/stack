@@ -62,7 +62,7 @@ import {
 } from "@ickb/v1-core";
 import type { Cell, Header, Transaction } from "@ckb-lumos/base";
 
-async function main() {
+async function main(): Promise<void> {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
   if (!CHAIN) {
     throw Error("Invalid env CHAIN: Empty");
@@ -89,7 +89,7 @@ async function main() {
 
   for (;;) {
     await new Promise((r) => setTimeout(r, 2 * Math.random() * sleepInterval));
-    console.log();
+    // console.log();
 
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const executionLog: Record<string, any> = {};
@@ -157,7 +157,14 @@ async function main() {
         return;
       }
 
-      function evaluate(combination: Combination) {
+      function evaluate(combination: Combination): Readonly<{
+        tx: TransactionSkeletonType;
+        gain: bigint;
+        i: number;
+        j: number;
+        origins: readonly I8Cell[];
+        matches: readonly I8Cell[];
+      }> {
         const { i, j, origins, matches } = combination;
         const onlyOrders = addCells(
           TransactionSkeleton(),
@@ -242,11 +249,11 @@ async function main() {
   }
 }
 
-function fmtCkb(b: bigint) {
+function fmtCkb(b: bigint): number {
   return Number(b) / Number(CKB);
 }
 
-function replacer(_: unknown, value: unknown) {
+function replacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? Number(value) : value;
 }
 
@@ -266,7 +273,7 @@ function bestPartialFilling(
   evaluate: (tx: Combination) => Combination,
   ckbAllowanceStep: bigint,
   udtAllowanceStep: bigint,
-) {
+): Combination {
   const ckb2UdtPartials = partialsFrom(orders, true, udtAllowanceStep);
   const udt2CkbPartials = partialsFrom(orders, false, ckbAllowanceStep);
 
@@ -318,7 +325,10 @@ function partialsFrom(
   orders: Order[],
   isCkb2Udt: boolean,
   allowanceStep: bigint,
-) {
+): {
+  origins: readonly I8Cell[];
+  matches: readonly I8Cell[];
+}[] {
   let ckbAllowanceStep, udtAllowanceStep;
   if (isCkb2Udt) {
     ckbAllowanceStep = 0n;
@@ -434,7 +444,7 @@ function convert(
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): TransactionSkeletonType {
   const ickbPool: MyExtendedDeposit[] = [];
   if (!isCkb2Udt) {
     // Filter deposits
@@ -455,7 +465,7 @@ function convert(
 
   const N = isCkb2Udt ? Number(maxAmount / depositAmount) : ickbPool.length;
   const txCache = Array<TransactionSkeletonType | undefined>(N);
-  const attempt = (n: number) => {
+  const attempt = (n: number): TransactionSkeletonType => {
     n = N - n;
     return (txCache[n] =
       txCache[n] ??
@@ -486,7 +496,7 @@ function convertAttempt(
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): TransactionSkeletonType {
   const { config } = chainConfig;
   if (quantity > 0) {
     if (isCkb2Udt) {
@@ -538,7 +548,11 @@ function addChange(
   feeRate: bigint,
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): {
+  tx: TransactionSkeletonType;
+  freeCkb: bigint;
+  freeIckbUdt: bigint;
+} {
   const { lockScript: accountLock, preSigner: addPlaceholders } = account;
   const { config } = chainConfig;
   let freeCkb, freeIckbUdt;
@@ -578,7 +592,7 @@ function base({
     owner: I8Cell;
   }>[];
   myOrders?: MyOrder[];
-}) {
+}): TransactionSkeletonType {
   let tx = TransactionSkeleton();
   tx = addCells(tx, "append", [capacities, udts, receipts].flat(), []);
   tx = addWithdrawalRequestGroups(tx, wrGroups);
@@ -589,7 +603,24 @@ function base({
 async function getL1State(
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): Promise<{
+  capacities: I8Cell[];
+  udts: I8Cell[];
+  receipts: I8Cell[];
+  matureWrGroups: Readonly<{
+    ownedWithdrawalRequest: I8Cell;
+    owner: I8Cell;
+  }>[];
+  notMatureWrGroups: Readonly<{
+    ownedWithdrawalRequest: I8Cell;
+    owner: I8Cell;
+  }>[];
+  myOrders: MyOrder[];
+  orders: Order[];
+  ickbPool: Readonly<ExtendedDeposit>[];
+  tipHeader: Readonly<I8Header>;
+  feeRate: bigint;
+}> {
   const { chain, config, rpc } = chainConfig;
   const { expander } = account;
 
@@ -601,7 +632,7 @@ async function getL1State(
 
   // Prefetch headers
   const wantedHeaders = new Set<string>();
-  const deferredGetHeader = (blockNumber: string) => {
+  const deferredGetHeader = (blockNumber: string): Readonly<I8Header> => {
     wantedHeaders.add(blockNumber);
     return headerPlaceholder;
   };
@@ -610,7 +641,7 @@ async function getL1State(
 
   // Prefetch txs outputs
   const wantedTxsOutputs = new Set<string>();
-  const deferredGetTxsOutputs = (txHash: string) => {
+  const deferredGetTxsOutputs = (txHash: string): never[] => {
     wantedTxsOutputs.add(txHash);
     return [];
   };
@@ -689,7 +720,7 @@ async function getL1State(
 async function getMixedCells(
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): Promise<Cell[]> {
   const { rpc, config } = chainConfig;
   return (
     await Promise.all(
@@ -703,7 +734,10 @@ async function getMixedCells(
   ).flat();
 }
 
-async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
+async function getTxsOutputs(
+  txHashes: Set<string>,
+  chainConfig: ChainConfig,
+): Promise<Readonly<Map<string, readonly Cell[]>>> {
   const { rpc } = chainConfig;
 
   const result = new Map<string, readonly Cell[]>();
@@ -759,7 +793,7 @@ let _knownTxsOutputs = Object.freeze(new Map<string, readonly Cell[]>());
 async function getHeadersByNumber(
   wanted: Set<string>,
   chainConfig: ChainConfig,
-) {
+): Promise<Readonly<Map<string, Readonly<I8Header>>>> {
   const { rpc } = chainConfig;
 
   const result = new Map<string, Readonly<I8Header>>();
@@ -809,7 +843,17 @@ const headerPlaceholder = I8Header.from({
   version: "0x0",
 });
 
-function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
+function secp256k1Blake160(
+  privateKey: string,
+  config: ConfigAdapter,
+): {
+  publicKey: string;
+  lockScript: Readonly<I8Script>;
+  address: string;
+  expander: (c: Cell) => I8Script | undefined;
+  preSigner: (tx: TransactionSkeletonType) => TransactionSkeletonType;
+  signer: (tx: TransactionSkeletonType) => Transaction;
+} {
   const publicKey = key.privateToPublic(privateKey);
 
   const lockScript = I8Script.from({
@@ -822,11 +866,11 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
 
   const expander = lockExpanderFrom(lockScript);
 
-  function preSigner(tx: TransactionSkeletonType) {
+  function preSigner(tx: TransactionSkeletonType): TransactionSkeletonType {
     return addWitnessPlaceholder(tx, lockScript);
   }
 
-  function signer(tx: TransactionSkeletonType) {
+  function signer(tx: TransactionSkeletonType): Transaction {
     tx = preSigner(tx);
     tx = prepareSigningEntries(tx, { config });
     const message = tx.get("signingEntries").get(0)?.message;
