@@ -16,7 +16,8 @@
     "lint": "eslint ./src",
     "start": "node --env-file=env/${CHAIN}/.env dist/esm/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
     "forcestart": "while true; do pnpm start; sleep 10; done",
-    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint"
+    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint",
+    "refresh": "git pull origin master && pnpm install --frozen-lockfile && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
