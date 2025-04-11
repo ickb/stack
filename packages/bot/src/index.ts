@@ -562,15 +562,8 @@ function addChange(
   ({ tx, freeCkb } = addCkbChange(
     tx,
     accountLock,
-    (txWithDummyChange: TransactionSkeletonType) => {
-      const baseFee = calculateTxFee(
-        txSize(addPlaceholders(txWithDummyChange)),
-        feeRate,
-      );
-      // Use a fee that is multiple of N=1249
-      const N = 1249n;
-      return ((baseFee + (N - 1n)) / N) * N;
-    },
+    (txWithDummyChange: TransactionSkeletonType) =>
+      calculateTxFee(txSize(addPlaceholders(txWithDummyChange)), feeRate),
     config,
   ));
 
