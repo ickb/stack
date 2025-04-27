@@ -6,17 +6,24 @@ iCKB SDK built on top of CCC
 
 ```mermaid
 graph TD;
-    A[ickb/utils] --> B[ckb-ccc/core];
-    C[ickb/dao] --> A[ickb/utils];
-    C --> B[ckb-ccc/core];
-    D[ickb/core] --> A[ickb/utils];
-    D --> C[ickb/dao];
-    E[ickb/order] --> A[ickb/utils];
-    E --> B[ckb-ccc/core];
-    F[ickb/sdk] --> A[ickb/utils];
-    F --> C[ickb/dao];
-    F --> D[ickb/core];
-    F --> E[ickb/order];
+    A["@ickb/utils"] --> B["@ckb-ccc/core"];
+    C["@ickb/dao"] --> A;
+    C --> B;
+    D["@ickb/core"] --> A;
+    D --> C;
+    E["@ickb/order"] --> A;
+    E --> B;
+    F["@ickb/sdk"] --> A;
+    F --> C;
+    F --> D;
+    F --> E;
+
+    click A "https://github.com/ickb/utils" "Go to @ickb/utils"
+    click B "https://github.com/ckb-devrel/ccc/tree/master/packages/core" "Go to @ckb-ccc/core"
+    click C "https://github.com/ickb/dao" "Go to @ickb/dao"
+    click D "https://github.com/ickb/core" "Go to @ickb/core"
+    click E "https://github.com/ickb/order" "Go to @ickb/order"
+    click F "https://github.com/ickb/sdk" "Go to @ickb/sdk"
 ```
 
 ## Epoch Semantic Versioning
