@@ -1,5 +1,5 @@
-import type { ccc } from "@ckb-ccc/core";
-import { arrayFrom, type ScriptDeps } from "@ickb/utils";
+import { ccc } from "@ckb-ccc/core";
+import { arrayFrom, epochCompare, type ScriptDeps } from "@ickb/utils";
 import {
   ickbExchangeRatio,
   iCKBUdtHandler,
@@ -33,7 +33,20 @@ export class IckbController {
     order: ScriptDeps;
   }): IckbController {
     const daoManager = DaoManager.fromDeps(dao);
-    const udtHandler = iCKBUdtHandler.fromDeps(xudt, daoManager);
+
+    const {
+      script: { codeHash, hashType },
+      cellDeps,
+    } = xudt;
+    const ickbXudt = {
+      script: new ccc.Script(
+        codeHash,
+        hashType,
+        [ickbLogic.script.hash(), "00000080"].join("") as ccc.Hex,
+      ),
+      cellDeps,
+    };
+    const udtHandler = iCKBUdtHandler.fromDeps(ickbXudt, daoManager);
 
     return new IckbController(
       LogicManager.fromDeps(ickbLogic, daoManager, udtHandler),
@@ -87,6 +100,11 @@ export class IckbController {
         ),
         this.orderManager.findOrders(client),
       ],
+    );
+
+    depositPool.sort((a, b) => epochCompare(a.maturity, b.maturity));
+    withdrawalGroups.sort((a, b) =>
+      epochCompare(a.owned.maturity, b.owned.maturity),
     );
 
     return { tip, depositPool, receipts, withdrawalGroups, orders };
