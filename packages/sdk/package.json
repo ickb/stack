@@ -30,13 +30,17 @@
     "provenance": true
   },
   "devDependencies": {
-    "@eslint/js": "^9.23.0",
-    "eslint": "^9.23.0",
+    "@eslint/js": "^9.25.1",
+    "eslint": "^9.25.1",
     "prettier": "^3.5.3",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.28.0"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.0"
   },
   "dependencies": {
-    "@ckb-ccc/core": "^1.8.0"
+    "@ckb-ccc/core": "^1.8.0",
+    "@ickb/core": "^1000.0.19",
+    "@ickb/dao": "^1000.0.19",
+    "@ickb/order": "^1000.0.17",
+    "@ickb/utils": "^1000.0.15"
   }
 }
