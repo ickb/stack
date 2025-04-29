@@ -96,6 +96,7 @@ export class IckbController {
     return convertedAmount;
   }
 
+  // TODO: Allow filtering which cells are fetched
   async getL1State(
     client: ccc.Client,
     locks: ccc.ScriptLike[],
@@ -103,7 +104,10 @@ export class IckbController {
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
     },
-  ): Promise<L1State> {
+  ): Promise<{
+    system: SystemState;
+    user: UserCells;
+  }> {
     const tip = await client.getTipHeader();
     const onChain = true;
     const opts = { ...options, tip, onChain };
@@ -131,12 +135,56 @@ export class IckbController {
     depositPool.sort((a, b) => epochCompare(a.maturity, b.maturity));
     // Calculate cumulative value of deposits in the pool
     let udtCumulative = 0n;
-    const cumulativeDepositPool: L1State["systemCells"]["depositPool"] = [];
+    const cumulativeDepositPool: SystemState["deposits"] = [];
     for (const deposit of depositPool) {
       udtCumulative += deposit.udtValue;
       cumulativeDepositPool.push({ ...deposit, udtCumulative });
     }
 
+    const userOrders: OrderGroup[] = [];
+    const nonUserOrders: OrderCell[] = [];
+    for (const group of orders) {
+      if (group.isOwner(...locks)) {
+        userOrders.push(group);
+      } else {
+        nonUserOrders.push(group.order);
+      }
+    }
+
+    const exchangeRatio = ickbExchangeRatio(tip);
+    const ckbDepositCap = convert(false, ICKB_DEPOSIT_CAP, exchangeRatio); // TODO: Remove export from core
+
+    return {
+      system: {
+        feeRate,
+        tip,
+        exchangeRatio,
+        ckbDepositCap,
+        udtDepositCap: ICKB_DEPOSIT_CAP,
+        deposits: cumulativeDepositPool,
+        orders: nonUserOrders,
+      },
+      user: {
+        capacities,
+        udts,
+        receipts,
+        withdrawalGroups,
+        orders: userOrders,
+      },
+    };
+  }
+
+  // TODO: Allow filtering which cells are accounted for
+  static getBalance({
+    capacities,
+    udts,
+    receipts,
+    withdrawalGroups,
+    orders,
+  }: UserCells): {
+    ckb: ccc.FixedPoint;
+    udt: ccc.FixedPoint;
+  } {
     const cells: { cell: ccc.Cell; udtValue?: ccc.FixedPoint }[] = [
       capacities,
       udts,
@@ -145,83 +193,39 @@ export class IckbController {
     for (const { owner, owned } of withdrawalGroups) {
       cells.push(owned, owner);
     }
-
-    const userOrders: L1State["userCells"]["orders"] = [];
-    const systemOrders: L1State["systemCells"]["orders"] = [];
-    for (const group of orders) {
-      const { master, order } = group;
-      if (group.isOwner(...locks)) {
-        userOrders.push(group);
-        cells.push(master, order);
-      } else {
-        systemOrders.push(order);
-      }
+    for (const { master, order } of orders) {
+      cells.push(master, order);
     }
-
-    const [ckbBalance, udtBalance] = cells.reduce(
-      ([ckbAcc, udtAcc], c) => {
-        return [
-          ckbAcc + c.cell.cellOutput.capacity,
-          c.udtValue ? udtAcc + c.udtValue : udtAcc,
-        ];
-      },
-      [ccc.Zero, ccc.Zero],
-    );
-
-    const exchangeRatio = ickbExchangeRatio(tip);
-    const ckbDepositCap = convert(false, ICKB_DEPOSIT_CAP, exchangeRatio); // Remove export from core
-
+    let ckb = ccc.Zero;
+    let udt = ccc.Zero;
+    for (const cell of cells) {
+      ckb += cell.cell.cellOutput.capacity;
+      udt += cell.udtValue ?? ccc.Zero;
+    }
     return {
-      info: {
-        feeRate,
-        tip,
-        exchangeRatio,
-        ckbDepositCap,
-        udtDepositCap: ICKB_DEPOSIT_CAP,
-      },
-      balance: {
-        ckb: ckbBalance,
-        udt: udtBalance,
-      },
-      userCells: {
-        capacities,
-        udts,
-        receipts,
-        withdrawalGroups,
-        orders: userOrders,
-      },
-      systemCells: {
-        depositPool: cumulativeDepositPool,
-        orders: systemOrders,
-      },
+      ckb,
+      udt,
     };
   }
 }
 
-export interface L1State {
-  info: {
-    feeRate: ccc.Num;
-    tip: ccc.ClientBlockHeader;
-    exchangeRatio: {
-      ckbScale: ccc.Num;
-      udtScale: ccc.Num;
-    };
-    ckbDepositCap: ccc.FixedPoint;
-    udtDepositCap: ccc.FixedPoint;
+export interface SystemState {
+  feeRate: ccc.Num;
+  tip: ccc.ClientBlockHeader;
+  exchangeRatio: {
+    ckbScale: ccc.Num;
+    udtScale: ccc.Num;
   };
-  balance: {
-    ckb: ccc.FixedPoint;
-    udt: ccc.FixedPoint;
-  };
-  userCells: {
-    capacities: CapacityCell[];
-    udts: UdtCell[];
-    receipts: ReceiptCell[];
-    withdrawalGroups: WithdrawalGroups[];
-    orders: OrderGroup[];
-  };
-  systemCells: {
-    depositPool: (IckbDepositCell & { udtCumulative: bigint })[];
-    orders: OrderCell[];
-  };
+  ckbDepositCap: ccc.FixedPoint;
+  udtDepositCap: ccc.FixedPoint;
+  deposits: (IckbDepositCell & { udtCumulative: bigint })[];
+  orders: OrderCell[];
+}
+
+export interface UserCells {
+  capacities: CapacityCell[];
+  udts: UdtCell[];
+  receipts: ReceiptCell[];
+  withdrawalGroups: WithdrawalGroups[];
+  orders: OrderGroup[];
 }
