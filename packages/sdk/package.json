@@ -1,6 +1,6 @@
 {
   "name": "@ickb/sdk",
-  "version": "1000.0.26",
+  "version": "1000.0.40",
   "description": "iCKB SDK built on top of CCC",
   "author": "phroi",
   "license": "MIT",
@@ -38,9 +38,9 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "^1.8.0",
-    "@ickb/core": "^1000.0.26",
-    "@ickb/dao": "^1000.0.26",
-    "@ickb/order": "^1000.0.26",
-    "@ickb/utils": "^1000.0.24"
+    "@ickb/core": "^1000.0.39",
+    "@ickb/dao": "^1000.0.35",
+    "@ickb/order": "^1000.0.36",
+    "@ickb/utils": "^1000.0.40"
   }
 }

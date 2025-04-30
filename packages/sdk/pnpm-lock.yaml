@@ -12,17 +12,17 @@ importers:
         specifier: ^1.8.0
         version: 1.8.0(typescript@5.8.3)
       '@ickb/core':
-        specifier: ^1000.0.26
-        version: 1000.0.26(typescript@5.8.3)
+        specifier: ^1000.0.39
+        version: 1000.0.39(typescript@5.8.3)
       '@ickb/dao':
-        specifier: ^1000.0.26
-        version: 1000.0.26(typescript@5.8.3)
+        specifier: ^1000.0.35
+        version: 1000.0.35(typescript@5.8.3)
       '@ickb/order':
-        specifier: ^1000.0.26
-        version: 1000.0.26(typescript@5.8.3)
+        specifier: ^1000.0.36
+        version: 1000.0.36(typescript@5.8.3)
       '@ickb/utils':
-        specifier: ^1000.0.24
-        version: 1000.0.24(typescript@5.8.3)
+        specifier: ^1000.0.40
+        version: 1000.0.40(typescript@5.8.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.25.1
@@ -106,17 +106,17 @@ packages:
     resolution: {integrity: sha512-xeO57FpIu4p1Ri3Jq/EXq4ClRm86dVF2z/+kvFnyqVYRavTZmaFaUBbWCOuuTh0o/g7DSsk6kc2vrS4Vl5oPOQ==}
     engines: {node: '>=18.18'}
 
-  '@ickb/core@1000.0.26':
-    resolution: {integrity: sha512-CI1No/RlduZUcuICEj/rXlJYgPVzhwx/Pj6npEpGHrrgapuUeM6cWyZE6H6WqktUq+n9khyMenpFgePJmuprsg==}
+  '@ickb/core@1000.0.39':
+    resolution: {integrity: sha512-0K45RJpjReS6lI+7Wf378FSxWDINqVB32ehXHgp6qiYzaffed41mzhcXeLuyoxP8aRh53l/1sE2Ef91lEpsuVA==}
 
-  '@ickb/dao@1000.0.26':
-    resolution: {integrity: sha512-Xbd3LFpA9roddaG8qR7cIk1rMAFSORcBKjT2dKA3ZuThgIToQguPxzWUzmmXJhCZxnxlNjoqiLnqiEFlfKS8/w==}
+  '@ickb/dao@1000.0.35':
+    resolution: {integrity: sha512-WMrUqZpQpp9mjTMfMZkP2sF+a/Vviaca87CAMpDAWMP5XejS+1rOEhzFNURDhDBv6OkkuO/4Yle7+H8Pqy4afQ==}
 
-  '@ickb/order@1000.0.26':
-    resolution: {integrity: sha512-t8ls81l9OE164RfYEhxKUI9VC9PI541x7VG7GdjPmTxXJ04zOz2n3e7gVURcKXT/4J7iAfXQ5TvWN41P5cijfw==}
+  '@ickb/order@1000.0.36':
+    resolution: {integrity: sha512-nvfVZcHDIDVg3PKkPYFM2p6LnUyNtCgag4waMo5LQKPL3IOOysIDPRMuJALhPPjP8lHQJyU54+D2YXyxT6gdIA==}
 
-  '@ickb/utils@1000.0.24':
-    resolution: {integrity: sha512-mKskbkIWXTATBGxa4i5ks65b5m8P3qGT7WmQPUKBcHcCWaqonjw3CGyB5OyQbPY5WQ7CIaUKhUYZhpIgNt6OhQ==}
+  '@ickb/utils@1000.0.40':
+    resolution: {integrity: sha512-9QJXN5h7PZ9KDeAL0wD5GSrhlcrH03JJUJMq2AGqQHqI4GoGXxfAuJOtckYXxXB/xpU0K+/kaw1NITd/mbxu8Q==}
 
   '@joyid/ckb@1.1.2':
     resolution: {integrity: sha512-+e+ISF566zaKNhKNSSS5kBw8or4Kb5Xqxe/2jVkUXKkqVHSS02Trrqe0g4IjSyeN9bszzolr1XgStv2hz62tqA==}
@@ -889,11 +889,11 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.2': {}
 
-  '@ickb/core@1000.0.26(typescript@5.8.3)':
+  '@ickb/core@1000.0.39(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
-      '@ickb/dao': 1000.0.26(typescript@5.8.3)
-      '@ickb/utils': 1000.0.24(typescript@5.8.3)
+      '@ickb/dao': 1000.0.35(typescript@5.8.3)
+      '@ickb/utils': 1000.0.40(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -901,10 +901,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ickb/dao@1000.0.26(typescript@5.8.3)':
+  '@ickb/dao@1000.0.35(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
-      '@ickb/utils': 1000.0.24(typescript@5.8.3)
+      '@ickb/utils': 1000.0.40(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -912,10 +912,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ickb/order@1000.0.26(typescript@5.8.3)':
+  '@ickb/order@1000.0.36(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
-      '@ickb/utils': 1000.0.24(typescript@5.8.3)
+      '@ickb/utils': 1000.0.40(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -923,7 +923,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ickb/utils@1000.0.24(typescript@5.8.3)':
+  '@ickb/utils@1000.0.40(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
     transitivePeerDependencies:
