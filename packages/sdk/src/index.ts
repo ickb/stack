@@ -20,7 +20,7 @@ import {
   OwnedOwnerManager,
   type IckbDepositCell,
   type ReceiptCell,
-  type WithdrawalGroups,
+  type WithdrawalGroup,
 } from "@ickb/core";
 import { DaoManager, type DaoCell } from "@ickb/dao";
 import {
@@ -106,7 +106,6 @@ export class IckbController {
     userCells: UserCells;
     minCkbChange: ccc.FixedPoint;
     system: SystemState;
-    balance: Balance;
     fee?: {
       numerator: ccc.Num;
       denominator: ccc.Num;
@@ -119,7 +118,7 @@ export class IckbController {
     const address = await signer.getRecommendedAddressObj();
     const N = isCkb2Udt
       ? Number(amount / system.ckbDepositCap)
-      : system.deposits.slice(0, 30).length;
+      : system.depositPool.slice(0, 30).length;
     const cache = Array<ReturnType<IckbController["convert"]>>(N);
     const attempt = (n: number): ReturnType<IckbController["convert"]> => {
       n = N - n;
@@ -143,7 +142,13 @@ export class IckbController {
       isCkb2Udt,
       amount,
       userCells,
-      system: { feeRate, tip, deposits, ckbDepositCap, exchangeRatio },
+      system: {
+        feeRate,
+        tip,
+        depositPool: deposits,
+        ckbDepositCap,
+        exchangeRatio,
+      },
     }: Parameters<IckbController["convert"]>[0],
   ): ReturnType<IckbController["convert"]> {
     try {
@@ -234,9 +239,9 @@ export class IckbController {
     }
   }
 
-  // TODO: Allow filtering which cells are fetched
   async getL1State(
     client: ccc.Client,
+    filter: Set<keyof UserCells | "depositPool">,
     locks: ccc.Script[],
     options?: {
       minLockUp?: ccc.Epoch;
@@ -261,14 +266,30 @@ export class IckbController {
       withdrawalRequests,
     ] = await Promise.all([
       client.getFeeRate(),
-      collect(this.logicManager.findDeposits(client, opts)),
-      collect(CapacityManager.findCapacities(client, locks, opts)),
-      collect(this.ickbUdtManager.findUdts(client, locks, opts)),
-      collect(this.logicManager.findReceipts(client, locks, opts)),
-      collect(this.ownedOwnerManager.findWithdrawalGroups(client, locks, opts)),
-      collect(this.orderManager.findOrders(client)),
-      collect(this.daoManager.findDeposits(client, locks, opts)),
-      collect(this.daoManager.findWithdrawalRequests(client, locks, opts)),
+      filter.has("depositPool")
+        ? collect(this.logicManager.findDeposits(client, opts))
+        : [],
+      filter.has("capacities")
+        ? collect(CapacityManager.findCapacities(client, locks, opts))
+        : [],
+      filter.has("udts")
+        ? collect(this.ickbUdtManager.findUdts(client, locks, opts))
+        : [],
+      filter.has("receipts")
+        ? collect(this.logicManager.findReceipts(client, locks, opts))
+        : [],
+      filter.has("withdrawalGroups")
+        ? collect(
+            this.ownedOwnerManager.findWithdrawalGroups(client, locks, opts),
+          )
+        : [],
+      filter.has("orders") ? collect(this.orderManager.findOrders(client)) : [],
+      filter.has("deposits")
+        ? collect(this.daoManager.findDeposits(client, locks, opts))
+        : [],
+      filter.has("withdrawalRequests")
+        ? collect(this.daoManager.findWithdrawalRequests(client, locks, opts))
+        : [],
       // TODO: fetch bot cells for estimating timings
     ]);
 
@@ -276,7 +297,7 @@ export class IckbController {
     depositPool.sort((a, b) => epochCompare(a.maturity, b.maturity));
     // Calculate cumulative value of deposits in the pool
     let udtCumulative = 0n;
-    const cumulativeDepositPool: SystemState["deposits"] = [];
+    const cumulativeDepositPool: SystemState["depositPool"] = [];
     for (const deposit of depositPool) {
       udtCumulative += deposit.udtValue;
       cumulativeDepositPool.push({ ...deposit, udtCumulative });
@@ -302,7 +323,7 @@ export class IckbController {
         exchangeRatio,
         ckbDepositCap,
         udtDepositCap: ICKB_DEPOSIT_CAP,
-        deposits: cumulativeDepositPool,
+        depositPool: cumulativeDepositPool,
         orders: nonUserOrders,
       },
       user: {
@@ -316,42 +337,6 @@ export class IckbController {
       },
     };
   }
-
-  // TODO: Allow filtering which cells are accounted for
-  static getBalance({
-    capacities,
-    udts,
-    receipts,
-    withdrawalGroups,
-    orders,
-  }: UserCells): Balance {
-    const cells: { cell: ccc.Cell; udtValue?: ccc.FixedPoint }[] = [
-      capacities,
-      udts,
-      receipts,
-    ].flat();
-    for (const { owner, owned } of withdrawalGroups) {
-      cells.push(owned, owner);
-    }
-    for (const { master, order } of orders) {
-      cells.push(master, order);
-    }
-    let ckb = ccc.Zero;
-    let udt = ccc.Zero;
-    for (const cell of cells) {
-      ckb += cell.cell.cellOutput.capacity;
-      udt += cell.udtValue ?? ccc.Zero;
-    }
-    return {
-      ckb,
-      udt,
-    };
-  }
-}
-
-export interface Balance {
-  ckb: ccc.FixedPoint;
-  udt: ccc.FixedPoint;
 }
 
 export interface SystemState {
@@ -363,7 +348,7 @@ export interface SystemState {
   };
   ckbDepositCap: ccc.FixedPoint;
   udtDepositCap: ccc.FixedPoint;
-  deposits: (IckbDepositCell & { udtCumulative: bigint })[];
+  depositPool: (IckbDepositCell & { udtCumulative: bigint })[];
   orders: OrderCell[];
 }
 
@@ -371,7 +356,7 @@ export interface UserCells {
   capacities: CapacityCell[];
   udts: UdtCell[];
   receipts: ReceiptCell[];
-  withdrawalGroups: WithdrawalGroups[];
+  withdrawalGroups: WithdrawalGroup[];
   orders: OrderGroup[];
   deposits: DaoCell[];
   withdrawalRequests: DaoCell[];
