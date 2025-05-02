@@ -11,6 +11,7 @@ import {
   asyncBinarySearch,
   RestrictedTransaction,
   type ExchangeRatio,
+  binarySearch,
 } from "@ickb/utils";
 import {
   convert,
@@ -49,6 +50,7 @@ export class IckbController {
     public readonly ownedOwnerManager: OwnedOwnerManager,
     public readonly orderManager: OrderManager,
     public readonly daoManager: DaoManager,
+    public readonly bots: ccc.Script[],
   ) {}
 
   /**
@@ -61,19 +63,22 @@ export class IckbController {
    * @param deps.order - The script dependencies for order.
    * @returns An instance of IckbController.
    */
-  static fromDeps({
-    xudt,
-    dao,
-    ickbLogic,
-    ownedOwner,
-    order,
-  }: {
-    xudt: ScriptDeps;
-    dao: ScriptDeps;
-    ickbLogic: ScriptDeps;
-    ownedOwner: ScriptDeps;
-    order: ScriptDeps;
-  }): IckbController {
+  static fromDeps(
+    {
+      xudt,
+      dao,
+      ickbLogic,
+      ownedOwner,
+      order,
+    }: {
+      xudt: ScriptDeps;
+      dao: ScriptDeps;
+      ickbLogic: ScriptDeps;
+      ownedOwner: ScriptDeps;
+      order: ScriptDeps;
+    },
+    bots: ccc.Script[],
+  ): IckbController {
     const daoManager = DaoManager.fromDeps(dao);
 
     const {
@@ -96,6 +101,7 @@ export class IckbController {
       OwnedOwnerManager.fromDeps(ownedOwner, daoManager, ickbUdtManager),
       OrderManager.fromDeps(order, ickbUdtManager),
       daoManager,
+      bots,
     );
   }
 
@@ -241,13 +247,14 @@ export class IckbController {
   ): ReturnType<IckbController["convert"]> {
     try {
       const { isCkb2Udt, rate, info, ckbMinFee, lock } = conversion;
-      const { signer, userCells, system, filters } = options;
-      const { feeRate, depositPool, ckbDepositCap, exchangeRatio } = system;
+      const { signer, userCells, filters, system } = options;
+      const { feeRate, ckbDepositCap, exchangeRatio, depositPool } = system;
 
       const tx = SmartTransaction.default();
-      const maturities: ccc.Epoch[] = [];
+      const maturities: ccc.Epoch[] = [[0n, 1n, 80n]]; // 3 minutes minimum
       let ckbFee = ccc.Zero;
       let amount = conversion.amount;
+      let udtWithdrawed = ccc.Zero;
 
       // Core protocol
       if (n > 0) {
@@ -261,7 +268,8 @@ export class IckbController {
         } else {
           const myDeposits = depositPool.slice(0, n);
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          amount -= myDeposits.slice(-1)[0]!.udtCumulative;
+          udtWithdrawed = myDeposits.slice(-1)[0]!.udtCumulative;
+          amount -= udtWithdrawed;
           if (amount < ccc.Zero) {
             // Too many Withdrawal Requests respectfully to the amount
             return undefined;
@@ -284,8 +292,7 @@ export class IckbController {
           : convert(true, amount, exchangeRatio) - convertedAmount;
 
         maturities.push(
-          // TODO: use real world data from deposits, open orders and bot balances
-          orderMaturityEstimate(isCkb2Udt, amount, system.tip),
+          orderMaturityEstimate(isCkb2Udt, amount, udtWithdrawed, system),
         );
       }
 
@@ -335,7 +342,7 @@ export class IckbController {
    */
   async getL1State(
     client: ccc.Client,
-    filter: Set<keyof UserCells | "depositPool">,
+    filter: Set<keyof UserCells | "depositPool" | "ckbBots">,
     locks: ccc.Script[],
     options?: {
       minLockUp?: ccc.Epoch;
@@ -358,6 +365,7 @@ export class IckbController {
       orders,
       deposits,
       withdrawalRequests,
+      botCapacities,
     ] = await Promise.all([
       client.getFeeRate(),
       filter.has("depositPool")
@@ -384,7 +392,9 @@ export class IckbController {
       filter.has("withdrawalRequests")
         ? collect(this.daoManager.findWithdrawalRequests(client, locks, opts))
         : [],
-      // TODO: fetch bot cells for estimating timings
+      filter.has("ckbBots")
+        ? collect(CapacityManager.findCapacities(client, locks, opts))
+        : [],
     ]);
 
     // Sort depositPool by maturity
@@ -410,6 +420,12 @@ export class IckbController {
     const exchangeRatio = ickbExchangeRatio(tip);
     const ckbDepositCap = convert(false, ICKB_DEPOSIT_CAP, exchangeRatio);
 
+    // Calculate the ckb ready to match incoming transactions
+    let ckbBots = botCapacities.reduce((acc, c) => acc + c.ckbValue, ccc.Zero);
+    // Each bot keeps a reserve of CKB for operations
+    ckbBots -= ccc.numFrom(this.bots.length) * ccc.fixedPointFrom("2000");
+    ckbBots = ckbBots > ccc.Zero ? ckbBots : ccc.Zero;
+
     return {
       system: {
         feeRate,
@@ -419,6 +435,7 @@ export class IckbController {
         udtDepositCap: ICKB_DEPOSIT_CAP,
         depositPool: cumulativeDepositPool,
         orderPool: nonUserOrders,
+        ckbBots,
       },
       user: {
         capacities,
@@ -461,6 +478,11 @@ export interface SystemState {
    * The order pool containing non-user order cells.
    */
   orderPool: OrderCell[];
+
+  /**
+   * The ckb held by bots ready to match incoming iCKB to CKB conversions.
+   */
+  ckbBots: ccc.FixedPoint;
 }
 
 /**
@@ -508,21 +530,47 @@ export interface Conversion {
  *
  * @param isCkb2Udt - A boolean indicating if the order is from CKB to UDT.
  * @param amount - The amount of CKB or UDT involved in the order.
- * @param tip - The current block header tip.
- * @returns The estimated maturity epoch for the order.
+ * @param udtWithdrawed - The amount of UDT that has been withdrawn by the current conversion via core.
+ * @param system - The current system state, which includes the block header tip, order pool, deposit pool, CKB bots, and exchange ratio.
  *
- * The estimation is based on:
- * - CKB to iCKB orders at 100k CKB every minute
- * - iCKB to CKB orders at 200 CKB every minute
+ * @returns The estimated maturity epoch for the order.
  */
 function orderMaturityEstimate(
   isCkb2Udt: boolean,
   amount: bigint,
-  tip: ccc.ClientBlockHeader,
+  udtWithdrawed: ccc.FixedPoint,
+  system: SystemState,
 ): ccc.Epoch {
-  return epochAdd(tip.epoch, [
+  const { tip, orderPool, depositPool, ckbBots, exchangeRatio } = system;
+
+  // Maturity estimate a priori, the estimation is based on:
+  // - CKB to iCKB orders at 100k CKB every minute
+  // - iCKB to CKB orders at 200 CKB every minute
+  let maturity = epochAdd(tip.epoch, [
     0n,
     1n + amount / ccc.fixedPointFrom(isCkb2Udt ? 100000 : 200),
     4n * 60n,
   ]);
+
+  if (isCkb2Udt) {
+    return maturity;
+  }
+
+  if (depositPool.length > 0) {
+    const udtWaiting = orderPool
+      .filter((o) => o.isUdt2CkbMatchable())
+      .reduce((acc, o) => acc + o.udtValue, ccc.Zero);
+    const udtAvailable = convert(isCkb2Udt, ckbBots, exchangeRatio);
+
+    const udtToConvert = amount + udtWithdrawed + udtWaiting - udtAvailable;
+    const i = binarySearch(
+      depositPool.length,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      (n) => depositPool[n]!.udtCumulative >= udtToConvert,
+    );
+
+    maturity = depositPool[i]?.maturity ?? maturity;
+  }
+
+  return maturity;
 }
