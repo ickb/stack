@@ -1,4 +1,4 @@
-import { ccc, type Epoch } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import {
   collect,
   epochCompare,
@@ -10,6 +10,7 @@ import {
   epochAdd,
   asyncBinarySearch,
   RestrictedTransaction,
+  type ExchangeRatio,
 } from "@ickb/utils";
 import {
   convert,
@@ -28,7 +29,6 @@ import {
   OrderManager,
   type OrderCell,
   type OrderGroup,
-  type RatioLike,
 } from "@ickb/order";
 
 export class IckbController {
@@ -78,102 +78,121 @@ export class IckbController {
     );
   }
 
-  previewConversion(options: {
+  // fee examples:
+  // 100000n => 0.001%
+  // 10000n => 0.01%
+  // 1000n => 0.1%
+  // 100n => 1%
+  // 10n => 10%
+  // 1n => 100%
+  // less than 1n => 0%
+  static previewConversion(conversion: {
     isCkb2Udt: boolean;
     amount: ccc.FixedPoint;
-    rate: RatioLike | ccc.ClientBlockHeader;
-    fee?: {
-      numerator: ccc.Num;
-      denominator: ccc.Num;
-    };
-  }): ccc.FixedPoint {
-    const { isCkb2Udt, amount, rate, fee } = options;
-    let convertedAmount = convert(isCkb2Udt, amount, rate);
+    rate: ExchangeRatio | ccc.ClientBlockHeader;
+    fee: ccc.Num;
+  }): { rate: ExchangeRatio; convertedAmount: ccc.FixedPoint } {
+    const { isCkb2Udt, amount, fee } = conversion;
+    let rate = conversion.rate;
+    rate = "dao" in rate ? ickbExchangeRatio(rate) : rate;
 
-    if (fee) {
-      const { numerator, denominator } = fee;
-      convertedAmount -= (convertedAmount * numerator) / denominator;
+    if (fee > ccc.Zero) {
+      const { ckbScale, udtScale } = rate;
+      rate = {
+        ckbScale,
+        // Worst case scenario where fee applies to the full amount
+        udtScale: udtScale + (isCkb2Udt ? 1n : -1n) * (udtScale / fee),
+      };
     }
 
-    return convertedAmount;
+    const convertedAmount =
+      amount > ccc.Zero ? convert(isCkb2Udt, amount, rate) : ccc.Zero;
+
+    return { rate, convertedAmount };
   }
 
-  async convert(
-    options: Parameters<IckbController["previewConversion"]>[0] & {
+  async convert(options: {
+    conversion: Parameters<typeof IckbController.previewConversion>[0] & {
       ckbMinMatchLog?: number;
-      signer: ccc.Signer;
-      userCells: UserCells;
-      system: SystemState;
-      // minCkbChange?: ccc.FixedPoint; TODO
-      filters: {
-        isReadyOnly: boolean;
-        isFulfilledOnly: boolean;
-      };
-    },
-  ): Promise<Conversion | undefined> {
-    const { isCkb2Udt, amount, rate, system, signer } = options;
-    // TODO: transform into a proper type and function in ickb/Core
-    const ratio =
-      "udtScale" in rate
-        ? {
-            ckbScale: ccc.numFrom(rate.ckbScale),
-            udtScale: ccc.numFrom(rate.udtScale),
-          }
-        : ickbExchangeRatio(rate);
-
-    // TODO: account for fee in ratio
-
-    const info = Info.create(isCkb2Udt, ratio, options.ckbMinMatchLog);
+      ckbMinFee?: ccc.Num;
+    };
+    signer: ccc.Signer;
+    userCells: UserCells;
+    system: SystemState;
+    filters: {
+      isReadyOnly: boolean;
+      isFulfilledOnly: boolean;
+    };
+  }): Promise<Conversion | undefined> {
+    // Get user lock
+    const { system, signer } = options;
     const lock = (await signer.getRecommendedAddressObj()).script;
+
+    // Normalize rate
+    const { rate } = IckbController.previewConversion({
+      ...options.conversion,
+      amount: ccc.Zero,
+    });
+    const { isCkb2Udt, amount, ckbMinMatchLog } = options.conversion;
+    const info = Info.create(isCkb2Udt, rate, ckbMinMatchLog);
+    // feeRate is a good approximation of the bot tx size matching the order
+    const ckbMinFee = options.conversion.ckbMinFee ?? 10n * system.feeRate;
+    const conversion = {
+      isCkb2Udt,
+      amount,
+      rate,
+      info,
+      ckbMinFee,
+      lock,
+    };
+
     const N = isCkb2Udt
       ? Number(amount / system.ckbDepositCap)
       : system.depositPool.slice(0, 30).length;
+
     const cache = Array<ReturnType<IckbController["convert"]>>(N);
-    const attempt = (n: number): ReturnType<IckbController["convert"]> => {
+    const cachedAttempt = (
+      n: number,
+    ): ReturnType<IckbController["convert"]> => {
       n = N - n;
-      return (cache[n] =
-        cache[n] ?? this.attemptConversion(n, info, lock, options));
+      return (cache[n] = cache[n] ?? this.attempt(n, conversion, options));
     };
-    return attempt(
+
+    return cachedAttempt(
       await asyncBinarySearch(
         N,
-        async (n: number) => (await attempt(n)) !== undefined,
+        async (n: number) => (await cachedAttempt(n)) !== undefined,
       ),
     );
   }
 
-  private async attemptConversion(
+  private async attempt(
     n: number,
-    info: Info,
-    lock: ccc.Script,
-    options: Parameters<IckbController["convert"]>[0],
+    conversion: {
+      isCkb2Udt: boolean;
+      amount: bigint;
+      rate: ExchangeRatio;
+      info: Info;
+      ckbMinFee: ccc.Num;
+      lock: ccc.Script;
+    },
+    options: Omit<Parameters<IckbController["convert"]>[0], "conversion">,
   ): ReturnType<IckbController["convert"]> {
     try {
-      const {
-        signer,
-        isCkb2Udt,
-        userCells,
-        system: { feeRate, tip, depositPool, ckbDepositCap, exchangeRatio },
-      } = options;
-      let amount = options.amount;
+      const { isCkb2Udt, rate, info, ckbMinFee, lock } = conversion;
+      const { signer, userCells, system, filters } = options;
+      const { feeRate, depositPool, ckbDepositCap, exchangeRatio } = system;
 
       const tx = SmartTransaction.default();
-      const maturities: Epoch[] = [];
+      const maturities: ccc.Epoch[] = [];
       let ckbFee = ccc.Zero;
-
-      // TODO: attempt to match other orders
-      // TODO: add switch to turn this off
-      // this.orderManager.bestMatch(tx, orderPool, exchangeRatio, {
-      //   minCkbGain: 3n * feeRate,
-      //   feeRate,
-      // });
+      let amount = conversion.amount;
 
       // Core protocol
-      // TODO: add switch to turn this off
       if (n > 0) {
         if (isCkb2Udt) {
           amount -= ckbDepositCap * BigInt(n);
-          if (amount < 0n) {
+          if (amount < ccc.Zero) {
             // Too many Deposits respectfully to the amount
             return undefined;
           }
@@ -182,7 +201,7 @@ export class IckbController {
           const myDeposits = depositPool.slice(0, n);
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           amount -= myDeposits.slice(-1)[0]!.udtCumulative;
-          if (amount < 0n) {
+          if (amount < ccc.Zero) {
             // Too many Withdrawal Requests respectfully to the amount
             return undefined;
           }
@@ -192,31 +211,25 @@ export class IckbController {
       }
 
       // Order protocol
-      // TODO: add switch to turn this off
-      if (amount > 0n) {
-        this.orderManager.mint(
-          tx,
-          lock,
-          info,
-          isCkb2Udt ? amount : ccc.Zero,
-          isCkb2Udt ? ccc.Zero : amount,
-        );
+      if (amount > ccc.Zero) {
+        this.orderManager.mint(tx, lock, info, {
+          ckbValue: isCkb2Udt ? amount : ccc.Zero,
+          udtValue: isCkb2Udt ? ccc.Zero : amount,
+        });
 
-        const ratio = isCkb2Udt ? info.ckbToUdt : info.udtToCkb;
-        const convertedAmount = convert(isCkb2Udt, amount, ratio);
+        const convertedAmount = convert(isCkb2Udt, amount, rate);
         ckbFee = isCkb2Udt
           ? amount - convert(false, convertedAmount, exchangeRatio)
           : convert(true, amount, exchangeRatio) - convertedAmount;
 
         maturities.push(
           // TODO: use real world data from deposits, open orders and bot balances
-          orderMaturityEstimate(isCkb2Udt, amount, tip),
+          orderMaturityEstimate(isCkb2Udt, amount, system.tip),
         );
       }
 
       // Check that order provides enough fee to the bot for being matched
-      // feeRate is a good approximation of the bot tx size matching the order
-      if (10n * (feeRate - ckbFee) > ckbFee) {
+      if (ckbFee < ckbMinFee) {
         return undefined;
       }
 
@@ -224,10 +237,8 @@ export class IckbController {
         userCells;
 
       this.logicManager.completeDeposit(tx, receipts);
-      this.ownedOwnerManager.withdraw(tx, withdrawalGroups, {
-        isReadyOnly: true,
-      });
-      this.orderManager.melt(tx, orders);
+      this.ownedOwnerManager.withdraw(tx, withdrawalGroups, filters);
+      this.orderManager.melt(tx, orders, filters);
       this.ickbUdtManager.addUdts(tx, udts);
       CapacityManager.addCapacities(tx, capacities);
 
@@ -377,7 +388,7 @@ export interface UserCells {
 export interface Conversion {
   tx: SmartTransaction;
   ckbFee: ccc.FixedPoint;
-  maturity: Epoch;
+  maturity: ccc.Epoch;
 }
 
 // Estimate bot ability to fulfill orders:

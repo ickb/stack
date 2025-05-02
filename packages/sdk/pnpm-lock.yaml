@@ -12,17 +12,17 @@ importers:
         specifier: ^1.8.0
         version: 1.8.0(typescript@5.8.3)
       '@ickb/core':
-        specifier: ^1000.0.41
-        version: 1000.0.41(typescript@5.8.3)
+        specifier: ^1000.0.43
+        version: 1000.0.43(typescript@5.8.3)
       '@ickb/dao':
         specifier: ^1000.0.41
         version: 1000.0.41(typescript@5.8.3)
       '@ickb/order':
-        specifier: ^1000.0.41
-        version: 1000.0.41(typescript@5.8.3)
+        specifier: ^1000.0.43
+        version: 1000.0.43(typescript@5.8.3)
       '@ickb/utils':
-        specifier: ^1000.0.41
-        version: 1000.0.41(typescript@5.8.3)
+        specifier: ^1000.0.43
+        version: 1000.0.43(typescript@5.8.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.25.1
@@ -48,8 +48,8 @@ packages:
   '@ckb-ccc/core@1.8.0':
     resolution: {integrity: sha512-P6DGpyt7gYUSg+LUueNdSqPxueLMEisknJFa9XKhD/N3bT9Nmcy4YmOlZ1WoNsFxue26IzRz7uWCLh2YeQ4tBA==}
 
-  '@eslint-community/eslint-utils@4.6.1':
-    resolution: {integrity: sha512-KTsJMmobmbrFLe3LDh0PC2FXpcSYJt/MLjlkh/9LEnmKYLSYmT/0EW9JWANjeoemiuZrmogti0tW5Ch+qNUYDw==}
+  '@eslint-community/eslint-utils@4.7.0':
+    resolution: {integrity: sha512-dyybb3AcajC7uha6CvhdVRJqaKyn7w2YKqKyAN37NKYgZT36w+iRb0Dymmc5qEJ549c/S31cMMSFd75bteCpCw==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
     peerDependencies:
       eslint: ^6.0.0 || ^7.0.0 || >=8.0.0
@@ -62,8 +62,8 @@ packages:
     resolution: {integrity: sha512-fxlS1kkIjx8+vy2SjuCB94q3htSNrufYTXubwiBFeaQHbH6Ipi43gFJq2zCMt6PHhImH3Xmr0NksKDvchWlpQQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eslint/config-helpers@0.2.1':
-    resolution: {integrity: sha512-RI17tsD2frtDu/3dmI7QRrD4bedNKPM08ziRYaC5AhkGrzIAJelm9kJU1TznK+apx6V+cqRz8tfpEeG3oIyjxw==}
+  '@eslint/config-helpers@0.2.2':
+    resolution: {integrity: sha512-+GPzk8PlG0sPpzdU5ZvIRMPidzAnZDl/s9L+y13iodqvb8leL53bTannOrQ/Im7UkpsmFU5Ily5U60LWixnmLg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@eslint/core@0.13.0':
@@ -106,17 +106,17 @@ packages:
     resolution: {integrity: sha512-xeO57FpIu4p1Ri3Jq/EXq4ClRm86dVF2z/+kvFnyqVYRavTZmaFaUBbWCOuuTh0o/g7DSsk6kc2vrS4Vl5oPOQ==}
     engines: {node: '>=18.18'}
 
-  '@ickb/core@1000.0.41':
-    resolution: {integrity: sha512-x/zB9OikAPJLHFqr7OWoCZUNkdAN1fxwS0Mhubx6KxhiN+35tgqoaI6Ak/L6YkWN9kj/uWb7YkEkVC/EuyMUEQ==}
+  '@ickb/core@1000.0.43':
+    resolution: {integrity: sha512-qfBHz83svW/Qt4tkAirjT8b6qJa1eMFdk3cUbgzsmZImT0W6lt9AuDHWxs7BOgrFGChd7+g/ovXDVSzQSXQrjQ==}
 
   '@ickb/dao@1000.0.41':
     resolution: {integrity: sha512-h71donPknKBfUZv3TmwPRvOIJZzoo8ebY0fMxuGF5hZ5P/ckMt7c/18+K1JCfOE79NMnHNNGoV+V2owtKCnNpw==}
 
-  '@ickb/order@1000.0.41':
-    resolution: {integrity: sha512-hwJvlUa+qgNBY86oH0nQxL/aY/0Jv4YTdwivKxwhKHAI7IDPFRIi+CLJGlq+SCGY4/a6jiz+SLHOMPZM3wB8Yg==}
+  '@ickb/order@1000.0.43':
+    resolution: {integrity: sha512-zkoUI99jXC3ujRhczcH1NBCTdrf+J6KmxMdHiYO9lD/DMvtnzGZEt72VtnPk3fy2Ok272Zlf5V8UgAkcBnabzg==}
 
-  '@ickb/utils@1000.0.41':
-    resolution: {integrity: sha512-wMzBB3mIr3jxfp8kfHxqitutSYdoJ2vQBsfj770lQNbw/kk/qgDd0/XDQTueyTBBcxj1mDpupN+jGe7uCIEZtw==}
+  '@ickb/utils@1000.0.43':
+    resolution: {integrity: sha512-SdRGenvxsXcLtcg0aoCS+vFCVfveb/cnT1qhn/XW2ja2GQP6Kre86GX9WsoKeE32CCIQAsbHj8NSzX5F9AtzUQ==}
 
   '@joyid/ckb@1.1.2':
     resolution: {integrity: sha512-+e+ISF566zaKNhKNSSS5kBw8or4Kb5Xqxe/2jVkUXKkqVHSS02Trrqe0g4IjSyeN9bszzolr1XgStv2hz62tqA==}
@@ -832,7 +832,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@eslint-community/eslint-utils@4.6.1(eslint@9.25.1)':
+  '@eslint-community/eslint-utils@4.7.0(eslint@9.25.1)':
     dependencies:
       eslint: 9.25.1
       eslint-visitor-keys: 3.4.3
@@ -847,7 +847,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@eslint/config-helpers@0.2.1': {}
+  '@eslint/config-helpers@0.2.2': {}
 
   '@eslint/core@0.13.0':
     dependencies:
@@ -889,11 +889,11 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.2': {}
 
-  '@ickb/core@1000.0.41(typescript@5.8.3)':
+  '@ickb/core@1000.0.43(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
       '@ickb/dao': 1000.0.41(typescript@5.8.3)
-      '@ickb/utils': 1000.0.41(typescript@5.8.3)
+      '@ickb/utils': 1000.0.43(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -904,7 +904,7 @@ snapshots:
   '@ickb/dao@1000.0.41(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
-      '@ickb/utils': 1000.0.41(typescript@5.8.3)
+      '@ickb/utils': 1000.0.43(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -912,10 +912,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ickb/order@1000.0.41(typescript@5.8.3)':
+  '@ickb/order@1000.0.43(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
-      '@ickb/utils': 1000.0.41(typescript@5.8.3)
+      '@ickb/utils': 1000.0.43(typescript@5.8.3)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -923,7 +923,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ickb/utils@1000.0.41(typescript@5.8.3)':
+  '@ickb/utils@1000.0.43(typescript@5.8.3)':
     dependencies:
       '@ckb-ccc/core': 1.8.0(typescript@5.8.3)
     transitivePeerDependencies:
@@ -1059,7 +1059,7 @@ snapshots:
 
   '@typescript-eslint/utils@8.31.1(eslint@9.25.1)(typescript@5.8.3)':
     dependencies:
-      '@eslint-community/eslint-utils': 4.6.1(eslint@9.25.1)
+      '@eslint-community/eslint-utils': 4.7.0(eslint@9.25.1)
       '@typescript-eslint/scope-manager': 8.31.1
       '@typescript-eslint/types': 8.31.1
       '@typescript-eslint/typescript-estree': 8.31.1(typescript@5.8.3)
@@ -1277,10 +1277,10 @@ snapshots:
 
   eslint@9.25.1:
     dependencies:
-      '@eslint-community/eslint-utils': 4.6.1(eslint@9.25.1)
+      '@eslint-community/eslint-utils': 4.7.0(eslint@9.25.1)
       '@eslint-community/regexpp': 4.12.1
       '@eslint/config-array': 0.20.0
-      '@eslint/config-helpers': 0.2.1
+      '@eslint/config-helpers': 0.2.2
       '@eslint/core': 0.13.0
       '@eslint/eslintrc': 3.3.1
       '@eslint/js': 9.25.1
