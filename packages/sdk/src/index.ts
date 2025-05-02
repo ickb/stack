@@ -31,7 +31,18 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 
+/**
+ * Controller for managing iCKB operations.
+ */
 export class IckbController {
+  /**
+   * Creates an instance of IckbController.
+   * @param ickbUdtManager - The manager for iCKB UDT operations.
+   * @param logicManager - The logic manager for handling business logic.
+   * @param ownedOwnerManager - The manager for owned owner operations.
+   * @param orderManager - The manager for order operations.
+   * @param daoManager - The manager for DAO operations.
+   */
   constructor(
     public readonly ickbUdtManager: IckbUdtManager,
     public readonly logicManager: LogicManager,
@@ -40,6 +51,16 @@ export class IckbController {
     public readonly daoManager: DaoManager,
   ) {}
 
+  /**
+   * Creates an instance of IckbController from script dependencies.
+   * @param deps - The script dependencies.
+   * @param deps.xudt - The script dependencies for UDT.
+   * @param deps.dao - The script dependencies for DAO.
+   * @param deps.ickbLogic - The script dependencies for iCKB logic.
+   * @param deps.ownedOwner - The script dependencies for owned owner.
+   * @param deps.order - The script dependencies for order.
+   * @returns An instance of IckbController.
+   */
   static fromDeps({
     xudt,
     dao,
@@ -78,14 +99,24 @@ export class IckbController {
     );
   }
 
-  // fee examples:
-  // 100000n => 0.001%
-  // 10000n => 0.01%
-  // 1000n => 0.1%
-  // 100n => 1%
-  // 10n => 10%
-  // 1n => 100%
-  // less than 1n => 0%
+  /**
+   * Previews the conversion between CKB and UDT.
+   * @param conversion - The conversion parameters.
+   * @param conversion.isCkb2Udt - Indicates if the conversion is from CKB to UDT.
+   * @param conversion.amount - The amount to convert.
+   * @param conversion.rate - The exchange rate for conversion.
+   * @param conversion.fee - The fee for the conversion.
+   * @returns The rate and converted amount.
+   *
+   * Fee meaning examples:
+   * - 100000n => 0.001%
+   * - 10000n => 0.01%
+   * - 1000n => 0.1%
+   * - 100n => 1%
+   * - 10n => 10%
+   * - 1n => 100%
+   * - less than 1n => 0%
+   */
   static previewConversion(conversion: {
     isCkb2Udt: boolean;
     amount: ccc.FixedPoint;
@@ -111,6 +142,23 @@ export class IckbController {
     return { rate, convertedAmount };
   }
 
+  /**
+   * Converts between CKB and UDT based on the provided options.
+   * @param options - The conversion options.
+   * @param options.conversion - The conversion parameters.
+   * @param options.conversion.isCkb2Udt - Indicates if the conversion is from CKB to UDT.
+   * @param options.conversion.amount - The amount to convert.
+   * @param options.conversion.rate - The exchange rate for conversion.
+   * @param options.conversion.ckbMinMatchLog - Minimum CKB match log (optional).
+   * @param options.conversion.ckbMinFee - Minimum CKB fee (optional).
+   * @param options.signer - The signer for the transaction.
+   * @param options.userCells - The user's cells.
+   * @param options.system - The current system state.
+   * @param options.filters - The filters for the conversion.
+   * @param options.filters.isReadyOnly - Indicates if only ready conversions should be considered.
+   * @param options.filters.isFulfilledOnly - Indicates if only fulfilled conversions should be considered.
+   * @returns A promise that resolves to the conversion result or undefined.
+   */
   async convert(options: {
     conversion: Parameters<typeof IckbController.previewConversion>[0] & {
       ckbMinMatchLog?: number;
@@ -166,6 +214,19 @@ export class IckbController {
     );
   }
 
+  /**
+   * Attempts to perform a conversion based on the provided parameters.
+   * @param n - The size of deposit to make or withdraw from.
+   * @param conversion - The conversion parameters.
+   * @param conversion.isCkb2Udt - Indicates if the conversion is from CKB to UDT.
+   * @param conversion.amount - The amount to convert.
+   * @param conversion.rate - The exchange rate for conversion.
+   * @param conversion.info - Additional information for the conversion.
+   * @param conversion.ckbMinFee - Minimum CKB fee.
+   * @param conversion.lock - The script lock for the transaction.
+   * @param options - Additional options for the conversion.
+   * @returns A promise that resolves to the conversion result or undefined.
+   */
   private async attempt(
     n: number,
     conversion: {
@@ -262,6 +323,16 @@ export class IckbController {
     }
   }
 
+  /**
+   * Retrieves the L1 state based on the provided parameters.
+   * @param client - The client to interact with the blockchain.
+   * @param filter - The set of filters to apply.
+   * @param locks - The script locks to filter the user cells.
+   * @param options - Optional parameters for the state retrieval.
+   * @param options.minLockUp - The minimum lock-up period (optional).
+   * @param options.maxLockUp - The maximum lock-up period (optional).
+   * @returns A promise that resolves to an object containing the system state and user cells.
+   */
   async getL1State(
     client: ccc.Client,
     filter: Set<keyof UserCells | "depositPool">,
@@ -362,38 +433,88 @@ export class IckbController {
   }
 }
 
+/**
+ * Represents the state of the system.
+ */
 export interface SystemState {
+  /** The fee rate for transactions. */
   feeRate: ccc.Num;
+
+  /** The tip for the current block header. */
   tip: ccc.ClientBlockHeader;
-  exchangeRatio: {
-    ckbScale: ccc.Num;
-    udtScale: ccc.Num;
-  };
+
+  /** The exchange ratio between CKB and UDT. */
+  exchangeRatio: ExchangeRatio;
+
+  /** The deposit cap expressed in CKB. */
   ckbDepositCap: ccc.FixedPoint;
+
+  /** The deposit cap expressed in iCKB. */
   udtDepositCap: ccc.FixedPoint;
+
+  /**
+   * The deposit pool containing iCKB deposit cells with cumulative iCKB amounts.
+   */
   depositPool: (IckbDepositCell & { udtCumulative: bigint })[];
+
+  /**
+   * The order pool containing non-user order cells.
+   */
   orderPool: OrderCell[];
 }
 
+/**
+ * Represents the user cells in the system.
+ */
 export interface UserCells {
+  /** The capacities owned by the user. */
   capacities: CapacityCell[];
+
+  /** The UDTs owned by the user. */
   udts: UdtCell[];
+
+  /** The receipts associated with the user's transactions. */
   receipts: ReceiptCell[];
+
+  /** The withdrawal groups for the user. */
   withdrawalGroups: WithdrawalGroup[];
+
+  /** The orders placed by the user. */
   orders: OrderGroup[];
+
+  /** The classical/non-iCKB deposits made by the user. */
   deposits: DaoCell[];
+
+  /** The classical/non-iCKB withdrawal requests made by the user. */
   withdrawalRequests: DaoCell[];
 }
 
+/**
+ * Represents a conversion transaction.
+ */
 export interface Conversion {
+  /** The smart transaction associated with the conversion. */
   tx: SmartTransaction;
+
+  /** The fee in CKB for the order created by the conversion. */
   ckbFee: ccc.FixedPoint;
+
+  /** The estimated maturity epoch for conversion. */
   maturity: ccc.Epoch;
 }
 
-// Estimate bot ability to fulfill orders:
-// - CKB to iCKB orders at 100k CKB every minute
-// - iCKB to CKB orders at 200 CKB every minute
+/**
+ * Estimates the maturity of an order based on the type of conversion and amount.
+ *
+ * @param isCkb2Udt - A boolean indicating if the order is from CKB to UDT.
+ * @param amount - The amount of CKB or UDT involved in the order.
+ * @param tip - The current block header tip.
+ * @returns The estimated maturity epoch for the order.
+ *
+ * The estimation is based on:
+ * - CKB to iCKB orders at 100k CKB every minute
+ * - iCKB to CKB orders at 200 CKB every minute
+ */
 function orderMaturityEstimate(
   isCkb2Udt: boolean,
   amount: bigint,
