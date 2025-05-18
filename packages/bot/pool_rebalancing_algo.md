@@ -33,11 +33,11 @@ For simplicity, let's model:
 
 - **Free Coins:** `O = N + m - M`, which accounts for the total coins available minus the agent's capacity. This way `O` is independent from the coins held by agent.
 
-- **Segmentation Function:** Total segments = `2^(ceil(log2(O)))`. Each segment have the same length and it can be indexed (0,1,2...) starting from an absolute origin that remains unchanged across snapshots. Segmentation is recalculated at every snapshot, so coins placed previously may change immediately the segment they belong to. Segment evaluation cycles modulo `O`: 0, 1, 2, … `O` - 1  and then repeats.
+- **Segmentation Function:** Total segments `Q = 2^(ceil(log2(O)))`. Each segment have the same length and it can be indexed (0,1,2...) starting from an absolute origin that remains unchanged across snapshots. Segmentation is recalculated at every snapshot, so coins placed previously may change immediately the segment they belong to. Segment evaluation cycles modulo `O`: 0, 1, 2, … `O` - 1  and then repeats.
 
 - **Segment Priority:**
-  - **High-Priority Segments:** Odd-numbered segments (indices 1,3...) are High-Priority and at equilibrium each must have exactly one coin.
-  - **Low-Priority Segments:** Even-numbered segments (indices 0,2...) are Low-Priority and at equilibrium each must have either one or zero coins.
+  - **High-Priority Segments:** Odd-numbered segments (indices 1,3...) are High-Priority and at equilibrium each must have exactly one coin. There are `Q/2` of them.
+  - **Low-Priority Segments:** Even-numbered segments (indices 0,2...) are Low-Priority and at equilibrium each must have either one or zero coins. There are `Q/2` of them, but at equilibrium only `O - Q/2` will have one coin, while the rest `Q - O` will have zero coins.
   - **Visual Idea:** We can visualize this segmentation prioritization as the alternating colors of the outer rim of a circular Dart Board.
 
 ## Strategy and Dynamics
@@ -73,7 +73,7 @@ Given a snapshot, segmentation recalculation always occurs prior to action decis
 
 **Pick-up Strategy:** Follow general rules for multiple coins in one segment.
 
-**Deposit Strategy:** Deposit a coin when a Low-Priority Segment is empty and the agent has coins.
+**Deposit Strategy:** Deposit a coin on a empty Low-Priority Segment if there are less than `O - Q/2` Low-Priority Segments with at least a coin and the agent has coins.
 
 ### Final Target: Equilibrium
 
