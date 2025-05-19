@@ -56,7 +56,7 @@ export class IckbController {
   /**
    * Creates an instance of IckbController from script dependencies.
    * @param deps - The script dependencies.
-   * @param deps.xudt - The script dependencies for UDT.
+   * @param deps.udt - The script dependencies for UDT.
    * @param deps.dao - The script dependencies for DAO.
    * @param deps.ickbLogic - The script dependencies for iCKB logic.
    * @param deps.ownedOwner - The script dependencies for owned owner.
@@ -64,14 +64,8 @@ export class IckbController {
    * @returns An instance of IckbController.
    */
   static fromDeps(
-    {
-      xudt,
-      dao,
-      ickbLogic,
-      ownedOwner,
-      order,
-    }: {
-      xudt: ScriptDeps;
+    deps: {
+      udt: ScriptDeps;
       dao: ScriptDeps;
       ickbLogic: ScriptDeps;
       ownedOwner: ScriptDeps;
@@ -79,27 +73,30 @@ export class IckbController {
     },
     bots: ccc.Script[],
   ): IckbController {
-    const daoManager = DaoManager.fromDeps(dao);
-
     const {
-      script: { codeHash, hashType },
-      cellDeps,
-    } = xudt;
-    const ickbXudt = {
+      udt: {
+        script: { codeHash, hashType },
+        cellDeps,
+      },
+      ickbLogic: { script: ickbLogicScript },
+    } = deps;
+
+    const daoManager = DaoManager.fromDeps(deps);
+    const udt = {
       script: new ccc.Script(
         codeHash,
         hashType,
-        [ickbLogic.script.hash(), "00000080"].join("") as ccc.Hex,
+        [ickbLogicScript.hash(), "00000080"].join("") as ccc.Hex,
       ),
       cellDeps,
     };
-    const ickbUdtManager = IckbUdtManager.fromDeps(ickbXudt, daoManager);
+    const ickbUdtManager = IckbUdtManager.fromDeps({ udt }, daoManager);
 
     return new IckbController(
       ickbUdtManager,
-      LogicManager.fromDeps(ickbLogic, daoManager, ickbUdtManager),
-      OwnedOwnerManager.fromDeps(ownedOwner, daoManager, ickbUdtManager),
-      OrderManager.fromDeps(order, ickbUdtManager),
+      LogicManager.fromDeps(deps, daoManager, ickbUdtManager),
+      OwnedOwnerManager.fromDeps(deps, daoManager, ickbUdtManager),
+      OrderManager.fromDeps(deps, ickbUdtManager),
       daoManager,
       bots,
     );
@@ -294,11 +291,11 @@ export class IckbController {
         maturities.push(
           orderMaturityEstimate(isCkb2Udt, amount, udtWithdrawed, system),
         );
-      }
 
-      // Check that order provides enough fee to the bot for being matched
-      if (ckbFee < ckbMinFee) {
-        return undefined;
+        // Check that order provides enough fee to the bot for being matched
+        if (ckbFee < ckbMinFee) {
+          return undefined;
+        }
       }
 
       const { receipts, withdrawalGroups, orders, udts, capacities } =
