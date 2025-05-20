@@ -73,25 +73,8 @@ export class IckbController {
     },
     bots: ccc.Script[],
   ): IckbController {
-    const {
-      udt: {
-        script: { codeHash, hashType },
-        cellDeps,
-      },
-      ickbLogic: { script: ickbLogicScript },
-    } = deps;
-
     const daoManager = DaoManager.fromDeps(deps);
-    const udt = {
-      script: new ccc.Script(
-        codeHash,
-        hashType,
-        [ickbLogicScript.hash(), "00000080"].join("") as ccc.Hex,
-      ),
-      cellDeps,
-    };
-    const ickbUdtManager = IckbUdtManager.fromDeps({ udt }, daoManager);
-
+    const ickbUdtManager = IckbUdtManager.fromDeps(deps, daoManager);
     return new IckbController(
       ickbUdtManager,
       LogicManager.fromDeps(deps, daoManager, ickbUdtManager),
