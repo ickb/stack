@@ -1,0 +1,47 @@
+{
+  "name": "@ickb/template",
+  "version": "0.0.0",
+  "description": "iCKB template built on top of CCC",
+  "author": "phroi",
+  "license": "MIT",
+  "private": false,
+  "homepage": "https://github.com/ickb/template",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ickb/template.git"
+  },
+  "sideEffects": false,
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "scripts": {
+    "build": "pnpm run build:esm && pnpm run build:cjs && node dist/cjs/index.js",
+    "build:esm": "tsc",
+    "build:cjs": "tsc --module commonjs --outDir dist/cjs",
+    "lint": "eslint ./src",
+    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint"
+  },
+  "files": [
+    "/dist",
+    "/src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "eslint": "^9.28.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.0"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.9.0",
+    "@ickb/core": "^1000.0.72",
+    "@ickb/dao": "^1000.0.72",
+    "@ickb/order": "^1000.0.75",
+    "@ickb/sdk": "^1000.0.71",
+    "@ickb/utils": "^1000.0.72"
+  }
+}
