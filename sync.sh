@@ -79,12 +79,11 @@ for target in "${targets[@]}"; do
     echo "    Empty dir -> full sync"
     rsync "${RSYNC_OPTS[@]}" "$script_dir/." "$target/"
 
-    # Replace every occurrence of the literal word "template" in each text file
+    # Replace every occurrence of the literal word "template" in package.json and README.md
     base="$(basename "$target")"
-    find "$target" -type f -exec grep -Il . {} + |
-      while IFS= read -r file; do
-        sed -i "s/template/${base}/g" "$file"
-      done
+    for file in "$target/package.json" "$target/README.md"; do
+      [[ -f $file ]] && sed -i "s/\btemplate\b/${base}/g" "$file"
+    done
 
   else
     # Selective sync: exclude key project files and directories.
