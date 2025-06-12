@@ -38,6 +38,12 @@ for t; do
   mkdir -p "$t"                              # create target if missing
   abs_t="$(cd "$t" && pwd -P)"               # resolve to canonical absolute path
 
+  # Guard against syncing into a sub-directory of the template itself.
+  if [[ $abs_t == "$script_dir"* ]]; then
+    echo "Error: target $abs_t is inside template dir $script_dir" >&2
+    exit 1
+  fi
+
   # Require write permission on the target directory.
   if [[ ! -w $abs_t ]]; then
     echo "Error: no write access to $abs_t" >&2
