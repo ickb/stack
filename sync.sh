@@ -78,6 +78,7 @@ is_empty_dir() {
 RSYNC_OPTS=(
   --archive
   --exclude="$script_name"
+  --exclude='pnpm-lock.yaml'
   --exclude='.git/'
   --filter=':- .gitignore'
 )
