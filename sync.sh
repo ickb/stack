@@ -113,7 +113,7 @@ for target in "${targets[@]}"; do
     merged="$target/package.json.tmp"
     base="$(basename "$target")"
 
-    jq -n \
+    jq -j -n \
       --slurpfile new <(sed "s/template/${base}/g" "$tmpl") \
       --slurpfile old "$old" \
     '
