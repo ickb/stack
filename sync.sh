@@ -35,12 +35,18 @@ script_name="$(basename "${BASH_SOURCE[0]}")"
 # Collect and validate absolute paths for each target.
 targets=()
 for t; do
-  mkdir -p "$t"                              # create target if missing
-  abs_t="$(cd "$t" && pwd -P)"               # resolve to canonical absolute path
+  # Must already exist as a directory
+  if [[ ! -d $t ]]; then
+    echo "Error: '$t' does not exist or is not a directory" >&2
+    exit 1
+  fi
+
+  # resolve to canonical absolute path
+  abs_t="$(cd "$t" && pwd -P)"           
 
   # Guard against syncing into a sub-directory of the template itself.
   if [[ $abs_t == "$script_dir"* ]]; then
-    echo "Error: target $abs_t is inside template dir $script_dir" >&2
+    echo "Error: '$t' is inside template dir $script_dir" >&2
     exit 1
   fi
 
