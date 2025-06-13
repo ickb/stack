@@ -5,21 +5,6 @@ import { OrderManager } from "@ickb/order";
 import { CapacityManager, unique, type ScriptDeps } from "@ickb/utils";
 
 /**
- * The iCKB UDT name.
- */
-export const UDT_NAME = "iCKB";
-
-/**
- * The iCKB UDT symbol.
- */
-export const UDT_SYMBOL = "iCKB";
-
-/**
- * The iCKB UDT number of decimals.
- */
-export const UDT_DECIMALS = 8;
-
-/**
  * Retrieves the configuration for the given deployment environment.
  *
  * Accepts either a string identifier ("mainnet" or "testnet") or a custom configuration
@@ -28,19 +13,19 @@ export const UDT_DECIMALS = 8;
  * It sets up various managers (UDT, Logic, OwnedOwner, Order, Dao, Capacity) and also
  * aggregates a unique list of known bot scripts.
  *
- * @param deps - Either a network identifier ("mainnet"/"testnet") or an object containing
+ * @param d - Either a network identifier ("mainnet"/"testnet") or an object containing
  *   explicit script dependencies for devnet.
  * @param bots - An optional array of bot script-like objects to augment the list of known bots.
  * @returns An object containing the instantiated managers and bots.
  */
 export function getConfig(
-  deps:
+  d:
     | "mainnet"
     | "testnet"
     | {
         // For devnet configuration provide explicit script dependencies.
         udt: ScriptDeps;
-        ickbLogic: ScriptDeps;
+        logic: ScriptDeps;
         ownedOwner: ScriptDeps;
         order: ScriptDeps;
         dao: ScriptDeps;
@@ -48,40 +33,60 @@ export function getConfig(
   bots: ccc.ScriptLike[] = [],
 ): {
   managers: {
-    udt: IckbUdtManager;
-    ickbLogic: LogicManager;
+    capacity: CapacityManager;
+    dao: DaoManager;
+    ickbUdt: IckbUdtManager;
+    logic: LogicManager;
     ownedOwner: OwnedOwnerManager;
     order: OrderManager;
-    dao: DaoManager;
-    capacity: CapacityManager;
   };
   bots: ccc.Script[];
 } {
   // If deps is provided as a network string, use the pre-defined constants.
-  if (deps === "mainnet" || deps === "testnet") {
+  if (d === "mainnet" || d === "testnet") {
     bots = bots.concat(
-      deps === "mainnet" ? MAINNET_KNOWN_BOTS : TESTNET_KNOWN_BOTS,
+      d === "mainnet" ? MAINNET_KNOWN_BOTS : TESTNET_KNOWN_BOTS,
     );
-    const depGroup = deps === "mainnet" ? MAINNET_DEP_GROUP : TESTNET_DEP_GROUP;
-    deps = {
+    const depGroup = d === "mainnet" ? MAINNET_DEP_GROUP : TESTNET_DEP_GROUP;
+    d = {
       udt: from(UDT, depGroup),
-      ickbLogic: from(ICKB_LOGIC, depGroup),
+      logic: from(ICKB_LOGIC, depGroup),
       ownedOwner: from(OWNED_OWNER, depGroup),
       order: from(ORDER, depGroup),
       dao: from(DAO, depGroup),
     };
   }
 
-  const daoManager = DaoManager.fromDeps(deps);
-  const ickbUdtManager = IckbUdtManager.fromDeps(deps, daoManager);
+  const capacity = CapacityManager.withAnyData();
+  const dao = new DaoManager(d.dao.script, d.dao.cellDeps);
+  const ickbUdt = new IckbUdtManager(
+    d.udt.script,
+    d.udt.cellDeps,
+    d.logic.script,
+    dao,
+  );
+  const logic = new LogicManager(
+    d.logic.script,
+    d.logic.cellDeps,
+    dao,
+    ickbUdt,
+  );
+  const ownedOwner = new OwnedOwnerManager(
+    d.ownedOwner.script,
+    d.ownedOwner.cellDeps,
+    dao,
+    ickbUdt,
+  );
+  const order = new OrderManager(d.order.script, d.order.cellDeps, ickbUdt);
+
   return {
     managers: {
-      udt: ickbUdtManager,
-      ickbLogic: LogicManager.fromDeps(deps, daoManager, ickbUdtManager),
-      ownedOwner: OwnedOwnerManager.fromDeps(deps, daoManager, ickbUdtManager),
-      order: OrderManager.fromDeps(deps, ickbUdtManager),
-      dao: daoManager,
-      capacity: CapacityManager.withAnyData(),
+      capacity,
+      dao,
+      ickbUdt,
+      logic,
+      ownedOwner,
+      order,
     },
     bots: [...unique(bots.map((b) => ccc.Script.from(b)))],
   };
@@ -102,16 +107,6 @@ function from(script: ccc.ScriptLike, ...cellDeps: ccc.CellDep[]): ScriptDeps {
 }
 
 /**
- * UDT (User Defined Token) lock script information used for onchain validation.
- */
-const UDT = {
-  codeHash:
-    "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
-  hashType: "data1",
-  args: "0xb73b6ab39d79390c6de90a09c96b290c331baf1798ed6f97aed02590929734e800000080",
-};
-
-/**
  * DAO (Decentralized Autonomous Organization) lock script information.
  */
 const DAO = {
@@ -119,6 +114,16 @@ const DAO = {
     "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
   hashType: "type",
   args: "0x",
+};
+
+/**
+ * UDT (User Defined Token) lock script information used for onchain validation.
+ */
+const UDT = {
+  codeHash:
+    "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
+  hashType: "data1",
+  args: "0xb73b6ab39d79390c6de90a09c96b290c331baf1798ed6f97aed02590929734e800000080",
 };
 
 /**

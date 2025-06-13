@@ -55,11 +55,11 @@ export class IckbSdk {
    */
   static from(...args: Parameters<typeof getConfig>): IckbSdk {
     const {
-      managers: { ownedOwner, ickbLogic, order, capacity },
+      managers: { ownedOwner, logic, order, capacity },
       bots,
     } = getConfig(...args);
 
-    return new IckbSdk(ownedOwner, ickbLogic, order, capacity, bots);
+    return new IckbSdk(ownedOwner, logic, order, capacity, bots);
   }
 
   /**
