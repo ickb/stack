@@ -1,6 +1,6 @@
 {
   "name": "@ickb/sdk",
-  "version": "1000.0.81",
+  "version": "1000.0.82",
   "description": "iCKB SDK built on top of CCC",
   "keywords": [
     "ickb",
@@ -46,17 +46,17 @@
     "provenance": true
   },
   "devDependencies": {
-    "@eslint/js": "^9.28.0",
-    "eslint": "^9.28.0",
+    "@eslint/js": "^9.29.0",
+    "eslint": "^9.29.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.34.0"
   },
   "dependencies": {
-    "@ckb-ccc/core": "^1.9.0",
-    "@ickb/core": "^1000.0.81",
-    "@ickb/dao": "^1000.0.81",
-    "@ickb/order": "^1000.0.81",
-    "@ickb/utils": "^1000.0.81"
+    "@ckb-ccc/core": "canary",
+    "@ickb/core": "^1000.0.82",
+    "@ickb/dao": "^1000.0.82",
+    "@ickb/order": "^1000.0.82",
+    "@ickb/utils": "^1000.0.82"
   }
 }
