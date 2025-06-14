@@ -125,9 +125,9 @@ for target in "${targets[@]}"; do
       | .name            = $old.name
       | .version         = $old.version
       | .description     = $old.description
-      | .dependencies    = ($new.dependencies + $old.dependencies)
-      | .devDependencies = ($new.devDependencies + $old.devDependencies)
-      | .scripts         = ($new.scripts + $old.scripts)
+      | .dependencies    = ($old.dependencies + $new.dependencies)
+      | .devDependencies = ($old.devDependencies + $new.devDependencies)
+      | .scripts         = ($old.scripts + $new.scripts)
     ' > "$merged" \
     && mv "$merged" "$old"
   fi
