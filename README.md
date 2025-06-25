@@ -6,6 +6,24 @@ Use `./sync.sh` to create or update boilerplate in repositories.
 
 Note: `./sync.sh` doesn't clean up old boilerplate files.
 
+Bonus: import un-published monorepos with:
+
+```json
+{
+  "scripts": {
+    "preinstall": "./.devcontainer/setup-local-store.sh https://github.com/ckb-devrel/ccc.git 9d016b7c0d349f16162e9387532448c81d879f87",
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "link:.local-store/ccc/packages/core",
+    "@ckb-ccc/udt": "link:.local-store/ccc/packages/udt"
+  }
+}
+```
+
+Usage: ./.devcontainer/setup-local-store.sh REPO_URL REF [REPO_URL REF …]
+  REPO_URL: Git repository HTTPS or SSH URL
+  REF:      Either a commit SHA (7–40 hex chars), a PR number (digits), or a branch name
+
 ## Dependencies
 
 ```mermaid

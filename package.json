@@ -34,8 +34,9 @@
   "scripts": {
     "prepare": "tsc",
     "lint": "eslint ./src",
-    "clean": "rm -fr pnpm-lock.yaml dist/*",
-    "revamp": "pnpm clean; pnpm up && node dist/index.js && pnpm lint"
+    "clean": "rm -fr pnpm-lock.yaml dist/* .local-store/.cache/*",
+    "preinstall": "./.devcontainer/setup-local-store.sh https://github.com/ckb-devrel/ccc.git 9d016b7c0d349f16162e9387532448c81d879f87",
+    "revamp": "pnpm clean; pnpm up && pnpm node dist/index.js && pnpm lint"
   },
   "files": [
     "dist",
@@ -48,11 +49,12 @@
   "devDependencies": {
     "@eslint/js": "^9.29.0",
     "eslint": "^9.29.0",
-    "prettier": "^3.5.3",
+    "prettier": "^3.6.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0"
+    "typescript-eslint": "^8.35.0"
   },
   "dependencies": {
-    "@ckb-ccc/core": "canary"
+    "@ckb-ccc/core": "link:.local-store/ccc/packages/core",
+    "@ckb-ccc/udt": "link:.local-store/ccc/packages/udt"
   }
 }

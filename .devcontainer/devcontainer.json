@@ -7,16 +7,18 @@
   "mounts": [
     "source=ickb-${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
     "source=ickb-${localWorkspaceFolderBasename}-dist,target=${containerWorkspaceFolder}/dist,type=volume",
-    "source=pnpm-cache,target=${containerWorkspaceFolder}/.pnpm-store,type=volume"
+    "source=pnpm-cache,target=${containerWorkspaceFolder}/.pnpm-store,type=volume",
+    "source=local-store,target=${containerWorkspaceFolder}/.local-store,type=volume"
   ],
   // Features to add to the dev container. More info: https://containers.dev/features.
   // "features": {},
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   // "forwardPorts": [],
   // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "sudo chown node -R . && npm install -g pnpm@latest && pnpm install",
+  "postCreateCommand": "sudo chown node -R . && npm install -g pnpm@latest",
   // Configure tool-specific properties.
   // "customizations": {},
+  "postStartCommand": "pnpm install",
   "remoteUser": "node",
   "customizations": {
     // Configure properties specific to VS Code.
