@@ -34,8 +34,8 @@ jobs:
 
       - name: Publish to NPM if not already present
         run: |
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_NAME=$(jq -r .name < package.json)
+          PACKAGE_VERSION=$(jq -r .version < package.json)
 
           if pnpm info ${PACKAGE_NAME}@${PACKAGE_VERSION} > /dev/null 2>&1; then
             echo "Version ${PACKAGE_VERSION} of ${PACKAGE_NAME} is already published, nothing to do."

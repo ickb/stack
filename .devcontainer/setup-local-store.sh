@@ -7,6 +7,9 @@ set -euo pipefail
 # Usage: ./.devcontainer/setup-local-store.sh REPO_URL REF [REPO_URL REF …]
 #   REPO_URL: Git repository HTTPS or SSH URL
 #   REF:      Either a commit SHA (7–40 hex chars), a PR number (digits), or a branch name
+#
+# Example: ./.devcontainer/setup-local-store.sh https://github.com/ckb-devrel/ccc.git 228
+
 if [ $# -lt 2 ] || (( $# % 2 )); then
   echo "Usage: $0 REPO_URL REF [REPO_URL REF …]" >&2
   exit 1

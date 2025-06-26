@@ -2,11 +2,15 @@
 
 iCKB template built on top of CCC to manage iCKB Typescript libraries boilerplate.
 
-Use `./sync.sh` to create or update boilerplate in repositories.
+## Sync boilerplate
 
-Note: `./sync.sh` doesn't clean up old boilerplate files.
+Use `./sync.sh` to create or update boilerplate across repositories.
 
-Bonus: import un-published monorepos with:
+Note: it will not clean up old boilerplate files.
+
+## Import locally
+
+Import locally unpublished mono-repositories (like CCC) in case of working with a PR that is not yet published in canary.
 
 ```json
 {
@@ -20,9 +24,16 @@ Bonus: import un-published monorepos with:
 }
 ```
 
-Usage: ./.devcontainer/setup-local-store.sh REPO_URL REF [REPO_URL REF …]
-  REPO_URL: Git repository HTTPS or SSH URL
-  REF:      Either a commit SHA (7–40 hex chars), a PR number (digits), or a branch name
+## Distribute locally
+
+Useful for testing changes across multiple repos before publishing to npm registry.
+
+```json
+{
+    "prepare": "tsc && pnpm distribute",
+    "distribute": "D=.local-store/$(jq -r .name < package.json); mkdir -p \"$D\" && rsync -a --delete --include='package.json' --include='src/***' --include='dist/***' --exclude='*' . \"$D\""
+}
+```
 
 ## Dependencies
 
