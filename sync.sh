@@ -120,12 +120,22 @@ for target in "${targets[@]}"; do
       $new[0] as $new |
       $old[0] as $old |
 
+      # Only update deps already present, using template’s version if available; don’t add new ones.
+      def merge_locked(old; new):
+        old
+        | to_entries
+        | map({
+            key: .key,
+            value: (new[.key] // .value)
+          })
+        | from_entries;
+
       # Start with full template structure, then override preserved fields.
       $new
       | .name            = $old.name
       | .version         = $new.version
       | .description     = $old.description
-      | .dependencies    = ($old.dependencies + $new.dependencies)
+      | .dependencies    = merge_locked($old.dependencies; $new.dependencies)
       | .devDependencies = ($old.devDependencies + $new.devDependencies)
       | .scripts         = ($old.scripts + $new.scripts)
     ' > "$merged" \
