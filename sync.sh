@@ -123,7 +123,7 @@ for target in "${targets[@]}"; do
       # Start with full template structure, then override preserved fields.
       $new
       | .name            = $old.name
-      | .version         = $old.version
+      | .version         = $new.version
       | .description     = $old.description
       | .dependencies    = ($old.dependencies + $new.dependencies)
       | .devDependencies = ($old.devDependencies + $new.devDependencies)
