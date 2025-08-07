@@ -33,8 +33,11 @@
           "typescript",
           "typescriptreact"
         ],
-        "geminicodeassist.updateChannel": "Insiders",
-        "geminicodeassist.enableTelemetry": false
+        "geminicodeassist.chat.enableStreaming": false,
+        "geminicodeassist.enableTelemetry": false,
+        "geminicodeassist.inlineSuggestions.suggestionSpeed": "Fast",
+        "geminicodeassist.localCodebaseAwareness": false,
+        "geminicodeassist.rules": "As a terse, expert peer, be correct. Code only when most direct."
       },
       "extensions": [
         "streetsidesoftware.code-spell-checker",

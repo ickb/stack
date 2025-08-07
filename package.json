@@ -35,6 +35,7 @@
     "prepare": "tsc && pnpm distribute",
     "lint": "eslint ./src",
     "clean": "rm -fr pnpm-lock.yaml dist/* .local-store/.cache/*",
+    "deepclean": "pnpm clean; rm -fr .local-store/* .pnpm-store/* node_modules/*",
     "preinstall": "",
     "distribute": "D=.local-store/$(jq -r .name < package.json); mkdir -p \"$D\" && rsync -a --delete --include='package.json' --include='src/***' --include='dist/***' --exclude='*' . \"$D\"",
     "revamp": "pnpm clean; pnpm up && pnpm node dist/index.js && pnpm lint"
@@ -48,13 +49,13 @@
     "provenance": true
   },
   "devDependencies": {
-    "@eslint/js": "^9.29.0",
-    "eslint": "^9.29.0",
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
     "prettier": "^3.6.2",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.35.0"
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.0"
   },
   "dependencies": {
-    "@ckb-ccc/core": "canary"
+    "@ckb-ccc/core": "^1.9.0"
   }
 }
