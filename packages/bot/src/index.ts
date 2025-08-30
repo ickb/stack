@@ -26,6 +26,7 @@ import {
   isPopulated,
   lockExpanderFrom,
   maturityDiscriminator,
+  shuffle,
   since,
   txSize,
   type ChainConfig,
@@ -344,6 +345,14 @@ function partialsFrom(
     orders.sort((o0, o1) =>
       udt2CkbRatioCompare(o0.info.udtToCkb, o1.info.udtToCkb),
     );
+  }
+
+  // Sometimes shuffle orders in case of stuck corner cases orders
+  if (orders.length > 1 && Math.random() > 0.9) {
+    console.log(
+      `"Shuffling ${isCkb2Udt ? "CKB to iCKB" : "iCKB to CKB"} orders!",`,
+    );
+    orders = shuffle(orders);
   }
 
   let origins: readonly I8Cell[] = Object.freeze([]);
@@ -703,7 +712,7 @@ async function getL1State(
     matureWrGroups,
     notMatureWrGroups,
     myOrders,
-    orders,
+    orders: orders.filter((o) => o.info.isMatchable),
     ickbPool,
     tipHeader,
     feeRate: await feeRatePromise,
