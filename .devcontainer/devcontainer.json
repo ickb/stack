@@ -1,0 +1,53 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+{
+  "name": "Node.js & TypeScript",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/typescript-node",
+  "mounts": [
+    "source=ickb-${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=ickb-${localWorkspaceFolderBasename}-dist,target=${containerWorkspaceFolder}/dist,type=volume",
+    "source=pnpm-cache,target=${containerWorkspaceFolder}/.pnpm-store,type=volume",
+    "source=local-store,target=${containerWorkspaceFolder}/.local-store,type=volume",
+    "source=gemini-code-assist,target=/home/node/.cache/google-vscode-extension,type=volume"
+  ],
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  // "features": {},
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+  // Use 'postCreateCommand' to run commands after the container is created.
+  "postCreateCommand": "sudo chown node -R . /home && npm install -g pnpm@latest",
+  // Configure tool-specific properties.
+  // "customizations": {},
+  "postStartCommand": "pnpm install",
+  "remoteUser": "node",
+  "customizations": {
+    // Configure properties specific to VS Code.
+    "vscode": {
+      // Set *default* container specific settings.json values on container create.
+      "settings": {
+        "eslint.validate": [
+          "json",
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "geminicodeassist.chat.enableStreaming": false,
+        "geminicodeassist.enableTelemetry": false,
+        "geminicodeassist.inlineSuggestions.suggestionSpeed": "Fast",
+        "geminicodeassist.localCodebaseAwareness": false,
+        "geminicodeassist.rules": "As a terse, expert peer, be correct. Code only when most direct."
+      },
+      "extensions": [
+        "streetsidesoftware.code-spell-checker",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "yoavbls.pretty-ts-errors",
+        "davidanson.vscode-markdownlint",
+        "github.vscode-github-actions",
+        "google.geminicodeassist"
+      ]
+    }
+  }
+}
