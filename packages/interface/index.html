@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>iCKB DApp</title>
+    <link rel="icon" href="favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta property="og:title" content="iCKB DApp" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:description"
+      content="An interface for interacting with iCKB scripts."
+    />
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body
+    id="app"
+    class="m-auto grid max-w-3xl cursor-default grid-cols-1 space-y-8 rounded bg-gradient-to-r from-zinc-950 to-zinc-800 p-8 text-slate-300 mix-blend-hard-light landscape:min-h-screen landscape:shadow-2xl landscape:shadow-black"
+  >
+    <div class="m-4 flex flex-col space-y-4">
+      <h1
+        class="flex flex-row items-center justify-center pb-10 text-5xl font-medium"
+      >
+        <span class="mr-2 text-5xl text-amber-400">{</span>
+        <span>iCKB</span>
+        <span class="ml-2 text-5xl text-amber-400">}</span>
+      </h1>
+      <p>
+        This is the iCKB DApp. A way to convert between CKB and the iCKB token.
+        The iCKB token is a liquid representation of deposits in the iCKB
+        protocol. It allows for fast withdrawals while maintaining the benefits
+        of traditional NervosDAO deposits without the need for re-staking.
+      </p>
+      <h2 class="items-center justify-center pt-8 pb-4 text-3xl font-medium">
+        Would you like to try out the DApp?
+      </h2>
+      <button
+        id="JoyID_mainnet"
+        class="text-s min-h-12 w-full cursor-pointer rounded border-2 border-amber-400 leading-relaxed font-bold tracking-wider text-amber-400 uppercase disabled:cursor-default disabled:opacity-50"
+      >
+        Yes, connect JoyID to Mainnet
+      </button>
+      <button
+        id="JoyID_testnet"
+        class="text-s min-h-12 w-full cursor-pointer rounded border-2 border-amber-400 leading-relaxed font-bold tracking-wider text-amber-400 uppercase disabled:cursor-default disabled:opacity-50"
+      >
+        Yes, connect JoyID to Testnet
+      </button>
+      <a
+        href="https://t.me/NervosNation/307406"
+        target="_blank"
+        class="text-s inline-flex min-h-12 w-full items-center justify-center rounded border-2 border-amber-400 text-center leading-relaxed font-bold tracking-wider text-amber-400 uppercase"
+      >
+        No, I'll feedback the dev
+      </a>
+      <a
+        href="https://www.nervdao.com"
+        class="text-s inline-flex min-h-12 w-full items-center justify-center rounded border-2 border-amber-400 text-center leading-relaxed font-bold tracking-wider text-amber-400 uppercase"
+      >
+        No, I'll use NervDAO
+      </a>
+      <div id="progress" class="hidden h-2 w-full overflow-hidden rounded">
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-3.00s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.85s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.70s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.55s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.40s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.25s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-2.10s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.95s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.80s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.65s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.50s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.35s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.20s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-1.05s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.90s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.75s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.60s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.45s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.30s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-delay:-0.15s] [animation-duration:6s]"
+        ></div>
+        <div
+          class="size-full animate-pulse bg-amber-400 [animation-duration:6s]"
+        ></div>
+      </div>
+      <script type="module">
+        const buttons = document.getElementsByTagName("button");
+        const progress = document.getElementById("progress");
+        const myModule = import("./src/main.tsx");
+        for (const button of buttons) {
+          button.addEventListener(
+            "click",
+            async (event) => {
+              for (const button of buttons) {
+                button.disabled = true;
+              }
+              progress.classList.replace("hidden", "flex");
+              const { startApp } = await myModule;
+              startApp(event.target.id);
+            },
+            false,
+          );
+        }
+      </script>
+      <p>
+        Feel free to give feedback for how you would like to see it improved.
+        Also visit the
+        <a
+          href="https://faucet.nervos.org/"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >Nervos Testnet Faucet</a
+        >
+        if you need some free testnet CKB to test with.
+      </p>
+      <h2 class="items-center justify-center pt-8 pb-4 text-3xl font-medium">
+        What is NervosDAO?
+      </h2>
+      <p>
+        NervosDAO is a L1 Script that allows users to deposit their CKB and earn
+        interests from
+        <a
+          href="https://www.nervos.org/knowledge-base/understanding_nervos_ckb_issuance_model"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >secondary issuance compensation</a
+        >. When depositing CKB in NervosDAO, these CKB are normally locked away
+        and inaccessible during the ~30 days cycle, so they are illiquid. iCKB
+        protocol
+        <a
+          href="https://www.youtube.com/watch?v=CcFFuenup38&t=781s"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >aims</a
+        >
+        to solve this.
+      </p>
+      <h2 class="items-center justify-center pt-8 pb-4 text-3xl font-medium">
+        What is iCKB?
+      </h2>
+      <p>
+        iCKB is a smart wrapper of NervosDAO. When depositing with the iCKB
+        protocol, the protocols mints iCKB tokens representing the deposits and
+        it takes control of the deposits, maintaining a
+        <a
+          href="https://github.com/ickb/proposal#enter-ickb"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >pool</a
+        >
+        of them.
+      </p>
+      <p>
+        Holding the iCKB token is roughly equivalent to a traditional NervosDAO
+        deposit, no re-staking needed, but with the additional benefit that iCKB
+        withdrawals are fast as they can withdraw from the iCKB deposits closest
+        to maturity, bypassing the NervosDAO ~30 days cycle.
+      </p>
+      <h2 class="items-center justify-center pt-8 pb-4 text-3xl font-medium">
+        Has iCKB been audited?
+      </h2>
+      <p>
+        The
+        <a
+          href="https://github.com/ickb/v1-core/tree/master/scripts"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >iCKB L1 Scripts</a
+        >
+        have been both internally reviewed by individuals with deep experience
+        in Nervos L1 and
+        <a
+          href="http://scalebit.xyz/reports/20240911-ICKB-Final-Audit-Report.pdf"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >externally audited</a
+        >
+        by the Scalebit team, an internationally recognized blockchain security
+        team.
+      </p>
+      <p>
+        As per usual practice, the Web DApp code has not been audited. Feel free
+        to review its
+        <a
+          href="https://github.com/ickb/v1-interface"
+          class="underline decoration-amber-400 decoration-wavy underline-offset-4"
+          >open source code</a
+        >
+        before using the DApp.
+      </p>
+      <h2 class="items-center justify-center pt-8 pb-4 text-3xl font-medium">
+        Who is behind iCKB?
+      </h2>
+      <p>
+        A developer, going by the pseudonym Phroi. I'd like to spend my time
+        working on projects giving meaning to my life and improving the life of
+        users. Win-win situations.
+      </p>
+      <p>
+        The Nervos Foundation who sponsored the development of iCKB project as a
+        public good. iCKB would not have happened without their help, especially
+        Jordan and Matt. In these years Jordan personally invested a lot of time
+        and energy, supporting iCKB in every way he could. Thank you a lot!!
+      </p>
+      <p>
+        Many Nervos ecosystem members who helped out iCKB directly or
+        indirectly, I'm especially grateful to Jan & his team, Homura and Nervos
+        Nation.
+      </p>
+    </div>
+  </body>
+</html>
