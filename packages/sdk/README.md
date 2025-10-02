@@ -18,12 +18,12 @@ graph TD;
     F --> D;
     F --> E;
 
-    click A "https://github.com/ickb/utils" "Go to @ickb/utils"
+    click A "https://github.com/ickb/stack/tree/master/packages/utils" "Go to @ickb/utils"
     click B "https://github.com/ckb-devrel/ccc/tree/master/packages/core" "Go to @ckb-ccc/core"
-    click C "https://github.com/ickb/dao" "Go to @ickb/dao"
-    click D "https://github.com/ickb/core" "Go to @ickb/core"
-    click E "https://github.com/ickb/order" "Go to @ickb/order"
-    click F "https://github.com/ickb/sdk" "Go to @ickb/sdk"
+    click C "https://github.com/ickb/stack/tree/master/packages/dao" "Go to @ickb/dao"
+    click D "https://github.com/ickb/stack/tree/master/packages/core" "Go to @ickb/core"
+    click E "https://github.com/ickb/stack/tree/master/packages/order" "Go to @ickb/order"
+    click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
 ```
 
 ## Epoch Semantic Versioning
@@ -32,4 +32,4 @@ This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/sdk) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/tree/master/packages/sdk) and it is released under the [MIT License](https://github.com/ickb/stack/tree/master/LICENSE).

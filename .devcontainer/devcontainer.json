@@ -8,7 +8,7 @@
 //    the container can be recreated from this config when needed.
 {
   // Display name shown by editor when selecting this dev container
-  "name": "${localWorkspaceFolderBasename} Dev Environment",
+  "name": "iCKB Dev Environment",
 
   // Base image from Microsoft devcontainers for a TypeScript + Node environment
   "image": "mcr.microsoft.com/devcontainers/typescript-node:24",
@@ -64,4 +64,3 @@
     }
   }
 }
-
