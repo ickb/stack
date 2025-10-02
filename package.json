@@ -4,8 +4,8 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "pnpm run -C packages/tests test && vitest",
-    "test:ci": "pnpm run -C packages/tests test && vitest run",
+    "test": "vitest",
+    "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
     "build:prepare": "pnpm -r install",
     "build": "pnpm -r run build",
