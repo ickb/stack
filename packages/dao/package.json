@@ -1,6 +1,6 @@
 {
   "name": "@ickb/dao",
-  "version": "1000.0.82",
+  "version": "1001.0.00",
   "description": "NervosDAO utilities built on top of CCC",
   "keywords": [
     "ickb",
@@ -10,13 +10,13 @@
   ],
   "author": "phroi",
   "license": "MIT",
-  "homepage": "https://github.com/ickb/dao",
+  "homepage": "https://ickb.org",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ickb/dao"
+    "url": "https://github.com/ickb/stack"
   },
   "bugs": {
-    "url": "https://github.com/ickb/dao/issues"
+    "url": "https://github.com/ickb/stack/issues"
   },
   "sideEffects": false,
   "type": "module",
@@ -28,14 +28,13 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "engines": {
-    "node": ">=18"
-  },
   "scripts": {
-    "prepare": "tsc",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "build": "tsc",
     "lint": "eslint ./src",
-    "clean": "rm -fr pnpm-lock.yaml dist/*",
-    "revamp": "pnpm clean; pnpm up && node dist/index.js && pnpm lint"
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml"
   },
   "files": [
     "dist",
@@ -45,15 +44,8 @@
     "access": "public",
     "provenance": true
   },
-  "devDependencies": {
-    "@eslint/js": "^9.29.0",
-    "eslint": "^9.29.0",
-    "prettier": "^3.5.3",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0"
-  },
   "dependencies": {
-    "@ckb-ccc/core": "canary",
-    "@ickb/utils": "^1000.0.82"
+    "@ckb-ccc/core": "catalog:",
+    "@ickb/utils": "workspace:*"
   }
 }
