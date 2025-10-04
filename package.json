@@ -7,12 +7,11 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
-    "build:prepare": "pnpm -r install",
-    "build": "pnpm -r run build",
-    "build:all": "pnpm -r run build",
+    "prepare": "pnpm -r prepare",
     "lint": "pnpm -r run lint",
+    "clean": "rm -fr dist node_modules pnpm-lock.yaml && pnpm -r run clean",
     "format": "pnpm -r run format",
-    "sync:config": "pnpm -r  --filter !./packages/bot --filter !./packages/interface --filter !./packages/utils -c exec 'for f in .gitignore .npmignore .prettierignore prettier.config.cjs tsconfig.json; do cp ../utils/$f .; done'",
+    "sync:config": "pnpm -r  --filter !./packages/bot --filter !./packages/interface --filter !./packages/utils -c exec 'for f in .gitignore .npmignore .prettierignore tsconfig.json typedoc.json vitest.config.mts; do cp ../utils/$f .; done'",
     "change": "pnpm changeset",
     "version": "pnpm changeset version",
     "publish": "pnpm publish -r",
@@ -25,10 +24,14 @@
     "@vitest/coverage-v8": "3.2.4",
     "eslint": "^9.36.0",
     "prettier": "^3.6.2",
+    "prettier-plugin-organize-imports": "^4.3.0",
     "typedoc": "0.28.7",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.45.0",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "latest"
   },
   "packageManager": "pnpm@10.8.1"
 }

@@ -1,2 +1,6 @@
 packages:
   - "packages/*"
+# Delay updates to dependencies by 24 hours. Since malware is usually detected quickly,
+# delaying updates by 24 hours will most likely prevent installing a bad version.
+# See: https://pnpm.io/supply-chain-security
+minimumReleaseAge: 1440

@@ -1,6 +1,5 @@
 /** @type {Partial<import("typedoc").TypeDocOptions>} */
 const config = {
-  extends: "./typedoc.base.json",
   $schema: "https://typedoc.org/schema.json",
   name: "iCKB Stack Docs",
   entryPoints: ["packages/*"],
