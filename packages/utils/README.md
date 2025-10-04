@@ -8,7 +8,7 @@ General utilities built on top of CCC
 graph TD;
     A["@ickb/utils"] --> B["@ckb-ccc/core"];
 
-    click A "https://github.com/ickb/utils" "Go to @ickb/utils"
+    click A "https://github.com/ickb/stack/tree/master/packages/utils" "Go to @ickb/utils"
     click B "https://github.com/ckb-devrel/ccc/tree/master/packages/core" "Go to @ckb-ccc/core"
 ```
 
@@ -18,4 +18,4 @@ This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/utils) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/tree/master/packages/utils) and it is released under the [MIT License](https://github.com/ickb/stack/tree/master/LICENSE).
