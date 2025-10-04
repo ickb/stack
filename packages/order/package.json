@@ -1,0 +1,59 @@
+{
+  "name": "@ickb/order",
+  "version": "1000.0.82",
+  "description": "UDT Limit Order utilities built on top of CCC",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
+  "author": "phroi",
+  "license": "MIT",
+  "homepage": "https://github.com/ickb/order",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ickb/order"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/order/issues"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prepare": "tsc",
+    "lint": "eslint ./src",
+    "clean": "rm -fr pnpm-lock.yaml dist/*",
+    "revamp": "pnpm clean; pnpm up && node dist/index.js && pnpm lint"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "eslint": "^9.29.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.0"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "canary",
+    "@ickb/utils": "^1000.0.82"
+  }
+}
