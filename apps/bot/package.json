@@ -1,0 +1,41 @@
+{
+  "name": "@ickb/bot",
+  "version": "1.4.3",
+  "description": "A bot that fulfills iCKB limit orders",
+  "author": "phroi",
+  "license": "MIT",
+  "private": false,
+  "homepage": "https://github.com/ickb/bot",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ickb/bot.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint ./src",
+    "start": "node --env-file=env/${CHAIN}/.env dist/esm/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
+    "forcestart": "while true; do pnpm start; sleep 10; done",
+    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint",
+    "refresh": "git pull origin master && pnpm install --frozen-lockfile && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/node": "^22.18.0",
+    "eslint": "^9.34.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0"
+  },
+  "dependencies": {
+    "@ckb-lumos/base": "^0.23.0",
+    "@ckb-lumos/ckb-indexer": "^0.23.0",
+    "@ckb-lumos/codec": "^0.23.0",
+    "@ckb-lumos/common-scripts": "^0.23.0",
+    "@ckb-lumos/config-manager": "^0.23.0",
+    "@ckb-lumos/hd": "^0.23.0",
+    "@ckb-lumos/helpers": "^0.23.0",
+    "@ickb/lumos-utils": "1.4.2",
+    "@ickb/v1-core": "1.4.2"
+  }
+}
