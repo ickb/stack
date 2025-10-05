@@ -1,8 +1,8 @@
-# For now let's just focus on the utils package, rest will be added later
 packages:
-  - packages/utils
+  - packages/*
+  - apps/*
 
 catalog:
-  "@ckb-ccc/core": ^1.12.2
+  '@ckb-ccc/core': ^1.12.2
 
 minimumReleaseAge: 1440

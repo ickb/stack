@@ -1,34 +1,60 @@
 {
   "name": "@ickb/v1-tester",
-  "version": "1.4.2",
+  "version": "1001.0.0",
   "description": "Simulator of iCKB limit order creation",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
+  "author": "phroi",
+  "license": "MIT",
+  "homepage": "https://ickb.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ickb/stack"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run",
     "build": "tsc",
+    "lint": "eslint ./src",
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml",
     "start": "node --env-file=env/${CHAIN}/.env dist/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json"
   },
   "files": [
-    "/dist",
-    "/src"
+    "dist",
+    "src"
   ],
-  "keywords": [],
-  "author": "phroi",
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.2"
+  },
   "dependencies": {
     "@ckb-lumos/base": "^0.23.0",
     "@ckb-lumos/common-scripts": "^0.23.0",
     "@ckb-lumos/config-manager": "^0.23.0",
-    "@ckb-lumos/helpers": "^0.23.0",
     "@ckb-lumos/hd": "^0.23.0",
+    "@ckb-lumos/helpers": "^0.23.0",
     "@ickb/lumos-utils": "1.4.2",
     "@ickb/v1-core": "1.4.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.7.6",
-    "typescript": "next",
-    "eslint": "^9.12.0",
-    "@typescript-eslint/eslint-plugin": "canary",
-    "@typescript-eslint/parser": "canary",
-    "prettier": "^3.3.3"
-  },
-  "packageManager": "pnpm@9.12.2+sha256.2ef6e547b0b07d841d605240dce4d635677831148cd30f6d564b8f4f928f73d2"
+  }
 }

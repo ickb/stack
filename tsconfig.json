@@ -20,8 +20,8 @@
     "removeComments": true,
     "stripInternal": true,
     "skipLibCheck": true,
-    "declaration": false,
-    "declarationMap": false,
+    "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
     "importsNotUsedAsValues": "remove"
   },

@@ -1,31 +1,19 @@
-# iCKB/faucet
+# iCKB Faucet
 
-iCKB faucet an utility to help requesting faucet funds and convert them directly to iCKB.
-
-## Dependencies
-
-```mermaid
-graph TD;
-    A["@ickb/utils"] --> B["@ckb-ccc/core"];
-    C["@ickb/faucet"] --> A;
-
-    click A "https://github.com/ickb/utils" "Go to @ickb/utils"
-    click B "https://github.com/ckb-devrel/ccc/tree/master/packages/core" "Go to @ckb-ccc/core"
-    click C "https://github.com/ickb/faucet" "Go to @ickb/faucet"
-```
+iCKB faucet an utility to help requesting testnet faucet funds and convert them directly to iCKB.
 
 ## Run the limit order fulfillment faucet on testnet
 
 1. Download this repo in a folder of your choice:  
 
 ```bash
-git clone https://github.com/ickb/faucet.git
+git clone https://github.com/ickb/stack.git
 ```
 
 2. Enter into the repo folder:
 
 ```bash
-cd faucet
+cd stack/apps/faucet
 ```
 
 3. Install dependencies:
@@ -55,4 +43,4 @@ ADDRESS=ckt-your-testnet-address pnpm start;
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/faucet) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack) and it is released under the [MIT License](../../LICENSE).

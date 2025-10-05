@@ -5,7 +5,7 @@
   "excludeExternals": true,
   "externalPattern": [
     "**/dist/**",
-    "./node_modules/**"
+    "**/node_modules/**"
   ],
   "sort": [
     "source-order",

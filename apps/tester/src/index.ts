@@ -1,11 +1,12 @@
+import type { Cell, Transaction } from "@ckb-lumos/base";
+import { prepareSigningEntries } from "@ckb-lumos/common-scripts/lib/secp256k1_blake160.js";
+import { key } from "@ckb-lumos/hd";
+import type { TransactionSkeletonType } from "@ckb-lumos/helpers";
 import {
   TransactionSkeleton,
   encodeToAddress,
   sealTransaction,
 } from "@ckb-lumos/helpers";
-import type { TransactionSkeletonType } from "@ckb-lumos/helpers";
-import { key } from "@ckb-lumos/hd";
-import { prepareSigningEntries } from "@ckb-lumos/common-scripts/lib/secp256k1_blake160.js";
 import {
   CKB,
   I8Cell,
@@ -26,6 +27,7 @@ import {
   type ChainConfig,
   type ConfigAdapter,
 } from "@ickb/lumos-utils";
+import type { MyOrder, OrderRatio } from "@ickb/v1-core";
 import {
   ICKB_SOFT_CAP_PER_DEPOSIT,
   addIckbUdtChange,
@@ -44,12 +46,13 @@ import {
   orderMint,
   orderSifter,
 } from "@ickb/v1-core";
-import type { MyOrder, OrderRatio } from "@ickb/v1-core";
-import type { Cell, Transaction } from "@ckb-lumos/base";
 
-async function main() {
+async function main(): Promise<void> {
   const { CHAIN, RPC_URL, TESTER_PRIVATE_KEY, TESTER_SLEEP_INTERVAL } =
     process.env;
+  if (!CHAIN) {
+    throw Error("Invalid env CHAIN: Empty");
+  }
   if (!isChain(CHAIN)) {
     throw Error("Invalid env CHAIN: " + CHAIN);
   }
@@ -70,12 +73,13 @@ async function main() {
   const account = secp256k1Blake160(TESTER_PRIVATE_KEY, config);
   const sleepInterval = Number(TESTER_SLEEP_INTERVAL) * 1000;
 
-  while (true) {
+  for (;;) {
     await new Promise((r) => setTimeout(r, 2 * Math.random() * sleepInterval));
     console.log();
 
-    let executionLog: any = {};
-    let startTime = new Date();
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const executionLog: Record<string, any> = {};
+    const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
     try {
       const { capacities, udts, myOrders } = await siftCells(
@@ -94,6 +98,7 @@ async function main() {
       if (
         myOrders.some(
           (o) =>
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             BigInt(o.cell.blockNumber!) + maxElapsedBlocks >=
               BigInt(tipHeader.number) && o.info.isMatchable,
         )
@@ -234,11 +239,12 @@ async function main() {
         feeRate,
       };
       executionLog.txHash = await rpc.sendTransaction(account.signer(tx));
-    } catch (e: any) {
-      if (e) {
+    } catch (e) {
+      if (e instanceof Object && "stack" in e) {
+        /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
         executionLog.error = { ...e, stack: e.stack ?? "" };
       } else {
-        executionLog.message = "Empty";
+        executionLog.error = e ?? "Empty Error";
       }
     }
     executionLog.ElapsedSeconds = Math.round(
@@ -248,12 +254,39 @@ async function main() {
   }
 }
 
-function fmtCkb(b: bigint) {
+function fmtCkb(b: bigint): number {
   return Number(b) / Number(CKB);
 }
 
-function replacer(_: unknown, value: unknown) {
+function replacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? Number(value) : value;
+}
+
+function addChange(
+  tx: TransactionSkeletonType,
+  feeRate: bigint,
+  account: ReturnType<typeof secp256k1Blake160>,
+  chainConfig: ChainConfig,
+): {
+  tx: TransactionSkeletonType;
+  freeCkb: bigint;
+  freeIckbUdt: bigint;
+} {
+  const { lockScript: accountLock, preSigner: addPlaceholders } = account;
+  const { config } = chainConfig;
+  let freeCkb, freeIckbUdt;
+  tx = addReceiptDepositsChange(tx, accountLock, config);
+  tx = addOwnedWithdrawalRequestsChange(tx, accountLock, config);
+  ({ tx, freeIckbUdt } = addIckbUdtChange(tx, accountLock, config));
+  ({ tx, freeCkb } = addCkbChange(
+    tx,
+    accountLock,
+    (txWithDummyChange: TransactionSkeletonType) =>
+      calculateTxFee(txSize(addPlaceholders(txWithDummyChange)), feeRate),
+    config,
+  ));
+
+  return { tx, freeCkb, freeIckbUdt };
 }
 
 function base({
@@ -271,7 +304,7 @@ function base({
     owner: I8Cell;
   }>[];
   myOrders?: MyOrder[];
-}) {
+}): TransactionSkeletonType {
   let tx = TransactionSkeleton();
   tx = addCells(tx, "append", [capacities, udts, receipts].flat(), []);
   tx = addWithdrawalRequestGroups(tx, wrGroups);
@@ -279,40 +312,14 @@ function base({
   return tx;
 }
 
-function addChange(
-  tx: TransactionSkeletonType,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-) {
-  const { lockScript: accountLock, preSigner: addPlaceholders } = account;
-  const { config } = chainConfig;
-  let freeCkb, freeIckbUdt;
-  tx = addReceiptDepositsChange(tx, accountLock, config);
-  tx = addOwnedWithdrawalRequestsChange(tx, accountLock, config);
-  ({ tx, freeIckbUdt } = addIckbUdtChange(tx, accountLock, config));
-  ({ tx, freeCkb } = addCkbChange(
-    tx,
-    accountLock,
-    (txWithDummyChange: TransactionSkeletonType) => {
-      const baseFee = calculateTxFee(
-        txSize(addPlaceholders(txWithDummyChange)),
-        feeRate,
-      );
-      // Use a fee that is multiple of N=1249
-      const N = 1249n;
-      return ((baseFee + (N - 1n)) / N) * N;
-    },
-    config,
-  ));
-
-  return { tx, freeCkb, freeIckbUdt };
-}
-
 async function siftCells(
   account: ReturnType<typeof secp256k1Blake160>,
   chainConfig: ChainConfig,
-) {
+): Promise<{
+  capacities: I8Cell[];
+  udts: I8Cell[];
+  myOrders: MyOrder[];
+}> {
   const { rpc, config } = chainConfig;
   const mixedCells = (
     await Promise.all(
@@ -326,7 +333,7 @@ async function siftCells(
 
   // Prefetch txs outputs
   const wantedTxsOutputs = new Set<string>();
-  const deferredGetTxsOutputs = (txHash: string) => {
+  const deferredGetTxsOutputs = (txHash: string): never[] => {
     wantedTxsOutputs.add(txHash);
     return [];
   };
@@ -354,10 +361,13 @@ async function siftCells(
   return { capacities, udts, myOrders };
 }
 
-async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
+async function getTxsOutputs(
+  txHashes: Set<string>,
+  chainConfig: ChainConfig,
+): Promise<Readonly<Map<string, readonly Cell[]>>> {
   const { rpc } = chainConfig;
 
-  const result = new Map<string, Readonly<Cell[]>>();
+  const result = new Map<string, readonly Cell[]>();
   const batch = rpc.createBatchRequest();
   for (const txHash of txHashes) {
     const outputs = _knownTxsOutputs.get(txHash);
@@ -375,11 +385,15 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
   for (const tx of (await batch.exec()).map(
     ({ transaction: tx }: { transaction: Transaction }) => tx,
   )) {
+    const txHash = tx.hash;
+    if (!txHash) {
+      throw Error("Empty tx hash");
+    }
     result.set(
-      tx.hash!,
+      txHash,
       Object.freeze(
         tx.outputs.map(({ lock, type, capacity }, index) =>
-          Object.freeze(<Cell>{
+          Object.freeze({
             cellOutput: Object.freeze({
               lock: Object.freeze(lock),
               type: Object.freeze(type),
@@ -387,10 +401,10 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
             }),
             data: Object.freeze(tx.outputsData[index] ?? "0x"),
             outPoint: Object.freeze({
-              txHash: tx.hash!,
+              txHash: txHash,
               index: hex(index),
             }),
-          }),
+          } as Cell),
         ),
       ),
     );
@@ -403,10 +417,21 @@ async function getTxsOutputs(txHashes: Set<string>, chainConfig: ChainConfig) {
 
 let _knownTxsOutputs = Object.freeze(new Map<string, Readonly<Cell[]>>());
 
-function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
+function secp256k1Blake160(
+  privateKey: string,
+  config: ConfigAdapter,
+): {
+  publicKey: string;
+  lockScript: Readonly<I8Script>;
+  address: string;
+  expander: (c: Cell) => I8Script | undefined;
+  preSigner: (tx: TransactionSkeletonType) => TransactionSkeletonType;
+  signer: (tx: TransactionSkeletonType) => Transaction;
+} {
   const publicKey = key.privateToPublic(privateKey);
 
   const lockScript = I8Script.from({
+    /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
     ...config.defaultScript("SECP256K1_BLAKE160"),
     args: key.publicKeyToBlake160(publicKey),
   });
@@ -415,15 +440,18 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
 
   const expander = lockExpanderFrom(lockScript);
 
-  function preSigner(tx: TransactionSkeletonType) {
+  function preSigner(tx: TransactionSkeletonType): TransactionSkeletonType {
     return addWitnessPlaceholder(tx, lockScript);
   }
 
-  function signer(tx: TransactionSkeletonType) {
+  function signer(tx: TransactionSkeletonType): Transaction {
     tx = preSigner(tx);
     tx = prepareSigningEntries(tx, { config });
-    const message = tx.get("signingEntries").get(0)!.message; //How to improve in case of multiple locks?
-    const sig = key.signRecoverable(message!, privateKey);
+    const message = tx.get("signingEntries").get(0)?.message;
+    if (!message) {
+      throw Error("Empty message to sign");
+    }
+    const sig = key.signRecoverable(message, privateKey);
 
     return sealTransaction(tx, [sig]);
   }
@@ -438,4 +466,4 @@ function secp256k1Blake160(privateKey: string, config: ConfigAdapter) {
   };
 }
 
-main();
+await main();

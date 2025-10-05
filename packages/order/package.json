@@ -1,6 +1,6 @@
 {
   "name": "@ickb/order",
-  "version": "1001.0.00",
+  "version": "1001.0.0",
   "description": "UDT Limit Order utilities built on top of CCC",
   "keywords": [
     "ickb",

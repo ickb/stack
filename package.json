@@ -4,21 +4,20 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
-    "build:prepare": "pnpm -r --filter !. install",
     "build": "pnpm -r --filter !./apps/** build",
     "build:all": "pnpm -r build",
     "lint": "pnpm -r lint",
     "clean": "rm -fr dist && pnpm -r clean",
     "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml && pnpm -r clean:deep",
-    "revamp": "pnpm clean:deep && pnpm -r up && pnpm build && pnpm lint",
-    "sync:template": "pnpm -r  --filter !./apps/** --filter !./packages/utils -c exec 'for f in .npmignore tsconfig.json typedoc.json vitest.config.mts; do cp ../utils/$f .; done'",
+    "revamp": "pnpm clean:deep && pnpm -r up && pnpm build:all && pnpm lint",
+    "sync:template": "pnpm -r --filter !./apps/interface --filter !./packages/utils --filter !. -c exec 'for f in .npmignore tsconfig.json typedoc.json vitest.config.mts; do cp ../../packages/utils/$f .; done'",
     "change": "pnpm changeset",
     "version": "pnpm changeset version",
     "publish": "pnpm publish -r",
     "docs": "typedoc"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",
