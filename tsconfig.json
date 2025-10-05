@@ -1,15 +1,9 @@
 {
   "compilerOptions": {
-    "target": "es2020",
-    "lib": ["es2020"],
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "rootDir": "src",
-    "outDir": "dist",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "importsNotUsedAsValues": "remove",
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "esModuleInterop": true,
@@ -26,7 +20,10 @@
     "removeComments": true,
     "stripInternal": true,
     "skipLibCheck": true,
-    "sourceRoot": "../src"
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "importsNotUsedAsValues": "remove"
   },
-  "include": ["src/**/*"]
+  "include": ["packages/**/*"]
 }

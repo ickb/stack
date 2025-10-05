@@ -1,31 +1,53 @@
 {
   "name": "@ickb/bot",
-  "version": "1.4.3",
+  "version": "1001.0.0",
   "description": "A bot that fulfills iCKB limit orders",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
   "author": "phroi",
   "license": "MIT",
-  "private": false,
-  "homepage": "https://github.com/ickb/bot",
+  "homepage": "https://ickb.org",
   "repository": {
     "type": "git",
-    "url": "git://github.com/ickb/bot.git"
+    "url": "https://github.com/ickb/stack"
   },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "sideEffects": false,
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run",
     "build": "tsc",
     "lint": "eslint ./src",
-    "start": "node --env-file=env/${CHAIN}/.env dist/esm/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
-    "forcestart": "while true; do pnpm start; sleep 10; done",
-    "up2lint": "rm pnpm-lock.yaml && pnpm up && pnpm build && pnpm lint",
-    "refresh": "git pull origin master && pnpm install --frozen-lockfile && pnpm build"
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml",
+    "start": "node --env-file=env/${CHAIN}/.env dist/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
+    "start:loop": "while true; do pnpm start; sleep 10; done"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "devDependencies": {
-    "@eslint/js": "^9.34.0",
-    "@types/node": "^22.18.0",
-    "eslint": "^9.34.0",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.41.0"
+    "@types/node": "^24.6.2"
   },
   "dependencies": {
     "@ckb-lumos/base": "^0.23.0",

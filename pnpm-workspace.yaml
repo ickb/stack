@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+
+catalog:
+  '@ckb-ccc/core': ^1.12.2
+
+minimumReleaseAge: 1440

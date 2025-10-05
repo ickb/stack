@@ -1,17 +1,17 @@
-# iCKB v1 tester
+# iCKB Tester
 
 ## Run the simulation of iCKB limit order creation on testnet
 
 1. Download this repo in a folder of your choice:  
 
 ```bash
-git clone https://github.com/ickb/v1-tester.git
+git clone https://github.com/ickb/stack.git
 ```
 
 2. Enter into the repo folder:
 
 ```bash
-cd v1-tester
+cd stack/apps/tester
 ```
 
 3. Install dependencies:
@@ -26,7 +26,7 @@ pnpm install
 pnpm build
 ```
 
-5. Define a `env/testnet/.env` file, for example:
+5. Inside `apps/tester` define a `env/testnet/.env` file, for example:
 
 ```
 CHAIN=testnet
@@ -49,4 +49,4 @@ pnpm run start;
 
 ## Licensing
 
-The license for this repository is the MIT License, see the [`LICENSE`](./LICENSE).
+The license for this repository is the MIT License, see the [`LICENSE`](../../LICENSE).

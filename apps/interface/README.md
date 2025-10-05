@@ -5,13 +5,13 @@
 1. Download this repo in a folder of your choice:  
 
 ```bash
-git clone https://github.com/ickb/interface.git
+git clone https://github.com/ickb/stack.git
 ```
 
 2. Enter into the repo folder:
 
 ```bash
-cd interface
+cd stack/app/interface
 ```
 
 3. Install dependencies:
@@ -34,4 +34,4 @@ pnpm run preview;
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/interface) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack.git) and it is released under the [MIT License](../../LICENSE).

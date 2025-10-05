@@ -1,13 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
+import { DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
-  unique,
   type Epoch,
   type ScriptDeps,
   type SmartTransaction,
   type UdtHandler,
+  unique,
 } from "@ickb/utils";
-import { DaoManager } from "@ickb/dao";
 import {
   type IckbDepositCell,
   ickbDepositCellFrom,
@@ -88,7 +88,7 @@ export class LogicManager implements ScriptDeps {
     tx.addUdtHandlers(this.udtHandler);
 
     const capacities = Array.from(
-      { length: Number(depositQuantity) },
+      { length: depositQuantity },
       () => depositAmount,
     );
     this.daoManager.deposit(tx, capacities, this.script);

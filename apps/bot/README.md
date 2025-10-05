@@ -1,4 +1,4 @@
-# iCKB/Bot
+# iCKB Bot
 
 Currently the Bot tries to minimize the amount of iCKB holdings, actively looking to convert them to CKB. This is to maximize the CKB liquidity that the bot can offer in case of a iCKB to CKB liquidity crunch, such as [when the redemptions overcome the short term availability of mature deposits](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369/14).
 
@@ -19,13 +19,13 @@ The docs directory aims to host comprehensive documentation outlining the inner 
 1. Download this repo in a folder of your choice:  
 
 ```bash
-git clone https://github.com/ickb/bot.git
+git clone https://github.com/ickb/stack.git
 ```
 
 2. Enter into the repo folder:
 
 ```bash
-cd bot
+cd stack/apps/bot
 ```
 
 3. Install dependencies:
@@ -40,7 +40,7 @@ pnpm install
 pnpm build
 ```
 
-5. Define a `env/testnet/.env` file, for example:
+5. In `apps/bot` define a `env/testnet/.env` file, for example:
 
 ```
 CHAIN=testnet
@@ -58,14 +58,14 @@ RPC_URL=http://127.0.0.1:8114/
 
 ```bash
 export CHAIN=testnet;
-pnpm run forcestart;
+pnpm run start:loop;
 ```
 
 ## Questions
 
-For questions or comments, please join the discussion via [GitHub Issues](https://github.com/ickb/bot/issues), the [Nervos Nation iCKB channel](https://t.me/NervosNation/307406/378182), or the [Nervos Talk thread](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369).
+For questions or comments, please join the discussion via [GitHub Issues](https://github.com/ickb/stack/issues), the [Nervos Nation iCKB channel](https://t.me/NervosNation/307406/378182), or the [Nervos Talk thread](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369).
 
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/bot) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack) and it is released under the [MIT License](../../LICENSE).

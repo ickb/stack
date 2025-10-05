@@ -1,49 +1,58 @@
 {
   "name": "@ickb/faucet",
-  "version": "0.0.0",
+  "version": "1001.0.0",
   "description": "iCKB faucet built on top of CCC",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
   "author": "phroi",
   "license": "MIT",
-  "private": false,
-  "homepage": "https://github.com/ickb/faucet",
+  "homepage": "https://ickb.org",
   "repository": {
     "type": "git",
-    "url": "git://github.com/ickb/faucet.git"
+    "url": "https://github.com/ickb/stack"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
   },
   "sideEffects": false,
   "type": "module",
-  "main": "dist/esm/index.js",
-  "module": "dist/esm/index.js",
-  "types": "dist/esm/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
-    "build": "pnpm run build:esm && node dist/esm/main.js",
-    "build:esm": "tsc",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "build": "tsc",
     "lint": "eslint ./src",
-    "up2lint": "rm pnpm-lock.yaml; pnpm up && pnpm build && pnpm lint",
-    "start": "ADDRESS=${ADDRESS} node dist/esm/index.js"
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml",
+    "start": "ADDRESS=${ADDRESS} node dist/index.js"
   },
   "files": [
-    "/dist",
-    "/src"
+    "dist",
+    "src"
   ],
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "devDependencies": {
-    "@eslint/js": "^9.28.0",
-    "@types/node": "latest",
-    "eslint": "^9.28.0",
-    "prettier": "^3.5.3",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0"
+    "@types/node": "^24.6.2"
   },
   "dependencies": {
-    "@ckb-ccc/core": "^1.9.0",
-    "@ickb/core": "^1000.0.72",
-    "@ickb/dao": "^1000.0.72",
-    "@ickb/order": "^1000.0.75",
-    "@ickb/sdk": "^1000.0.71",
-    "@ickb/utils": "^1000.0.73"
+    "@ckb-ccc/core": "catalog:",
+    "@ickb/core": "workspace:*",
+    "@ickb/dao": "workspace:*",
+    "@ickb/order": "workspace:*",
+    "@ickb/utils": "workspace:*"
   }
 }

@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Lint project
+        run: pnpm lint
+
       - name: Build project
         run: pnpm build
 
