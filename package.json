@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "install:ccc:pr": " set -eux -- 314; cd packages; git clone https://github.com/ckb-devrel/ccc.git || exit 0; cd ccc; st=true; for p in $@; do git fetch origin pull/$p/head:pr-$p; if $st; then git checkout pr-$p; st=false; else git merge --no-ff --no-edit pr-$p; fi; done; pnpm -r install",
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
@@ -29,7 +30,7 @@
     "prettier-plugin-organize-imports": "^4.3.0",
     "typedoc": "0.28.7",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.45.0",
+    "typescript-eslint": "^8.46.0",
     "vitest": "^3.2.4"
   },
   "packageManager": "pnpm@10.15.1"
