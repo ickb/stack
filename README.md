@@ -27,6 +27,22 @@ graph TD;
     click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
 ```
 
+## Develop CCC
+
+Import locally unpublished CCC pull requests (PRs), for example when working with a PR that has not yet been published to canary. The first PR specified will be checked out.
+
+```json
+{
+  "overrides": {
+    "@ckb-ccc/core": "workspace:*"
+  },
+  "scripts": {
+    "preinstall": "pnpm install:ccc:pr",
+    "install:ccc:pr": " set -eux -- 314 261; cd packages; git clone https://github.com/ckb-devrel/ccc.git || exit 0; cd ccc; st=true; for p in $@; do git fetch origin pull/$p/head:pr-$p; if $st; then git checkout pr-$p; st=false; else git merge --no-ff --no-edit pr-$p; fi; done; pnpm -r install"
+  }
+}
+```
+
 ## Epoch Semantic Versioning
 
 This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.
