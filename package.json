@@ -1,12 +1,12 @@
 {
   "private": true,
   "scripts": {
-    "install:ccc:pr": " set -eux -- 314; cd packages; git clone https://github.com/ckb-devrel/ccc.git || exit 0; cd ccc; st=true; for p in $@; do git fetch origin pull/$p/head:pr-$p; if $st; then git checkout pr-$p; st=false; else git merge --no-ff --no-edit pr-$p; fi; done; pnpm -r install",
+    "ccc:setup": "bash scripts/setup-ccc.sh releases/next releases/udt",
+    "build": "pnpm -r --filter !./apps/** build",
+    "build:all": "pnpm -r build",
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
-    "build": "pnpm -r --filter !./apps/** build",
-    "build:all": "pnpm -r build",
     "lint": "pnpm -r lint",
     "clean": "rm -fr dist && pnpm -r clean",
     "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml && pnpm -r clean:deep",
@@ -21,17 +21,19 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.1",
-    "@changesets/cli": "^2.29.7",
-    "@eslint/js": "^9.37.0",
+    "@anthropic-ai/claude-code": "^2.1.41",
+    "@changesets/changelog-github": "^0.5.2",
+    "@changesets/cli": "^2.29.8",
+    "@eslint/js": "^9.39.2",
     "@vitest/coverage-v8": "3.2.4",
-    "eslint": "^9.37.0",
-    "prettier": "^3.6.2",
+    "eslint": "^9.39.2",
+    "get-shit-done-cc": "^1.18.0",
+    "prettier": "^3.8.1",
     "prettier-plugin-organize-imports": "^4.3.0",
     "typedoc": "0.28.7",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.0",
+    "typescript-eslint": "^8.55.0",
     "vitest": "^3.2.4"
   },
-  "packageManager": "pnpm@10.15.1"
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
 }

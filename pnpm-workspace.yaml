@@ -4,5 +4,6 @@ packages:
 
 catalog:
   '@ckb-ccc/core': ^1.12.2
+  '@types/node': ^24.8.1
 
 minimumReleaseAge: 1440

@@ -46,7 +46,7 @@
     "provenance": true
   },
   "devDependencies": {
-    "@types/node": "^24.7.0"
+    "@types/node": "catalog:"
   },
   "dependencies": {
     "@ckb-lumos/base": "^0.23.0",
