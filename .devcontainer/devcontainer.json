@@ -4,14 +4,15 @@
 // 2. Open the Command Palette (Shift+Ctrl+P / Shift+Cmd+P) and  run "Dev Containers: Reopen in Container",
 //    alternatively "Dev Containers: Open Folder in Container".
 // 3. When finished, run "Dev Containers: Close Remote Connection" from the Command Palette to stop the container.
-// 4. To reclaim disk space, remove the stopped container/image with Docker/Podman,
-//    the container can be recreated from this config when needed.
 {
-  // Display name shown by editor when selecting this dev container
-  "name": "iCKB Dev Environment",
+  "name": "Dev Environment",
 
-  // Base image from Microsoft devcontainers for a TypeScript + Node environment
   "image": "mcr.microsoft.com/devcontainers/typescript-node:24",
+
+  "containerEnv": {
+    "DEVCONTAINER": "true",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
 
   // Persisted volumes to speed installs and avoid repeated network requests
   "mounts": [
@@ -20,46 +21,45 @@
   ],
 
   // Run once after the container filesystem is created.
-  // - Fix ownership so the non-root node user can access workspace files
-  // - Install latest pnpm globally so postStartCommand and developer workflows use pnpm
-  "postCreateCommand": "sudo corepack enable && sudo chown -R node:node /home/node ${containerWorkspaceFolder}",
+  "postCreateCommand": {
+    // Enable corepack and fix workspace ownership for non-root user
+    "permissions": "sudo corepack enable && sudo chown -R node:node /home/node ${containerWorkspaceFolder}",
+    "gsd": "pnpm dlx get-shit-done-cc@latest --claude --global --force-statusline > /dev/null",
+    "aliases": "echo \"alias claude='cd ${containerWorkspaceFolder} && pnpm exec claude --dangerously-skip-permissions'\" >> ~/.bash_aliases"
+  },
 
-  // Run each time the container starts. Ensures dependencies are installed inside the container user environment.
-  "postStartCommand": "pnpm install --frozen-lockfile",
+  // Run each time the container starts. Ensures updated dependencies are installed inside the container user environment.
+  "postStartCommand": "corepack use pnpm@latest && pnpm up",
 
   // Use the non-root 'node' user provided by the base image for safer file access and to mirror deployment permissions
   "remoteUser": "node",
 
   "customizations": {
     "vscode": {
-      // Recommended and enforced editor settings for consistent linting/validation across contributors
       "settings": {
-        // Prefer editor config over global formatting where appropriate
         "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.codeActionsOnSave": {
           "source.fixAll.eslint": "explicit"
         },
-        "eslint.validate": [
-          "json",
-          "javascript",
-          "javascriptreact",
-          "typescript",
-          "typescriptreact"
-        ],
-        // Disable telemetry to avoid sending usage data to Microsoft
-        "telemetry.enableTelemetry": false
+        "telemetry.enableTelemetry": false,
+        "telemetry.telemetryLevel": "off",
+        "chat.disableAIFeatures": true,
+        "claudeCode": {
+          "disableLoginPrompt": true,
+          "useTerminal": true
+        }
       },
 
-      // Recommended extensions preinstalled in the container to provide a consistent developer experience
       "extensions": [
-        "streetsidesoftware.code-spell-checker", // basic spell checking in docs/comments
-        "bradlc.vscode-tailwindcss", // Tailwind CSS IntelliSense if project uses Tailwind
-        "dbaeumer.vscode-eslint", // ESLint integration for linting and autofix
-        "esbenp.prettier-vscode", // Prettier for consistent formatting
-        "yoavbls.pretty-ts-errors", // Improved TypeScript error messages
-        "davidanson.vscode-markdownlint", // Markdown linting for docs
-        "github.vscode-github-actions", // GitHub Actions workflow support
-        "github.vscode-pull-request-github" // PR and issue integration with GitHub
+        "streetsidesoftware.code-spell-checker",
+        "bradlc.vscode-tailwindcss",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "yoavbls.pretty-ts-errors",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code",
+        "-github.copilot-chat" // Disable GitHub Copilot Chat extension
       ]
     }
   }
