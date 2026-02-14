@@ -45,7 +45,7 @@ for REF in "$@"; do
     while IFS= read -r FILE; do
       "$CLAUDE" --print --model sonnet --no-session-persistence \
         -p "You are a merge conflict resolver. Output ONLY the resolved file content. Merge both sides meaningfully. No explanations, no code fences, no extra text." \
-        "$(cat "$FILE")" > "${FILE}.resolved"
+        < "$FILE" > "${FILE}.resolved"
 
       # Validate no conflict markers remain
       if grep -q '<<<<<<<' "${FILE}.resolved"; then
