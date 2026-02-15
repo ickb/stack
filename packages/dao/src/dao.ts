@@ -1,7 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import {
   defaultFindCellsLimit,
-  Epoch,
   unique,
   type ScriptDeps,
   type SmartTransaction,
@@ -268,10 +267,10 @@ export class DaoManager implements ScriptDeps {
    *   - `onChain?: boolean`
    *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
    *       Default: `false`.
-   *   - `minLockUp?: Epoch`
+   *   - `minLockUp?: ccc.Epoch`
    *       Minimum lock-up period required (in epochs).
    *       Defaults to the manager’s configured minimum (≈10 minutes).
-   *   - `maxLockUp?: Epoch`
+   *   - `maxLockUp?: ccc.Epoch`
    *       Maximum lock-up period allowed (in epochs).
    *       Defaults to the manager’s configured maximum (≈3 days).
    *   - `limit?: number`
@@ -298,8 +297,8 @@ export class DaoManager implements ScriptDeps {
     options?: {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
-      minLockUp?: Epoch;
-      maxLockUp?: Epoch;
+      minLockUp?: ccc.Epoch;
+      maxLockUp?: ccc.Epoch;
       limit?: number;
     },
   ): AsyncGenerator<DaoCell> {

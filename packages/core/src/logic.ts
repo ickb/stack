@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import { DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
-  type Epoch,
   type ScriptDeps,
   type SmartTransaction,
   type UdtHandler,
@@ -226,9 +225,9 @@ export class LogicManager implements ScriptDeps {
    *   - `onChain?: boolean`
    *       When `true`, forces direct on-chain queries via `findCellsOnChain`.
    *       Otherwise, uses cached results via `findCells`. Default: `false`.
-   *   - `minLockUp?: Epoch`
+   *   - `minLockUp?: ccc.Epoch`
    *       Minimum lock-up period in epochs. Defaults to manager’s configured minimum (~10 min).
-   *   - `maxLockUp?: Epoch`
+   *   - `maxLockUp?: ccc.Epoch`
    *       Maximum lock-up period in epochs. Defaults to manager’s configured maximum (~3 days).
    *   - `limit?: number`
    *       Maximum cells per batch when querying. Defaults to `defaultFindCellsLimit` (400).
@@ -249,8 +248,8 @@ export class LogicManager implements ScriptDeps {
     options?: {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
-      minLockUp?: Epoch;
-      maxLockUp?: Epoch;
+      minLockUp?: ccc.Epoch;
+      maxLockUp?: ccc.Epoch;
       limit?: number;
     },
   ): AsyncGenerator<IckbDepositCell> {
