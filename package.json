@@ -7,7 +7,7 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm -r --filter '!./ccc/.cache/**' lint",
     "clean": "rm -fr dist && pnpm -r clean",
     "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml && pnpm -r clean:deep",
     "revamp": "pnpm clean:deep && pnpm -r up && pnpm build:all && pnpm lint",

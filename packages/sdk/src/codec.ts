@@ -1,4 +1,4 @@
-import { ccc, mol } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { max } from "@ickb/utils";
 
 const N = 1024;
@@ -14,7 +14,7 @@ const N = 1024;
  * @remarks The total number of bits for encoding all the bins is computed as bitsPerBin * 1024. The codec
  * does not have a fixed byteLength since it depends on the data.
  */
-export const PoolSnapshot = mol.Codec.from<number[]>({
+export const PoolSnapshot = ccc.Codec.from<number[]>({
   /**
    * Encodes an array of 1024 bin counts into a Uint8Array.
    *
