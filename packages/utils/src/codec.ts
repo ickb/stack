@@ -1,9 +1,9 @@
-import { mol, ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 
 /**
  * Boundary-checked codec for little-endian 32-bit signed integers.
  */
-export const CheckedInt32LE = mol.Codec.from<ccc.NumLike, number>({
+export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   byteLength: 4,
   encode: (numLike) => {
     const num = Number(numLike);
@@ -37,10 +37,10 @@ export const CheckedInt32LE = mol.Codec.from<ccc.NumLike, number>({
  * https://github.com/ckb-devrel/ccc/blob/master/packages/core/src/molecule/codec.ts
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function union<T extends Record<string, mol.CodecLike<any, any>>>(
+export function union<T extends Record<string, ccc.CodecLike<any, any>>>(
   codecLayout: T,
   fields?: Record<keyof T, number | undefined | null>,
-): mol.Codec<UnionEncodable<T>, UnionDecoded<T>> {
+): ccc.Codec<UnionEncodable<T>, UnionDecoded<T>> {
   const keys = Object.keys(codecLayout);
   const values = Object.values(codecLayout);
   let byteLength = values[0]?.byteLength;
@@ -56,7 +56,7 @@ export function union<T extends Record<string, mol.CodecLike<any, any>>>(
     byteLength += 4;
   }
 
-  return mol.Codec.from({
+  return ccc.Codec.from({
     byteLength,
     encode({ type, value }) {
       const typeStr = type.toString();
@@ -120,22 +120,22 @@ export function union<T extends Record<string, mol.CodecLike<any, any>>>(
 
 type UnionEncodable<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends Record<string, mol.CodecLike<any, any>>,
+  T extends Record<string, ccc.CodecLike<any, any>>,
   K extends keyof T = keyof T,
 > = K extends unknown
   ? {
       type: K;
-      value: mol.EncodableType<T[K]>;
+      value: ccc.EncodableType<T[K]>;
     }
   : never;
 type UnionDecoded<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends Record<string, mol.CodecLike<any, any>>,
+  T extends Record<string, ccc.CodecLike<any, any>>,
   K extends keyof T = keyof T,
 > = K extends unknown
   ? {
       type: K;
-      value: mol.DecodedType<T[K]>;
+      value: ccc.DecodedType<T[K]>;
     }
   : never;
 

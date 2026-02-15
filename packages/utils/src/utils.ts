@@ -1,4 +1,4 @@
-import { ccc, mol } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 
 /**
  * Represents the components of a value, including CKB and UDT amounts.
@@ -373,7 +373,7 @@ export function gcd(res: bigint, ...rest: bigint[]): bigint {
  * @returns A generator that yields items from the iterable, ensuring that each item's
  *          byte representation (as computed by hexFrom) is unique.
  */
-export function* unique<T extends mol.Entity>(
+export function* unique<T extends ccc.Entity>(
   items: Iterable<T>,
 ): Generator<T> {
   const set = new Set<string>();
@@ -409,7 +409,7 @@ export function* unique<T extends mol.Entity>(
  *   to obtain a bytes-like representation before conversion.
  * - For any other case, the input is passed to ccc.hexFrom for conversion.
  */
-export function hexFrom(v: bigint | mol.Entity | ccc.BytesLike): ccc.Hex {
+export function hexFrom(v: bigint | ccc.Entity | ccc.BytesLike): ccc.Hex {
   if (typeof v === "string" && isHex(v)) {
     return v;
   }
