@@ -55,20 +55,32 @@ graph TD;
 
 ## Develop CCC
 
-Import locally unpublished CCC changes (branches, PRs, or specific commits) using `scripts/setup-ccc.sh`. The script auto-detects ref types, merges them sequentially onto a `wip` branch, then builds CCC. On merge conflicts, it auto-resolves them using Claude.
+When `ccc/patches/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned patches via `ccc/setup.sh --replay`). No manual setup step is needed — just clone and install:
 
 ```bash
-# Usage: scripts/setup-ccc.sh [ref ...]
+git clone <repo-url> && cd stack && pnpm install
+```
+
+To redo the setup from scratch: `rm -rf ccc/.cache && pnpm install`.
+
+When `ccc/.cache/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and overrides them with local links — no manual `pnpm.overrides` needed.
+
+### Recording new CCC patches
+
+To import new unpublished CCC changes (branches, PRs, or specific commits), use `ccc/setup.sh` with `--record`. The script auto-detects ref types, merges them sequentially onto a `wip` branch, then builds CCC. On merge conflicts, it auto-resolves them using Claude.
+
+```bash
+# Usage: ccc/setup.sh --record [ref ...]
 #   Ref auto-detection:
 #   - ^[0-9a-f]{7,40}$ → commit SHA
 #   - ^[0-9]+$          → GitHub PR number
 #   - everything else   → branch name
-#   No args → just clone, no merges
 
 # Examples:
-bash scripts/setup-ccc.sh releases/next releases/udt
-bash scripts/setup-ccc.sh 268 releases/next
-bash scripts/setup-ccc.sh abc1234
+rm -rf ccc/.cache
+bash ccc/setup.sh --record releases/next releases/udt
+bash ccc/setup.sh --record 268 releases/next
+bash ccc/setup.sh --record abc1234
 ```
 
 The `ccc:setup` script in `package.json` is preconfigured with the current refs:
@@ -76,14 +88,10 @@ The `ccc:setup` script in `package.json` is preconfigured with the current refs:
 ```json
 {
   "scripts": {
-    "ccc:setup": "bash scripts/setup-ccc.sh releases/next releases/udt"
+    "ccc:setup": "bash ccc/setup.sh releases/next releases/udt"
   }
 }
 ```
-
-To redo the setup from scratch, remove `ccc/` first: `rm -fr ccc && pnpm ccc:setup`.
-
-When `ccc/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and overrides them with local links — no manual `pnpm.overrides` needed.
 
 ## Epoch Semantic Versioning
 

@@ -1,9 +1,22 @@
+const { execSync } = require("child_process");
 const { existsSync, readdirSync, readFileSync } = require("fs");
 const { join } = require("path");
 
-const cccPkgs = join(__dirname, "ccc", "packages");
+const cccCache = join(__dirname, "ccc", ".cache");
+const cccRefs = join(__dirname, "ccc", "patches", "REFS");
 
-// Auto-discover all CCC packages: scan ccc/packages/*/package.json
+// Auto-setup: replay CCC patches on first pnpm install if patches are committed
+if (!existsSync(cccCache) && existsSync(cccRefs)) {
+  console.log("Setting up CCC local development environment...");
+  execSync("bash ccc/setup.sh --replay", {
+    stdio: "inherit",
+    cwd: __dirname,
+  });
+}
+
+const cccPkgs = join(cccCache, "packages");
+
+// Auto-discover all CCC packages: scan ccc/.cache/packages/*/package.json
 const localOverrides = {};
 if (existsSync(cccPkgs)) {
   for (const dir of readdirSync(cccPkgs, { withFileTypes: true })) {
@@ -12,7 +25,7 @@ if (existsSync(cccPkgs)) {
     if (!existsSync(pkgJsonPath)) continue;
     const { name } = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
     if (name) {
-      localOverrides[name] = `link:${join(cccPkgs, dir.name)}`;
+      localOverrides[name] = "workspace:*";
     }
   }
 }

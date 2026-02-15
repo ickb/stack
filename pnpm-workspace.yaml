@@ -1,6 +1,13 @@
 packages:
   - packages/*
   - apps/*
+  - ccc/.cache/packages/*
+  - '!ccc/.cache/packages/demo'
+  - '!ccc/.cache/packages/docs'
+  - '!ccc/.cache/packages/examples'
+  - '!ccc/.cache/packages/faucet'
+  - '!ccc/.cache/packages/playground'
+  - '!ccc/.cache/packages/tests'
 
 catalog:
   '@ckb-ccc/core': ^1.12.2

@@ -1,9 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "ccc:setup": "bash scripts/setup-ccc.sh releases/next releases/udt",
-    "build": "pnpm -r --filter !./apps/** build",
-    "build:all": "pnpm -r build",
+    "ccc:setup": "bash ccc/setup.sh --record releases/next releases/udt",
+    "build": "pnpm -r --filter !./apps/** --filter !./ccc/.cache/** build",
+    "build:all": "pnpm -r --filter !./ccc/.cache/** build",
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
