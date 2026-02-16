@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import {
-  Epoch,
   getHeader,
   type TransactionHeader,
   type ValueComponents,
@@ -27,7 +26,7 @@ export interface DaoCell extends ValueComponents {
   interests: ccc.Num;
 
   /** The maturity epoch of the DAO cell. In case of deposit, it's calculated from tip plus minLockUp. */
-  maturity: Epoch;
+  maturity: ccc.Epoch;
 
   /**
    * Indicates the readiness to be consumed by a transaction.
@@ -69,8 +68,8 @@ export async function daoCellFrom(
       }
   ) & {
     tip: ccc.ClientBlockHeader;
-    minLockUp?: Epoch;
-    maxLockUp?: Epoch;
+    minLockUp?: ccc.Epoch;
+    maxLockUp?: ccc.Epoch;
   },
 ): Promise<DaoCell> {
   const isDeposit = options.isDeposit;
@@ -120,9 +119,7 @@ export async function daoCellFrom(
     oldest.header,
     newest.header,
   );
-  let maturity = Epoch.from(
-    ccc.calcDaoClaimEpoch(oldest.header, newest.header),
-  );
+  let maturity = ccc.calcDaoClaimEpoch(oldest.header, newest.header);
 
   const minLockUp = options.minLockUp ?? defaultMinLockUp;
   const maxLockUp = options.maxLockUp ?? defaultMaxLockUp;
@@ -168,7 +165,7 @@ export async function daoCellFrom(
  * Given each epoch represents 4 hours (14400000 milliseconds),
  * then 1/24 of an epoch equals: (14400000 / 24) = 600000 milliseconds, i.e. 10 minutes.
  */
-const defaultMinLockUp = Epoch.from([0n, 1n, 24n]); // 10 minutes
+const defaultMinLockUp = ccc.Epoch.from([0n, 1n, 24n]); // 10 minutes
 
 /**
  * The default maximum lock-up period represented as an Epoch.
@@ -180,4 +177,4 @@ const defaultMinLockUp = Epoch.from([0n, 1n, 24n]); // 10 minutes
  * With each epoch lasting 4 hours, 18 epochs equal 18 * 4 hours = 72 hours,
  * i.e. 3 days.
  */
-const defaultMaxLockUp = Epoch.from([18n, 0n, 1n]); // 3 days
+const defaultMaxLockUp = ccc.Epoch.from([18n, 0n, 1n]); // 3 days

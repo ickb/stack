@@ -7,7 +7,6 @@ import {
   type ValueComponents,
   hexFrom,
   getHeader,
-  Epoch,
 } from "@ickb/utils";
 import {
   convert,
@@ -370,7 +369,7 @@ export class IckbSdk {
 
     // Initialize deposit pool snapshot.
     let poolSnapshotHex: ccc.Hex = "0x";
-    let poolSnapshotEpoch = Epoch.from([0n, 0n, 1n]);
+    let poolSnapshotEpoch = ccc.Epoch.from([0n, 0n, 1n]);
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
@@ -390,7 +389,7 @@ export class IckbSdk {
           type: "txHash",
           value: c.cell.outPoint.txHash,
         });
-        const e = Epoch.from(h.epoch);
+        const e = ccc.Epoch.from(h.epoch);
         if (poolSnapshotEpoch.compare(e) < 0) {
           poolSnapshotHex = outputData;
           poolSnapshotEpoch = e;
@@ -427,12 +426,12 @@ export class IckbSdk {
     }
 
     // Estimate available CKB from deposit pool snapshot.
-    const tipEpoch = Epoch.from(tip.epoch);
-    const oneCycle = Epoch.from([180n, 0n, 1n]);
+    const tipEpoch = ccc.Epoch.from(tip.epoch);
+    const oneCycle = ccc.Epoch.from([180n, 0n, 1n]);
     if (poolSnapshotHex !== "0x") {
-      const eNumber = tip.epoch[0];
-      let start = Epoch.from([eNumber - (eNumber % 180n), 0n, 1n]);
-      const step = Epoch.from([0n, 180n, 1024n]);
+      const eNumber = tip.epoch.integer;
+      let start = ccc.Epoch.from([eNumber - (eNumber % 180n), 0n, 1n]);
+      const step = ccc.Epoch.from([0n, 180n, 1024n]);
       const depositSize = convert(false, ICKB_DEPOSIT_CAP, tip);
       for (const binAmount of PoolSnapshot.decode(poolSnapshotHex)) {
         const end = start.add(step);

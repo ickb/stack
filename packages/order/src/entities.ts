@@ -1,26 +1,20 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import {
-  CheckedInt32LE,
-  union,
-  type ExchangeRatio,
-  gcd,
-  max,
-} from "@ickb/utils";
+import { CheckedInt32LE, gcd, max, type ExchangeRatio } from "@ickb/utils";
 
 /**
  * Represents a ratio of two scales, CKB and UDT, with validation and comparison methods.
  *
  * @class Ratio
- * @extends {mol.Entity.Base<ExchangeRatio, Ratio>}
+ * @extends {ccc.Entity.Base<ExchangeRatio, Ratio>}
  * @codec {mol.struct({ ckbScale: mol.Uint64, udtScale: mol.Uint64 })}
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     ckbScale: mol.Uint64,
     udtScale: mol.Uint64,
   }),
 )
-export class Ratio extends mol.Entity.Base<ExchangeRatio, Ratio>() {
+export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
   /**
    * Creates an instance of Ratio.
    *
@@ -266,17 +260,17 @@ export interface InfoLike {
  * Represents conversion information between CKB and UDT, including validation and comparison methods.
  *
  * @class Info
- * @extends {mol.Entity.Base<InfoLike, Info>}
+ * @extends {ccc.Entity.Base<InfoLike, Info>}
  * @codec {mol.struct({ ckbToUdt: Ratio, udtToCkb: Ratio, ckbMinMatchLog: mol.Uint8 })}
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     ckbToUdt: Ratio,
     udtToCkb: Ratio,
     ckbMinMatchLog: mol.Uint8,
   }),
 )
-export class Info extends mol.Entity.Base<InfoLike, Info>() {
+export class Info extends ccc.Entity.Base<InfoLike, Info>() {
   /**
    * Creates an instance of Info.
    *
@@ -482,16 +476,16 @@ export interface RelativeLike {
  * Represents a relative structure with padding and distance, including validation methods.
  *
  * @class Relative
- * @extends {mol.Entity.Base<RelativeLike, Relative>}
+ * @extends {ccc.Entity.Base<RelativeLike, Relative>}
  * @codec {mol.struct({ padding: mol.Byte32, distance: CheckedInt32LE })}
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     padding: mol.Byte32,
     distance: CheckedInt32LE,
   }),
 )
-export class Relative extends mol.Entity.Base<RelativeLike, Relative>() {
+export class Relative extends ccc.Entity.Base<RelativeLike, Relative>() {
   /**
    * Creates an instance of Relative.
    *
@@ -574,7 +568,7 @@ export class Relative extends mol.Entity.Base<RelativeLike, Relative>() {
  * @constant MasterCodec
  * @type {mol.UnionCodec<{ relative: Relative; absolute: ccc.OutPoint; }>}
  */
-export const MasterCodec = union({
+export const MasterCodec = mol.union({
   relative: Relative,
   absolute: ccc.OutPoint,
 });
@@ -584,14 +578,14 @@ export const MasterCodec = union({
  *
  * @type {MasterLike}
  */
-export type MasterLike = mol.EncodableType<typeof MasterCodec>;
+export type MasterLike = ccc.EncodableType<typeof MasterCodec>;
 
 /**
  * Represents a type that has been decoded using the MasterCodec.
  *
  * @type {Master}
  */
-export type Master = mol.DecodedType<typeof MasterCodec>;
+export type Master = ccc.DecodedType<typeof MasterCodec>;
 
 /**
  * Converts a MasterLike object to a Master object.
@@ -604,11 +598,8 @@ function masterFrom(master: MasterLike): Master {
   const { type, value } = master;
   if (type === "relative") {
     return { type, value: Relative.from(value) };
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  } else if (type === "absolute") {
-    return { type, value: ccc.OutPoint.from(value) };
   } else {
-    throw Error(`Invalid type ${String(type)}, not relative, not absolute`);
+    return { type, value: ccc.OutPoint.from(value) };
   }
 }
 /**
@@ -623,13 +614,10 @@ function masterValidate(master: Master): void {
   const { type, value } = master;
   if (type === "relative") {
     value.validate();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  } else if (type === "absolute") {
+  } else {
     if (!/^0x[0-9a-f]{64}$/i.test(value.txHash) || value.index < 0) {
       throw Error("OutPoint invalid");
     }
-  } else {
-    throw Error(`Invalid type ${String(type)}, not relative, not absolute`);
   }
 }
 
@@ -666,17 +654,17 @@ export interface OrderDataLike {
  * with validation and utility methods.
  *
  * @class Data
- * @extends {mol.Entity.Base<OrderDataLike, OrderData>}
+ * @extends {ccc.Entity.Base<OrderDataLike, OrderData>}
  * @codec {mol.struct({ udtValue: mol.Uint128, master: MasterCodec, info: Info })}
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     udtValue: mol.Uint128,
     master: MasterCodec,
     info: Info,
   }),
 )
-export class OrderData extends mol.Entity.Base<OrderDataLike, OrderData>() {
+export class OrderData extends ccc.Entity.Base<OrderDataLike, OrderData>() {
   /**
    * Creates an instance of OrderData.
    *
@@ -759,11 +747,8 @@ export class OrderData extends mol.Entity.Base<OrderDataLike, OrderData>() {
     const { type, value } = this.master;
     if (type === "relative") {
       return new ccc.OutPoint(current.txHash, current.index + value.distance);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    } else if (type === "absolute") {
-      return value;
     } else {
-      throw Error(`Invalid type ${String(type)}, not relative, not absolute`);
+      return value;
     }
   }
 }

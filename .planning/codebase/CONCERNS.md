@@ -33,36 +33,36 @@
 
 ### Local Epoch Class Partially Duplicates CCC Upstream (Medium)
 
-- Issue: `packages/utils/src/epoch.ts` defines a custom `Epoch` class (258 lines) that duplicates functionality now available in CCC's `ccc.Epoch`. CCC's `Epoch` class (in `ccc/packages/core/src/ckb/epoch.ts`, 490 lines) provides `from()`, `add()`, `sub()`, `compare()`, `toUnix()`, `normalizeCanonical()`, `toPackedHex()`, and convenience comparison methods (`lt`, `le`, `eq`, `ge`, `gt`). The local `Epoch` class provides nearly identical functionality but uses different property naming (`number/index/length` vs. CCC's `integer/numerator/denominator`).
+- Issue: `packages/utils/src/epoch.ts` defines a custom `Epoch` class (258 lines) that duplicates functionality now available in CCC's `ccc.Epoch`. CCC's `Epoch` class (in `ccc-dev/ccc/packages/core/src/ckb/epoch.ts`, 490 lines) provides `from()`, `add()`, `sub()`, `compare()`, `toUnix()`, `normalizeCanonical()`, `toPackedHex()`, and convenience comparison methods (`lt`, `le`, `eq`, `ge`, `gt`). The local `Epoch` class provides nearly identical functionality but uses different property naming (`number/index/length` vs. CCC's `integer/numerator/denominator`).
 - Files:
   - `packages/utils/src/epoch.ts` - local `Epoch` class
-  - `ccc/packages/core/src/ckb/epoch.ts` - CCC upstream `Epoch` class
+  - `ccc-dev/ccc/packages/core/src/ckb/epoch.ts` - CCC upstream `Epoch` class
 - Impact: Maintaining a parallel Epoch implementation means bugs fixed upstream are not automatically inherited. The local class already wraps CCC functions (`ccc.epochFromHex` at line 101, `ccc.epochToHex` at line 111) and accepts `ccc.Epoch` instances (via `deStruct()` at line 240), showing partial integration but also added complexity.
 - Fix approach: Replace local `Epoch` with `ccc.Epoch` throughout `packages/`. Both classes provide `from()`, `add()`, `sub()`, `compare()`, and `toUnix()`. The main migration friction is the naming difference. CCC provides deprecated array-style accessors `[0]`, `[1]`, `[2]` for backwards compatibility, easing the transition for code that uses tuple-style access.
 
 ### Local UDT Handling May Overlap CCC Upstream (Medium)
 
-- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are already being used from CCC upstream in five locations.
+- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-dev/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are already being used from CCC upstream in five locations.
 - Files:
   - `packages/utils/src/udt.ts` - `UdtHandler` interface, `UdtManager` class (~370 lines)
   - `packages/core/src/udt.ts` - `IckbUdtManager` extending UDT handling for iCKB-specific logic
-  - `ccc/packages/udt/src/` - CCC upstream UDT package
+  - `ccc-dev/ccc/packages/udt/src/` - CCC upstream UDT package
   - Usage of `ccc.udtBalanceFrom()`: `packages/core/src/udt.ts` line 100, `packages/utils/src/udt.ts` lines 166, 193, 319, 363
 - Impact: There may be duplicated utility code for standard UDT operations (finding cells, calculating balances). The iCKB-specific extensions (e.g., `IckbUdtManager` which modifies balance calculations based on DAO deposit/withdrawal state) are domain-specific and unlikely to be in CCC.
 - Fix approach: Audit the CCC `@ckb-ccc/udt` package to identify which local utilities can be replaced. Keep iCKB-specific extensions but delegate standard UDT operations (cell finding, basic balance) to CCC where possible.
 
 ### Fragile CCC Local Override Mechanism (Medium)
 
-- Issue: The `.pnpmfile.cjs` hook and `scripts/setup-ccc.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc/packages/*/`.
+- Issue: The `.pnpmfile.cjs` hook and `ccc-dev/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-dev/ccc/packages/*/`.
 - Files:
   - `.pnpmfile.cjs` - pnpm hook that overrides `@ckb-ccc/*` package resolutions
-  - `scripts/setup-ccc.sh` - clones CCC repo and builds it locally
-  - `pnpm-workspace.yaml` - includes `ccc/packages/*` in workspace
-  - `ccc/` - local CCC checkout (when present)
+  - `ccc-dev/record.sh` - clones CCC repo, merges refs, and builds it locally
+  - `pnpm-workspace.yaml` - includes `ccc-dev/ccc/packages/*` in workspace
+  - `ccc-dev/ccc/` - local CCC checkout (when present)
 - Impact: Multiple fragility points:
-  1. The local CCC repo at `ccc/` must be manually cloned and kept in sync with a specific branch/commit.
+  1. The local CCC repo at `ccc-dev/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
   2. The `readPackage` hook modifies `dependencies` objects at install time, which can silently break if CCC reorganizes its packages.
-  3. CI/CD (`scripts/setup-ccc.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
+  3. CI/CD (`ccc-dev/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
   4. The override mechanism is invisible to developers who don't read `.pnpmfile.cjs`, leading to confusion when packages resolve differently than expected from `package.json`.
 - Fix approach: Now that UDT and Epoch PRs have been merged into CCC upstream, evaluate whether the local overrides are still needed. If CCC publishes releases containing the merged features, switch to published versions and remove the override mechanism.
 

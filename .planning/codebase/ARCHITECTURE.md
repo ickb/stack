@@ -10,7 +10,7 @@
 - Monorepo structure with `packages/` (NEW CCC-based libraries) and `apps/` (applications)
 - CCC (`@ckb-ccc/core`) as foundation for CKB blockchain interactions (replacing deprecated Lumos)
 - Manager-based pattern for handling domain entities (DAO, Orders, Logic, Capacity)
-- Local CCC dev build override via `scripts/setup-ccc.sh` + `.pnpmfile.cjs` (NOT a git submodule)
+- Local CCC dev build override via `ccc-dev/record.sh` + `ccc-dev/replay.sh` + `.pnpmfile.cjs` (NOT a git submodule)
 - Transaction-centric abstraction with SmartTransaction extending ccc.Transaction
 
 **Migration Status:**
@@ -25,7 +25,7 @@
 
 **Core Blockchain Foundation (CCC):**
 - Purpose: Abstract CKB protocol operations and provide type-safe wrappers
-- Source: `@ckb-ccc/core` (npm) or local clone at `ccc/` (via `scripts/setup-ccc.sh`)
+- Source: `@ckb-ccc/core` (npm) or local clone at `ccc-dev/ccc/` (via `ccc-dev/record.sh`)
 - Contains: CKB RPC clients, transaction builders, signer implementations, Molecule codec, UDT support, Epoch handling
 - Depends on: CKB network services
 - Used by: All new packages and migrated apps

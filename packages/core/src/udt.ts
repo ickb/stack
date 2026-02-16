@@ -97,7 +97,7 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
         // An iCKB UDT Cell
         if (this.isUdt(cell)) {
           return [
-            udtValue + ccc.udtBalanceFrom(outputData),
+            udtValue + ccc.numFromBytes(ccc.bytesFrom(outputData).slice(0, 16)),
             capacity + cellOutput.capacity,
           ];
         }

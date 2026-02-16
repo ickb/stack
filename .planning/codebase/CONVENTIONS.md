@@ -10,7 +10,7 @@
 - All `@ckb-lumos/*` packages are **DEPRECATED** -- Lumos is being replaced by CCC.
 - CCC PRs for UDT and Epochs have been **MERGED** upstream -- those features now exist in CCC itself.
 - `SmartTransaction` was **ABANDONED** in favor of CCC's client cache for header caching. The class still exists in `packages/utils/src/transaction.ts` but should not be extended further.
-- CCC is sometimes overridden locally via `scripts/setup-ccc.sh` and `.pnpmfile.cjs` for testing unpublished changes.
+- CCC is sometimes overridden locally via `ccc-dev/record.sh` and `.pnpmfile.cjs` for testing unpublished changes.
 
 **When writing new code:** Use CCC (`@ckb-ccc/core`) types and patterns exclusively in `packages/`. Never introduce new Lumos dependencies.
 

@@ -115,6 +115,7 @@ export class SmartTransaction extends ccc.Transaction {
     return (
       this.getUdtHandler(udt)
         ?.getInputsUdtBalance(client, this)
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
         .then((b) => b[0]) ?? super.getInputsUdtBalance(client, udt)
     );
   }
@@ -132,6 +133,7 @@ export class SmartTransaction extends ccc.Transaction {
     const udt = ccc.Script.from(udtLike);
     return (
       this.getUdtHandler(udt)?.getOutputsUdtBalance(this)[0] ??
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
       super.getOutputsUdtBalance(udt)
     );
   }

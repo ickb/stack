@@ -24,12 +24,11 @@
   "postCreateCommand": {
     // Enable corepack and fix workspace ownership for non-root user
     "permissions": "sudo corepack enable && sudo chown -R node:node /home/node ${containerWorkspaceFolder}",
-    "gsd": "pnpm dlx get-shit-done-cc@latest --claude --global --force-statusline > /dev/null",
     "aliases": "echo \"alias claude='cd ${containerWorkspaceFolder} && pnpm exec claude --dangerously-skip-permissions'\" >> ~/.bash_aliases"
   },
 
   // Run each time the container starts. Ensures updated dependencies are installed inside the container user environment.
-  "postStartCommand": "corepack use pnpm@latest && pnpm up",
+  "postStartCommand": "corepack use pnpm@latest && pnpm up && pnpm dlx get-shit-done-cc@latest --claude --global --force-statusline",
 
   // Use the non-root 'node' user provided by the base image for safer file access and to mirror deployment permissions
   "remoteUser": "node",

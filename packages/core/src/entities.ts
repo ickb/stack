@@ -12,14 +12,14 @@ export interface OwnerDataLike {
 /**
  * Represents the data structure to encode the owner data of the owned owner script.
  *
- * @extends mol.Entity.Base<OwnerDataLike, OwnerData>
+ * @extends ccc.Entity.Base<OwnerDataLike, OwnerData>
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     ownedDistance: CheckedInt32LE,
   }),
 )
-export class OwnerData extends mol.Entity.Base<OwnerDataLike, OwnerData>() {
+export class OwnerData extends ccc.Entity.Base<OwnerDataLike, OwnerData>() {
   /**
    * Creates an instance of OwnerData.
    *
@@ -68,15 +68,15 @@ export interface ReceiptDataLike {
 /**
  * Represents receipt data containing deposit information.
  *
- * @extends mol.Entity.Base<ReceiptDataLike, ReceiptData>
+ * @extends ccc.Entity.Base<ReceiptDataLike, ReceiptData>
  */
-@mol.codec(
+@ccc.codec(
   mol.struct({
     depositQuantity: mol.Uint32,
     depositAmount: mol.Uint64,
   }),
 )
-export class ReceiptData extends mol.Entity.Base<
+export class ReceiptData extends ccc.Entity.Base<
   ReceiptDataLike,
   ReceiptData
 >() {
