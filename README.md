@@ -55,40 +55,39 @@ graph TD;
 
 ## Develop CCC
 
-When `ccc/patches/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned patches via `ccc/setup.sh --replay`). No manual setup step is needed — just clone and install:
+When `ccc-dev/pins/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
 git clone <repo-url> && cd stack && pnpm install
 ```
 
-To redo the setup from scratch: `rm -rf ccc/.cache && pnpm install`.
+To redo the setup from scratch: `rm -rf ccc-dev/ccc && pnpm install`.
 
-When `ccc/.cache/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and overrides them with local links — no manual `pnpm.overrides` needed.
+When `ccc-dev/ccc/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and overrides them with local links — no manual `pnpm.overrides` needed.
 
-### Recording new CCC patches
+### Recording new CCC pins
 
-To import new unpublished CCC changes (branches, PRs, or specific commits), use `ccc/setup.sh` with `--record`. The script auto-detects ref types, merges them sequentially onto a `wip` branch, then builds CCC. On merge conflicts, it auto-resolves them using Claude.
+To import new unpublished CCC changes (branches, PRs, or specific commits), use `ccc-dev/record.sh`. The script auto-detects ref types, merges them sequentially onto a `wip` branch, then builds CCC. On merge conflicts, it auto-resolves them using Claude.
 
 ```bash
-# Usage: ccc/setup.sh --record [ref ...]
+# Usage: ccc-dev/record.sh <ref ...>
 #   Ref auto-detection:
 #   - ^[0-9a-f]{7,40}$ → commit SHA
 #   - ^[0-9]+$          → GitHub PR number
 #   - everything else   → branch name
 
 # Examples:
-rm -rf ccc/.cache
-bash ccc/setup.sh --record releases/next releases/udt
-bash ccc/setup.sh --record 268 releases/next
-bash ccc/setup.sh --record abc1234
+bash ccc-dev/record.sh releases/next releases/udt
+bash ccc-dev/record.sh 268 releases/next
+bash ccc-dev/record.sh abc1234
 ```
 
-The `ccc:setup` script in `package.json` is preconfigured with the current refs:
+The `ccc:record` script in `package.json` is preconfigured with the current refs:
 
 ```json
 {
   "scripts": {
-    "ccc:setup": "bash ccc/setup.sh releases/next releases/udt"
+    "ccc:record": "bash ccc-dev/record.sh releases/next releases/udt"
   }
 }
 ```

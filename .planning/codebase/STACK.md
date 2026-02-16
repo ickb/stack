@@ -8,7 +8,7 @@
 - TypeScript 5.9.3 - All source code across packages and apps
 
 **Secondary:**
-- Bash - `scripts/setup-ccc.sh` for local CCC dev build setup
+- Bash - `ccc-dev/record.sh`, `ccc-dev/replay.sh` for local CCC dev build setup
 - JavaScript (CJS) - `.pnpmfile.cjs` for pnpm hook overrides, `prettier.config.cjs`
 
 ## Runtime
@@ -95,18 +95,18 @@ minimumReleaseAge: 1440
 
 The repo supports using a local development build of CCC for testing unpublished upstream changes. This is controlled by two files:
 
-**`scripts/setup-ccc.sh`:**
-- Clones the CCC repo (`https://github.com/ckb-devrel/ccc.git`) into `./ccc/`
+**`ccc-dev/record.sh`:**
+- Clones the CCC repo (`https://github.com/ckb-devrel/ccc.git`) into `./ccc-dev/ccc/`
 - Accepts refs as args: branch names, PR numbers, or commit SHAs
 - Merges specified refs onto a `wip` branch (uses Claude CLI for merge conflict resolution)
 - Builds CCC locally: `pnpm build:prepare && pnpm build`
-- Run via: `pnpm ccc:setup` (default invocation: `bash scripts/setup-ccc.sh releases/next releases/udt`)
-- The `ccc/` directory is gitignored
-- Skips if `ccc/` already exists (remove it to redo setup)
+- Run via: `pnpm ccc:record` (default invocation: `bash ccc-dev/record.sh releases/next releases/udt`)
+- The `ccc-dev/ccc/` directory is gitignored
+- Skips if `ccc-dev/ccc/` already exists (remove it to redo setup)
 
 **`.pnpmfile.cjs`:**
-- A pnpm `readPackage` hook that auto-discovers all packages in `ccc/packages/*/package.json`
-- When `ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `link:` references to the local build
+- A pnpm `readPackage` hook that auto-discovers all packages in `ccc-dev/ccc/packages/*/package.json`
+- When `ccc-dev/ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `link:` references to the local build
 - Applies to `dependencies`, `devDependencies`, and `optionalDependencies`
 - Effect: all workspace packages transparently use the local CCC build instead of npm versions
 
