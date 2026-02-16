@@ -1,13 +1,13 @@
 packages:
   - packages/*
   - apps/*
-  - ccc/.cache/packages/*
-  - '!ccc/.cache/packages/demo'
-  - '!ccc/.cache/packages/docs'
-  - '!ccc/.cache/packages/examples'
-  - '!ccc/.cache/packages/faucet'
-  - '!ccc/.cache/packages/playground'
-  - '!ccc/.cache/packages/tests'
+  - ccc-dev/ccc/packages/*
+  - '!ccc-dev/ccc/packages/demo'
+  - '!ccc-dev/ccc/packages/docs'
+  - '!ccc-dev/ccc/packages/examples'
+  - '!ccc-dev/ccc/packages/faucet'
+  - '!ccc-dev/ccc/packages/playground'
+  - '!ccc-dev/ccc/packages/tests'
 
 catalog:
   '@ckb-ccc/core': ^1.12.2
