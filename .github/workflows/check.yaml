@@ -1,4 +1,4 @@
-name: Build, lint and test
+name: Check (lint, build and test)
 
 on: [pull_request, push]
 
@@ -13,11 +13,5 @@ jobs:
           node-version: 24
       - uses: pnpm/action-setup@v4
 
-      - name: Install dependencies
-        run: pnpm install
-      - name: Build
-        run: pnpm build:all
-      - name: Lint
-        run: pnpm lint
-      # - name: Test
-      # run: pnpm test:ci
+      - name: Check (lint, build and test)
+        run: pnpm check

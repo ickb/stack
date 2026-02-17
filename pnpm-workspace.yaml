@@ -2,15 +2,16 @@ packages:
   - packages/*
   - apps/*
   - ccc-dev/ccc/packages/*
-  - '!ccc-dev/ccc/packages/demo'
-  - '!ccc-dev/ccc/packages/docs'
-  - '!ccc-dev/ccc/packages/examples'
-  - '!ccc-dev/ccc/packages/faucet'
-  - '!ccc-dev/ccc/packages/playground'
-  - '!ccc-dev/ccc/packages/tests'
+  - "!ccc-dev/ccc/packages/demo"
+  - "!ccc-dev/ccc/packages/docs"
+  - "!ccc-dev/ccc/packages/examples"
+  - "!ccc-dev/ccc/packages/faucet"
+  - "!ccc-dev/ccc/packages/playground"
+  - "!ccc-dev/ccc/packages/tests"
 
 catalog:
-  '@ckb-ccc/core': ^1.12.2
-  '@types/node': ^24.8.1
+  "@ckb-ccc/core": ^1.12.2
+  "@types/node": ^24.8.1
 
 minimumReleaseAge: 1440
+minimumReleaseAgeByPackage:
