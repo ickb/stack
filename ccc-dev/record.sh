@@ -10,16 +10,13 @@ set -euo pipefail
 
 REPO_URL="https://github.com/ckb-devrel/ccc.git"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_DIR="$SCRIPT_DIR/ccc"
 PATCH_DIR="$SCRIPT_DIR/pins"
 
 # Verify Claude CLI is available (needed for conflict resolution)
-if [ $# -gt 0 ]; then
-  if ! command -v claude &>/dev/null && ! pnpm exec claude --version &>/dev/null; then
-    echo "ERROR: 'claude' CLI required for conflict resolution (npm i -g @anthropic-ai/claude-code)" >&2
-    exit 1
-  fi
+if [ $# -gt 0 ] && ! command -v claude &>/dev/null; then
+  echo "ERROR: 'claude' CLI required for conflict resolution (run: pnpm install)" >&2
+  exit 1
 fi
 
 # Always start fresh — wipe previous clone and pins
@@ -75,21 +72,17 @@ for REF in "$@"; do
 
     # Resolve each conflicted file with Claude
     for FILE in "${CONFLICTED[@]}"; do
-      pnpm exec claude --print --model sonnet --no-session-persistence \
+      claude --print --model sonnet --no-session-persistence \
         -p "You are a merge conflict resolver. Output ONLY the resolved file content. Merge both sides meaningfully. No explanations, no code fences, no extra text." \
         < "$REPO_DIR/$FILE" > "$REPO_DIR/${FILE}.resolved"
 
-      # Validate resolution is non-empty
+      # Validate resolution
       if [ ! -s "$REPO_DIR/${FILE}.resolved" ]; then
         echo "ERROR: Claude returned empty resolution for $FILE" >&2
-        rm -f "$REPO_DIR/${FILE}.resolved"
         exit 1
       fi
-
-      # Validate no conflict markers remain
       if grep -q '<<<<<<<' "$REPO_DIR/${FILE}.resolved"; then
         echo "ERROR: Conflict markers remain in $FILE after resolution" >&2
-        rm -f "$REPO_DIR/${FILE}.resolved"
         exit 1
       fi
 
@@ -114,10 +107,7 @@ for REF in "$@"; do
   echo "$MERGE_SHA $REF" >> "$PATCH_DIR/REFS"
 done
 
-# Build CCC
-rm -f "$REPO_DIR/pnpm-lock.yaml"
-(cd "$REPO_DIR" && pnpm install)
-(cd "$REPO_DIR" && pnpm run --if-present build:prepare && pnpm build)
+bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR"
 
 # Prepend BASE SHA as first line of REFS
 mkdir -p "$PATCH_DIR"

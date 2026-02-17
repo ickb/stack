@@ -6,7 +6,6 @@ set -euo pipefail
 
 REPO_URL="https://github.com/ckb-devrel/ccc.git"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_DIR="$SCRIPT_DIR/ccc"
 PATCH_DIR="$SCRIPT_DIR/pins"
 
@@ -77,9 +76,7 @@ while IFS=' ' read -r SHA REF_NAME; do
   fi
 done < <(tail -n +2 "$PATCH_DIR/REFS")
 
-rm -f "$REPO_DIR/pnpm-lock.yaml"
-(cd "$REPO_DIR" && pnpm install)
-(cd "$REPO_DIR" && pnpm run --if-present build:prepare && pnpm build)
+bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR"
 
 # Verify HEAD SHA matches recording
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)

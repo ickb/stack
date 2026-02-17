@@ -31,11 +31,11 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "tsc",
+    "build": "[ -d ../../ccc-dev/ccc ] && exec node ../../ccc-dev/tsc.mjs || tsc",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml",
-    "start": "ADDRESS=${ADDRESS} node dist/index.js"
+    "clean:deep": "rm -fr dist node_modules",
+    "start": "node dist/index.js"
   },
   "files": [
     "dist",
