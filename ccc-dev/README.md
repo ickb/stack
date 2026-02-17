@@ -6,9 +6,13 @@ CCC has unreleased branches (`releases/next`, `releases/udt`) that this project 
 
 ## How it works
 
-1. `.pnpmfile.cjs` runs at pnpm install time. If `ccc-dev/pins/REFS` exists but `ccc-dev/ccc/` doesn't, it auto-triggers `replay.sh`.
-2. `replay.sh` clones CCC, checks out the pinned base SHA, and replays each merge using pinned SHAs and saved conflict resolutions — producing a deterministic build.
-3. `.pnpmfile.cjs` then overrides all `@ckb-ccc/*` dependencies to `workspace:*`, pointing them at the local `ccc-dev/ccc/packages/` builds.
+1. **Auto-replay** — `.pnpmfile.cjs` runs at `pnpm install` time. If `ccc-dev/pins/REFS` exists but `ccc-dev/ccc/` doesn't, it auto-triggers `replay.sh` to clone and set up CCC.
+
+2. **Workspace override** — When `ccc-dev/ccc/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and rewrites `@ckb-ccc/*` dependencies to `workspace:*` — no manual `pnpm.overrides` needed. This is necessary because `catalog:` specifiers resolve to a semver range _before_ pnpm considers workspace linking — even with `link-workspace-packages = true`, pnpm fetches from the registry without this hook. When CCC is not cloned, the hook is a no-op and deps resolve from the registry normally.
+
+3. **Source-level types** — `patch.sh` (called by both `record.sh` and `replay.sh`) patches CCC's `package.json` exports to point TypeScript at `.ts` source instead of built `.d.ts`. This gives real-time type feedback when editing across the CCC/stack boundary — changes in CCC source are immediately visible to stack packages without rebuilding.
+
+4. **Diagnostic filtering** — `ccc-dev/tsc.mjs` is a tsc wrapper used by stack package builds. Because CCC `.ts` source is type-checked under the stack's stricter tsconfig (`verbatimModuleSyntax`, `noImplicitOverride`, `noUncheckedIndexedAccess`), plain `tsc` would report hundreds of CCC diagnostics that aren't real integration errors. The wrapper emits output normally and only fails on diagnostics from stack source files. When CCC is not cloned, packages fall back to plain `tsc`.
 
 ## `pins/` format
 
@@ -29,7 +33,35 @@ Recording captures the current upstream state and any conflict resolutions:
 pnpm ccc:record
 ```
 
-This runs `ccc-dev/record.sh` which clones CCC, merges the configured refs (`releases/next`, `releases/udt`), uses Claude CLI to resolve any conflicts, builds, and writes `pins/`. Commit the resulting `ccc-dev/pins/` directory so other contributors get the same build.
+This runs `ccc-dev/record.sh` which clones CCC, merges the configured refs, uses Claude CLI to resolve any conflicts, patches for source-level type resolution, and writes `pins/`. Commit the resulting `ccc-dev/pins/` directory so other contributors get the same build.
+
+The `ccc:record` script in `package.json` is preconfigured with the current refs:
+
+```json
+{
+  "scripts": {
+    "ccc:record": "bash ccc-dev/record.sh releases/next releases/udt"
+  }
+}
+```
+
+### Ref auto-detection
+
+`record.sh` accepts any number of refs and auto-detects their type:
+
+```bash
+# Usage: ccc-dev/record.sh <ref ...>
+#   - ^[0-9a-f]{7,40}$ → commit SHA
+#   - ^[0-9]+$          → GitHub PR number
+#   - everything else   → branch name
+
+# Examples:
+bash ccc-dev/record.sh releases/next releases/udt
+bash ccc-dev/record.sh 268 releases/next
+bash ccc-dev/record.sh abc1234
+```
+
+Refs are merged sequentially onto a `wip` branch, then CCC is built. On merge conflicts, the script auto-resolves them using Claude.
 
 ## Developing CCC PRs
 
@@ -41,13 +73,13 @@ Record upstream refs alongside a PR:
 pnpm ccc:record 666
 ```
 
-This merges `releases/next`, `releases/udt`, and PR #666 onto the `wip` branch and builds.
-You stay on `wip` — all upstream + PR changes are available. VS Code sees the full merged state.
+This merges `releases/next`, `releases/udt`, and PR #666 onto the `wip` branch.
+You stay on `wip` — all upstream + PR changes are available. VS Code sees the full merged state with diagnostics using CCC's own tsconfig rules.
 
 ### Development loop
 
 1. **Edit code** on `wip` in `ccc-dev/ccc/`. Commit normally.
-2. **Rebuild**: `pnpm build` (now includes CCC packages).
+2. **Rebuild**: `pnpm build` (builds stack packages with CCC type integration).
 3. **Run tests**: `pnpm test`
 
 ### Pushing your changes
