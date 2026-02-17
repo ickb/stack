@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-02-17
 
 ## Important Context
 
@@ -18,7 +18,7 @@
 
 **Files:**
 - Use `snake_case` for multi-word source files: `owned_owner.ts`
-- Use single lowercase words when possible: `cells.ts`, `entities.ts`, `logic.ts`, `codec.ts`, `utils.ts`, `epoch.ts`, `heap.ts`, `udt.ts`
+- Use single lowercase words when possible: `cells.ts`, `entities.ts`, `logic.ts`, `codec.ts`, `utils.ts`, `heap.ts`, `udt.ts`
 - Every package has an `index.ts` barrel file that re-exports everything
 - Config files at root use dot-prefix convention: `prettier.config.cjs`, `eslint.config.mjs`, `vitest.config.mts`
 
@@ -270,16 +270,18 @@ export * from "./utils.js";
 
 ## Molecule / Codec Patterns
 
-**Entity classes** use CCC's `mol.Entity.Base` with decorator-based codec definition:
+**TS codecs must match the Molecule schema** at `contracts/schemas/encoding.mol`. The on-chain contracts use Molecule for serialization; the TS packages must produce byte-identical encodings.
+
+**Entity classes** use CCC's `ccc.Entity.Base` with decorator-based codec definition:
 ```typescript
 // packages/order/src/entities.ts
-@mol.codec(
+@ccc.codec(
   mol.struct({
     ckbScale: mol.Uint64,
     udtScale: mol.Uint64,
   }),
 )
-export class Ratio extends mol.Entity.Base<ExchangeRatio, Ratio>() {
+export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
   constructor(
     public ckbScale: ccc.Num,
     public udtScale: ccc.Num,
@@ -324,7 +326,6 @@ let origins: readonly I8Cell[] = Object.freeze([]);
 ```
 - Use `readonly` on class fields and interface members where appropriate
 - Use `Readonly<T>` wrapper type for maps and objects: `Readonly<Map<string, readonly Cell[]>>`
-- Private constructors for controlled instantiation: `Epoch` in `packages/utils/src/epoch.ts` uses `private constructor`
 
 ## Async Generator Pattern
 
@@ -369,4 +370,4 @@ process.exit(0);
 
 ---
 
-*Convention analysis: 2026-02-14*
+*Convention analysis: 2026-02-17*

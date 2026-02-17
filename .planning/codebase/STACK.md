@@ -1,11 +1,14 @@
 # Technology Stack
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-02-17
 
 ## Languages
 
 **Primary:**
 - TypeScript 5.9.3 - All source code across packages and apps
+
+**On-Chain (reference):**
+- Rust 2021 edition - On-chain CKB smart contracts in `contracts/` reference repo (3 contracts + shared utils, ~1,163 lines). Built with Capsule v0.10.5, `no_std` + alloc-only runtime, targeting RISC-V. Uses `ckb-std 0.15.3` and `primitive_types` crate for C256 safe math.
 
 **Secondary:**
 - Bash - `ccc-dev/record.sh`, `ccc-dev/replay.sh` for local CCC dev build setup
@@ -110,7 +113,7 @@ The repo supports using a local development build of CCC for testing unpublished
 - Applies to `dependencies`, `devDependencies`, and `optionalDependencies`
 - Effect: all workspace packages transparently use the local CCC build instead of npm versions
 
-**CCC upstream contributions:** The maintainer contributed UDT and Epoch support to CCC upstream (now merged). Some local code in `packages/utils/src/epoch.ts` and `packages/utils/src/udt.ts` may overlap with features now available natively in CCC.
+**CCC upstream contributions:** The maintainer contributed UDT and Epoch support to CCC upstream (now merged). The local Epoch class has been deleted (replaced by `ccc.Epoch`). Some local UDT handling in `packages/utils/src/udt.ts` may still overlap with features now available in CCC's `@ckb-ccc/udt` package.
 
 ## Configuration
 
@@ -181,4 +184,4 @@ The repo supports using a local development build of CCC for testing unpublished
 
 ---
 
-*Stack analysis: 2026-02-14*
+*Stack analysis: 2026-02-17*

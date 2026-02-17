@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-02-17
 
 ## Important Context
 
@@ -84,7 +84,7 @@ export default defineConfig({
 
 **Naming:**
 - Use `.test.ts` suffix (not `.spec.ts`)
-- Name should match the source file: `epoch.ts` -> `epoch.test.ts`, `codec.ts` -> `codec.test.ts`
+- Name should match the source file: `codec.ts` -> `codec.test.ts`, `heap.ts` -> `heap.test.ts`
 
 **Expected structure when adding tests:**
 ```
@@ -94,14 +94,12 @@ packages/utils/
 │   ├── capacity.test.ts      # <-- tests go here
 │   ├── codec.ts
 │   ├── codec.test.ts         # <-- tests go here
-│   ├── epoch.ts
-│   ├── epoch.test.ts         # <-- tests go here
 │   ├── heap.ts
 │   ├── heap.test.ts          # <-- tests go here
 │   ├── index.ts
 │   ├── transaction.ts
 │   ├── udt.ts
-│   └── utils.ts
+│   ├── utils.ts
 │   └── utils.test.ts         # <-- tests go here
 └── vitest.config.mts
 ```
@@ -244,10 +242,9 @@ pnpm test:cov          # Generates V8 coverage report
 - Scope: Individual classes, functions, pure logic
 - Location: `packages/*/src/*.test.ts`
 - Priority targets for new tests:
-  1. `packages/utils/src/epoch.ts` - Epoch arithmetic, normalization, comparison, hex conversion
-  2. `packages/utils/src/utils.ts` - `binarySearch`, `asyncBinarySearch`, `gcd`, `min`, `max`, `sum`, `hexFrom`, `isHex`, `shuffle`
-  3. `packages/utils/src/codec.ts` - `CheckedInt32LE` encode/decode, `union` codec
-  4. `packages/utils/src/heap.ts` - `MinHeap` operations (push, pop, remove, fix)
+  1. `packages/utils/src/utils.ts` - `binarySearch`, `asyncBinarySearch`, `gcd`, `min`, `max`, `sum`, `hexFrom`, `isHex`, `shuffle`
+  2. `packages/utils/src/codec.ts` - `CheckedInt32LE` encode/decode
+  3. `packages/utils/src/heap.ts` - `MinHeap` operations (push, pop, remove, fix)
   5. `packages/order/src/entities.ts` - `Ratio`, `Info`, `Relative`, `OrderData` encode/decode/validate
   6. `packages/order/src/cells.ts` - `OrderCell.mustFrom`, `OrderCell.tryFrom`, `OrderGroup`
   7. `packages/dao/src/dao.ts` - `DaoManager.isDeposit`, `isWithdrawalRequest`
@@ -257,6 +254,17 @@ pnpm test:cov          # Generates V8 coverage report
 - Scope: Multi-component interactions requiring a mock CCC client
 - Example: `LogicManager.deposit()` combining DaoManager + UdtHandler
 - Example: `IckbSdk.estimate()` combining exchange ratios with order info
+
+**Contract-Alignment Tests (critical):**
+- Scope: Verify TS logic produces identical results to Rust contract validation
+- Priority targets:
+  1. Exchange rate: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty -- must match `contracts/scripts/contracts/ickb_logic/src/entry.rs` `deposit_to_ickb()`
+  2. Molecule encoding: `ReceiptData`, `OwnedOwnerData`, `Ratio`, `OrderInfo`, `MintOrderData`, `MatchOrderData` -- must match `contracts/schemas/encoding.mol`
+  3. Order value conservation: `in_ckb * ckb_mul + in_udt * udt_mul <= out_ckb * ckb_mul + out_udt * udt_mul` -- must match `contracts/scripts/contracts/limit_order/src/entry.rs` `validate()`
+  4. Concavity check: `c2u.ckb_mul * u2c.udt_mul >= c2u.udt_mul * u2c.ckb_mul` -- must match limit_order contract
+  5. Deposit size bounds: min 1,000 CKB, max 1,000,000 CKB unoccupied capacity
+  6. Owned owner distance calculation: TS MetaPoint arithmetic must match contract's `extract_owned_metapoint()`
+- Approach: Use known input/output vectors derived from the Rust contract logic or construct test cases from the Molecule schema
 
 **E2E Tests:**
 - Not applicable -- apps interact with live blockchain nodes
@@ -369,4 +377,4 @@ The test step is **commented out**. Once tests are written, uncomment to enable:
 
 ---
 
-*Testing analysis: 2026-02-14*
+*Testing analysis: 2026-02-17*
