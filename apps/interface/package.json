@@ -13,9 +13,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "([ -d ../../ccc-dev/ccc ] && exec node ../../ccc-dev/tsc.mjs || tsc) && vite build",
     "preview": "vite preview",
-    "lint": "eslint ./src"
+    "lint": "eslint ./src",
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules"
   },
   "devDependencies": {
     "@babel/preset-react": "^7.27.1",

@@ -21,20 +21,20 @@
   "sideEffects": false,
   "type": "module",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
     }
   },
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "tsc",
+    "build": "[ -d ../../ccc-dev/ccc ] && exec node ../../ccc-dev/tsc.mjs || tsc",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml"
+    "clean:deep": "rm -fr dist node_modules"
   },
   "files": [
     "dist",
@@ -42,7 +42,14 @@
   ],
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": true,
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",

@@ -63,34 +63,14 @@ git clone <repo-url> && cd stack && pnpm install
 
 To redo the setup from scratch: `rm -rf ccc-dev/ccc && pnpm install`.
 
-When `ccc-dev/ccc/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and overrides them with local links — no manual `pnpm.overrides` needed.
+See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
-### Recording new CCC pins
+## Developer Scripts
 
-To import new unpublished CCC changes (branches, PRs, or specific commits), use `ccc-dev/record.sh`. The script auto-detects ref types, merges them sequentially onto a `wip` branch, then builds CCC. On merge conflicts, it auto-resolves them using Claude.
-
-```bash
-# Usage: ccc-dev/record.sh <ref ...>
-#   Ref auto-detection:
-#   - ^[0-9a-f]{7,40}$ → commit SHA
-#   - ^[0-9]+$          → GitHub PR number
-#   - everything else   → branch name
-
-# Examples:
-bash ccc-dev/record.sh releases/next releases/udt
-bash ccc-dev/record.sh 268 releases/next
-bash ccc-dev/record.sh abc1234
-```
-
-The `ccc:record` script in `package.json` is preconfigured with the current refs:
-
-```json
-{
-  "scripts": {
-    "ccc:record": "bash ccc-dev/record.sh releases/next releases/udt"
-  }
-}
-```
+| Command | Description |
+|---|---|
+| `pnpm pr` | Open a GitHub PR creation page for the current branch. Uses Claude to auto-generate title and body when available, falls back to branch name and commit log. |
+| `pnpm review` | Fetch and display PR review comments from GitHub for the current branch (or `pnpm review -- --pr <number>` for a specific PR). |
 
 ## Epoch Semantic Versioning
 

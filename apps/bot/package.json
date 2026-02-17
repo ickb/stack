@@ -34,8 +34,8 @@
     "build": "tsc",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules pnpm-lock.yaml",
-    "start": "node --env-file=env/${CHAIN}/.env dist/index.js | tee  log_${CHAIN}_$(date +%F_%H-%M-%S).json",
+    "clean:deep": "rm -fr dist node_modules",
+    "start": "[ -n \"$CHAIN\" ] || { echo 'CHAIN not set (testnet|mainnet)' >&2; exit 1; } && node --env-file=env/${CHAIN}/.env dist/index.js | tee log_${CHAIN}_$(date +%F_%H-%M-%S).json",
     "start:loop": "while true; do pnpm start; sleep 10; done"
   },
   "files": [
