@@ -23,7 +23,10 @@
     "docs": "typedoc",
     "pr": "bash scripts/pr.sh",
     "review": "bash scripts/review.sh",
-    "claude": "claude --dangerously-skip-permissions"
+    "claude": "claude --dangerously-skip-permissions",
+    "reference": "pnpm reference:contracts; pnpm reference:whitepaper",
+    "reference:contracts": "[ -d contracts ] || (git clone https://github.com/ickb/contracts.git && chmod -R a-w contracts)",
+    "reference:whitepaper": "[ -d whitepaper ] || (git clone https://github.com/ickb/whitepaper.git && chmod -R a-w whitepaper)"
   },
   "engines": {
     "node": ">=24"

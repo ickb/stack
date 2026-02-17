@@ -65,6 +65,19 @@ To redo the setup from scratch: `rm -rf ccc-dev/ccc && pnpm install`.
 
 See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
+## Reference
+
+Clone the on-chain contracts and whitepaper repos locally for AI context:
+
+```bash
+pnpm reference
+```
+
+This clones two repos into the project root (both are git-ignored and made read-only):
+
+- **[contracts](https://github.com/ickb/contracts)** — Rust L1 scripts deployed on Nervos CKB
+- **[whitepaper](https://github.com/ickb/whitepaper)** — iCKB protocol design and specification
+
 ## Developer Scripts
 
 | Command | Description |

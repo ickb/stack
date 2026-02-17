@@ -4,3 +4,7 @@
 
 # Artifacts
 **/dist/
+
+# Reference repos
+contracts/
+whitepaper/
