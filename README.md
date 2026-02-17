@@ -65,12 +65,27 @@ To redo the setup from scratch: `rm -rf ccc-dev/ccc && pnpm install`.
 
 See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
+## Reference
+
+Clone the on-chain contracts and whitepaper repos locally for AI context:
+
+```bash
+pnpm reference
+```
+
+This clones two repos into the project root (both are git-ignored and made read-only):
+
+- **[contracts](https://github.com/ickb/contracts)** — Rust L1 scripts deployed on Nervos CKB
+- **[whitepaper](https://github.com/ickb/whitepaper)** — iCKB protocol design and specification
+
 ## Developer Scripts
 
 | Command | Description |
 |---|---|
 | `pnpm pr` | Open a GitHub PR creation page for the current branch. Uses Claude to auto-generate title and body when available, falls back to branch name and commit log. |
 | `pnpm review` | Fetch and display PR review comments from GitHub for the current branch (or `pnpm review -- --pr <number>` for a specific PR). |
+
+> **Note:** `gh` CLI is not available in this environment. Use `pnpm pr` and `pnpm review` instead.
 
 ## Epoch Semantic Versioning
 

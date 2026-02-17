@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-02-17
 
 ## APIs & External Services
 
@@ -104,42 +104,104 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 
 ## Smart Contracts (On-Chain Scripts)
 
-The project interacts with several on-chain CKB scripts defined in `packages/sdk/src/constants.ts`:
+The project interacts with several on-chain CKB scripts defined in `packages/sdk/src/constants.ts`. The Rust source code is available in the `contracts/` reference repo (clone via `pnpm reference`). Protocol design is documented in the `whitepaper/` reference repo.
 
 **NervosDAO:**
 - Code hash: `0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e`
 - Hash type: `type`
 - Purpose: Deposit/withdraw CKB with interest (Nervos DAO)
 - Managed by: `DaoManager` in `packages/dao/src/dao.ts`
+- Constants: `DAO_DEPOSIT_DATA = [0,0,0,0,0,0,0,0]` (8 zero bytes = deposit; non-zero = withdrawal request)
+- DAO accumulated rate: extracted from block header at offset 168, size 8 bytes
+- Genesis accumulated rate: `AR_0 = 10^16` (used as baseline for iCKB exchange rate)
 
-**iCKB UDT (User Defined Token):**
+**iCKB UDT (xUDT Token):**
 - Code hash: `0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95`
 - Hash type: `data1`
-- Purpose: The iCKB token type script
+- Args: `[iCKB_Logic_Hash, 0x00000080]` (0x80000000 = owner mode by input type)
+- Token script hash: `0xd485c2271949c232e3f5d46128336c716f90bcbf3cb278696083689fbbcd407a`
+- Amount storage: 16 bytes (u128 LE) in cell data
+- Purpose: The iCKB token type script (xUDT standard)
 - Managed by: `IckbUdtManager` in `packages/core/src/udt.ts`
 
 **iCKB Logic:**
 - Code hash: `0x2a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd3`
 - Hash type: `data1`
-- Purpose: Core iCKB deposit/receipt logic
+- Purpose: Core iCKB deposit/receipt logic (type script)
 - Managed by: `LogicManager` in `packages/core/src/logic.ts`
+- Contract source: `contracts/scripts/contracts/ickb_logic/`
+- Validation rules:
+  - Empty args required (prevents reuse with different configurations)
+  - Cell classification: Deposit (iCKB lock + DAO type), Receipt (any lock + iCKB type), UDT (any lock + xUDT type)
+  - Conservation law: `input_udt + input_receipts = output_udt + input_deposits`
+  - Deposit size: min 1,000 CKB, max 1,000,000 CKB (unoccupied capacity)
+  - Soft cap: 100,000 iCKB per deposit; 10% penalty on excess
+  - Receipt-deposit matching: for each unique deposit amount, deposit count must equal receipt count
+- Receipt data format: `[deposit_quantity: u32 LE (4 bytes), deposit_amount: u64 LE (8 bytes)]` = 12 bytes total
+- Exchange rate: `iCKB = capacity * AR_0 / AR_m` where AR_m = accumulated rate at deposit block
+- Error codes: NotEmptyArgs(5), ScriptMisuse(6), DepositTooSmall(7), DepositTooBig(8), EmptyReceipt(9), ReceiptMismatch(10), AmountMismatch(11), AmountUnreasonablyBig(12)
 
 **Owned Owner:**
 - Code hash: `0xacc79e07d107831feef4c70c9e683dac5644d5993b9cb106dca6e74baa381bd0`
 - Hash type: `data1`
-- Purpose: Withdrawal ownership tracking
+- Purpose: Withdrawal ownership tracking (lock script)
 - Managed by: `OwnedOwnerManager` in `packages/core/src/owned_owner.ts`
+- Contract source: `contracts/scripts/contracts/owned_owner/`
+- Design: Solves NervosDAO constraint that deposit lock and withdrawal lock must have equal size
+- Mechanism: Owner cell (type=owned_owner) contains `owned_distance: i32 LE` (4 bytes) pointing to its paired owned cell (lock=owned_owner)
+- Validation rules:
+  - Empty args required
+  - Owned cells must be DAO withdrawal requests (not deposits)
+  - 1:1 pairing enforced: exactly 1 owner and 1 owned per MetaPoint, in both inputs and outputs
+  - Cannot be both lock and type simultaneously
+- Error codes: NotEmptyArgs(5), NotWithdrawalRequest(6), ScriptMisuse(7), Mismatch(8)
 
 **Order (Limit Order):**
 - Code hash: `0x49dfb6afee5cc8ac4225aeea8cb8928b150caf3cd92fea33750683c74b13254a`
 - Hash type: `data1`
-- Purpose: On-chain limit orders for CKB/iCKB exchange
+- Purpose: On-chain limit orders for CKB/UDT exchange (lock script)
 - Managed by: `OrderManager` in `packages/order/src/order.ts`
+- Contract source: `contracts/scripts/contracts/limit_order/`
+- Lifecycle: Mint (create order + master cell) -> Match (partial/full fill) -> Melt (destroy fulfilled order)
+- Order cell data layout (88-89 bytes):
+  - `[0:16]` UDT amount (u128 LE)
+  - `[16:20]` Action (u32 LE): 0=Mint, 1=Match
+  - `[20:52]` TX hash (Mint: all zeros padding) or master outpoint hash (Match)
+  - `[52:56]` Master distance (Mint: i32 relative offset) or master index (Match: u32 absolute)
+  - `[56:64]` CKB->UDT ckb_multiplier (u64 LE)
+  - `[64:72]` CKB->UDT udt_multiplier (u64 LE)
+  - `[72:80]` UDT->CKB ckb_multiplier (u64 LE)
+  - `[80:88]` UDT->CKB udt_multiplier (u64 LE)
+  - `[88:89]` ckb_min_match_log (u8): minimum match = `1 << n`, range 0..=64
+- Validation rules:
+  - Empty args required
+  - Mint: output has order + master; padding must be all zeros
+  - Match: value conservation `in_ckb * ckb_mul + in_udt * udt_mul <= out_ckb * ckb_mul + out_udt * udt_mul`
+  - Melt: input has order + master; no output
+  - Concavity check: `c2u.ckb_mul * u2c.udt_mul >= c2u.udt_mul * u2c.ckb_mul` (round-trip cannot lose value)
+  - DOS prevention: partial matches must meet minimum threshold (`1 << ckb_min_match_log`)
+  - Order info (ratios, min match, UDT hash) must be immutable across matches
+  - Cannot modify already-fulfilled orders
+- Error codes: NotEmptyArgs(5), DuplicatedMaster(6), InvalidAction(7), NonZeroPadding(8), InvalidRatio(9), InvalidCkbMinMatchLog(10), ConcaveRatio(11), BothRatioNull(12), MissingUdtType(13), SameMaster(14), ScriptMisuse(15), DifferentInfo(16), InvalidMatch(17), DecreasingValue(18), AttemptToChangeFulfilled(19), InsufficientMatch(20), InvalidConfiguration(21)
+
+**Molecule Schema (`contracts/schemas/encoding.mol`):**
+```molecule
+struct ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }
+struct OwnedOwnerData { owned_distance: Int32 }
+struct Ratio { ckb_multiplier: Uint64, udt_multiplier: Uint64 }
+struct OrderInfo { ckb_to_udt: Ratio, udt_to_ckb: Ratio, ckb_min_match_log: Uint8 }
+struct MintOrderData { padding: Byte32, master_distance: Int32, order_info: OrderInfo }
+struct MatchOrderData { master_outpoint: OutPoint, order_info: OrderInfo }
+union PartialOrderData { MintOrderData, MatchOrderData }
+```
 
 **Deployment Groups (Cell Dependencies):**
 - Mainnet dep group: TX `0x621a6f38de3b9f453016780edac3b26bfcbfa3e2ecb47c2da275471a5d3ed165` index 0
 - Testnet dep group: TX `0xf7ece4fb33d8378344cab11fcd6a4c6f382fd4207ac921cf5821f30712dcd311` index 0
 - Known bot scripts: one mainnet bot, one testnet bot (lock scripts in `packages/sdk/src/constants.ts`)
+- Deployment TX (mainnet): `0xd7309191381f5a8a2904b8a79958a9be2752dbba6871fa193dab6aeb29dc8f44`
+- All scripts deployed with zero lock (immutable, non-upgradable)
+- Security audit: Scalebit (2024-09-11), no critical vulnerabilities
 
 **Network configuration:** `IckbSdk.from("mainnet" | "testnet")` in `packages/sdk/src/sdk.ts` selects the appropriate script hashes and dep groups.
 
@@ -218,4 +280,4 @@ CCC (`@ckb-ccc/core`) is the most critical external dependency. Key capabilities
 
 ---
 
-*Integration audit: 2026-02-14*
+*Integration audit: 2026-02-17*

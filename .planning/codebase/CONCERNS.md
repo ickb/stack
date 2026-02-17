@@ -1,6 +1,6 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-02-17
 
 ## Tech Debt
 
@@ -31,23 +31,19 @@
 - Impact: Lumos is deprecated upstream and will eventually stop receiving updates. Security patches and CKB protocol changes will only be reflected in CCC.
 - Fix approach: This is resolved by the app migration above. The new `packages/` libraries already use CCC exclusively via `@ckb-ccc/core`.
 
-### Local Epoch Class Partially Duplicates CCC Upstream (Medium)
+### ~~Local Epoch Class Partially Duplicates CCC Upstream~~ (RESOLVED)
 
-- Issue: `packages/utils/src/epoch.ts` defines a custom `Epoch` class (258 lines) that duplicates functionality now available in CCC's `ccc.Epoch`. CCC's `Epoch` class (in `ccc-dev/ccc/packages/core/src/ckb/epoch.ts`, 490 lines) provides `from()`, `add()`, `sub()`, `compare()`, `toUnix()`, `normalizeCanonical()`, `toPackedHex()`, and convenience comparison methods (`lt`, `le`, `eq`, `ge`, `gt`). The local `Epoch` class provides nearly identical functionality but uses different property naming (`number/index/length` vs. CCC's `integer/numerator/denominator`).
-- Files:
-  - `packages/utils/src/epoch.ts` - local `Epoch` class
-  - `ccc-dev/ccc/packages/core/src/ckb/epoch.ts` - CCC upstream `Epoch` class
-- Impact: Maintaining a parallel Epoch implementation means bugs fixed upstream are not automatically inherited. The local class already wraps CCC functions (`ccc.epochFromHex` at line 101, `ccc.epochToHex` at line 111) and accepts `ccc.Epoch` instances (via `deStruct()` at line 240), showing partial integration but also added complexity.
-- Fix approach: Replace local `Epoch` with `ccc.Epoch` throughout `packages/`. Both classes provide `from()`, `add()`, `sub()`, `compare()`, and `toUnix()`. The main migration friction is the naming difference. CCC provides deprecated array-style accessors `[0]`, `[1]`, `[2]` for backwards compatibility, easing the transition for code that uses tuple-style access.
+- **Resolved in:** commit ae8b5af (`refactor: replace ickb Epoch with ccc.Epoch`)
+- Local `packages/utils/src/epoch.ts` (244 lines) was deleted. All packages now use `ccc.Epoch` directly.
 
 ### Local UDT Handling May Overlap CCC Upstream (Medium)
 
-- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-dev/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are already being used from CCC upstream in five locations.
+- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-dev/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
 - Files:
   - `packages/utils/src/udt.ts` - `UdtHandler` interface, `UdtManager` class (~370 lines)
   - `packages/core/src/udt.ts` - `IckbUdtManager` extending UDT handling for iCKB-specific logic
   - `ccc-dev/ccc/packages/udt/src/` - CCC upstream UDT package
-  - Usage of `ccc.udtBalanceFrom()`: `packages/core/src/udt.ts` line 100, `packages/utils/src/udt.ts` lines 166, 193, 319, 363
+  - Usage of `ccc.udtBalanceFrom()`: `packages/utils/src/udt.ts` lines 169, 197, 323, 368
 - Impact: There may be duplicated utility code for standard UDT operations (finding cells, calculating balances). The iCKB-specific extensions (e.g., `IckbUdtManager` which modifies balance calculations based on DAO deposit/withdrawal state) are domain-specific and unlikely to be in CCC.
 - Fix approach: Audit the CCC `@ckb-ccc/udt` package to identify which local utilities can be replaced. Keep iCKB-specific extensions but delegate standard UDT operations (cell finding, basic balance) to CCC where possible.
 
@@ -220,12 +216,36 @@
 - Files: All files under `packages/` and `apps/`
 - Risk: The financial logic in `packages/sdk/src/sdk.ts` (order matching, maturity estimation, CKB/UDT conversion), `packages/order/src/order.ts` (order matching algorithm with complex bigint arithmetic), and `packages/dao/src/cells.ts` (DAO interest calculation, maturity computation) handle real cryptocurrency operations. Bugs in these areas could lead to financial loss.
 - Priority: High. At minimum, the following should have unit tests:
-  1. `packages/utils/src/epoch.ts` - Epoch arithmetic (add, sub, compare, toUnix)
-  2. `packages/order/src/entities.ts` - `Ratio.applyFee()`, `Ratio.convert()`, `Info.validate()`
-  3. `packages/order/src/order.ts` - `OrderMatcher.match()`, `OrderMatcher.nonDecreasing()`, `OrderManager.bestMatch()`
-  4. `packages/sdk/src/codec.ts` - `PoolSnapshot` encode/decode roundtrip
-  5. `packages/dao/src/cells.ts` - `daoCellFrom()` maturity/interest calculations
-  6. `packages/core/src/logic.ts` - iCKB exchange ratio and conversion logic
+  1. `packages/utils/src/utils.ts` - `binarySearch`, `asyncBinarySearch`, `gcd`, `min`, `max`, `sum`, `hexFrom`, `isHex`, `shuffle`
+  2. `packages/utils/src/codec.ts` - `CheckedInt32LE` encode/decode
+  3. `packages/order/src/entities.ts` - `Ratio.applyFee()`, `Ratio.convert()`, `Info.validate()`
+  4. `packages/order/src/order.ts` - `OrderMatcher.match()`, `OrderMatcher.nonDecreasing()`, `OrderManager.bestMatch()`
+  5. `packages/sdk/src/codec.ts` - `PoolSnapshot` encode/decode roundtrip
+  6. `packages/dao/src/cells.ts` - `daoCellFrom()` maturity/interest calculations
+  7. `packages/core/src/logic.ts` - iCKB exchange ratio and conversion logic
+
+### TS Exchange Rate Must Match Rust Contract Logic
+
+- What's not tested: The TypeScript exchange rate calculation (`packages/core/src/udt.ts`) must produce identical results to the Rust contract's `deposit_to_ickb()` function (`contracts/scripts/contracts/ickb_logic/src/entry.rs`). Any discrepancy would cause transactions to be rejected on-chain.
+- Key formula: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty `amount - (amount - 100000) / 10` when `amount > ICKB_SOFT_CAP_PER_DEPOSIT`
+- Contract constants that TS must match:
+  - `CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000 * 100_000_000` (1,000 CKB)
+  - `CKB_MAXIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000,000 * 100_000_000` (1,000,000 CKB)
+  - `ICKB_SOFT_CAP_PER_DEPOSIT = 100,000 * 100_000_000` (100,000 iCKB)
+  - `GENESIS_ACCUMULATED_RATE = 10_000_000_000_000_000` (10^16)
+- Reference: `contracts/scripts/contracts/ickb_logic/src/entry.rs` function `deposit_to_ickb()`
+- Fix approach: Add cross-validation tests with known inputs/outputs derived from the Rust contract logic
+
+### TS Molecule Codecs Must Match Contract Schemas
+
+- What's not tested: The TypeScript Molecule codec definitions (`@ccc.codec` decorators in `packages/order/src/entities.ts`, `packages/core/src/entities.ts`) must produce byte-identical encodings to the Molecule schema at `contracts/schemas/encoding.mol`. Field order, sizes, and endianness must match exactly.
+- Key schemas:
+  - `ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }` = 12 bytes
+  - `OwnedOwnerData { owned_distance: Int32 }` = 4 bytes
+  - `Ratio { ckb_multiplier: Uint64, udt_multiplier: Uint64 }` = 16 bytes
+  - `OrderInfo { ckb_to_udt: Ratio, udt_to_ckb: Ratio, ckb_min_match_log: Uint8 }` = 33 bytes
+  - Order cell data: `[UDT amount (16)] [Action (4)] [TX hash/padding (32)] [Index/distance (4)] [OrderInfo (33)] = 89 bytes`
+- Fix approach: Add codec roundtrip tests using known byte vectors from the Rust contract tests or manually constructed from the Molecule schema
 
 ## Dead Code
 
@@ -252,4 +272,4 @@
 
 ---
 
-*Concerns audit: 2026-02-14*
+*Concerns audit: 2026-02-17*
