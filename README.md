@@ -85,6 +85,8 @@ This clones two repos into the project root (both are git-ignored and made read-
 | `pnpm pr` | Open a GitHub PR creation page for the current branch. Uses Claude to auto-generate title and body when available, falls back to branch name and commit log. |
 | `pnpm review` | Fetch and display PR review comments from GitHub for the current branch (or `pnpm review -- --pr <number>` for a specific PR). |
 
+> **Note:** `gh` CLI is not available in this environment. Use `pnpm pr` and `pnpm review` instead.
+
 ## Epoch Semantic Versioning
 
 This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.

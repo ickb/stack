@@ -4,6 +4,9 @@
 
 ## Important Context
 
+**Tooling:**
+- `gh` CLI is NOT available and must NOT be installed. Use `pnpm pr` to open PRs and `pnpm review` to fetch PR comments.
+
 **Legacy vs. New code:**
 - `@ickb/lumos-utils@1.4.2` and `@ickb/v1-core@1.4.2` are **LEGACY and DEPRECATED** npm packages. The apps (`apps/bot`, `apps/tester`, `apps/interface`) still depend on them.
 - The `packages/` directory contains the **NEW replacement libraries** built on CCC (ckb-ccc), which will eventually replace the legacy packages in the apps.
