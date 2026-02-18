@@ -13,9 +13,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/ccc"
 PATCH_DIR="$SCRIPT_DIR/pins"
 
-# Verify Claude CLI is available (needed for conflict resolution)
-if [ $# -gt 0 ] && ! command -v claude &>/dev/null; then
-  echo "ERROR: 'claude' CLI required for conflict resolution (run: pnpm install)" >&2
+# Guard: abort if ccc-dev/ccc/ has pending work
+if ! bash "$SCRIPT_DIR/status.sh" >/dev/null 2>&1; then
+  bash "$SCRIPT_DIR/status.sh" >&2
+  echo "" >&2
+  echo "ERROR: ccc-dev/ccc/ has pending work that would be lost." >&2
+  echo "Push with 'pnpm ccc:push', commit, or remove ccc-dev/ccc/ manually." >&2
   exit 1
 fi
 
@@ -29,9 +32,6 @@ git clone --filter=blob:none "$REPO_URL" "$REPO_DIR"
 # Record base SHA before any merges
 BASE_SHA=$(git -C "$REPO_DIR" rev-parse HEAD)
 git -C "$REPO_DIR" checkout -b wip
-
-# Prevent nested Claude Code detection when invoking claude CLI below
-unset CLAUDECODE 2>/dev/null || true
 
 MERGE_IDX=0
 
@@ -70,15 +70,15 @@ for REF in "$@"; do
     # Capture conflicted file list BEFORE resolution
     mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
 
-    # Resolve each conflicted file with Claude
+    # Resolve each conflicted file with AI Coworker
     for FILE in "${CONFLICTED[@]}"; do
-      claude --print --model sonnet --no-session-persistence \
+      pnpm --silent coworker:ask \
         -p "You are a merge conflict resolver. Output ONLY the resolved file content. Merge both sides meaningfully. No explanations, no code fences, no extra text." \
         < "$REPO_DIR/$FILE" > "$REPO_DIR/${FILE}.resolved"
 
       # Validate resolution
       if [ ! -s "$REPO_DIR/${FILE}.resolved" ]; then
-        echo "ERROR: Claude returned empty resolution for $FILE" >&2
+        echo "ERROR: AI Coworker returned empty resolution for $FILE" >&2
         exit 1
       fi
       if grep -q '<<<<<<<' "$REPO_DIR/${FILE}.resolved"; then
@@ -107,7 +107,7 @@ for REF in "$@"; do
   echo "$MERGE_SHA $REF" >> "$PATCH_DIR/REFS"
 done
 
-bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR"
+bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
 
 # Prepend BASE SHA as first line of REFS
 mkdir -p "$PATCH_DIR"

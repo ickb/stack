@@ -76,12 +76,15 @@ while IFS=' ' read -r SHA REF_NAME; do
   fi
 done < <(tail -n +2 "$PATCH_DIR/REFS")
 
-bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR"
+bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
 
 # Verify HEAD SHA matches recording
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
 EXPECTED=$(cat "$PATCH_DIR/HEAD")
 if [ "$ACTUAL" != "$EXPECTED" ]; then
-  echo "ERROR: replay diverged from recording (expected $EXPECTED, got $ACTUAL)" >&2
+  echo "FAIL: replay HEAD ($ACTUAL) != pinned HEAD ($EXPECTED)" >&2
+  echo "Pins are stale or corrupted. Re-record with 'pnpm ccc:record'." >&2
   exit 1
 fi
+
+echo "OK — replay HEAD matches pinned HEAD ($EXPECTED)"

@@ -36,7 +36,9 @@ export async function main(): Promise<void> {
   const capacityManager = CapacityManager.withEmptyData();
 
   for (;;) {
-    await new Promise((r) => setTimeout(r, 120000));
+    await new Promise((r) => {
+      setTimeout(r, 120000);
+    });
     console.log();
 
     const executionLog: {

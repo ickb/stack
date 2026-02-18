@@ -12,6 +12,20 @@ export default defineConfig(
   tseslint.configs.strictTypeChecked,
   {
     rules: {
+      "array-callback-return": "error",
+      eqeqeq: "error",
+      "no-self-compare": "error",
+      "no-constant-binary-expression": "error",
+      "no-template-curly-in-string": "error",
+      "no-constructor-return": "error",
+      "no-promise-executor-return": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.name='Error']",
+          message: "Use `new Error(...)` instead of `Error(...)`.",
+        },
+      ],
       "@typescript-eslint/explicit-function-return-type": "error",
     },
     languageOptions: {

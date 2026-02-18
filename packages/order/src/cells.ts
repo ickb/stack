@@ -187,28 +187,28 @@ export class OrderCell implements ValueComponents {
     }
 
     if (!this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock)) {
-      throw Error("Order script different");
+      throw new Error("Order script different");
     }
 
     const udt = this.cell.cellOutput.type;
     if (!udt || !descendant.cell.cellOutput.type?.eq(udt)) {
-      throw Error("UDT type is different");
+      throw new Error("UDT type is different");
     }
 
     if (!descendant.getMaster().eq(this.getMaster())) {
-      throw Error("Master is different");
+      throw new Error("Master is different");
     }
 
-    if (!this.data.info.eq(this.data.info)) {
-      throw Error("Info is different");
+    if (!this.data.info.eq(descendant.data.info)) {
+      throw new Error("Info is different");
     }
 
     if (this.absTotal > descendant.absTotal) {
-      throw Error("Total value is lower than the original one");
+      throw new Error("Total value is lower than the original one");
     }
 
     if (this.absProgress > descendant.absProgress) {
-      throw Error("Progress is lower than the original one");
+      throw new Error("Progress is lower than the original one");
     }
   }
 
@@ -279,11 +279,11 @@ export class MasterCell implements ValueComponents {
    */
   validate(order: OrderCell): void {
     if (!this.cell.cellOutput.type?.eq(order.cell.cellOutput.lock)) {
-      throw Error("Order script different");
+      throw new Error("Order script different");
     }
 
     if (!order.getMaster().eq(this.cell.outPoint)) {
-      throw Error("Master is different");
+      throw new Error("Master is different");
     }
   }
 

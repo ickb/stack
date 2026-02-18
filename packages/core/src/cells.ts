@@ -76,7 +76,7 @@ export async function receiptCellFrom(
       ? options.cell
       : await options.client.getCell(options.outpoint);
   if (!cell) {
-    throw Error("Cell not found");
+    throw new Error("Cell not found");
   }
 
   const txHash = cell.outPoint.txHash;

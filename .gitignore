@@ -8,3 +8,6 @@
 # Reference repos
 contracts/
 whitepaper/
+
+# AI tool config symlink
+CLAUDE.md

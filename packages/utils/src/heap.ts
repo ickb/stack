@@ -95,7 +95,7 @@ export class MinHeap<T> {
     }
 
     const n = this.len() - 1;
-    if (n != i) {
+    if (n !== i) {
       this.swap(i, n);
       if (!this.down(i, n)) {
         this.up(i);
@@ -126,7 +126,7 @@ export class MinHeap<T> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     while (true) {
       const i = (j - 1) >> 1; // parent
-      if (i == j || !this.less(j, i)) {
+      if (i === j || !this.less(j, i)) {
         break;
       }
       this.swap(i, j);

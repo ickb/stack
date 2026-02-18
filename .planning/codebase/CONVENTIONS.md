@@ -5,7 +5,7 @@
 ## Important Context
 
 **Tooling:**
-- `gh` CLI is NOT available and must NOT be installed. Use `pnpm pr` to open PRs and `pnpm review` to fetch PR comments.
+- `gh` CLI is NOT available and must NOT be installed. PR and review workflows are handled inline by the AI Coworker (see AGENTS.md).
 
 **Legacy vs. New code:**
 - `@ickb/lumos-utils@1.4.2` and `@ickb/v1-core@1.4.2` are **LEGACY and DEPRECATED** npm packages. The apps (`apps/bot`, `apps/tester`, `apps/interface`) still depend on them.

@@ -98,7 +98,7 @@ export class DaoManager implements ScriptDeps {
     // Check that there are at most 64 output cells, see:
     // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
     if (tx.outputs.length > 64) {
-      throw Error("More than 64 output cells in a NervosDAO transaction");
+      throw new Error("More than 64 output cells in a NervosDAO transaction");
     }
   }
 
@@ -135,22 +135,22 @@ export class DaoManager implements ScriptDeps {
     }
 
     if (
-      tx.inputs.length != tx.outputs.length ||
-      tx.outputs.length != tx.outputsData.length
+      tx.inputs.length !== tx.outputs.length ||
+      tx.outputs.length !== tx.outputsData.length
     ) {
-      throw Error("Transaction have different inputs and outputs lengths");
+      throw new Error("Transaction have different inputs and outputs lengths");
     }
 
     for (const deposit of deposits) {
       const { cell, isDeposit, headers } = deposit;
       if (!isDeposit) {
-        throw Error("Not a deposit");
+        throw new Error("Not a deposit");
       }
       if (
         sameSizeOnly &&
-        cell.cellOutput.lock.args.length != lock.args.length
+        cell.cellOutput.lock.args.length !== lock.args.length
       ) {
-        throw Error(
+        throw new Error(
           "Withdrawal request lock args has different size from deposit",
         );
       }
@@ -172,7 +172,7 @@ export class DaoManager implements ScriptDeps {
     // Check that there are at most 64 output cells, see:
     // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
     if (tx.outputs.length > 64) {
-      throw Error("More than 64 output cells in a NervosDAO transaction");
+      throw new Error("More than 64 output cells in a NervosDAO transaction");
     }
   }
 
@@ -211,7 +211,7 @@ export class DaoManager implements ScriptDeps {
         maturity,
       } = withdrawalRequest;
       if (isDeposit) {
-        throw Error("Not a withdrawal request");
+        throw new Error("Not a withdrawal request");
       }
       tx.addHeaders(headers);
       const depositHeader = headers[0];
@@ -234,7 +234,7 @@ export class DaoManager implements ScriptDeps {
       const witness =
         tx.getWitnessArgsAt(inputIndex) ?? ccc.WitnessArgs.from({});
       if (witness.inputType) {
-        throw Error("Witnesses of withdrawal request already in use");
+        throw new Error("Witnesses of withdrawal request already in use");
       }
       witness.inputType = ccc.hexFrom(ccc.numLeToBytes(headerIndex, 8));
       tx.setWitnessArgsAt(inputIndex, witness);
@@ -243,7 +243,7 @@ export class DaoManager implements ScriptDeps {
     // Check that there are at most 64 output cells, see:
     // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
     if (tx.outputs.length > 64) {
-      throw Error("More than 64 output cells in a NervosDAO transaction");
+      throw new Error("More than 64 output cells in a NervosDAO transaction");
     }
   }
 

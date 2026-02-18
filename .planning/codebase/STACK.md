@@ -101,11 +101,11 @@ The repo supports using a local development build of CCC for testing unpublished
 **`ccc-dev/record.sh`:**
 - Clones the CCC repo (`https://github.com/ckb-devrel/ccc.git`) into `./ccc-dev/ccc/`
 - Accepts refs as args: branch names, PR numbers, or commit SHAs
-- Merges specified refs onto a `wip` branch (uses Claude CLI for merge conflict resolution)
+- Merges specified refs onto a `wip` branch (uses AI Coworker CLI for merge conflict resolution)
 - Builds CCC locally: `pnpm build:prepare && pnpm build`
 - Run via: `pnpm ccc:record` (default invocation: `bash ccc-dev/record.sh releases/next releases/udt`)
 - The `ccc-dev/ccc/` directory is gitignored
-- Skips if `ccc-dev/ccc/` already exists (remove it to redo setup)
+- Aborts if `ccc-dev/ccc/` has pending work (any changes vs pinned commit, diverged HEAD, or untracked files)
 
 **`.pnpmfile.cjs`:**
 - A pnpm `readPackage` hook that auto-discovers all packages in `ccc-dev/ccc/packages/*/package.json`

@@ -73,7 +73,7 @@
 │   │   ├── REFS                    # Pinned branch HEADs
 │   │   └── resolutions/            # Merge conflict resolutions
 │   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
-│   ├── record.sh                   # Records new pins with Claude conflict resolution
+│   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
 │   ├── replay.sh                   # Deterministically rebuilds ccc/ from pins
 │   └── tsc.mjs                     # TypeScript compilation script override
 ├── contracts/                      # Reference: Rust on-chain contracts (git-ignored, clone via `pnpm reference`)
@@ -345,19 +345,15 @@
 - System: Record/replay mechanism for deterministic, conflict-free builds
 - `pins/`: Committed directory containing:
   - `REFS`: Pinned branch HEADs for merging
-  - `resolutions/`: Serialized conflict resolutions with Claude aid
+  - `resolutions/`: Serialized conflict resolutions with AI Coworker aid
 - `ccc/`: Generated from pins; auto-deleted and rebuilt on `pnpm install`
 - Activation: `.pnpmfile.cjs` hook triggers `replay.sh` and overrides package resolution
 - Commands:
-  - Record: `pnpm ccc:record releases/next releases/udt` (requires Claude CLI)
+  - Record: `pnpm ccc:record releases/next releases/udt` (requires AI Coworker CLI)
+  - Status: `pnpm ccc:status` (check for pending work in `ccc/`)
   - Rebuild: `pnpm install` (automatic)
-  - Clean: `pnpm ccc:nuke && pnpm install`
-
-**scripts/:**
-- Purpose: Developer convenience scripts
-- Files: `pr.sh` (GitHub PR creation), `review.sh` (fetch PR comments)
-- Execution: Via `pnpm pr` and `pnpm review` shortcuts
-- Committed: Yes
+  - Clean (re-replay): `pnpm ccc:clean && pnpm install` (guarded)
+  - Reset (published): `pnpm ccc:reset && pnpm install` (guarded)
 
 **node_modules/:**
 - Purpose: Installed npm/pnpm dependencies
