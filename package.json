@@ -2,14 +2,16 @@
   "private": true,
   "scripts": {
     "ccc:record": "bash ccc-dev/record.sh releases/next releases/udt",
+    "ccc:status": "bash ccc-dev/status.sh",
     "ccc:push": "bash ccc-dev/push.sh",
-    "ccc:nuke": "rm -rf ccc-dev/ccc ccc-dev/pins",
+    "ccc:clean": "bash ccc-dev/status.sh && rm -rf ccc-dev/ccc",
+    "ccc:reset": "pnpm ccc:clean && rm -rf ccc-dev/pins",
     "build": "pnpm -r --filter !./apps/** --filter !./ccc-dev/ccc/** build",
     "build:all": "pnpm -r --filter !./ccc-dev/ccc/** build",
-    "check": "pnpm clean:deep && pnpm install && pnpm build:all && pnpm lint && pnpm test:ci",
+    "check": "pnpm clean:deep && pnpm install && pnpm lint && pnpm build:all && pnpm test:ci",
     "check:fresh": "rm pnpm-lock.yaml && pnpm run check",
     "check:ci": "CI=true pnpm run check",
-    "check:full": "pnpm check:fresh && pnpm check:ci",
+    "check:full": "pnpm ccc:clean; pnpm check:fresh && pnpm check:ci",
     "test": "vitest",
     "test:ci": "vitest run",
     "test:cov": "vitest run --coverage",
@@ -21,9 +23,8 @@
     "version": "pnpm changeset version",
     "publish": "pnpm publish -r",
     "docs": "typedoc",
-    "pr": "bash scripts/pr.sh",
-    "review": "bash scripts/review.sh",
-    "claude": "claude --dangerously-skip-permissions",
+    "coworker": "ln -sf AGENTS.md CLAUDE.md && claude --model opus --dangerously-skip-permissions",
+    "coworker:ask": "env -u CLAUDECODE claude --print --model sonnet --no-session-persistence",
     "reference": "pnpm reference:contracts; pnpm reference:whitepaper",
     "reference:contracts": "[ -d contracts ] || (git clone https://github.com/ickb/contracts.git && chmod -R a-w contracts)",
     "reference:whitepaper": "[ -d whitepaper ] || (git clone https://github.com/ickb/whitepaper.git && chmod -R a-w whitepaper)"
@@ -42,8 +43,8 @@
     "prettier-plugin-organize-imports": "^4.3.0",
     "typedoc": "0.28.7",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^3.2.4"
   },
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+  "packageManager": "pnpm@10.30.0+sha512.2b5753de015d480eeb88f5b5b61e0051f05b4301808a82ec8b840c9d2adf7748eb352c83f5c1593ca703ff1017295bc3fdd3119abb9686efc96b9fcb18200937"
 }
