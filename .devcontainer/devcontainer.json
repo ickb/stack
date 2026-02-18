@@ -11,7 +11,13 @@
 
   "containerEnv": {
     "DEVCONTAINER": "true",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    "DEVCONTAINERS_NO_TELEMETRY": "true",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "DO_NOT_TRACK": "1",
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "NO_UPDATE_NOTIFIER": "1",
+    "npm_config_update_notifier": "false"
   },
 
   // Persisted volumes to speed installs and avoid repeated network requests
@@ -24,10 +30,12 @@
   "postCreateCommand": {
     // Enable corepack and fix workspace ownership for non-root user
     "permissions": "sudo corepack enable && sudo chown -R node:node /home/node ${containerWorkspaceFolder}",
-    // Needed for anthropic.claude-code extension to work with a pnpm claude installation
-    "aliases": "echo \"alias claude='pnpm claude'\" >> ~/.bash_aliases",
+    // Needed for AI Coworker extension to work with a pnpm installation
+    "aliases": "echo \"alias claude='pnpm coworker'\" >> ~/.bash_aliases",
     // Install GSD
-    "gsd": "pnpm dlx get-shit-done-cc@latest --claude --global --force-statusline"
+    "gsd": "pnpm dlx get-shit-done-cc@latest --claude --global --force-statusline",
+    // Clipboard support for wl-copy/wl-paste (used by CLAUDE.md)
+    "clipboard": "sudo apt-get update -qq && sudo apt-get install -y -qq wl-clipboard"
   },
 
   // Run each time the container starts. Ensures updated dependencies are installed inside the container user environment.
