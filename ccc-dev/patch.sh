@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # Patch a CCC clone for use in the stack workspace.
-# Usage: ccc-dev/patch.sh <ccc-repo-dir>
+# Usage: ccc-dev/patch.sh <ccc-repo-dir> <merge-count>
 
-REPO_DIR="${1:?Usage: patch.sh <ccc-repo-dir>}"
+REPO_DIR="${1:?Usage: patch.sh <ccc-repo-dir> <merge-count>}"
+MERGE_COUNT="${2:?Missing merge-count argument}"
 
 # Remove CCC's own lockfile so deps are recorded in the root pnpm-lock.yaml
 rm -f "$REPO_DIR/pnpm-lock.yaml"
@@ -24,3 +25,11 @@ for pkg_json in "$REPO_DIR"/packages/*/package.json; do
       else . end
     ) else . end' "$pkg_json" > "$pkg_json.tmp" && mv "$pkg_json.tmp" "$pkg_json"
 done
+
+# Commit patched files with deterministic identity so record and replay produce the same hash
+export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
+export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
+PATCH_TS="@$((MERGE_COUNT + 1)) +0000"
+export GIT_AUTHOR_DATE="$PATCH_TS" GIT_COMMITTER_DATE="$PATCH_TS"
+git -C "$REPO_DIR" add -A
+git -C "$REPO_DIR" commit -m "patch: source-level type resolution"
