@@ -8,23 +8,23 @@ This monorepo is developing the **new generation** of iCKB libraries, replacing 
 
 **New packages** (under `packages/`, built on CCC):
 
-| Package | Purpose | Status |
-|---|---|---|
+| Package       | Purpose                                                                    | Status             |
+| ------------- | -------------------------------------------------------------------------- | ------------------ |
 | `@ickb/utils` | Blockchain primitives, transaction helpers, epoch arithmetic, UDT handling | Active development |
-| `@ickb/dao` | Nervos DAO abstraction layer | Active development |
-| `@ickb/order` | Limit order cell management | Active development |
-| `@ickb/core` | iCKB core protocol logic (deposits, receipts, owned owner) | Active development |
-| `@ickb/sdk` | High-level SDK composing all packages | Active development |
+| `@ickb/dao`   | Nervos DAO abstraction layer                                               | Active development |
+| `@ickb/order` | Limit order cell management                                                | Active development |
+| `@ickb/core`  | iCKB core protocol logic (deposits, receipts, owned owner)                 | Active development |
+| `@ickb/sdk`   | High-level SDK composing all packages                                      | Active development |
 
 **Apps migration status:**
 
-| App | Purpose | Stack |
-|---|---|---|
-| `apps/faucet` | Testnet CKB distribution | **Migrated** to new packages + CCC |
-| `apps/sampler` | iCKB exchange rate sampling | **Migrated** to new packages + CCC |
-| `apps/bot` | Automated order matching | Legacy (`@ickb/v1-core` + Lumos) |
-| `apps/tester` | Order creation simulator | Legacy (`@ickb/v1-core` + Lumos) |
-| `apps/interface` | React web UI | Legacy (`@ickb/v1-core` + Lumos) |
+| App              | Purpose                     | Stack                              |
+| ---------------- | --------------------------- | ---------------------------------- |
+| `apps/faucet`    | Testnet CKB distribution    | **Migrated** to new packages + CCC |
+| `apps/sampler`   | iCKB exchange rate sampling | **Migrated** to new packages + CCC |
+| `apps/bot`       | Automated order matching    | Legacy (`@ickb/v1-core` + Lumos)   |
+| `apps/tester`    | Order creation simulator    | Legacy (`@ickb/v1-core` + Lumos)   |
+| `apps/interface` | React web UI                | Legacy (`@ickb/v1-core` + Lumos)   |
 
 **Key upstream contributions:** UDT and Epoch support were contributed to CCC upstream and have been merged. Some local utilities may overlap with features now available natively in CCC.
 
@@ -36,6 +36,7 @@ graph TD;
     C["@ickb/dao"] --> A;
     C --> B;
     D["@ickb/core"] --> A;
+    D --> B;
     D --> C;
     E["@ickb/order"] --> A;
     E --> B;
@@ -58,10 +59,10 @@ graph TD;
 When `ccc-dev/pins/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
-git clone <repo-url> && cd stack && pnpm install
+git clone git@github.com:ickb/stack.git && cd stack && pnpm install
 ```
 
-To redo the setup from scratch: `rm -rf ccc-dev/ccc && pnpm install`.
+To redo the setup from scratch: `pnpm ccc:clean && pnpm install`.
 
 See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
@@ -80,12 +81,15 @@ This clones two repos into the project root (both are git-ignored and made read-
 
 ## Developer Scripts
 
-| Command | Description |
-|---|---|
-| `pnpm pr` | Open a GitHub PR creation page for the current branch. Uses Claude to auto-generate title and body when available, falls back to branch name and commit log. |
-| `pnpm review` | Fetch and display PR review comments from GitHub for the current branch (or `pnpm review -- --pr <number>` for a specific PR). |
-
-> **Note:** `gh` CLI is not available in this environment. Use `pnpm pr` and `pnpm review` instead.
+| Command             | Description                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `pnpm coworker`     | Launch an interactive AI Coworker session (full autonomy, opus model).                 |
+| `pnpm coworker:ask` | One-shot AI query for scripting (sonnet model, stateless). Used by `pnpm ccc:record`. |
+| `pnpm ccc:status`   | Check if CCC clone matches pinned state. Exit 0 = safe to wipe.          |
+| `pnpm ccc:record`   | Record CCC pins (clone, merge refs, build). Guarded against pending work.             |
+| `pnpm ccc:clean`    | Remove CCC clone, keep pins (guarded). Re-replay on next `pnpm install`.              |
+| `pnpm ccc:reset`    | Remove CCC clone and pins (guarded). Restores published CCC packages.                 |
+| `pnpm check:full`   | Wipe derived state and validate from scratch. Skips wipe if CCC has pending work.     |
 
 ## Epoch Semantic Versioning
 

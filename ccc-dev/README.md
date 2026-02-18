@@ -10,7 +10,7 @@ CCC has unreleased branches (`releases/next`, `releases/udt`) that this project 
 
 2. **Workspace override** — When `ccc-dev/ccc/` is present, `.pnpmfile.cjs` auto-discovers all CCC packages and rewrites `@ckb-ccc/*` dependencies to `workspace:*` — no manual `pnpm.overrides` needed. This is necessary because `catalog:` specifiers resolve to a semver range _before_ pnpm considers workspace linking — even with `link-workspace-packages = true`, pnpm fetches from the registry without this hook. When CCC is not cloned, the hook is a no-op and deps resolve from the registry normally.
 
-3. **Source-level types** — `patch.sh` (called by both `record.sh` and `replay.sh`) patches CCC's `package.json` exports to point TypeScript at `.ts` source instead of built `.d.ts`. This gives real-time type feedback when editing across the CCC/stack boundary — changes in CCC source are immediately visible to stack packages without rebuilding.
+3. **Source-level types** — `patch.sh` (called by both `record.sh` and `replay.sh`) patches CCC's `package.json` exports to point TypeScript at `.ts` source instead of built `.d.ts`, then creates a deterministic git commit (fixed author/date) so record and replay produce the same `pins/HEAD` hash. This gives real-time type feedback when editing across the CCC/stack boundary — changes in CCC source are immediately visible to stack packages without rebuilding.
 
 4. **Diagnostic filtering** — `ccc-dev/tsc.mjs` is a tsc wrapper used by stack package builds. Because CCC `.ts` source is type-checked under the stack's stricter tsconfig (`verbatimModuleSyntax`, `noImplicitOverride`, `noUncheckedIndexedAccess`), plain `tsc` would report hundreds of CCC diagnostics that aren't real integration errors. The wrapper emits output normally and only fails on diagnostics from stack source files. When CCC is not cloned, packages fall back to plain `tsc`.
 
@@ -33,7 +33,7 @@ Recording captures the current upstream state and any conflict resolutions:
 pnpm ccc:record
 ```
 
-This runs `ccc-dev/record.sh` which clones CCC, merges the configured refs, uses Claude CLI to resolve any conflicts, patches for source-level type resolution, and writes `pins/`. Commit the resulting `ccc-dev/pins/` directory so other contributors get the same build.
+This runs `ccc-dev/record.sh` which clones CCC, merges the configured refs, uses AI Coworker to resolve any conflicts, patches for source-level type resolution, and writes `pins/`. Commit the resulting `ccc-dev/pins/` directory so other contributors get the same build.
 
 The `ccc:record` script in `package.json` is preconfigured with the current refs:
 
@@ -61,7 +61,7 @@ bash ccc-dev/record.sh 268 releases/next
 bash ccc-dev/record.sh abc1234
 ```
 
-Refs are merged sequentially onto a `wip` branch, then CCC is built. On merge conflicts, the script auto-resolves them using Claude.
+Refs are merged sequentially onto a `wip` branch, then CCC is built. On merge conflicts, the script auto-resolves them using AI Coworker.
 
 ## Developing CCC PRs
 
@@ -96,15 +96,17 @@ git checkout wip  # return to development
 
 ## Switching modes
 
+**Check for pending work:** `pnpm ccc:status` — exit 0 if `ccc-dev/ccc/` matches pinned state (safe to wipe), exit 1 otherwise.
+
 **Local CCC (default when `pins/` is committed):** `pnpm install` auto-replays pins and overrides deps.
 
 **Published CCC:** `pnpm ccc:reset && pnpm install` — removes clone and pins, restores published packages.
 
-**Re-record:** `pnpm ccc:record` wipes and re-records everything from scratch.
+**Re-record:** `pnpm ccc:record` wipes and re-records everything from scratch. Aborts if `ccc-dev/ccc/` has pending work.
 
 **Force re-replay:** `pnpm ccc:clean && pnpm install` — removes clone but keeps pins, replays on next install.
 
 ## Requirements
 
-- **Recording** (`pnpm ccc:record`): Requires [Claude CLI](https://www.npmjs.com/package/@anthropic-ai/claude-code) for automated conflict resolution (only when merging refs).
+- **Recording** (`pnpm ccc:record`): Requires the AI Coworker CLI (installed as a devDependency; invoked via `pnpm coworker:ask`) for automated conflict resolution (only when merging refs).
 - **Replay** (`pnpm install`): No extra tools needed — works for any contributor with just pnpm.
