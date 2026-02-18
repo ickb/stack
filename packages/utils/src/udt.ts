@@ -153,7 +153,7 @@ export class UdtManager implements UdtHandler {
 
         // Input is not well defined
         if (!cellOutput || !outputData) {
-          throw Error("Unable to complete input");
+          throw new Error("Unable to complete input");
         }
 
         // Input is not an UDT

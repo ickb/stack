@@ -51,7 +51,7 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
    */
   validate(): void {
     if (!this.isEmpty() && !this.isPopulated()) {
-      throw Error("Ratio invalid: not empty, not populated");
+      throw new Error("Ratio invalid: not empty, not populated");
     }
   }
 
@@ -107,11 +107,11 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
    *                   and zero if they are equal.
    */
   compare(other: Ratio): number {
-    if (this.udtScale == other.udtScale) {
+    if (this.udtScale === other.udtScale) {
       return Number(this.ckbScale - other.ckbScale);
     }
 
-    if (this.ckbScale == other.ckbScale) {
+    if (this.ckbScale === other.ckbScale) {
       return Number(other.udtScale - this.udtScale);
     }
 
@@ -144,7 +144,7 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
    */
   applyFee(isCkb2Udt: boolean, fee: ccc.Num, feeBase: ccc.Num): Ratio {
     if (fee >= feeBase) {
-      throw Error("Fee too big respectfully to feeBase");
+      throw new Error("Fee too big relative to feeBase");
     }
 
     if (fee === 0n) {
@@ -210,7 +210,7 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
     mustCeil: boolean,
   ): ccc.FixedPoint {
     if (!this.isPopulated()) {
-      throw Error("Invalid midpoint ExchangeRatio");
+      throw new Error("Invalid midpoint ExchangeRatio");
     }
 
     if (amount === 0n) {
@@ -334,14 +334,14 @@ export class Info extends ccc.Entity.Base<InfoLike, Info>() {
    */
   validate(): void {
     if (this.ckbMinMatchLog < 0 || this.ckbMinMatchLog > 64) {
-      throw Error("ckbMinMatchLog invalid");
+      throw new Error("ckbMinMatchLog invalid");
     }
 
     if (this.ckbToUdt.isEmpty()) {
       if (this.udtToCkb.isPopulated()) {
         return;
       } else {
-        throw Error("ckbToUdt is Empty, but udtToCkb is not Populated");
+        throw new Error("ckbToUdt is Empty, but udtToCkb is not Populated");
       }
     }
 
@@ -349,12 +349,12 @@ export class Info extends ccc.Entity.Base<InfoLike, Info>() {
       if (this.ckbToUdt.isPopulated()) {
         return;
       } else {
-        throw Error("udtToCkb is Empty, but ckbToUdt is not Populated");
+        throw new Error("udtToCkb is Empty, but ckbToUdt is not Populated");
       }
     }
 
     if (!this.ckbToUdt.isPopulated() || !this.udtToCkb.isPopulated()) {
-      throw Error("One ratio is invalid, so not Empty and not Populated");
+      throw new Error("One ratio is invalid, so not Empty and not Populated");
     }
 
     // Check that if we convert from ckb to udt and then back from udt to ckb, it doesn't lose value.
@@ -362,7 +362,7 @@ export class Info extends ccc.Entity.Base<InfoLike, Info>() {
       this.ckbToUdt.ckbScale * this.udtToCkb.udtScale <
       this.ckbToUdt.udtScale * this.udtToCkb.ckbScale
     ) {
-      throw Error("udtToCkb and ckbToUdt allow order value to be extracted");
+      throw new Error("udtToCkb and ckbToUdt allow order value to be extracted");
     }
   }
 
@@ -542,8 +542,8 @@ export class Relative extends ccc.Entity.Base<RelativeLike, Relative>() {
    * @throws {Error} If the padding is not of length 32 or contains non-zero values.
    */
   validate(): void {
-    if (this.padding.length != 32 || this.padding.some((x) => x !== 0)) {
-      throw Error("Relative master invalid, non standard padding");
+    if (this.padding.length !== 32 || this.padding.some((x) => x !== 0)) {
+      throw new Error("Relative master invalid, non standard padding");
     }
   }
 
@@ -616,7 +616,7 @@ function masterValidate(master: Master): void {
     value.validate();
   } else {
     if (!/^0x[0-9a-f]{64}$/i.test(value.txHash) || value.index < 0) {
-      throw Error("OutPoint invalid");
+      throw new Error("OutPoint invalid");
     }
   }
 }
@@ -707,7 +707,7 @@ export class OrderData extends ccc.Entity.Base<OrderDataLike, OrderData>() {
    */
   validate(): void {
     if (this.udtValue < 0) {
-      throw Error("udtValue invalid, negative");
+      throw new Error("udtValue invalid, negative");
     }
     masterValidate(this.master);
     this.info.validate();

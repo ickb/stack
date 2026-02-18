@@ -8,7 +8,7 @@ export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   encode: (numLike) => {
     const num = Number(numLike);
     if (num < -2147483648 || num > 2147483647) {
-      throw Error("NumLike out of int32 bounds");
+      throw new Error("NumLike out of int32 bounds");
     }
     const encoded = new Uint8Array(4);
     new DataView(encoded.buffer).setInt32(0, num, true);

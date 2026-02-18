@@ -440,7 +440,7 @@ export class IckbSdk {
           ckbMaturing.push({
             ckbValue: BigInt(binAmount) * depositSize,
             maturity:
-              tipEpoch.compare(tipEpoch) < 0
+              start.compare(tipEpoch) < 0
                 ? // If the bin has already started, assume worst-case timing.
                   end.add(oneCycle).toUnix(tip)
                 : // Otherwise, use the bin end as the maturity.

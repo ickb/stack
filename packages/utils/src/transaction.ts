@@ -91,7 +91,7 @@ export class SmartTransaction extends ccc.Transaction {
       this.inputs.some((c) => c.cellOutput?.type?.eq(dao)) ||
       this.outputs.some((c) => c.type?.eq(dao));
     if (isDaoTx && this.outputs.length > 64) {
-      throw Error("More than 64 output cells in a NervosDAO transaction");
+      throw new Error("More than 64 output cells in a NervosDAO transaction");
     }
 
     return [inAdded, addedChange];
@@ -166,7 +166,7 @@ export class SmartTransaction extends ccc.Transaction {
 
         // Input is not well defined.
         if (!cellOutput || !outputData) {
-          throw Error("Unable to complete input");
+          throw new Error("Unable to complete input");
         }
         const cell = ccc.Cell.from({
           outPoint,
@@ -297,11 +297,11 @@ export class SmartTransaction extends ccc.Transaction {
         const h = this.headers.get(key);
         if (!h) {
           this.headers.set(key, header);
-        } else if (hash == h.hash) {
+        } else if (hash === h.hash) {
           // Keep old header.
           header = h;
         } else {
-          throw Error("Found two hashes for the same header");
+          throw new Error("Found two hashes for the same header");
         }
       }
 
@@ -339,13 +339,13 @@ export class SmartTransaction extends ccc.Transaction {
         txHash: headerKey.type === "txHash" ? headerKey.value : undefined,
       });
       if (headerDepsLength !== this.headerDeps.length) {
-        throw Error("Header was not present in HeaderDeps");
+        throw new Error("Header was not present in HeaderDeps");
       }
     } else {
       // Double check that header is present in headerDeps.
       const { hash } = header;
       if (!this.headerDeps.some((h) => h === hash)) {
-        throw Error("Header not found in HeaderDeps");
+        throw new Error("Header not found in HeaderDeps");
       }
     }
 

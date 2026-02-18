@@ -51,16 +51,16 @@ async function main(): Promise<void> {
   const { CHAIN, RPC_URL, TESTER_PRIVATE_KEY, TESTER_SLEEP_INTERVAL } =
     process.env;
   if (!CHAIN) {
-    throw Error("Invalid env CHAIN: Empty");
+    throw new Error("Invalid env CHAIN: Empty");
   }
   if (!isChain(CHAIN)) {
-    throw Error("Invalid env CHAIN: " + CHAIN);
+    throw new Error("Invalid env CHAIN: " + CHAIN);
   }
   if (!TESTER_PRIVATE_KEY) {
-    throw Error("Empty env TESTER_PRIVATE_KEY");
+    throw new Error("Empty env TESTER_PRIVATE_KEY");
   }
   if (!TESTER_SLEEP_INTERVAL || Number(TESTER_SLEEP_INTERVAL) < 1) {
-    throw Error("Invalid env TESTER_SLEEP_INTERVAL");
+    throw new Error("Invalid env TESTER_SLEEP_INTERVAL");
   }
 
   const chainConfig = await chainConfigFrom(
@@ -74,7 +74,9 @@ async function main(): Promise<void> {
   const sleepInterval = Number(TESTER_SLEEP_INTERVAL) * 1000;
 
   for (;;) {
-    await new Promise((r) => setTimeout(r, 2 * Math.random() * sleepInterval));
+    await new Promise((r) => {
+      setTimeout(r, 2 * Math.random() * sleepInterval);
+    });
     console.log();
 
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -195,15 +197,15 @@ async function main(): Promise<void> {
       );
 
       if (freeIckbUdt < 0n) {
-        throw Error("Negative iCKB after the tx");
+        throw new Error("Negative iCKB after the tx");
       }
       if (isCkb2Udt) {
         if (freeCkb < 1000n * CKB) {
-          throw Error("Not enough CKB, less than 1000 CKB after the tx");
+          throw new Error("Not enough CKB, less than 1000 CKB after the tx");
         }
       } else {
         if (freeCkb < 0n) {
-          throw Error("Not enough CKB to execute the transaction");
+          throw new Error("Not enough CKB to execute the transaction");
         }
       }
 
@@ -387,7 +389,7 @@ async function getTxsOutputs(
   )) {
     const txHash = tx.hash;
     if (!txHash) {
-      throw Error("Empty tx hash");
+      throw new Error("Empty tx hash");
     }
     result.set(
       txHash,
@@ -449,7 +451,7 @@ function secp256k1Blake160(
     tx = prepareSigningEntries(tx, { config });
     const message = tx.get("signingEntries").get(0)?.message;
     if (!message) {
-      throw Error("Empty message to sign");
+      throw new Error("Empty message to sign");
     }
     const sig = key.signRecoverable(message, privateKey);
 

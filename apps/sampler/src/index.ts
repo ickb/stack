@@ -99,7 +99,7 @@ export async function main(): Promise<void> {
     // Fetch header for the found block number and log it.
     const header = await client.getHeaderByNumber(blockNumber);
     if (!header) {
-      throw Error("Header not found");
+      throw new Error("Header not found");
     }
 
     logRow(header, note);
@@ -156,8 +156,8 @@ function logRow(header: ccc.ClientBlockHeader, note: string): void {
  * @public
  */
 export function samples(startMs: bigint, endMs: bigint, n: number): Date[] {
-  if (endMs < startMs) throw Error("endMs must be bigger than startMs");
-  if (n < 1) throw Error("n must be a positive number");
+  if (endMs < startMs) throw new Error("endMs must be bigger than startMs");
+  if (n < 1) throw new Error("n must be a positive number");
 
   // Convert bigints (ms) to Dates for year extraction.
   const start = new Date(Number(startMs));

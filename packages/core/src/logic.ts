@@ -76,11 +76,11 @@ export class LogicManager implements ScriptDeps {
     }
 
     if (depositAmount < ccc.fixedPointFrom(1082)) {
-      throw Error("iCKB deposit minimum is 1082 CKB");
+      throw new Error("iCKB deposit minimum is 1082 CKB");
     }
 
     if (depositAmount > ccc.fixedPointFrom(1000082)) {
-      throw Error("iCKB deposit minimum is 1082 CKB");
+      throw new Error("iCKB deposit maximum is 1000082 CKB");
     }
 
     tx.addCellDeps(this.cellDeps);
@@ -104,7 +104,7 @@ export class LogicManager implements ScriptDeps {
     // Check that there are at most 64 output cells, see:
     // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
     if (tx.outputs.length > 64) {
-      throw Error("More than 64 output cells in a NervosDAO transaction");
+      throw new Error("More than 64 output cells in a NervosDAO transaction");
     }
   }
 
