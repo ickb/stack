@@ -226,19 +226,19 @@
 
 ### TS Exchange Rate Must Match Rust Contract Logic
 
-- What's not tested: The TypeScript exchange rate calculation (`packages/core/src/udt.ts`) must produce identical results to the Rust contract's `deposit_to_ickb()` function (`contracts/scripts/contracts/ickb_logic/src/entry.rs`). Any discrepancy would cause transactions to be rejected on-chain.
+- What's not tested: The TypeScript exchange rate calculation (`packages/core/src/udt.ts`) must produce identical results to the Rust contract's `deposit_to_ickb()` function (`reference/contracts/scripts/contracts/ickb_logic/src/entry.rs`). Any discrepancy would cause transactions to be rejected on-chain.
 - Key formula: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty `amount - (amount - 100000) / 10` when `amount > ICKB_SOFT_CAP_PER_DEPOSIT`
 - Contract constants that TS must match:
   - `CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000 * 100_000_000` (1,000 CKB)
   - `CKB_MAXIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000,000 * 100_000_000` (1,000,000 CKB)
   - `ICKB_SOFT_CAP_PER_DEPOSIT = 100,000 * 100_000_000` (100,000 iCKB)
   - `GENESIS_ACCUMULATED_RATE = 10_000_000_000_000_000` (10^16)
-- Reference: `contracts/scripts/contracts/ickb_logic/src/entry.rs` function `deposit_to_ickb()`
+- Reference: `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` function `deposit_to_ickb()`
 - Fix approach: Add cross-validation tests with known inputs/outputs derived from the Rust contract logic
 
 ### TS Molecule Codecs Must Match Contract Schemas
 
-- What's not tested: The TypeScript Molecule codec definitions (`@ccc.codec` decorators in `packages/order/src/entities.ts`, `packages/core/src/entities.ts`) must produce byte-identical encodings to the Molecule schema at `contracts/schemas/encoding.mol`. Field order, sizes, and endianness must match exactly.
+- What's not tested: The TypeScript Molecule codec definitions (`@ccc.codec` decorators in `packages/order/src/entities.ts`, `packages/core/src/entities.ts`) must produce byte-identical encodings to the Molecule schema at `reference/contracts/schemas/encoding.mol`. Field order, sizes, and endianness must match exactly.
 - Key schemas:
   - `ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }` = 12 bytes
   - `OwnedOwnerData { owned_distance: Int32 }` = 4 bytes
