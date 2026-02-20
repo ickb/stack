@@ -5,5 +5,9 @@
 # Artifacts
 **/dist/
 
+
 # AI tool config symlink
 CLAUDE.md
+
+# Time tracking
+.focus-timer
