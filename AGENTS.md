@@ -2,6 +2,7 @@
 
 This file is the tool-agnostic agent config:
 
+- **Learn**: When a non-obvious constraint causes a failure, leave a concise note here and a detailed comment at the relevant location
 - Refer to yourself as "AI Coworker" in docs and comments, not by product or company name
 - Never add AI tool attribution or branding to PR descriptions, commit messages, or code comments
 - Do not install or use `gh` CLI
@@ -26,11 +27,11 @@ The `ccc-dev/` system uses a record/replay mechanism for deterministic builds of
 - `.pnpmfile.cjs` silently rewrites all `@ckb-ccc/*` dependencies to `workspace:*` when `ccc-dev/ccc/` exists. Local CCC packages override published ones without any visible change in package.json files
 - `pnpm install` has a side effect: if `ccc-dev/pins/REFS` exists but `ccc-dev/ccc/` does not, it automatically runs `ccc-dev/replay.sh` to rebuild CCC from pins. This is intentional
 - `ccc-dev/patch.sh` rewrites CCC package exports to point at `.ts` source instead of `.d.ts`, then creates a deterministic git commit (fixed author/date) so record and replay produce the same `pins/HEAD` hash. This is why imports from `@ckb-ccc/*` resolve to TypeScript source files inside `node_modules` — it is not a bug
-- `ccc-dev/tsc.mjs` is a custom `tsc` wrapper that filters out diagnostics originating from `ccc-dev/ccc/`. CCC source does not satisfy this repo's strict tsconfig (`verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noImplicitOverride`), so the wrapper suppresses those errors while still reporting errors in stack source
+- `ccc-dev/tsgo-filter.sh` is a bash wrapper around `tsgo` that filters out diagnostics originating from `ccc-dev/ccc/`. CCC source does not satisfy this repo's strict tsconfig (`verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noImplicitOverride`), so the wrapper suppresses those errors while still reporting errors in stack source
 
 # Reference Repos
 
-`contracts/` and `whitepaper/` (cloned via `pnpm reference`) are made **read-only** with `chmod -R a-w`. To refresh, delete the directory and re-run `pnpm reference`
+`reference/` contains read-only clones (project knowledge, dependency sources, etc.) fetched via `pnpm reference`. To refresh, delete the directory and re-run `pnpm reference`
 
 # Versioning
 

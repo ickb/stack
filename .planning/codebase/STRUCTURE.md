@@ -76,15 +76,16 @@
 │   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
 │   ├── replay.sh                   # Deterministically rebuilds ccc/ from pins
 │   └── tsc.mjs                     # TypeScript compilation script override
-├── contracts/                      # Reference: Rust on-chain contracts (git-ignored, clone via `pnpm reference`)
-│   └── scripts/contracts/
-│       ├── ickb_logic/            # Type script: iCKB UDT minting/validation
-│       ├── limit_order/           # Lock script: peer-to-peer limit orders
-│       ├── owned_owner/           # Lock script: DAO withdrawal delegation
-│       └── utils/                 # Shared: DAO helpers, C256 safe math, MetaPoint
-├── whitepaper/                    # Reference: iCKB protocol design (git-ignored, clone via `pnpm reference`)
-│   ├── README.md                  # Complete protocol specification (~49KB)
-│   └── 2024_overview.md           # Project overview and timeline
+├── reference/                      # Read-only reference repos (git-ignored, clone via `pnpm reference`)
+│   ├── contracts/                 # Rust on-chain contracts
+│   │   └── scripts/contracts/
+│   │       ├── ickb_logic/        # Type script: iCKB UDT minting/validation
+│   │       ├── limit_order/       # Lock script: peer-to-peer limit orders
+│   │       ├── owned_owner/       # Lock script: DAO withdrawal delegation
+│   │       └── utils/             # Shared: DAO helpers, C256 safe math, MetaPoint
+│   └── whitepaper/                # iCKB protocol design
+│       ├── README.md              # Complete protocol specification (~49KB)
+│       └── 2024_overview.md       # Project overview and timeline
 ├── .planning/                      # GSD analysis documents
 │   └── codebase/
 │       ├── ARCHITECTURE.md         # Architecture and data flows
@@ -317,7 +318,7 @@
 - External package: `pnpm add @vendor/package` from workspace root
 - Catalog versions: Reference via `"@vendor/package": "catalog:"` in pnpm-workspace.yaml
 
-**contracts/ (reference repo):**
+**reference/contracts/ (reference repo):**
 - Purpose: Rust on-chain smart contracts for the iCKB protocol (3 production contracts + shared utils)
 - Cloned via: `pnpm reference` (git-ignored, read-only reference)
 - Key paths:
@@ -330,7 +331,7 @@
 - Build: Capsule v0.10.5, Rust 2021, `no_std` + alloc-only, RISC-V target
 - Audit: Scalebit (2024-09-11)
 
-**whitepaper/ (reference repo):**
+**reference/whitepaper/ (reference repo):**
 - Purpose: iCKB protocol design specification
 - Cloned via: `pnpm reference` (git-ignored, read-only reference)
 - Key files:

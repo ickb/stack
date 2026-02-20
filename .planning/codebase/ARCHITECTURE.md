@@ -47,7 +47,7 @@ The iCKB protocol solves NervosDAO illiquidity by pooling DAO deposits and issui
 
 ## On-Chain Contracts (Rust)
 
-Three production smart contracts (in `contracts/` reference repo) implement the protocol on CKB L1. Each TS package in `packages/` corresponds to contract logic:
+Three production smart contracts (in `reference/contracts/` reference repo) implement the protocol on CKB L1. Each TS package in `packages/` corresponds to contract logic:
 
 | Contract | Script Type | TS Package | Purpose |
 |---|---|---|---|

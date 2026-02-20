@@ -273,7 +273,7 @@ export * from "./utils.js";
 
 ## Molecule / Codec Patterns
 
-**TS codecs must match the Molecule schema** at `contracts/schemas/encoding.mol`. The on-chain contracts use Molecule for serialization; the TS packages must produce byte-identical encodings.
+**TS codecs must match the Molecule schema** at `reference/contracts/schemas/encoding.mol`. The on-chain contracts use Molecule for serialization; the TS packages must produce byte-identical encodings.
 
 **Entity classes** use CCC's `ccc.Entity.Base` with decorator-based codec definition:
 ```typescript

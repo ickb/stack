@@ -8,7 +8,7 @@
 - TypeScript 5.9.3 - All source code across packages and apps
 
 **On-Chain (reference):**
-- Rust 2021 edition - On-chain CKB smart contracts in `contracts/` reference repo (3 contracts + shared utils, ~1,163 lines). Built with Capsule v0.10.5, `no_std` + alloc-only runtime, targeting RISC-V. Uses `ckb-std 0.15.3` and `primitive_types` crate for C256 safe math.
+- Rust 2021 edition - On-chain CKB smart contracts in `reference/contracts/` reference repo (3 contracts + shared utils, ~1,163 lines). Built with Capsule v0.10.5, `no_std` + alloc-only runtime, targeting RISC-V. Uses `ckb-std 0.15.3` and `primitive_types` crate for C256 safe math.
 
 **Secondary:**
 - Bash - `ccc-dev/record.sh`, `ccc-dev/replay.sh` for local CCC dev build setup

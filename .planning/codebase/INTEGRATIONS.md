@@ -104,7 +104,7 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 
 ## Smart Contracts (On-Chain Scripts)
 
-The project interacts with several on-chain CKB scripts defined in `packages/sdk/src/constants.ts`. The Rust source code is available in the `contracts/` reference repo (clone via `pnpm reference`). Protocol design is documented in the `whitepaper/` reference repo.
+The project interacts with several on-chain CKB scripts defined in `packages/sdk/src/constants.ts`. The Rust source code is available in the `reference/contracts/` reference repo (clone via `pnpm reference`). Protocol design is documented in the `reference/whitepaper/` reference repo.
 
 **NervosDAO:**
 - Code hash: `0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e`
@@ -129,7 +129,7 @@ The project interacts with several on-chain CKB scripts defined in `packages/sdk
 - Hash type: `data1`
 - Purpose: Core iCKB deposit/receipt logic (type script)
 - Managed by: `LogicManager` in `packages/core/src/logic.ts`
-- Contract source: `contracts/scripts/contracts/ickb_logic/`
+- Contract source: `reference/contracts/scripts/contracts/ickb_logic/`
 - Validation rules:
   - Empty args required (prevents reuse with different configurations)
   - Cell classification: Deposit (iCKB lock + DAO type), Receipt (any lock + iCKB type), UDT (any lock + xUDT type)
@@ -146,7 +146,7 @@ The project interacts with several on-chain CKB scripts defined in `packages/sdk
 - Hash type: `data1`
 - Purpose: Withdrawal ownership tracking (lock script)
 - Managed by: `OwnedOwnerManager` in `packages/core/src/owned_owner.ts`
-- Contract source: `contracts/scripts/contracts/owned_owner/`
+- Contract source: `reference/contracts/scripts/contracts/owned_owner/`
 - Design: Solves NervosDAO constraint that deposit lock and withdrawal lock must have equal size
 - Mechanism: Owner cell (type=owned_owner) contains `owned_distance: i32 LE` (4 bytes) pointing to its paired owned cell (lock=owned_owner)
 - Validation rules:
@@ -161,7 +161,7 @@ The project interacts with several on-chain CKB scripts defined in `packages/sdk
 - Hash type: `data1`
 - Purpose: On-chain limit orders for CKB/UDT exchange (lock script)
 - Managed by: `OrderManager` in `packages/order/src/order.ts`
-- Contract source: `contracts/scripts/contracts/limit_order/`
+- Contract source: `reference/contracts/scripts/contracts/limit_order/`
 - Lifecycle: Mint (create order + master cell) -> Match (partial/full fill) -> Melt (destroy fulfilled order)
 - Order cell data layout (88-89 bytes):
   - `[0:16]` UDT amount (u128 LE)
@@ -184,7 +184,7 @@ The project interacts with several on-chain CKB scripts defined in `packages/sdk
   - Cannot modify already-fulfilled orders
 - Error codes: NotEmptyArgs(5), DuplicatedMaster(6), InvalidAction(7), NonZeroPadding(8), InvalidRatio(9), InvalidCkbMinMatchLog(10), ConcaveRatio(11), BothRatioNull(12), MissingUdtType(13), SameMaster(14), ScriptMisuse(15), DifferentInfo(16), InvalidMatch(17), DecreasingValue(18), AttemptToChangeFulfilled(19), InsufficientMatch(20), InvalidConfiguration(21)
 
-**Molecule Schema (`contracts/schemas/encoding.mol`):**
+**Molecule Schema (`reference/contracts/schemas/encoding.mol`):**
 ```molecule
 struct ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }
 struct OwnedOwnerData { owned_distance: Int32 }

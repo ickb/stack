@@ -258,9 +258,9 @@ pnpm test:cov          # Generates V8 coverage report
 **Contract-Alignment Tests (critical):**
 - Scope: Verify TS logic produces identical results to Rust contract validation
 - Priority targets:
-  1. Exchange rate: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty -- must match `contracts/scripts/contracts/ickb_logic/src/entry.rs` `deposit_to_ickb()`
-  2. Molecule encoding: `ReceiptData`, `OwnedOwnerData`, `Ratio`, `OrderInfo`, `MintOrderData`, `MatchOrderData` -- must match `contracts/schemas/encoding.mol`
-  3. Order value conservation: `in_ckb * ckb_mul + in_udt * udt_mul <= out_ckb * ckb_mul + out_udt * udt_mul` -- must match `contracts/scripts/contracts/limit_order/src/entry.rs` `validate()`
+  1. Exchange rate: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty -- must match `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` `deposit_to_ickb()`
+  2. Molecule encoding: `ReceiptData`, `OwnedOwnerData`, `Ratio`, `OrderInfo`, `MintOrderData`, `MatchOrderData` -- must match `reference/contracts/schemas/encoding.mol`
+  3. Order value conservation: `in_ckb * ckb_mul + in_udt * udt_mul <= out_ckb * ckb_mul + out_udt * udt_mul` -- must match `reference/contracts/scripts/contracts/limit_order/src/entry.rs` `validate()`
   4. Concavity check: `c2u.ckb_mul * u2c.udt_mul >= c2u.udt_mul * u2c.ckb_mul` -- must match limit_order contract
   5. Deposit size bounds: min 1,000 CKB, max 1,000,000 CKB unoccupied capacity
   6. Owned owner distance calculation: TS MetaPoint arithmetic must match contract's `extract_owned_metapoint()`
