@@ -64,20 +64,13 @@
 
 ## Known Bugs
 
-### Self-Comparison Bug in Pool Snapshot Maturity Calculation
+### ~~Faucet `main()` Runs Diagnostic Code Instead of Faucet Logic~~ (RESOLVED)
 
-- Symptoms: In `IckbSdk.getCkb()`, the maturity estimation for pool snapshot bins always takes the wrong branch. The condition `tipEpoch.compare(tipEpoch) < 0` compares `tipEpoch` to itself, which always returns `0` (equal), so the condition is always `false`. The comment says "If the bin has already started, assume worst-case timing" but this branch is never taken.
-- Files: `packages/sdk/src/sdk.ts`, line 444
-- Trigger: Any call to `IckbSdk.getL1State()` when a pool snapshot exists (when `poolSnapshotHex !== "0x"`). The maturity calculation for bins always uses `end.toUnix(tip)` instead of `end.add(oneCycle).toUnix(tip)` for bins that have already started.
-- Workaround: The code path still produces a maturity value, just potentially an incorrect one (underestimating maturity for already-started bins, since it does not add the extra cycle).
-- Fix: The comparison should likely be `start.compare(tipEpoch) < 0` (checking if the bin start is before the current tip epoch) or similar, not `tipEpoch.compare(tipEpoch)`.
+- **Resolved:** Faucet was restructured. `apps/faucet/src/index.ts` now imports and calls `main()` from `apps/faucet/src/main.ts` which contains the actual faucet transfer logic (88 lines).
 
-### Faucet `main()` Runs Diagnostic Code Instead of Faucet Logic
+### ~~Self-Comparison Bug in Pool Snapshot Maturity Calculation~~ (INVALID)
 
-- Symptoms: `apps/faucet/src/index.ts` exports two functions named `main` (lines 6-13) and `main0` (lines 16-90). The file calls `await main()` at the bottom (line 92), but `main()` is a diagnostic function that queries DAO claim epochs from testnet and logs them. The actual faucet transfer logic is in `main0()`.
-- Files: `apps/faucet/src/index.ts`, lines 6-13 (diagnostic `main`), lines 16-90 (actual faucet `main0`), line 92 (`await main()`)
-- Trigger: Running the faucet app always executes the diagnostic instead of the fund transfer.
-- Workaround: Manually change `await main()` to `await main0()`.
+- **Invalid:** The original analysis incorrectly stated the condition was `tipEpoch.compare(tipEpoch) < 0` (self-comparison). The actual code at `packages/sdk/src/sdk.ts` line 443 is `start.compare(tipEpoch) < 0`, which correctly checks whether the bin start epoch precedes the current tip epoch. No bug exists.
 
 ## Security Considerations
 
@@ -92,9 +85,9 @@
 
 ### Faucet Logs Ephemeral Private Key to Console
 
-- Risk: `apps/faucet/src/index.ts` generates a temporary private key using `crypto.getRandomValues()` at line 30 and logs the key to console at line 31 (`console.log(key)`).
-- Files: `apps/faucet/src/index.ts`, lines 30-31
-- Current mitigation: The key is ephemeral and only used for testnet faucet transfers. This code is currently in `main0()` which is not the active entry point (see faucet bug above).
+- Risk: `apps/faucet/src/main.ts` generates a temporary private key using `crypto.getRandomValues()` at line 26 and logs the key to console at line 27 (`console.log(key)`).
+- Files: `apps/faucet/src/main.ts`, lines 26-27
+- Current mitigation: The key is ephemeral and only used for testnet faucet transfers.
 - Recommendations: Avoid logging private keys even in development/testnet contexts. Keep the key in memory only.
 
 ### Hardcoded Script Constants
@@ -137,7 +130,7 @@
 
 ### SmartTransaction Class Extending ccc.Transaction
 
-- Files: `packages/utils/src/transaction.ts` (478 lines)
+- Files: `packages/utils/src/transaction.ts` (517 lines)
 - Why fragile: `SmartTransaction` extends `ccc.Transaction` and overrides 8 methods: `completeFee`, `getInputsUdtBalance`, `getOutputsUdtBalance`, `getInputsCapacity`, `clone`, `copy`, `from`, `default`, and `fromLumosSkeleton`. Changes to `ccc.Transaction`'s interface or behavior upstream can silently break `SmartTransaction`.
 - Safe modification: When updating CCC dependency, review `ccc.Transaction` changelog for breaking changes to overridden methods. The `completeFee` override (lines 63-98) is particularly fragile as it calls `super.completeFee()` and also queries the client for the NervosDAO script to check the 64-output limit.
 - Test coverage: No tests for `SmartTransaction`.
@@ -193,20 +186,20 @@
 
 ### No Automated Tests
 
-- Problem: Zero test files exist in the project source code (all `*.test.*` and `*.spec.*` files are in `node_modules/`). The CI pipeline (`.github/workflows/check.yaml`) has the test step commented out (lines 22-23: `# - name: Test` / `# run: pnpm test:ci`).
+- Problem: Zero test files exist in the project source code (all `*.test.*` and `*.spec.*` files are in `node_modules/`). The CI pipeline (`.github/workflows/check.yaml`) runs `pnpm check` which includes `pnpm test:ci`, but with no test files, `vitest run` passes vacuously.
 - Blocks: Confident refactoring, library migration, and CCC upstream updates. Any code change is a regression risk.
-- Files: `.github/workflows/check.yaml`, lines 22-23
+- Files: `.github/workflows/check.yaml`
 
 ### No Published Package Versions
 
-- Problem: All packages in `packages/` have version `0.0.1` in their `package.json` files. None have been published to npm.
+- Problem: All packages in `packages/` have version `1001.0.0` (Epoch Semantic Versioning placeholder) in their `package.json` files. None have been published to npm yet.
 - Blocks: External consumers cannot depend on the new libraries. External projects still must use the deprecated `@ickb/lumos-utils@1.4.2` and `@ickb/v1-core@1.4.2`.
 - Files:
-  - `packages/utils/package.json` - version `0.0.1`
-  - `packages/core/package.json` - version `0.0.1`
-  - `packages/dao/package.json` - version `0.0.1`
-  - `packages/order/package.json` - version `0.0.1`
-  - `packages/sdk/package.json` - version `0.0.1`
+  - `packages/utils/package.json` - version `1001.0.0`
+  - `packages/core/package.json` - version `1001.0.0`
+  - `packages/dao/package.json` - version `1001.0.0`
+  - `packages/order/package.json` - version `1001.0.0`
+  - `packages/sdk/package.json` - version `1001.0.0`
 
 ## Test Coverage Gaps
 
@@ -249,13 +242,6 @@
 
 ## Dead Code
 
-### Faucet Diagnostic `main()` Function
-
-- Issue: `apps/faucet/src/index.ts` contains a `main()` function (lines 6-13) that queries DAO claim epochs from testnet. This is leftover diagnostic code. The actual faucet logic is in `main0()` (lines 16-90). The file calls the diagnostic `main()` at line 92.
-- Files: `apps/faucet/src/index.ts`, lines 6-13
-- Impact: The faucet app does not perform its intended function when run.
-- Fix approach: Remove diagnostic `main()`, rename `main0()` to `main()`.
-
 ### `fromLumosSkeleton` in SmartTransaction
 
 - Issue: `SmartTransaction.fromLumosSkeleton()` at `packages/utils/src/transaction.ts` line 432 provides Lumos interoperability. Since the new packages do not use Lumos, this method is only needed if external code passes Lumos skeletons to the new packages.
@@ -266,7 +252,7 @@
 ### SmartTransaction Name is Misleading (Not Dead)
 
 - Issue: Despite the original "SmartTransaction" concept being abandoned ecosystem-wide, the `SmartTransaction` class in `packages/utils/src/transaction.ts` is actively used throughout the new packages. It extends `ccc.Transaction` with UDT handler management and header caching (which is what replaced the abandoned SmartTransaction headers concept). The name is a vestige but the code is alive and critical.
-- Files: `packages/utils/src/transaction.ts` - definition (478 lines). Used in: `packages/sdk/src/sdk.ts`, `packages/order/src/order.ts`, `packages/dao/src/dao.ts`, `packages/core/src/owned_owner.ts`, `packages/core/src/logic.ts`, `apps/faucet/src/index.ts`
+- Files: `packages/utils/src/transaction.ts` - definition (517 lines). Used in: `packages/sdk/src/sdk.ts`, `packages/order/src/order.ts`, `packages/dao/src/dao.ts`, `packages/core/src/owned_owner.ts`, `packages/core/src/logic.ts`, `apps/faucet/src/main.ts`
 - Impact: The name `SmartTransaction` may confuse developers familiar with the abandoned ecosystem concept.
 - Fix approach: Consider renaming to `IckbTransaction` or `EnhancedTransaction`. Low priority since the class is internal to the monorepo.
 

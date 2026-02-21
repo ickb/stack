@@ -158,7 +158,7 @@ if (!isChain(CHAIN)) {
 
 5. **Async error handling in app loops** -- catch, log structured JSON, continue:
 ```typescript
-// apps/bot/src/index.ts, apps/tester/src/index.ts, apps/faucet/src/index.ts
+// apps/bot/src/index.ts, apps/tester/src/index.ts, apps/faucet/src/main.ts
 try {
   // ... main logic
 } catch (e) {
@@ -257,7 +257,6 @@ async *findDeposits(
 ```typescript
 export * from "./codec.js";
 export * from "./capacity.js";
-export * from "./epoch.js";
 export * from "./heap.js";
 export * from "./transaction.js";
 export * from "./udt.js";
