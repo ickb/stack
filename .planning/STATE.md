@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 1 of 7 (SmartTransaction Removal -- feature-slice)
-Plan: 1 of 3 in current phase
-Status: Plan 01-01 complete, proceeding to plan 01-02
-Last activity: 2026-02-22 -- Plan 01-01 executed (DAO output limit consolidation)
+Plan: 2 of 3 in current phase
+Status: Plan 01-02 complete, proceeding to plan 01-03
+Last activity: 2026-02-22 -- Plan 01-02 executed (getHeader/addHeaders removal)
 
-Progress: [█░░░░░░░░░] 5%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: ~30min
-- Total execution time: 0.5 hours
+- Total plans completed: 2
+- Average duration: ~18min
+- Total execution time: 0.6 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1/3 | 30min | 30min |
+| 01 | 2/3 | 36min | 18min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~30min)
-- Trend: first plan
+- Last 5 plans: 01-01 (~30min), 01-02 (~6min)
+- Trend: accelerating
 
 *Updated after each plan completion*
 
@@ -51,6 +51,9 @@ Recent decisions affecting current work:
 - [01-01]: Added ccc-dev local patch mechanism (pins/local/*.patch) for deterministic replay of CCC modifications
 - [01-01]: DaoManager.requestWithdrawal/withdraw client parameter placed before optional options for cleaner API
 - [01-01]: assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost common case
+- [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (SmartTransaction still uses internally until Plan 03 deletion)
+- [01-02]: TransactionHeader moved to utils.ts as canonical location for downstream consumers
+- [01-02]: Inlined CCC client calls use explicit null checks with descriptive error messages
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 01-01-PLAN.md
-Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-01-SUMMARY.md
+Stopped at: Completed 01-02-PLAN.md
+Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-02-SUMMARY.md
