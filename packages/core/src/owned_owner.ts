@@ -135,7 +135,6 @@ export class OwnedOwnerManager implements ScriptDeps {
     if (withdrawalGroups.length === 0) {
       return tx;
     }
-    options = { ...options, isReadyOnly: false }; // non isReady deposits already filtered
 
     tx.addCellDeps(this.cellDeps);
     tx.addCellDeps(this.udtHandler.cellDeps);
@@ -147,7 +146,8 @@ export class OwnedOwnerManager implements ScriptDeps {
       tx.addInput(owner.cell);
     }
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    // assertDaoOutputLimit already called inside daoManager.withdraw;
+    // only owner inputs (not outputs) are added after, so no re-check needed.
     return tx;
   }
 

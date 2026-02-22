@@ -47,8 +47,9 @@ export interface UdtHandler extends ScriptDeps {
    * @param options.shouldAddInputs - Whether to add inputs if insufficient. Defaults to `true`.
    * @param options.compressState - Whether to collect all UDT cells to compress state rent. Defaults to `false`.
    * @returns A promise resolving to a tuple:
-   *   - [0]: Number of UDT inputs added.
-   *   - [1]: `true` if a UDT change output was appended; otherwise `false`.
+   *   - [0]: The (possibly mutated) transaction.
+   *   - [1]: Number of UDT inputs added.
+   *   - [2]: `true` if a UDT change output was appended; otherwise `false`.
    */
   completeUdt(
     signer: ccc.Signer,
@@ -57,7 +58,7 @@ export interface UdtHandler extends ScriptDeps {
       shouldAddInputs?: boolean;
       compressState?: boolean;
     },
-  ): Promise<[number, boolean]>;
+  ): Promise<[ccc.Transaction, number, boolean]>;
 
   /** The canonical name of the UDT. */
   name: string;
@@ -219,8 +220,9 @@ export class UdtManager implements UdtHandler {
    * @param options.shouldAddInputs - Whether to add inputs if insufficient. Defaults to `true`.
    * @param options.compressState - Whether to collect all UDT cells to compress state rent. Defaults to `false`.
    * @returns A promise resolving to a tuple:
-   *   - [0]: Number of UDT inputs added.
-   *   - [1]: `true` if a UDT change output was appended; otherwise `false`.
+   *   - [0]: The (possibly mutated) transaction.
+   *   - [1]: Number of UDT inputs added.
+   *   - [2]: `true` if a UDT change output was appended; otherwise `false`.
    */
   async completeUdt(
     signer: ccc.Signer,
@@ -229,7 +231,7 @@ export class UdtManager implements UdtHandler {
       shouldAddInputs?: boolean;
       compressState?: boolean;
     },
-  ): Promise<[number, boolean]> {
+  ): Promise<[ccc.Transaction, number, boolean]> {
     const tx = ccc.Transaction.from(txLike);
     const client = signer.client;
     let [inUdt, inCapacity] = await this.getInputsUdtBalance(client, tx);
@@ -264,7 +266,7 @@ export class UdtManager implements UdtHandler {
     }
 
     if (inUdt === outUdt) {
-      return [inAdded, false];
+      return [tx, inAdded, false];
     }
 
     tx.addOutput(
@@ -275,7 +277,7 @@ export class UdtManager implements UdtHandler {
       mol.Uint128LE.encode(inUdt - outUdt),
     );
 
-    return [inAdded, true];
+    return [tx, inAdded, true];
   }
 
   /**

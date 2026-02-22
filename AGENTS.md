@@ -19,7 +19,7 @@
 
 1. **Routine Pre-PR Validation**: `pnpm check:full`, it wipes derived state and regenerates from scratch. If `ccc-dev/ccc/` has pending work, the wipe is skipped to prevent data loss — re-record or push CCC changes first for a clean validation
 2. **Open a PR**: Run `pnpm changeset` to generate a changeset entry, then push the branch and present a clickable markdown link `[title](url)` where the URL is a GitHub compare URL (`quick_pull=1`). Base branch is `master`. Prefill "title" (concise, under 70 chars) and "body" (markdown with ## Why and ## Changes sections)
-3. **Fetch PR review comments**: Use the GitHub REST API via curl. Fetch all three comment types (issue comments, reviews, and inline comments). Reviewers reply asynchronously — poll every minute until comments arrive
+3. **Fetch PR review comments**: Use the GitHub REST API via curl. Fetch all three comment types (issue comments, reviews, and inline comments). Categorize feedback by actionability (action required / informational), not by source (human / bot). Reviewers reply asynchronously — poll every minute until comments arrive
 
 ## CCC Local Development (ccc-dev/)
 
