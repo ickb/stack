@@ -74,9 +74,12 @@
 │   │   ├── REFS                    # Pinned branch HEADs
 │   │   └── resolutions/            # Merge conflict resolutions
 │   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
+│   ├── patch.sh                    # Rewrites CCC exports to .ts source, creates deterministic commit
+│   ├── push.sh                     # Pushes local CCC changes upstream
 │   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
 │   ├── replay.sh                   # Deterministically rebuilds ccc/ from pins
-│   └── tsc.mjs                     # TypeScript compilation script override
+│   ├── status.sh                   # Checks if ccc-dev/ccc/ has pending custom work
+│   └── tsgo-filter.sh              # Wrapper around tsgo filtering CCC diagnostics
 ├── reference/                      # Read-only reference repos (git-ignored, clone via `pnpm reference`)
 │   ├── contracts/                 # Rust on-chain contracts
 │   │   └── scripts/contracts/
@@ -309,7 +312,7 @@
     // ... methods
   }
   ```
-- Transaction methods: Accept `SmartTransaction`, call `.addCellDeps()`, `.addInput()`, `.addOutput()`
+- Transaction methods: Accept `ccc.TransactionLike`, return `ccc.Transaction`, call `.addCellDeps()`, `.addInput()`, `.addOutput()`
 - Finding methods: Use async generators for lazy cell discovery
 - Type checkers: Implement `isFoo(cell)` methods for type verification
 
