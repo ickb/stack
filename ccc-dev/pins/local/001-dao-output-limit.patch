@@ -1,0 +1,93 @@
+diff --git a/packages/core/src/ckb/transaction.ts b/packages/core/src/ckb/transaction.ts
+index e97e2ef..b172089 100644
+--- a/packages/core/src/ckb/transaction.ts
++++ b/packages/core/src/ckb/transaction.ts
+@@ -27,6 +27,7 @@ import { Epoch } from "./epoch.js";
+ import { Script, ScriptLike, ScriptOpt } from "./script.js";
+ import { DEP_TYPE_TO_NUM, NUM_TO_DEP_TYPE } from "./transaction.advanced.js";
+ import {
++  ErrorNervosDaoOutputLimit,
+   ErrorTransactionInsufficientCapacity,
+   ErrorTransactionInsufficientCoin,
+ } from "./transactionErrors.js";
+@@ -2253,6 +2254,7 @@ export class Transaction extends Entity.Base<TransactionLike, Transaction>() {
+       // leastExtraCapacity should be 0 here, otherwise we should failed in the previous check
+       // So this only happens in the first iteration
+       if (fee === leastFee) {
++        await assertDaoOutputLimit(this, from.client);
+         return [collected, false];
+       }
+ 
+@@ -2280,6 +2282,7 @@ export class Transaction extends Entity.Base<TransactionLike, Transaction>() {
+       // The fee has been paid
+       if (leastFee === changedFee) {
+         this.copy(tx);
++        await assertDaoOutputLimit(this, from.client);
+         return [collected, true];
+       }
+ 
+@@ -2450,6 +2453,40 @@ export class Transaction extends Entity.Base<TransactionLike, Transaction>() {
+   }
+ }
+ 
++/**
++ * Asserts that a NervosDAO transaction does not exceed the 64-output limit.
++ * Auto-resolves unresolved inputs (populating CellInput.cellOutput as a side effect).
++ * Only checks when outputs > 64 AND at least one input or output has the DAO type script.
++ *
++ * @param tx - The transaction to check
++ * @param client - CKB client for resolving the NervosDAO script and input cell info
++ * @throws ErrorNervosDaoOutputLimit if limit exceeded
++ */
++export async function assertDaoOutputLimit(
++  tx: Transaction,
++  client: Client,
++): Promise<void> {
++  if (tx.outputs.length <= 64) return;
++
++  const { codeHash, hashType } = await client.getKnownScript(
++    KnownScript.NervosDao,
++  );
++  const dao = Script.from({ codeHash, hashType, args: "0x" });
++
++  // Auto-resolve unresolved inputs
++  for (const input of tx.inputs) {
++    await input.completeExtraInfos(client);
++  }
++
++  const isDaoTx =
++    tx.inputs.some((i) => i.cellOutput?.type?.eq(dao)) ||
++    tx.outputs.some((o) => o.type?.eq(dao));
++
++  if (isDaoTx) {
++    throw new ErrorNervosDaoOutputLimit(tx.outputs.length);
++  }
++}
++
+ /**
+  * Calculate Nervos DAO profit between two blocks.
+  * This function computes the profit earned from a Nervos DAO deposit
+diff --git a/packages/core/src/ckb/transactionErrors.ts b/packages/core/src/ckb/transactionErrors.ts
+index 2605766..692af12 100644
+--- a/packages/core/src/ckb/transactionErrors.ts
++++ b/packages/core/src/ckb/transactionErrors.ts
+@@ -22,6 +22,19 @@ export class ErrorTransactionInsufficientCapacity extends Error {
+   }
+ }
+ 
++export class ErrorNervosDaoOutputLimit extends Error {
++  public readonly count: number;
++  public readonly limit: number;
++
++  constructor(count: number) {
++    super(
++      `NervosDAO transaction has ${count} output cells, exceeding the limit of 64`,
++    );
++    this.count = count;
++    this.limit = 64;
++  }
++}
++
+ /**
+  * @deprecated Use `ErrorUdtInsufficientCoin` from `@ckb-ccc/udt` instead.
+  */

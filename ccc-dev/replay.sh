@@ -78,6 +78,26 @@ done < <(tail -n +2 "$PATCH_DIR/REFS")
 
 bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
 
+# Apply local patches (sorted by filename for deterministic order)
+LOCAL_DIR="$PATCH_DIR/local"
+if [ -d "$LOCAL_DIR" ]; then
+  LOCAL_IDX=$((MERGE_IDX + 1))
+  for PATCH_FILE in $(find "$LOCAL_DIR" -name '*.patch' | sort); do
+    LOCAL_IDX=$((LOCAL_IDX + 1))
+    PATCH_NAME=$(basename "$PATCH_FILE" .patch)
+    echo "Applying local patch: $PATCH_NAME" >&2
+
+    export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
+    export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
+    export GIT_AUTHOR_DATE="@$LOCAL_IDX +0000"
+    export GIT_COMMITTER_DATE="@$LOCAL_IDX +0000"
+
+    git -C "$REPO_DIR" apply "$PATCH_FILE"
+    git -C "$REPO_DIR" add -A
+    git -C "$REPO_DIR" commit -m "$PATCH_NAME"
+  done
+fi
+
 # Verify HEAD SHA matches recording
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
 EXPECTED=$(cat "$PATCH_DIR/HEAD")

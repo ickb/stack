@@ -22,10 +22,15 @@ if ! bash "$SCRIPT_DIR/status.sh" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Always start fresh — wipe previous clone and pins
+# Always start fresh — wipe previous clone and pins (preserve local patches)
+LOCAL_BAK=""
+if [ -d "$PATCH_DIR/local" ]; then
+  LOCAL_BAK=$(mktemp -d)
+  cp -r "$PATCH_DIR/local" "$LOCAL_BAK/local"
+fi
 rm -rf "$REPO_DIR" "$PATCH_DIR"
 
-trap 'rm -rf "$REPO_DIR" "$PATCH_DIR"; echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2' ERR
+trap 'rm -rf "$REPO_DIR" "$PATCH_DIR" "${LOCAL_BAK:-}"; echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2' ERR
 
 git clone --filter=blob:none "$REPO_URL" "$REPO_DIR"
 
@@ -108,6 +113,33 @@ for REF in "$@"; do
 done
 
 bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
+
+# Restore preserved local patches
+if [ -n "$LOCAL_BAK" ] && [ -d "$LOCAL_BAK/local" ]; then
+  mkdir -p "$PATCH_DIR"
+  cp -r "$LOCAL_BAK/local" "$PATCH_DIR/local"
+  rm -rf "$LOCAL_BAK"
+fi
+
+# Apply local patches (sorted by filename for deterministic order)
+LOCAL_DIR="$PATCH_DIR/local"
+if [ -d "$LOCAL_DIR" ]; then
+  LOCAL_IDX=$((MERGE_IDX + 1))
+  for PATCH_FILE in $(find "$LOCAL_DIR" -name '*.patch' | sort); do
+    LOCAL_IDX=$((LOCAL_IDX + 1))
+    PATCH_NAME=$(basename "$PATCH_FILE" .patch)
+    echo "Applying local patch: $PATCH_NAME"
+
+    export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
+    export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
+    export GIT_AUTHOR_DATE="@$LOCAL_IDX +0000"
+    export GIT_COMMITTER_DATE="@$LOCAL_IDX +0000"
+
+    git -C "$REPO_DIR" apply "$PATCH_FILE"
+    git -C "$REPO_DIR" add -A
+    git -C "$REPO_DIR" commit -m "$PATCH_NAME"
+  done
+fi
 
 # Prepend BASE SHA as first line of REFS
 mkdir -p "$PATCH_DIR"
