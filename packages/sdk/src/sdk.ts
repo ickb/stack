@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import {
   collect,
   CapacityManager,
-  SmartTransaction,
   binarySearch,
   type ValueComponents,
   hexFrom,
@@ -225,18 +224,18 @@ export class IckbSdk {
    * @returns A Promise resolving to void.
    */
   async request(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     user: ccc.Signer | ccc.Script,
     info: Info,
     amounts: ValueComponents,
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
     // If the user is provided as a Signer, extract the recommended lock script.
     user =
       "codeHash" in user
         ? user
         : (await user.getRecommendedAddressObj()).script;
 
-    this.order.mint(tx, user, info, amounts);
+    return this.order.mint(txLike, user, info, amounts);
   }
 
   /**
@@ -254,13 +253,13 @@ export class IckbSdk {
    * @returns void
    */
   collect(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     groups: OrderGroup[],
     options?: {
       isFulfilledOnly?: boolean;
     },
-  ): void {
-    this.order.melt(tx, groups, options);
+  ): ccc.Transaction {
+    return this.order.melt(txLike, groups, options);
   }
 
   /**

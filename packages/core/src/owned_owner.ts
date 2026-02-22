@@ -3,7 +3,6 @@ import {
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
-  type SmartTransaction,
   type UdtHandler,
 } from "@ickb/utils";
 import { daoCellFrom, DaoManager } from "@ickb/dao";
@@ -67,24 +66,25 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @returns void
    */
   async requestWithdrawal(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     deposits: IckbDepositCell[],
     lock: ccc.Script,
     client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    let tx = ccc.Transaction.from(txLike);
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       deposits = deposits.filter((d) => d.isReady);
     }
     if (deposits.length === 0) {
-      return;
+      return tx;
     }
     options = { ...options, isReadyOnly: false }; // non isReady deposits already filtered
 
-    await this.daoManager.requestWithdrawal(
+    tx = await this.daoManager.requestWithdrawal(
       tx,
       deposits,
       this.script,
@@ -92,7 +92,7 @@ export class OwnedOwnerManager implements ScriptDeps {
       options,
     );
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const outputData = OwnerData.encode({ ownedDistance: -deposits.length });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -107,6 +107,7 @@ export class OwnedOwnerManager implements ScriptDeps {
     }
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
@@ -119,33 +120,35 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @returns void
    */
   async withdraw(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     withdrawalGroups: WithdrawalGroup[],
     client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    let tx = ccc.Transaction.from(txLike);
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       withdrawalGroups = withdrawalGroups.filter((g) => g.owned.isReady);
     }
     if (withdrawalGroups.length === 0) {
-      return;
+      return tx;
     }
     options = { ...options, isReadyOnly: false }; // non isReady deposits already filtered
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const requests = withdrawalGroups.map((g) => g.owned);
-    await this.daoManager.withdraw(tx, requests, client);
+    tx = await this.daoManager.withdraw(tx, requests, client);
 
     for (const { owner } of withdrawalGroups) {
       tx.addInput(owner.cell);
     }
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**

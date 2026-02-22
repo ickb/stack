@@ -3,7 +3,6 @@ import { DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
   type ScriptDeps,
-  type SmartTransaction,
   type UdtHandler,
   unique,
 } from "@ickb/utils";
@@ -66,14 +65,15 @@ export class LogicManager implements ScriptDeps {
    * @param lock - The lock script for the output receipt cell.
    */
   async deposit(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     depositQuantity: number,
     depositAmount: ccc.FixedPoint,
     lock: ccc.Script,
     client: ccc.Client,
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {
-      return;
+      return tx;
     }
 
     if (depositAmount < ccc.fixedPointFrom(1082)) {
@@ -85,13 +85,13 @@ export class LogicManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const capacities = Array.from(
       { length: depositQuantity },
       () => depositAmount,
     );
-    await this.daoManager.deposit(tx, capacities, this.script, client);
+    tx = await this.daoManager.deposit(tx, capacities, this.script, client);
 
     // Add the Receipt to the outputs
     tx.addOutput(
@@ -103,6 +103,7 @@ export class LogicManager implements ScriptDeps {
     );
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
@@ -111,13 +112,17 @@ export class LogicManager implements ScriptDeps {
    * @param tx - The transaction to add the receipts to.
    * @param receipts - The receipts to add to the transaction.
    */
-  completeDeposit(tx: SmartTransaction, receipts: ReceiptCell[]): void {
+  completeDeposit(
+    txLike: ccc.TransactionLike,
+    receipts: ReceiptCell[],
+  ): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     if (receipts.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const r of receipts) {
       const hash = r.header.header.hash;
@@ -129,6 +134,7 @@ export class LogicManager implements ScriptDeps {
     for (const { cell } of receipts) {
       tx.addInput(cell);
     }
+    return tx;
   }
 
   /**

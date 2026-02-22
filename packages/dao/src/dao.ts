@@ -3,7 +3,6 @@ import {
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
-  type SmartTransaction,
 } from "@ickb/utils";
 import { daoCellFrom, type DaoCell } from "./cells.js";
 
@@ -68,19 +67,21 @@ export class DaoManager implements ScriptDeps {
   /**
    * Adds a deposit to a transaction.
    *
-   * @param tx - The transaction to which the deposit will be added.
+   * @param txLike - The transaction to which the deposit will be added.
    * @param capacities - An array of capacities of the deposits to create.
    * @param lock - The lock script for the outputs.
-   * @returns void.
+   * @param client - The CKB client for DAO output limit validation.
+   * @returns The updated transaction.
    */
   async deposit(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     capacities: ccc.FixedPoint[],
     lock: ccc.Script,
     client: ccc.Client,
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     if (capacities.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
@@ -97,6 +98,7 @@ export class DaoManager implements ScriptDeps {
     }
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
@@ -114,7 +116,7 @@ export class DaoManager implements ScriptDeps {
    * @throws Error if the transaction or header of deposit is not found.
    */
   async requestWithdrawal(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     deposits: DaoCell[],
     lock: ccc.Script,
     client: ccc.Client,
@@ -122,14 +124,15 @@ export class DaoManager implements ScriptDeps {
       sameSizeOnly?: boolean;
       isReadyOnly?: boolean;
     },
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     const sameSizeOnly = options?.sameSizeOnly ?? true;
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       deposits = deposits.filter((d) => d.isReady);
     }
     if (deposits.length === 0) {
-      return;
+      return tx;
     }
 
     if (
@@ -171,6 +174,7 @@ export class DaoManager implements ScriptDeps {
     }
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
@@ -184,19 +188,20 @@ export class DaoManager implements ScriptDeps {
    * @throws Error if the withdrawal request is not valid.
    */
   async withdraw(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     withdrawalRequests: DaoCell[],
     client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       withdrawalRequests = withdrawalRequests.filter((d) => d.isReady);
     }
     if (withdrawalRequests.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
@@ -244,6 +249,7 @@ export class DaoManager implements ScriptDeps {
     }
 
     await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**

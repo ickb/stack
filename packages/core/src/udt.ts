@@ -1,12 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ReceiptData } from "./entities.js";
 import type { DaoManager } from "@ickb/dao";
-import {
-  UdtManager,
-  type ExchangeRatio,
-  type SmartTransaction,
-  type UdtHandler,
-} from "@ickb/utils";
+import { UdtManager, type ExchangeRatio, type UdtHandler } from "@ickb/utils";
 
 /**
  * IckbUdtManager is a class that implements the UdtHandler interface.
@@ -70,8 +65,9 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
    */
   override async getInputsUdtBalance(
     client: ccc.Client,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
   ): Promise<[ccc.FixedPoint, ccc.FixedPoint]> {
+    const tx = ccc.Transaction.from(txLike);
     return ccc.reduceAsync(
       tx.inputs,
       async (acc, input) => {

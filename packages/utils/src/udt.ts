@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { unique, type ScriptDeps, type ValueComponents } from "./utils.js";
-import type { SmartTransaction } from "./transaction.js";
 import { defaultFindCellsLimit } from "./capacity.js";
 
 /**
@@ -20,25 +19,27 @@ export interface UdtHandler extends ScriptDeps {
    */
   getInputsUdtBalance(
     client: ccc.Client,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
   ): Promise<[ccc.FixedPoint, ccc.FixedPoint]>;
 
   /**
    * Retrieves the UDT output balance (token amount and capacity)
    * for a given transaction.
    *
-   * @param tx - The smart transaction whose outputs are to be balanced.
+   * @param txLike - The transaction whose outputs are to be balanced.
    * @returns A tuple:
    *   - [0]: Total UDT amount in outputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT outputs (as `ccc.FixedPoint`).
    */
-  getOutputsUdtBalance(tx: SmartTransaction): [ccc.FixedPoint, ccc.FixedPoint];
+  getOutputsUdtBalance(
+    txLike: ccc.TransactionLike,
+  ): [ccc.FixedPoint, ccc.FixedPoint];
 
   /**
    * Completes a transaction by adding UDT inputs and/or UDT change outputs as needed.
    *
    * @param signer - Signer providing client access and account scripts.
-   * @param tx - The smart transaction to adjust.
+   * @param txLike - The transaction to adjust.
    * @param options.shouldAddInputs - Whether to add inputs if insufficient. Defaults to `true`.
    * @param options.compressState - Whether to collect all UDT cells to compress state rent. Defaults to `false`.
    * @returns A promise resolving to a tuple:
@@ -47,7 +48,7 @@ export interface UdtHandler extends ScriptDeps {
    */
   completeUdt(
     signer: ccc.Signer,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     options?: {
       shouldAddInputs?: boolean;
       compressState?: boolean;
@@ -135,15 +136,16 @@ export class UdtManager implements UdtHandler {
    * for a given transaction.
    *
    * @param client - The CKB client to query cell data.
-   * @param tx - The smart transaction whose inputs are to be balanced.
+   * @param txLike - The transaction whose inputs are to be balanced.
    * @returns A promise resolving to a tuple:
    *   - [0]: Total UDT amount in inputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT inputs (as `ccc.FixedPoint`).
    */
   getInputsUdtBalance(
     client: ccc.Client,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
   ): Promise<[ccc.FixedPoint, ccc.FixedPoint]> {
+    const tx = ccc.Transaction.from(txLike);
     return ccc.reduceAsync(
       tx.inputs,
       async (acc, input) => {
@@ -178,12 +180,15 @@ export class UdtManager implements UdtHandler {
    * Retrieves the UDT output balance (token amount and capacity)
    * for a given transaction.
    *
-   * @param tx - The smart transaction whose outputs are to be balanced.
+   * @param txLike - The transaction whose outputs are to be balanced.
    * @returns A tuple:
    *   - [0]: Total UDT amount in outputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT outputs (as `ccc.FixedPoint`).
    */
-  getOutputsUdtBalance(tx: SmartTransaction): [ccc.FixedPoint, ccc.FixedPoint] {
+  getOutputsUdtBalance(
+    txLike: ccc.TransactionLike,
+  ): [ccc.FixedPoint, ccc.FixedPoint] {
+    const tx = ccc.Transaction.from(txLike);
     return tx.outputs.reduce(
       (acc, output, i) => {
         if (!output.type?.eq(this.script)) {
@@ -215,12 +220,13 @@ export class UdtManager implements UdtHandler {
    */
   async completeUdt(
     signer: ccc.Signer,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     options?: {
       shouldAddInputs?: boolean;
       compressState?: boolean;
     },
   ): Promise<[number, boolean]> {
+    const tx = ccc.Transaction.from(txLike);
     const client = signer.client;
     let [inUdt, inCapacity] = await this.getInputsUdtBalance(client, tx);
     const [outUdt, outCapacity] = this.getOutputsUdtBalance(tx);
@@ -270,20 +276,22 @@ export class UdtManager implements UdtHandler {
 
   /**
    * Adds UDT cells to a transaction.
-   * @param tx - The smart transaction to which UDT cells will be added.
+   * @param txLike - The transaction to which UDT cells will be added.
    * @param udts - An array of UDT cells to add.
+   * @returns The transaction with UDT cells added.
    */
-  addUdts(tx: SmartTransaction, udts: UdtCell[]): void {
+  addUdts(txLike: ccc.TransactionLike, udts: UdtCell[]): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     if (udts.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this);
 
     for (const { cell } of udts) {
       tx.addInput(cell);
     }
+    return tx;
   }
 
   /**

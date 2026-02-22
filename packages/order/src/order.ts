@@ -5,7 +5,6 @@ import {
   hexFrom,
   type ExchangeRatio,
   type ScriptDeps,
-  type SmartTransaction,
   type UdtHandler,
   type ValueComponents,
 } from "@ickb/utils";
@@ -172,11 +171,12 @@ export class OrderManager implements ScriptDeps {
    * @returns void
    */
   mint(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     lock: ccc.Script,
     info: InfoLike,
     amounts: ValueComponents,
-  ): void {
+  ): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     const { ckbValue, udtValue } = amounts;
     const data = OrderData.from({
       udtValue,
@@ -188,7 +188,7 @@ export class OrderManager implements ScriptDeps {
     });
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     // Append order cell to Outputs
     const position = tx.addOutput(
@@ -206,6 +206,7 @@ export class OrderManager implements ScriptDeps {
       lock,
       type: this.script,
     });
+    return tx;
   }
 
   /**
@@ -218,14 +219,15 @@ export class OrderManager implements ScriptDeps {
    * @param tx - The transaction to which the matches will be added.
    * @param match - The match object containing partial matches.
    */
-  addMatch(tx: SmartTransaction, match: Match): void {
+  addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     const partials = match.partials;
     if (partials.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const { order, ckbOut, udtOut } of partials) {
       tx.addInput(order.cell);
@@ -245,6 +247,7 @@ export class OrderManager implements ScriptDeps {
         }).toBytes(),
       );
     }
+    return tx;
   }
 
   /**
@@ -499,26 +502,28 @@ export class OrderManager implements ScriptDeps {
    * @returns void
    */
   melt(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     groups: OrderGroup[],
     options?: {
       isFulfilledOnly?: boolean;
     },
-  ): void {
+  ): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     const isFulfilledOnly = options?.isFulfilledOnly ?? false;
     if (isFulfilledOnly) {
       groups = groups.filter((g) => g.order.isFulfilled());
     }
     if (groups.length === 0) {
-      return;
+      return tx;
     }
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const group of groups) {
       tx.addInput(group.order.cell);
       tx.addInput(group.master.cell);
     }
+    return tx;
   }
 
   /**
