@@ -12,17 +12,19 @@ CCC has unreleased branches (`releases/next`, `releases/udt`) that this project 
 
 3. **Source-level types** — `patch.sh` (called by both `record.sh` and `replay.sh`) patches CCC's `package.json` exports to point TypeScript at `.ts` source instead of built `.d.ts`, then creates a deterministic git commit (fixed author/date) so record and replay produce the same `pins/HEAD` hash. This gives real-time type feedback when editing across the CCC/stack boundary — changes in CCC source are immediately visible to stack packages without rebuilding.
 
-4. **Diagnostic filtering** — `ccc-dev/tsc.mjs` is a tsc wrapper used by stack package builds. Because CCC `.ts` source is type-checked under the stack's stricter tsconfig (`verbatimModuleSyntax`, `noImplicitOverride`, `noUncheckedIndexedAccess`), plain `tsc` would report hundreds of CCC diagnostics that aren't real integration errors. The wrapper emits output normally and only fails on diagnostics from stack source files. When CCC is not cloned, packages fall back to plain `tsc`.
+4. **Diagnostic filtering** — `ccc-dev/tsgo-filter.sh` is a bash wrapper around `tsgo` used by stack package builds. Because CCC `.ts` source is type-checked under the stack's stricter tsconfig (`verbatimModuleSyntax`, `noImplicitOverride`, `noUncheckedIndexedAccess`), plain `tsgo` would report hundreds of CCC diagnostics that aren't real integration errors. The wrapper emits output normally and only fails on diagnostics from stack source files. When CCC is not cloned, packages fall back to plain `tsgo`.
 
 ## `pins/` format
 
 ```
 ccc-dev/pins/
   REFS              # Line 1: base SHA. Lines 2+: "SHA refname" (one per merge)
-  HEAD              # Expected final SHA after all merges (integrity check)
+  HEAD              # Expected final SHA after all merges + patches (integrity check)
   resolutions/      # Saved conflict resolution files, organized by merge index
     1/path/to/file  # Resolved file for merge step 1
     2/path/to/file  # Resolved file for merge step 2
+  local/            # Git patch files applied after merges + source patching
+    001-name.patch  # Applied in sorted filename order with deterministic commits
 ```
 
 ## Recording
@@ -62,6 +64,20 @@ bash ccc-dev/record.sh abc1234
 ```
 
 Refs are merged sequentially onto a `wip` branch, then CCC is built. On merge conflicts, the script auto-resolves them using AI Coworker.
+
+## Local patches
+
+Local patches (`pins/local/*.patch`) are project-specific changes applied to CCC on top of the merged upstream refs. They are committed to git alongside other pins and applied deterministically during both recording and replay.
+
+Use local patches for CCC changes that this project needs but that haven't been merged upstream yet (e.g., a DAO safety check contributed via a CCC PR).
+
+To create a local patch:
+
+1. Make changes in `ccc-dev/ccc/` on the `wip` branch
+2. Generate a patch: `git -C ccc-dev/ccc diff > ccc-dev/pins/local/001-description.patch`
+3. Re-record to verify: `pnpm ccc:record`
+
+Patches are applied in sorted filename order. Use numeric prefixes (`001-`, `002-`) to control ordering. Both `record.sh` and `replay.sh` apply local patches with deterministic git identity and timestamps so the resulting `pins/HEAD` hash is reproducible.
 
 ## Developing CCC PRs
 
