@@ -66,14 +66,15 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
    * @returns void
    */
-  requestWithdrawal(
+  async requestWithdrawal(
     tx: SmartTransaction,
     deposits: IckbDepositCell[],
     lock: ccc.Script,
+    client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<void> {
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       deposits = deposits.filter((d) => d.isReady);
@@ -83,7 +84,13 @@ export class OwnedOwnerManager implements ScriptDeps {
     }
     options = { ...options, isReadyOnly: false }; // non isReady deposits already filtered
 
-    this.daoManager.requestWithdrawal(tx, deposits, this.script, options);
+    await this.daoManager.requestWithdrawal(
+      tx,
+      deposits,
+      this.script,
+      client,
+      options,
+    );
     tx.addCellDeps(this.cellDeps);
     tx.addUdtHandlers(this.udtHandler);
 
@@ -99,11 +106,7 @@ export class OwnedOwnerManager implements ScriptDeps {
       );
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**
@@ -115,13 +118,14 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param options.isReadyOnly - Whether to only process ready withdrawal groups (default: false).
    * @returns void
    */
-  withdraw(
+  async withdraw(
     tx: SmartTransaction,
     withdrawalGroups: WithdrawalGroup[],
+    client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<void> {
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       withdrawalGroups = withdrawalGroups.filter((g) => g.owned.isReady);
@@ -135,17 +139,13 @@ export class OwnedOwnerManager implements ScriptDeps {
     tx.addUdtHandlers(this.udtHandler);
 
     const requests = withdrawalGroups.map((g) => g.owned);
-    this.daoManager.withdraw(tx, requests);
+    await this.daoManager.withdraw(tx, requests, client);
 
     for (const { owner } of withdrawalGroups) {
       tx.addInput(owner.cell);
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**

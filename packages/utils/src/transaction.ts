@@ -81,18 +81,7 @@ export class SmartTransaction extends ccc.Transaction {
     inAdded += res[0];
     addedChange ||= res[1];
 
-    // Check that, if NervosDAO cells are included, then there are at most 64 output cells.
-    // See: https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    const { hashType, codeHash } = await signer.client.getKnownScript(
-      ccc.KnownScript.NervosDao,
-    );
-    const dao = ccc.Script.from({ codeHash, hashType, args: "0x" });
-    const isDaoTx =
-      this.inputs.some((c) => c.cellOutput?.type?.eq(dao)) ||
-      this.outputs.some((c) => c.type?.eq(dao));
-    if (isDaoTx && this.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(this, signer.client);
 
     return [inAdded, addedChange];
   }

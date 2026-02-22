@@ -73,11 +73,12 @@ export class DaoManager implements ScriptDeps {
    * @param lock - The lock script for the outputs.
    * @returns void.
    */
-  deposit(
+  async deposit(
     tx: SmartTransaction,
     capacities: ccc.FixedPoint[],
     lock: ccc.Script,
-  ): void {
+    client: ccc.Client,
+  ): Promise<void> {
     if (capacities.length === 0) {
       return;
     }
@@ -95,11 +96,7 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**
@@ -116,15 +113,16 @@ export class DaoManager implements ScriptDeps {
    * @throws Error if the withdrawal request lock args have a different size from the deposit.
    * @throws Error if the transaction or header of deposit is not found.
    */
-  requestWithdrawal(
+  async requestWithdrawal(
     tx: SmartTransaction,
     deposits: DaoCell[],
     lock: ccc.Script,
+    client: ccc.Client,
     options?: {
       sameSizeOnly?: boolean;
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<void> {
     const sameSizeOnly = options?.sameSizeOnly ?? true;
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
@@ -169,11 +167,7 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**
@@ -186,13 +180,14 @@ export class DaoManager implements ScriptDeps {
    * @returns void
    * @throws Error if the withdrawal request is not valid.
    */
-  withdraw(
+  async withdraw(
     tx: SmartTransaction,
     withdrawalRequests: DaoCell[],
+    client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<void> {
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       withdrawalRequests = withdrawalRequests.filter((d) => d.isReady);
@@ -240,11 +235,7 @@ export class DaoManager implements ScriptDeps {
       tx.setWitnessArgsAt(inputIndex, witness);
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**

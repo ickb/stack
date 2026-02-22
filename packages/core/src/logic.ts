@@ -65,12 +65,13 @@ export class LogicManager implements ScriptDeps {
    * @param depositAmount - The amount of each deposit.
    * @param lock - The lock script for the output receipt cell.
    */
-  deposit(
+  async deposit(
     tx: SmartTransaction,
     depositQuantity: number,
     depositAmount: ccc.FixedPoint,
     lock: ccc.Script,
-  ): void {
+    client: ccc.Client,
+  ): Promise<void> {
     if (depositQuantity <= 0) {
       return;
     }
@@ -90,7 +91,7 @@ export class LogicManager implements ScriptDeps {
       { length: depositQuantity },
       () => depositAmount,
     );
-    this.daoManager.deposit(tx, capacities, this.script);
+    await this.daoManager.deposit(tx, capacities, this.script, client);
 
     // Add the Receipt to the outputs
     tx.addOutput(
@@ -101,11 +102,7 @@ export class LogicManager implements ScriptDeps {
       ReceiptData.encode({ depositQuantity, depositAmount }),
     );
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
   }
 
   /**
