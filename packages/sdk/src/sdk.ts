@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   collect,
-  CapacityManager,
   binarySearch,
+  unique,
   type ValueComponents,
   hexFrom,
 } from "@ickb/utils";
@@ -33,14 +33,12 @@ export class IckbSdk {
    * @param ownedOwner - The manager for owned owner operations.
    * @param ickbLogic - The manager for iCKB logic operations.
    * @param order - The manager for order operations.
-   * @param capacity - The capacity manager instance.
    * @param bots - An array of bot lock scripts.
    */
   constructor(
     private readonly ownedOwner: OwnedOwnerManager,
     private readonly ickbLogic: LogicManager,
     private readonly order: OrderManager,
-    private readonly capacity: CapacityManager,
     private readonly bots: ccc.Script[],
   ) {}
 
@@ -52,11 +50,11 @@ export class IckbSdk {
    */
   static from(...args: Parameters<typeof getConfig>): IckbSdk {
     const {
-      managers: { ownedOwner, logic, order, capacity },
+      managers: { ownedOwner, logic, order },
       bots,
     } = getConfig(...args);
 
-    return new IckbSdk(ownedOwner, logic, order, capacity, bots);
+    return new IckbSdk(ownedOwner, logic, order, bots);
   }
 
   /**
@@ -371,28 +369,46 @@ export class IckbSdk {
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
-    for await (const c of this.capacity.findCapacities(
-      client,
-      this.bots,
-      opts,
-    )) {
-      const key = hexFrom(c.cell.cellOutput.lock);
-      const ckb = (bot2Ckb.get(key) ?? reserved) + c.ckbValue;
-      bot2Ckb.set(key, ckb);
-
-      // Find the most recent deposit pool snapshot from bot cell output data.
-      const outputData = c.cell.outputData;
-      if (outputData.length % 256 === 2) {
-        const txWithHeader = await client.getTransactionWithHeader(
-          c.cell.outPoint.txHash,
-        );
-        if (!txWithHeader?.header) {
-          throw new Error("Header not found for txHash");
+    for (const lock of unique(this.bots)) {
+      for await (const cell of client.findCellsOnChain(
+        {
+          script: lock,
+          scriptType: "lock",
+          filter: {
+            scriptLenRange: [0n, 1n],
+          },
+          scriptSearchMode: "exact",
+          withData: true,
+        },
+        "asc",
+        400,
+      )) {
+        if (
+          cell.cellOutput.type !== undefined ||
+          !cell.cellOutput.lock.eq(lock)
+        ) {
+          continue;
         }
-        const e = ccc.Epoch.from(txWithHeader.header.epoch);
-        if (poolSnapshotEpoch.compare(e) < 0) {
-          poolSnapshotHex = outputData;
-          poolSnapshotEpoch = e;
+
+        const key = hexFrom(cell.cellOutput.lock);
+        const ckb =
+          (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
+        bot2Ckb.set(key, ckb);
+
+        // Find the most recent deposit pool snapshot from bot cell output data.
+        const outputData = cell.outputData;
+        if (outputData.length % 256 === 2) {
+          const txWithHeader = await client.getTransactionWithHeader(
+            cell.outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
+          const e = ccc.Epoch.from(txWithHeader.header.epoch);
+          if (poolSnapshotEpoch.compare(e) < 0) {
+            poolSnapshotHex = outputData;
+            poolSnapshotEpoch = e;
+          }
         }
       }
     }

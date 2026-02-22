@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { IckbUdtManager, LogicManager, OwnedOwnerManager } from "@ickb/core";
 import { DaoManager } from "@ickb/dao";
 import { OrderManager } from "@ickb/order";
-import { CapacityManager, unique, type ScriptDeps } from "@ickb/utils";
+import { unique, type ScriptDeps } from "@ickb/utils";
 
 /**
  * Retrieves the configuration for the given deployment environment.
@@ -33,7 +33,6 @@ export function getConfig(
   bots: ccc.ScriptLike[] = [],
 ): {
   managers: {
-    capacity: CapacityManager;
     dao: DaoManager;
     ickbUdt: IckbUdtManager;
     logic: LogicManager;
@@ -57,7 +56,6 @@ export function getConfig(
     };
   }
 
-  const capacity = CapacityManager.withAnyData();
   const dao = new DaoManager(d.dao.script, d.dao.cellDeps);
   const ickbUdt = new IckbUdtManager(
     d.udt.script,
@@ -81,7 +79,6 @@ export function getConfig(
 
   return {
     managers: {
-      capacity,
       dao,
       ickbUdt,
       logic,

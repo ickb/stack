@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  CapacityManager,
-  collect,
-  hexFrom,
-  SmartTransaction,
-  sum,
-} from "@ickb/utils";
+import { hexFrom, sum, unique } from "@ickb/utils";
 import { getRandomValues } from "crypto";
 import { exit } from "process";
 
@@ -33,8 +27,6 @@ export async function main(): Promise<void> {
   console.log(dummyAddress.toString());
   console.log();
 
-  const capacityManager = CapacityManager.withEmptyData();
-
   for (;;) {
     await new Promise((r) => {
       setTimeout(r, 120000);
@@ -53,23 +45,50 @@ export async function main(): Promise<void> {
     const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
     try {
-      const capacities = await collect(
-        capacityManager.findCapacities(client, [dummyAddress.script]),
-      );
+      const capacities: ccc.Cell[] = [];
+      for (const lock of unique([dummyAddress.script])) {
+        for await (const cell of client.findCellsOnChain(
+          {
+            script: lock,
+            scriptType: "lock",
+            filter: {
+              scriptLenRange: [0n, 1n],
+              outputDataLenRange: [0n, 1n],
+            },
+            scriptSearchMode: "exact",
+            withData: true,
+          },
+          "asc",
+          400,
+        )) {
+          if (
+            cell.cellOutput.type !== undefined ||
+            !cell.cellOutput.lock.eq(lock)
+          ) {
+            continue;
+          }
+          capacities.push(cell);
+        }
+      }
 
       if (capacities.length === 0) {
         console.log("No faucet funds to transfer, shutting down...");
         exit(0);
       }
 
-      const ckbBalance = sum(0n, ...capacities.map((c) => c.ckbValue));
+      const ckbBalance = sum(
+        0n,
+        ...capacities.map((c) => c.cellOutput.capacity),
+      );
 
       executionLog.balance = {
         CKB: ccc.fixedPointToString(ckbBalance),
       };
 
-      const tx = SmartTransaction.default();
-      capacityManager.addCapacities(tx, capacities);
+      const tx = ccc.Transaction.default();
+      for (const cell of capacities) {
+        tx.addInput(cell);
+      }
       await tx.completeFeeChangeToLock(dummyAccount, realAccount.script);
       executionLog.txHash = await dummyAccount.sendTransaction(tx);
     } catch (e) {

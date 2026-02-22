@@ -1,6 +1,19 @@
 import { ccc } from "@ckb-ccc/core";
 
 /**
+ * The default upper limit on the number of cells to return when querying the chain.
+ *
+ * This limit is aligned with Nervos CKB's pull request #4576
+ * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
+ *
+ * @remarks
+ * When searching for cells, callers may override this limit
+ * by passing a custom `limit` in their options. If no override is provided,
+ * this constant controls how many cells will be fetched in a single batch.
+ */
+export const defaultFindCellsLimit = 400;
+
+/**
  * Represents a transaction header that includes a block header and an optional transaction hash.
  */
 export interface TransactionHeader {

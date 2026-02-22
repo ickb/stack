@@ -1,6 +1,10 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { unique, type ScriptDeps, type ValueComponents } from "./utils.js";
-import { defaultFindCellsLimit } from "./capacity.js";
+import {
+  defaultFindCellsLimit,
+  unique,
+  type ScriptDeps,
+  type ValueComponents,
+} from "./utils.js";
 
 /**
  * Interface representing a handler for User Defined Tokens (UDTs).
