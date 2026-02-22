@@ -107,4 +107,7 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
   exit 1
 fi
 
+# Add fork remote for pushing to phroi/ccc (SSH for auth)
+git -C "$REPO_DIR" remote add fork git@github.com:phroi/ccc.git
+
 echo "OK — replay HEAD matches pinned HEAD ($EXPECTED)"
