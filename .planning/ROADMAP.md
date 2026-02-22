@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Build CCC DAO utility (ErrorNervosDaoOutputLimit + assertDaoOutputLimit) and replace all 7 scattered DAO checks
+- [x] 01-01-PLAN.md — Build CCC DAO utility (ErrorNervosDaoOutputLimit + assertDaoOutputLimit) and replace all 7 scattered DAO checks
 - [ ] 01-02-PLAN.md — Remove getHeader()/HeaderKey, inline CCC client calls at all call sites, replace addHeaders with headerDeps push
 - [ ] 01-03-PLAN.md — Delete SmartTransaction + CapacityManager, update all method signatures to TransactionLike, clean SDK
 
@@ -138,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. SmartTransaction Removal (feature-slice) | 0/3 | Planning complete | - |
+| 1. SmartTransaction Removal (feature-slice) | 1/3 | In progress | - |
 | 2. CCC Utility Adoption | 0/2 | Not started | - |
 | 3. CCC Udt Integration Investigation | 0/2 | Not started | - |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
