@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 1 of 7 (SmartTransaction Removal -- feature-slice)
-Plan: 2 of 3 in current phase
-Status: Plan 01-02 complete, proceeding to plan 01-03
-Last activity: 2026-02-22 -- Plan 01-02 executed (getHeader/addHeaders removal)
+Plan: 3 of 3 in current phase (phase complete)
+Status: Phase 01 complete, ready for phase 02
+Last activity: 2026-02-22 -- Plan 01-03 executed (SmartTransaction/CapacityManager deletion)
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 15%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: ~18min
-- Total execution time: 0.6 hours
+- Total plans completed: 3
+- Average duration: ~17min
+- Total execution time: 0.9 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 2/3 | 36min | 18min |
+| 01 | 3/3 | 52min | 17min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~30min), 01-02 (~6min)
+- Last 5 plans: 01-01 (~30min), 01-02 (~6min), 01-03 (~16min)
 - Trend: accelerating
 
 *Updated after each plan completion*
@@ -54,6 +54,10 @@ Recent decisions affecting current work:
 - [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (SmartTransaction still uses internally until Plan 03 deletion)
 - [01-02]: TransactionHeader moved to utils.ts as canonical location for downstream consumers
 - [01-02]: Inlined CCC client calls use explicit null checks with descriptive error messages
+- [01-03]: All manager methods accept ccc.TransactionLike and return ccc.Transaction (TransactionLike pattern)
+- [01-03]: Replaced addUdtHandlers with tx.addCellDeps(this.udtHandler.cellDeps) across all packages
+- [01-03]: SmartTransaction class and CapacityManager class fully deleted from @ickb/utils
+- [01-03]: SDK getCkb() uses direct client.findCellsOnChain instead of CapacityManager
 
 ### Pending Todos
 
@@ -67,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 01-02-PLAN.md
-Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-02-SUMMARY.md
+Stopped at: Completed 01-03-PLAN.md (Phase 01 complete)
+Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-03-SUMMARY.md

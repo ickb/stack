@@ -9,11 +9,11 @@ Requirements for initial milestone. Each maps to roadmap phases.
 
 ### SmartTransaction Removal
 
-- [ ] **SMTX-01**: All manager method signatures across all 5 library packages accept `ccc.TransactionLike` instead of `SmartTransaction`, following CCC's convention (TransactionLike input, Transaction output); `CapacityManager` is deleted (not migrated)
-- [ ] **SMTX-02**: `SmartTransaction` class and its `completeFee()` override are deleted from `@ickb/utils`
+- [x] **SMTX-01**: All manager method signatures across all 5 library packages accept `ccc.TransactionLike` instead of `SmartTransaction`, following CCC's convention (TransactionLike input, Transaction output); `CapacityManager` is deleted (not migrated)
+- [x] **SMTX-02**: `SmartTransaction` class and its `completeFee()` override are deleted from `@ickb/utils`
 - [ ] **SMTX-03**: Fee completion uses CCC-native `ccc.Transaction.completeFeeBy()` or `completeFeeChangeToLock()` with DAO-aware capacity calculation
 - [x] **SMTX-04**: `getHeader()` function and `HeaderKey` type are removed from `@ickb/utils`; all call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); header caching handled transparently by `ccc.Client.cache`
-- [ ] **SMTX-05**: UDT handler registration (`addUdtHandlers()`) is replaced by direct `Udt` instance usage or standalone utility functions
+- [x] **SMTX-05**: UDT handler registration (`addUdtHandlers()`) is replaced by direct `Udt` instance usage or standalone utility functions
 - [x] **SMTX-06**: 64-output NervosDAO limit check is consolidated into a single utility function (currently scattered across 6 locations)
 - [ ] **SMTX-07**: `IckbUdtManager` multi-representation UDT balance logic (xUDT + receipts + deposits) survives removal intact -- conservation law `Input UDT + Input Receipts = Output UDT + Input Deposits` is preserved
 - [ ] **SMTX-08**: `IckbSdk.estimate()` and `IckbSdk.maturity()` continue working after SmartTransaction removal
@@ -81,11 +81,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status | Notes |
 |-------------|-------|--------|-------|
-| SMTX-01 | Phase 1 | Pending | Feature-slice: all signatures migrated to TransactionLike across all packages |
-| SMTX-02 | Phase 1 | Pending | |
+| SMTX-01 | Phase 1 | Complete | All signatures migrated to TransactionLike across all packages (01-03) |
+| SMTX-02 | Phase 1 | Complete | SmartTransaction class deleted from @ickb/utils (01-03) |
 | SMTX-03 | Phase 6 | Pending | |
 | SMTX-04 | Phase 1 | Complete | getHeader()/HeaderKey removed, CCC client calls inlined |
-| SMTX-05 | Phase 4, 5 | Pending | addUdtHandlers() removed in Phase 1; replacement pattern finalized in Phase 4-5 after Phase 3 decision |
+| SMTX-05 | Phase 1, 4, 5 | Complete | addUdtHandlers() replaced with tx.addCellDeps(udtHandler.cellDeps) (01-03); UdtHandler/UdtManager replacement deferred to Phase 4-5 |
 | SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via ccc-dev/ (01-01) |
 | SMTX-07 | Phase 5 | Pending | |
 | SMTX-08 | Phase 6 | Pending | |
@@ -109,4 +109,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-22 after 01-01 execution (SMTX-06 completed)*
+*Last updated: 2026-02-22 after 01-03 execution (SMTX-01, SMTX-02, SMTX-05 completed; Phase 1 complete)*
