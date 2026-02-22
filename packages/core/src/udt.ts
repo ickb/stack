@@ -1,12 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ReceiptData } from "./entities.js";
 import type { DaoManager } from "@ickb/dao";
-import {
-  UdtManager,
-  type ExchangeRatio,
-  type SmartTransaction,
-  type UdtHandler,
-} from "@ickb/utils";
+import { UdtManager, type ExchangeRatio, type UdtHandler } from "@ickb/utils";
 
 /**
  * IckbUdtManager is a class that implements the UdtHandler interface.
@@ -63,15 +58,16 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
    * for a given transaction.
    *
    * @param client - The CKB client to query cell data.
-   * @param tx - The smart transaction whose inputs are to be balanced.
+   * @param txLike - The transaction whose inputs are to be balanced.
    * @returns A promise resolving to a tuple:
    *   - [0]: Total iCKB UDT amount in inputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT-related inputs (as `ccc.FixedPoint`).
    */
   override async getInputsUdtBalance(
     client: ccc.Client,
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
   ): Promise<[ccc.FixedPoint, ccc.FixedPoint]> {
+    const tx = ccc.Transaction.from(txLike);
     return ccc.reduceAsync(
       tx.inputs,
       async (acc, input) => {
@@ -104,31 +100,36 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
 
         // An iCKB Receipt
         if (this.logicScript.eq(type)) {
-          // Get header of Receipt cell and check its inclusion in HeaderDeps
-          const header = await tx.getHeader(client, {
-            type: "txHash",
-            value: outPoint.txHash,
-          });
+          // Get header of Receipt cell
+          const txWithHeader = await client.getTransactionWithHeader(
+            outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
 
           const { depositQuantity, depositAmount } =
             ReceiptData.decode(outputData);
 
           return [
-            udtValue + ickbValue(depositAmount, header) * depositQuantity,
+            udtValue +
+              ickbValue(depositAmount, txWithHeader.header) * depositQuantity,
             capacity + cellOutput.capacity,
           ];
         }
 
         // An iCKB Deposit for which the withdrawal is being requested
         if (this.logicScript.eq(lock) && this.daoManager.isDeposit(cell)) {
-          // Get header of Deposit cell and check its inclusion in HeaderDeps
-          const header = await tx.getHeader(client, {
-            type: "txHash",
-            value: outPoint.txHash,
-          });
+          // Get header of Deposit cell
+          const txWithHeader = await client.getTransactionWithHeader(
+            outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
 
           return [
-            udtValue - ickbValue(cell.capacityFree, header),
+            udtValue - ickbValue(cell.capacityFree, txWithHeader.header),
             capacity + cellOutput.capacity,
           ];
         }

@@ -1,9 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import {
-  getHeader,
-  type TransactionHeader,
-  type ValueComponents,
-} from "@ickb/utils";
+import { type TransactionHeader, type ValueComponents } from "@ickb/utils";
 
 /**
  * Represents a DAO cell with its associated properties.
@@ -83,36 +79,39 @@ export async function daoCellFrom(
 
   const tip = options.tip;
   const txHash = cell.outPoint.txHash;
-  const oldest =
-    "headers" in options
-      ? options.headers[0]
-      : !isDeposit
-        ? {
-            header: await getHeader(options.client, {
-              type: "number",
-              value: mol.Uint64LE.decode(cell.outputData),
-            }),
-          }
-        : {
-            header: await getHeader(options.client, {
-              type: "txHash",
-              value: txHash,
-            }),
-            txHash,
-          };
+  let oldest: TransactionHeader;
+  if ("headers" in options) {
+    oldest = options.headers[0];
+  } else if (!isDeposit) {
+    const header = await options.client.getHeaderByNumber(
+      mol.Uint64LE.decode(cell.outputData),
+    );
+    if (!header) {
+      throw new Error("Header not found for block number");
+    }
+    oldest = { header };
+  } else {
+    const txWithHeader =
+      await options.client.getTransactionWithHeader(txHash);
+    if (!txWithHeader?.header) {
+      throw new Error("Header not found for txHash");
+    }
+    oldest = { header: txWithHeader.header, txHash };
+  }
 
-  const newest =
-    "headers" in options
-      ? options.headers[1]
-      : !isDeposit
-        ? {
-            header: await getHeader(options.client, {
-              type: "txHash",
-              value: txHash,
-            }),
-            txHash,
-          }
-        : { header: tip };
+  let newest: TransactionHeader;
+  if ("headers" in options) {
+    newest = options.headers[1];
+  } else if (!isDeposit) {
+    const txWithHeader =
+      await options.client.getTransactionWithHeader(txHash);
+    if (!txWithHeader?.header) {
+      throw new Error("Header not found for txHash");
+    }
+    newest = { header: txWithHeader.header, txHash };
+  } else {
+    newest = { header: tip };
+  }
 
   const interests = ccc.calcDaoProfit(
     cell.capacityFree,

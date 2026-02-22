@@ -3,7 +3,6 @@ import { DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
   type ScriptDeps,
-  type SmartTransaction,
   type UdtHandler,
   unique,
 } from "@ickb/utils";
@@ -60,19 +59,21 @@ export class LogicManager implements ScriptDeps {
   /**
    * Processes a deposit transaction.
    *
-   * @param tx - The transaction to add the deposit to.
+   * @param txLike - The transaction to add the deposit to.
    * @param depositQuantity - The quantity of deposits.
    * @param depositAmount - The amount of each deposit.
    * @param lock - The lock script for the output receipt cell.
    */
-  deposit(
-    tx: SmartTransaction,
+  async deposit(
+    txLike: ccc.TransactionLike,
     depositQuantity: number,
     depositAmount: ccc.FixedPoint,
     lock: ccc.Script,
-  ): void {
+    client: ccc.Client,
+  ): Promise<ccc.Transaction> {
+    let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {
-      return;
+      return tx;
     }
 
     if (depositAmount < ccc.fixedPointFrom(1082)) {
@@ -84,13 +85,13 @@ export class LogicManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const capacities = Array.from(
       { length: depositQuantity },
       () => depositAmount,
     );
-    this.daoManager.deposit(tx, capacities, this.script);
+    tx = await this.daoManager.deposit(tx, capacities, this.script, client);
 
     // Add the Receipt to the outputs
     tx.addOutput(
@@ -101,32 +102,39 @@ export class LogicManager implements ScriptDeps {
       ReceiptData.encode({ depositQuantity, depositAmount }),
     );
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
    * Completes a deposit transaction by transforming the receipts into iCKB UDTs.
    *
-   * @param tx - The transaction to add the receipts to.
+   * @param txLike - The transaction to add the receipts to.
    * @param receipts - The receipts to add to the transaction.
    */
-  completeDeposit(tx: SmartTransaction, receipts: ReceiptCell[]): void {
+  completeDeposit(
+    txLike: ccc.TransactionLike,
+    receipts: ReceiptCell[],
+  ): ccc.Transaction {
+    const tx = ccc.Transaction.from(txLike);
     if (receipts.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addUdtHandlers(this.udtHandler);
+    tx.addCellDeps(this.udtHandler.cellDeps);
 
-    tx.addHeaders(receipts.map((r) => r.header));
+    for (const r of receipts) {
+      const hash = r.header.header.hash;
+      if (!tx.headerDeps.some((h) => h === hash)) {
+        tx.headerDeps.push(hash);
+      }
+    }
 
     for (const { cell } of receipts) {
       tx.addInput(cell);
     }
+    return tx;
   }
 
   /**

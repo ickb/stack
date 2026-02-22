@@ -3,7 +3,6 @@ import {
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
-  type SmartTransaction,
 } from "@ickb/utils";
 import { daoCellFrom, type DaoCell } from "./cells.js";
 
@@ -68,18 +67,21 @@ export class DaoManager implements ScriptDeps {
   /**
    * Adds a deposit to a transaction.
    *
-   * @param tx - The transaction to which the deposit will be added.
+   * @param txLike - The transaction to which the deposit will be added.
    * @param capacities - An array of capacities of the deposits to create.
    * @param lock - The lock script for the outputs.
-   * @returns void.
+   * @param client - The CKB client for DAO output limit validation.
+   * @returns The updated transaction.
    */
-  deposit(
-    tx: SmartTransaction,
+  async deposit(
+    txLike: ccc.TransactionLike,
     capacities: ccc.FixedPoint[],
     lock: ccc.Script,
-  ): void {
+    client: ccc.Client,
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     if (capacities.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
@@ -95,17 +97,14 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
    * Requests withdrawal from NervosDAO deposits.
    *
-   * @param tx - The transaction to which the withdrawal request will be added.
+   * @param txLike - The transaction to which the withdrawal request will be added.
    * @param deposits - An array of deposits to request the withdrawal from.
    * @param lock - The lock script for the withdrawal request cells.
    * @param options - Optional parameters for the withdrawal request.
@@ -116,22 +115,24 @@ export class DaoManager implements ScriptDeps {
    * @throws Error if the withdrawal request lock args have a different size from the deposit.
    * @throws Error if the transaction or header of deposit is not found.
    */
-  requestWithdrawal(
-    tx: SmartTransaction,
+  async requestWithdrawal(
+    txLike: ccc.TransactionLike,
     deposits: DaoCell[],
     lock: ccc.Script,
+    client: ccc.Client,
     options?: {
       sameSizeOnly?: boolean;
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     const sameSizeOnly = options?.sameSizeOnly ?? true;
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       deposits = deposits.filter((d) => d.isReady);
     }
     if (deposits.length === 0) {
-      return;
+      return tx;
     }
 
     if (
@@ -157,7 +158,10 @@ export class DaoManager implements ScriptDeps {
 
       tx.addCellDeps(this.cellDeps);
       const depositHeader = headers[0];
-      tx.addHeaders(depositHeader);
+      const depositHash = depositHeader.header.hash;
+      if (!tx.headerDeps.some((h) => h === depositHash)) {
+        tx.headerDeps.push(depositHash);
+      }
       tx.addInput(cell);
       tx.addOutput(
         {
@@ -169,36 +173,35 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**
    * Withdraws funds from the NervosDAO based on the provided mature withdrawal requests.
    *
-   * @param tx - The transaction to which the withdrawal will be added.
+   * @param txLike - The transaction to which the withdrawal will be added.
    * @param withdrawalRequests - An array of withdrawal requests to process.
    * @param options - Optional parameters for the withdrawal process.
    * @param options.isReadyOnly - Whether to only process ready withdrawal requests (default: false).
    * @returns void
    * @throws Error if the withdrawal request is not valid.
    */
-  withdraw(
-    tx: SmartTransaction,
+  async withdraw(
+    txLike: ccc.TransactionLike,
     withdrawalRequests: DaoCell[],
+    client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): void {
+  ): Promise<ccc.Transaction> {
+    const tx = ccc.Transaction.from(txLike);
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       withdrawalRequests = withdrawalRequests.filter((d) => d.isReady);
     }
     if (withdrawalRequests.length === 0) {
-      return;
+      return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
@@ -213,7 +216,12 @@ export class DaoManager implements ScriptDeps {
       if (isDeposit) {
         throw new Error("Not a withdrawal request");
       }
-      tx.addHeaders(headers);
+      for (const th of headers) {
+        const hash = th.header.hash;
+        if (!tx.headerDeps.some((h) => h === hash)) {
+          tx.headerDeps.push(hash);
+        }
+      }
       const depositHeader = headers[0];
       const headerIndex = tx.headerDeps.findIndex(
         (h) => h === depositHeader.header.hash,
@@ -240,11 +248,8 @@ export class DaoManager implements ScriptDeps {
       tx.setWitnessArgsAt(inputIndex, witness);
     }
 
-    // Check that there are at most 64 output cells, see:
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#gotchas
-    if (tx.outputs.length > 64) {
-      throw new Error("More than 64 output cells in a NervosDAO transaction");
-    }
+    await ccc.assertDaoOutputLimit(tx, client);
+    return tx;
   }
 
   /**

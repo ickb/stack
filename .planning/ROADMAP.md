@@ -12,7 +12,7 @@ This roadmap delivers the v1 milestone: removing the abandoned SmartTransaction 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: SmartTransaction Removal (feature-slice)** - Delete SmartTransaction class and infrastructure across all packages; contribute 64-output DAO limit check to CCC core; migrate all method signatures to ccc.TransactionLike
+- [x] **Phase 1: SmartTransaction Removal (feature-slice)** - Delete SmartTransaction class and infrastructure across all packages; contribute 64-output DAO limit check to CCC core; migrate all method signatures to ccc.TransactionLike
 - [ ] **Phase 2: CCC Utility Adoption** - Replace local utility functions that duplicate CCC equivalents across all packages; preserve iCKB-unique utilities
 - [ ] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
 - [ ] **Phase 4: Deprecated CCC API Replacement** - Replace deprecated CCC API calls (`udtBalanceFrom`, etc.) with `@ckb-ccc/udt` equivalents in dao and order packages; finalize UDT handler replacement pattern based on Phase 3 findings
@@ -33,12 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A 64-output NervosDAO limit check exists in CCC core (via `ccc-dev/`): `completeFee()` safety net, standalone async utility, and `ErrorNervosDaoOutputLimit` error class; all 6+ scattered checks across dao/core packages are replaced with calls to this CCC utility
   5. ALL manager method signatures across ALL 5 library packages accept `ccc.TransactionLike` instead of `SmartTransaction`, following CCC's convention (TransactionLike input, Transaction output with `Transaction.from()` conversion at entry point)
   6. `pnpm check:full` passes after each feature-slice removal step — no intermediate broken states
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [x] 01-01-PLAN.md — Build CCC DAO utility (ErrorNervosDaoOutputLimit + assertDaoOutputLimit) and replace all 7 scattered DAO checks
+- [x] 01-02-PLAN.md — Remove getHeader()/HeaderKey, inline CCC client calls at all call sites, replace addHeaders with headerDeps push
+- [x] 01-03-PLAN.md — Delete SmartTransaction + CapacityManager, update all method signatures to TransactionLike, clean SDK
 
 ### Phase 2: CCC Utility Adoption
 **Goal**: Local utility functions that duplicate CCC core functionality are replaced with CCC equivalents across all packages; iCKB-unique utilities are explicitly preserved
@@ -138,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. SmartTransaction Removal (feature-slice) | 0/3 | Not started | - |
+| 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
 | 2. CCC Utility Adoption | 0/2 | Not started | - |
 | 3. CCC Udt Integration Investigation | 0/2 | Not started | - |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |

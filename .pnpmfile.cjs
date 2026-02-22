@@ -2,7 +2,7 @@
 //
 // 1. Auto-replay: clone + patch CCC on first `pnpm install` (if pins exist).
 //    replay.sh handles git clone, merge replay, lockfile removal, and source
-//    patching (jq exports rewrite + @ts-nocheck). It does NOT run pnpm install
+//    patching (jq exports rewrite). It does NOT run pnpm install
 //    internally — the root workspace install handles CCC deps alongside
 //    everything else.
 //
@@ -24,7 +24,10 @@ const cccCache = join(__dirname, "ccc-dev", "ccc");
 const cccRefs = join(__dirname, "ccc-dev", "pins", "REFS");
 
 // 1. Auto-replay CCC pins on first pnpm install
-if (!existsSync(cccCache) && existsSync(cccRefs)) {
+//    Skip when ccc:record is running — it rebuilds pins from scratch.
+//    Detect via argv since pnpmfile loads before npm_lifecycle_event is set.
+const isCccRecord = process.argv.some((a) => a === "ccc:record");
+if (!isCccRecord && !existsSync(cccCache) && existsSync(cccRefs)) {
   try {
     execSync("bash ccc-dev/replay.sh", {
       cwd: __dirname,

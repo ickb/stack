@@ -1,9 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  getHeader,
-  type TransactionHeader,
-  type ValueComponents,
-} from "@ickb/utils";
+import { type TransactionHeader, type ValueComponents } from "@ickb/utils";
 import { OwnerData, ReceiptData } from "./entities.js";
 import { ickbValue } from "./udt.js";
 import { daoCellFrom, type DaoCell } from "@ickb/dao";
@@ -80,11 +76,13 @@ export async function receiptCellFrom(
   }
 
   const txHash = cell.outPoint.txHash;
-  const header = {
-    header: await getHeader(options.client, {
-      type: "txHash",
-      value: txHash,
-    }),
+  const txWithHeader =
+    await options.client.getTransactionWithHeader(txHash);
+  if (!txWithHeader?.header) {
+    throw new Error("Header not found for txHash");
+  }
+  const header: TransactionHeader = {
+    header: txWithHeader.header,
     txHash,
   };
   const { depositQuantity, depositAmount } = ReceiptData.decode(

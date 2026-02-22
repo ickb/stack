@@ -1,6 +1,35 @@
 import { ccc } from "@ckb-ccc/core";
 
 /**
+ * The default upper limit on the number of cells to return when querying the chain.
+ *
+ * This limit is aligned with Nervos CKB's pull request #4576
+ * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
+ *
+ * @remarks
+ * When searching for cells, callers may override this limit
+ * by passing a custom `limit` in their options. If no override is provided,
+ * this constant controls how many cells will be fetched in a single batch.
+ */
+export const defaultFindCellsLimit = 400;
+
+/**
+ * Represents a transaction header that includes a block header and an optional transaction hash.
+ */
+export interface TransactionHeader {
+  /**
+   * The block header associated with the transaction, represented as `ccc.ClientBlockHeader`.
+   */
+  header: ccc.ClientBlockHeader;
+
+  /**
+   * An optional transaction hash associated with the transaction, represented as `ccc.Hex`.
+   * This property may be undefined if the transaction hash is not applicable.
+   */
+  txHash?: ccc.Hex;
+}
+
+/**
  * Represents the components of a value, including CKB and UDT amounts.
  */
 export interface ValueComponents {
@@ -46,67 +75,6 @@ export interface ScriptDeps {
    * @type {ccc.CellDep[]}
    */
   cellDeps: ccc.CellDep[];
-}
-
-/**
- * Represents a key for retrieving a block header.
- *
- * The `HeaderKey` can be one of three shapes:
- *
- * 1. For hash type:
- *    - `type`: Indicates that the header key is a block hash type, which is "hash".
- *    - `value`: The value associated with the header key, represented as `ccc.Hex`.
- *
- * 2. For number type:
- *    - `type`: Indicates that the header key is a block number type, which is "number".
- *    - `value`: The value associated with the header key, represented as `ccc.Num`.
- *
- * 3. For transaction hash type:
- *    - `type`: Indicates that the header key is a transaction hash type, which is "txHash".
- *    - `value`: The value associated with the header key, represented as `ccc.Hex`.
- */
-export type HeaderKey =
-  | {
-      type: "hash";
-      value: ccc.Hex;
-    }
-  | {
-      type: "number";
-      value: ccc.Num;
-    }
-  | {
-      type: "txHash";
-      value: ccc.Hex;
-    };
-
-/**
- * Retrieves the block header based on the provided header key.
- *
- * @param client - An instance of `ccc.Client` used to interact with the blockchain.
- * @param headerKey - An object of type `HeaderKey` that specifies how to retrieve the header.
- * @returns A promise that resolves to a `ccc.ClientBlockHeader` representing the block header.
- * @throws Error if the header is not found for the given header key.
- */
-export async function getHeader(
-  client: ccc.Client,
-  headerKey: HeaderKey,
-): Promise<ccc.ClientBlockHeader> {
-  const { type, value } = headerKey;
-  let header: ccc.ClientBlockHeader | undefined = undefined;
-  if (type === "hash") {
-    header = await client.getHeaderByHash(value);
-  } else if (type === "number") {
-    header = await client.getHeaderByNumber(value);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  } else if (type === "txHash") {
-    header = (await client.getTransactionWithHeader(value))?.header;
-  }
-
-  if (!header) {
-    throw new Error("Header not found");
-  }
-
-  return header;
 }
 
 /**

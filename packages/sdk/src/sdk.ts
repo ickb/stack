@@ -1,12 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   collect,
-  CapacityManager,
-  SmartTransaction,
   binarySearch,
+  unique,
   type ValueComponents,
   hexFrom,
-  getHeader,
 } from "@ickb/utils";
 import {
   convert,
@@ -35,14 +33,12 @@ export class IckbSdk {
    * @param ownedOwner - The manager for owned owner operations.
    * @param ickbLogic - The manager for iCKB logic operations.
    * @param order - The manager for order operations.
-   * @param capacity - The capacity manager instance.
    * @param bots - An array of bot lock scripts.
    */
   constructor(
     private readonly ownedOwner: OwnedOwnerManager,
     private readonly ickbLogic: LogicManager,
     private readonly order: OrderManager,
-    private readonly capacity: CapacityManager,
     private readonly bots: ccc.Script[],
   ) {}
 
@@ -54,11 +50,11 @@ export class IckbSdk {
    */
   static from(...args: Parameters<typeof getConfig>): IckbSdk {
     const {
-      managers: { ownedOwner, logic, order, capacity },
+      managers: { ownedOwner, logic, order },
       bots,
     } = getConfig(...args);
 
-    return new IckbSdk(ownedOwner, logic, order, capacity, bots);
+    return new IckbSdk(ownedOwner, logic, order, bots);
   }
 
   /**
@@ -216,7 +212,7 @@ export class IckbSdk {
    * - Adds required cell dependencies and UDT handlers to the transaction.
    * - Appends the order cell to the transaction outputs.
    *
-   * @param tx - The smart transaction to which the order cell is added.
+   * @param txLike - The transaction to which the order cell is added.
    * @param user - The user, represented either as a Signer or a Script.
    * @param info - The order information meta data (usually computed via OrderManager.convert).
    * @param amounts - The value components for the order, including:
@@ -226,18 +222,18 @@ export class IckbSdk {
    * @returns A Promise resolving to void.
    */
   async request(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     user: ccc.Signer | ccc.Script,
     info: Info,
     amounts: ValueComponents,
-  ): Promise<void> {
+  ): Promise<ccc.Transaction> {
     // If the user is provided as a Signer, extract the recommended lock script.
     user =
       "codeHash" in user
         ? user
         : (await user.getRecommendedAddressObj()).script;
 
-    this.order.mint(tx, user, info, amounts);
+    return this.order.mint(txLike, user, info, amounts);
   }
 
   /**
@@ -247,7 +243,7 @@ export class IckbSdk {
    * it filters accordingly. Then, for every valid group, the master and order cells are added
    * as inputs to the transaction.
    *
-   * @param tx - The smart transaction to which the inputs are added.
+   * @param txLike - The transaction to which the inputs are added.
    * @param groups - An array of order groups to be melted.
    * @param options - Optional parameters:
    *    - isFulfilledOnly: If true, only order groups with fully or partially fulfilled orders are processed.
@@ -255,13 +251,13 @@ export class IckbSdk {
    * @returns void
    */
   collect(
-    tx: SmartTransaction,
+    txLike: ccc.TransactionLike,
     groups: OrderGroup[],
     options?: {
       isFulfilledOnly?: boolean;
     },
-  ): void {
-    this.order.melt(tx, groups, options);
+  ): ccc.Transaction {
+    return this.order.melt(txLike, groups, options);
   }
 
   /**
@@ -373,26 +369,46 @@ export class IckbSdk {
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
-    for await (const c of this.capacity.findCapacities(
-      client,
-      this.bots,
-      opts,
-    )) {
-      const key = hexFrom(c.cell.cellOutput.lock);
-      const ckb = (bot2Ckb.get(key) ?? reserved) + c.ckbValue;
-      bot2Ckb.set(key, ckb);
+    for (const lock of unique(this.bots)) {
+      for await (const cell of client.findCellsOnChain(
+        {
+          script: lock,
+          scriptType: "lock",
+          filter: {
+            scriptLenRange: [0n, 1n],
+          },
+          scriptSearchMode: "exact",
+          withData: true,
+        },
+        "asc",
+        400,
+      )) {
+        if (
+          cell.cellOutput.type !== undefined ||
+          !cell.cellOutput.lock.eq(lock)
+        ) {
+          continue;
+        }
 
-      // Find the most recent deposit pool snapshot from bot cell output data.
-      const outputData = c.cell.outputData;
-      if (outputData.length % 256 === 2) {
-        const h = await getHeader(client, {
-          type: "txHash",
-          value: c.cell.outPoint.txHash,
-        });
-        const e = ccc.Epoch.from(h.epoch);
-        if (poolSnapshotEpoch.compare(e) < 0) {
-          poolSnapshotHex = outputData;
-          poolSnapshotEpoch = e;
+        const key = hexFrom(cell.cellOutput.lock);
+        const ckb =
+          (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
+        bot2Ckb.set(key, ckb);
+
+        // Find the most recent deposit pool snapshot from bot cell output data.
+        const outputData = cell.outputData;
+        if (outputData.length % 256 === 2) {
+          const txWithHeader = await client.getTransactionWithHeader(
+            cell.outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
+          const e = ccc.Epoch.from(txWithHeader.header.epoch);
+          if (poolSnapshotEpoch.compare(e) < 0) {
+            poolSnapshotHex = outputData;
+            poolSnapshotEpoch = e;
+          }
         }
       }
     }
