@@ -1,23 +1,27 @@
 # AI Coworker Configuration
 
-This file is the tool-agnostic agent config:
+## Meta
 
 - **Learn**: When a non-obvious constraint causes a failure, leave a concise note here and a detailed comment at the relevant location
+- `CLAUDE.md` is a symlink to this file, created by `pnpm coworker`
 - Refer to yourself as "AI Coworker" in docs and comments, not by product or company name
 - Never add AI tool attribution or branding to PR descriptions, commit messages, or code comments
 - Do not install or use `gh` CLI
+
+## Workflows
+
 - **Routine Pre-PR Validation**: `pnpm check:full`, it wipes derived state and regenerates from scratch. If `ccc-dev/ccc/` has pending work, the wipe is skipped to prevent data loss — re-record or push CCC changes first for a clean validation
-- **Open a PR**: Push the branch, then construct and present a GitHub compare URL
-  (`quick_pull=1`) to the user. Base branch is `master`. Prefill "title" (concise, under 70 chars) and "body" (markdown with ## Why and ## Changes sections)
+- **Open a PR**: Push the branch, then present a clickable markdown link `[title](url)` where the URL is a GitHub compare URL (`quick_pull=1`). Base branch is `master`. Prefill "title" (concise, under 70 chars) and "body" (markdown with ## Why and ## Changes sections)
 - **Fetch PR review comments**: Use the GitHub REST API via curl. Fetch all three comment types (issue comments, reviews, and inline comments). Reviewers reply asynchronously — poll every minute until comments arrive
 - **Copy to clipboard**:
-  ```
+
+  ```sh
   head -c -1 <<'EOF' | wl-copy
   content goes here
   EOF
   ```
 
-# CCC Local Development (ccc-dev/)
+## CCC Local Development (ccc-dev/)
 
 The `ccc-dev/` system uses a record/replay mechanism for deterministic builds of a local CCC fork:
 
@@ -29,10 +33,14 @@ The `ccc-dev/` system uses a record/replay mechanism for deterministic builds of
 - `ccc-dev/patch.sh` rewrites CCC package exports to point at `.ts` source instead of `.d.ts`, then creates a deterministic git commit (fixed author/date) so record and replay produce the same `pins/HEAD` hash. This is why imports from `@ckb-ccc/*` resolve to TypeScript source files inside `node_modules` — it is not a bug
 - `ccc-dev/tsgo-filter.sh` is a bash wrapper around `tsgo` that filters out diagnostics originating from `ccc-dev/ccc/`. CCC source does not satisfy this repo's strict tsconfig (`verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noImplicitOverride`), so the wrapper suppresses those errors while still reporting errors in stack source
 
-# Reference Repos
+## Reference Repos
 
 `reference/` contains read-only clones (project knowledge, dependency sources, etc.) fetched via `pnpm reference`. To refresh, delete the directory and re-run `pnpm reference`
 
-# Versioning
+## Versioning
 
 All packages use version `1001.0.0` (Epoch Semantic Versioning), managed by changesets (`pnpm changeset`)
+
+## Knowledge
+
+- Always compare CKB scripts using full `Script.eq()` (codeHash + hashType + args), never just `codeHash`. Partial comparison silently matches wrong scripts

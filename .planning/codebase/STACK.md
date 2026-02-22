@@ -73,6 +73,13 @@
 packages:
   - packages/*
   - apps/*
+  - ccc-dev/ccc/packages/*
+  - "!ccc-dev/ccc/packages/demo"
+  - "!ccc-dev/ccc/packages/docs"
+  - "!ccc-dev/ccc/packages/examples"
+  - "!ccc-dev/ccc/packages/faucet"
+  - "!ccc-dev/ccc/packages/playground"
+  - "!ccc-dev/ccc/packages/tests"
 
 catalog:
   '@ckb-ccc/core': ^1.12.2
@@ -109,7 +116,7 @@ The repo supports using a local development build of CCC for testing unpublished
 
 **`.pnpmfile.cjs`:**
 - A pnpm `readPackage` hook that auto-discovers all packages in `ccc-dev/ccc/packages/*/package.json`
-- When `ccc-dev/ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `link:` references to the local build
+- When `ccc-dev/ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `workspace:*` (CCC packages are listed in `pnpm-workspace.yaml`, but catalog specifiers resolve to semver ranges before workspace linking, so the hook forces `workspace:*` to ensure local packages are used)
 - Applies to `dependencies`, `devDependencies`, and `optionalDependencies`
 - Effect: all workspace packages transparently use the local CCC build instead of npm versions
 

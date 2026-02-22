@@ -104,10 +104,9 @@ The refactored architecture replaces `SmartTransaction` (a subclass of `ccc.Tran
 |                     Utilities Layer                                  |
 |  +---------------------------------------------------------------+ |
 |  |              @ickb/utils                                      | |
-|  |  addCellDeps() | getHeader() utilities                        | |
 |  |  collect() | unique() | binarySearch() | MinHeap              | |
 |  |  (NO SmartTransaction, NO UdtHandler, NO UdtManager,         | |
-|  |   NO CapacityManager -- replaced by CCC completeInputs*)     | |
+|  |   NO CapacityManager, NO getHeader()/HeaderKey)               | |
 |  +---------------------------------------------------------------+ |
 |                              |                                      |
 +------------------------------+--------------------------------------+
@@ -132,7 +131,7 @@ Current state: `SmartTransaction extends ccc.Transaction` adding:
 - Overrides `getInputsUdtBalance()`/`getOutputsUdtBalance()` to delegate to handlers
 - Overrides `getInputsCapacity()` to account for DAO withdrawal profit
 
-Target: All manager methods accept `ccc.Transaction` instead of `SmartTransaction`. Each concern migrates to a different place:
+Target: All manager methods accept `ccc.TransactionLike` instead of `SmartTransaction` (following CCC's convention: TransactionLike input, Transaction output). Each concern migrates to a different place:
 
 | SmartTransaction feature | Replacement |
 |---|---|
@@ -140,8 +139,8 @@ Target: All manager methods accept `ccc.Transaction` instead of `SmartTransactio
 | `completeFee()` override that calls UDT handlers | App-level orchestration: call `ickbUdt.completeBy(tx, signer)` then `tx.completeFeeBy(signer)` |
 | `getInputsUdtBalance()`/`getOutputsUdtBalance()` overrides | `IckbUdt.getInputsInfo(client, tx)` / `IckbUdt.getOutputsInfo(client, tx)` |
 | `getInputsCapacity()` DAO profit override | Not needed -- CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `Cell.getDaoProfit()` |
-| `headers` map + `addHeaders()` + `getHeader()` | CCC's Client Cache (already caches headers). For header-dependent operations, pass headers explicitly or use client.getHeader() |
-| `addCellDeps()` deduplication | Utility function `addCellDeps(tx, deps)` (simple, no class needed) |
+| `headers` map + `addHeaders()` + `getHeader()` | Removed entirely. `getHeader()` call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`). `addHeaders()` call sites push to `tx.headerDeps` directly. CCC's Client Cache handles caching transparently |
+| `addCellDeps()` deduplication | `tx.addCellDeps()` (already on `ccc.Transaction`) |
 | `SmartTransaction.default()` | `ccc.Transaction.default()` |
 
 **2. CCC Udt Adoption for iCKB**
@@ -245,7 +244,7 @@ This approach works because:
 - The `completeBy()` and `completeChangeToLock()` methods automatically work with the overridden balance calculation
 - Input outpoints are available in `tx.inputs`, enabling header fetching for receipt/deposit value calculation
 
-**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (UDT Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
+**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (CCC Udt Integration Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
 
 **3. DAO Capacity Calculation**
 
@@ -255,7 +254,7 @@ This approach works because:
 
 | Component | Owns | Does NOT Own |
 |-----------|------|-------------|
-| `@ickb/utils` | `addCellDeps()` utility, `getHeader()` utility, `collect()`, `unique()`, `binarySearch()`, `MinHeap`, `BufferedGenerator`, codec utilities | No SmartTransaction, no UdtHandler, no UdtManager, no CapacityManager (replaced by CCC's `completeInputsByCapacity`), no header caching |
+| `@ickb/utils` | `collect()`, `unique()`, `binarySearch()`, `MinHeap`, `BufferedGenerator`, codec utilities | No SmartTransaction, no UdtHandler, no UdtManager, no CapacityManager, no `getHeader()`/`HeaderKey` (all removed; CCC equivalents used directly) |
 | `@ickb/dao` | `DaoManager` (deposit/withdraw/requestWithdrawal/find operations), `DaoCell` wrapping | No UDT concerns, no DAO capacity utility (CCC handles natively) |
 | `@ickb/order` | `OrderManager` (convert/mint/match/melt/find), `OrderMatcher`, `OrderCell`/`MasterCell`/`OrderGroup`, `Info`/`Ratio`/`OrderData` entities | No direct UDT balancing (delegates to UDT handler) |
 | `@ickb/core` | `LogicManager` (deposit/completeDeposit/findReceipts/findDeposits), `OwnedOwnerManager`, `IckbUdt extends udt.Udt` (triple-representation balancing), iCKB exchange rate math | No generic UDT handling |
@@ -336,18 +335,18 @@ orderManager.mint(tx: SmartTransaction, lock, info, amounts): void
 logicManager.deposit(tx: SmartTransaction, qty, amount, lock): void
 ```
 
-**After (plain ccc.Transaction):**
+**After (plain ccc.TransactionLike / ccc.Transaction):**
 ```typescript
-// All managers accept plain ccc.Transaction
-daoManager.deposit(tx: ccc.Transaction, capacities, lock): void
-orderManager.mint(tx: ccc.Transaction, lock, info, amounts): void
-logicManager.deposit(tx: ccc.Transaction, qty, amount, lock): void
+// All managers accept ccc.TransactionLike, return ccc.Transaction (CCC convention)
+daoManager.deposit(tx: ccc.TransactionLike, capacities, lock): ccc.Transaction
+orderManager.mint(tx: ccc.TransactionLike, lock, info, amounts): ccc.Transaction
+logicManager.deposit(tx: ccc.TransactionLike, qty, amount, lock): ccc.Transaction
 ```
 
 The key difference: managers no longer call `tx.addUdtHandlers()` or `tx.addHeaders()`. Instead:
 - CellDeps are added via `tx.addCellDeps()` (already exists on `ccc.Transaction`)
 - UDT completion is handled by the caller at transaction completion time
-- Headers are fetched from the client cache or passed explicitly when needed
+- Headers are fetched via inlined CCC client calls; `getHeader()`/`HeaderKey` removed entirely
 
 ## Architectural Patterns
 
@@ -522,42 +521,34 @@ export async function completeIckbTransaction(
 
 **Do this instead:** Use CCC's `Udt` class directly. For iCKB-specific behavior, subclass `Udt`.
 
-## Build Order (Dependency-Driven)
+## Build Order
 
-The refactoring must proceed bottom-up through the dependency graph:
+> **Note:** This research originally suggested a per-package bottom-up build order. The actual ROADMAP uses a **feature-slice approach** instead — each removal is chased across ALL packages so the build stays green at every step. See `.planning/ROADMAP.md` for the authoritative 7-phase structure (SmartTransaction Removal → CCC Utility Adoption → Udt Investigation → Deprecated API Replacement → Core UDT Refactor → SDK Completion → Full Verification). App migration is deferred to a future milestone.
+
+The dependency graph still applies to the order of operations within each feature-slice:
 
 ```
-Phase 1: @ickb/utils (foundation -- remove SmartTransaction, UdtHandler, UdtManager)
+@ickb/utils  (foundation -- SmartTransaction, CapacityManager, getHeader live here)
     |
-    v
-Phase 2: @ickb/dao (update DaoManager to use ccc.Transaction)
-    |
-    v
-Phase 3: @ickb/order (update OrderManager to use ccc.Transaction)
-    |     \
-    v      v
-Phase 4: @ickb/core (update LogicManager, OwnedOwnerManager; create IckbUdt)
-    |
-    v
-Phase 5: @ickb/sdk (update IckbSdk to use new completion pipeline)
-    |
-    v
-Phase 6: Apps (migrate bot, interface, tester from Lumos to CCC + new packages)
+    +---> @ickb/dao   (depends on utils)
+    +---> @ickb/order  (depends on utils)
+    |         |
+    +---> @ickb/core   (depends on dao + utils)
+              |
+          @ickb/sdk    (depends on all above)
 ```
 
-**Rationale for this order:**
+**Rationale for dependency order within feature-slices:**
 
-1. **@ickb/utils first** because every other package imports it. SmartTransaction removal here unlocks all downstream changes.
+1. **@ickb/utils first** because every other package imports it. Changes to exports here affect all downstream packages.
 
-2. **@ickb/dao before @ickb/order and @ickb/core** because `@ickb/core` depends on `@ickb/dao` (LogicManager has a DaoManager). Order and core can be done in parallel since neither depends on the other directly.
+2. **@ickb/dao and @ickb/order in parallel** since neither depends on the other directly.
 
-3. **@ickb/core before @ickb/sdk** because IckbUdt (in core) must exist before SDK can use it for the completion pipeline.
+3. **@ickb/core after dao** because `@ickb/core` depends on `@ickb/dao` (LogicManager has a DaoManager).
 
-4. **@ickb/sdk before apps** because apps consume the SDK.
+4. **@ickb/sdk last** because it depends on all domain packages.
 
-5. **Apps last** because they are the consumers and the most work. The migrated faucet/sampler apps will also need updating if their SmartTransaction usage changes.
-
-**Critical dependency:** The `IckbUdt` subclass design in Phase 4 is the riskiest and most uncertain part. If CCC's `Udt` class cannot be subclassed effectively for the triple-representation model, the architecture may need to fall back to a wrapper pattern rather than inheritance. Phase-specific research recommended.
+**Critical dependency:** The `IckbUdt` subclass design (ROADMAP Phase 3 investigation) is the riskiest and most uncertain part. If CCC's `Udt` class cannot be subclassed effectively for the triple-representation model, the architecture may need to fall back to a wrapper pattern rather than inheritance.
 
 ## Integration Points
 
@@ -573,7 +564,7 @@ Phase 6: Apps (migrate bot, interface, tester from Lumos to CCC + new packages)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| Utils <-> Domain | Domain managers call utility functions, use CapacityManager | Direction: domain calls utils, never reverse |
+| Utils <-> Domain | Domain managers call utility functions (collect, unique, binarySearch, codec) | Direction: domain calls utils, never reverse. CapacityManager removed; CCC's `completeInputsByCapacity()` replaces it |
 | Domain <-> SDK | SDK instantiates and orchestrates domain managers | SDK owns manager lifecycle via `getConfig()` |
 | SDK <-> Apps | Apps call SDK methods, receive immutable snapshots | `SystemState` is a plain readonly object, no circular dependency |
 | Domain <-> CCC Udt | `IckbUdt extends udt.Udt` in `@ickb/core` | CCC Udt is the extension point; iCKB does NOT modify CCC code |

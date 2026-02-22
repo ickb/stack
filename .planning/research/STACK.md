@@ -64,7 +64,6 @@ This research focuses on the CCC APIs and patterns that should be adopted as par
 | `ScriptDeps` interface | `packages/utils/src/utils.ts` | iCKB-specific manager composition pattern |
 | `ValueComponents` interface | `packages/utils/src/utils.ts` | iCKB-specific dual-value abstraction |
 | `ExchangeRatio` interface | `packages/utils/src/utils.ts` | iCKB-specific exchange rate abstraction |
-| `HeaderKey` type + `getHeader()` | `packages/utils/src/utils.ts` | See analysis below |
 
 ### CCC `@ckb-ccc/udt` Package
 
@@ -92,7 +91,7 @@ Use `@ckb-ccc/udt` because:
 | `getOutputsUdtBalance()` override | `Udt.getOutputsBalance()` | Direct method on Udt instance |
 | `getInputsCapacity()` override (DAO profit) | `ccc.Transaction.getInputsCapacity()` | CCC's base implementation now calls `getExtraCapacity()` per input, which includes DAO profit via `Cell.getDaoProfit()` |
 | Header caching (`headers` map) | `ccc.Client.cache` (ClientCacheMemory) | Headers cached automatically by Client on fetch |
-| `addHeaders()` / `getHeader()` | `client.getHeaderByHash()` / `client.getHeaderByNumber()` with auto-caching | CCC caches confirmed headers |
+| `addHeaders()` / `getHeader()` | Removed. Call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); `addHeaders()` call sites push to `tx.headerDeps` directly | CCC caches confirmed headers |
 | `addUdtHandlers()` | `udt.addCellDeps(tx)` | Cell deps added directly by Udt instance |
 | `default()` factory | `ccc.Transaction.default()` | Same pattern, no extra state |
 | `clone()` with shared state | `ccc.Transaction.clone()` | No shared state needed without udtHandlers/headers maps |
@@ -104,10 +103,9 @@ SmartTransaction's `headers` map served two purposes:
 1. **Performance:** Avoid re-fetching headers
 2. **Correctness:** Ensure headers are in `headerDeps` when needed for DAO calculations
 
-CCC's `Client.cache` handles purpose (1) -- all `getHeaderByHash()` and `getHeaderByNumber()` calls are cached if the header is confirmed. Purpose (2) -- adding to `headerDeps` -- must be handled explicitly by iCKB code. The `getHeader()` utility function in `utils.ts` should become a standalone function that:
-- Fetches the header via `client.getHeaderByHash/Number/getTransaction`
-- Adds the header hash to `tx.headerDeps` if not present
-- Does NOT cache (CCC Client handles that)
+CCC's `Client.cache` handles purpose (1) -- all `getHeaderByHash()` and `getHeaderByNumber()` calls are cached if the header is confirmed. Purpose (2) -- adding to `headerDeps` -- is handled by inlining CCC client calls at each call site.
+
+**Decision (from Phase 1 context):** `getHeader()` function and `HeaderKey` type are removed entirely from `@ickb/utils`. Call sites inline CCC client calls: `txHash` lookups use `(await client.getTransactionWithHeader(hash))?.header`, `number` lookups use `await client.getHeaderByNumber(n)`. `addHeaders()` call sites in DaoManager/LogicManager push to `tx.headerDeps` directly.
 
 ### Critical Design Decision: DAO Profit in getInputsCapacity
 
@@ -155,7 +153,7 @@ Create `IckbUdt extends Udt` that overrides `getInputsInfo()` and `getOutputsInf
 
 **Implementation sketch:** See ARCHITECTURE.md "Pattern 2: IckbUdt Subclass" for the full code example with `getInputsInfo()` override.
 
-**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (UDT Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
+**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (CCC Udt Integration Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
 
 **Header fetching within `getInputsInfo()`:**
 

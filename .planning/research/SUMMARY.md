@@ -61,7 +61,7 @@ The library already implements all differentiators (D-3 through D-8, D-10): matu
 The architecture shifts from a God-object transaction (SmartTransaction carrying UDT handlers + header cache + overridden behaviors) to a layered composition model: plain `ccc.Transaction` for state, standalone utility functions for concerns like header dep management, `IckbUdt extends udt.Udt` for iCKB-specific balance calculation, and an explicit completion pipeline at the call site (complete UDT first, then CKB capacity, then fee). The build order is strictly bottom-up through the dependency graph.
 
 **Major components:**
-1. `@ickb/utils` — transaction utilities (`addCellDeps`, `getHeader`), async data utilities (`collect`, `unique`, `binarySearch`, `MinHeap`); NO SmartTransaction, NO UdtHandler, NO UdtManager after refactor
+1. `@ickb/utils` — async data utilities (`collect`, `unique`, `binarySearch`, `MinHeap`), codec utilities; NO SmartTransaction, NO UdtHandler, NO UdtManager, NO CapacityManager, NO `getHeader()`/`HeaderKey` after refactor
 2. `@ickb/dao` + `@ickb/order` — domain managers operating on plain `ccc.Transaction`; add cell deps directly; no UDT awareness
 3. `@ickb/core` — `IckbUdt extends udt.Udt` overriding `getInputsInfo()` and `getOutputsInfo()` for triple-representation balance; `LogicManager` and `OwnedOwnerManager` for iCKB protocol operations
 4. `@ickb/sdk` — `IckbSdk` facade orchestrating all managers; explicit completion pipeline: `ickbUdt.completeBy(tx, signer)` then `tx.completeFeeBy(signer)`
@@ -95,6 +95,8 @@ await signer.sendTransaction(completedTx);
 
 ## Implications for Roadmap
 
+> **Note:** The phase structure below was a pre-roadmap research suggestion. The actual ROADMAP (`.planning/ROADMAP.md`) uses a different 7-phase feature-slice approach: SmartTransaction Removal → CCC Utility Adoption → Udt Investigation → Deprecated API Replacement → Core UDT Refactor → SDK Completion → Full Verification. App migration (bot, interface, tester) is deferred to a future milestone. The research findings below still inform the roadmap decisions.
+
 Based on research, suggested phase structure:
 
 ### Phase 1: Library Foundation Refactor
@@ -104,8 +106,8 @@ Based on research, suggested phase structure:
 **Avoids:** Pitfalls 1 (SmartTransaction implicit behaviors), 3 (exchange rate divergence), 4 (64-output limit), 6 (codec byte layout)
 **Sub-phases (dependency-driven):**
 1a. Test infrastructure: characterization tests for SmartTransaction behaviors; codec roundtrip tests; exchange rate cross-validation fixtures
-1b. `@ickb/utils`: remove SmartTransaction, UdtHandler, UdtManager; adopt CCC utility equivalents; add `addCellDeps`/`getHeader` utility functions
-1c. `@ickb/dao` + `@ickb/order` (parallel): update all manager methods from `SmartTransaction` to `ccc.Transaction`
+1b. `@ickb/utils`: remove SmartTransaction, CapacityManager, `getHeader()`/`HeaderKey`; adopt CCC utility equivalents
+1c. `@ickb/dao` + `@ickb/order` (parallel): update all manager methods from `SmartTransaction` to `ccc.TransactionLike`
 1d. `@ickb/core`: create `IckbUdt extends udt.Udt`; update LogicManager/OwnedOwnerManager
 1e. `@ickb/sdk`: implement explicit completion pipeline; update IckbSdk facade
 **Research flag:** Phase 1d needs careful investigation — the `IckbUdt` subclassing approach is architecturally sound (confirmed by both STACK.md and ARCHITECTURE.md research) but the header-access-in-`getInputsInfo` pattern requires verification against the CCC `Udt` API.
@@ -163,7 +165,7 @@ Standard patterns (skip research-phase):
 
 ### Gaps to Address
 
-- **Resolved — CCC Udt override point:** Both ARCHITECTURE.md and STACK.md now agree on overriding `getInputsInfo()`/`getOutputsInfo()` (not `infoFrom()`). The `infoFrom()` approach was ruled out because `CellAnyLike` lacks `outPoint`, which is needed for header fetching in receipt/deposit value calculation. Final confirmation of CCC's internal method chains still needed during Phase 3 (UDT Investigation).
+- **Resolved — CCC Udt override point:** Both ARCHITECTURE.md and STACK.md now agree on overriding `getInputsInfo()`/`getOutputsInfo()` (not `infoFrom()`). The `infoFrom()` approach was ruled out because `CellAnyLike` lacks `outPoint`, which is needed for header fetching in receipt/deposit value calculation. Final confirmation of CCC's internal method chains still needed during Phase 3 (CCC Udt Integration Investigation).
 - **Resolved — DAO profit in CCC `getInputsCapacity`:** Verified from CCC source (transaction.ts lines 1860-1883) that `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` → `CellInput.getExtraCapacity()` → `Cell.getDaoProfit()`. No standalone utility needed. SmartTransaction's override of `getInputsCapacity()` can be dropped without replacement.
 - **CCC PR #328 (FeePayer) tracking:** Design the SmartTransaction replacement so FeePayer can be adopted as a drop-in improvement if the PR merges. Do not block on it.
 - **Bot key logging security:** PITFALLS.md notes the faucet already has a private key logging bug. The bot migration must include an explicit security audit of all logging paths.
