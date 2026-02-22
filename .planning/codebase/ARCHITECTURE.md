@@ -77,7 +77,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 **Utilities Layer (`packages/utils/src/`)**
 - Purpose: Reusable blockchain primitives and transaction helpers
-- Key exports: `SmartTransaction`, `CapacityManager`, codec/heap/epoch utilities, UDT handlers
+- Key exports: `SmartTransaction`, `CapacityManager`, codec/heap utilities, UDT handlers
 - Key files:
   - `transaction.ts` (517 lines): SmartTransaction builder with fee completion and UDT balancing
   - `capacity.ts` (221 lines): CapacityManager for cell discovery and collection
@@ -151,7 +151,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 - Purpose: Domain-specific operational services
 
   **Faucet (Migrated to CCC + New Packages):**
-  - Location: `apps/faucet/src/main.ts` (86 lines)
+  - Location: `apps/faucet/src/main.ts` (88 lines), entry via `apps/faucet/src/index.ts`
   - Entry: `main()` async function
   - Pattern: Infinite loop with 2-minute poll interval
   - Uses: CCC client, CapacityManager, SmartTransaction

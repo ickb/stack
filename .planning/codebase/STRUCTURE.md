@@ -34,7 +34,8 @@
 │   │       └── codec.ts            # PoolSnapshot codec (138 lines)
 │   └── utils/                      # Shared blockchain utilities
 │       └── src/
-│           ├── index.ts            # Barrel export: codec, capacity, heap, transaction, udt, utils│           ├── transaction.ts      # SmartTransaction class (517 lines)
+│           ├── index.ts            # Barrel export: codec, capacity, heap, transaction, udt, utils
+│           ├── transaction.ts      # SmartTransaction class (517 lines)
 │           ├── capacity.ts         # CapacityManager class (221 lines)
 │           ├── udt.ts              # UDT calculations and handlers (393 lines)
 │           ├── utils.ts            # Binary search, collectors, etc. (458 lines)
@@ -46,8 +47,8 @@
 │   │       └── index.ts            # main() entry with order matching loop (897 lines)
 │   ├── faucet/                     # Testnet CKB distribution (MIGRATED to CCC)
 │   │   └── src/
-│   │       ├── index.ts            # Export main()
-│   │       └── main.ts             # main() entry with distribution loop (86 lines)
+│   │       ├── index.ts            # Entry: imports and calls main() from main.ts
+│   │       └── main.ts             # main() entry with distribution loop (88 lines)
 │   ├── sampler/                    # Blockchain state sampling (MIGRATED to CCC)
 │   │   └── src/
 │   │       └── index.ts            # Direct execution entry (192 lines)

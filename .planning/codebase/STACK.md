@@ -21,7 +21,7 @@
 - Current environment: v24.13.0
 
 **Package Manager:**
-- pnpm 10.29.3 (pinned via `packageManager` field with SHA-512 hash in root `package.json`)
+- pnpm 10.30.1 (pinned via `packageManager` field with SHA-512 hash in root `package.json`)
 - Lockfile: `pnpm-lock.yaml` present
 - Workspace protocol: `workspace:*` for internal deps, `catalog:` for shared version pins
 
@@ -153,7 +153,7 @@ The repo supports using a local development build of CCC for testing unpublished
 
 ## Versioning
 
-**Packages use version `1001.0.0`** - Placeholder version indicating pre-release / under active development. All publishable packages (`@ickb/utils`, `@ickb/dao`, `@ickb/order`, `@ickb/core`, `@ickb/sdk`) and apps use this.
+**Packages use version `1001.0.0`** (Epoch Semantic Versioning) - All publishable packages (`@ickb/utils`, `@ickb/dao`, `@ickb/order`, `@ickb/core`, `@ickb/sdk`) use this version, managed by changesets.
 
 **Changesets** (`.changeset/config.json`):
 - Public access
@@ -167,7 +167,7 @@ The repo supports using a local development build of CCC for testing unpublished
 
 **Development:**
 - Node.js >= 24
-- pnpm 10.29.3
+- pnpm 10.30.1
 - Git (for CCC setup script)
 - DevContainer configuration at `.devcontainer/devcontainer.json`
 

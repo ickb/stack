@@ -10,7 +10,7 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 
 **New CCC-based clients:**
 - `ccc.ClientPublicTestnet()` - Public CKB testnet RPC endpoint
-  - Used in: `apps/faucet/src/index.ts`, `apps/interface/src/main.tsx`
+  - Used in: `apps/faucet/src/main.ts`, `apps/interface/src/main.tsx`
 - `ccc.ClientPublicMainnet()` - Public CKB mainnet RPC endpoint
   - Used in: `apps/sampler/src/index.ts`, `apps/interface/src/main.tsx`
 - Custom RPC URL supported via env var in bot
@@ -30,7 +30,7 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 - `client.getHeaderByNumber()` / `client.getHeaderByHash()` - Get block headers
   - Used in: `packages/utils/src/utils.ts`, `apps/sampler/src/index.ts`
 - `client.getHeaderByNumberNoCache()` - Uncached header fetch
-  - Used in: `apps/faucet/src/index.ts`
+  - Used in: `apps/faucet/src/main.ts`
 - `client.getTransactionWithHeader()` - Get transaction with its block header
   - Used in: `packages/utils/src/utils.ts`
 - `client.getCell()` - Get individual cell by outpoint
@@ -40,7 +40,7 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 - `client.getFeeRate()` - Get current fee rate
   - Used in: `packages/sdk/src/sdk.ts`
 - `signer.sendTransaction()` - Submit signed transactions
-  - Used in: `apps/faucet/src/index.ts`, `apps/interface/src/Connector.tsx`
+  - Used in: `apps/faucet/src/main.ts`, `apps/interface/src/Connector.tsx`
 
 ### CKB Public RPC Endpoints
 
@@ -82,7 +82,7 @@ All interaction with the Nervos CKB Layer 1 blockchain happens via JSON-RPC 2.0.
 
 **Wallet Signing (CCC-based):**
 - `ccc.SignerCkbPrivateKey` - Private key signer for programmatic signing
-  - Used in: `apps/faucet/src/index.ts` (generates random ephemeral keys)
+  - Used in: `apps/faucet/src/main.ts` (generates random ephemeral keys)
 - JoyId Signer - Browser wallet integration
   - Used in: `apps/interface/src/main.tsx` via `JoyId.getJoyIdSigners()`
   - CCC's `@ckb-ccc/ccc` package provides wallet connector framework
@@ -213,7 +213,7 @@ union PartialOrderData { MintOrderData, MatchOrderData }
 **Logging:**
 - JSON structured logs to stdout
   - `apps/bot/src/index.ts`: Logs `{ startTime, balance, ratio, actions, txFee, txHash, error, ElapsedSeconds }` each iteration
-  - `apps/faucet/src/index.ts`: Logs `{ startTime, balance, error, txHash, elapsedSeconds }` each iteration
+  - `apps/faucet/src/main.ts`: Logs `{ startTime, balance, error, txHash, elapsedSeconds }` each iteration
   - `apps/sampler/src/index.ts`: Outputs CSV rows `BlockNumber, Date, Value, Note`
 - No log aggregation service
 

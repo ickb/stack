@@ -11,7 +11,7 @@
 - CCC PRs for UDT and Epochs have been **MERGED** upstream.
 - `SmartTransaction` was **ABANDONED** -- do not expand its test coverage; it exists in `packages/utils/src/transaction.ts` but header caching now uses CCC's client cache.
 
-**Current test status:** No `.test.ts` files exist yet in the `packages/` or `apps/` source directories. Vitest is fully configured and ready. The CI pipeline has the test step **commented out** (see `.github/workflows/check.yaml`). Writing tests is a greenfield effort.
+**Current test status:** No `.test.ts` files exist yet in the `packages/` or `apps/` source directories. Vitest is fully configured and ready. The CI pipeline runs `pnpm check` which includes `pnpm test:ci`, but with no test files `vitest run` passes vacuously. Writing tests is a greenfield effort.
 
 ## Test Framework
 
@@ -111,32 +111,39 @@ Use `describe` for grouping by class or function, `it` or `test` for individual 
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import { Epoch } from "./epoch.js";
+import { Ratio } from "./entities.js";
 
-describe("Epoch", () => {
+describe("Ratio", () => {
   describe("from", () => {
-    it("creates from tuple representation", () => {
-      const epoch = Epoch.from([5n, 2n, 4n]);
-      expect(epoch.number).toBe(5n);
-      expect(epoch.index).toBe(1n);    // normalized: 2/4 -> 1/2
-      expect(epoch.length).toBe(2n);
+    it("creates from plain object", () => {
+      const ratio = Ratio.from({ ckbScale: 3n, udtScale: 4n });
+      expect(ratio.ckbScale).toBe(3n);
+      expect(ratio.udtScale).toBe(4n);
     });
 
-    it("short-circuits on Epoch instance", () => {
-      const epoch = Epoch.from([5n, 0n, 1n]);
-      expect(Epoch.from(epoch)).toBe(epoch);
-    });
-
-    it("throws on non-positive length", () => {
-      expect(() => Epoch.from([0n, 0n, 0n])).toThrow("Non positive Epoch length");
+    it("short-circuits on Ratio instance", () => {
+      const ratio = new Ratio(10n, 20n);
+      expect(Ratio.from(ratio)).toBe(ratio);
     });
   });
 
-  describe("compare", () => {
-    it("returns 0 for equal epochs", () => {
-      const a = Epoch.from([5n, 1n, 2n]);
-      const b = Epoch.from([5n, 2n, 4n]);
-      expect(a.compare(b)).toBe(0);
+  describe("validate", () => {
+    it("accepts populated ratio", () => {
+      const r = new Ratio(100n, 200n);
+      expect(() => r.validate()).not.toThrow();
+      expect(r.isValid()).toBe(true);
+    });
+
+    it("accepts empty ratio", () => {
+      const r = Ratio.empty();
+      expect(() => r.validate()).not.toThrow();
+      expect(r.isValid()).toBe(true);
+    });
+
+    it("rejects half-populated ratio", () => {
+      const r = new Ratio(100n, 0n);
+      expect(() => r.validate()).toThrow("not empty, not populated");
+      expect(r.isValid()).toBe(false);
     });
   });
 });
@@ -359,19 +366,11 @@ describe("Ratio.compare", () => {
 
 **Current state in `.github/workflows/check.yaml`:**
 ```yaml
-- name: Build
-  run: pnpm build:all
-- name: Lint
-  run: pnpm lint
-# - name: Test
-# run: pnpm test:ci
+- name: Check (lint, build and test)
+  run: pnpm check
 ```
 
-The test step is **commented out**. Once tests are written, uncomment to enable:
-```yaml
-- name: Test
-  run: pnpm test:ci
-```
+The `pnpm check` script runs: `pnpm clean:deep && pnpm install && pnpm lint && pnpm build:all && pnpm test:ci`. Tests are included but with no test files, `vitest run` passes vacuously.
 
 **CI runs on:** `[pull_request, push]` events, `ubuntu-latest`, Node.js 24, pnpm.
 
