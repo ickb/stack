@@ -31,13 +31,13 @@ The iCKB protocol solves NervosDAO illiquidity by pooling DAO deposits and issui
 
 **Exchange Rate:** `iCKB_value = unoccupied_capacity * AR_0 / AR_m` where `AR_0 = 10^16` (genesis accumulated rate) and `AR_m` is the accumulated rate at the deposit block. CKB is inflationary; iCKB is not -- 1 iCKB represents an ever-increasing amount of CKB over time.
 
-**Deposit (2-Phase):**
-1. Phase 1: User deposits CKB into NervosDAO -> receives a Receipt cell (cannot calculate iCKB value yet because the block's accumulated rate isn't available during validation).
-2. Phase 2: Receipt cell is converted to iCKB xUDT tokens using the now-available accumulated rate from the deposit block header.
+**Deposit (2-Step):**
+1. Step 1: User deposits CKB into NervosDAO -> receives a Receipt cell (cannot calculate iCKB value yet because the block's accumulated rate isn't available during validation).
+2. Step 2: Receipt cell is converted to iCKB xUDT tokens using the now-available accumulated rate from the deposit block header.
 
-**Withdrawal (2-Phase):**
-1. Phase 1: User burns iCKB tokens -> creates a NervosDAO withdrawal request (using any mature deposit from the pool, not necessarily the user's original deposit).
-2. Phase 2: Standard NervosDAO withdrawal after 180-epoch maturity.
+**Withdrawal (2-Step):**
+1. Step 1: User burns iCKB tokens -> creates a NervosDAO withdrawal request (using any mature deposit from the pool, not necessarily the user's original deposit).
+2. Step 2: Standard NervosDAO withdrawal after 180-epoch maturity.
 
 **Soft Cap Penalty:** Deposits exceeding 100,000 iCKB-equivalent incur a 10% discount on the excess amount. This incentivizes standard-size deposits (~100k CKB) and prevents DoS via fragmentation. Formula: `final = amount - (amount - 100000) / 10` when `amount > 100000`.
 

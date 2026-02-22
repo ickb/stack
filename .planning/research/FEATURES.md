@@ -87,8 +87,8 @@ SmartTransaction Removal (TS-1)
 
 CCC Udt Investigation (D-2)
     |
-    +-- requires --> SmartTransaction Removal (TS-1)
-    |                   (must understand new API shape first)
+    +-- can parallel --> SmartTransaction Removal (TS-1)
+    |                   (design investigation, no code changes -- can proceed in parallel)
     |
     +-- informs --> Multi-representation UDT (D-1)
                         (whether to use Udt interface or custom)
@@ -122,7 +122,7 @@ npm Publication (TS-11)
 - **TS-1 (SmartTransaction Removal) is the critical path.** Every downstream task depends on it. It must happen first and must preserve D-1 (multi-representation UDT) and D-3 (conversion preview) functionality.
 - **TS-5 (Bot Migration) validates the entire stack.** The bot exercises deposits, withdrawals, order matching, fee completion, and UDT balancing under real conditions. It is the integration test for the library suite.
 - **TS-4 (Lumos Removal) is the final gate.** It can only happen after all three legacy apps are migrated. It removes `@ickb/lumos-utils`, `@ickb/v1-core`, and all `@ckb-lumos/*` from the monorepo.
-- **D-2 (CCC Udt Investigation) is exploratory.** It should not block other work. Findings inform the API design of D-1 but the library can ship with a custom `UdtHandler` interface regardless.
+- **D-2 (CCC Udt Investigation) is exploratory.** It can proceed in parallel with SmartTransaction removal (design investigation, not code changes). Findings inform the API design of D-1 but the library can ship with a custom `UdtHandler` interface regardless.
 - **CCC PR #328 (FeePayer) is external.** Track it but do not depend on it. Design the SmartTransaction replacement so that FeePayer can be adopted later if it merges.
 
 ## MVP Definition
@@ -131,7 +131,7 @@ npm Publication (TS-11)
 
 Minimum viable state for npm publication of clean CCC-aligned library packages.
 
-- [ ] **TS-1: SmartTransaction removal** -- Replace with utility functions on `ccc.Transaction`. This is the single most important task. All manager methods must accept `ccc.Transaction` instead of `SmartTransaction`.
+- [ ] **TS-1: SmartTransaction removal** -- Replace with utility functions on `ccc.Transaction`. This is the single most important task. All manager methods must accept `ccc.TransactionLike` instead of `SmartTransaction` (CCC convention: TransactionLike input, Transaction output).
 - [ ] **TS-2: CCC utility deduplication** -- Adopt CCC equivalents for `max`/`min`/`gcd`/`isHex`/`hexFrom`.
 - [ ] **TS-3: Clean public API** -- Audit exports, ensure intentional public surface, proper type exports.
 - [ ] **TS-5: Bot migration** -- Validates the library packages work end-to-end under production conditions.

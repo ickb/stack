@@ -16,7 +16,7 @@ SmartTransaction's design buries critical side effects in method overrides that 
 
 **How to avoid:**
 1. Before removing anything, catalog every SmartTransaction-specific method used across the codebase. The complete list: `addUdtHandlers`, `addHeaders`, `getHeader`, `hasUdtHandler`, `getUdtHandler`, `encodeUdtKey`, `encodeHeaderKey`, `completeFee` (override), `getInputsCapacity` (override), `getInputsUdtBalance` (override), `getOutputsUdtBalance` (override), `clone` (override with shared maps), `copy` (override with map merging), `default` (override), `from` (override).
-2. Design the replacement as standalone functions for the UDT completion concern (`completeUdtChange(tx, signer)`) and header dep management (`getHeader(client, tx, key)`). Note: `getInputsCapacity` DAO profit accounting does NOT need a utility — CCC's `Transaction.getInputsCapacity()` handles this natively via `getInputsCapacityExtra()` → `Cell.getDaoProfit()`. Validate that each original override has a corresponding replacement (utility function or CCC-native method).
+2. Design the replacement as standalone functions for the UDT completion concern (`completeUdtChange(tx, signer)`). Note: `getInputsCapacity` DAO profit accounting does NOT need a utility — CCC's `Transaction.getInputsCapacity()` handles this natively via `getInputsCapacityExtra()` → `Cell.getDaoProfit()`. Header management: `getHeader()` and `HeaderKey` are removed entirely; call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); `addHeaders()` call sites push to `tx.headerDeps` directly. Validate that each original override has a corresponding replacement (inlined CCC call or CCC-native method).
 3. Write characterization tests BEFORE refactoring: for a known set of inputs, capture the exact `completeFee` output (number of added inputs, whether change was added) and the exact `getInputsCapacity` return value. Run these tests against the new utility functions.
 
 **Warning signs:**
@@ -41,7 +41,7 @@ Concretely, `IckbUdtManager.getInputsUdtBalance` currently (a) counts xUDT balan
 The temptation is to make `IckbUdt extends Udt` so that CCC's generic transaction completion (`completeBy`, `completeInputsByBalance`) "just works" for iCKB. But iCKB's multi-representation value model is fundamentally incompatible with the assumption that UDT balance = sum of `u128 LE` fields in matching type cells. The CCC `Udt` class was designed for standard xUDT tokens, not for protocol-specific tokens with conservation laws spanning multiple cell types.
 
 **How to avoid:**
-1. The preferred approach (see ARCHITECTURE.md and STACK.md) is to subclass `Udt` as `IckbUdt`, overriding `getInputsInfo()`/`getOutputsInfo()` rather than `infoFrom()`. This avoids the `CellAnyLike` limitation (no outPoint for header fetching) while keeping CCC's completion methods functional. However, this is an **open design question** to be resolved during Phase 3 (UDT Investigation).
+1. The preferred approach (see ARCHITECTURE.md and STACK.md) is to subclass `Udt` as `IckbUdt`, overriding `getInputsInfo()`/`getOutputsInfo()` rather than `infoFrom()`. This avoids the `CellAnyLike` limitation (no outPoint for header fetching) while keeping CCC's completion methods functional. However, this is an **open design question** to be resolved during Phase 3 (CCC Udt Integration Investigation).
 2. If subclassing proves unviable, the fallback is to keep multi-representation accounting in iCKB-specific standalone functions (refactored from `IckbUdtManager`), using CCC's `Udt` only for standard xUDT operations (cell discovery, basic balance reading).
 3. Whichever approach is chosen, ensure that CCC's `Udt.completeInputsByBalance()` does not inadvertently add receipt or deposit cells as if they were standard xUDT inputs. Verify that the conservation law (`input_udt + input_receipts = output_udt + input_deposits`) is enforced correctly by the overridden methods.
 4. Always add required `headerDeps` explicitly -- CCC's client cache handles header fetching performance, but `headerDeps` must be on the transaction for on-chain validation.
@@ -53,7 +53,7 @@ The temptation is to make `IckbUdt extends Udt` so that CCC's generic transactio
 - CCC's generic `completeInputsByBalance()` selecting cells that trigger the conservation law unexpectedly
 
 **Phase to address:**
-Phase 3 (UDT Investigation). The UDT handling architecture must be settled before core implementation (Phase 5), because the apps currently use `SmartTransaction.completeFee` which delegates to `IckbUdtManager.completeUdt`. Phase 3 is specifically designed to resolve this design question.
+Phase 3 (CCC Udt Integration Investigation). The UDT handling architecture must be settled before core implementation (Phase 5), because the apps currently use `SmartTransaction.completeFee` which delegates to `IckbUdtManager.completeUdt`. Phase 3 is specifically designed to resolve this design question.
 
 ---
 
@@ -260,7 +260,7 @@ How roadmap phases should address these pitfalls.
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
 | SmartTransaction implicit behaviors lost | Phase 1 (Library refactor) | Characterization tests pass: `completeFee` output matches, `getInputsCapacity` return matches, headers present in `headerDeps` |
-| CCC Udt subclassing for multi-representation value | Phase 3 (UDT Investigation) | Design decision documented: subclass viability confirmed or fallback approach chosen; conservation law preservation verified in either case |
+| CCC Udt subclassing for multi-representation value | Phase 3 (CCC Udt Integration Investigation) | Design decision documented: subclass viability confirmed or fallback approach chosen; conservation law preservation verified in either case |
 | Exchange rate divergence | Phase 1 (Library refactor, test infrastructure) | Cross-validation test suite exists with known Rust contract outputs; tests pass in CI |
 | Conservation law violation during app migration | Future milestone (App migration) | Migrated bot produces byte-identical transactions to Lumos bot for the same inputs; testnet validation passes |
 | Molecule codec byte layout mismatch | Phase 1 (Library refactor, test infrastructure) | Codec roundtrip tests exist for all 6 entity types; expected hex strings match Molecule schema |
