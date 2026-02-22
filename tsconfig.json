@@ -16,6 +16,7 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noImplicitAny": true,
+    "noEmit": true,
     "noEmitOnError": true,
     "removeComments": true,
     "stripInternal": true,
