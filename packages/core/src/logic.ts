@@ -119,7 +119,12 @@ export class LogicManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
     tx.addUdtHandlers(this.udtHandler);
 
-    tx.addHeaders(receipts.map((r) => r.header));
+    for (const r of receipts) {
+      const hash = r.header.header.hash;
+      if (!tx.headerDeps.some((h) => h === hash)) {
+        tx.headerDeps.push(hash);
+      }
+    }
 
     for (const { cell } of receipts) {
       tx.addInput(cell);

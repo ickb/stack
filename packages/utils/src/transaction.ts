@@ -1,6 +1,50 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { getHeader, hexFrom, type HeaderKey } from "./utils.js";
+import { hexFrom, type TransactionHeader } from "./utils.js";
 import type { UdtHandler } from "./udt.js";
+
+/**
+ * Represents a key for retrieving a block header.
+ * @internal Retained for SmartTransaction until class deletion in Plan 03.
+ */
+type HeaderKey =
+  | {
+      type: "hash";
+      value: ccc.Hex;
+    }
+  | {
+      type: "number";
+      value: ccc.Num;
+    }
+  | {
+      type: "txHash";
+      value: ccc.Hex;
+    };
+
+/**
+ * Retrieves the block header based on the provided header key.
+ * @internal Retained for SmartTransaction until class deletion in Plan 03.
+ */
+async function getHeader(
+  client: ccc.Client,
+  headerKey: HeaderKey,
+): Promise<ccc.ClientBlockHeader> {
+  const { type, value } = headerKey;
+  let header: ccc.ClientBlockHeader | undefined = undefined;
+  if (type === "hash") {
+    header = await client.getHeaderByHash(value);
+  } else if (type === "number") {
+    header = await client.getHeaderByNumber(value);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  } else if (type === "txHash") {
+    header = (await client.getTransactionWithHeader(value))?.header;
+  }
+
+  if (!header) {
+    throw new Error("Header not found");
+  }
+
+  return header;
+}
 
 /**
  * Class representing a smart transaction that extends the base ccc.Transaction.
@@ -489,18 +533,4 @@ export type SmartTransactionLike = ccc.TransactionLike & {
   headers?: Map<string, ccc.ClientBlockHeader>;
 };
 
-/**
- * Represents a transaction header that includes a block header and an optional transaction hash.
- */
-export interface TransactionHeader {
-  /**
-   * The block header associated with the transaction, represented as `ccc.ClientBlockHeader`.
-   */
-  header: ccc.ClientBlockHeader;
-
-  /**
-   * An optional transaction hash associated with the transaction, represented as `ccc.Hex`.
-   * This property may be undefined if the transaction hash is not applicable.
-   */
-  txHash?: ccc.Hex;
-}
+// TransactionHeader type moved to utils.ts (re-exported from there)

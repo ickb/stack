@@ -155,7 +155,10 @@ export class DaoManager implements ScriptDeps {
 
       tx.addCellDeps(this.cellDeps);
       const depositHeader = headers[0];
-      tx.addHeaders(depositHeader);
+      const depositHash = depositHeader.header.hash;
+      if (!tx.headerDeps.some((h) => h === depositHash)) {
+        tx.headerDeps.push(depositHash);
+      }
       tx.addInput(cell);
       tx.addOutput(
         {
@@ -208,7 +211,12 @@ export class DaoManager implements ScriptDeps {
       if (isDeposit) {
         throw new Error("Not a withdrawal request");
       }
-      tx.addHeaders(headers);
+      for (const th of headers) {
+        const hash = th.header.hash;
+        if (!tx.headerDeps.some((h) => h === hash)) {
+          tx.headerDeps.push(hash);
+        }
+      }
       const depositHeader = headers[0];
       const headerIndex = tx.headerDeps.findIndex(
         (h) => h === depositHeader.header.hash,

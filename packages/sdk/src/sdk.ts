@@ -6,7 +6,6 @@ import {
   binarySearch,
   type ValueComponents,
   hexFrom,
-  getHeader,
 } from "@ickb/utils";
 import {
   convert,
@@ -385,11 +384,13 @@ export class IckbSdk {
       // Find the most recent deposit pool snapshot from bot cell output data.
       const outputData = c.cell.outputData;
       if (outputData.length % 256 === 2) {
-        const h = await getHeader(client, {
-          type: "txHash",
-          value: c.cell.outPoint.txHash,
-        });
-        const e = ccc.Epoch.from(h.epoch);
+        const txWithHeader = await client.getTransactionWithHeader(
+          c.cell.outPoint.txHash,
+        );
+        if (!txWithHeader?.header) {
+          throw new Error("Header not found for txHash");
+        }
+        const e = ccc.Epoch.from(txWithHeader.header.epoch);
         if (poolSnapshotEpoch.compare(e) < 0) {
           poolSnapshotHex = outputData;
           poolSnapshotEpoch = e;
