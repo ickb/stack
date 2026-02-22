@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Clean, CCC-aligned library packages published to npm that frontends can depend on to interact with iCKB contracts -- no Lumos, no abandoned abstractions, no duplicated functionality with CCC.
-**Current focus:** Phase 1: @ickb/utils SmartTransaction Removal
+**Current focus:** Phase 1: SmartTransaction Removal (feature-slice)
 
 ## Current Position
 
-Phase: 1 of 7 (@ickb/utils SmartTransaction Removal)
+Phase: 1 of 7 (SmartTransaction Removal — feature-slice)
 Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-02-21 -- Roadmap created
+Status: Context gathered, ready to plan
+Last activity: 2026-02-22 -- Phase 1 context gathered
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -42,9 +42,12 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: Bottom-up refactor order follows package dependency graph: utils -> dao+order -> core -> sdk
-- [Roadmap]: UDT investigation (Phase 3) is a design phase that produces a decision document before core implementation (Phase 5)
-- [Roadmap]: SMTX-01 (all managers accept ccc.Transaction) is verified at Phase 5 completion, after utils managers removed (Phase 1), dao+order managers updated (Phase 4), and core managers updated (Phase 5)
+- [Roadmap]: Phase 1 uses feature-slice approach — each removal chased across all packages, build stays green after every step. SMTX-01 (all signatures to TransactionLike) completed in Phase 1, not Phase 5.
+- [Roadmap]: UDT investigation (Phase 3) is a design phase that produces a decision document; its outcome determines UdtHandler/UdtManager replacement pattern used in Phases 4-5
+- [Roadmap]: Phases 4-5 reduced in scope: Phase 4 focuses on deprecated API replacement + UDT pattern finalization in dao/order; Phase 5 focuses on IckbUdt implementation + conservation law in core
+- [Phase 1 Context]: DAO 64-output limit check contributed to CCC core via ccc-dev/, CCC PR submitted during Phase 1
+- [Phase 1 Context]: getHeader()/HeaderKey removed entirely — inline CCC client calls at read-only call sites; addHeaders() call sites in DaoManager/LogicManager push to tx.headerDeps directly
+- [Phase 1 Context]: Script comparison must always use full Script.eq(), never just codeHash comparison
 
 ### Pending Todos
 
@@ -57,6 +60,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Roadmap created, ready for Phase 1 planning
-Resume file: None
+Last session: 2026-02-22
+Stopped at: Phase 1 context gathered
+Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-CONTEXT.md
