@@ -59,7 +59,7 @@ export class LogicManager implements ScriptDeps {
   /**
    * Processes a deposit transaction.
    *
-   * @param tx - The transaction to add the deposit to.
+   * @param txLike - The transaction to add the deposit to.
    * @param depositQuantity - The quantity of deposits.
    * @param depositAmount - The amount of each deposit.
    * @param lock - The lock script for the output receipt cell.
@@ -109,7 +109,7 @@ export class LogicManager implements ScriptDeps {
   /**
    * Completes a deposit transaction by transforming the receipts into iCKB UDTs.
    *
-   * @param tx - The transaction to add the receipts to.
+   * @param txLike - The transaction to add the receipts to.
    * @param receipts - The receipts to add to the transaction.
    */
   completeDeposit(

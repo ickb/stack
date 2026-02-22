@@ -58,7 +58,7 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
    * for a given transaction.
    *
    * @param client - The CKB client to query cell data.
-   * @param tx - The smart transaction whose inputs are to be balanced.
+   * @param txLike - The transaction whose inputs are to be balanced.
    * @returns A promise resolving to a tuple:
    *   - [0]: Total iCKB UDT amount in inputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT-related inputs (as `ccc.FixedPoint`).

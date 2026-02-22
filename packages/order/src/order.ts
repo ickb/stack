@@ -161,7 +161,7 @@ export class OrderManager implements ScriptDeps {
    * - Appends the order cell to the outputs with the UDT data and adjusts the CKB capacity.
    * - Appends a corresponding master cell immediately after the order cell.
    *
-   * @param tx - The transaction to which the order will be added.
+   * @param txLike - The transaction to which the order will be added.
    * @param lock - The lock script for the master cell.
    * @param info - The information related to the order, usually calculated using OrderManager.convert.
    * @param amounts - The amounts for the order, including:
@@ -216,7 +216,7 @@ export class OrderManager implements ScriptDeps {
    * - Adds the original order as an input.
    * - Creates an updated output with adjusted CKB capacity and UDT data.
    *
-   * @param tx - The transaction to which the matches will be added.
+   * @param txLike - The transaction to which the matches will be added.
    * @param match - The match object containing partial matches.
    */
   addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transaction {
@@ -494,7 +494,7 @@ export class OrderManager implements ScriptDeps {
    * For each order group, if the option is to only process fulfilled orders, it filters accordingly.
    * Then, for every valid group, the master and order cells are added as inputs in the transaction.
    *
-   * @param tx - The transaction to which the groups will be added.
+   * @param txLike - The transaction to which the groups will be added.
    * @param groups - The array of OrderGroup instances to melt.
    * @param options - Optional parameters:
    *    @param options.isFulfilledOnly - If true, only groups with fulfilled orders will be melted.

@@ -104,7 +104,7 @@ export class DaoManager implements ScriptDeps {
   /**
    * Requests withdrawal from NervosDAO deposits.
    *
-   * @param tx - The transaction to which the withdrawal request will be added.
+   * @param txLike - The transaction to which the withdrawal request will be added.
    * @param deposits - An array of deposits to request the withdrawal from.
    * @param lock - The lock script for the withdrawal request cells.
    * @param options - Optional parameters for the withdrawal request.
@@ -180,7 +180,7 @@ export class DaoManager implements ScriptDeps {
   /**
    * Withdraws funds from the NervosDAO based on the provided mature withdrawal requests.
    *
-   * @param tx - The transaction to which the withdrawal will be added.
+   * @param txLike - The transaction to which the withdrawal will be added.
    * @param withdrawalRequests - An array of withdrawal requests to process.
    * @param options - Optional parameters for the withdrawal process.
    * @param options.isReadyOnly - Whether to only process ready withdrawal requests (default: false).

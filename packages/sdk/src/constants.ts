@@ -10,7 +10,7 @@ import { unique, type ScriptDeps } from "@ickb/utils";
  * Accepts either a string identifier ("mainnet" or "testnet") or a custom configuration
  * object containing script dependencies for a devnet.
  *
- * It sets up various managers (UDT, Logic, OwnedOwner, Order, Dao, Capacity) and also
+ * It sets up various managers (UDT, Logic, OwnedOwner, Order, Dao) and also
  * aggregates a unique list of known bot scripts.
  *
  * @param d - Either a network identifier ("mainnet"/"testnet") or an object containing

@@ -16,7 +16,7 @@ export interface UdtHandler extends ScriptDeps {
    * for a given transaction.
    *
    * @param client - The CKB client to query cell data.
-   * @param tx - The smart transaction whose inputs are to be balanced.
+   * @param txLike - The transaction whose inputs are to be balanced.
    * @returns A promise resolving to a tuple:
    *   - [0]: Total UDT amount in inputs (as `ccc.FixedPoint`).
    *   - [1]: Total capacity in UDT inputs (as `ccc.FixedPoint`).
@@ -215,7 +215,7 @@ export class UdtManager implements UdtHandler {
    * Completes a transaction by adding UDT inputs and/or UDT change outputs as needed.
    *
    * @param signer - Signer providing client access and account scripts.
-   * @param tx - The smart transaction to adjust.
+   * @param txLike - The transaction to adjust.
    * @param options.shouldAddInputs - Whether to add inputs if insufficient. Defaults to `true`.
    * @param options.compressState - Whether to collect all UDT cells to compress state rent. Defaults to `false`.
    * @returns A promise resolving to a tuple:

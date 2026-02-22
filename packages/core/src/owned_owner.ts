@@ -58,7 +58,7 @@ export class OwnedOwnerManager implements ScriptDeps {
   /**
    * Requests a withdrawal for the specified deposits.
    *
-   * @param tx - The transaction to add the withdrawal request to.
+   * @param txLike - The transaction to add the withdrawal request to.
    * @param deposits - The deposits to withdraw.
    * @param lock - The lock script for the output.
    * @param options - Optional parameters for the withdrawal request.
@@ -113,7 +113,7 @@ export class OwnedOwnerManager implements ScriptDeps {
   /**
    * Completes the withdrawals of the specified withdrawal groups.
    *
-   * @param tx - The transaction to add the withdrawals to.
+   * @param txLike - The transaction to add the withdrawals to.
    * @param withdrawalGroups - The withdrawal groups to process.
    * @param options - Optional parameters for the withdrawal process.
    * @param options.isReadyOnly - Whether to only process ready withdrawal groups (default: false).

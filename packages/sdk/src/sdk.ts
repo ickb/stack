@@ -212,7 +212,7 @@ export class IckbSdk {
    * - Adds required cell dependencies and UDT handlers to the transaction.
    * - Appends the order cell to the transaction outputs.
    *
-   * @param tx - The smart transaction to which the order cell is added.
+   * @param txLike - The transaction to which the order cell is added.
    * @param user - The user, represented either as a Signer or a Script.
    * @param info - The order information meta data (usually computed via OrderManager.convert).
    * @param amounts - The value components for the order, including:
@@ -243,7 +243,7 @@ export class IckbSdk {
    * it filters accordingly. Then, for every valid group, the master and order cells are added
    * as inputs to the transaction.
    *
-   * @param tx - The smart transaction to which the inputs are added.
+   * @param txLike - The transaction to which the inputs are added.
    * @param groups - An array of order groups to be melted.
    * @param options - Optional parameters:
    *    - isFulfilledOnly: If true, only order groups with fully or partially fulfilled orders are processed.
