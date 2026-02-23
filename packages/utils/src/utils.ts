@@ -226,50 +226,6 @@ export class BufferedGenerator<T> {
 }
 
 /**
- * Returns the maximum value from a list of values.
- *
- * This function compares a starting value against additional values and returns the largest one.
- *
- * @param res - The initial value used as a starting point for comparisons.
- * @param rest - A variable number of additional values to compare.
- * @returns The maximum value among the provided values.
- *
- * @example
- * // Example usage:
- * const maximum = max(1, 5, 3, 9, 2); // Returns 9
- */
-export function max<T>(res: T, ...rest: T[]): T {
-  for (const v of rest) {
-    if (v > res) {
-      res = v;
-    }
-  }
-  return res;
-}
-
-/**
- * Returns the minimum value from a list of values.
- *
- * This function compares a starting value against additional values and returns the smallest one.
- *
- * @param res - The initial value used as a starting point for comparisons.
- * @param rest - A variable number of additional values to compare.
- * @returns The minimum value among the provided values.
- *
- * @example
- * // Example usage:
- * const minimum = min(1, 5, 3, 9, 2); // Returns 1
- */
-export function min<T>(res: T, ...rest: T[]): T {
-  for (const v of rest) {
-    if (v < res) {
-      res = v;
-    }
-  }
-  return res;
-}
-
-/**
  * Returns the sum of a list of values.
  *
  * This function adds together an initial value with a variable number of additional values.
@@ -312,25 +268,6 @@ export function sum<T>(res: T, ...rest: T[]): T {
 }
 
 /**
- * Calculates the greatest common divisor (GCD) of multiple `bigint` numbers.
- *
- * This function extends the Euclidean algorithm to an array of values. It calculates the GCD
- * by iteratively computing the GCD of the current result and each subsequent number.
- *
- * @param res - The initial `bigint` value to start the GCD calculation.
- * @param rest - An array of additional `bigint` values whose GCD will be computed with `res`.
- * @returns The greatest common divisor of all the provided numbers as a `bigint`.
- */
-export function gcd(res: bigint, ...rest: bigint[]): bigint {
-  for (let v of rest) {
-    while (v !== 0n) {
-      [res, v] = [v, res % v];
-    }
-  }
-  return res;
-}
-
-/**
  * Yields unique items from the given iterable based on their byte representation.
  *
  * The function uses a Set to track the byte-string keys of items that have already been yielded.
@@ -339,88 +276,17 @@ export function gcd(res: bigint, ...rest: bigint[]): bigint {
  * @typeParam T - A type that extends mol.Entity and should support a toBytes() method.
  * @param items - An iterable collection of items of type T.
  * @returns A generator that yields items from the iterable, ensuring that each item's
- *          byte representation (as computed by hexFrom) is unique.
+ *          hex representation (via toHex()) is unique.
  */
 export function* unique<T extends ccc.Entity>(
   items: Iterable<T>,
 ): Generator<T> {
   const set = new Set<string>();
   for (const i of items) {
-    const key = hexFrom(i);
+    const key = i.toHex();
     if (!set.has(key)) {
       set.add(key);
       yield i;
     }
   }
-}
-
-/**
- * Returns the hexadecimal representation (ccc.Hex) of the given value.
- *
- * @warning BigInts are always encoded in Big Endian, so this function may be unsuitable
- *          for applications that require alternative byte-order encodings.
- *
- * Supports converting a bigint, an object that implements mol.Entity's toBytes() method,
- * or any value compatible with ccc.BytesLike.
- *
- * @param v - The value to convert, which can be:
- *            - a bigint,
- *            - a mol.Entity with a toBytes() method, or
- *            - a ccc.BytesLike object.
- * @returns A hexadecimal string formatted as ccc.Hex.
- *
- * @remarks
- * - If the input is a string and already a standard hexadecimal representation (as determined by isHex),
- *   it is returned as-is.
- * - If the input is a bigint, `0x${v.toString(16)}` is used to convert it to a hex string.
- * - If the input is a mol.Entity (or any object with a toBytes() method), the toBytes() method is used
- *   to obtain a bytes-like representation before conversion.
- * - For any other case, the input is passed to ccc.hexFrom for conversion.
- */
-export function hexFrom(v: bigint | ccc.Entity | ccc.BytesLike): ccc.Hex {
-  if (typeof v === "string" && isHex(v)) {
-    return v;
-  }
-
-  if (typeof v === "bigint") {
-    return `0x${v.toString(16)}`;
-  }
-
-  if (typeof v === "object" && "toBytes" in v) {
-    v = v.toBytes();
-  }
-
-  return ccc.hexFrom(v);
-}
-
-/**
- * Determines whether a given string is a properly formatted hexadecimal string (ccc.Hex).
- *
- * A valid hexadecimal string:
- * - Has at least two characters.
- * - Starts with "0x".
- * - Has an even length.
- * - Contains only characters representing digits (0-9) or lowercase letters (a-f) after the "0x" prefix.
- *
- * @param s - The string to validate as a hexadecimal (ccc.Hex) string.
- * @returns True if the string is a valid hex string, false otherwise.
- */
-export function isHex(s: string): s is ccc.Hex {
-  if (
-    s.length < 2 ||
-    s.charCodeAt(0) !== 48 || // ascii code for '0'
-    s.charCodeAt(1) !== 120 || // ascii code for 'x'
-    s.length % 2 !== 0
-  ) {
-    return false;
-  }
-
-  for (let i = 2; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    // Allow characters '0'-'9' and 'a'-'f'
-    if (!((c >= 48 && c <= 57) || (c >= 97 && c <= 102))) {
-      return false;
-    }
-  }
-  return true;
 }
