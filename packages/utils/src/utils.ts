@@ -268,12 +268,12 @@ export function sum<T>(res: T, ...rest: T[]): T {
 }
 
 /**
- * Yields unique items from the given iterable based on their byte representation.
+ * Yields unique items from the given iterable based on their hex representation.
  *
- * The function uses a Set to track the byte-string keys of items that have already been yielded.
+ * The function uses a Set to track the hex-string keys of items that have already been yielded.
  * Only the first occurrence of each unique key is yielded.
  *
- * @typeParam T - A type that extends mol.Entity and should support a toBytes() method.
+ * @typeParam T - A type that extends ccc.Entity.
  * @param items - An iterable collection of items of type T.
  * @returns A generator that yields items from the iterable, ensuring that each item's
  *          hex representation (via toHex()) is unique.
