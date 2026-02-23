@@ -50,11 +50,10 @@ Plans:
   3. Local `isHex()` in `@ickb/utils` is replaced with `ccc.isHex()`
   4. Local `hexFrom()` call sites are refactored to explicit calls: `ccc.numToHex()` for bigint and `ccc.hexFrom(entity.toBytes())` for entities (CCC's `hexFrom()` only handles `HexLike`, not `bigint | Entity`)
   5. iCKB-unique utilities (`binarySearch`, `asyncBinarySearch`, `shuffle`, `unique`, `collect`, `BufferedGenerator`, `MinHeap`) remain in `@ickb/utils` unchanged
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Replace local max/min/gcd/hexFrom/isHex with CCC equivalents, delete local implementations, preserve iCKB-unique utilities
 
 ### Phase 3: CCC Udt Integration Investigation
 **Goal**: Clear, documented decision on whether IckbUdt should extend CCC's `udt.Udt` class for iCKB's multi-representation value (xUDT + receipts + deposits), with the header access pattern designed. This decision determines the replacement for UdtHandler/UdtManager (which remain in `@ickb/utils` with updated signatures after Phase 1).
@@ -139,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
-| 2. CCC Utility Adoption | 0/2 | Not started | - |
+| 2. CCC Utility Adoption | 0/1 | Not started | - |
 | 3. CCC Udt Integration Investigation | 0/2 | Not started | - |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
 | 5. @ickb/core UDT Refactor | 0/3 | Not started | - |
