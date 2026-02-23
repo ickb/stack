@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 repos=(
   "contracts  https://github.com/ickb/contracts.git"
   "whitepaper https://github.com/ickb/whitepaper.git"
+  "ccc-fee-payer https://github.com/ashuralyk/ccc.git --branch feat/fee-payer"
 )
 
 for entry in "${repos[@]}"; do
