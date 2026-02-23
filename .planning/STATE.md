@@ -59,7 +59,7 @@ Recent decisions affecting current work:
 - [01-03]: Replaced addUdtHandlers with tx.addCellDeps(this.udtHandler.cellDeps) across all packages
 - [01-03]: SmartTransaction class and CapacityManager class fully deleted from @ickb/utils
 - [01-03]: SDK getCkb() uses direct client.findCellsOnChain instead of CapacityManager
-- [02-01]: Used Number(ccc.numMax()) over Math.max() to maintain CCC utility adoption consistency
+- [02-01]: Used Math.max() over Number(ccc.numMax()) for number-typed contexts to avoid unnecessary number→bigint→number round-trips
 - [02-01]: Used entity.toHex() for Entity args, ccc.hexFrom() for BytesLike args -- matching CCC's type-safe separation
 
 ### Pending Todos

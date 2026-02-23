@@ -10,14 +10,14 @@ requires:
     provides: Clean @ickb/utils with SmartTransaction/CapacityManager already removed
 provides:
   - "@ickb/utils exports reduced: max/min/gcd/hexFrom/isHex deleted"
-  - "All call sites use CCC equivalents: ccc.numMax, ccc.gcd, entity.toHex(), ccc.hexFrom()"
+  - "All call sites use CCC equivalents or native JS: Math.max (number contexts), ccc.gcd, entity.toHex(), ccc.hexFrom()"
   - "unique() uses entity.toHex() internally instead of local hexFrom()"
 affects: [03-udt-investigation, 04-deprecated-api-replacement]
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: [entity.toHex() for Entity-to-Hex, Number(ccc.numMax()) for bigint-to-number contexts]
+  patterns: [entity.toHex() for Entity-to-Hex, Math.max()/Math.min() for number-typed max/min contexts]
 
 key-files:
   created:
@@ -31,12 +31,12 @@ key-files:
     - "apps/faucet/src/main.ts"
 
 key-decisions:
-  - "Used Number(ccc.numMax()) over Math.max() to maintain CCC utility adoption consistency"
+  - "Used Math.max()/Math.min() for number-typed contexts to avoid unnecessary number→bigint→number round-trips via ccc.numMax()"
   - "Used entity.toHex() for Entity args, ccc.hexFrom() for BytesLike args -- matching CCC's type-safe separation"
 
 patterns-established:
   - "Entity-to-Hex: use entity.toHex() method, never ccc.hexFrom(entity)"
-  - "Number context from numMax/numMin: wrap with Number() since CCC returns bigint"
+  - "Number context max/min: use Math.max()/Math.min() directly, avoid ccc.numMax() number→bigint→number round-trips"
 
 requirements-completed: [DEDUP-01, DEDUP-02, DEDUP-03, DEDUP-04, DEDUP-05]
 
@@ -58,7 +58,7 @@ completed: 2026-02-23
 - **Files modified:** 7
 
 ## Accomplishments
-- Replaced all 8 external call sites across 5 files with CCC equivalents (ccc.numMax, ccc.gcd, entity.toHex(), ccc.hexFrom())
+- Replaced all 8 external call sites across 5 files with CCC equivalents or native JS (Math.max, ccc.gcd, entity.toHex(), ccc.hexFrom())
 - Deleted 5 local function definitions (~135 lines) from @ickb/utils
 - Updated unique() internal implementation from hexFrom(i) to i.toHex()
 - Preserved all 8 iCKB-unique utilities (binarySearch, asyncBinarySearch, shuffle, collect, BufferedGenerator, MinHeap, sum, unique)
@@ -67,27 +67,27 @@ completed: 2026-02-23
 
 ## Task Commits
 
-Each task was committed atomically:
+Each task had an initial refactor commit, then a follow-up fix:
 
-1. **Task 1: Replace all external call sites with CCC equivalents** - `c6f2477` (refactor)
-2. **Task 2: Update unique() internals, delete local functions, generate changeset, and verify** - `9086201` (refactor)
+1. **Task 1: Replace all external call sites with CCC equivalents** — refactor, then fix (Math.max over ccc.numMax + planning docs + changeset bump downgrade)
+2. **Task 2: Update unique() internals, delete local functions, generate changeset, and verify** — refactor, then docs (unique() JSDoc)
 
 ## Files Created/Modified
 - `packages/utils/src/utils.ts` - Deleted max/min/gcd/hexFrom/isHex, updated unique() to use i.toHex()
-- `packages/order/src/entities.ts` - Replaced gcd() with ccc.gcd(), max() with Number(ccc.numMax())
+- `packages/order/src/entities.ts` - Replaced gcd() with ccc.gcd(), max() with Math.max()
 - `packages/order/src/order.ts` - Replaced hexFrom(outPoint/master) with .toHex()
-- `packages/sdk/src/codec.ts` - Replaced max() with Number(ccc.numMax())
+- `packages/sdk/src/codec.ts` - Replaced max() with Math.max()
 - `packages/sdk/src/sdk.ts` - Replaced hexFrom(lock) with lock.toHex()
 - `apps/faucet/src/main.ts` - Replaced hexFrom(bytes) with ccc.hexFrom(bytes)
 - `.changeset/remove-local-utility-functions.md` - Changeset for breaking API change
 
 ## Decisions Made
-- Used `Number(ccc.numMax(...))` instead of `Math.max(...)` for the two number-typed max() call sites, maintaining the CCC utility adoption goal at the cost of a minor `Number()` wrapping inconvenience
+- Used `Math.max()` instead of `Number(ccc.numMax(...))` for the two number-typed max() call sites, avoiding unnecessary number→bigint→number round-trips (ccc.numMax() is for bigint contexts)
 - Used `entity.toHex()` for all Entity-typed hexFrom() call sites and `ccc.hexFrom()` for the single BytesLike call site, following CCC's type-safe separation pattern
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+- Plan step 3 changeset summary prescribed `ccc.numMax`/`ccc.numMin` as replacements for `max()`/`min()`, but all call sites were number-typed. Used `Math.max()` instead to avoid unnecessary `number→bigint→number` round-trips — corrected in the fix commit.
 
 ## Issues Encountered
 None

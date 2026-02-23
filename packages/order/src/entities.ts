@@ -169,7 +169,7 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
     bScale /= g;
 
     // Prevent potential overflow by ensuring the bit length stays within 64 bits.
-    const maxBitLen = Number(ccc.numMax(aScale.toString(2).length, bScale.toString(2).length));
+    const maxBitLen = Math.max(aScale.toString(2).length, bScale.toString(2).length);
     if (maxBitLen > 64) {
       const shift = BigInt(maxBitLen - 64);
       aScale >>= shift;

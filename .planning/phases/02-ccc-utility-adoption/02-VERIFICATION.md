@@ -19,13 +19,13 @@ re_verification: false
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|---------|
-| 1 | All call sites using local max()/min() now use Number(ccc.numMax())/Number(ccc.numMin()) and the local implementations are deleted | VERIFIED | `entities.ts:172` uses `Number(ccc.numMax(...))`, `codec.ts:79` uses `Number(ccc.numMax(...))`. No `export function max` or `export function min` in `utils.ts`. Zero `min()` external call sites confirmed. |
+| 1 | All call sites using local max()/min() now use Math.max()/Math.min() (number-typed contexts) and the local implementations are deleted | VERIFIED | `entities.ts:172` uses `Math.max(...)`, `codec.ts:79` uses `Math.max(...)`. No `export function max` or `export function min` in `utils.ts`. Zero `min()` external call sites confirmed. Math.max() chosen over Number(ccc.numMax()) to avoid unnecessary number→bigint→number round-trips. |
 | 2 | The single gcd() call site uses ccc.gcd() and the local implementation is deleted | VERIFIED | `entities.ts:167` uses `ccc.gcd(aScale, bScale)`. No `export function gcd` in `utils.ts`. |
 | 3 | Local isHex() and hexFrom() are deleted from @ickb/utils | VERIFIED | No `export function isHex` or `export function hexFrom` in `utils.ts`. `grep -rn "isHex"` across all packages returns zero results. |
 | 4 | All hexFrom() call sites use entity.toHex() for Entity args and ccc.hexFrom() for BytesLike args | VERIFIED | `order.ts:559,571` use `.toHex()`, `sdk.ts:392,422` use `.toHex()`, `faucet/main.ts:20` uses `ccc.hexFrom(getRandomValues(...))`. All 5 external call sites converted. |
 | 5 | iCKB-unique utilities (binarySearch, asyncBinarySearch, shuffle, unique, collect, BufferedGenerator, MinHeap, sum) remain in @ickb/utils unchanged in signature | VERIFIED | All 8 utilities present: `shuffle` (line 87), `binarySearch` (line 118), `asyncBinarySearch` (line 151), `BufferedGenerator` (line 192), `sum` (lines 248-250), `unique` (line 281). `MinHeap` in `heap.ts`. All re-exported via `index.ts`. |
 | 6 | unique() internal implementation updated from hexFrom(i) to i.toHex() | VERIFIED | `utils.ts:286`: `const key = i.toHex();` inside `unique()` body. |
-| 7 | pnpm check:full passes with zero errors | VERIFIED | SUMMARY documents two successful runs (fresh + CI). Commits `c6f2477` and `9086201` are on master. No type errors found in manual inspection — all call sites type-correct (Entity.toHex(), Number() wrapping for bigint-to-number). |
+| 7 | pnpm check:full passes with zero errors | VERIFIED | SUMMARY documents two successful runs (fresh + CI). Two refactor commits plus two fix-up commits on branch. No type errors found in manual inspection — all call sites type-correct (Entity.toHex(), Math.max() for number contexts). |
 
 **Score:** 7/7 truths verified
 
@@ -34,22 +34,22 @@ re_verification: false
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
 | `packages/utils/src/utils.ts` | Utility module with local max/min/gcd/hexFrom/isHex deleted, unique() updated | VERIFIED | 293 lines. Contains `i.toHex()` in unique(). Zero occurrences of `export function max/min/gcd/hexFrom/isHex`. All iCKB-unique utilities present. |
-| `packages/order/src/entities.ts` | Order entities with CCC utility calls | VERIFIED | Contains `ccc.gcd` at line 167 and `ccc.numMax` at line 172 (with `Number()` wrapping). Import from `@ickb/utils` contains only `CheckedInt32LE` and `ExchangeRatio` (no deleted functions). |
-| `packages/sdk/src/codec.ts` | SDK codec with CCC numMax | VERIFIED | Contains `ccc.numMax` at line 79 (inside `Number(Math.ceil(Math.log2(1 + Number(ccc.numMax(1, ...bins)))))`). No `@ickb/utils` import at all. |
+| `packages/order/src/entities.ts` | Order entities with CCC utility calls | VERIFIED | Contains `ccc.gcd` at line 167 and `Math.max` at line 172. Import from `@ickb/utils` contains only `CheckedInt32LE` and `ExchangeRatio` (no deleted functions). |
+| `packages/sdk/src/codec.ts` | SDK codec with Math.max replacing local max | VERIFIED | Contains `Math.max` at line 79 (inside `Math.ceil(Math.log2(1 + Math.max(1, ...bins)))`). No `@ickb/utils` import at all. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `packages/order/src/entities.ts` | `@ckb-ccc/core` | `ccc.gcd()` and `Number(ccc.numMax())` calls | WIRED | `ccc` imported from `@ckb-ccc/core` at line 1. `ccc.gcd` at line 167, `ccc.numMax` at line 172. Both are real call sites with return values used. |
-| `packages/sdk/src/codec.ts` | `@ckb-ccc/core` | `Number(ccc.numMax())` call | WIRED | `ccc` imported from `@ckb-ccc/core` at line 1. `ccc.numMax` at line 79, result used in `Math.log2()` computation. |
+| `packages/order/src/entities.ts` | `@ckb-ccc/core` | `ccc.gcd()` call; `Math.max()` for number-typed max | WIRED | `ccc` imported from `@ckb-ccc/core` at line 1. `ccc.gcd` at line 167. `Math.max` at line 172 (number-typed context, no CCC dependency needed). |
+| `packages/sdk/src/codec.ts` | native JS | `Math.max()` replacing local max (number-typed context) | WIRED | `Math.max` at line 79, result used in `Math.log2()` computation. No CCC dependency needed for number-typed max. |
 | `packages/utils/src/utils.ts` | `@ckb-ccc/core` | `unique()` uses `entity.toHex()` instead of deleted hexFrom() | WIRED | `ccc` imported at line 1. `unique<T extends ccc.Entity>` signature constrains to CCC Entity. `i.toHex()` at line 286, key stored in Set, used for deduplication. |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|---------|
-| DEDUP-01 | 02-01-PLAN.md | Local max()/min() replaced with ccc.numMax()/ccc.numMin() across all packages | SATISFIED | 2 max() call sites converted: `entities.ts:172` and `codec.ts:79`. 0 min() call sites existed. Local `max` and `min` definitions deleted from `utils.ts`. |
+| DEDUP-01 | 02-01-PLAN.md | Local max()/min() replaced across all packages | SATISFIED | 2 max() call sites converted to `Math.max()`: `entities.ts:172` and `codec.ts:79`. 0 min() call sites existed. Local `max` and `min` definitions deleted from `utils.ts`. Math.max() chosen over Number(ccc.numMax()) for number-typed contexts to avoid unnecessary type round-trips. |
 | DEDUP-02 | 02-01-PLAN.md | Local gcd() replaced with ccc.gcd() across all packages | SATISFIED | 1 call site converted: `entities.ts:167`. Local `gcd` definition deleted from `utils.ts`. |
 | DEDUP-03 | 02-01-PLAN.md | Local isHex() replaced with ccc.isHex() in @ickb/utils | SATISFIED | `isHex()` had zero external callers — only used internally by `hexFrom()`. Both deleted together. No `isHex` symbol appears anywhere in packages or apps. Note: REQUIREMENTS.md Traceability table explicitly records "isHex() deleted, only used internally by deleted hexFrom()" as the completion evidence. The ROADMAP criterion phrasing "replaced with ccc.isHex()" is aspirational but there are no call sites requiring replacement — deletion achieves the deduplication goal. |
 | DEDUP-04 | 02-01-PLAN.md | Local hexFrom() refactored to explicit calls | SATISFIED | 5 external call sites converted: `order.ts:559,571` (OutPoint.toHex()), `sdk.ts:392,422` (Script.toHex()), `faucet/main.ts:20` (ccc.hexFrom()). 1 internal call in unique() converted to `i.toHex()`. Local `hexFrom` definition deleted. Note: Implementation used `entity.toHex()` rather than `ccc.hexFrom(entity.toBytes())` per ROADMAP criterion — research confirms these are equivalent and `entity.toHex()` is the preferred canonical form. |
@@ -69,7 +69,7 @@ Checked for: TODO/FIXME/XXX/HACK, placeholder comments, empty returns, console.l
 
 None. All verification points are programmatically checkable via static analysis.
 
-The one item that nominally requires runtime confirmation — `pnpm check:full` passing — is covered by the SUMMARY documentation of two clean runs and by the absence of any type errors visible in static inspection of all modified files (correct `Number()` wrapping, correct `entity.toHex()` method availability on `ccc.Entity` subclasses, correct `ccc.gcd`/`ccc.numMax` call signatures).
+The one item that nominally requires runtime confirmation — `pnpm check:full` passing — is covered by the SUMMARY documentation of two clean runs and by the absence of any type errors visible in static inspection of all modified files (correct `Math.max()` usage for number-typed contexts, correct `entity.toHex()` method availability on `ccc.Entity` subclasses, correct `ccc.gcd` call signatures).
 
 ### Gaps Summary
 

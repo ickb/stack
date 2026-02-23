@@ -72,29 +72,29 @@ const g = ccc.gcd(aScale, bScale);
 ```
 
 ### Pattern 3: Handling the max/min Number-vs-BigInt Gap
-**What:** CCC's `numMax`/`numMin` return `bigint`, but call sites use `number` arithmetic.
+**What:** CCC's `numMax`/`numMin` return `bigint`, but call sites use `number` arithmetic. For number-typed contexts, use `Math.max()`/`Math.min()` directly to avoid unnecessary `number→bigint→number` round-trips.
 **When to use:** When replacing `max()`/`min()` at `number`-typed call sites.
 **Example:**
 ```typescript
-// entities.ts -- call site uses number context, can convert surrounding code to bigint
+// entities.ts -- call site uses number context, arguments are .length (number)
 // Before:
 const maxBitLen = max(aScale.toString(2).length, bScale.toString(2).length);
 if (maxBitLen > 64) {
   const shift = BigInt(maxBitLen - 64);
 
-// After -- use Number() wrap since Math.log2 etc. need number:
-const maxBitLen = Number(ccc.numMax(aScale.toString(2).length, bScale.toString(2).length));
+// After -- use Math.max() directly since all args and consumers are number-typed:
+const maxBitLen = Math.max(aScale.toString(2).length, bScale.toString(2).length);
 if (maxBitLen > 64) {
   const shift = BigInt(maxBitLen - 64);
 ```
 
 ```typescript
-// codec.ts -- Math.ceil/Math.log2 require number
+// codec.ts -- Math.ceil/Math.log2 require number, bins are number[]
 // Before:
 return Math.ceil(Math.log2(1 + max(1, ...bins)));
 
 // After:
-return Math.ceil(Math.log2(1 + Number(ccc.numMax(1, ...bins))));
+return Math.ceil(Math.log2(1 + Math.max(1, ...bins)));
 ```
 
 ### Anti-Patterns to Avoid
@@ -120,7 +120,7 @@ return Math.ceil(Math.log2(1 + Number(ccc.numMax(1, ...bins))));
 ### Pitfall 1: Type Mismatch on numMax/numMin Return
 **What goes wrong:** `ccc.numMax()` returns `bigint` but call sites expect `number`. TypeScript will error on arithmetic with `Math.ceil`, `Math.log2`, or numeric comparison without explicit conversion.
 **Why it happens:** The local `max<T>` is generic over any comparable type; CCC's `numMax` is bigint-specific.
-**How to avoid:** Wrap `ccc.numMax()`/`ccc.numMin()` call sites with `Number()` when the surrounding context requires `number`. Alternatively, use `Math.max()`/`Math.min()` for pure `number` contexts -- the requirement says to use `ccc.numMax()`/`ccc.numMin()`, so the `Number()` wrap approach is safer for compliance.
+**How to avoid:** Use `Math.max()`/`Math.min()` for pure `number` contexts to avoid unnecessary `number→bigint→number` round-trips. Reserve `ccc.numMax()`/`ccc.numMin()` for `bigint`-typed contexts where they are a natural fit.
 **Warning signs:** TypeScript errors like "Type 'bigint' is not assignable to type 'number'" at the two `max` call sites.
 
 ### Pitfall 2: Forgetting to Update `unique()` Internal Call
@@ -157,8 +157,8 @@ Verified patterns from CCC source (`ccc-dev/ccc/packages/core/src/`):
 // Signature: ccc.numMin(a: NumLike, ...numbers: NumLike[]): Num
 // Returns: bigint (Num)
 
-// For number-typed contexts, wrap with Number():
-const maxBitLen = Number(ccc.numMax(aScale.toString(2).length, bScale.toString(2).length));
+// For number-typed contexts, use Math.max() directly (avoids number→bigint→number round-trip):
+const maxBitLen = Math.max(aScale.toString(2).length, bScale.toString(2).length);
 ```
 
 ### gcd (from utils/index.ts:276-285)
@@ -214,8 +214,8 @@ const hex2 = outPoint.toHex();              // OutPoint -> Hex
 
 | File | Line | Usage | Type | Replacement |
 |------|------|-------|------|-------------|
-| `packages/order/src/entities.ts` | 172 | `max(aScale.toString(2).length, bScale.toString(2).length)` | `number` | `Number(ccc.numMax(...))` |
-| `packages/sdk/src/codec.ts` | 80 | `max(1, ...bins)` | `number` | `Number(ccc.numMax(1, ...bins))` |
+| `packages/order/src/entities.ts` | 172 | `max(aScale.toString(2).length, bScale.toString(2).length)` | `number` | `Math.max(...)` |
+| `packages/sdk/src/codec.ts` | 80 | `max(1, ...bins)` | `number` | `Math.max(1, ...bins)` |
 
 ### `gcd()` (1 external call site)
 
@@ -251,10 +251,9 @@ const hex2 = outPoint.toHex();              // OutPoint -> Hex
 
 ## Open Questions
 
-1. **numMax/numMin vs Math.max/Math.min for number contexts**
-   - What we know: Both `max()` call sites operate on `number` type. `ccc.numMax()` returns `bigint`, requiring `Number()` wrapping.
-   - What's unclear: The requirement (DEDUP-01) explicitly says "replaced with `ccc.numMax()`/`ccc.numMin()`". Using `Math.max()`/`Math.min()` would be cleaner for `number` contexts but doesn't match the literal requirement text.
-   - Recommendation: Use `Number(ccc.numMax(...))` to satisfy the requirement literally. The `Number()` wrap is a minor inconvenience but keeps alignment with the stated goal of CCC utility adoption. If the project owner objects, `Math.max()` is the fallback.
+1. **numMax/numMin vs Math.max/Math.min for number contexts** (RESOLVED)
+   - Both `max()` call sites operate on `number` type. `ccc.numMax()` returns `bigint`, requiring `Number()` wrapping.
+   - Resolution: Use `Math.max()`/`Math.min()` for number-typed contexts. `ccc.numMax()` introduces unnecessary `number→bigint→number` round-trips when all arguments and consumers are number-typed. Reserve `ccc.numMax()`/`ccc.numMin()` for bigint contexts where they are a natural fit.
 
 2. **`sum()` preservation status**
    - What we know: `sum()` is in `utils.ts` alongside the functions being removed. It has no CCC equivalent. It's not listed in DEDUP-05's explicit preservation list.

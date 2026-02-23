@@ -45,7 +45,7 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: DEDUP-01, DEDUP-02, DEDUP-03, DEDUP-04, DEDUP-05
 **Success Criteria** (what must be TRUE):
-  1. All call sites using local `max()`/`min()` now use `ccc.numMax()`/`ccc.numMin()` and the local implementations are deleted
+  1. All call sites using local `max()`/`min()` now use `Math.max()`/`Math.min()` (number-typed contexts) and the local implementations are deleted
   2. All call sites using local `gcd()` now use `ccc.gcd()` and the local implementation is deleted
   3. Local `isHex()` in `@ickb/utils` is replaced with `ccc.isHex()`
   4. Local `hexFrom()` call sites are refactored to explicit calls: `ccc.numToHex()` for bigint and `ccc.hexFrom(entity.toBytes())` for entities (CCC's `hexFrom()` only handles `HexLike`, not `bigint | Entity`)

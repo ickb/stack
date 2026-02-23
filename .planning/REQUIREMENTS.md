@@ -22,7 +22,7 @@ Requirements for initial milestone. Each maps to roadmap phases.
 
 ### CCC Utility Deduplication
 
-- [x] **DEDUP-01**: Local `max()` / `min()` replaced with `ccc.numMax()` / `ccc.numMin()` across all packages
+- [x] **DEDUP-01**: Local `max()` / `min()` replaced across all packages -- `Math.max()`/`Math.min()` for number-typed contexts (avoids unnecessary `number→bigint→number` round-trips via `ccc.numMax()`)
 - [x] **DEDUP-02**: Local `gcd()` replaced with `ccc.gcd()` across all packages
 - [x] **DEDUP-03**: Local `isHex()` replaced with `ccc.isHex()` in `@ickb/utils`
 - [x] **DEDUP-04**: Local `hexFrom()` refactored to explicit calls -- CCC's `hexFrom()` only handles `HexLike` (not `bigint | Entity`), so call sites should use `ccc.numToHex()` for bigint and `ccc.hexFrom(entity.toBytes())` for entities (per STACK.md evaluation)
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SMTX-08 | Phase 6 | Pending | |
 | SMTX-09 | Phase 7 | Pending | |
 | SMTX-10 | Phase 4, 5 | Pending | Deprecated calls in dao/order (Phase 4) and core (Phase 5) |
-| DEDUP-01 | Phase 2 | Complete | max()/min() replaced with Number(ccc.numMax())/Number(ccc.numMin()), local deleted (02-01) |
+| DEDUP-01 | Phase 2 | Complete | max()/min() replaced with Math.max()/Math.min() for number-typed contexts, local deleted (02-01) |
 | DEDUP-02 | Phase 2 | Complete | gcd() replaced with ccc.gcd(), local deleted (02-01) |
 | DEDUP-03 | Phase 2 | Complete | isHex() deleted, only used internally by deleted hexFrom() (02-01) |
 | DEDUP-04 | Phase 2 | Complete | hexFrom() call sites use entity.toHex() or ccc.hexFrom(), local deleted (02-01) |
