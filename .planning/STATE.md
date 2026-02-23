@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Clean, CCC-aligned library packages published to npm that frontends can depend on to interact with iCKB contracts -- no Lumos, no abandoned abstractions, no duplicated functionality with CCC.
-**Current focus:** Phase 1: SmartTransaction Removal (feature-slice)
+**Current focus:** Phase 2: CCC Utility Adoption
 
 ## Current Position
 
-Phase: 1 of 7 (SmartTransaction Removal -- feature-slice)
-Plan: 3 of 3 in current phase (phase complete)
-Status: Phase 01 complete, ready for phase 02
-Last activity: 2026-02-22 -- Plan 01-03 executed (SmartTransaction/CapacityManager deletion)
+Phase: 2 of 7 (CCC Utility Adoption)
+Plan: 1 of 1 in current phase (phase complete)
+Status: Phase 02 complete, ready for phase 03
+Last activity: 2026-02-23 -- Plan 02-01 executed (local utility functions replaced with CCC equivalents)
 
-Progress: [██░░░░░░░░] 15%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~17min
-- Total execution time: 0.9 hours
+- Total plans completed: 4
+- Average duration: ~15min
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 3/3 | 52min | 17min |
+| 02 | 1/1 | 7min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~30min), 01-02 (~6min), 01-03 (~16min)
+- Last 5 plans: 01-01 (~30min), 01-02 (~6min), 01-03 (~16min), 02-01 (~7min)
 - Trend: accelerating
 
 *Updated after each plan completion*
@@ -58,6 +59,8 @@ Recent decisions affecting current work:
 - [01-03]: Replaced addUdtHandlers with tx.addCellDeps(this.udtHandler.cellDeps) across all packages
 - [01-03]: SmartTransaction class and CapacityManager class fully deleted from @ickb/utils
 - [01-03]: SDK getCkb() uses direct client.findCellsOnChain instead of CapacityManager
+- [02-01]: Used Number(ccc.numMax()) over Math.max() to maintain CCC utility adoption consistency
+- [02-01]: Used entity.toHex() for Entity args, ccc.hexFrom() for BytesLike args -- matching CCC's type-safe separation
 
 ### Pending Todos
 
@@ -70,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-22
-Stopped at: Completed 01-03-PLAN.md (Phase 01 complete)
-Resume file: .planning/phases/01-ickb-utils-smarttransaction-removal/01-03-SUMMARY.md
+Last session: 2026-02-23
+Stopped at: Completed 02-01-PLAN.md (Phase 02 complete)
+Resume file: .planning/phases/02-ccc-utility-adoption/02-01-SUMMARY.md

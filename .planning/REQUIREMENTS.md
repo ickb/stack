@@ -22,11 +22,11 @@ Requirements for initial milestone. Each maps to roadmap phases.
 
 ### CCC Utility Deduplication
 
-- [ ] **DEDUP-01**: Local `max()` / `min()` replaced with `ccc.numMax()` / `ccc.numMin()` across all packages
-- [ ] **DEDUP-02**: Local `gcd()` replaced with `ccc.gcd()` across all packages
-- [ ] **DEDUP-03**: Local `isHex()` replaced with `ccc.isHex()` in `@ickb/utils`
-- [ ] **DEDUP-04**: Local `hexFrom()` refactored to explicit calls -- CCC's `hexFrom()` only handles `HexLike` (not `bigint | Entity`), so call sites should use `ccc.numToHex()` for bigint and `ccc.hexFrom(entity.toBytes())` for entities (per STACK.md evaluation)
-- [ ] **DEDUP-05**: iCKB-unique utilities (`binarySearch`, `asyncBinarySearch`, `shuffle`, `unique`, `collect`, `BufferedGenerator`, `MinHeap`) are preserved unchanged
+- [x] **DEDUP-01**: Local `max()` / `min()` replaced with `ccc.numMax()` / `ccc.numMin()` across all packages
+- [x] **DEDUP-02**: Local `gcd()` replaced with `ccc.gcd()` across all packages
+- [x] **DEDUP-03**: Local `isHex()` replaced with `ccc.isHex()` in `@ickb/utils`
+- [x] **DEDUP-04**: Local `hexFrom()` refactored to explicit calls -- CCC's `hexFrom()` only handles `HexLike` (not `bigint | Entity`), so call sites should use `ccc.numToHex()` for bigint and `ccc.hexFrom(entity.toBytes())` for entities (per STACK.md evaluation)
+- [x] **DEDUP-05**: iCKB-unique utilities (`binarySearch`, `asyncBinarySearch`, `shuffle`, `unique`, `collect`, `BufferedGenerator`, `MinHeap`) are preserved unchanged
 
 ### CCC Udt Integration
 
@@ -91,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SMTX-08 | Phase 6 | Pending | |
 | SMTX-09 | Phase 7 | Pending | |
 | SMTX-10 | Phase 4, 5 | Pending | Deprecated calls in dao/order (Phase 4) and core (Phase 5) |
-| DEDUP-01 | Phase 2 | Pending | |
-| DEDUP-02 | Phase 2 | Pending | |
-| DEDUP-03 | Phase 2 | Pending | |
-| DEDUP-04 | Phase 2 | Pending | |
-| DEDUP-05 | Phase 2 | Pending | |
+| DEDUP-01 | Phase 2 | Complete | max()/min() replaced with Number(ccc.numMax())/Number(ccc.numMin()), local deleted (02-01) |
+| DEDUP-02 | Phase 2 | Complete | gcd() replaced with ccc.gcd(), local deleted (02-01) |
+| DEDUP-03 | Phase 2 | Complete | isHex() deleted, only used internally by deleted hexFrom() (02-01) |
+| DEDUP-04 | Phase 2 | Complete | hexFrom() call sites use entity.toHex() or ccc.hexFrom(), local deleted (02-01) |
+| DEDUP-05 | Phase 2 | Complete | All 8 iCKB-unique utilities preserved unchanged (02-01) |
 | UDT-01 | Phase 3 | Pending | |
 | UDT-02 | Phase 3 | Pending | |
 | UDT-03 | Phase 3 | Pending | |
@@ -109,4 +109,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-22 after 01-03 execution (SMTX-01, SMTX-02, SMTX-05 completed; Phase 1 complete)*
+*Last updated: 2026-02-23 after 02-01 execution (DEDUP-01 through DEDUP-05 completed; Phase 2 complete)*
