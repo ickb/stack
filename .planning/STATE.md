@@ -69,7 +69,9 @@ None yet.
 ### Blockers/Concerns
 
 - Resolved: CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()` (verified in STACK.md from CCC source). No standalone utility needed.
-- Research gap: CCC Udt `getInputsInfo()` signature needs verification for header fetching context -- must confirm during Phase 3 investigation.
+- Resolved: CCC Udt `getInputsInfo()` resolves inputs to `Cell` objects (which have `outPoint`) before passing to `infoFrom()`. `infoFrom()`'s `CellAnyLike` parameter has `outPoint?: OutPointLike | null` — optional, not absent. Input cells have outPoint (for header fetches), output cells don't. Both `infoFrom` and `getInputsInfo/getOutputsInfo` are viable override points for IckbUdt (verified during Phase 3 discuss-phase).
+- STACK.md research correction: `client.getHeaderByTxHash()` does not exist in CCC. The correct API is `client.getTransactionWithHeader()`. STACK.md line 162 references a non-existent method.
+- STACK.md research correction: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328").
 
 ## Session Continuity
 

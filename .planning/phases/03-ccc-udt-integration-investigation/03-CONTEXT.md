@@ -55,8 +55,8 @@ Assess feasibility of subclassing CCC's `udt.Udt` class for iCKB's multi-represe
 <specifics>
 ## Specific Ideas
 
-- `infoFrom` can detect input vs output cells via outpoint presence — investigate this as a cleaner override strategy
-- PR #328's `completeInputs(tx, filter, accumulator)` pattern could be the hook for auto-fetching iCKB receipt/deposit cells during transaction completion
+- `infoFrom` can detect input vs output cells via outpoint presence — investigate this as a cleaner override strategy. Note: STACK.md research incorrectly claimed `CellAnyLike` lacks `outPoint`; it actually has `outPoint?: OutPointLike | null`. `getInputsInfo()` passes `Cell` objects (always have outPoint) to `infoFrom()`, while `getOutputsInfo()` passes `CellAny` from `tx.outputCells` (no outPoint). Both override points are viable.
+- PR #328's `completeInputs(tx, filter, accumulator)` pattern could be the hook for auto-fetching iCKB receipt/deposit cells during transaction completion. Note: STACK.md research recommended `client.getHeaderByTxHash()` which does not exist in CCC — the correct API is `client.getTransactionWithHeader()` as used in the current codebase.
 - The `ickbValue()` function (core/udt.ts:151) and `convert()` function (core/udt.ts:179) are the core exchange rate calculation — these must work within the Udt override context
 - Current `IckbUdtManager.getInputsUdtBalance()` (core/udt.ts:66) is the reference implementation for multi-representation balance calculation — three cell types: xUDT cells, receipt cells (type = logicScript), deposit cells (lock = logicScript + isDeposit)
 
