@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { max } from "@ickb/utils";
 
 const N = 1024;
 
@@ -77,7 +76,7 @@ export const PoolSnapshot = ccc.Codec.from<number[]>({
  * @returns The minimal number of bits required to represent the highest value among the bins.
  */
 function computeBits(bins: number[]): number {
-  return Math.ceil(Math.log2(1 + max(1, ...bins)));
+  return Math.ceil(Math.log2(1 + Math.max(1, ...bins)));
 }
 
 /**

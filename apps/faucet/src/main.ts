@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { hexFrom, sum, unique } from "@ickb/utils";
+import { sum, unique } from "@ickb/utils";
 import { getRandomValues } from "crypto";
 import { exit } from "process";
 
@@ -17,7 +17,7 @@ export async function main(): Promise<void> {
   const realAccount = await ccc.Address.fromString(ADDRESS, client);
 
   console.log("Generating temporary key:");
-  const key = hexFrom(getRandomValues(new Uint8Array(32)));
+  const key = ccc.hexFrom(getRandomValues(new Uint8Array(32)));
   console.log(key);
   console.log();
 

@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import {
   BufferedGenerator,
   defaultFindCellsLimit,
-  hexFrom,
   type ExchangeRatio,
   type ScriptDeps,
   type UdtHandler,
@@ -557,7 +556,7 @@ export class OrderManager implements ScriptDeps {
     // Prepare a map of masterCellKey → { master, originPromise?, orders[] }
     const rawGroups = new Map(
       allMasters.map((master) => [
-        hexFrom(master.cell.outPoint),
+        master.cell.outPoint.toHex(),
         {
           master,
           origin: undefined as Promise<OrderCell | undefined> | undefined,
@@ -569,7 +568,7 @@ export class OrderManager implements ScriptDeps {
     // Group simple orders by their master cell, kick off origin lookup once per master
     for (const order of simpleOrders) {
       const master = order.getMaster();
-      const key = hexFrom(master);
+      const key = master.toHex();
       const rawGroup = rawGroups.get(key);
 
       if (!rawGroup) {

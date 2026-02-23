@@ -7,6 +7,7 @@
 - Refer to yourself as "AI Coworker" in docs and comments, not by product or company name
 - Never add AI tool attribution or branding to PR descriptions, commit messages, or code comments
 - Do not install or use `gh` CLI
+- When a post-plan fix changes a documented decision, update the planning docs in the same commit
 - **Copy to clipboard**:
 
   ```sh
