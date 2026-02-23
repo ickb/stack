@@ -63,11 +63,11 @@ Plans:
   1. A written feasibility assessment exists answering: can `IckbUdt extends udt.Udt` override `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells, without breaking CCC's internal method chains
   2. The header access pattern for receipt value calculation is designed and documented -- specifying whether `client.getCellWithHeader()`, `client.getHeaderByTxHash()`, or direct CCC client calls are used within the Udt override (note: `getHeader()` was removed in Phase 1)
   3. A decision document exists with one of three outcomes: (a) subclass CCC Udt, (b) keep custom interface, (c) hybrid approach -- with rationale for the chosen path
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Trace CCC Udt internals end-to-end, verify infoFrom override feasibility, resolve open questions
+- [ ] 03-02-PLAN.md — Write formal decision document (feasibility assessment, header access pattern, decision with rationale)
 
 ### Phase 4: Deprecated CCC API Replacement
 **Goal**: Deprecated CCC API calls are replaced with `@ckb-ccc/udt` equivalents in `@ickb/dao` and `@ickb/order`; UDT handler usage is finalized based on Phase 3 findings (method signatures and `addUdtHandlers()` removal already done in Phase 1)
