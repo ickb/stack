@@ -152,7 +152,12 @@ class IckbUdt extends udt.Udt {
       }
 
       // Deposit cell: lock === logicScript && isDeposit
-      if (lock.eq(this.logicScript) && this.daoManager.isDeposit(/*..*/)) {
+      if (lock.eq(this.logicScript)) {
+        // Construct Cell for isDeposit() which requires ccc.Cell, not CellAny
+        const fullCell = ccc.Cell.from({ outPoint: cell.outPoint, cellOutput: cell.cellOutput, outputData: cell.outputData });
+        if (!this.daoManager.isDeposit(fullCell)) {
+          continue;
+        }
         const txWithHeader = await client.getTransactionWithHeader(
           cell.outPoint.txHash,
         );
@@ -161,7 +166,7 @@ class IckbUdt extends udt.Udt {
         }
         // Deposits SUBTRACT from iCKB balance (conservation law)
         info.addAssign({
-          balance: -ickbValue(cell.cellOutput.capacity - /*occupiedCapacity*/, txWithHeader.header),
+          balance: -ickbValue(cell.capacityFree, txWithHeader.header),
           capacity: cell.cellOutput.capacity,
           count: 1,
         });
@@ -202,7 +207,7 @@ class IckbUdt extends udt.Udt {
 ### Anti-Patterns to Avoid
 - **Overriding `getInputsInfo`/`getOutputsInfo` directly:** These methods contain resolution logic (resolving `CellInput` to `Cell`, iterating `tx.outputCells`) that would need to be duplicated. Override `infoFrom` instead for cleaner code.
 - **Using `infoFrom` for cell discovery:** `infoFrom` is for balance calculation from already-known cells, not for finding cells on-chain. Cell discovery uses `filter` + `completeInputs`.
-- **Mixing `DaoManager.isDeposit(cell)` with `CellAny`:** `DaoManager.isDeposit()` expects `ccc.Cell` (with `outPoint`), not `CellAny`. When calling within `infoFrom`, construct a `Cell` from `CellAny` only when `outPoint` is present. This is safe because deposit cells are only relevant as inputs.
+- **Passing `CellAny` to `DaoManager.isDeposit()`:** `DaoManager.isDeposit()` expects `ccc.Cell`, not `CellAny`. When calling within `infoFrom`, construct `Cell.from({ outPoint, cellOutput, outputData })` from the `CellAny` when `outPoint` is present. This is safe because deposit cells are only relevant as inputs. Note: `capacityFree` is available on `CellAny` directly -- only `isDeposit` requires the `Cell` construction.
 - **Ignoring the sign convention for deposits:** In the iCKB conservation law, deposit cells consumed as inputs SUBTRACT from iCKB balance. The current `IckbUdtManager.getInputsUdtBalance()` uses `udtValue - ickbValue(...)` for deposits. The `infoFrom` override must preserve this negative balance contribution.
 
 ## Don't Hand-Roll
@@ -239,7 +244,7 @@ class IckbUdt extends udt.Udt {
 ### Pitfall 4: Capacity Calculation for Deposit Cells
 **What goes wrong:** Using `cell.cellOutput.capacity` directly instead of `cell.capacityFree` (unoccupied capacity) for deposit cell iCKB value.
 **Why it happens:** The iCKB exchange rate applies to unoccupied capacity, not total capacity. Deposit cells have 82 CKB occupied capacity.
-**How to avoid:** Use `cell.capacityFree` (which is `capacity - occupiedCapacity`) when computing `ickbValue()` for deposit cells. Note: `CellAny` does not have `capacityFree` -- need to access it from `Cell` or compute manually.
+**How to avoid:** Use `cell.capacityFree` (which is `capacity - fixedPointFrom(occupiedSize)`) when computing `ickbValue()` for deposit cells. `CellAny` has `capacityFree` (transaction.ts:404-405), so this works directly within `infoFrom`.
 **Warning signs:** Slight over-valuation of deposit cells leading to invalid transactions.
 
 ### Pitfall 5: Async infoFrom and CCC's Completion Loop
@@ -349,6 +354,7 @@ type CellAnyLike = {
 
 class CellAny {
   public outPoint: OutPoint | undefined;  // undefined for output cells
+  get capacityFree() { return this.cellOutput.capacity - fixedPointFrom(this.occupiedSize); }
   // ...
 }
 ```
@@ -391,9 +397,9 @@ abstract completeInputs<T>(
    - Recommendation: **Caller responsibility.** The current pattern already has `LogicManager` and `OwnedOwnerManager` handling receipt/deposit cell discovery and addition. `IckbUdt.infoFrom` should accurately VALUE these cells when they appear in the transaction, but should NOT be responsible for FINDING them. This keeps the subclass clean and avoids fighting CCC's single-filter design. The `completeInputsByBalance` method then correctly accounts for receipt/deposit value that the caller has already added.
 
 2. **`capacityFree` on CellAny vs Cell**
-   - What we know: `ickbValue()` for deposit cells uses `cell.capacityFree` (unoccupied capacity). `CellAny` may not expose `capacityFree` directly.
-   - What's unclear: Whether `CellAny` has `capacityFree` or if we need to construct a `Cell` from the `CellAny` to access it.
-   - Recommendation: Check `CellAny` API during implementation. If missing, compute manually: `capacity - CellOutput.from(cellOutput).occupiedSize * 100000000n` (or similar). Alternatively, since deposit cells only appear as inputs (with outPoint), construct `Cell.from({ outPoint, cellOutput, outputData })` which definitely has `capacityFree`.
+   - What we know: `ickbValue()` for deposit cells uses `cell.capacityFree` (unoccupied capacity).
+   - **Resolved:** `CellAny` has `capacityFree` getter (transaction.ts:404-405): `get capacityFree() { return this.cellOutput.capacity - fixedPointFrom(this.occupiedSize); }`. No need to construct a `Cell` -- `CellAny.from(cellLike).capacityFree` works directly in `infoFrom`.
+   - Note: `DaoManager.isDeposit()` still requires `ccc.Cell` (not `CellAny`). For deposit cells (which have `outPoint`), construct `Cell.from({ outPoint, cellOutput, outputData })` for the `isDeposit` call only.
 
 3. **PR #328 FeePayer Integration**
    - What we know: PR #328 abstracts `completeInputs` into `FeePayer.completeInputs(tx, filter, accumulator, init)`. The current CCC Udt's `completeInputs` delegates to `tx.completeInputs(from, this.filter, ...)` which delegates to `from.completeInputs(...)` (Signer). PR #328 changes this to go through `FeePayer.completeInputs`.

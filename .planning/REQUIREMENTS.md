@@ -31,7 +31,7 @@ Requirements for initial milestone. Each maps to roadmap phases.
 ### CCC Udt Integration
 
 - [ ] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
-- [ ] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getHeaderByTxHash()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
+- [ ] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
 - [ ] **UDT-03**: Decision documented: subclass CCC `Udt` vs. keep custom `UdtHandler` interface vs. hybrid approach
 - [ ] **UDT-04**: If subclassing is viable, `IckbUdt` class is implemented in `@ickb/core` with multi-representation balance calculation
 - [ ] **UDT-05**: If subclassing is not viable, `IckbUdtManager` is refactored to work with plain `ccc.Transaction` (no SmartTransaction dependency) while maintaining a compatible interface

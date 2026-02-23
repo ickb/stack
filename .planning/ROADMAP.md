@@ -60,8 +60,8 @@ Plans:
 **Depends on**: Nothing (can proceed in parallel with Phases 1-2; design investigation, not code changes)
 **Requirements**: UDT-01, UDT-02, UDT-03
 **Success Criteria** (what must be TRUE):
-  1. A written feasibility assessment exists answering: can `IckbUdt extends udt.Udt` override `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells, without breaking CCC's internal method chains
-  2. The header access pattern for receipt value calculation is designed and documented -- specifying whether `client.getCellWithHeader()`, `client.getHeaderByTxHash()`, or direct CCC client calls are used within the Udt override (note: `getHeader()` was removed in Phase 1)
+  1. A written feasibility assessment exists answering: can `IckbUdt extends udt.Udt` override `infoFrom()` (or `getInputsInfo()`/`getOutputsInfo()`) to account for receipt cells and deposit cells alongside xUDT cells, without breaking CCC's internal method chains
+  2. The header access pattern for receipt value calculation is designed and documented -- specifying whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (note: `getHeader()` was removed in Phase 1)
   3. A decision document exists with one of three outcomes: (a) subclass CCC Udt, (b) keep custom interface, (c) hybrid approach -- with rationale for the chosen path
 **Plans**: 2 plans
 
@@ -89,7 +89,7 @@ Plans:
 **Requirements**: SMTX-05, SMTX-07, SMTX-10, UDT-04, UDT-05
 **Success Criteria** (what must be TRUE):
   1. The iCKB conservation law (`Input UDT + Input Receipts = Output UDT + Input Deposits`) is enforced correctly in the refactored code -- multi-representation UDT balance logic survives intact
-  2. If Phase 3 concluded subclassing is viable: `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `getInputsInfo()`/`getOutputsInfo()` that account for xUDT cells, receipt cells, and deposit cells
+  2. If Phase 3 concluded subclassing is viable: `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `infoFrom()` that accounts for xUDT cells, receipt cells, and deposit cells
   3. If Phase 3 concluded subclassing is not viable: `IckbUdtManager` is refactored to work with plain `ccc.Transaction` while maintaining a compatible interface for balance calculation
   4. `UdtHandler` interface and `UdtManager` class are removed from `@ickb/utils` (their responsibilities absorbed by the Phase 3 outcome implementation)
   5. No calls to deprecated CCC APIs exist in `@ickb/core`
@@ -139,7 +139,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 |-------|----------------|--------|-----------|
 | 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
 | 2. CCC Utility Adoption | 1/1 | Complete    | 2026-02-23 |
-| 3. CCC Udt Integration Investigation | 0/2 | Not started | - |
+| 3. CCC Udt Integration Investigation | 0/2 | In progress | - |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
 | 5. @ickb/core UDT Refactor | 0/3 | Not started | - |
 | 6. SDK Completion Pipeline | 0/2 | Not started | - |

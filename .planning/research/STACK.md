@@ -140,30 +140,28 @@ Where `getInputsCapacityExtra` sums `getExtraCapacity()` per input, which calls 
 
 ### Recommended Approach: Subclass `Udt` from `@ckb-ccc/udt`
 
-Create `IckbUdt extends Udt` that overrides `getInputsInfo()` and `getOutputsInfo()` to recognize all three representations.
+Create `IckbUdt extends Udt` that overrides `infoFrom()` to recognize all three representations.
 
-**Why `getInputsInfo()`/`getOutputsInfo()` (not `infoFrom()`):**
-- The natural candidate would be `infoFrom()` -- it's called by all balance/info methods, so overriding it would propagate everywhere. However, `infoFrom()` receives `CellAnyLike` which lacks `outPoint`, and iCKB receipt/deposit value calculation requires the cell's outPoint to fetch the block header via transaction hash.
-- `getInputsInfo()` and `getOutputsInfo()` receive the full `TransactionLike`, so input outpoints are available for header lookups. This is cleaner than trying to thread header information through `infoFrom()`.
-- CCC's `completeInputsByBalance()` calls `this.getInputsInfo()`, so overriding it changes balancing behavior correctly.
+**Why `infoFrom()` (updated in Phase 3 research):**
+- `infoFrom()` is called by all balance/info methods, so overriding it propagates everywhere. Input cells passed via `getInputsInfo()` → `CellInput.getCell()` always have `outPoint` set on the `CellAny`/`Cell` objects, enabling header fetches for receipt/deposit value calculation. Output cells from `tx.outputCells` lack `outPoint`, allowing `infoFrom` to distinguish inputs from outputs.
+- `CellAny` has `capacityFree` (transaction.ts:404-405), so deposit cell valuation works directly. Only `DaoManager.isDeposit()` requires constructing a `Cell` from `CellAny`.
+- CCC's `completeInputsByBalance()` chains through `getInputsInfo()` → `infoFrom()`, so overriding `infoFrom` changes balancing behavior correctly without duplicating resolution logic.
 
 **Why NOT override `completeInputsByBalance()`:**
 - The base implementation's dual-constraint logic (balance + capacity) is correct for iCKB
 - The subclass only needs to change HOW balance is calculated from cells, not the input selection strategy
 
-**Implementation sketch:** See ARCHITECTURE.md "Pattern 2: IckbUdt Subclass" for the full code example with `getInputsInfo()` override.
+**Implementation sketch:** See 03-RESEARCH.md for the corrected `infoFrom()` override pattern. ARCHITECTURE.md "Pattern 2" has an older `getInputsInfo()` override example (marked as outdated).
 
-**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (CCC Udt Integration Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
+**Header fetching within `infoFrom()` override:**
 
-**Header fetching within `getInputsInfo()`:**
+Since input cells have `outPoint` set (resolved via `CellInput.getCell(client)` in `getInputsInfo`), the `infoFrom` override can fetch headers using:
 
-Since `getInputsInfo()` receives the full transaction, input outpoints are directly available. The implementation can fetch headers using:
-
-1. **`client.getHeaderByTxHash(input.previousOutput.txHash)`** -- Fetches the block header for the transaction that created the cell. Cached by CCC Client. This is the approach used in the ARCHITECTURE.md code sketch.
+1. **`client.getTransactionWithHeader(cell.outPoint.txHash)`** -- Fetches the block header for the transaction that created the cell. Cached by CCC Client. Returns `{ transaction, header? }`.
 
 2. **`client.getTransaction()` + `client.getHeaderByHash()`** -- Alternative two-step approach: get the transaction response (which includes `blockHash`), then fetch the header. Both are cached by CCC Client.
 
-Option 1 is simpler and sufficient for the `getInputsInfo()` override.
+Option 1 is simpler and sufficient for the `infoFrom()` override.
 
 ## CCC Transaction Completion Pattern
 

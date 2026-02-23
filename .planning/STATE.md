@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 3 of 7 (CCC Udt Integration Investigation)
-Plan: 0 of 2 in current phase (context gathered, ready for planning)
-Status: Phase 03 context gathered, ready for planning
-Last activity: 2026-02-23 -- Phase 03 context gathered (discuss-phase)
+Plan: 0 of 2 in current phase (planned, ready for execution)
+Status: Phase 03 planned, ready for execution
+Last activity: 2026-02-23 -- Phase 03 plans created (plan-phase)
 
-Progress: [███░░░░░░░] 25%
+Progress: [███░░░░░░░] 29%
 
 ## Performance Metrics
 
@@ -70,11 +70,12 @@ None yet.
 
 - Resolved: CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()` (verified in STACK.md from CCC source). No standalone utility needed.
 - Resolved: CCC Udt `getInputsInfo()` resolves inputs to `Cell` objects (which have `outPoint`) before passing to `infoFrom()`. `infoFrom()`'s `CellAnyLike` parameter has `outPoint?: OutPointLike | null` — optional, not absent. Input cells have outPoint (for header fetches), output cells don't. Both `infoFrom` and `getInputsInfo/getOutputsInfo` are viable override points for IckbUdt (verified during Phase 3 discuss-phase).
-- STACK.md research correction: `client.getHeaderByTxHash()` does not exist in CCC. The correct API is `client.getTransactionWithHeader()`. STACK.md line 162 references a non-existent method.
-- STACK.md research correction: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328").
+- Resolved: STACK.md research correction applied — `client.getHeaderByTxHash()` (non-existent) replaced with `client.getTransactionWithHeader()` in STACK.md, ROADMAP.md Phase 3 success criterion #2, and REQUIREMENTS.md UDT-02.
+- Resolved: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328").
+- Resolved: `CellAny` has `capacityFree` getter (CCC transaction.ts:404-405) — 03-RESEARCH.md corrected (previously claimed `CellAny` lacked it).
 
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-ccc-udt-integration-investigation/03-CONTEXT.md
+Stopped at: Phase 3 plans created, ready for execution
+Resume file: .planning/phases/03-ccc-udt-integration-investigation/03-01-PLAN.md

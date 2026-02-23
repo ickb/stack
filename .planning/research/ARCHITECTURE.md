@@ -137,7 +137,7 @@ Target: All manager methods accept `ccc.TransactionLike` instead of `SmartTransa
 |---|---|
 | `udtHandlers` map + `addUdtHandlers()` | CCC `Udt.completeBy()` / `Udt.completeInputsByBalance()` called at transaction completion time |
 | `completeFee()` override that calls UDT handlers | App-level orchestration: call `ickbUdt.completeBy(tx, signer)` then `tx.completeFeeBy(signer)` |
-| `getInputsUdtBalance()`/`getOutputsUdtBalance()` overrides | `IckbUdt.getInputsInfo(client, tx)` / `IckbUdt.getOutputsInfo(client, tx)` |
+| `getInputsUdtBalance()`/`getOutputsUdtBalance()` overrides | `ickbUdt.getInputsInfo(client, tx)` / `ickbUdt.getOutputsInfo(client, tx)` (delegating to overridden `infoFrom()`) |
 | `getInputsCapacity()` DAO profit override | Not needed -- CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `Cell.getDaoProfit()` |
 | `headers` map + `addHeaders()` + `getHeader()` | Removed entirely. `getHeader()` call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`). `addHeaders()` call sites push to `tx.headerDeps` directly. CCC's Client Cache handles caching transparently |
 | `addCellDeps()` deduplication | `tx.addCellDeps()` (already on `ccc.Transaction`) |
@@ -159,9 +159,9 @@ iCKB's triple-representation value requires custom balance calculation to accoun
 2. Receipt cells (valued as `depositQuantity * ickbValue(depositAmount, header)`)
 3. iCKB deposit cells consumed as inputs (negative iCKB value: `-ickbValue(cell.capacityFree, header)`)
 
-**Recommended approach: Subclass `Udt` as `IckbUdt`, overriding `getInputsInfo()` and `getOutputsInfo()`.**
+**Recommended approach: Subclass `Udt` as `IckbUdt`, overriding `infoFrom()`.**
 
-The natural override point would be `infoFrom()` (called by all balance/info methods), but `infoFrom()` receives `CellAnyLike` which lacks `outPoint` -- needed to fetch the deposit header via transaction hash for receipt and deposit value calculation. Instead, `getInputsInfo()` and `getOutputsInfo()` receive the full transaction, so input outpoints are available for header lookups.
+**Correction (Phase 3):** This section originally recommended overriding `getInputsInfo()`/`getOutputsInfo()` based on the incorrect premise that `CellAnyLike` lacks `outPoint`. In fact, `CellAnyLike` has `outPoint?: OutPointLike | null`, and input cells passed through `getInputsInfo` → `CellInput.getCell()` always have `outPoint` set. `CellAny` also has `capacityFree`. Therefore `infoFrom()` is the better override point — it's more granular (per-cell) and avoids duplicating resolution logic. See 03-RESEARCH.md for the corrected design. The code example below uses the older `getInputsInfo()` pattern; the corrected `infoFrom()` pattern is in 03-RESEARCH.md.
 
 ```typescript
 // packages/core/src/udt.ts -- refactored
@@ -185,8 +185,8 @@ export class IckbUdt extends udt.Udt {
    * 3. Deposit cells being withdrawn (lock = logicScript + DAO deposit,
    *    negative balance = -ickbValue)
    *
-   * Uses getInputsInfo (not infoFrom) because receipt/deposit value calculation
-   * requires the cell's outPoint for header fetching, which CellAnyLike lacks.
+   * NOTE: Phase 3 research recommends overriding infoFrom() instead.
+   * CellAnyLike has outPoint, and input cells always have it set.
    */
   override async getInputsInfo(
     client: ccc.Client,
@@ -211,7 +211,7 @@ export class IckbUdt extends udt.Udt {
 
       // iCKB Receipt
       if (cell.cellOutput.type?.eq(this.logicScript)) {
-        const header = await client.getHeaderByTxHash(input.previousOutput.txHash);
+        const { header } = (await client.getTransactionWithHeader(input.previousOutput.txHash)) ?? {};
         const { depositQuantity, depositAmount } = ReceiptData.decode(cell.outputData);
         info.addAssign({
           balance: ickbValue(depositAmount, header) * BigInt(depositQuantity),
@@ -223,7 +223,7 @@ export class IckbUdt extends udt.Udt {
 
       // iCKB Deposit being withdrawn (negative UDT balance)
       if (cell.cellOutput.lock.eq(this.logicScript) && this.daoManager.isDeposit(cell)) {
-        const header = await client.getHeaderByTxHash(input.previousOutput.txHash);
+        const { header } = (await client.getTransactionWithHeader(input.previousOutput.txHash)) ?? {};
         info.addAssign({
           balance: -ickbValue(cell.capacityFree, header),
           capacity: cell.cellOutput.capacity,
@@ -382,17 +382,19 @@ await signer.sendTransaction(completedTx);
 
 ### Pattern 2: IckbUdt Subclass with Overridden Balance Calculation
 
-**What:** `IckbUdt extends udt.Udt` overriding `getInputsInfo()` and `getOutputsInfo()` to account for the triple-representation value model.
+**Correction (Phase 3):** Phase 3 research determined that `infoFrom()` is the preferred override point, not `getInputsInfo()`/`getOutputsInfo()`. The code example below uses the older `getInputsInfo()` pattern; see 03-RESEARCH.md for the corrected `infoFrom()` pattern.
+
+**What:** `IckbUdt extends udt.Udt` overriding `infoFrom()` to account for the triple-representation value model.
 
 **When to use:** Whenever iCKB UDT balancing is needed (order creation, deposit completion, any tx involving iCKB tokens).
 
 **Trade-offs:**
 - Pro: All CCC Udt methods (completeBy, completeInputsByBalance, getBalanceBurned) automatically work with iCKB's special value model
 - Pro: Consistent with CCC ecosystem patterns -- other projects can adopt the same pattern
-- Con: Requires header fetching inside getInputsInfo(), which adds async complexity
+- Con: Requires header fetching inside infoFrom(), which adds async complexity
 - Con: `IckbUdt` needs references to `logicScript` and `daoManager` for cell type detection
 
-**Example:**
+**Example (outdated — uses `getInputsInfo()` override; see 03-RESEARCH.md for corrected `infoFrom()` pattern):**
 ```typescript
 export class IckbUdt extends udt.Udt {
   constructor(
@@ -427,7 +429,7 @@ export class IckbUdt extends udt.Udt {
 
       // iCKB Receipt
       if (cell.cellOutput.type?.eq(this.logicScript)) {
-        const header = await client.getHeaderByTxHash(input.previousOutput.txHash);
+        const { header } = (await client.getTransactionWithHeader(input.previousOutput.txHash)) ?? {};
         const { depositQuantity, depositAmount } = ReceiptData.decode(cell.outputData);
         info.addAssign({
           balance: ickbValue(depositAmount, header) * BigInt(depositQuantity),
@@ -439,7 +441,7 @@ export class IckbUdt extends udt.Udt {
 
       // iCKB Deposit being withdrawn (negative UDT balance)
       if (cell.cellOutput.lock.eq(this.logicScript) && this.daoManager.isDeposit(cell)) {
-        const header = await client.getHeaderByTxHash(input.previousOutput.txHash);
+        const { header } = (await client.getTransactionWithHeader(input.previousOutput.txHash)) ?? {};
         info.addAssign({
           balance: -ickbValue(cell.capacityFree, header),
           capacity: cell.cellOutput.capacity,
@@ -508,7 +510,7 @@ export async function completeIckbTransaction(
 - The headers map creates shared mutable state between cloned transactions
 - Header dependencies (`headerDeps`) are already tracked by `ccc.Transaction`
 
-**Do this instead:** Use `client.getHeaderByTxHash()` or `client.getHeaderByNumber()` and rely on CCC's client-side caching. For transaction-specific header operations (like DAO profit calculation), pass headers explicitly.
+**Do this instead:** Use `client.getTransactionWithHeader()` or `client.getHeaderByNumber()` and rely on CCC's client-side caching. For transaction-specific header operations (like DAO profit calculation), pass headers explicitly.
 
 ### Anti-Pattern 3: Generic UdtHandler Interface in Utils
 
