@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE, gcd, max, type ExchangeRatio } from "@ickb/utils";
+import { CheckedInt32LE, type ExchangeRatio } from "@ickb/utils";
 
 /**
  * Represents a ratio of two scales, CKB and UDT, with validation and comparison methods.
@@ -164,12 +164,12 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
     bScale *= feeBase;
 
     // Reduce the ratio by dividing by the greatest common divisor.
-    const g = gcd(aScale, bScale);
+    const g = ccc.gcd(aScale, bScale);
     aScale /= g;
     bScale /= g;
 
     // Prevent potential overflow by ensuring the bit length stays within 64 bits.
-    const maxBitLen = max(aScale.toString(2).length, bScale.toString(2).length);
+    const maxBitLen = Number(ccc.numMax(aScale.toString(2).length, bScale.toString(2).length));
     if (maxBitLen > 64) {
       const shift = BigInt(maxBitLen - 64);
       aScale >>= shift;

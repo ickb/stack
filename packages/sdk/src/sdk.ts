@@ -4,7 +4,6 @@ import {
   binarySearch,
   unique,
   type ValueComponents,
-  hexFrom,
 } from "@ickb/utils";
 import {
   convert,
@@ -390,7 +389,7 @@ export class IckbSdk {
           continue;
         }
 
-        const key = hexFrom(cell.cellOutput.lock);
+        const key = cell.cellOutput.lock.toHex();
         const ckb =
           (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
         bot2Ckb.set(key, ckb);
@@ -420,7 +419,7 @@ export class IckbSdk {
     for (const wr of await promiseBotWithdrawals) {
       if (wr.owned.isReady) {
         // Update the bot's CKB based on withdrawal if the bot is ready.
-        const key = hexFrom(wr.owner.cell.cellOutput.lock);
+        const key = wr.owner.cell.cellOutput.lock.toHex();
         const ckb = (bot2Ckb.get(key) ?? reserved) + wr.ckbValue;
         bot2Ckb.set(key, ckb);
         continue;
