@@ -1,0 +1,15 @@
+--- packages/core/src/ckb/transaction.ts
+CONFLICT ours=5 base=4 theirs=1 resolution=4
+import {
+  ErrorNervosDaoOutputLimit,
+  ErrorTransactionInsufficientCoin,
+} from "./transactionErrors.js";
+CONFLICT ours=97 base=95 theirs=7 resolution=8
+    const result = await from.completeFee(this, {
+      changeFn: change,
+      feeRate: expectedFeeRate,
+      filter,
+      options,
+    });
+    await assertDaoOutputLimit(this, from.client);
+    return result;
