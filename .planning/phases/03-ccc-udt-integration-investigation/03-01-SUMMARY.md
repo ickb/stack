@@ -6,9 +6,9 @@ tags: [ccc, udt, subclass, infoFrom, override, header-access]
 
 # Dependency graph
 requires:
-  - phase: 01-lumos-removal
+  - phase: 01-ickb-utils-smarttransaction-removal
     provides: "IckbUdtManager with TransactionLike pattern, DaoManager with isDeposit()"
-  - phase: 02-ccc-deprecation-removal
+  - phase: 02-ccc-utility-adoption
     provides: "Clean codebase without deprecated CCC APIs"
 provides:
   - "Verified source-code-backed evidence for IckbUdt extends udt.Udt feasibility"

@@ -9,9 +9,9 @@ requires:
   - phase: 03-ccc-udt-integration-investigation
     plan: 01
     provides: "Source code trace evidence for infoFrom override feasibility, resolved open questions"
-  - phase: 01-lumos-removal
+  - phase: 01-ickb-utils-smarttransaction-removal
     provides: "IckbUdtManager with TransactionLike pattern, DaoManager with isDeposit()"
-  - phase: 02-ccc-deprecation-removal
+  - phase: 02-ccc-utility-adoption
     provides: "Clean codebase without deprecated CCC APIs"
 provides:
   - "Formal decision: IckbUdt extends udt.Udt with infoFrom override"
