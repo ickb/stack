@@ -20,7 +20,7 @@ PINS_DIR="$CCC_DEV_PINS_DIR"
 #     Tier 1: Strategy classification — LLM picks OURS/THEIRS/BOTH/GENERATE (~5 tokens)
 #     Tier 2: Code generation — LLM generates merged code for hunks only
 #   Outputs the resolved file to stdout.
-#   Writes unified diff to <file>.resdiff (collected into pins/res-N.diff after merge).
+#   Writes counted resolution to <file>.resolution (collected into pins/res-N.resolution after merge).
 # ---------------------------------------------------------------------------
 resolve_conflict() {
   local FILE="$1" F_REL="$2"
@@ -31,13 +31,6 @@ resolve_conflict() {
 
   WORK=$(mktemp -d)
   trap 'rm -rf "$WORK"' RETURN
-
-  # Save the conflicted file for diff generation later.
-  # Strip ref names from markers (<<<<<<< HEAD → <<<<<<<) so diffs are
-  # marker-name-agnostic and apply cleanly during replay regardless of
-  # git version or core.abbrev differences.
-  sed 's/^<<<<<<< .*/<<<<<<</; s/^||||||| .*/|||||||/; s/^>>>>>>> .*/>>>>>>>/' \
-    "$FILE" > "$WORK/conflicted_$(basename "$FILE")"
 
   # Extract ours / base / theirs for each conflict hunk
   awk -v dir="$WORK" '
@@ -74,24 +67,31 @@ resolve_conflict() {
     fi
   done
 
-  # --- helper: verify, reconstruct resolved file, generate diff sidecar ---
+  # --- helper: verify, reconstruct resolved file, write resolution sidecar ---
   _finish() {
     for i in $(seq 1 "$COUNT"); do
       [ -f "$WORK/r$i" ] || { echo "ERROR: missing resolution for conflict $i in $FILE" >&2; return 1; }
     done
-    # Reconstruct resolved file: tee to stdout (captured as .resolved by caller)
-    # and to a temp file for diff generation
-    awk -v dir="$WORK" '
-    substr($0,1,7) == "<<<<<<<" { n++; f = dir "/r" n; while ((getline l < f) > 0) print l; close(f); skip = 1; next }
-    substr($0,1,7) == ">>>>>>>" { skip = 0; next }
-    skip { next }
-    { print }
-    ' "$FILE" | tee "$WORK/resolved_$(basename "$FILE")"
-    # Generate unified diff sidecar (collected into res-N.diff after parallel jobs finish)
-    diff -u --label "a/$F_REL" --label "b/$F_REL" \
-      "$WORK/conflicted_$(basename "$FILE")" \
-      "$WORK/resolved_$(basename "$FILE")" \
-      > "$FILE.resdiff" || true  # diff exits 1 when files differ
+
+    # Build per-file counted resolution data
+    local res_data="$WORK/res_data"
+    : > "$res_data"
+    for i in $(seq 1 "$COUNT"); do
+      local ours_n=0 base_n=0 theirs_n=0 res_n=0
+      ours_n=$(wc -l < "$WORK/c${i}_ours")
+      [ -f "$WORK/c${i}_base" ] && base_n=$(wc -l < "$WORK/c${i}_base")
+      theirs_n=$(wc -l < "$WORK/c${i}_theirs")
+      res_n=$(wc -l < "$WORK/r$i")
+      printf 'CONFLICT ours=%d base=%d theirs=%d resolution=%d\n' \
+        "$ours_n" "$base_n" "$theirs_n" "$res_n" >> "$res_data"
+      cat "$WORK/r$i" >> "$res_data"
+    done
+
+    # Apply counted resolutions to reconstruct resolved file (verifies counts)
+    apply_counted_resolutions "$res_data" "$FILE"
+
+    # Write resolution sidecar (collected into res-N.resolution by caller)
+    cp "$res_data" "$FILE.resolution"
   }
 
   [ ${#NEED_LLM[@]} -eq 0 ] && { _finish; return; }
@@ -197,7 +197,7 @@ git clone --filter=blob:none "$CCC_DEV_REPO_URL" "$REPO_DIR"
 
 # Enable diff3 conflict markers so conflict resolution can see the base version.
 # Force full 40-char SHAs in |||||| base markers so they're identical across runs
-# (default core.abbrev varies with object count, breaking diff replay).
+# (default core.abbrev varies with object count, breaking resolution replay).
 git -C "$REPO_DIR" config merge.conflictStyle diff3
 git -C "$REPO_DIR" config core.abbrev 40
 
@@ -243,7 +243,7 @@ for REF in "$@"; do
 
   # Merge by SHA (not named ref or FETCH_HEAD) so conflict marker lines
   # (>>>>>>> <ref>) are identical between record and replay. Both use the
-  # same pinned SHA, so the unified diff in res-N.diff applies cleanly.
+  # same pinned SHA, so counted resolutions apply with correct line counts.
   if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" "$MERGE_SHA"; then
     # Capture conflicted file list BEFORE resolution
     mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
@@ -278,9 +278,10 @@ for REF in "$@"; do
       mv "$REPO_DIR/${FILE}.resolved" "$REPO_DIR/$FILE"
       git -C "$REPO_DIR" add "$FILE"
 
-      # Append per-file resolution diff (written by resolve_conflict)
-      cat "$REPO_DIR/${FILE}.resdiff" >> "$PINS_DIR/res-${MERGE_IDX}.diff"
-      rm "$REPO_DIR/${FILE}.resdiff"
+      # Append per-file resolution with path header (written by resolve_conflict)
+      printf -- '--- %s\n' "$FILE" >> "$PINS_DIR/res-${MERGE_IDX}.resolution"
+      cat "$REPO_DIR/${FILE}.resolution" >> "$PINS_DIR/res-${MERGE_IDX}.resolution"
+      rm "$REPO_DIR/${FILE}.resolution"
     done
 
     # Overwrite MERGE_MSG so merge --continue uses our deterministic message
@@ -307,7 +308,7 @@ HEAD_SHA=$(git -C "$REPO_DIR" rev-parse HEAD)
 printf '%s\n' "$HEAD_SHA" > "$PINS_DIR/HEAD"
 
 LOCAL_PATCH_COUNT=$(count_glob "$PINS_DIR"/local-*.patch)
-RESOLUTION_COUNT=$(count_glob "$PINS_DIR"/res-*.diff)
+RESOLUTION_COUNT=$(count_glob "$PINS_DIR"/res-*.resolution)
 
 echo "Pins recorded in $PINS_DIR/"
 echo "  BASE=$BASE_SHA ($DEFAULT_BRANCH)"

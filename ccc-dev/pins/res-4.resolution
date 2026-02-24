@@ -1,0 +1,20 @@
+--- packages/core/src/ckb/transactionErrors.ts
+CONFLICT ours=13 base=0 theirs=3 resolution=13
+export class ErrorNervosDaoOutputLimit extends Error {
+  public readonly count: number;
+  public readonly limit: number;
+
+  constructor(count: number) {
+    super(
+      `NervosDAO transaction has ${count} output cells, exceeding the limit of 64`,
+    );
+    this.count = count;
+    this.limit = 64;
+  }
+}
+
+--- vitest.config.mts
+CONFLICT ours=1 base=1 theirs=1 resolution=1
+    projects: packages,
+CONFLICT ours=1 base=1 theirs=1 resolution=1
+      include: packages,

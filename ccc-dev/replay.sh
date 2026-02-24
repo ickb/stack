@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage: ccc-dev/replay.sh
-#   Deterministic replay from manifest + resolution diffs + local patches
+#   Deterministic replay from manifest + counted resolutions + local patches
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -49,22 +49,20 @@ while IFS=$'\t' read -r SHA REF_NAME; do
 
   # Merge by SHA (matching record.sh) so conflict markers are identical
   if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" "$SHA"; then
-    RES_DIFF="$PINS_DIR/res-${MERGE_IDX}.diff"
-    if [ ! -f "$RES_DIFF" ]; then
-      echo "ERROR: Merge $MERGE_IDX ($REF_NAME) has conflicts but no resolution diff." >&2
+    RES_FILE="$PINS_DIR/res-${MERGE_IDX}.resolution"
+    if [ ! -f "$RES_FILE" ]; then
+      if [ -f "$PINS_DIR/res-${MERGE_IDX}.diff" ]; then
+        echo "ERROR: Legacy diff format detected (res-${MERGE_IDX}.diff)." >&2
+        echo "Re-record with:  pnpm ccc:record" >&2
+        exit 1
+      fi
+      echo "ERROR: Merge $MERGE_IDX ($REF_NAME) has conflicts but no resolution file." >&2
       echo "Re-record with:  pnpm ccc:record" >&2
       exit 1
     fi
 
-    # Strip ref names from conflict markers (<<<<<<< HEAD → <<<<<<<) so
-    # res-N.diff applies cleanly (diffs are marker-name-agnostic).
-    mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
-    for FILE in "${CONFLICTED[@]}"; do
-      sed -i 's/^<<<<<<< .*/<<<<<<</; s/^||||||| .*/|||||||/; s/^>>>>>>> .*/>>>>>>>/' "$REPO_DIR/$FILE"
-    done
-
-    # Apply resolution diff to fix all conflicts for this merge step
-    patch -p1 -d "$REPO_DIR" < "$RES_DIFF"
+    # Apply counted resolutions (positional — no sed stripping or patch needed)
+    apply_resolution_file "$REPO_DIR" "$RES_FILE"
 
     # Stage resolved files and complete the merge
     git -C "$REPO_DIR" add -A

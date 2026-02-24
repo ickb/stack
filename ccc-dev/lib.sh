@@ -72,3 +72,88 @@ apply_local_patches() {
     ts=$((ts + 1))
   done
 }
+
+# Apply counted conflict resolutions to a single conflicted file.
+# Reads resolution data (CONFLICT headers + content lines) from $1,
+# walks the conflicted file $2 positionally by line counts (never inspects
+# content), and outputs the resolved file to stdout.
+# Exits non-zero if the conflict count in the resolution data doesn't match
+# the number of <<<<<<< markers in the file (catches fake markers).
+# Usage: apply_counted_resolutions <resolution-data> <conflicted-file>
+apply_counted_resolutions() {
+  awk '
+  FNR==NR {
+    if (/^CONFLICT /) {
+      n++
+      for (i=2; i<=NF; i++) {
+        split($i, kv, "=")
+        c[n, kv[1]] = kv[2]+0
+      }
+      rn[n] = 0
+      next
+    }
+    rn[n]++
+    r[n, rn[n]] = $0
+    next
+  }
+  {
+    if (substr($0,1,7) == "<<<<<<<") {
+      cn++
+      if (cn > n) {
+        printf "ERROR: more conflicts in file than in resolution data (%d > %d)\n", cn, n > "/dev/stderr"
+        err = 1; exit 1
+      }
+      for (i = 0; i < c[cn,"ours"]; i++) getline
+      getline  # |||||||
+      for (i = 0; i < c[cn,"base"]; i++) getline
+      getline  # =======
+      for (i = 0; i < c[cn,"theirs"]; i++) getline
+      getline  # >>>>>>>
+      for (i = 1; i <= c[cn,"resolution"]; i++) print r[cn,i]
+      next
+    }
+    print
+  }
+  END {
+    if (!err && cn != n) {
+      printf "ERROR: expected %d conflicts, found %d\n", n, cn > "/dev/stderr"
+      exit 1
+    }
+  }
+  ' "$1" "$2"
+}
+
+# Apply a multi-file resolution file to a repo directory.
+# Splits by "--- path" headers into per-file chunks, then calls
+# apply_counted_resolutions for each file, replacing it in-place.
+# Usage: apply_resolution_file <repo-dir> <resolution-file>
+apply_resolution_file() {
+  local repo_dir="$1" res_file="$2"
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  trap 'rm -rf "$tmp_dir"' RETURN
+
+  # Split by --- headers; write path list and per-file chunks
+  awk -v dir="$tmp_dir" '
+  /^--- / {
+    if (f) close(f)
+    n++
+    path = substr($0, 5)
+    print path > (dir "/paths")
+    f = dir "/chunk-" n
+    next
+  }
+  f { print > f }
+  END { if (f) close(f) }
+  ' "$res_file"
+
+  [ -f "$tmp_dir/paths" ] || return 0
+
+  local i=0 path
+  while IFS= read -r path; do
+    i=$((i + 1))
+    apply_counted_resolutions "$tmp_dir/chunk-$i" "$repo_dir/$path" \
+      > "$repo_dir/${path}.resolved.tmp"
+    mv "$repo_dir/${path}.resolved.tmp" "$repo_dir/$path"
+  done < "$tmp_dir/paths"
+}
