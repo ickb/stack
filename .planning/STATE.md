@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 3 of 7 (CCC Udt Integration Investigation)
-Plan: 0 of 2 in current phase (planned, ready for execution)
-Status: Phase 03 planned, ready for execution
-Last activity: 2026-02-23 -- Phase 03 plans created (plan-phase)
+Plan: 1 of 2 in current phase
+Status: Plan 03-01 complete, ready for 03-02
+Last activity: 2026-02-24 -- Plan 03-01 investigation complete (execute-phase)
 
-Progress: [███░░░░░░░] 29%
+Progress: [████░░░░░░] 36%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: ~15min
-- Total execution time: 1.0 hours
+- Total plans completed: 5
+- Average duration: ~13min
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [███░░░░░░░] 29%
 |-------|-------|-------|----------|
 | 01 | 3/3 | 52min | 17min |
 | 02 | 1/1 | 7min | 7min |
+| 03 | 1/2 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~30min), 01-02 (~6min), 01-03 (~16min), 02-01 (~7min)
+- Last 5 plans: 01-02 (~6min), 01-03 (~16min), 02-01 (~7min), 03-01 (~5min)
 - Trend: accelerating
 
 *Updated after each plan completion*
@@ -61,6 +62,10 @@ Recent decisions affecting current work:
 - [01-03]: SDK getCkb() uses direct client.findCellsOnChain instead of CapacityManager
 - [02-01]: Used Math.max() over Number(ccc.numMax()) for number-typed contexts to avoid unnecessary number→bigint→number round-trips
 - [02-01]: Used entity.toHex() for Entity args, ccc.hexFrom() for BytesLike args -- matching CCC's type-safe separation
+- [03-01]: infoFrom is the sole override point for IckbUdt -- no need to override getInputsInfo/getOutputsInfo
+- [03-01]: No upstream CCC changes required for IckbUdt subclass -- all override points are public with appropriate signatures
+- [03-01]: Caller responsibility for receipt/deposit cell discovery (not IckbUdt's filter) -- LogicManager/OwnedOwnerManager handle this
+- [03-01]: Accurate balance reporting only -- conservation law enforcement is separate from infoFrom
 
 ### Pending Todos
 
@@ -76,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-23
-Stopped at: Phase 3 plans created, ready for execution
-Resume file: .planning/phases/03-ccc-udt-integration-investigation/03-01-PLAN.md
+Last session: 2026-02-24
+Stopped at: Completed 03-01-PLAN.md
+Resume file: .planning/phases/03-ccc-udt-integration-investigation/03-02-PLAN.md

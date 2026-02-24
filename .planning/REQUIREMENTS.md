@@ -30,8 +30,8 @@ Requirements for initial milestone. Each maps to roadmap phases.
 
 ### CCC Udt Integration
 
-- [ ] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
-- [ ] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
+- [x] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
+- [x] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
 - [ ] **UDT-03**: Decision documented: subclass CCC `Udt` vs. keep custom `UdtHandler` interface vs. hybrid approach
 - [ ] **UDT-04**: If subclassing is viable, `IckbUdt` class is implemented in `@ickb/core` with multi-representation balance calculation
 - [ ] **UDT-05**: If subclassing is not viable, `IckbUdtManager` is refactored to work with plain `ccc.Transaction` (no SmartTransaction dependency) while maintaining a compatible interface
@@ -96,8 +96,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEDUP-03 | Phase 2 | Complete | isHex() deleted, only used internally by deleted hexFrom() (02-01) |
 | DEDUP-04 | Phase 2 | Complete | hexFrom() call sites use entity.toHex() or ccc.hexFrom(), local deleted (02-01) |
 | DEDUP-05 | Phase 2 | Complete | All 8 iCKB-unique utilities preserved unchanged (02-01) |
-| UDT-01 | Phase 3 | Pending | |
-| UDT-02 | Phase 3 | Pending | |
+| UDT-01 | Phase 3 | Complete | |
+| UDT-02 | Phase 3 | Complete | |
 | UDT-03 | Phase 3 | Pending | |
 | UDT-04 | Phase 5 | Pending | |
 | UDT-05 | Phase 5 | Pending | |
