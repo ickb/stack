@@ -2,25 +2,12 @@
 set -euo pipefail
 
 # Usage: ccc-dev/replay.sh
-#   Deterministic replay from pinned SHAs + conflict resolutions
+#   Deterministic replay from manifest + resolution diffs + local patches
 
-REPO_URL="https://github.com/ckb-devrel/ccc.git"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$SCRIPT_DIR/ccc"
-PINS_DIR="$SCRIPT_DIR/pins"
-
-# Find the SHA-named pins file (40-char hex filename)
-pins_file() {
-  local f
-  for f in "$PINS_DIR"/*; do
-    [ -f "$f" ] || continue
-    case "$(basename "$f")" in
-      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-        echo "$f"; return 0 ;;
-    esac
-  done
-  return 1
-}
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+REPO_DIR="$CCC_DEV_REPO_DIR"
+PINS_DIR="$CCC_DEV_PINS_DIR"
 
 # Skip if already cloned
 if [ -d "$REPO_DIR" ]; then
@@ -29,88 +16,66 @@ if [ -d "$REPO_DIR" ]; then
 fi
 
 # Skip if no pins to replay
-PINS_FILE=$(pins_file 2>/dev/null) || {
+MANIFEST=$(manifest_file 2>/dev/null) || {
   echo "No CCC pins to replay, skipping" >&2
   exit 0
 }
 
 trap 'rm -rf "$REPO_DIR"; echo "FAILED — cleaned up ccc-dev/ccc/" >&2' ERR
 
-BASE_SHA=$(head -1 "$PINS_FILE" | cut -d' ' -f1)
-git clone --filter=blob:none "$REPO_URL" "$REPO_DIR"
+# Read base SHA from first line of manifest
+BASE_SHA=$(head -1 "$MANIFEST" | cut -d$'\t' -f1)
+git clone --filter=blob:none "$CCC_DEV_REPO_URL" "$REPO_DIR"
 
-# Match record.sh's conflict marker style for identical reconstruction
+# Match record.sh's conflict marker style and SHA abbreviation for identical markers
 git -C "$REPO_DIR" config merge.conflictStyle diff3
+git -C "$REPO_DIR" config core.abbrev 40
 
 git -C "$REPO_DIR" checkout "$BASE_SHA"
 git -C "$REPO_DIR" checkout -b wip
 
+# Replay merges from manifest (skip line 1 = base)
 MERGE_IDX=0
-while IFS=' ' read -r SHA REF_NAME; do
+while IFS=$'\t' read -r SHA REF_NAME; do
   MERGE_IDX=$((MERGE_IDX + 1))
   echo "Replaying merge $MERGE_IDX: $REF_NAME ($SHA)" >&2
 
-  # Pin identity and dates to match record.sh for deterministic commits
-  export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
-  export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
-  export GIT_AUTHOR_DATE="@$MERGE_IDX +0000"
-  export GIT_COMMITTER_DATE="@$MERGE_IDX +0000"
+  deterministic_env "$MERGE_IDX"
 
   git -C "$REPO_DIR" fetch origin "$SHA"
 
   # Use explicit merge message matching record.sh for deterministic commits
   MERGE_MSG="Merge $REF_NAME into wip"
 
-  if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" FETCH_HEAD; then
-    mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
+  # Merge by SHA (matching record.sh) so conflict markers are identical
+  if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" "$SHA"; then
+    RES_DIFF="$PINS_DIR/res-${MERGE_IDX}.diff"
+    if [ ! -f "$RES_DIFF" ]; then
+      echo "ERROR: Merge $MERGE_IDX ($REF_NAME) has conflicts but no resolution diff." >&2
+      echo "Re-record with:  pnpm ccc:record" >&2
+      exit 1
+    fi
 
-    for FILE in "${CONFLICTED[@]}"; do
-      # Extract hunks for this merge/file from the pins file
-      HUNK_DIR=$(mktemp -d)
-      awk -v idx="$MERGE_IDX" -v fp="$FILE" -v hdir="$HUNK_DIR" '
-      /^=== / {
-        split($0, a, " ")
-        if (a[2] == idx && a[3] == fp) { f = hdir "/" a[4]; active = 1 }
-        else { active = 0 }
-        next
-      }
-      active { print > f }
-      ' "$PINS_FILE"
+    # Apply resolution diff to fix all conflicts for this merge step
+    patch -p1 -d "$REPO_DIR" < "$RES_DIFF"
 
-      if [ -z "$(ls "$HUNK_DIR" 2>/dev/null)" ]; then
-        rm -rf "$HUNK_DIR"
-        echo "ERROR: No saved resolution for '$FILE' at step $MERGE_IDX ($REF_NAME)" >&2
-        echo "Re-record with:  pnpm ccc:record" >&2
-        exit 1
-      fi
-
-      # Reconstruct resolved file by splicing saved hunks into conflict markers
-      awk -v dir="$HUNK_DIR" '
-      substr($0,1,7) == "<<<<<<<" {
-        n++; f = dir "/" n
-        while ((getline l < f) > 0) print l
-        close(f); skip = 1; next
-      }
-      substr($0,1,7) == ">>>>>>>" { skip = 0; next }
-      skip { next }
-      { print }
-      ' "$REPO_DIR/$FILE" > "$REPO_DIR/${FILE}.resolved"
-      mv "$REPO_DIR/${FILE}.resolved" "$REPO_DIR/$FILE"
-      rm -rf "$HUNK_DIR"
-      git -C "$REPO_DIR" add "$FILE"
-    done
-
-    # Overwrite MERGE_MSG so merge --continue uses our deterministic message
+    # Stage resolved files and complete the merge
+    git -C "$REPO_DIR" add -A
     echo "$MERGE_MSG" > "$REPO_DIR/.git/MERGE_MSG"
     GIT_EDITOR=true git -C "$REPO_DIR" merge --continue
   fi
-done < <(awk 'NR>1 && /^=== /{exit} NR>1' "$PINS_FILE")
+done < <(tail -n +2 "$MANIFEST")
 
-bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
+bash "$CCC_DEV_DIR/patch.sh" "$REPO_DIR" "$(merge_count)"
 
-# Verify HEAD SHA matches filename
+apply_local_patches "$REPO_DIR" || {
+  echo "Re-record with:  pnpm ccc:record" >&2
+  exit 1
+}
+
+# Verify HEAD SHA matches pins/HEAD
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
-EXPECTED=$(basename "$PINS_FILE")
+EXPECTED=$(pinned_head)
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "FAIL: replay HEAD ($ACTUAL) != pinned HEAD ($EXPECTED)" >&2
   echo "Pins are stale or corrupted. Re-record with 'pnpm ccc:record'." >&2

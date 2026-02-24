@@ -8,22 +8,22 @@ set -euo pipefail
 #     everything else   → branch name
 #   No refs → just clone, no merges
 
-REPO_URL="https://github.com/ckb-devrel/ccc.git"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$SCRIPT_DIR/ccc"
-PINS_DIR="$SCRIPT_DIR/pins"
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+REPO_DIR="$CCC_DEV_REPO_DIR"
+PINS_DIR="$CCC_DEV_PINS_DIR"
 
 # ---------------------------------------------------------------------------
-# resolve_conflict <conflicted-file> <merge-idx> <file-rel-path>
+# resolve_conflict <conflicted-file> <file-rel-path>
 #   Tiered merge conflict resolution (diff3 markers required):
 #     Tier 0: Deterministic — one side matches base → take the other (0 tokens)
 #     Tier 1: Strategy classification — LLM picks OURS/THEIRS/BOTH/GENERATE (~5 tokens)
 #     Tier 2: Code generation — LLM generates merged code for hunks only
 #   Outputs the resolved file to stdout.
-#   Appends per-hunk entries to sidecar file (collected into pins after merge).
+#   Writes unified diff to <file>.resdiff (collected into pins/res-N.diff after merge).
 # ---------------------------------------------------------------------------
 resolve_conflict() {
-  local FILE="$1" M_IDX="$2" F_REL="$3"
+  local FILE="$1" F_REL="$2"
   local COUNT WORK i OURS BASE THEIRS
 
   COUNT=$(awk 'substr($0,1,7)=="<<<<<<<"{n++} END{print n+0}' "$FILE")
@@ -31,6 +31,9 @@ resolve_conflict() {
 
   WORK=$(mktemp -d)
   trap 'rm -rf "$WORK"' RETURN
+
+  # Save the conflicted file for diff generation later
+  cp "$FILE" "$WORK/conflicted_$(basename "$FILE")"
 
   # Extract ours / base / theirs for each conflict hunk
   awk -v dir="$WORK" '
@@ -67,22 +70,24 @@ resolve_conflict() {
     fi
   done
 
-  # --- helper: verify, write hunks to .resolutions sidecar, reconstruct to stdout ---
+  # --- helper: verify, reconstruct resolved file, generate diff sidecar ---
   _finish() {
     for i in $(seq 1 "$COUNT"); do
       [ -f "$WORK/r$i" ] || { echo "ERROR: missing resolution for conflict $i in $FILE" >&2; return 1; }
     done
-    # Write hunks to a sidecar file (appended to flat file after parallel jobs finish)
-    for i in $(seq 1 "$COUNT"); do
-      echo "=== $M_IDX $F_REL $i ===" >> "$FILE.resolutions"
-      cat "$WORK/r$i" >> "$FILE.resolutions"
-    done
+    # Reconstruct resolved file: tee to stdout (captured as .resolved by caller)
+    # and to a temp file for diff generation
     awk -v dir="$WORK" '
     substr($0,1,7) == "<<<<<<<" { n++; f = dir "/r" n; while ((getline l < f) > 0) print l; close(f); skip = 1; next }
     substr($0,1,7) == ">>>>>>>" { skip = 0; next }
     skip { next }
     { print }
-    ' "$FILE"
+    ' "$FILE" | tee "$WORK/resolved_$(basename "$FILE")"
+    # Generate unified diff sidecar (collected into res-N.diff after parallel jobs finish)
+    diff -u --label "a/$F_REL" --label "b/$F_REL" \
+      "$WORK/conflicted_$(basename "$FILE")" \
+      "$WORK/resolved_$(basename "$FILE")" \
+      > "$FILE.resdiff" || true  # diff exits 1 when files differ
   }
 
   [ ${#NEED_LLM[@]} -eq 0 ] && { _finish; return; }
@@ -101,7 +106,7 @@ $(cat "$WORK/c${i}_theirs")
 "
   done
 
-  STRATEGIES=$(echo "$CLASSIFY_INPUT" | pnpm --silent coworker:ask \
+  STRATEGIES=$(printf '%s\n' "$CLASSIFY_INPUT" | pnpm --silent coworker:ask \
     -p "For each conflict, respond with ONLY the conflict number and one strategy per line:
 N OURS       — keep ours (theirs is outdated/superseded)
 N THEIRS     — keep theirs (ours is outdated/superseded)
@@ -138,10 +143,10 @@ $(cat "$WORK/c${i}_theirs")
 "
   done
 
-  GENERATED=$(echo "$GENERATE_INPUT" | pnpm --silent coworker:ask \
+  GENERATED=$(printf '%s\n' "$GENERATE_INPUT" | pnpm --silent coworker:ask \
     -p "Merge each conflict meaningfully. Output '=== RESOLUTION N ===' header followed by ONLY the merged code. No explanations, no code fences.")
 
-  echo "$GENERATED" | awk -v dir="$WORK" '
+  printf '%s\n' "$GENERATED" | awk -v dir="$WORK" '
   /^=== RESOLUTION [0-9]+ ===$/ { if (f) close(f); f = dir "/r" $3; buf = ""; next }
   f && /^[[:space:]]*$/ { buf = buf $0 "\n"; next }
   f { if (buf != "") { printf "%s", buf > f; buf = "" }; print > f }
@@ -152,45 +157,60 @@ $(cat "$WORK/c${i}_theirs")
 }
 
 # Guard: abort if ccc-dev/ccc/ has pending work
-if ! bash "$SCRIPT_DIR/status.sh" >/dev/null 2>&1; then
-  bash "$SCRIPT_DIR/status.sh" >&2
+if ! bash "$CCC_DEV_DIR/status.sh" >/dev/null 2>&1; then
+  bash "$CCC_DEV_DIR/status.sh" >&2
   echo "" >&2
   echo "ERROR: ccc-dev/ccc/ has pending work that would be lost." >&2
   echo "Push with 'pnpm ccc:push', commit, or remove ccc-dev/ccc/ manually." >&2
   exit 1
 fi
 
+# Preserve local patches before wiping
+LOCAL_PATCHES_TMP=""
+if ls "$PINS_DIR"/local-*.patch >/dev/null 2>&1; then
+  LOCAL_PATCHES_TMP=$(mktemp -d)
+  cp "$PINS_DIR"/local-*.patch "$LOCAL_PATCHES_TMP/"
+  echo "Preserved $(count_glob "$LOCAL_PATCHES_TMP"/local-*.patch) local patch(es)"
+fi
+
 # Always start fresh — wipe previous clone and pins
 rm -rf "$REPO_DIR" "$PINS_DIR"
+mkdir -p "$PINS_DIR"
 
 cleanup_on_error() {
   rm -rf "$REPO_DIR" "$PINS_DIR"
-  echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2
+  if [ -n "${LOCAL_PATCHES_TMP:-}" ] && [ -d "${LOCAL_PATCHES_TMP:-}" ]; then
+    echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2
+    echo "Local patches preserved in: $LOCAL_PATCHES_TMP" >&2
+    echo "Restore manually or re-record without local patches." >&2
+  else
+    echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2
+  fi
 }
 trap cleanup_on_error ERR
 
-git clone --filter=blob:none "$REPO_URL" "$REPO_DIR"
+git clone --filter=blob:none "$CCC_DEV_REPO_URL" "$REPO_DIR"
 
-# Enable diff3 conflict markers so conflict resolution can see the base version
+# Enable diff3 conflict markers so conflict resolution can see the base version.
+# Force full 40-char SHAs in |||||| base markers so they're identical across runs
+# (default core.abbrev varies with object count, breaking diff replay).
 git -C "$REPO_DIR" config merge.conflictStyle diff3
+git -C "$REPO_DIR" config core.abbrev 40
 
 # Capture default branch name and base SHA before any merges
 DEFAULT_BRANCH=$(git -C "$REPO_DIR" branch --show-current)
 BASE_SHA=$(git -C "$REPO_DIR" rev-parse HEAD)
 git -C "$REPO_DIR" checkout -b wip
 
+# Write manifest: base line first
+printf '%s\t%s\n' "$BASE_SHA" "$DEFAULT_BRANCH" > "$PINS_DIR/manifest"
+
 MERGE_IDX=0
-REFS_TMP=$(mktemp)
-RESOLUTIONS_TMP=$(mktemp)
 
 for REF in "$@"; do
   MERGE_IDX=$((MERGE_IDX + 1))
 
-  # Pin identity and dates so merge commits are deterministic across runs
-  export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
-  export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
-  export GIT_AUTHOR_DATE="@$MERGE_IDX +0000"
-  export GIT_COMMITTER_DATE="@$MERGE_IDX +0000"
+  deterministic_env "$MERGE_IDX"
 
   # Case A: full (7-40 char) hex commit SHA
   if [[ $REF =~ ^[0-9a-f]{7,40}$ ]]; then
@@ -211,20 +231,23 @@ for REF in "$@"; do
   # Capture the resolved SHA for this ref before merging
   MERGE_SHA=$(git -C "$REPO_DIR" rev-parse "$MERGE_REF")
 
-  # Append merge ref line
-  echo "$MERGE_SHA $REF" >> "$REFS_TMP"
+  # Append merge ref line to manifest
+  printf '%s\t%s\n' "$MERGE_SHA" "$REF" >> "$PINS_DIR/manifest"
 
   # Use explicit merge message so record and replay produce identical commits
   MERGE_MSG="Merge $REF into wip"
 
-  if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" "$MERGE_REF"; then
+  # Merge by SHA (not named ref or FETCH_HEAD) so conflict marker lines
+  # (>>>>>>> <ref>) are identical between record and replay. Both use the
+  # same pinned SHA, so the unified diff in res-N.diff applies cleanly.
+  if ! git -C "$REPO_DIR" merge --no-ff -m "$MERGE_MSG" "$MERGE_SHA"; then
     # Capture conflicted file list BEFORE resolution
     mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
 
     # Resolve conflicted files with AI Coworker (parallel, hunks-only)
     PIDS=()
     for FILE in "${CONFLICTED[@]}"; do
-      resolve_conflict "$REPO_DIR/$FILE" "$MERGE_IDX" "$FILE" \
+      resolve_conflict "$REPO_DIR/$FILE" "$FILE" \
         > "$REPO_DIR/${FILE}.resolved" &
       PIDS+=($!)
     done
@@ -237,7 +260,7 @@ for REF in "$@"; do
       fi
     done
 
-    # Validate, apply resolutions, and collect hunk entries
+    # Validate, apply resolutions, and collect per-file diffs
     for FILE in "${CONFLICTED[@]}"; do
       if [ ! -s "$REPO_DIR/${FILE}.resolved" ]; then
         echo "ERROR: AI Coworker returned empty resolution for $FILE" >&2
@@ -251,9 +274,9 @@ for REF in "$@"; do
       mv "$REPO_DIR/${FILE}.resolved" "$REPO_DIR/$FILE"
       git -C "$REPO_DIR" add "$FILE"
 
-      # Append per-file resolution hunks to resolutions temp file
-      cat "$REPO_DIR/${FILE}.resolutions" >> "$RESOLUTIONS_TMP"
-      rm "$REPO_DIR/${FILE}.resolutions"
+      # Append per-file resolution diff (written by resolve_conflict)
+      cat "$REPO_DIR/${FILE}.resdiff" >> "$PINS_DIR/res-${MERGE_IDX}.diff"
+      rm "$REPO_DIR/${FILE}.resdiff"
     done
 
     # Overwrite MERGE_MSG so merge --continue uses our deterministic message
@@ -262,27 +285,35 @@ for REF in "$@"; do
   fi
 done
 
-bash "$SCRIPT_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
+bash "$CCC_DEV_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
 
-# Build the final pins file: base + refs + resolutions, named by HEAD SHA
+# Restore and apply local patches
+if [ -n "${LOCAL_PATCHES_TMP:-}" ]; then
+  cp "$LOCAL_PATCHES_TMP"/local-*.patch "$PINS_DIR/"
+  rm -rf "$LOCAL_PATCHES_TMP"
+
+  apply_local_patches "$REPO_DIR" || {
+    echo "Upstream changes may have invalidated it. Edit or remove the patch and re-record." >&2
+    exit 1
+  }
+fi
+
+# Write HEAD file
 HEAD_SHA=$(git -C "$REPO_DIR" rev-parse HEAD)
-mkdir -p "$PINS_DIR"
+printf '%s\n' "$HEAD_SHA" > "$PINS_DIR/HEAD"
 
-{
-  echo "$BASE_SHA $DEFAULT_BRANCH"
-  [ -s "$REFS_TMP" ] && cat "$REFS_TMP"
-  [ -s "$RESOLUTIONS_TMP" ] && cat "$RESOLUTIONS_TMP"
-} > "$PINS_DIR/$HEAD_SHA"
-rm -f "$REFS_TMP" "$RESOLUTIONS_TMP"
-
-RESOLUTION_COUNT=$(grep -c '^=== ' "$PINS_DIR/$HEAD_SHA" 2>/dev/null || echo 0)
+LOCAL_PATCH_COUNT=$(count_glob "$PINS_DIR"/local-*.patch)
+RESOLUTION_COUNT=$(count_glob "$PINS_DIR"/res-*.diff)
 
 echo "Pins recorded in $PINS_DIR/"
 echo "  BASE=$BASE_SHA ($DEFAULT_BRANCH)"
 echo "  Merges: $MERGE_IDX ref(s)"
 if [ "$RESOLUTION_COUNT" -gt 0 ]; then
-  echo "  Resolutions: $RESOLUTION_COUNT hunk(s)"
+  echo "  Resolutions: $RESOLUTION_COUNT merge step(s) with conflicts"
 else
   echo "  Resolutions: none (no conflicts)"
+fi
+if [ "$LOCAL_PATCH_COUNT" -gt 0 ]; then
+  echo "  Local patches: $LOCAL_PATCH_COUNT"
 fi
 echo "  HEAD=$HEAD_SHA"

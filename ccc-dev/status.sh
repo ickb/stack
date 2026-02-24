@@ -5,34 +5,20 @@ set -euo pipefail
 #   Exit 0 → safe (not cloned, or matches pins exactly)
 #   Exit 1 → has custom work (any changes vs pinned commit, diverged HEAD, or no pins to compare)
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$SCRIPT_DIR/ccc"
-PINS_DIR="$SCRIPT_DIR/pins"
-
-# Find the SHA-named pins file (40-char hex filename)
-pins_file() {
-  local f
-  for f in "$PINS_DIR"/*; do
-    [ -f "$f" ] || continue
-    case "$(basename "$f")" in
-      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-        echo "$f"; return 0 ;;
-    esac
-  done
-  return 1
-}
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+REPO_DIR="$CCC_DEV_REPO_DIR"
 
 if [ ! -d "$REPO_DIR" ]; then
   echo "ccc-dev/ccc/ is not cloned"
   exit 0
 fi
 
-PINS_FILE=$(pins_file 2>/dev/null) || {
-  echo "ccc-dev/ccc/ exists but no pins file — custom clone"
+PINNED=$(pinned_head 2>/dev/null) || {
+  echo "ccc-dev/ccc/ exists but no pins — custom clone"
   exit 1
 }
 
-PINNED=$(basename "$PINS_FILE")
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
 
 if [ "$ACTUAL" != "$PINNED" ]; then

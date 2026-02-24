@@ -23,9 +23,8 @@ const { join } = require("path");
 const cccCache = join(__dirname, "ccc-dev", "ccc");
 const pinsDir = join(__dirname, "ccc-dev", "pins");
 
-// Detect SHA-named pins file (40-char hex filename)
-const hasPins = existsSync(pinsDir) &&
-  readdirSync(pinsDir).some((f) => /^[0-9a-f]{40}$/.test(f));
+// Detect pins by manifest file presence
+const hasPins = existsSync(join(pinsDir, "manifest"));
 
 // 1. Auto-replay CCC pins on first pnpm install
 //    Skip when ccc:record is running — it rebuilds pins from scratch.

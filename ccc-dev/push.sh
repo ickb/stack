@@ -5,22 +5,9 @@ set -euo pipefail
 #   Cherry-picks commits made after recording onto the PR branch.
 #   target-branch: defaults to the last pr-* branch found.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$SCRIPT_DIR/ccc"
-PINS_DIR="$SCRIPT_DIR/pins"
-
-# Find the SHA-named pins file (40-char hex filename)
-pins_file() {
-  local f
-  for f in "$PINS_DIR"/*; do
-    [ -f "$f" ] || continue
-    case "$(basename "$f")" in
-      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-        echo "$f"; return 0 ;;
-    esac
-  done
-  return 1
-}
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+REPO_DIR="$CCC_DEV_REPO_DIR"
 
 # Verify prerequisites
 if [ ! -d "$REPO_DIR" ]; then
@@ -28,8 +15,8 @@ if [ ! -d "$REPO_DIR" ]; then
   exit 1
 fi
 
-PINS_FILE=$(pins_file 2>/dev/null) || {
-  echo "ERROR: No pins file found. Run 'pnpm ccc:record' first." >&2
+WIP_HEAD=$(pinned_head 2>/dev/null) || {
+  echo "ERROR: No pins found. Run 'pnpm ccc:record' first." >&2
   exit 1
 }
 
@@ -40,8 +27,6 @@ if [ "$CURRENT_BRANCH" != "wip" ]; then
   echo "Switch back with:  cd ccc-dev/ccc && git checkout wip" >&2
   exit 1
 fi
-
-WIP_HEAD=$(basename "$PINS_FILE")
 
 # Show commits to push
 echo "Commits since recording:"
