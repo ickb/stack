@@ -50,7 +50,7 @@ Recent decisions affecting current work:
 - [Phase 1 Context]: DAO 64-output limit check contributed to CCC core via ccc-dev/, CCC PR submitted during Phase 1
 - [Phase 1 Context]: getHeader()/HeaderKey removed entirely -- inline CCC client calls at read-only call sites; addHeaders() call sites in DaoManager/LogicManager push to tx.headerDeps directly
 - [Phase 1 Context]: Script comparison must always use full Script.eq(), never just codeHash comparison
-- [01-01]: Added ccc-dev local patch mechanism (pins/local/*.patch) for deterministic replay of CCC modifications (superseded by single-file pins format in Phase 3)
+- [01-01]: Added ccc-dev local patch mechanism for deterministic replay of CCC modifications (now multi-file format: manifest + res-N.resolution + local-*.patch)
 - [01-01]: DaoManager.requestWithdrawal/withdraw client parameter placed before optional options for cleaner API
 - [01-01]: assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost common case
 - [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (SmartTransaction still uses internally until Plan 03 deletion)
