@@ -56,6 +56,13 @@ while IFS=$'\t' read -r SHA REF_NAME; do
       exit 1
     fi
 
+    # Strip ref names from conflict markers (<<<<<<< HEAD → <<<<<<<) so
+    # res-N.diff applies cleanly (diffs are marker-name-agnostic).
+    mapfile -t CONFLICTED < <(git -C "$REPO_DIR" diff --name-only --diff-filter=U)
+    for FILE in "${CONFLICTED[@]}"; do
+      sed -i 's/^<<<<<<< .*/<<<<<<</; s/^||||||| .*/|||||||/; s/^>>>>>>> .*/>>>>>>>/' "$REPO_DIR/$FILE"
+    done
+
     # Apply resolution diff to fix all conflicts for this merge step
     patch -p1 -d "$REPO_DIR" < "$RES_DIFF"
 

@@ -32,8 +32,12 @@ resolve_conflict() {
   WORK=$(mktemp -d)
   trap 'rm -rf "$WORK"' RETURN
 
-  # Save the conflicted file for diff generation later
-  cp "$FILE" "$WORK/conflicted_$(basename "$FILE")"
+  # Save the conflicted file for diff generation later.
+  # Strip ref names from markers (<<<<<<< HEAD → <<<<<<<) so diffs are
+  # marker-name-agnostic and apply cleanly during replay regardless of
+  # git version or core.abbrev differences.
+  sed 's/^<<<<<<< .*/<<<<<<</; s/^||||||| .*/|||||||/; s/^>>>>>>> .*/>>>>>>>/' \
+    "$FILE" > "$WORK/conflicted_$(basename "$FILE")"
 
   # Extract ours / base / theirs for each conflict hunk
   awk -v dir="$WORK" '
