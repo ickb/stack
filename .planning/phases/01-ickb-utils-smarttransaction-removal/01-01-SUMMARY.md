@@ -20,7 +20,7 @@ tech-stack:
 
 key-files:
   created:
-    - ccc-dev/pins/local/001-dao-output-limit.patch
+    - ccc-dev/pins/local-001-dao-output-limit.patch (now part of pins/ multi-file format)
   modified:
     - ccc-dev/ccc/packages/core/src/ckb/transactionErrors.ts
     - ccc-dev/ccc/packages/core/src/ckb/transaction.ts
@@ -32,12 +32,12 @@ key-files:
     - packages/utils/src/transaction.ts
 
 key-decisions:
-  - "Added ccc-dev local patch mechanism (pins/local/*.patch) to support deterministic replay of CCC source modifications"
+  - "Added ccc-dev local patch mechanism (pins/local-*.patch) to support deterministic replay of CCC source modifications"
   - "Moved client parameter before optional options in DaoManager.requestWithdrawal and DaoManager.withdraw signatures"
   - "assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost in common case"
 
 patterns-established:
-  - "Local CCC patches: place .patch files in ccc-dev/pins/local/ for changes applied after standard merge+patch cycle"
+  - "Local CCC patches: pins/local-*.patch files applied after standard merge+patch cycle"
   - "DAO output limit: always use ccc.assertDaoOutputLimit(tx, client) instead of inline checks"
 
 requirements-completed: [SMTX-06]
@@ -85,7 +85,7 @@ Each task was committed atomically:
 - `packages/utils/src/transaction.ts` - SmartTransaction.completeFee DAO check replaced
 
 ## Decisions Made
-- Added ccc-dev local patch mechanism (pins/local/*.patch) because the existing record/replay infrastructure had no way to persist source-level CCC modifications through the clean/replay cycle. This was a necessary blocking-issue fix (Rule 3).
+- Added ccc-dev local patch mechanism (pins/local-*.patch) because the existing record/replay infrastructure had no way to persist source-level CCC modifications through the clean/replay cycle. This was a necessary blocking-issue fix (Rule 3).
 - Placed `client: ccc.Client` parameter before optional `options` parameters in DaoManager signatures for cleaner API design (required params before optional).
 - assertDaoOutputLimit uses early return when `outputs.length <= 64` so the common-case path has zero async overhead.
 
@@ -96,8 +96,8 @@ Each task was committed atomically:
 **1. [Rule 3 - Blocking] Added ccc-dev local patch mechanism**
 - **Found during:** Task 1 (CCC core changes)
 - **Issue:** ccc-dev record/replay infrastructure had no way to persist local CCC source modifications. Running `pnpm ccc:record` or `pnpm check:full` would wipe changes because replay clones fresh from upstream.
-- **Fix:** Added `pins/local/` directory for `.patch` files. Modified `record.sh` to preserve local patches during re-recording and apply them after standard merge+patch. Modified `replay.sh` to apply local patches after standard replay. Both use deterministic git identity/timestamps for reproducible HEAD SHAs.
-- **Files modified:** `ccc-dev/record.sh`, `ccc-dev/replay.sh`, `ccc-dev/pins/local/001-dao-output-limit.patch`
+- **Fix:** Added `pins/local-*.patch` mechanism. Modified `record.sh` to preserve local patches during re-recording and apply them after standard merge+patch. Modified `replay.sh` to apply local patches after standard replay. Both use deterministic git identity/timestamps for reproducible HEAD SHAs.
+- **Files modified:** `ccc-dev/record.sh`, `ccc-dev/replay.sh`, `ccc-dev/pins/local-001-dao-output-limit.patch`
 - **Verification:** `pnpm check:full` passes (clean wipe + replay + build cycle)
 - **Committed in:** 7081869 (Task 1 commit)
 
@@ -119,7 +119,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- FOUND: ccc-dev/pins/local/001-dao-output-limit.patch
+- FOUND: ccc-dev/pins/ (local patch integrated into multi-file format)
 - FOUND: 01-01-SUMMARY.md
 - FOUND: commit 7081869 (Task 1)
 - FOUND: commit 2decd06 (Task 2)

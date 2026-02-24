@@ -53,7 +53,7 @@ Recent decisions affecting current work:
 - [01-01]: Added ccc-dev local patch mechanism for deterministic replay of CCC modifications (now multi-file format: manifest + res-N.resolution + local-*.patch)
 - [01-01]: DaoManager.requestWithdrawal/withdraw client parameter placed before optional options for cleaner API
 - [01-01]: assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost common case
-- [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (SmartTransaction still uses internally until Plan 03 deletion)
+- [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (deleted alongside SmartTransaction in 01-03)
 - [01-02]: TransactionHeader moved to utils.ts as canonical location for downstream consumers
 - [01-02]: Inlined CCC client calls use explicit null checks with descriptive error messages
 - [01-03]: All manager methods accept ccc.TransactionLike and return ccc.Transaction (TransactionLike pattern)

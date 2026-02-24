@@ -48,7 +48,7 @@ re_verification: false
 | `packages/sdk/src/sdk.ts` | TransactionLike signatures + findCellsOnChain (replacing CapacityManager) | VERIFIED | 2× `txLike: ccc.TransactionLike`; `findCellsOnChain` at line 373 with `scriptLenRange` filter; `getTransactionWithHeader` with null check at line 401 |
 | `packages/utils/src/transaction.ts` | DELETED | VERIFIED | File does not exist |
 | `packages/utils/src/capacity.ts` | DELETED | VERIFIED | File does not exist |
-| `ccc-dev/pins/local/001-dao-output-limit.patch` | Local patch for deterministic CCC replay | VERIFIED | File exists at expected path |
+| `ccc-dev/pins/` | Local patches for deterministic CCC replay | VERIFIED | Pins directory with multi-file format (manifest + resolutions + patches) |
 
 ### Key Link Verification (from PLAN frontmatter)
 

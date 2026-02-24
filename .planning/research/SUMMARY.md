@@ -167,7 +167,7 @@ Standard patterns (skip research-phase):
 
 - **Resolved — CCC Udt override point:** Phase 3 research (03-RESEARCH.md) determined that `infoFrom()` is the optimal override point. The earlier recommendation to override `getInputsInfo()`/`getOutputsInfo()` was based on the incorrect premise that `CellAnyLike` lacks `outPoint` — it actually has `outPoint?: OutPointLike | null`, and input cells from `getInputsInfo()` → `CellInput.getCell()` always have `outPoint` set. `CellAny` also has `capacityFree`. See 03-RESEARCH.md for the corrected design.
 - **Resolved — DAO profit in CCC `getInputsCapacity`:** Verified from CCC source (transaction.ts lines 1860-1883) that `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` → `CellInput.getExtraCapacity()` → `Cell.getDaoProfit()`. No standalone utility needed. SmartTransaction's override of `getInputsCapacity()` can be dropped without replacement.
-- **CCC PR #328 (FeePayer) tracking:** Design the SmartTransaction replacement so FeePayer can be adopted as a drop-in improvement if the PR merges. Do not block on it.
+- **Resolved — CCC PR #328 (FeePayer):** PR #328 is now integrated into `ccc-dev/ccc` via pins. FeePayer classes are available at `ccc-dev/ccc/packages/core/src/signer/feePayer/`. User decision during Phase 3 context: design around PR #328 as target architecture.
 - **Bot key logging security:** PITFALLS.md notes the faucet already has a private key logging bug. The bot migration must include an explicit security audit of all logging paths.
 
 ## Sources
@@ -176,7 +176,7 @@ Standard patterns (skip research-phase):
 - `ccc-dev/ccc/packages/udt/src/udt/index.ts` — CCC Udt class (1798 lines), complete UDT lifecycle API
 - `ccc-dev/ccc/packages/core/src/ckb/transaction.ts` — CCC Transaction class (2537 lines), completeFee/completeInputsByCapacity/getInputsCapacity
 - `ccc-dev/ccc/packages/core/src/client/client.ts` — CCC Client with cache, findCells, cell/header fetching
-- `packages/utils/src/transaction.ts` — Current SmartTransaction (517 lines), source of truth for replacement requirements
+- `packages/utils/src/transaction.ts` — SmartTransaction (deleted in Phase 1), was source of truth for replacement requirements
 - `packages/utils/src/udt.ts` — Current UdtManager/UdtHandler (393 lines)
 - `packages/core/src/udt.ts` — Current IckbUdtManager (213 lines), triple-representation balance logic
 - `reference/contracts/schemas/encoding.mol` — Molecule schema, byte layout ground truth

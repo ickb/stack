@@ -34,11 +34,9 @@
 │   │       └── codec.ts            # PoolSnapshot codec (138 lines)
 │   └── utils/                      # Shared blockchain utilities
 │       └── src/
-│           ├── index.ts            # Barrel export: codec, capacity, heap, transaction, udt, utils
-│           ├── transaction.ts      # SmartTransaction class (517 lines)
-│           ├── capacity.ts         # CapacityManager class (221 lines)
-│           ├── udt.ts              # UDT calculations and handlers (393 lines)
-│           ├── utils.ts            # Binary search, collectors, etc. (458 lines)
+│           ├── index.ts            # Barrel export: codec, heap, udt, utils
+│           ├── udt.ts              # UDT calculations and handlers (407 lines)
+│           ├── utils.ts            # Binary search, collectors, etc. (292 lines)
 │           ├── codec.ts            # CheckedInt32LE codec (21 lines)
 │           └── heap.ts             # Heap implementation (175 lines)
 ├── apps/                           # Applications
@@ -155,9 +153,9 @@
 
 **packages/utils/src/:**
 - Purpose: Shared blockchain utilities and primitives
-- Exports: SmartTransaction, CapacityManager, UdtHandler, CheckedInt32LE, codecs
-- Key classes: `SmartTransaction` (transaction builder), `CapacityManager` (cell management)
-- Key helpers: `collect()`, `unique()`, `binarySearch()`, `hexFrom()`, `getHeader()`
+- Exports: UdtHandler, UdtManager, CheckedInt32LE, TransactionHeader, codecs
+- Key classes: `UdtManager` (UDT cell management)
+- Key helpers: `collect()`, `unique()`, `binarySearch()`
 - Dependencies: @ckb-ccc/core
 
 **apps/bot/src/:**
@@ -192,7 +190,7 @@
 - Status: LEGACY (uses @ickb/v1-core, @ckb-lumos/*, deprecated)
 - Entry: `main.tsx` with `startApp(wallet_chain)` function
 - Component tree: Connector → App → Form/Dashboard/Action
-- Data flow: React Query for L1 state, SmartTransaction for TX building
+- Data flow: React Query for L1 state, @ickb/v1-core for TX building
 - Styling: TailwindCSS with inline classes
 
 **ccc-dev/:**
@@ -229,8 +227,7 @@
 - Deposits: `packages/core/src/logic.ts` → `LogicManager` class (269 lines)
 - Orders: `packages/order/src/order.ts` → `OrderManager` class (988 lines)
 - DAO: `packages/dao/src/dao.ts` → `DaoManager` class (412 lines)
-- Transactions: `packages/utils/src/transaction.ts` → `SmartTransaction` class (517 lines)
-- Capacity: `packages/utils/src/capacity.ts` → `CapacityManager` class (221 lines)
+- UDT: `packages/utils/src/udt.ts` → `UdtHandler` interface + `UdtManager` class (407 lines)
 
 **Type Definitions:**
 - Order entities: `packages/order/src/entities.ts` (Info, Ratio, OrderData) — 754 lines
@@ -258,7 +255,7 @@
 - Types and functions exported at package level via index
 
 **Classes and Functions:**
-- Classes: PascalCase (e.g., `IckbSdk`, `LogicManager`, `SmartTransaction`, `DaoManager`)
+- Classes: PascalCase (e.g., `IckbSdk`, `LogicManager`, `DaoManager`, `OrderManager`)
 - Manager suffix: Consistently applied to manager classes
 - Instance methods: camelCase (e.g., `deposit()`, `mint()`, `getL1State()`)
 - Static methods: camelCase on class (e.g., `IckbSdk.from()`, `IckbSdk.estimate()`)
