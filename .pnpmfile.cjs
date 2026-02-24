@@ -21,13 +21,17 @@ const { existsSync, readdirSync, readFileSync } = require("fs");
 const { join } = require("path");
 
 const cccCache = join(__dirname, "ccc-dev", "ccc");
-const cccRefs = join(__dirname, "ccc-dev", "pins", "REFS");
+const pinsDir = join(__dirname, "ccc-dev", "pins");
+
+// Detect SHA-named pins file (40-char hex filename)
+const hasPins = existsSync(pinsDir) &&
+  readdirSync(pinsDir).some((f) => /^[0-9a-f]{40}$/.test(f));
 
 // 1. Auto-replay CCC pins on first pnpm install
 //    Skip when ccc:record is running — it rebuilds pins from scratch.
 //    Detect via argv since pnpmfile loads before npm_lifecycle_event is set.
 const isCccRecord = process.argv.some((a) => a === "ccc:record");
-if (!isCccRecord && !existsSync(cccCache) && existsSync(cccRefs)) {
+if (!isCccRecord && !existsSync(cccCache) && hasPins) {
   try {
     execSync("bash ccc-dev/replay.sh", {
       cwd: __dirname,

@@ -10,7 +10,7 @@ catalogs:
       specifier: ^24.8.1
       version: 24.10.13
 
-pnpmfileChecksum: sha256-bpHTpFkBXc22BQj6RinbwnORUfuz+2Nea3ugya/XRbU=
+pnpmfileChecksum: sha256-iEn0+MI98OpmwKC8U1jHu+8897J8VViPHHsaj/LfDU0=
 
 importers:
 

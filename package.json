@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "ccc:record": "bash ccc-dev/record.sh 359 releases/next releases/udt",
+    "ccc:record": "bash ccc-dev/record.sh 359 328 releases/next releases/udt",
     "ccc:status": "bash ccc-dev/status.sh",
     "ccc:push": "bash ccc-dev/push.sh",
     "ccc:clean": "bash ccc-dev/status.sh && rm -rf ccc-dev/ccc",

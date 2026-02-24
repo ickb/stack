@@ -16,7 +16,7 @@ rm -f "$REPO_DIR/pnpm-lock.yaml"
 # - "import" rewritten to .ts source → Vite/esbuild can bundle without building CCC
 for pkg_json in "$REPO_DIR"/packages/*/package.json; do
   jq '.type = "module" |
-    if .exports then .exports |= with_entries(
+    if (.exports | type) == "object" then .exports |= with_entries(
       if .value | type == "object" and has("import")
       then .value |= (
         (.import | sub("/dist/";"/src/") | sub("\\.m?js$";".ts")) as $src |

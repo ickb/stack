@@ -14,7 +14,7 @@
 #   3. Reports only diagnostics from stack source files
 #   4. Exits non-zero only on real stack errors
 
-set -uo pipefail
+set -euo pipefail
 
 output=$(pnpm tsgo --noEmitOnError false 2>&1) || true
 

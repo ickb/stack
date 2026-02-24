@@ -7,16 +7,31 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/ccc"
+PINS_DIR="$SCRIPT_DIR/pins"
+
+# Find the SHA-named pins file (40-char hex filename)
+pins_file() {
+  local f
+  for f in "$PINS_DIR"/*; do
+    [ -f "$f" ] || continue
+    case "$(basename "$f")" in
+      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+        echo "$f"; return 0 ;;
+    esac
+  done
+  return 1
+}
 
 # Verify prerequisites
 if [ ! -d "$REPO_DIR" ]; then
-  echo "ERROR: $REPO_DIR does not exist. Run ccc-dev/record.sh first." >&2
+  echo "ERROR: $REPO_DIR does not exist. Run 'pnpm ccc:record' first." >&2
   exit 1
 fi
-if [ ! -r "$SCRIPT_DIR/pins/HEAD" ]; then
-  echo "ERROR: pins/HEAD not found. Run ccc-dev/record.sh first." >&2
+
+PINS_FILE=$(pins_file 2>/dev/null) || {
+  echo "ERROR: No pins file found. Run 'pnpm ccc:record' first." >&2
   exit 1
-fi
+}
 
 # Verify we're on the wip branch
 CURRENT_BRANCH=$(git -C "$REPO_DIR" branch --show-current)
@@ -26,7 +41,7 @@ if [ "$CURRENT_BRANCH" != "wip" ]; then
   exit 1
 fi
 
-WIP_HEAD=$(cat "$SCRIPT_DIR/pins/HEAD")
+WIP_HEAD=$(basename "$PINS_FILE")
 
 # Show commits to push
 echo "Commits since recording:"

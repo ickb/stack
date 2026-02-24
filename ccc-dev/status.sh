@@ -9,21 +9,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/ccc"
 PINS_DIR="$SCRIPT_DIR/pins"
 
+# Find the SHA-named pins file (40-char hex filename)
+pins_file() {
+  local f
+  for f in "$PINS_DIR"/*; do
+    [ -f "$f" ] || continue
+    case "$(basename "$f")" in
+      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+        echo "$f"; return 0 ;;
+    esac
+  done
+  return 1
+}
+
 if [ ! -d "$REPO_DIR" ]; then
   echo "ccc-dev/ccc/ is not cloned"
   exit 0
 fi
 
-if [ ! -f "$PINS_DIR/HEAD" ]; then
-  echo "ccc-dev/ccc/ exists but no pins/HEAD — custom clone"
+PINS_FILE=$(pins_file 2>/dev/null) || {
+  echo "ccc-dev/ccc/ exists but no pins file — custom clone"
   exit 1
-fi
+}
 
-PINNED=$(cat "$PINS_DIR/HEAD")
+PINNED=$(basename "$PINS_FILE")
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
 
 if [ "$ACTUAL" != "$PINNED" ]; then
-  echo "HEAD diverged from pins/HEAD:"
+  echo "HEAD diverged from pinned HEAD:"
   echo "  pinned  $PINNED"
   echo "  actual  $ACTUAL"
   git -C "$REPO_DIR" log --oneline "$PINNED..$ACTUAL" 2>/dev/null || true
