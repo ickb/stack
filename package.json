@@ -4,6 +4,7 @@
     "ccc:record": "bash ccc-dev/record.sh 359 328 releases/next releases/udt",
     "ccc:status": "bash ccc-dev/status.sh",
     "ccc:push": "bash ccc-dev/push.sh",
+    "ccc:save": "bash ccc-dev/save.sh",
     "ccc:clean": "bash ccc-dev/status.sh && rm -rf ccc-dev/ccc",
     "ccc:reset": "pnpm ccc:clean && rm -rf ccc-dev/pins",
     "build": "pnpm -r --filter !./apps/** --filter !./ccc-dev/ccc/** build",
