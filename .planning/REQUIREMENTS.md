@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SMTX-03 | Phase 6 | Pending | |
 | SMTX-04 | Phase 1 | Complete | getHeader()/HeaderKey removed, CCC client calls inlined |
 | SMTX-05 | Phase 1, 4, 5 | Complete | addUdtHandlers() replaced with tx.addCellDeps(udtHandler.cellDeps) (01-03); UdtHandler/UdtManager replacement deferred to Phase 4-5 |
-| SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via ccc-dev/ (01-01) |
+| SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via ccc-fork/ (01-01) |
 | SMTX-07 | Phase 5 | Pending | |
 | SMTX-08 | Phase 6 | Pending | |
 | SMTX-09 | Phase 7 | Pending | |

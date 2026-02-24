@@ -2,7 +2,7 @@
 
 **Domain:** CCC API adoption for iCKB protocol library migration
 **Researched:** 2026-02-21
-**Confidence:** HIGH (primary source: local CCC source code in `ccc-dev/ccc/`)
+**Confidence:** HIGH (primary source: local CCC source code in `ccc-fork/ccc/`)
 
 ## Context
 
@@ -67,7 +67,7 @@ This research focuses on the CCC APIs and patterns that should be adopted as par
 
 ### CCC `@ckb-ccc/udt` Package
 
-**Version:** Local build from `ccc-dev/ccc/packages/udt/`
+**Version:** Local build from `ccc-fork/ccc/packages/udt/`
 **Key classes:** `Udt`, `UdtInfo`, `UdtConfig`, `ErrorUdtInsufficientCoin`
 **Depends on:** `@ckb-ccc/core`, `@ckb-ccc/ssri`
 
@@ -111,7 +111,7 @@ CCC's `Client.cache` handles purpose (1) -- all `getHeaderByHash()` and `getHead
 
 CCC's `Transaction.getInputsCapacity()` now includes DAO profit via `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()`. This means SmartTransaction's override of `getInputsCapacity()` is **no longer needed** -- CCC does this natively.
 
-Verified in CCC source (`ccc-dev/ccc/packages/core/src/ckb/transaction.ts` lines 1860-1883):
+Verified in CCC source (`ccc-fork/ccc/packages/core/src/ckb/transaction.ts` lines 1860-1883):
 ```typescript
 async getInputsCapacity(client: Client): Promise<Num> {
   return (
@@ -275,7 +275,7 @@ Both are now redundant:
 
 PR #328 proposes a `FeePayer` abstraction for CCC that would allow specifying who pays transaction fees. This is relevant because SmartTransaction's fee completion could designate a specific lock for fee payment.
 
-**Current status (updated):** PR #328 is now integrated into `ccc-dev/ccc` via the pins/record system. FeePayer classes are available at `ccc-dev/ccc/packages/core/src/signer/feePayer/`. The user decided during Phase 3 context that PR #328 is the target architecture -- investigation should design around it.
+**Current status (updated):** PR #328 is now integrated into `ccc-fork/ccc` via the pins/record system. FeePayer classes are available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`. The user decided during Phase 3 context that PR #328 is the target architecture -- investigation should design around it.
 
 **Impact on migration:** The FeePayer abstraction is available to build against directly. The `infoFrom()` override is compatible with both the current Signer-based completion and the FeePayer-based completion -- cells flow through `getInputsInfo` → `infoFrom` regardless of which completion plumbing is used.
 
@@ -306,17 +306,17 @@ PR #328 proposes a `FeePayer` abstraction for CCC that would allow specifying wh
 # No other new dependencies needed -- all other changes use existing @ckb-ccc/core APIs
 ```
 
-**Note:** With `ccc-dev/` local build active, `.pnpmfile.cjs` automatically rewires all `@ckb-ccc/*` dependencies to local packages, so the `@ckb-ccc/udt` package is already available from the local CCC build.
+**Note:** With `ccc-fork/` local build active, `.pnpmfile.cjs` automatically rewires all `@ckb-ccc/*` dependencies to local packages, so the `@ckb-ccc/udt` package is already available from the local CCC build.
 
 ## Sources
 
-- `ccc-dev/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class, full source (1798 lines) -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/ckb/transaction.ts` -- CCC Transaction class, full source (2537 lines) -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/client/client.ts` -- CCC Client class with caching, cell finding -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom` etc. -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom`, `bytesLen` -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/utils/index.ts` -- `reduce`, `reduceAsync`, `gcd`, `apply`, `sleep` -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/ckb/epoch.ts` -- `Epoch` class (already adopted) -- HIGH confidence
+- `ccc-fork/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class, full source (1798 lines) -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` -- CCC Transaction class, full source (2537 lines) -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/client/client.ts` -- CCC Client class with caching, cell finding -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom` etc. -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom`, `bytesLen` -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/utils/index.ts` -- `reduce`, `reduceAsync`, `gcd`, `apply`, `sleep` -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/ckb/epoch.ts` -- `Epoch` class (already adopted) -- HIGH confidence
 - `packages/utils/src/transaction.ts` -- Current SmartTransaction implementation (517 lines) -- HIGH confidence
 - `packages/utils/src/udt.ts` -- Current UdtManager/UdtHandler implementation (393 lines) -- HIGH confidence
 - `packages/utils/src/capacity.ts` -- Current CapacityManager implementation (221 lines) -- HIGH confidence

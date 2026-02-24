@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ccc-dev/replay.sh
+# Usage: fork-scripts/replay.sh <fork-dir>
 #   Deterministic replay from manifest + counted resolutions + local patches
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-REPO_DIR="$CCC_DEV_REPO_DIR"
-PINS_DIR="$CCC_DEV_PINS_DIR"
+
+DEV_DIR="${1:?Usage: fork-scripts/replay.sh <fork-dir>}"
+DEV_DIR=$(cd "$DEV_DIR" && pwd)
+
+REPO_DIR=$(repo_dir "$DEV_DIR")
+PINS_DIR=$(pins_dir "$DEV_DIR")
+UPSTREAM=$(upstream_url "$DEV_DIR")
+FORK_NAME=$(basename "$DEV_DIR")
 
 # Skip if already cloned
 if [ -d "$REPO_DIR" ]; then
-  echo "ccc-dev/ccc/ already exists, skipping (remove it to redo setup)" >&2
+  echo "$FORK_NAME: clone already exists, skipping (remove it to redo setup)" >&2
   exit 0
 fi
 
 # Skip if no pins to replay
-MANIFEST=$(manifest_file 2>/dev/null) || {
-  echo "No CCC pins to replay, skipping" >&2
+MANIFEST=$(manifest_file "$PINS_DIR" 2>/dev/null) || {
+  echo "$FORK_NAME: no pins to replay, skipping" >&2
   exit 0
 }
 
-trap 'rm -rf "$REPO_DIR"; echo "FAILED — cleaned up ccc-dev/ccc/" >&2' ERR
+trap 'rm -rf "$REPO_DIR"; echo "FAILED — cleaned up $FORK_NAME clone" >&2' ERR
 
 # Read base SHA from first line of manifest
 BASE_SHA=$(head -1 "$MANIFEST" | cut -d$'\t' -f1)
-git clone --filter=blob:none "$CCC_DEV_REPO_URL" "$REPO_DIR"
+git clone --filter=blob:none "$UPSTREAM" "$REPO_DIR"
 
 # Match record.sh's conflict marker style and SHA abbreviation for identical markers
 git -C "$REPO_DIR" config merge.conflictStyle diff3
@@ -53,11 +59,11 @@ while IFS=$'\t' read -r SHA REF_NAME; do
     if [ ! -f "$RES_FILE" ]; then
       if [ -f "$PINS_DIR/res-${MERGE_IDX}.diff" ]; then
         echo "ERROR: Legacy diff format detected (res-${MERGE_IDX}.diff)." >&2
-        echo "Re-record with:  pnpm ccc:record" >&2
+        echo "Re-record with:  pnpm fork:record $FORK_NAME" >&2
         exit 1
       fi
       echo "ERROR: Merge $MERGE_IDX ($REF_NAME) has conflicts but no resolution file." >&2
-      echo "Re-record with:  pnpm ccc:record" >&2
+      echo "Re-record with:  pnpm fork:record $FORK_NAME" >&2
       exit 1
     fi
 
@@ -71,23 +77,26 @@ while IFS=$'\t' read -r SHA REF_NAME; do
   fi
 done < <(tail -n +2 "$MANIFEST")
 
-bash "$CCC_DEV_DIR/patch.sh" "$REPO_DIR" "$(merge_count)"
+bash "$FORK_SCRIPTS_DIR/patch.sh" "$REPO_DIR" "$(merge_count "$PINS_DIR")"
 
-apply_local_patches "$REPO_DIR" || {
-  echo "Re-record with:  pnpm ccc:record" >&2
+apply_local_patches "$REPO_DIR" "$PINS_DIR" || {
+  echo "Re-record with:  pnpm fork:record $FORK_NAME" >&2
   exit 1
 }
 
 # Verify HEAD SHA matches pins/HEAD
 ACTUAL=$(git -C "$REPO_DIR" rev-parse HEAD)
-EXPECTED=$(pinned_head)
+EXPECTED=$(pinned_head "$PINS_DIR")
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "FAIL: replay HEAD ($ACTUAL) != pinned HEAD ($EXPECTED)" >&2
-  echo "Pins are stale or corrupted. Re-record with 'pnpm ccc:record'." >&2
+  echo "Pins are stale or corrupted. Re-record with 'pnpm fork:record $FORK_NAME'." >&2
   exit 1
 fi
 
-# Add fork remote for pushing to phroi/ccc (SSH for auth)
-git -C "$REPO_DIR" remote add fork git@github.com:phroi/ccc.git
+# Add fork remote for pushing (SSH for auth), if configured
+FORK_REMOTE=$(fork_url "$DEV_DIR" 2>/dev/null) || true
+if [ -n "${FORK_REMOTE:-}" ]; then
+  git -C "$REPO_DIR" remote add fork "$FORK_REMOTE"
+fi
 
 echo "OK — replay HEAD matches pinned HEAD ($EXPECTED)"

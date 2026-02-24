@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ccc-dev/save.sh [description]
-#   Captures local work in ccc-dev/ccc/ as a patch file in pins/.
+# Usage: fork-scripts/save.sh <fork-dir> [description]
+#   Captures local work in the fork clone as a patch file in pins/.
 #   description: short label for the patch (default: "local")
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-REPO_DIR="$CCC_DEV_REPO_DIR"
-PINS_DIR="$CCC_DEV_PINS_DIR"
+
+DEV_DIR="${1:?Usage: fork-scripts/save.sh <fork-dir> [description]}"
+DEV_DIR=$(cd "$DEV_DIR" && pwd)
+shift
+
+REPO_DIR=$(repo_dir "$DEV_DIR")
+PINS_DIR=$(pins_dir "$DEV_DIR")
+FORK_NAME=$(basename "$DEV_DIR")
 
 DESCRIPTION="${1:-local}"
 # Sanitize description for use in filename (fallback if nothing alphanumeric remains)
@@ -17,12 +23,12 @@ DESCRIPTION=$(printf '%s' "$DESCRIPTION" | tr -c '[:alnum:]-_' '-' | sed 's/--*/
 
 # Check prerequisites
 if [ ! -d "$REPO_DIR" ]; then
-  echo "ERROR: ccc-dev/ccc/ does not exist. Run 'pnpm ccc:record' first." >&2
+  echo "ERROR: $FORK_NAME clone does not exist. Run 'pnpm fork:record $FORK_NAME' first." >&2
   exit 1
 fi
 
-PINNED_HEAD=$(pinned_head 2>/dev/null) || {
-  echo "ERROR: No pins found. Run 'pnpm ccc:record' first." >&2
+PINNED_HEAD=$(pinned_head "$PINS_DIR" 2>/dev/null) || {
+  echo "ERROR: No pins found. Run 'pnpm fork:record $FORK_NAME' first." >&2
   exit 1
 }
 
@@ -47,7 +53,7 @@ EXISTING=$(count_glob "$PINS_DIR"/local-*.patch)
 if [ "$EXISTING" -gt 0 ]; then
   PATCH_BASE=$(git -C "$REPO_DIR" rev-parse "${PINNED_HEAD}~${EXISTING}" 2>/dev/null) || {
     echo "ERROR: Cannot compute base state. Pins may be corrupted." >&2
-    echo "Re-record with:  pnpm ccc:record" >&2
+    echo "Re-record with:  pnpm fork:record $FORK_NAME" >&2
     exit 1
   }
 else
@@ -72,7 +78,7 @@ fi
 # Rebuild deterministic state from base (before any local patches)
 git -C "$REPO_DIR" reset --hard "$PATCH_BASE"
 
-apply_local_patches "$REPO_DIR" || {
+apply_local_patches "$REPO_DIR" "$PINS_DIR" || {
   # Remove the newly-written patch so a retry doesn't hit the same failure
   rm -f "$PINS_DIR/${PATCH_NAME}.patch"
   echo "Earlier patches may have changed the base. Edit or reorder patches." >&2

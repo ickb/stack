@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ccc-dev/record.sh [ref ...]
+# Usage: fork-scripts/record.sh <fork-dir> [ref ...]
 #   ref auto-detection:
 #     ^[0-9a-f]{7,40}$ → commit SHA
 #     ^[0-9]+$          → GitHub PR number
 #     everything else   → branch name
-#   No refs → just clone, no merges
+#   No refs on CLI → reads from config.json
+#   No refs at all → just clone, no merges
 
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-REPO_DIR="$CCC_DEV_REPO_DIR"
-PINS_DIR="$CCC_DEV_PINS_DIR"
+
+DEV_DIR="${1:?Usage: fork-scripts/record.sh <fork-dir> [ref ...]}"
+DEV_DIR=$(cd "$DEV_DIR" && pwd)
+shift
+
+REPO_DIR=$(repo_dir "$DEV_DIR")
+PINS_DIR=$(pins_dir "$DEV_DIR")
+UPSTREAM=$(upstream_url "$DEV_DIR")
+
+# Collect refs: CLI args override config.json
+if [ $# -gt 0 ]; then
+  REFS=("$@")
+else
+  mapfile -t REFS < <(repo_refs "$DEV_DIR")
+fi
 
 # ---------------------------------------------------------------------------
 # resolve_conflict <conflicted-file> <file-rel-path>
@@ -160,12 +174,13 @@ $(cat "$WORK/c${i}_theirs")
   _finish
 }
 
-# Guard: abort if ccc-dev/ccc/ has pending work
-if ! bash "$CCC_DEV_DIR/status.sh" >/dev/null 2>&1; then
-  bash "$CCC_DEV_DIR/status.sh" >&2
+# Guard: abort if clone has pending work
+FORK_NAME=$(basename "$DEV_DIR")
+if ! bash "$FORK_SCRIPTS_DIR/status.sh" "$DEV_DIR" >/dev/null 2>&1; then
+  bash "$FORK_SCRIPTS_DIR/status.sh" "$DEV_DIR" >&2
   echo "" >&2
-  echo "ERROR: ccc-dev/ccc/ has pending work that would be lost." >&2
-  echo "Push with 'pnpm ccc:push', commit, or remove ccc-dev/ccc/ manually." >&2
+  echo "ERROR: $FORK_NAME has pending work that would be lost." >&2
+  echo "Push with 'pnpm fork:push $FORK_NAME', commit, or remove the clone manually." >&2
   exit 1
 fi
 
@@ -184,16 +199,16 @@ mkdir -p "$PINS_DIR"
 cleanup_on_error() {
   rm -rf "$REPO_DIR" "$PINS_DIR"
   if [ -n "${LOCAL_PATCHES_TMP:-}" ] && [ -d "${LOCAL_PATCHES_TMP:-}" ]; then
-    echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2
+    echo "FAILED — cleaned up clone and pins/" >&2
     echo "Local patches preserved in: $LOCAL_PATCHES_TMP" >&2
     echo "Restore manually or re-record without local patches." >&2
   else
-    echo "FAILED — cleaned up ccc-dev/ccc/ and pins/" >&2
+    echo "FAILED — cleaned up clone and pins/" >&2
   fi
 }
 trap cleanup_on_error ERR
 
-git clone --filter=blob:none "$CCC_DEV_REPO_URL" "$REPO_DIR"
+git clone --filter=blob:none "$UPSTREAM" "$REPO_DIR"
 
 # Enable diff3 conflict markers so conflict resolution can see the base version.
 # Force full 40-char SHAs in |||||| base markers so they're identical across runs
@@ -211,7 +226,7 @@ printf '%s\t%s\n' "$BASE_SHA" "$DEFAULT_BRANCH" > "$PINS_DIR/manifest"
 
 MERGE_IDX=0
 
-for REF in "$@"; do
+for REF in "${REFS[@]}"; do
   MERGE_IDX=$((MERGE_IDX + 1))
 
   deterministic_env "$MERGE_IDX"
@@ -290,14 +305,14 @@ for REF in "$@"; do
   fi
 done
 
-bash "$CCC_DEV_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
+bash "$FORK_SCRIPTS_DIR/patch.sh" "$REPO_DIR" "$MERGE_IDX"
 
 # Restore and apply local patches
 if [ -n "${LOCAL_PATCHES_TMP:-}" ]; then
   cp "$LOCAL_PATCHES_TMP"/local-*.patch "$PINS_DIR/"
   rm -rf "$LOCAL_PATCHES_TMP"
 
-  apply_local_patches "$REPO_DIR" || {
+  apply_local_patches "$REPO_DIR" "$PINS_DIR" || {
     echo "Upstream changes may have invalidated it. Edit or remove the patch and re-record." >&2
     exit 1
   }

@@ -38,27 +38,27 @@
 
 ### Local UDT Handling May Overlap CCC Upstream (Medium)
 
-- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-dev/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
+- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-fork/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
 - Files:
   - `packages/utils/src/udt.ts` - `UdtHandler` interface, `UdtManager` class (~370 lines)
   - `packages/core/src/udt.ts` - `IckbUdtManager` extending UDT handling for iCKB-specific logic
-  - `ccc-dev/ccc/packages/udt/src/` - CCC upstream UDT package
+  - `ccc-fork/ccc/packages/udt/src/` - CCC upstream UDT package
   - Usage of `ccc.udtBalanceFrom()`: `packages/utils/src/udt.ts` lines 169, 197, 323, 368
 - Impact: There may be duplicated utility code for standard UDT operations (finding cells, calculating balances). The iCKB-specific extensions (e.g., `IckbUdtManager` which modifies balance calculations based on DAO deposit/withdrawal state) are domain-specific and unlikely to be in CCC.
 - Fix approach: Audit the CCC `@ckb-ccc/udt` package to identify which local utilities can be replaced. Keep iCKB-specific extensions but delegate standard UDT operations (cell finding, basic balance) to CCC where possible.
 
 ### Fragile CCC Local Override Mechanism (Medium)
 
-- Issue: The `.pnpmfile.cjs` hook and `ccc-dev/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-dev/ccc/packages/*/`.
+- Issue: The `.pnpmfile.cjs` hook and `ccc-fork/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-fork/ccc/packages/*/`.
 - Files:
   - `.pnpmfile.cjs` - pnpm hook that overrides `@ckb-ccc/*` package resolutions
-  - `ccc-dev/record.sh` - clones CCC repo, merges refs, and builds it locally
-  - `pnpm-workspace.yaml` - includes `ccc-dev/ccc/packages/*` in workspace
-  - `ccc-dev/ccc/` - local CCC checkout (when present)
+  - `ccc-fork/record.sh` - clones CCC repo, merges refs, and builds it locally
+  - `pnpm-workspace.yaml` - includes `ccc-fork/ccc/packages/*` in workspace
+  - `ccc-fork/ccc/` - local CCC checkout (when present)
 - Impact: Multiple fragility points:
-  1. The local CCC repo at `ccc-dev/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
+  1. The local CCC repo at `ccc-fork/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
   2. The `readPackage` hook modifies `dependencies` objects at install time, which can silently break if CCC reorganizes its packages.
-  3. CI/CD (`ccc-dev/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
+  3. CI/CD (`ccc-fork/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
   4. The override mechanism is invisible to developers who don't read `.pnpmfile.cjs`, leading to confusion when packages resolve differently than expected from `package.json`.
 - Fix approach: Now that UDT and Epoch PRs have been merged into CCC upstream, evaluate whether the local overrides are still needed. If CCC publishes releases containing the merged features, switch to published versions and remove the override mechanism.
 

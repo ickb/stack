@@ -31,7 +31,7 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "[ -d ../../ccc-dev/ccc ] && exec bash ../../ccc-dev/tsgo-filter.sh || tsgo",
+    "build": "bash ../../fork-scripts/tsgo-filter.sh",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules"

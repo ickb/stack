@@ -18,7 +18,7 @@
 **Selected: `infoFrom`** (not `getInputsInfo`/`getOutputsInfo`)
 
 Rationale:
-- `infoFrom` operates at the per-cell level (`ccc-dev/ccc/packages/udt/src/udt/index.ts:624-641`), providing fine-grained control over how each cell contributes to balance
+- `infoFrom` operates at the per-cell level (`ccc-fork/ccc/packages/udt/src/udt/index.ts:624-641`), providing fine-grained control over how each cell contributes to balance
 - `getInputsInfo`/`getOutputsInfo` contain input resolution logic (`input.getCell(client)`) and output iteration (`tx.outputCells`) that would need to be duplicated if overridden
 - `infoFrom` receives a `client: ccc.Client` parameter (unused in base implementation) that the override needs for header fetches
 - `infoFrom` is async, allowing network calls within the override
@@ -28,7 +28,7 @@ Rationale:
 
 **1. xUDT cells (standard UDT balance)**
 
-- **Identification:** `this.isUdt(cell)` -- checks `cell.cellOutput.type?.eq(this.script)` with full `Script.eq()` (codeHash + hashType + args) and `outputData.length >= 16` bytes (`ccc-dev/ccc/packages/udt/src/udt/index.ts:1063-1069`)
+- **Identification:** `this.isUdt(cell)` -- checks `cell.cellOutput.type?.eq(this.script)` with full `Script.eq()` (codeHash + hashType + args) and `outputData.length >= 16` bytes (`ccc-fork/ccc/packages/udt/src/udt/index.ts:1063-1069`)
 - **Balance:** `udt.Udt.balanceFromUnsafe(cell.outputData)` -- reads first 16 bytes as 128-bit LE integer (`index.ts:590-593`). Replaces the manual `ccc.numFromBytes(ccc.bytesFrom(outputData).slice(0, 16))` pattern in current `IckbUdtManager`
 - **Applies to:** Both input and output cells
 - **Sign:** Positive
@@ -234,7 +234,7 @@ class IckbUdt extends udt.Udt {
 ```
 
 This code sketch is derived from:
-- The base `infoFrom` implementation (`ccc-dev/ccc/packages/udt/src/udt/index.ts:624-641`)
+- The base `infoFrom` implementation (`ccc-fork/ccc/packages/udt/src/udt/index.ts:624-641`)
 - The current `IckbUdtManager.getInputsUdtBalance()` logic (`packages/core/src/udt.ts:66-141`)
 - The line-by-line migration mapping from `03-01-INVESTIGATION.md`
 

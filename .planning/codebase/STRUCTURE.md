@@ -67,20 +67,20 @@
 │       │   ├── utils.ts            # Helper utilities (160 lines)
 │       │   └── vite-env.d.ts       # Vite type definitions
 │       └── public/                 # Static assets
-├── ccc-dev/                        # Local CCC development (record/replay system)
+├── ccc-fork/                        # Local CCC development (record/replay system)
 │   ├── pins/                       # Committed: manifest + counted resolutions + local patches
 │   │   ├── HEAD                    # Expected final SHA after full replay
 │   │   ├── manifest                # Base SHA + merge refs (TSV, one per line)
 │   │   ├── res-N.resolution        # Conflict resolution for merge step N (counted format)
 │   │   └── local-*.patch           # Local development patches (applied after merges)
 │   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
-│   ├── lib.sh                      # Shared shell functions for ccc-dev scripts
+│   ├── lib.sh                      # Shared shell functions for ccc-fork scripts
 │   ├── patch.sh                    # Rewrites CCC exports to .ts source, creates deterministic commit
 │   ├── push.sh                     # Pushes local CCC changes upstream
 │   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
 │   ├── replay.sh                   # Deterministically rebuilds ccc/ from pins
 │   ├── save.sh                     # Captures local CCC work as a patch in pins/
-│   ├── status.sh                   # Checks if ccc-dev/ccc/ has pending custom work
+│   ├── status.sh                   # Checks if ccc-fork/ccc/ has pending custom work
 │   └── tsgo-filter.sh              # Wrapper around tsgo filtering CCC diagnostics
 ├── reference/                      # Read-only reference repos (git-ignored, clone via `pnpm reference`)
 │   ├── contracts/                 # Rust on-chain contracts
@@ -193,7 +193,7 @@
 - Data flow: React Query for L1 state, @ickb/v1-core for TX building
 - Styling: TailwindCSS with inline classes
 
-**ccc-dev/:**
+**ccc-fork/:**
 - Purpose: Local CCC clone for development against unpublished upstream changes
 - System: Record/replay mechanism for deterministic builds
 - `pins/`: Committed directory with manifest + counted resolutions + local patches (multi-file format)
@@ -319,7 +319,7 @@
 
 **Dependencies:**
 - Internal package: `"@ickb/package": "workspace:*"` in package.json
-- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `ccc-dev/ccc/` exists
+- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `ccc-fork/ccc/` exists
 - External package: `pnpm add @vendor/package` from workspace root
 - Catalog versions: Reference via `"@vendor/package": "catalog:"` in pnpm-workspace.yaml
 
@@ -346,20 +346,20 @@
 
 ## Special Directories
 
-**ccc-dev/:**
+**ccc-fork/:**
 - Purpose: Local development environment for CCC upstream PRs
 - System: Record/replay mechanism for deterministic, conflict-free builds
 - `pins/`: Committed directory with manifest + counted resolutions + local patches (multi-file format)
 - `ccc/`: Generated from pins; auto-deleted and rebuilt on `pnpm install`
 - Activation: `.pnpmfile.cjs` hook triggers `replay.sh` and overrides package resolution
 - Commands:
-  - Record: `pnpm ccc:record` (requires AI Coworker CLI)
-  - Status: `pnpm ccc:status` (check for pending work in `ccc/`)
-  - Save: `pnpm ccc:save` (capture local work as patch in pins/)
-  - Push: `pnpm ccc:push` (cherry-pick commits onto a PR branch)
+  - Record: `pnpm fork:record` (requires AI Coworker CLI)
+  - Status: `pnpm fork:status` (check for pending work in `ccc/`)
+  - Save: `pnpm fork:save` (capture local work as patch in pins/)
+  - Push: `pnpm fork:push` (cherry-pick commits onto a PR branch)
   - Rebuild: `pnpm install` (automatic)
-  - Clean (re-replay): `pnpm ccc:clean && pnpm install` (guarded)
-  - Reset (published): `pnpm ccc:reset && pnpm install` (guarded)
+  - Clean (re-replay): `pnpm fork:clean && pnpm install` (guarded)
+  - Reset (published): `pnpm fork:reset && pnpm install` (guarded)
 
 **node_modules/:**
 - Purpose: Installed npm/pnpm dependencies

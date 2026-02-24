@@ -176,7 +176,7 @@ Shortcuts that seem reasonable but create long-term problems.
 | Keeping SmartTransaction "just for now" while migrating apps | Apps work immediately without library changes | Two transaction models coexist, every new feature must work with both, CCC upgrades become harder | Never -- library refactor must come before app migration |
 | Passing `SmartTransaction` type through public API boundaries | Avoids rewriting callers | External consumers inherit a dependency on a non-standard Transaction subclass, blocking npm publication | Never for published packages -- internal-only is acceptable during transition |
 | Skipping codec roundtrip tests | Faster initial development | Silent byte-level bugs that only manifest on-chain | Never -- these tests are cheap to write and prevent catastrophic failures |
-| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `ccc-dev/` local builds to validate, then switch to published version) |
+| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `ccc-fork/` local builds to validate, then switch to published version) |
 | Migrating bot without parallel Lumos fallback | Cleaner codebase, single transaction path | If CCC-based bot has subtle bugs, no way to fall back; real funds at risk | Never for mainnet -- always keep Lumos bot runnable until CCC bot is validated on testnet |
 | Removing `@ickb/lumos-utils` and `@ickb/v1-core` from workspace before all apps are migrated | Simpler dependency tree | Breaks unmigrated apps, blocks incremental migration | Only after ALL apps are migrated and verified |
 
@@ -272,7 +272,7 @@ How roadmap phases should address these pitfalls.
 ## Sources
 
 - Direct codebase analysis: `packages/utils/src/transaction.ts` (SmartTransaction, 517 lines), `packages/utils/src/udt.ts` (UdtManager, 393 lines), `packages/core/src/udt.ts` (IckbUdtManager, 213 lines)
-- CCC `Udt` class source: `ccc-dev/ccc/packages/udt/src/udt/index.ts` (1798 lines)
+- CCC `Udt` class source: `ccc-fork/ccc/packages/udt/src/udt/index.ts` (1798 lines)
 - On-chain contract source: `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` (conservation law, exchange rate)
 - On-chain contract source: `reference/contracts/scripts/contracts/owned_owner/` (owner/owned pairing)
 - On-chain contract source: `reference/contracts/scripts/contracts/limit_order/` (order/master relationship)

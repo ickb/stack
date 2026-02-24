@@ -70,7 +70,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 **Foundation: CCC Framework**
 - Purpose: Provide blockchain primitives and client interface
-- Location: `@ckb-ccc/core` (npm or local `ccc-dev/ccc/`)
+- Location: `@ckb-ccc/core` (npm or local `ccc-fork/ccc/`)
 - Contains: CKB RPC clients, transaction builders, signers, Molecule codec, UDT support, Epoch handling
 - Used by: All packages and applications
 - Note: CCC now includes UDT and Epoch features contributed by this project's maintainer

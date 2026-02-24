@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 2 replaces five local utility functions in `@ickb/utils` (`max`, `min`, `gcd`, `isHex`, `hexFrom`) with their CCC equivalents, then deletes the local implementations. The CCC equivalents (`ccc.numMax`, `ccc.numMin`, `ccc.gcd`, `ccc.isHex`, `ccc.numToHex`, `ccc.hexFrom`) are all verified to exist in the CCC core barrel at `@ckb-ccc/core` (verified against `ccc-dev/ccc/packages/core/src/`).
+Phase 2 replaces five local utility functions in `@ickb/utils` (`max`, `min`, `gcd`, `isHex`, `hexFrom`) with their CCC equivalents, then deletes the local implementations. The CCC equivalents (`ccc.numMax`, `ccc.numMin`, `ccc.gcd`, `ccc.isHex`, `ccc.numToHex`, `ccc.hexFrom`) are all verified to exist in the CCC core barrel at `@ckb-ccc/core` (verified against `ccc-fork/ccc/packages/core/src/`).
 
 The main complexity is that the replacements are not all 1:1 drop-ins. The local `max()`/`min()` is generic `<T>` and both current call sites pass `number` (not `bigint`), while `ccc.numMax()`/`ccc.numMin()` return `bigint`. The local `hexFrom()` accepts `bigint | Entity | BytesLike`, while CCC's `hexFrom()` only accepts `HexLike` (= `BytesLike`). All external `hexFrom` call sites pass `ccc.Entity` instances, which have a `.toHex()` method that produces the same result. The `gcd` and `isHex` replacements are straightforward. Seven iCKB-unique utilities are confirmed to have no CCC equivalents and remain unchanged.
 
@@ -48,7 +48,7 @@ No additional libraries needed. This phase only rearranges existing imports.
 **When to use:** Anywhere the local `hexFrom(entity)` was used with a `ccc.Entity` argument.
 **Example:**
 ```typescript
-// Source: ccc-dev/ccc/packages/core/src/codec/entity.ts:135-137
+// Source: ccc-fork/ccc/packages/core/src/codec/entity.ts:135-137
 // Before (local hexFrom):
 const key = hexFrom(cell.cellOutput.lock);
 
@@ -61,7 +61,7 @@ const key = cell.cellOutput.lock.toHex();
 **When to use:** For `gcd`, where the CCC equivalent is a direct function call.
 **Example:**
 ```typescript
-// Source: ccc-dev/ccc/packages/core/src/utils/index.ts:276-285
+// Source: ccc-fork/ccc/packages/core/src/utils/index.ts:276-285
 // Before:
 import { gcd } from "@ickb/utils";
 const g = gcd(aScale, bScale);
@@ -149,7 +149,7 @@ return Math.ceil(Math.log2(1 + Math.max(1, ...bins)));
 
 ## Code Examples
 
-Verified patterns from CCC source (`ccc-dev/ccc/packages/core/src/`):
+Verified patterns from CCC source (`ccc-fork/ccc/packages/core/src/`):
 
 ### numMax / numMin (from num/index.ts:30-62)
 ```typescript
@@ -263,11 +263,11 @@ const hex2 = outPoint.toHex();              // OutPoint -> Hex
 ## Sources
 
 ### Primary (HIGH confidence)
-- `ccc-dev/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom`, `numToHex` signatures and implementations
-- `ccc-dev/ccc/packages/core/src/utils/index.ts` -- `gcd` signature and implementation
-- `ccc-dev/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom` signatures and implementations
-- `ccc-dev/ccc/packages/core/src/codec/entity.ts` -- `Entity.toHex()` method
-- `ccc-dev/ccc/packages/core/src/barrel.ts` -- confirms all functions exported via CCC barrel
+- `ccc-fork/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom`, `numToHex` signatures and implementations
+- `ccc-fork/ccc/packages/core/src/utils/index.ts` -- `gcd` signature and implementation
+- `ccc-fork/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom` signatures and implementations
+- `ccc-fork/ccc/packages/core/src/codec/entity.ts` -- `Entity.toHex()` method
+- `ccc-fork/ccc/packages/core/src/barrel.ts` -- confirms all functions exported via CCC barrel
 - `packages/utils/src/utils.ts` -- local implementations being replaced
 - All call sites verified via ripgrep across `packages/` and `apps/`
 

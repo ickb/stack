@@ -11,7 +11,7 @@
 - Rust 2021 edition - On-chain CKB smart contracts in `reference/contracts/` reference repo (3 contracts + shared utils, ~1,163 lines). Built with Capsule v0.10.5, `no_std` + alloc-only runtime, targeting RISC-V. Uses `ckb-std 0.15.3` and `primitive_types` crate for C256 safe math.
 
 **Secondary:**
-- Bash - `ccc-dev/record.sh`, `ccc-dev/replay.sh` for local CCC dev build setup
+- Bash - `ccc-fork/record.sh`, `ccc-fork/replay.sh` for local CCC dev build setup
 - JavaScript (CJS) - `.pnpmfile.cjs` for pnpm hook overrides, `prettier.config.cjs`
 
 ## Runtime
@@ -73,13 +73,13 @@
 packages:
   - packages/*
   - apps/*
-  - ccc-dev/ccc/packages/*
-  - "!ccc-dev/ccc/packages/demo"
-  - "!ccc-dev/ccc/packages/docs"
-  - "!ccc-dev/ccc/packages/examples"
-  - "!ccc-dev/ccc/packages/faucet"
-  - "!ccc-dev/ccc/packages/playground"
-  - "!ccc-dev/ccc/packages/tests"
+  - ccc-fork/ccc/packages/*
+  - "!ccc-fork/ccc/packages/demo"
+  - "!ccc-fork/ccc/packages/docs"
+  - "!ccc-fork/ccc/packages/examples"
+  - "!ccc-fork/ccc/packages/faucet"
+  - "!ccc-fork/ccc/packages/playground"
+  - "!ccc-fork/ccc/packages/tests"
 
 catalog:
   '@ckb-ccc/core': ^1.12.2
@@ -105,18 +105,18 @@ minimumReleaseAge: 1440
 
 The repo supports using a local development build of CCC for testing unpublished upstream changes. This is controlled by two files:
 
-**`ccc-dev/record.sh`:**
-- Clones the CCC repo (`https://github.com/ckb-devrel/ccc.git`) into `./ccc-dev/ccc/`
+**`ccc-fork/record.sh`:**
+- Clones the CCC repo (`https://github.com/ckb-devrel/ccc.git`) into `./ccc-fork/ccc/`
 - Accepts refs as args: branch names, PR numbers, or commit SHAs
 - Merges specified refs onto a `wip` branch (uses AI Coworker CLI for merge conflict resolution)
 - Patches CCC exports for source-level types via `patch.sh`
-- Run via: `pnpm ccc:record` (default invocation: `bash ccc-dev/record.sh 359 328 releases/next releases/udt`)
-- The `ccc-dev/ccc/` directory is gitignored
-- Aborts if `ccc-dev/ccc/` has pending work (any changes vs pinned commit, diverged HEAD, or untracked files)
+- Run via: `pnpm fork:record` (default invocation: `bash ccc-fork/record.sh 359 328 releases/next releases/udt`)
+- The `ccc-fork/ccc/` directory is gitignored
+- Aborts if `ccc-fork/ccc/` has pending work (any changes vs pinned commit, diverged HEAD, or untracked files)
 
 **`.pnpmfile.cjs`:**
-- A pnpm `readPackage` hook that auto-discovers all packages in `ccc-dev/ccc/packages/*/package.json`
-- When `ccc-dev/ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `workspace:*` (CCC packages are listed in `pnpm-workspace.yaml`, but catalog specifiers resolve to semver ranges before workspace linking, so the hook forces `workspace:*` to ensure local packages are used)
+- A pnpm `readPackage` hook that auto-discovers all packages in `ccc-fork/ccc/packages/*/package.json`
+- When `ccc-fork/ccc/` exists, overrides all `@ckb-ccc/*` dependency versions in the workspace with `workspace:*` (CCC packages are listed in `pnpm-workspace.yaml`, but catalog specifiers resolve to semver ranges before workspace linking, so the hook forces `workspace:*` to ensure local packages are used)
 - Applies to `dependencies`, `devDependencies`, and `optionalDependencies`
 - Effect: all workspace packages transparently use the local CCC build instead of npm versions
 

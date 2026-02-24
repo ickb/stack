@@ -54,17 +54,17 @@ graph TD;
     click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
 ```
 
-## Develop CCC
+## Develop with Forks
 
-When `ccc-dev/pins/manifest` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
+When `<name>-fork/pins/manifest` is committed, `pnpm install` automatically sets up the local fork development environment on first run (by replaying pinned merges via `fork-scripts/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
 git clone git@github.com:ickb/stack.git && cd stack && pnpm install
 ```
 
-To redo the setup from scratch: `pnpm ccc:clean && pnpm install`.
+To redo the setup from scratch: `pnpm fork:clean-all && pnpm install`.
 
-See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
+See [ccc-fork/README.md](ccc-fork/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
 ## Reference
 

@@ -56,7 +56,7 @@ Clean, CCC-aligned library packages published to npm that frontends can depend o
 
 **Migration status:** Library packages are on CCC. Apps split: faucet/sampler already migrated; bot/interface/tester still on legacy Lumos (`@ckb-lumos/*`, `@ickb/lumos-utils@1.4.2`, `@ickb/v1-core@1.4.2`).
 
-**Local CCC dev build:** `ccc-dev/` supports using local CCC builds for testing. `.pnpmfile.cjs` transparently rewires `@ckb-ccc/*` to local packages. `ccc-dev/patch.sh` rewrites exports to `.ts` source. This enables testing upstream changes before they're published.
+**Local CCC dev build:** `ccc-fork/` supports using local CCC builds for testing. `.pnpmfile.cjs` transparently rewires `@ckb-ccc/*` to local packages. `ccc-fork/patch.sh` rewrites exports to `.ts` source. This enables testing upstream changes before they're published.
 
 ## Constraints
 

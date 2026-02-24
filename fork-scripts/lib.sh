@@ -1,32 +1,82 @@
 #!/usr/bin/env bash
-# Shared helpers for ccc-dev scripts
+# Shared helpers for fork management scripts
 
-CCC_DEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CCC_DEV_PINS_DIR="$CCC_DEV_DIR/pins"
-CCC_DEV_REPO_DIR="$CCC_DEV_DIR/ccc"
-CCC_DEV_REPO_URL="https://github.com/ckb-devrel/ccc.git"
+FORK_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$FORK_SCRIPTS_DIR/.." && pwd)"
+
+# Read a value from a fork directory's config.json
+# Usage: config_val <fork-dir> <jq-expr>
+config_val() {
+  jq -r "$2" "$1/config.json"
+}
+
+# Get the clone directory path for a fork
+# Usage: repo_dir <fork-dir>
+repo_dir() {
+  local clone_dir
+  clone_dir=$(config_val "$1" '.cloneDir')
+  echo "$1/$clone_dir"
+}
+
+# Get the pins directory path for a fork
+# Usage: pins_dir <fork-dir>
+pins_dir() {
+  echo "$1/pins"
+}
+
+# Get the upstream URL from config
+# Usage: upstream_url <fork-dir>
+upstream_url() {
+  config_val "$1" '.upstream'
+}
+
+# Get the fork URL from config (may be empty)
+# Usage: fork_url <fork-dir>
+fork_url() {
+  local url
+  url=$(config_val "$1" '.fork // empty')
+  [ -n "$url" ] && echo "$url"
+}
+
+# Get the refs array from config as lines
+# Usage: repo_refs <fork-dir>
+repo_refs() {
+  config_val "$1" '.refs[]'
+}
+
+# Discover all *-fork/ directories with config.json at repo root
+# Usage: discover_fork_dirs
+discover_fork_dirs() {
+  for d in "$ROOT_DIR"/*-fork; do
+    [ -f "$d/config.json" ] && echo "$d"
+  done
+}
 
 # Read the expected HEAD SHA from pins/HEAD
+# Usage: pinned_head <pins-dir>
 pinned_head() {
-  local f="$CCC_DEV_PINS_DIR/HEAD"
+  local f="$1/HEAD"
   [ -f "$f" ] && cat "$f" || return 1
 }
 
 # Return path to pins/manifest if it exists
+# Usage: manifest_file <pins-dir>
 manifest_file() {
-  local f="$CCC_DEV_PINS_DIR/manifest"
+  local f="$1/manifest"
   [ -f "$f" ] && echo "$f" || return 1
 }
 
 # Check whether pins exist (manifest present)
+# Usage: has_pins <pins-dir>
 has_pins() {
-  [ -f "$CCC_DEV_PINS_DIR/manifest" ]
+  [ -f "$1/manifest" ]
 }
 
 # Count merge refs in manifest (total lines minus base line)
+# Usage: merge_count <pins-dir>
 merge_count() {
   local mf
-  mf=$(manifest_file) || return 1
+  mf=$(manifest_file "$1") || return 1
   echo $(( $(wc -l < "$mf") - 1 ))
 }
 
@@ -52,13 +102,13 @@ count_glob() {
 # Timestamp sequence continues from patch.sh: merge_count+1 is patch.sh,
 # so local patches start at merge_count+2.
 # Returns 1 if any patch fails to apply (caller should add remediation advice).
-# Usage: apply_local_patches <repo-dir>
+# Usage: apply_local_patches <repo-dir> <pins-dir>
 apply_local_patches() {
-  local repo_dir="$1"
+  local repo_dir="$1" p_dir="$2"
   local mc ts patch name
-  mc=$(merge_count) || mc=0
+  mc=$(merge_count "$p_dir") || mc=0
   ts=$((mc + 2))
-  for patch in "$CCC_DEV_PINS_DIR"/local-*.patch; do
+  for patch in "$p_dir"/local-*.patch; do
     [ -f "$patch" ] || return 0
     name=$(basename "$patch" .patch)
     echo "Applying local patch: $name" >&2
