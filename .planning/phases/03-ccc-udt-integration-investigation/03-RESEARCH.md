@@ -11,7 +11,7 @@
 - CCC alignment is the primary driver -- iCKB should feel native to CCC users and benefit from upstream improvements
 - Upstream CCC PRs are explicitly on the table if CCC's Udt class needs small, targeted changes to accommodate iCKB's multi-representation value
 - No concern about CCC upgrade risk -- if we contribute to CCC's Udt, we co-own the design
-- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture -- investigation should design around it and identify improvements that would better fit iCKB's needs. Branch cloned to `reference/ccc-fee-payer/`
+- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture -- investigation should design around it and identify improvements that would better fit iCKB's needs. Now integrated into `ccc-dev/ccc` (available at `ccc-dev/ccc/packages/core/src/signer/feePayer/`)
 - Investigation should cover both cell discovery and balance calculation, not just balance
 - Design upstream: if CCC Udt changes are needed, design them generically as a "composite UDT" pattern that benefits other CKB tokens beyond iCKB
 - Leaning toward `IckbUdt extends udt.Udt` -- iCKB is fundamentally a UDT, just with extra cell types carrying value
@@ -361,7 +361,7 @@ class CellAny {
 
 ### PR #328 FeePayer.completeInputs Signature
 ```typescript
-// Source: reference/ccc-fee-payer/packages/core/src/signer/feePayer/feePayer.ts lines 26-39
+// Source: ccc-dev/ccc/packages/core/src/signer/feePayer/feePayer.ts lines 26-39
 abstract completeInputs<T>(
   tx: Transaction,
   filter: ClientCollectableSearchKeyFilterLike,
@@ -381,7 +381,7 @@ abstract completeInputs<T>(
 | `ccc.udtBalanceFrom()` (deprecated) | `udt.Udt.balanceFromUnsafe(outputData)` | Current CCC | Old API deprecated, new one in Udt class |
 | `tx.completeInputsByUdt()` (deprecated) | `udt.completeInputsByBalance(tx, signer)` | Current CCC | Old on Transaction, new on Udt instance |
 | `tx.getInputsUdtBalance()` / `tx.getOutputsUdtBalance()` (deprecated) | `udt.getInputsInfo(client, tx)` / `udt.getOutputsInfo(client, tx)` | Current CCC | New methods return UdtInfo (balance + capacity + count) |
-| PR #328 FeePayer Udt (uses deprecated APIs) | Current CCC Udt (uses `infoFrom`) | Not yet merged | PR #328's Udt is simpler, still uses old deprecated APIs; current CCC Udt is more complete |
+| PR #328 FeePayer Udt (uses deprecated APIs) | Current CCC Udt (uses `infoFrom`) | Integrated into ccc-dev/ccc | PR #328's Udt is simpler, still uses old deprecated APIs; current CCC Udt is more complete |
 
 **Deprecated/outdated:**
 - `ccc.udtBalanceFrom()`: Replaced by `udt.Udt.balanceFromUnsafe()`
@@ -421,9 +421,7 @@ abstract completeInputs<T>(
 - `packages/utils/src/udt.ts` -- Current `UdtHandler` interface, `UdtManager` base class
 - `packages/core/src/logic.ts` -- `LogicManager`, receipt/deposit identification
 - `packages/core/src/cells.ts` -- `ReceiptCell`, `IckbDepositCell`, `receiptCellFrom` header access pattern
-- `reference/ccc-fee-payer/packages/core/src/signer/feePayer/feePayer.ts` -- PR #328 FeePayer abstract class
-- `reference/ccc-fee-payer/packages/udt/src/udt/index.ts` -- PR #328's simpler Udt (still uses deprecated APIs)
-- `reference/ccc-fee-payer/packages/core/src/ckb/transaction.ts` -- PR #328 `completeByFeePayer`, completion chain
+- `ccc-dev/ccc/packages/core/src/signer/feePayer/feePayer.ts` -- PR #328 FeePayer abstract class (now integrated into ccc-dev/ccc)
 
 ### Secondary (MEDIUM confidence)
 - None -- all findings verified from source code

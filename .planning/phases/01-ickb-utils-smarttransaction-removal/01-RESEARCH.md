@@ -312,7 +312,7 @@ tx.addCellDeps(this.udtHandler.cellDeps);
 
 ### Pitfall 8: ccc-dev pins must be recorded after CCC changes
 **What goes wrong:** Making changes to `ccc-dev/ccc/` without running `pnpm ccc:record` means the pins don't reflect the new state.
-**Why it happens:** `ccc-dev/pins/HEAD` is a hash integrity check. If ccc code changes but pins don't update, replay won't reproduce the same state.
+**Why it happens:** `ccc-dev/pins/` contains an integrity check. If ccc code changes but pins don't update, replay won't reproduce the same state.
 **How to avoid:** After developing the DAO utility in `ccc-dev/ccc/`, run `pnpm ccc:record` to update pins. Check `pnpm ccc:status` to verify.
 **Warning signs:** `pnpm ccc:status` reports exit code 1 (pending work).
 

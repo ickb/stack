@@ -76,8 +76,7 @@ Each task was committed atomically:
 ## Files Created/Modified
 - `ccc-dev/ccc/packages/core/src/ckb/transactionErrors.ts` - ErrorNervosDaoOutputLimit error class
 - `ccc-dev/ccc/packages/core/src/ckb/transaction.ts` - assertDaoOutputLimit utility + completeFee safety net
-- `ccc-dev/pins/local/001-dao-output-limit.patch` - Local patch for deterministic replay
-- `ccc-dev/pins/HEAD` - Updated pinned HEAD SHA
+- `ccc-dev/pins/` - Updated pins for deterministic replay
 - `ccc-dev/record.sh` - Added local patch preservation and application
 - `ccc-dev/replay.sh` - Added local patch application after standard merge+patch
 - `packages/dao/src/dao.ts` - DaoManager.deposit/requestWithdrawal/withdraw now async with client param

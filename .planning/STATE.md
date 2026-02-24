@@ -71,7 +71,7 @@ None yet.
 - Resolved: CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()` (verified in STACK.md from CCC source). No standalone utility needed.
 - Resolved: CCC Udt `getInputsInfo()` resolves inputs to `Cell` objects (which have `outPoint`) before passing to `infoFrom()`. `infoFrom()`'s `CellAnyLike` parameter has `outPoint?: OutPointLike | null` — optional, not absent. Input cells have outPoint (for header fetches), output cells don't. Both `infoFrom` and `getInputsInfo/getOutputsInfo` are viable override points for IckbUdt (verified during Phase 3 discuss-phase).
 - Resolved: STACK.md research correction applied — `client.getHeaderByTxHash()` (non-existent) replaced with `client.getTransactionWithHeader()` in STACK.md, ROADMAP.md Phase 3 success criterion #2, and REQUIREMENTS.md UDT-02.
-- Resolved: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328").
+- Resolved: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328"). PR #328 is now integrated into `ccc-dev/ccc` via pins; FeePayer classes available at `ccc-dev/ccc/packages/core/src/signer/feePayer/`. The separate `reference/ccc-fee-payer` clone is no longer needed.
 - Resolved: `CellAny` has `capacityFree` getter (CCC transaction.ts:404-405) — 03-RESEARCH.md corrected (previously claimed `CellAny` lacked it).
 
 ## Session Continuity

@@ -151,7 +151,7 @@ Create `IckbUdt extends Udt` that overrides `infoFrom()` to recognize all three 
 - The base implementation's dual-constraint logic (balance + capacity) is correct for iCKB
 - The subclass only needs to change HOW balance is calculated from cells, not the input selection strategy
 
-**Implementation sketch:** See 03-RESEARCH.md for the corrected `infoFrom()` override pattern. ARCHITECTURE.md "Pattern 2" has an older `getInputsInfo()` override example (marked as outdated).
+**Implementation sketch:** See 03-RESEARCH.md for the `infoFrom()` override pattern. ARCHITECTURE.md "CCC Udt Adoption for iCKB" section has the same corrected example.
 
 **Header fetching within `infoFrom()` override:**
 
@@ -275,11 +275,11 @@ Both are now redundant:
 
 PR #328 proposes a `FeePayer` abstraction for CCC that would allow specifying who pays transaction fees. This is relevant because SmartTransaction's fee completion could designate a specific lock for fee payment.
 
-**Current status:** Still open (not merged as of research date).
+**Current status (updated):** PR #328 is now integrated into `ccc-dev/ccc` via the pins/record system. FeePayer classes are available at `ccc-dev/ccc/packages/core/src/signer/feePayer/`. The user decided during Phase 3 context that PR #328 is the target architecture -- investigation should design around it.
 
-**Impact on migration:** Do NOT wait for PR #328. CCC's existing `completeFeeChangeToLock(signer, changeLock)` already allows specifying a change destination. The FeePayer abstraction would be a further convenience but is not blocking.
+**Impact on migration:** The FeePayer abstraction is available to build against directly. The `infoFrom()` override is compatible with both the current Signer-based completion and the FeePayer-based completion -- cells flow through `getInputsInfo` → `infoFrom` regardless of which completion plumbing is used.
 
-**Recommendation:** Proceed with `completeFeeChangeToLock()` / `completeFeeBy()`. If PR #328 merges later, it can be adopted as an incremental improvement.
+**Recommendation:** Design around FeePayer as the target architecture. Use `completeFeeChangeToLock()` / `completeFeeBy()` for current execution while investigating how FeePayer's `completeInputs(tx, filter, accumulator, init)` pattern can improve iCKB's receipt/deposit cell discovery.
 
 ## Version Compatibility
 
