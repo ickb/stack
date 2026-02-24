@@ -29,12 +29,15 @@ if [ "$ACTUAL" != "$PINNED" ]; then
   exit 1
 fi
 
-# Compare pinned commit directly against working tree.
-# git diff <commit> catches unstaged AND staged changes in one shot.
+# Compare pinned commit against working tree AND index.
+# git diff <commit> catches unstaged changes; --cached catches staged-only changes
+# (e.g. staged edits where the working tree was reverted).
 if ! git -C "$REPO_DIR" diff "$PINNED" --quiet 2>/dev/null \
+   || ! git -C "$REPO_DIR" diff --cached "$PINNED" --quiet 2>/dev/null \
    || [ -n "$(git -C "$REPO_DIR" ls-files --others --exclude-standard 2>/dev/null)" ]; then
   echo "ccc-dev/ccc/ has changes relative to pins:"
   git -C "$REPO_DIR" diff "$PINNED" --stat 2>/dev/null || true
+  git -C "$REPO_DIR" diff --cached "$PINNED" --stat 2>/dev/null || true
   git -C "$REPO_DIR" ls-files --others --exclude-standard 2>/dev/null || true
   exit 1
 fi

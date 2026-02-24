@@ -56,7 +56,7 @@ graph TD;
 
 ## Develop CCC
 
-When `ccc-dev/pins/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
+When `ccc-dev/pins/manifest` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
 git clone git@github.com:ickb/stack.git && cd stack && pnpm install
@@ -85,8 +85,10 @@ This clones two repos into the project root (both are git-ignored and made read-
 | ------------------- | ------------------------------------------------------------------------------------- |
 | `pnpm coworker`     | Launch an interactive AI Coworker session (full autonomy, opus model).                 |
 | `pnpm coworker:ask` | One-shot AI query for scripting (sonnet model, stateless). Used by `pnpm ccc:record`. |
-| `pnpm ccc:status`   | Check if CCC clone matches pinned state. Exit 0 = safe to wipe.          |
-| `pnpm ccc:record`   | Record CCC pins (clone, merge refs, build). Guarded against pending work.             |
+| `pnpm ccc:status`   | Check if CCC clone matches pinned state. Exit 0 = safe to wipe.                       |
+| `pnpm ccc:record`   | Record CCC pins (clone, merge refs, build). Guarded against pending work.              |
+| `pnpm ccc:save`     | Capture local CCC work as a patch in pins/ (survives re-records and replays).          |
+| `pnpm ccc:push`     | Cherry-pick commits from wip branch onto a PR branch for pushing to the fork.          |
 | `pnpm ccc:clean`    | Remove CCC clone, keep pins (guarded). Re-replay on next `pnpm install`.              |
 | `pnpm ccc:reset`    | Remove CCC clone and pins (guarded). Restores published CCC packages.                 |
 | `pnpm check:full`   | Wipe derived state and validate from scratch. Skips wipe if CCC has pending work.     |

@@ -11,8 +11,9 @@ REPO_DIR="$CCC_DEV_REPO_DIR"
 PINS_DIR="$CCC_DEV_PINS_DIR"
 
 DESCRIPTION="${1:-local}"
-# Sanitize description for use in filename
+# Sanitize description for use in filename (fallback if nothing alphanumeric remains)
 DESCRIPTION=$(printf '%s' "$DESCRIPTION" | tr -c '[:alnum:]-_' '-' | sed 's/--*/-/g; s/^-//; s/-$//')
+[ -z "$DESCRIPTION" ] && DESCRIPTION="local"
 
 # Check prerequisites
 if [ ! -d "$REPO_DIR" ]; then
@@ -31,9 +32,9 @@ if [ "$CURRENT_BRANCH" != "wip" ]; then
   exit 1
 fi
 
-# Check for changes (committed + uncommitted + untracked) relative to pinned HEAD
+# Check for changes (committed + uncommitted + staged + untracked) relative to pinned HEAD
 if git -C "$REPO_DIR" diff "$PINNED_HEAD" --quiet 2>/dev/null \
-   && git -C "$REPO_DIR" diff --cached --quiet 2>/dev/null \
+   && git -C "$REPO_DIR" diff --cached "$PINNED_HEAD" --quiet 2>/dev/null \
    && [ -z "$(git -C "$REPO_DIR" ls-files --others --exclude-standard 2>/dev/null)" ]; then
   echo "No changes to save (working tree matches pinned HEAD)."
   exit 0
@@ -72,6 +73,8 @@ fi
 git -C "$REPO_DIR" reset --hard "$PATCH_BASE"
 
 apply_local_patches "$REPO_DIR" || {
+  # Remove the newly-written patch so a retry doesn't hit the same failure
+  rm -f "$PINS_DIR/${PATCH_NAME}.patch"
   echo "Earlier patches may have changed the base. Edit or reorder patches." >&2
   exit 1
 }
