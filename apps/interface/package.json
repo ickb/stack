@@ -13,7 +13,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "([ -d ../../ccc-dev/ccc ] && exec bash ../../ccc-dev/tsgo-filter.sh || tsgo) && vite build",
+    "build": "bash ../../fork-scripts/tsgo-filter.sh && vite build",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
