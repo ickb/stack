@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 3 of 7 (CCC Udt Integration Investigation)
-Plan: 1 of 2 in current phase
-Status: Plan 03-01 complete, ready for 03-02
-Last activity: 2026-02-24 -- Plan 03-01 investigation complete (execute-phase)
+Phase: 3 of 7 (CCC Udt Integration Investigation) -- COMPLETE
+Plan: 2 of 2 in current phase (all plans complete)
+Status: Phase 3 complete, ready for Phase 4
+Last activity: 2026-02-24 -- Plan 03-02 decision document complete (execute-phase)
 
-Progress: [████░░░░░░] 36%
+Progress: [████░░░░░░] 43%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: ~13min
-- Total execution time: 1.1 hours
+- Total plans completed: 6
+- Average duration: ~12min
+- Total execution time: 1.2 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [████░░░░░░] 36%
 |-------|-------|-------|----------|
 | 01 | 3/3 | 52min | 17min |
 | 02 | 1/1 | 7min | 7min |
-| 03 | 1/2 | 5min | 5min |
+| 03 | 2/2 | 9min | 4.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (~6min), 01-03 (~16min), 02-01 (~7min), 03-01 (~5min)
+- Last 5 plans: 01-03 (~16min), 02-01 (~7min), 03-01 (~5min), 03-02 (~4min)
 - Trend: accelerating
 
 *Updated after each plan completion*
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 - [03-01]: No upstream CCC changes required for IckbUdt subclass -- all override points are public with appropriate signatures
 - [03-01]: Caller responsibility for receipt/deposit cell discovery (not IckbUdt's filter) -- LogicManager/OwnedOwnerManager handle this
 - [03-01]: Accurate balance reporting only -- conservation law enforcement is separate from infoFrom
+- [03-02]: Decision: subclass CCC Udt (option a) -- IckbUdt extends udt.Udt with infoFrom override
+- [03-02]: Conservation law: accurate balance reporting only; on-chain script is authoritative enforcer; build-time validation optional later
+- [03-02]: Cell discovery boundary: infoFrom values cells already in transaction; callers (LogicManager/OwnedOwnerManager) find and add receipt/deposit cells
+- [03-02]: UdtHandler interface and UdtManager class to be deleted in Phase 5, replaced by udt.Udt type
 
 ### Pending Todos
 
@@ -82,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 03-01-PLAN.md
-Resume file: .planning/phases/03-ccc-udt-integration-investigation/03-02-PLAN.md
+Stopped at: Completed 03-02-PLAN.md (Phase 3 complete)
+Resume file: Phase 4 planning needed

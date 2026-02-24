@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: SmartTransaction Removal (feature-slice)** - Delete SmartTransaction class and infrastructure across all packages; contribute 64-output DAO limit check to CCC core; migrate all method signatures to ccc.TransactionLike
 - [x] **Phase 2: CCC Utility Adoption** - Replace local utility functions that duplicate CCC equivalents across all packages; preserve iCKB-unique utilities
-- [ ] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
+- [x] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
 - [ ] **Phase 4: Deprecated CCC API Replacement** - Replace deprecated CCC API calls (`udtBalanceFrom`, etc.) with `@ckb-ccc/udt` equivalents in dao and order packages; finalize UDT handler replacement pattern based on Phase 3 findings
 - [ ] **Phase 5: @ickb/core UDT Refactor** - Implement IckbUdt class or refactor IckbUdtManager based on Phase 3 findings; preserve iCKB conservation law; replace deprecated CCC API calls in core
 - [ ] **Phase 6: SDK Completion Pipeline** - Wire IckbSdk facade to CCC-native fee completion; verify estimate() and maturity() work end-to-end
@@ -67,7 +67,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Trace CCC Udt internals end-to-end, verify infoFrom override feasibility, resolve open questions
-- [ ] 03-02-PLAN.md — Write formal decision document (feasibility assessment, header access pattern, decision with rationale)
+- [x] 03-02-PLAN.md — Write formal decision document (feasibility assessment, header access pattern, decision with rationale)
 
 ### Phase 4: Deprecated CCC API Replacement
 **Goal**: Deprecated CCC API calls are replaced with `@ckb-ccc/udt` equivalents in `@ickb/dao` and `@ickb/order`; UDT handler usage is finalized based on Phase 3 findings (method signatures and `addUdtHandlers()` removal already done in Phase 1)
@@ -139,7 +139,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 |-------|----------------|--------|-----------|
 | 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
 | 2. CCC Utility Adoption | 1/1 | Complete    | 2026-02-23 |
-| 3. CCC Udt Integration Investigation | 0/2 | In progress | - |
+| 3. CCC Udt Integration Investigation | 2/2 | Complete    | 2026-02-24 |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
 | 5. @ickb/core UDT Refactor | 0/3 | Not started | - |
 | 6. SDK Completion Pipeline | 0/2 | Not started | - |
