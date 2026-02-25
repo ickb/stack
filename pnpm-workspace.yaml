@@ -1,15 +1,15 @@
 packages:
   - packages/*
   - apps/*
-  # @generated begin fork-workspaces
-  - ccc-fork/ccc/packages/*
-  - "!ccc-fork/ccc/packages/demo"
-  - "!ccc-fork/ccc/packages/docs"
-  - "!ccc-fork/ccc/packages/examples"
-  - "!ccc-fork/ccc/packages/faucet"
-  - "!ccc-fork/ccc/packages/playground"
-  - "!ccc-fork/ccc/packages/tests"
-  # @generated end fork-workspaces
+  # @generated begin forker-workspaces
+  - forks/ccc/packages/*
+  - "!forks/ccc/packages/demo"
+  - "!forks/ccc/packages/docs"
+  - "!forks/ccc/packages/examples"
+  - "!forks/ccc/packages/faucet"
+  - "!forks/ccc/packages/playground"
+  - "!forks/ccc/packages/tests"
+  # @generated end forker-workspaces
 
 catalog:
   "@ckb-ccc/core": ^1.12.2

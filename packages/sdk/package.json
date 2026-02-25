@@ -31,7 +31,7 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "bash ../../fork-scripts/tsgo-filter.sh",
+    "build": "bash ../../tsgo-filter.sh",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules"

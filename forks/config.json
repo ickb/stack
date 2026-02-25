@@ -1,0 +1,38 @@
+{
+  "ccc": {
+    "upstream": "https://github.com/ckb-devrel/ccc.git",
+    "fork": "git@github.com:phroi/ccc.git",
+    "refs": [
+      "359",
+      "328",
+      "releases/next",
+      "releases/udt"
+    ],
+    "workspace": {
+      "include": [
+        "packages/*"
+      ],
+      "exclude": [
+        "packages/demo",
+        "packages/docs",
+        "packages/examples",
+        "packages/faucet",
+        "packages/playground",
+        "packages/tests"
+      ]
+    }
+  },
+  "forker": {
+    "upstream": "https://github.com/phroi/forker.git",
+    "fork": "git@github.com:phroi/forker.git",
+    "refs": []
+  },
+  "contracts": {
+    "upstream": "https://github.com/ickb/contracts.git",
+    "refs": []
+  },
+  "whitepaper": {
+    "upstream": "https://github.com/ickb/whitepaper.git",
+    "refs": []
+  }
+}

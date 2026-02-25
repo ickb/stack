@@ -1,10 +1,10 @@
 --- packages/core/src/ckb/transaction.ts
-CONFLICT ours=5 base=4 theirs=1 resolution=4
+CONFLICT ours=5 base=4 theirs=1 resolution=4 sha=9b7e58e11a803c51911391e089e70989663efb79fe8775ddc4335e5c2202248d
 import {
   ErrorNervosDaoOutputLimit,
   ErrorTransactionInsufficientCoin,
 } from "./transactionErrors.js";
-CONFLICT ours=97 base=95 theirs=7 resolution=8
+CONFLICT ours=97 base=95 theirs=7 resolution=8 sha=35fcc18a78d1a7d169108f94fda08c9a4d720da6a4c8be68130da8a3a8257de3
     const result = await from.completeFee(this, {
       changeFn: change,
       feeRate: expectedFeeRate,

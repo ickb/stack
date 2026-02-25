@@ -37,7 +37,7 @@
     // Clipboard support for wl-copy/wl-paste (used by CLAUDE.md)
     "clipboard": "sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends wl-clipboard",
     // Install vscode focus timer extension
-    "focus-timer": "d=~/focus-timer-ext && git clone https://github.com/phroi/vscode-focus-timer.git $d && ln -sfn $d ~/.vscode-server/extensions/phroi.focus"
+    "focus-timer": "d=~/focus-timer-ext && git clone --depth 1 https://github.com/phroi/vscode-focus-timer.git $d && ln -sfn $d ~/.vscode-server/extensions/phroi.focus"
   },
 
   // Run each time the container starts. Ensures updated dependencies are installed inside the container user environment.

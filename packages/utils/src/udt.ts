@@ -77,7 +77,6 @@ export interface UdtHandler extends ScriptDeps {
  *
  * UDT Handler implementer should use this error class where appropriate.
  */
-// eslint-disable-next-line @typescript-eslint/no-deprecated
 export class ErrorTransactionInsufficientCoin extends ccc.ErrorTransactionInsufficientCoin {
   /**
    * @param amount - The additional amount required (in fixed-point).
@@ -91,7 +90,6 @@ export class ErrorTransactionInsufficientCoin extends ccc.ErrorTransactionInsuff
     public readonly symbol: string,
     public readonly decimals: number,
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
     super(amount, type);
     this.message = `Insufficient coin, need ${ccc.fixedPointToString(
       amount,

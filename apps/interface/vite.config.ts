@@ -2,20 +2,20 @@ import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from '@vitejs/plugin-basic-ssl'
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
-// Detect if any managed fork clones are present
+// Detect if any managed fork clones are present (forks/ directory layout)
 const root = join(__dirname, "../..");
 const hasForkSource = (() => {
   try {
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !entry.name.endsWith("-fork")) continue;
-      const configPath = join(root, entry.name, "config.json");
-      if (!existsSync(configPath)) continue;
-      const { cloneDir } = JSON.parse(readFileSync(configPath, "utf8"));
-      if (!cloneDir) continue;
-      if (existsSync(join(root, entry.name, cloneDir))) return true;
+    const configPath = join(root, "forks", "config.json");
+    if (!existsSync(configPath)) return false;
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    for (const [name, entry] of Object.entries<any>(config)) {
+      // Managed forks have non-empty refs; reference-only clones have refs: []
+      if (!Array.isArray(entry.refs) || entry.refs.length === 0) continue;
+      if (existsSync(join(root, "forks", name))) return true;
     }
   } catch (err) {
     console.error("Failed to detect fork sources:", err);
@@ -32,7 +32,7 @@ export default defineConfig({
     tailwindcss(),
     react({
       // Fork source uses decorators — skip babel, let esbuild handle them
-      ...(hasForkSource && { exclude: [/\w+-fork\/\w+\//] }),
+      ...(hasForkSource && { exclude: [/forks\/\w+\//] }),
       babel: {
         plugins: [["babel-plugin-react-compiler"]],
       },
