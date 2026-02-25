@@ -34,11 +34,9 @@
 │   │       └── codec.ts            # PoolSnapshot codec (138 lines)
 │   └── utils/                      # Shared blockchain utilities
 │       └── src/
-│           ├── index.ts            # Barrel export: codec, capacity, heap, transaction, udt, utils
-│           ├── transaction.ts      # SmartTransaction class (517 lines)
-│           ├── capacity.ts         # CapacityManager class (221 lines)
-│           ├── udt.ts              # UDT calculations and handlers (393 lines)
-│           ├── utils.ts            # Binary search, collectors, etc. (458 lines)
+│           ├── index.ts            # Barrel export: codec, heap, udt, utils
+│           ├── udt.ts              # UDT calculations and handlers (407 lines)
+│           ├── utils.ts            # Binary search, collectors, etc. (292 lines)
 │           ├── codec.ts            # CheckedInt32LE codec (21 lines)
 │           └── heap.ts             # Heap implementation (175 lines)
 ├── apps/                           # Applications
@@ -69,17 +67,29 @@
 │       │   ├── utils.ts            # Helper utilities (160 lines)
 │       │   └── vite-env.d.ts       # Vite type definitions
 │       └── public/                 # Static assets
-├── ccc-dev/                        # Local CCC development (record/replay system)
-│   ├── pins/                       # Committed: pinned SHAs and conflict resolutions
-│   │   ├── REFS                    # Pinned branch HEADs
-│   │   └── resolutions/            # Merge conflict resolutions
-│   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
-│   ├── patch.sh                    # Rewrites CCC exports to .ts source, creates deterministic commit
-│   ├── push.sh                     # Pushes local CCC changes upstream
+├── fork-scripts/                    # Generic fork management scripts (accept fork dir as argument)
+│   ├── lib.sh                      # Shared shell functions for fork scripts
+│   ├── patch.sh                    # Rewrites fork exports to .ts source, creates deterministic commit
+│   ├── push.sh                     # Pushes local fork changes upstream
 │   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
-│   ├── replay.sh                   # Deterministically rebuilds ccc/ from pins
-│   ├── status.sh                   # Checks if ccc-dev/ccc/ has pending custom work
-│   └── tsgo-filter.sh              # Wrapper around tsgo filtering CCC diagnostics
+│   ├── replay.sh                   # Deterministically rebuilds clone from pins
+│   ├── replay-all.sh               # Replays all *-fork/ directories
+│   ├── save.sh                     # Captures local work as a patch in pins/
+│   ├── status.sh                   # Checks if fork clone has pending custom work
+│   ├── status-all.sh               # Checks status of all *-fork/ directories
+│   ├── clean.sh                    # Removes fork clone (guarded against pending work)
+│   ├── clean-all.sh                # Cleans all *-fork/ directories
+│   ├── reset.sh                    # Resets fork to published packages (guarded)
+│   └── tsgo-filter.sh              # Wrapper around tsgo filtering fork diagnostics
+├── ccc-fork/                        # CCC fork configuration and pins
+│   ├── config.json                 # Upstream URL, fork URL, refs to merge, workspace config
+│   ├── pins/                       # Committed: manifest + counted resolutions + local patches
+│   │   ├── HEAD                    # Expected final SHA after full replay
+│   │   ├── manifest                # Base SHA + merge refs (TSV, one per line)
+│   │   ├── res-N.resolution        # Conflict resolution for merge step N (counted format)
+│   │   └── local-*.patch           # Local development patches (applied after merges)
+│   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
+│   └── README.md                   # Fork documentation
 ├── reference/                      # Read-only reference repos (git-ignored, clone via `pnpm reference`)
 │   ├── contracts/                 # Rust on-chain contracts
 │   │   └── scripts/contracts/
@@ -151,9 +161,9 @@
 
 **packages/utils/src/:**
 - Purpose: Shared blockchain utilities and primitives
-- Exports: SmartTransaction, CapacityManager, UdtHandler, CheckedInt32LE, codecs
-- Key classes: `SmartTransaction` (transaction builder), `CapacityManager` (cell management)
-- Key helpers: `collect()`, `unique()`, `binarySearch()`, `hexFrom()`, `getHeader()`
+- Exports: UdtHandler, UdtManager, CheckedInt32LE, TransactionHeader, codecs
+- Key classes: `UdtManager` (UDT cell management)
+- Key helpers: `collect()`, `unique()`, `binarySearch()`
 - Dependencies: @ckb-ccc/core
 
 **apps/bot/src/:**
@@ -188,14 +198,19 @@
 - Status: LEGACY (uses @ickb/v1-core, @ckb-lumos/*, deprecated)
 - Entry: `main.tsx` with `startApp(wallet_chain)` function
 - Component tree: Connector → App → Form/Dashboard/Action
-- Data flow: React Query for L1 state, SmartTransaction for TX building
+- Data flow: React Query for L1 state, @ickb/v1-core for TX building
 - Styling: TailwindCSS with inline classes
 
-**ccc-dev/:**
-- Purpose: Local CCC clone for development against unpublished upstream changes
-- System: Record/replay mechanism for deterministic builds
-- `pins/`: Committed directory with pinned SHAs (REFS, HEAD) and conflict resolutions
-- `ccc/`: Gitignored, ephemeral clone auto-generated by `replay.sh`
+**fork-scripts/:**
+- Purpose: Generic fork management scripts for record/replay mechanism
+- All scripts accept a fork directory as their first argument (e.g., `fork-scripts/record.sh ccc-fork`)
+- Called via pnpm aliases: `pnpm fork:record ccc-fork`, `pnpm fork:status ccc-fork`, etc.
+
+**ccc-fork/:**
+- Purpose: CCC fork configuration and pins for local development against unpublished upstream changes
+- `config.json`: Upstream URL, fork URL, refs to merge, workspace include/exclude
+- `pins/`: Committed directory with manifest + counted resolutions + local patches (multi-file format)
+- `ccc/`: Gitignored, ephemeral clone auto-generated by `fork-scripts/replay.sh`
 - Activation: `.pnpmfile.cjs` auto-triggers replay on `pnpm install` and redirects @ckb-ccc/* deps
 
 **.planning/codebase/:**
@@ -225,8 +240,7 @@
 - Deposits: `packages/core/src/logic.ts` → `LogicManager` class (269 lines)
 - Orders: `packages/order/src/order.ts` → `OrderManager` class (988 lines)
 - DAO: `packages/dao/src/dao.ts` → `DaoManager` class (412 lines)
-- Transactions: `packages/utils/src/transaction.ts` → `SmartTransaction` class (517 lines)
-- Capacity: `packages/utils/src/capacity.ts` → `CapacityManager` class (221 lines)
+- UDT: `packages/utils/src/udt.ts` → `UdtHandler` interface + `UdtManager` class (407 lines)
 
 **Type Definitions:**
 - Order entities: `packages/order/src/entities.ts` (Info, Ratio, OrderData) — 754 lines
@@ -254,7 +268,7 @@
 - Types and functions exported at package level via index
 
 **Classes and Functions:**
-- Classes: PascalCase (e.g., `IckbSdk`, `LogicManager`, `SmartTransaction`, `DaoManager`)
+- Classes: PascalCase (e.g., `IckbSdk`, `LogicManager`, `DaoManager`, `OrderManager`)
 - Manager suffix: Consistently applied to manager classes
 - Instance methods: camelCase (e.g., `deposit()`, `mint()`, `getL1State()`)
 - Static methods: camelCase on class (e.g., `IckbSdk.from()`, `IckbSdk.estimate()`)
@@ -318,7 +332,7 @@
 
 **Dependencies:**
 - Internal package: `"@ickb/package": "workspace:*"` in package.json
-- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `ccc-dev/ccc/` exists
+- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `ccc-fork/ccc/` exists
 - External package: `pnpm add @vendor/package` from workspace root
 - Catalog versions: Reference via `"@vendor/package": "catalog:"` in pnpm-workspace.yaml
 
@@ -345,20 +359,25 @@
 
 ## Special Directories
 
-**ccc-dev/:**
-- Purpose: Local development environment for CCC upstream PRs
-- System: Record/replay mechanism for deterministic, conflict-free builds
-- `pins/`: Committed directory containing:
-  - `REFS`: Pinned branch HEADs for merging
-  - `resolutions/`: Serialized conflict resolutions with AI Coworker aid
+**fork-scripts/:**
+- Purpose: Generic fork management framework for deterministic, conflict-free builds
+- System: Record/replay mechanism using pins (manifest + counted resolutions + local patches)
+- All scripts accept a `<name>-fork` directory as their first argument
+- Commands (using `ccc-fork` as example):
+  - Record: `pnpm fork:record ccc-fork` (requires AI Coworker CLI)
+  - Status: `pnpm fork:status ccc-fork` (check for pending work in clone)
+  - Save: `pnpm fork:save ccc-fork [description]` (capture local work as patch in pins/)
+  - Push: `pnpm fork:push ccc-fork` (cherry-pick commits onto a PR branch)
+  - Rebuild: `pnpm install` (automatic when pins/ exists but clone does not)
+  - Clean (re-replay): `pnpm fork:clean ccc-fork && pnpm install` (guarded)
+  - Reset (published): `pnpm fork:reset ccc-fork && pnpm install` (guarded)
+
+**ccc-fork/:**
+- Purpose: CCC fork configuration for local development against unpublished upstream changes
+- `config.json`: Upstream/fork URLs, merge refs, workspace include/exclude
+- `pins/`: Committed merge instructions and conflict resolutions
 - `ccc/`: Generated from pins; auto-deleted and rebuilt on `pnpm install`
-- Activation: `.pnpmfile.cjs` hook triggers `replay.sh` and overrides package resolution
-- Commands:
-  - Record: `pnpm ccc:record releases/next releases/udt` (requires AI Coworker CLI)
-  - Status: `pnpm ccc:status` (check for pending work in `ccc/`)
-  - Rebuild: `pnpm install` (automatic)
-  - Clean (re-replay): `pnpm ccc:clean && pnpm install` (guarded)
-  - Reset (published): `pnpm ccc:reset && pnpm install` (guarded)
+- Activation: `.pnpmfile.cjs` hook triggers `fork-scripts/replay.sh` and overrides package resolution
 
 **node_modules/:**
 - Purpose: Installed npm/pnpm dependencies

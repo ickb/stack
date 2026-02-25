@@ -11,7 +11,7 @@
 - Manager-based pattern encapsulating script operations with uniform `ScriptDeps` interface
 - Async-first cell discovery via generator functions with lazy evaluation
 - TypeScript ESM modules with strict null checks and type safety
-- SmartTransaction builder for automatic fee/change calculation
+- CCC-native transaction building with TransactionLike pattern (SmartTransaction deleted in Phase 1)
 - Cell wrapper abstractions extending raw blockchain data with domain logic
 
 **Migration Status:**
@@ -21,7 +21,7 @@
 - Apps split: `faucet` and `sampler` already use new packages; `bot`, `tester`, `interface` still on legacy Lumos
 - CCC PRs for UDT and Epoch support have been MERGED upstream -- local Epoch class has been deleted (replaced by `ccc.Epoch`); some local UDT handling may still overlap with CCC's `@ckb-ccc/udt`
 - Custom `mol.union` codec and deprecated `mol.*` APIs have been replaced with CCC's `mol.union`, `ccc.Entity.Base`, and `@ccc.codec` decorator
-- SmartTransaction was ABANDONED as an ecosystem-wide concept (no adoption), but the class itself remains used locally; headers are now cached in CCC Client Cache
+- SmartTransaction was DELETED in Phase 1; all managers now accept `ccc.TransactionLike` and return `ccc.Transaction` directly; headers cached by CCC Client Cache
 
 ## Protocol Design (from whitepaper)
 
@@ -70,21 +70,22 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 **Foundation: CCC Framework**
 - Purpose: Provide blockchain primitives and client interface
-- Location: `@ckb-ccc/core` (npm or local `ccc-dev/ccc/`)
+- Location: `@ckb-ccc/core` (npm or local `ccc-fork/ccc/`)
 - Contains: CKB RPC clients, transaction builders, signers, Molecule codec, UDT support, Epoch handling
 - Used by: All packages and applications
 - Note: CCC now includes UDT and Epoch features contributed by this project's maintainer
 
 **Utilities Layer (`packages/utils/src/`)**
-- Purpose: Reusable blockchain primitives and transaction helpers
-- Key exports: `SmartTransaction`, `CapacityManager`, codec/heap utilities, UDT handlers
+- Purpose: Reusable blockchain primitives and UDT handlers
+- Key exports: `UdtManager`, `UdtHandler`, codec/heap utilities
 - Key files:
-  - `transaction.ts` (517 lines): SmartTransaction builder with fee completion and UDT balancing
-  - `capacity.ts` (221 lines): CapacityManager for cell discovery and collection
-  - `udt.ts` (393 lines): UDT token value calculations and handlers
-  - `utils.ts` (458 lines): General utilities (binary search, collectors, script helpers)
+  - `udt.ts` (407 lines): UDT token value calculations and handlers
+  - `utils.ts` (292 lines): General utilities (binary search, collectors, helpers)
+  - `codec.ts` (21 lines): CheckedInt32LE codec
+  - `heap.ts` (175 lines): MinHeap implementation
 - Depends on: `@ckb-ccc/core`
 - Used by: All domain packages
+- Note: `SmartTransaction`, `CapacityManager`, `transaction.ts`, `capacity.ts` were deleted in Phase 1
 
 **Domain Layer - DAO (`packages/dao/src/`)**
 - Purpose: Abstract Nervos DAO operations (deposit, withdraw, requestWithdrawal)
@@ -154,7 +155,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
   - Location: `apps/faucet/src/main.ts` (88 lines), entry via `apps/faucet/src/index.ts`
   - Entry: `main()` async function
   - Pattern: Infinite loop with 2-minute poll interval
-  - Uses: CCC client, CapacityManager, SmartTransaction
+  - Uses: CCC client, ccc.Transaction
   - Flow: Discover faucet funds → transfer to user account → log JSON results
 
   **Sampler (Migrated to CCC):**
@@ -198,7 +199,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 1. User calls `IckbSdk.request(tx, user, info, amounts)` via app
 2. `OrderManager.mint()` creates order cell with `Info` metadata (ratio, direction, fee info)
-3. `SmartTransaction` adds cell deps, outputs, UDT handlers
+3. Transaction adds cell deps, outputs via `tx.addCellDeps()` / `tx.addOutput()`
 4. User signs and broadcasts transaction
 
 **Order Discovery and Matching (Bot Flow):**
@@ -213,7 +214,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 8. Bot identifies orders where CKB/UDT supply exists for matching
 9. Calls `OrderManager.satisfy()` to process matched orders
 10. Builds transaction with satisfied order cells and input/output witnesses
-11. Completes fees via `SmartTransaction.completeFeeChangeToLock()`
+11. Completes fees via `tx.completeFeeChangeToLock()`
 12. Signs and broadcasts
 
 **Maturity Estimation (Supporting Calculation):**
@@ -241,13 +242,13 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 2. Receipt cell minted containing deposit metadata
 3. Bot fetches deposits via `LogicManager.findDeposits()`
 4. After maturity, bot calls `LogicManager.withdraw()` to extract funds
-5. Change cells automatically added by SmartTransaction
+5. Change cells added via CCC fee completion pipeline
 
 **State Management:**
 
 - L1 state: Immutable snapshots fetched per query with configurable refresh intervals
-- Transaction state: Built incrementally via `SmartTransaction.add*` methods
-- UDT balances: Tracked per UDT handler in `SmartTransaction.udtHandlers` map
+- Transaction state: Built incrementally via `ccc.Transaction` methods (`addInput`, `addOutput`, `addCellDeps`)
+- UDT balances: Tracked via `UdtHandler` interface implementations
 - Maturing CKB: Cumulative array sorted by maturity timestamp
 
 ## Key Abstractions
@@ -260,7 +261,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 **Manager Classes (Pattern):**
 - Purpose: Encapsulate entity-specific operations
-- Pattern: Stateless managers with methods that operate on SmartTransaction
+- Pattern: Stateless managers with methods that accept `ccc.TransactionLike` and return `ccc.Transaction`
 - Examples:
   - `DaoManager.deposit(tx, capacities, lock)`: Add DAO deposit cells
   - `OrderManager.mint(tx, user, info, amounts)`: Create order cell
@@ -277,16 +278,12 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
   - `WithdrawalGroup`: Pairs owned (withdrawal request) + owner cell with value aggregation
 - Construction: Async factories via `daoCellFrom()`, `ickbDepositCellFrom()`, `receiptCellFrom()`
 
-**SmartTransaction (Builder):**
-- Purpose: Extends ccc.Transaction with UDT-aware balancing
-- Pattern: Incremental builder with state accumulation
-- Key state: `inputs`, `outputs`, `outputsData`, `cellDeps`, `headerDeps`, `witnesses`, `udtHandlers` map
-- Automatic operations:
-  - `completeFeeChangeToLock()`: Calculate and add change cells for CKB
-  - `addUdtChange()`: Add change cells for each tracked UDT
-  - `addCellDeps()`: Deduplicate and append cell dependencies
-- Used by: All managers to build transactions atomically
-- Note: The "SmartTransaction" ecosystem concept was ABANDONED (no CKB ecosystem adoption). However, this class is still actively used throughout all new packages. The name is a vestige. Header caching has moved to CCC's Client Cache.
+**Transaction Building (ccc.Transaction):**
+- Purpose: All managers use plain `ccc.Transaction` (SmartTransaction was deleted in Phase 1)
+- Pattern: Managers accept `ccc.TransactionLike` and return `ccc.Transaction` (TransactionLike pattern)
+- Key operations: `tx.addCellDeps()`, `tx.addInput()`, `tx.addOutput()`, `tx.headerDeps.push()`
+- Fee completion: CCC-native `completeFeeBy()` / `completeFeeChangeToLock()` with DAO-aware 64-output limit check (contributed to CCC core)
+- Header caching: Transparently handled by CCC Client Cache (no explicit header map)
 
 **Value Types (Domain Models):**
 - `ValueComponents`: `{ ckbValue: ccc.FixedPoint; udtValue: ccc.FixedPoint }`
@@ -371,14 +368,14 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 - Pattern: CCC signers abstract wallet implementation
 
 **Capacity & Fee Management:**
-- `CapacityManager`: Discovers and collects cells for capacity
-- `SmartTransaction`: Auto-calculates fees from transaction size
-- Pattern: Add-then-complete flow (add inputs/outputs, then complete fee)
+- CCC-native: `tx.completeFeeBy()` / `tx.completeFeeChangeToLock()` with DAO-aware 64-output limit
+- Pattern: Add-then-complete flow (add inputs/outputs, then complete fee via CCC pipeline)
+- Note: `CapacityManager` was deleted in Phase 1; capacity discovery uses `client.findCellsOnChain()` directly
 
 **UDT Handling:**
-- `UdtHandler`: Encapsulates token script + type script pair
-- Pattern: Managers create handlers; SmartTransaction tracks per-UDT changes
-- Automatic change: `SmartTransaction.addUdtChange()` for balancing
+- `UdtHandler`: Interface encapsulating token script + cell deps
+- `UdtManager`: Base implementation with `isUdt()`, `findUdts()`, `completeInputsByUdt()`
+- Pattern: Managers hold `UdtHandler` reference; cell deps added via `tx.addCellDeps(udtHandler.cellDeps)`
 
 ---
 
