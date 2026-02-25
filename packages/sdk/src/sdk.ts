@@ -188,7 +188,7 @@ export class IckbSdk {
 
     // For UDT to CKB orders, add available CKB.
     ckb += ckbAvailable;
-    if (ckb >= 0) {
+    if (ckb >= 0n) {
       return maturity + ("info" in o ? BigInt(Date.now()) : tip.timestamp);
     }
 

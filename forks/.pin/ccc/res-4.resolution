@@ -1,5 +1,5 @@
 --- packages/core/src/ckb/transactionErrors.ts
-CONFLICT ours=13 base=0 theirs=3 resolution=13
+CONFLICT ours=13 base=0 theirs=3 resolution=13 sha=fb78be5c37c81b8ddc5817c91bc2399cb8a22a6a36b4615041c16f3ee8baa4a3
 export class ErrorNervosDaoOutputLimit extends Error {
   public readonly count: number;
   public readonly limit: number;
@@ -14,7 +14,7 @@ export class ErrorNervosDaoOutputLimit extends Error {
 }
 
 --- vitest.config.mts
-CONFLICT ours=1 base=1 theirs=1 resolution=1
+CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=944a4a3ae09aceaa620bd0783e575d8519671a30ea7db8e975d6cff49d8156d2
     projects: packages,
-CONFLICT ours=1 base=1 theirs=1 resolution=1
+CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=ac0f08d951dbb8bc8f2fe686d0a5ab8e6d8bb47b2e6bc0ce8d565fa4e44d5b5a
       include: packages,

@@ -11,7 +11,7 @@
 - CCC alignment is the primary driver -- iCKB should feel native to CCC users and benefit from upstream improvements
 - Upstream CCC PRs are explicitly on the table if CCC's Udt class needs small, targeted changes to accommodate iCKB's multi-representation value
 - No concern about CCC upgrade risk -- if we contribute to CCC's Udt, we co-own the design
-- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture -- investigation should design around it and identify improvements that would better fit iCKB's needs. Now integrated into `ccc-fork/ccc` (available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`)
+- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture -- investigation should design around it and identify improvements that would better fit iCKB's needs. Now integrated into `forks/ccc` (available at `forks/ccc/packages/core/src/signer/feePayer/`)
 - Investigation should cover both cell discovery and balance calculation, not just balance
 - Design upstream: if CCC Udt changes are needed, design them generically as a "composite UDT" pattern that benefits other CKB tokens beyond iCKB
 - Leaning toward `IckbUdt extends udt.Udt` -- iCKB is fundamentally a UDT, just with extra cell types carrying value
@@ -301,7 +301,7 @@ override async getInputsUdtBalance(
 
 ### CCC Udt.infoFrom Base Implementation (Override Target)
 ```typescript
-// Source: ccc-fork/ccc/packages/udt/src/udt/index.ts lines 624-641
+// Source: forks/ccc/packages/udt/src/udt/index.ts lines 624-641
 async infoFrom(
   _client: ccc.Client,
   cells: ccc.CellAnyLike | ccc.CellAnyLike[],
@@ -323,7 +323,7 @@ async infoFrom(
 
 ### CCC getInputsInfo Chain (How Input Cells Reach infoFrom)
 ```typescript
-// Source: ccc-fork/ccc/packages/udt/src/udt/index.ts lines 1099-1108
+// Source: forks/ccc/packages/udt/src/udt/index.ts lines 1099-1108
 async getInputsInfo(client: ccc.Client, txLike: ccc.TransactionLike): Promise<UdtInfo> {
   const tx = ccc.Transaction.from(txLike);
   const inputCells = await Promise.all(
@@ -334,7 +334,7 @@ async getInputsInfo(client: ccc.Client, txLike: ccc.TransactionLike): Promise<Ud
   return this.infoFrom(client, inputCells);
 }
 
-// Source: ccc-fork/ccc/packages/udt/src/udt/index.ts lines 1178-1184
+// Source: forks/ccc/packages/udt/src/udt/index.ts lines 1178-1184
 async getOutputsInfo(client: ccc.Client, txLike: ccc.TransactionLike): Promise<UdtInfo> {
   const tx = ccc.Transaction.from(txLike);
   return this.infoFrom(client, Array.from(tx.outputCells));
@@ -344,7 +344,7 @@ async getOutputsInfo(client: ccc.Client, txLike: ccc.TransactionLike): Promise<U
 
 ### CellAny OutPoint Presence (Input vs Output Detection)
 ```typescript
-// Source: ccc-fork/ccc/packages/core/src/ckb/transaction.ts lines 313-318, 331-348
+// Source: forks/ccc/packages/core/src/ckb/transaction.ts lines 313-318, 331-348
 type CellAnyLike = {
   outPoint?: OutPointLike | null;     // present for inputs, absent for outputs
   previousOutput?: OutPointLike | null;
@@ -361,7 +361,7 @@ class CellAny {
 
 ### PR #328 FeePayer.completeInputs Signature
 ```typescript
-// Source: ccc-fork/ccc/packages/core/src/signer/feePayer/feePayer.ts lines 26-39
+// Source: forks/ccc/packages/core/src/signer/feePayer/feePayer.ts lines 26-39
 abstract completeInputs<T>(
   tx: Transaction,
   filter: ClientCollectableSearchKeyFilterLike,
@@ -381,13 +381,13 @@ abstract completeInputs<T>(
 | `ccc.udtBalanceFrom()` (deprecated) | `udt.Udt.balanceFromUnsafe(outputData)` | Current CCC | Old API deprecated, new one in Udt class |
 | `tx.completeInputsByUdt()` (deprecated) | `udt.completeInputsByBalance(tx, signer)` | Current CCC | Old on Transaction, new on Udt instance |
 | `tx.getInputsUdtBalance()` / `tx.getOutputsUdtBalance()` (deprecated) | `udt.getInputsInfo(client, tx)` / `udt.getOutputsInfo(client, tx)` | Current CCC | New methods return UdtInfo (balance + capacity + count) |
-| PR #328 FeePayer Udt (uses deprecated APIs) | Current CCC Udt (uses `infoFrom`) | Integrated into ccc-fork/ccc | PR #328's Udt is simpler, still uses old deprecated APIs; current CCC Udt is more complete |
+| PR #328 FeePayer Udt (uses deprecated APIs) | Current CCC Udt (uses `infoFrom`) | Integrated into forks/ccc | PR #328's Udt is simpler, still uses old deprecated APIs; current CCC Udt is more complete |
 
 **Deprecated/outdated:**
 - `ccc.udtBalanceFrom()`: Replaced by `udt.Udt.balanceFromUnsafe()`
 - `tx.completeInputsByUdt()`: Replaced by `udt.Udt.completeInputsByBalance()`
 - `tx.getInputsUdtBalance()` / `tx.getOutputsUdtBalance()`: Replaced by `udt.Udt.getInputsInfo()` / `udt.Udt.getOutputsInfo()`
-- PR #328 FeePayer branch's Udt class: Uses deprecated APIs above; the current CCC Udt class (which we work with via ccc-fork) is more advanced
+- PR #328 FeePayer branch's Udt class: Uses deprecated APIs above; the current CCC Udt class (which we work with via forks/ccc) is more advanced
 
 ## Open Questions
 
@@ -414,14 +414,14 @@ abstract completeInputs<T>(
 ## Sources
 
 ### Primary (HIGH confidence)
-- `ccc-fork/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class source, `infoFrom`, `getInputsInfo`, `getOutputsInfo`, `completeInputsByBalance` full implementation
-- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` -- `CellAny`, `CellAnyLike`, `Cell`, `CellInput.getCell()`, `outputCells` getter
-- `ccc-fork/ccc/packages/core/src/client/client.ts` -- `getTransactionWithHeader()`, `getCellWithHeader()` implementations
+- `forks/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class source, `infoFrom`, `getInputsInfo`, `getOutputsInfo`, `completeInputsByBalance` full implementation
+- `forks/ccc/packages/core/src/ckb/transaction.ts` -- `CellAny`, `CellAnyLike`, `Cell`, `CellInput.getCell()`, `outputCells` getter
+- `forks/ccc/packages/core/src/client/client.ts` -- `getTransactionWithHeader()`, `getCellWithHeader()` implementations
 - `packages/core/src/udt.ts` -- Current `IckbUdtManager`, `ickbValue()`, `convert()`, `ickbExchangeRatio()`
 - `packages/utils/src/udt.ts` -- Current `UdtHandler` interface, `UdtManager` base class
 - `packages/core/src/logic.ts` -- `LogicManager`, receipt/deposit identification
 - `packages/core/src/cells.ts` -- `ReceiptCell`, `IckbDepositCell`, `receiptCellFrom` header access pattern
-- `ccc-fork/ccc/packages/core/src/signer/feePayer/feePayer.ts` -- PR #328 FeePayer abstract class (now integrated into ccc-fork/ccc)
+- `forks/ccc/packages/core/src/signer/feePayer/feePayer.ts` -- PR #328 FeePayer abstract class (now integrated into forks/ccc)
 
 ### Secondary (MEDIUM confidence)
 - None -- all findings verified from source code

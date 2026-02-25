@@ -145,7 +145,7 @@ export function binarySearch(n: number, f: (i: number) => boolean): number {
  * @param f - An async function that takes an index `i` and returns a boolean value.
  * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
  *
- * @credits go standard library authors, this implementation is just a translation or that code:
+ * @credits go standard library authors, this implementation is just a translation of that code:
  * https://go.dev/src/sort/search.go *
  */
 export async function asyncBinarySearch(

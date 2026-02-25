@@ -17,7 +17,7 @@ Assess feasibility of subclassing CCC's `udt.Udt` class for iCKB's multi-represe
 - CCC alignment is the primary driver — iCKB should feel native to CCC users and benefit from upstream improvements
 - Upstream CCC PRs are explicitly on the table if CCC's Udt class needs small, targeted changes to accommodate iCKB's multi-representation value
 - No concern about CCC upgrade risk — if we contribute to CCC's Udt, we co-own the design
-- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture — investigation should design around it and identify improvements that would better fit iCKB's needs. Now integrated into `ccc-fork/ccc` (available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`)
+- PR #328 (FeePayer abstraction by ashuralyk) is the target architecture — investigation should design around it and identify improvements that would better fit iCKB's needs. Now integrated into `forks/ccc` (available at `forks/ccc/packages/core/src/signer/feePayer/`)
 - Investigation should cover both cell discovery and balance calculation, not just balance
 - Design upstream: if CCC Udt changes are needed, design them generically as a "composite UDT" pattern that benefits other CKB tokens beyond iCKB
 
@@ -56,7 +56,7 @@ Assess feasibility of subclassing CCC's `udt.Udt` class for iCKB's multi-represe
 ## Specific Ideas
 
 - `infoFrom` can detect input vs output cells via outpoint presence — investigate this as a cleaner override strategy. Note: STACK.md research incorrectly claimed `CellAnyLike` lacks `outPoint`; it actually has `outPoint?: OutPointLike | null`. `getInputsInfo()` passes `Cell` objects (always have outPoint) to `infoFrom()`, while `getOutputsInfo()` passes `CellAny` from `tx.outputCells` (no outPoint). Both override points are viable.
-- PR #328's `completeInputs(tx, filter, accumulator)` pattern (now in `ccc-fork/ccc/packages/core/src/signer/feePayer/feePayer.ts`) could be the hook for auto-fetching iCKB receipt/deposit cells during transaction completion. Note: STACK.md research recommended `client.getHeaderByTxHash()` which does not exist in CCC — the correct API is `client.getTransactionWithHeader()` as used in the current codebase.
+- PR #328's `completeInputs(tx, filter, accumulator)` pattern (now in `forks/ccc/packages/core/src/signer/feePayer/feePayer.ts`) could be the hook for auto-fetching iCKB receipt/deposit cells during transaction completion. Note: STACK.md research recommended `client.getHeaderByTxHash()` which does not exist in CCC — the correct API is `client.getTransactionWithHeader()` as used in the current codebase.
 - The `ickbValue()` function (core/udt.ts:151) and `convert()` function (core/udt.ts:179) are the core exchange rate calculation — these must work within the Udt override context
 - Current `IckbUdtManager.getInputsUdtBalance()` (core/udt.ts:66) is the reference implementation for multi-representation balance calculation — three cell types: xUDT cells, receipt cells (type = logicScript), deposit cells (lock = logicScript + isDeposit)
 

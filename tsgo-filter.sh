@@ -9,7 +9,7 @@
 # integration errors, just tsconfig-strictness mismatches.
 #
 # This wrapper:
-#   1. Detects all *-fork/ clone directories at repo root
+#   1. Reads fork entry names from forks/config.json
 #   2. If none are cloned, runs plain tsgo (no filtering needed)
 #   3. Otherwise runs tsgo with noEmitOnError=false so fork diagnostics don't block emit
 #   4. Reports only diagnostics from stack source files
@@ -17,14 +17,12 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# Build filter pattern from all cloned fork directories
+# Build filter pattern from cloned fork entries
 FILTER_PARTS=()
-for d in "$ROOT"/*-fork; do
-  [ -f "$d/config.json" ] || continue
-  clone_dir=$(jq -r '.cloneDir' "$d/config.json")
-  [ -d "$d/$clone_dir" ] && FILTER_PARTS+=("$(basename "$d")/$clone_dir/")
+for name in $(jq -r 'keys[]' "$ROOT/forks/config.json" 2>/dev/null); do
+  [ -d "$ROOT/forks/$name" ] && FILTER_PARTS+=("forks/$name/")
 done
 
 # No managed repos cloned — run plain tsgo

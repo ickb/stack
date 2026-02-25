@@ -13,7 +13,7 @@
 - All `@ckb-lumos/*` packages are **DEPRECATED** -- Lumos is being replaced by CCC.
 - CCC PRs for UDT and Epochs have been **MERGED** upstream -- those features now exist in CCC itself.
 - `SmartTransaction` was **DELETED** in Phase 1 in favor of CCC's client cache for header caching. Headers are now fetched inline via CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`). All manager method signatures now accept `ccc.TransactionLike` and return `ccc.Transaction` directly.
-- CCC is sometimes overridden locally via `fork-scripts/record.sh` and `.pnpmfile.cjs` for testing unpublished changes.
+- CCC is sometimes overridden locally via `bash forks/forker/record.sh` and `.pnpmfile.cjs` for testing unpublished changes.
 
 **When writing new code:** Use CCC (`@ckb-ccc/core`) types and patterns exclusively in `packages/`. Never introduce new Lumos dependencies.
 
@@ -270,7 +270,7 @@ export * from "./utils.js";
 
 ## Molecule / Codec Patterns
 
-**TS codecs must match the Molecule schema** at `reference/contracts/schemas/encoding.mol`. The on-chain contracts use Molecule for serialization; the TS packages must produce byte-identical encodings.
+**TS codecs must match the Molecule schema** at `forks/contracts/schemas/encoding.mol`. The on-chain contracts use Molecule for serialization; the TS packages must produce byte-identical encodings.
 
 **Entity classes** use CCC's `ccc.Entity.Base` with decorator-based codec definition:
 ```typescript

@@ -139,7 +139,7 @@ export class DaoManager implements ScriptDeps {
       tx.inputs.length !== tx.outputs.length ||
       tx.outputs.length !== tx.outputsData.length
     ) {
-      throw new Error("Transaction have different inputs and outputs lengths");
+      throw new Error("Transaction has different inputs and outputs lengths");
     }
 
     for (const deposit of deposits) {

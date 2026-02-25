@@ -56,41 +56,28 @@ graph TD;
 
 ## Develop with Forks
 
-When `<name>-fork/pins/manifest` is committed, `pnpm install` automatically sets up the local fork development environment on first run (by replaying pinned merges via `fork-scripts/replay.sh`). No manual setup step is needed — just clone and install:
+When `forks/.pin/<name>/manifest` is committed, `pnpm install` automatically sets up the local fork development environment on first run (by replaying pinned merges via `forks/forker/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
 git clone git@github.com:ickb/stack.git && cd stack && pnpm install
 ```
 
-To redo the setup from scratch: `pnpm fork:clean-all && pnpm install`.
+To redo the setup from scratch: `bash forks/forker/clean-all.sh && pnpm install`.
 
-See [ccc-fork/README.md](ccc-fork/README.md) for recording new pins, developing CCC PRs, and the full workflow.
-
-## Reference
-
-Clone the on-chain contracts and whitepaper repos locally for AI context:
-
-```bash
-pnpm reference
-```
-
-This clones two repos into the project root (both are git-ignored and made read-only):
-
-- **[contracts](https://github.com/ickb/contracts)** — Rust L1 scripts deployed on Nervos CKB
-- **[whitepaper](https://github.com/ickb/whitepaper)** — iCKB protocol design and specification
+After `pnpm install`, see `forks/forker/README.md` for recording new pins, developing fork PRs, and the full workflow.
 
 ## Developer Scripts
 
 | Command                          | Description                                                                       |
 | -------------------------------- | --------------------------------------------------------------------------------- |
 | `pnpm coworker`                  | Launch an interactive AI Coworker session (full autonomy, opus model).             |
-| `pnpm coworker:ask`              | One-shot AI query for scripting (sonnet model, stateless). Used by fork:record.    |
-| `pnpm fork:status <name>-fork`   | Check if fork clone matches pinned state. Exit 0 = safe to wipe.                  |
-| `pnpm fork:record <name>-fork`   | Record fork pins (clone, merge refs, build). Guarded against pending work.         |
-| `pnpm fork:save <name>-fork`     | Capture local fork work as a patch in pins/ (survives re-records and replays).     |
-| `pnpm fork:push <name>-fork`     | Cherry-pick commits from wip branch onto a PR branch for pushing to the fork.      |
-| `pnpm fork:clean <name>-fork`    | Remove fork clone, keep pins (guarded). Re-replay on next `pnpm install`.          |
-| `pnpm fork:reset <name>-fork`    | Remove fork clone and pins (guarded). Restores published packages.                 |
+| `pnpm coworker:ask`              | One-shot AI query for scripting (sonnet model, stateless). Used by record.sh.      |
+| `bash forks/forker/status.sh <name>`  | Check if fork clone matches pinned state. Exit 0 = safe to wipe.                  |
+| `bash forks/forker/record.sh <name>`  | Record fork pins (clone, merge refs, build). Guarded against pending work.         |
+| `bash forks/forker/save.sh <name>`    | Capture local fork work as a patch in .pin/ (survives re-records and replays).     |
+| `bash forks/forker/push.sh <name>`    | Cherry-pick commits from wip branch onto a PR branch for pushing to the fork.      |
+| `bash forks/forker/clean.sh <name>`   | Remove fork clone, keep pins (guarded). Re-replay on next `pnpm install`.          |
+| `bash forks/forker/reset.sh <name>`   | Remove fork clone and pins (guarded). Restores published packages.                 |
 | `pnpm check:full`                | Wipe derived state and validate from scratch. Skips wipe if forks have pending work.|
 
 ## Epoch Semantic Versioning

@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. `SmartTransaction` class and `CapacityManager` class no longer exist in `@ickb/utils` source or exports
   2. `UdtHandler` interface and `UdtManager` class remain in `@ickb/utils` with method signatures updated from `SmartTransaction` to `ccc.TransactionLike` (full replacement deferred to Phase 3+)
   3. `getHeader()` function and `HeaderKey` type are removed from `@ickb/utils`; all call sites across dao/core/sdk inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); `SmartTransaction.addHeaders()` call sites in DaoManager/LogicManager push to `tx.headerDeps` directly
-  4. A 64-output NervosDAO limit check exists in CCC core (via `ccc-fork/`): `completeFee()` safety net, standalone async utility, and `ErrorNervosDaoOutputLimit` error class; all 6+ scattered checks across dao/core packages are replaced with calls to this CCC utility
+  4. A 64-output NervosDAO limit check exists in CCC core (via `forks/ccc/`): `completeFee()` safety net, standalone async utility, and `ErrorNervosDaoOutputLimit` error class; all 6+ scattered checks across dao/core packages are replaced with calls to this CCC utility
   5. ALL manager method signatures across ALL 5 library packages accept `ccc.TransactionLike` instead of `SmartTransaction`, following CCC's convention (TransactionLike input, Transaction output with `Transaction.from()` conversion at entry point)
   6. `pnpm check:full` passes after each feature-slice removal step — no intermediate broken states
 **Plans**: 3 plans
