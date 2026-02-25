@@ -30,9 +30,9 @@ Requirements for initial milestone. Each maps to roadmap phases.
 
 ### CCC Udt Integration
 
-- [ ] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
-- [ ] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getHeaderByTxHash()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
-- [ ] **UDT-03**: Decision documented: subclass CCC `Udt` vs. keep custom `UdtHandler` interface vs. hybrid approach
+- [x] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
+- [x] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
+- [x] **UDT-03**: Decision documented: subclass CCC `Udt` vs. keep custom `UdtHandler` interface vs. hybrid approach
 - [ ] **UDT-04**: If subclassing is viable, `IckbUdt` class is implemented in `@ickb/core` with multi-representation balance calculation
 - [ ] **UDT-05**: If subclassing is not viable, `IckbUdtManager` is refactored to work with plain `ccc.Transaction` (no SmartTransaction dependency) while maintaining a compatible interface
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SMTX-03 | Phase 6 | Pending | |
 | SMTX-04 | Phase 1 | Complete | getHeader()/HeaderKey removed, CCC client calls inlined |
 | SMTX-05 | Phase 1, 4, 5 | Complete | addUdtHandlers() replaced with tx.addCellDeps(udtHandler.cellDeps) (01-03); UdtHandler/UdtManager replacement deferred to Phase 4-5 |
-| SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via ccc-dev/ (01-01) |
+| SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via ccc-fork/ (01-01) |
 | SMTX-07 | Phase 5 | Pending | |
 | SMTX-08 | Phase 6 | Pending | |
 | SMTX-09 | Phase 7 | Pending | |
@@ -96,9 +96,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEDUP-03 | Phase 2 | Complete | isHex() deleted, only used internally by deleted hexFrom() (02-01) |
 | DEDUP-04 | Phase 2 | Complete | hexFrom() call sites use entity.toHex() or ccc.hexFrom(), local deleted (02-01) |
 | DEDUP-05 | Phase 2 | Complete | All 8 iCKB-unique utilities preserved unchanged (02-01) |
-| UDT-01 | Phase 3 | Pending | |
-| UDT-02 | Phase 3 | Pending | |
-| UDT-03 | Phase 3 | Pending | |
+| UDT-01 | Phase 3 | Complete | |
+| UDT-02 | Phase 3 | Complete | |
+| UDT-03 | Phase 3 | Complete | |
 | UDT-04 | Phase 5 | Pending | |
 | UDT-05 | Phase 5 | Pending | |
 
@@ -109,4 +109,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-23 after 02-01 execution (DEDUP-01 through DEDUP-05 completed; Phase 2 complete)*
+*Last updated: 2026-02-24 after Phase 3 completion (UDT-01 through UDT-03 completed; Phase 3 complete)*
