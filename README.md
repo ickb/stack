@@ -54,17 +54,17 @@ graph TD;
     click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
 ```
 
-## Develop CCC
+## Develop with Forks
 
-When `ccc-dev/pins/REFS` is committed, `pnpm install` automatically sets up the CCC local development environment on first run (by replaying pinned merges via `ccc-dev/replay.sh`). No manual setup step is needed — just clone and install:
+When `<name>-fork/pins/manifest` is committed, `pnpm install` automatically sets up the local fork development environment on first run (by replaying pinned merges via `fork-scripts/replay.sh`). No manual setup step is needed — just clone and install:
 
 ```bash
 git clone git@github.com:ickb/stack.git && cd stack && pnpm install
 ```
 
-To redo the setup from scratch: `pnpm ccc:clean && pnpm install`.
+To redo the setup from scratch: `pnpm fork:clean-all && pnpm install`.
 
-See [ccc-dev/README.md](ccc-dev/README.md) for recording new pins, developing CCC PRs, and the full workflow.
+See [ccc-fork/README.md](ccc-fork/README.md) for recording new pins, developing CCC PRs, and the full workflow.
 
 ## Reference
 
@@ -81,15 +81,17 @@ This clones two repos into the project root (both are git-ignored and made read-
 
 ## Developer Scripts
 
-| Command             | Description                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `pnpm coworker`     | Launch an interactive AI Coworker session (full autonomy, opus model).                 |
-| `pnpm coworker:ask` | One-shot AI query for scripting (sonnet model, stateless). Used by `pnpm ccc:record`. |
-| `pnpm ccc:status`   | Check if CCC clone matches pinned state. Exit 0 = safe to wipe.          |
-| `pnpm ccc:record`   | Record CCC pins (clone, merge refs, build). Guarded against pending work.             |
-| `pnpm ccc:clean`    | Remove CCC clone, keep pins (guarded). Re-replay on next `pnpm install`.              |
-| `pnpm ccc:reset`    | Remove CCC clone and pins (guarded). Restores published CCC packages.                 |
-| `pnpm check:full`   | Wipe derived state and validate from scratch. Skips wipe if CCC has pending work.     |
+| Command                          | Description                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm coworker`                  | Launch an interactive AI Coworker session (full autonomy, opus model).             |
+| `pnpm coworker:ask`              | One-shot AI query for scripting (sonnet model, stateless). Used by fork:record.    |
+| `pnpm fork:status <name>-fork`   | Check if fork clone matches pinned state. Exit 0 = safe to wipe.                  |
+| `pnpm fork:record <name>-fork`   | Record fork pins (clone, merge refs, build). Guarded against pending work.         |
+| `pnpm fork:save <name>-fork`     | Capture local fork work as a patch in pins/ (survives re-records and replays).     |
+| `pnpm fork:push <name>-fork`     | Cherry-pick commits from wip branch onto a PR branch for pushing to the fork.      |
+| `pnpm fork:clean <name>-fork`    | Remove fork clone, keep pins (guarded). Re-replay on next `pnpm install`.          |
+| `pnpm fork:reset <name>-fork`    | Remove fork clone and pins (guarded). Restores published packages.                 |
+| `pnpm check:full`                | Wipe derived state and validate from scratch. Skips wipe if forks have pending work.|
 
 ## Epoch Semantic Versioning
 

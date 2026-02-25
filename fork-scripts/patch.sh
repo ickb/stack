@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Patch a CCC clone for use in the stack workspace.
-# Usage: ccc-dev/patch.sh <ccc-repo-dir> <merge-count>
+# Patch a cloned repo for use in the stack workspace.
+# Usage: fork-scripts/patch.sh <repo-dir> <merge-count>
 
-REPO_DIR="${1:?Usage: patch.sh <ccc-repo-dir> <merge-count>}"
+# shellcheck source=lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+REPO_DIR="${1:?Usage: fork-scripts/patch.sh <repo-dir> <merge-count>}"
 MERGE_COUNT="${2:?Missing merge-count argument}"
 
-# Remove CCC's own lockfile so deps are recorded in the root pnpm-lock.yaml
+# Remove the repo's own lockfile so deps are recorded in the root pnpm-lock.yaml
 rm -f "$REPO_DIR/pnpm-lock.yaml"
 
-# Patch CCC packages so the stack resolves directly to .ts source:
+# Patch packages so the stack resolves directly to .ts source:
 # - "type":"module" → NodeNext treats .ts files as ESM
 # - "types" export condition → TypeScript resolves .ts source before .js dist
-# - "import" rewritten to .ts source → Vite/esbuild can bundle without building CCC
+# - "import" rewritten to .ts source → Vite/esbuild can bundle without building
 for pkg_json in "$REPO_DIR"/packages/*/package.json; do
+  [ -f "$pkg_json" ] || continue
   jq '.type = "module" |
-    if .exports then .exports |= with_entries(
+    if (.exports | type) == "object" then .exports |= with_entries(
       if .value | type == "object" and has("import")
       then .value |= (
         (.import | sub("/dist/";"/src/") | sub("\\.m?js$";".ts")) as $src |
@@ -27,9 +31,8 @@ for pkg_json in "$REPO_DIR"/packages/*/package.json; do
 done
 
 # Commit patched files with deterministic identity so record and replay produce the same hash
-export GIT_AUTHOR_NAME="ci" GIT_AUTHOR_EMAIL="ci@local"
-export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@local"
-PATCH_TS="@$((MERGE_COUNT + 1)) +0000"
-export GIT_AUTHOR_DATE="$PATCH_TS" GIT_COMMITTER_DATE="$PATCH_TS"
+deterministic_env "$((MERGE_COUNT + 1))"
 git -C "$REPO_DIR" add -A
-git -C "$REPO_DIR" commit -m "patch: source-level type resolution"
+if ! git -C "$REPO_DIR" diff --cached --quiet; then
+  git -C "$REPO_DIR" commit -m "patch: source-level type resolution"
+fi
