@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: SmartTransaction Removal (feature-slice)** - Delete SmartTransaction class and infrastructure across all packages; contribute 64-output DAO limit check to CCC core; migrate all method signatures to ccc.TransactionLike
 - [x] **Phase 2: CCC Utility Adoption** - Replace local utility functions that duplicate CCC equivalents across all packages; preserve iCKB-unique utilities
-- [ ] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
+- [x] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
 - [ ] **Phase 4: Deprecated CCC API Replacement** - Replace deprecated CCC API calls (`udtBalanceFrom`, etc.) with `@ckb-ccc/udt` equivalents in dao and order packages; finalize UDT handler replacement pattern based on Phase 3 findings
 - [ ] **Phase 5: @ickb/core UDT Refactor** - Implement IckbUdt class or refactor IckbUdtManager based on Phase 3 findings; preserve iCKB conservation law; replace deprecated CCC API calls in core
 - [ ] **Phase 6: SDK Completion Pipeline** - Wire IckbSdk facade to CCC-native fee completion; verify estimate() and maturity() work end-to-end
@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. `SmartTransaction` class and `CapacityManager` class no longer exist in `@ickb/utils` source or exports
   2. `UdtHandler` interface and `UdtManager` class remain in `@ickb/utils` with method signatures updated from `SmartTransaction` to `ccc.TransactionLike` (full replacement deferred to Phase 3+)
   3. `getHeader()` function and `HeaderKey` type are removed from `@ickb/utils`; all call sites across dao/core/sdk inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); `SmartTransaction.addHeaders()` call sites in DaoManager/LogicManager push to `tx.headerDeps` directly
-  4. A 64-output NervosDAO limit check exists in CCC core (via `ccc-dev/`): `completeFee()` safety net, standalone async utility, and `ErrorNervosDaoOutputLimit` error class; all 6+ scattered checks across dao/core packages are replaced with calls to this CCC utility
+  4. A 64-output NervosDAO limit check exists in CCC core (via `ccc-fork/`): `completeFee()` safety net, standalone async utility, and `ErrorNervosDaoOutputLimit` error class; all 6+ scattered checks across dao/core packages are replaced with calls to this CCC utility
   5. ALL manager method signatures across ALL 5 library packages accept `ccc.TransactionLike` instead of `SmartTransaction`, following CCC's convention (TransactionLike input, Transaction output with `Transaction.from()` conversion at entry point)
   6. `pnpm check:full` passes after each feature-slice removal step — no intermediate broken states
 **Plans**: 3 plans
@@ -60,14 +60,14 @@ Plans:
 **Depends on**: Nothing (can proceed in parallel with Phases 1-2; design investigation, not code changes)
 **Requirements**: UDT-01, UDT-02, UDT-03
 **Success Criteria** (what must be TRUE):
-  1. A written feasibility assessment exists answering: can `IckbUdt extends udt.Udt` override `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells, without breaking CCC's internal method chains
-  2. The header access pattern for receipt value calculation is designed and documented -- specifying whether `client.getCellWithHeader()`, `client.getHeaderByTxHash()`, or direct CCC client calls are used within the Udt override (note: `getHeader()` was removed in Phase 1)
+  1. A written feasibility assessment exists answering: can `IckbUdt extends udt.Udt` override `infoFrom()` (or `getInputsInfo()`/`getOutputsInfo()`) to account for receipt cells and deposit cells alongside xUDT cells, without breaking CCC's internal method chains
+  2. The header access pattern for receipt value calculation is designed and documented -- specifying whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (note: `getHeader()` was removed in Phase 1)
   3. A decision document exists with one of three outcomes: (a) subclass CCC Udt, (b) keep custom interface, (c) hybrid approach -- with rationale for the chosen path
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [x] 03-01-PLAN.md — Trace CCC Udt internals end-to-end, verify infoFrom override feasibility, resolve open questions
+- [x] 03-02-PLAN.md — Write formal decision document (feasibility assessment, header access pattern, decision with rationale)
 
 ### Phase 4: Deprecated CCC API Replacement
 **Goal**: Deprecated CCC API calls are replaced with `@ckb-ccc/udt` equivalents in `@ickb/dao` and `@ickb/order`; UDT handler usage is finalized based on Phase 3 findings (method signatures and `addUdtHandlers()` removal already done in Phase 1)
@@ -89,7 +89,7 @@ Plans:
 **Requirements**: SMTX-05, SMTX-07, SMTX-10, UDT-04, UDT-05
 **Success Criteria** (what must be TRUE):
   1. The iCKB conservation law (`Input UDT + Input Receipts = Output UDT + Input Deposits`) is enforced correctly in the refactored code -- multi-representation UDT balance logic survives intact
-  2. If Phase 3 concluded subclassing is viable: `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `getInputsInfo()`/`getOutputsInfo()` that account for xUDT cells, receipt cells, and deposit cells
+  2. If Phase 3 concluded subclassing is viable: `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `infoFrom()` that accounts for xUDT cells, receipt cells, and deposit cells
   3. If Phase 3 concluded subclassing is not viable: `IckbUdtManager` is refactored to work with plain `ccc.Transaction` while maintaining a compatible interface for balance calculation
   4. `UdtHandler` interface and `UdtManager` class are removed from `@ickb/utils` (their responsibilities absorbed by the Phase 3 outcome implementation)
   5. No calls to deprecated CCC APIs exist in `@ickb/core`
@@ -139,7 +139,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 |-------|----------------|--------|-----------|
 | 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
 | 2. CCC Utility Adoption | 1/1 | Complete    | 2026-02-23 |
-| 3. CCC Udt Integration Investigation | 0/2 | Not started | - |
+| 3. CCC Udt Integration Investigation | 2/2 | Complete    | 2026-02-24 |
 | 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
 | 5. @ickb/core UDT Refactor | 0/3 | Not started | - |
 | 6. SDK Completion Pipeline | 0/2 | Not started | - |

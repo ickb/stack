@@ -12,8 +12,8 @@
 - The `packages/` directory contains the **NEW replacement libraries** built on CCC (ckb-ccc), which will eventually replace the legacy packages in the apps.
 - All `@ckb-lumos/*` packages are **DEPRECATED** -- Lumos is being replaced by CCC.
 - CCC PRs for UDT and Epochs have been **MERGED** upstream -- those features now exist in CCC itself.
-- `SmartTransaction` was **ABANDONED** in favor of CCC's client cache for header caching. The class still exists in `packages/utils/src/transaction.ts` but should not be extended further.
-- CCC is sometimes overridden locally via `ccc-dev/record.sh` and `.pnpmfile.cjs` for testing unpublished changes.
+- `SmartTransaction` was **DELETED** in Phase 1 in favor of CCC's client cache for header caching. Headers are now fetched inline via CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`). All manager method signatures now accept `ccc.TransactionLike` and return `ccc.Transaction` directly.
+- CCC is sometimes overridden locally via `fork-scripts/record.sh` and `.pnpmfile.cjs` for testing unpublished changes.
 
 **When writing new code:** Use CCC (`@ckb-ccc/core`) types and patterns exclusively in `packages/`. Never introduce new Lumos dependencies.
 
@@ -26,8 +26,8 @@
 - Config files at root use dot-prefix convention: `prettier.config.cjs`, `eslint.config.mjs`, `vitest.config.mts`
 
 **Functions:**
-- Use `camelCase` for all functions: `binarySearch`, `asyncBinarySearch`, `hexFrom`, `isHex`, `getHeader`
-- Prefix boolean-returning functions with `is`: `isHex()`, `isDeposit()`, `isCapacity()`, `isReceipt()`, `isCkb2Udt()`, `isMatchable()`, `isFulfilled()`
+- Use `camelCase` for all functions: `binarySearch`, `asyncBinarySearch`, `hexFrom`, `isHex`, `collect`
+- Prefix boolean-returning functions with `is`: `isHex()`, `isDeposit()`, `isUdt()`, `isReceipt()`, `isCkb2Udt()`, `isMatchable()`, `isFulfilled()`
 - Use `tryFrom` for fallible constructors that return `undefined` on failure: `OrderCell.tryFrom()`, `OrderGroup.tryFrom()`
 - Use `mustFrom` for throwing constructors: `OrderCell.mustFrom()`
 - Use `from` for static factory methods: `Ratio.from()`, `Info.from()`, `Epoch.from()`, `MasterCell.from()`
@@ -40,12 +40,12 @@
 
 **Types/Interfaces:**
 - Use `PascalCase` for types, interfaces, and classes: `Ratio`, `Info`, `OrderData`, `OrderCell`, `Epoch`
-- Suffix data-transfer / input interfaces with `Like`: `InfoLike`, `RelativeLike`, `OrderDataLike`, `MasterLike`, `EpochLike`, `SmartTransactionLike`
+- Suffix data-transfer / input interfaces with `Like`: `InfoLike`, `RelativeLike`, `OrderDataLike`, `MasterLike`, `EpochLike`
 - The `Like` type is the "encodable" or input representation; the plain name is the decoded/validated form
 - Use `ValueComponents` interface for anything with `ckbValue` and `udtValue` properties
 
 **Classes:**
-- Use `PascalCase`: `MinHeap`, `BufferedGenerator`, `SmartTransaction`, `CapacityManager`, `UdtManager`, `DaoManager`, `LogicManager`, `OrderManager`, `OwnedOwnerManager`, `IckbSdk`
+- Use `PascalCase`: `MinHeap`, `BufferedGenerator`, `UdtManager`, `DaoManager`, `LogicManager`, `OrderManager`, `OwnedOwnerManager`, `IckbSdk`
 - Manager classes implement `ScriptDeps` interface and contain `script` and `cellDeps` properties
 - Generic type parameters use single capital letters: `<T>`, `<K>`
 
@@ -234,7 +234,7 @@ async *findDeposits(
   },
 ): AsyncGenerator<DaoCell> { ... }
 ```
-- Use variadic args with flat support: `addUdtHandlers(...udtHandlers: (UdtHandler | UdtHandler[])[])`
+- Use variadic args: `sum(res: bigint, ...rest: bigint[])`, `isOwner(...locks: ccc.Script[])`
 
 **Return Values:**
 - Use tuples for multi-value returns: `Promise<[number, boolean]>`, `[ccc.FixedPoint, ccc.FixedPoint]`
@@ -256,9 +256,7 @@ async *findDeposits(
 - Example (`packages/utils/src/index.ts`):
 ```typescript
 export * from "./codec.js";
-export * from "./capacity.js";
 export * from "./heap.js";
-export * from "./transaction.js";
 export * from "./udt.js";
 export * from "./utils.js";
 ```
@@ -333,20 +331,20 @@ let origins: readonly I8Cell[] = Object.freeze([]);
 
 Finder methods throughout the library use `async *` generators for lazy iteration:
 ```typescript
-// packages/utils/src/capacity.ts
-async *findCapacities(
+// packages/utils/src/udt.ts
+async *findUdts(
   client: ccc.Client,
   locks: ccc.Script[],
   options?: { onChain?: boolean; limit?: number },
-): AsyncGenerator<CapacityCell> {
+): AsyncGenerator<UdtCell> {
   const limit = options?.limit ?? defaultFindCellsLimit;
   for (const lock of unique(locks)) {
     // ... RPC query setup ...
     for await (const cell of client.findCells(...findCellsArgs)) {
-      if (!this.isCapacity(cell) || !cell.cellOutput.lock.eq(lock)) {
+      if (!this.isUdt(cell) || !cell.cellOutput.lock.eq(lock)) {
         continue;
       }
-      yield { cell, ckbValue: cell.cellOutput.capacity, udtValue: 0n, [isCapacitySymbol]: true };
+      yield { cell, ckbValue: cell.cellOutput.capacity, udtValue: ccc.udtBalanceFrom(cell.outputData), [isUdtSymbol]: true };
     }
   }
 }
@@ -354,7 +352,7 @@ async *findCapacities(
 
 To collect results into an array, use the `collect()` helper from `packages/utils/src/utils.ts`:
 ```typescript
-const capacities = await collect(capacityManager.findCapacities(client, locks));
+const udts = await collect(udtManager.findUdts(client, locks));
 ```
 
 ## App Entry Points

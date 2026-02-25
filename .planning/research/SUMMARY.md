@@ -17,11 +17,11 @@ The primary risk is losing implicit behaviors baked into `SmartTransaction` — 
 
 ### Recommended Stack
 
-The existing TypeScript/pnpm/CCC stack requires no new technology choices. The migration is a CCC API adoption exercise: replace 14 local utilities with CCC equivalents (`ccc.numMax`/`numMin`, `ccc.gcd`, `ccc.isHex`, `Udt.balanceFromUnsafe`, etc.), add `@ckb-ccc/udt` as a dependency to `@ickb/core`, and restructure transaction building around CCC's native completion pipeline. The local `ccc-dev/` build system already makes `@ckb-ccc/udt` available via `.pnpmfile.cjs` rewriting — no additional infrastructure work needed.
+The existing TypeScript/pnpm/CCC stack requires no new technology choices. The migration is a CCC API adoption exercise: replace 14 local utilities with CCC equivalents (`ccc.numMax`/`numMin`, `ccc.gcd`, `ccc.isHex`, `Udt.balanceFromUnsafe`, etc.), add `@ckb-ccc/udt` as a dependency to `@ickb/core`, and restructure transaction building around CCC's native completion pipeline. The local `ccc-fork/` build system already makes `@ckb-ccc/udt` available via `.pnpmfile.cjs` rewriting — no additional infrastructure work needed.
 
 **Core technologies:**
 - `@ckb-ccc/core` ^1.12.2: Transaction building, cell queries, signer abstraction — already adopted, native replacement for all SmartTransaction behaviors
-- `@ckb-ccc/udt` (local ccc-dev build): UDT lifecycle management (cell finding, balance calculation, input completion, change handling) — replaces local UdtManager/UdtHandler; `IckbUdt` subclasses this
+- `@ckb-ccc/udt` (local ccc-fork build): UDT lifecycle management (cell finding, balance calculation, input completion, change handling) — replaces local UdtManager/UdtHandler; `IckbUdt` subclasses this
 - `ccc.Transaction.completeFeeBy` / `completeFeeChangeToLock`: CKB fee completion — direct SmartTransaction.completeFee replacement for the CKB-change portion
 - `ccc.Transaction.completeInputsByCapacity`: CKB capacity input collection — replaces CapacityManager's cell-finding role
 - `ccc.Client.cache`: Transparent header caching — replaces SmartTransaction's `headers` map for performance; header deps must still be added explicitly
@@ -63,7 +63,7 @@ The architecture shifts from a God-object transaction (SmartTransaction carrying
 **Major components:**
 1. `@ickb/utils` — async data utilities (`collect`, `unique`, `binarySearch`, `MinHeap`), codec utilities; NO SmartTransaction, NO UdtHandler, NO UdtManager, NO CapacityManager, NO `getHeader()`/`HeaderKey` after refactor
 2. `@ickb/dao` + `@ickb/order` — domain managers operating on plain `ccc.Transaction`; add cell deps directly; no UDT awareness
-3. `@ickb/core` — `IckbUdt extends udt.Udt` overriding `getInputsInfo()` and `getOutputsInfo()` for triple-representation balance; `LogicManager` and `OwnedOwnerManager` for iCKB protocol operations
+3. `@ickb/core` — `IckbUdt extends udt.Udt` overriding `infoFrom()` for triple-representation balance; `LogicManager` and `OwnedOwnerManager` for iCKB protocol operations
 4. `@ickb/sdk` — `IckbSdk` facade orchestrating all managers; explicit completion pipeline: `ickbUdt.completeBy(tx, signer)` then `tx.completeFeeBy(signer)`
 5. Apps (bot, interface, tester) — consume SDK; no direct manager usage for most operations
 
@@ -76,14 +76,14 @@ await completedTx.completeFeeBy(signer);                     // CKB capacity + f
 await signer.sendTransaction(completedTx);
 ```
 
-**Key architectural decision — override `getInputsInfo()` not `infoFrom()`:**
-`getInputsInfo()` receives the full transaction with input outpoints, enabling header fetching for receipt and deposit cells. `infoFrom()` receives only cells without outpoints and cannot reach the block headers needed for iCKB value calculation.
+**Key architectural decision — override `infoFrom()` (corrected in Phase 3 research):**
+`infoFrom()` receives `CellAnyLike` objects — input cells (from `getInputsInfo` → `CellInput.getCell()`) always have `outPoint` set, enabling header fetches for receipt/deposit value calculation. Output cells lack `outPoint`, allowing `infoFrom` to distinguish inputs from outputs. See 03-RESEARCH.md for the corrected design.
 
 ### Critical Pitfalls
 
 1. **SmartTransaction implicit behaviors lost during removal** — `completeFee` silently iterates all UDT handlers, `getInputsCapacity` adds DAO withdrawal profit, `clone()` shares handler/header maps. A mechanical find-and-replace misses all three. Avoid by: cataloging every SmartTransaction-specific method, writing characterization tests before removing anything, and designing the replacement as explicit utility functions rather than a companion object.
 
-2. **Incorrect CCC Udt subclassing for multi-representation value** — CCC's `Udt.completeInputsByBalance` assumes UDT balance = sum of `u128 LE` fields in matching type cells. iCKB's conservation law spans xUDT cells, receipt cells, and DAO deposit cells. Avoid by: using `IckbUdt` only to override `getInputsInfo()`/`getOutputsInfo()` (which have full transaction context), NOT overriding `infoFrom()` or `balanceFrom()` for iCKB-specific representations.
+2. **Incorrect CCC Udt subclassing for multi-representation value** — CCC's `Udt.completeInputsByBalance` assumes UDT balance = sum of `u128 LE` fields in matching type cells. iCKB's conservation law spans xUDT cells, receipt cells, and DAO deposit cells. Avoid by: overriding `infoFrom()` in `IckbUdt` to value all three cell types with correct sign conventions (Phase 3 research confirmed `CellAnyLike` has `outPoint` for input cells, enabling header fetches). Do NOT override `balanceFrom()` for iCKB-specific representations.
 
 3. **Exchange rate divergence between TypeScript and Rust contract** — The `ickbValue()` formula must produce byte-identical results to the on-chain `ickb_logic` script. Integer division order and the soft-cap formula are dangerous. Avoid by: creating cross-validation tests with known Rust contract outputs BEFORE touching any exchange rate code.
 
@@ -144,7 +144,7 @@ Based on research, suggested phase structure:
 ### Research Flags
 
 Needs deeper research during planning:
-- **Phase 1d (IckbUdt subclassing):** Confirm that CCC's `Udt.getInputsInfo()` signature provides enough context for header fetching for receipt/deposit cells. Also confirm that overriding `getInputsInfo()` (rather than `infoFrom()`) does not break any CCC internal method chains.
+- **Phase 1d (IckbUdt subclassing):** **Resolved in Phase 3 research.** `infoFrom()` is the preferred override point — input cells have `outPoint` for header fetching, `CellAny` has `capacityFree`. See 03-RESEARCH.md.
 - **Phase 3 (JoyId wallet connector):** Manual testing with actual JoyId hardware required; CCC's wallet connector API differs from Lumos in ways that affect UX flow.
 
 Standard patterns (skip research-phase):
@@ -156,27 +156,27 @@ Standard patterns (skip research-phase):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Primary source is local CCC source code (`ccc-dev/ccc/`); all APIs verified by direct inspection |
+| Stack | HIGH | Primary source is local CCC source code (`ccc-fork/ccc/`); all APIs verified by direct inspection |
 | Features | HIGH | Based on direct codebase analysis + CCC docs + npm ecosystem survey; competitor analysis confirms iCKB has no direct competitors |
-| Architecture | HIGH | Build order derived from package dependency graph; key patterns verified against CCC Udt source; override point resolved (`getInputsInfo`/`getOutputsInfo`, not `infoFrom`) |
+| Architecture | HIGH | Build order derived from package dependency graph; key patterns verified against CCC Udt source; override point resolved (`infoFrom`, not `getInputsInfo`/`getOutputsInfo` — see Phase 3 research) |
 | Pitfalls | HIGH | Derived from direct code reading (SmartTransaction 517 lines, IckbUdtManager 213 lines, CCC Udt 1798 lines) and on-chain contract constraints |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Resolved — CCC Udt override point:** Both ARCHITECTURE.md and STACK.md now agree on overriding `getInputsInfo()`/`getOutputsInfo()` (not `infoFrom()`). The `infoFrom()` approach was ruled out because `CellAnyLike` lacks `outPoint`, which is needed for header fetching in receipt/deposit value calculation. Final confirmation of CCC's internal method chains still needed during Phase 3 (CCC Udt Integration Investigation).
+- **Resolved — CCC Udt override point:** Phase 3 research (03-RESEARCH.md) determined that `infoFrom()` is the optimal override point. The earlier recommendation to override `getInputsInfo()`/`getOutputsInfo()` was based on the incorrect premise that `CellAnyLike` lacks `outPoint` — it actually has `outPoint?: OutPointLike | null`, and input cells from `getInputsInfo()` → `CellInput.getCell()` always have `outPoint` set. `CellAny` also has `capacityFree`. See 03-RESEARCH.md for the corrected design.
 - **Resolved — DAO profit in CCC `getInputsCapacity`:** Verified from CCC source (transaction.ts lines 1860-1883) that `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` → `CellInput.getExtraCapacity()` → `Cell.getDaoProfit()`. No standalone utility needed. SmartTransaction's override of `getInputsCapacity()` can be dropped without replacement.
-- **CCC PR #328 (FeePayer) tracking:** Design the SmartTransaction replacement so FeePayer can be adopted as a drop-in improvement if the PR merges. Do not block on it.
+- **Resolved — CCC PR #328 (FeePayer):** PR #328 is now integrated into `ccc-fork/ccc` via pins. FeePayer classes are available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`. User decision during Phase 3 context: design around PR #328 as target architecture.
 - **Bot key logging security:** PITFALLS.md notes the faucet already has a private key logging bug. The bot migration must include an explicit security audit of all logging paths.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `ccc-dev/ccc/packages/udt/src/udt/index.ts` — CCC Udt class (1798 lines), complete UDT lifecycle API
-- `ccc-dev/ccc/packages/core/src/ckb/transaction.ts` — CCC Transaction class (2537 lines), completeFee/completeInputsByCapacity/getInputsCapacity
-- `ccc-dev/ccc/packages/core/src/client/client.ts` — CCC Client with cache, findCells, cell/header fetching
-- `packages/utils/src/transaction.ts` — Current SmartTransaction (517 lines), source of truth for replacement requirements
+- `ccc-fork/ccc/packages/udt/src/udt/index.ts` — CCC Udt class (1798 lines), complete UDT lifecycle API
+- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` — CCC Transaction class (2537 lines), completeFee/completeInputsByCapacity/getInputsCapacity
+- `ccc-fork/ccc/packages/core/src/client/client.ts` — CCC Client with cache, findCells, cell/header fetching
+- `packages/utils/src/transaction.ts` — SmartTransaction (deleted in Phase 1), was source of truth for replacement requirements
 - `packages/utils/src/udt.ts` — Current UdtManager/UdtHandler (393 lines)
 - `packages/core/src/udt.ts` — Current IckbUdtManager (213 lines), triple-representation balance logic
 - `reference/contracts/schemas/encoding.mol` — Molecule schema, byte layout ground truth

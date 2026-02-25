@@ -33,7 +33,7 @@ key-files:
     - packages/sdk/src/sdk.ts
 
 key-decisions:
-  - "Moved getHeader/HeaderKey to transaction.ts as non-exported internals rather than deleting entirely, since SmartTransaction class still uses them internally until Plan 03 deletion"
+  - "Moved getHeader/HeaderKey to transaction.ts as non-exported internals (deleted alongside SmartTransaction in 01-03)"
   - "TransactionHeader moved to utils.ts as canonical location, imported by transaction.ts"
   - "Inlined CCC client calls use explicit null checks with descriptive error messages matching original getHeader throw semantics"
 
@@ -84,7 +84,7 @@ Each task was committed atomically:
 - `packages/sdk/src/sdk.ts` - Inlined 1 getHeader call with client.getTransactionWithHeader
 
 ## Decisions Made
-- Moved getHeader/HeaderKey into transaction.ts as non-exported internals rather than deleting entirely. SmartTransaction's own instance methods (getHeader, encodeHeaderKey, addHeaders) still reference these internally. Deleting them would break SmartTransaction, which is not removed until Plan 03. This keeps the public API clean while maintaining internal consistency.
+- Moved getHeader/HeaderKey into transaction.ts as non-exported internals rather than deleting entirely. SmartTransaction's own instance methods (getHeader, encodeHeaderKey, addHeaders) still reference these internally. Deleting them would break SmartTransaction, which was removed in Plan 01-03. This kept the public API clean while maintaining internal consistency.
 - TransactionHeader placed in utils.ts as the canonical location since it outlives SmartTransaction (used by DaoCell.headers and ReceiptCell.header).
 - Inlined CCC client calls preserve the original error semantics: getHeader always threw on null results, and the inlined code also throws with descriptive messages.
 
@@ -95,7 +95,7 @@ Each task was committed atomically:
 **1. [Rule 3 - Blocking] Retained getHeader/HeaderKey as non-exported internals in transaction.ts**
 - **Found during:** Task 1 (Step 5 - removing getHeader from utils.ts)
 - **Issue:** SmartTransaction class in transaction.ts imports and uses the standalone getHeader function and HeaderKey type internally. Removing them from utils.ts without providing them in transaction.ts would break the class.
-- **Fix:** Moved getHeader function and HeaderKey type into transaction.ts as non-exported (internal) declarations. They are no longer part of the @ickb/utils public API but remain available for SmartTransaction's internal use until Plan 03 deletes the class.
+- **Fix:** Moved getHeader function and HeaderKey type into transaction.ts as non-exported (internal) declarations. They are no longer part of the @ickb/utils public API but remained available for SmartTransaction's internal use until 01-03 deleted the class.
 - **Files modified:** packages/utils/src/transaction.ts
 - **Verification:** pnpm check:full passes; HeaderKey/getHeader not found in any consumer packages
 - **Committed in:** 85ead3a (Task 1 commit)
@@ -103,7 +103,7 @@ Each task was committed atomically:
 ---
 
 **Total deviations:** 1 auto-fixed (1 blocking)
-**Impact on plan:** Necessary to keep SmartTransaction functional until Plan 03 removes it. No scope creep.
+**Impact on plan:** Necessary to keep SmartTransaction functional until 01-03 removed it. No scope creep.
 
 ## Issues Encountered
 None - plan executed smoothly once the internal SmartTransaction dependency was handled.

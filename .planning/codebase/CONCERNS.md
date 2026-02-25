@@ -38,27 +38,28 @@
 
 ### Local UDT Handling May Overlap CCC Upstream (Medium)
 
-- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-dev/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
+- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-fork/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
 - Files:
   - `packages/utils/src/udt.ts` - `UdtHandler` interface, `UdtManager` class (~370 lines)
   - `packages/core/src/udt.ts` - `IckbUdtManager` extending UDT handling for iCKB-specific logic
-  - `ccc-dev/ccc/packages/udt/src/` - CCC upstream UDT package
+  - `ccc-fork/ccc/packages/udt/src/` - CCC upstream UDT package
   - Usage of `ccc.udtBalanceFrom()`: `packages/utils/src/udt.ts` lines 169, 197, 323, 368
 - Impact: There may be duplicated utility code for standard UDT operations (finding cells, calculating balances). The iCKB-specific extensions (e.g., `IckbUdtManager` which modifies balance calculations based on DAO deposit/withdrawal state) are domain-specific and unlikely to be in CCC.
 - Fix approach: Audit the CCC `@ckb-ccc/udt` package to identify which local utilities can be replaced. Keep iCKB-specific extensions but delegate standard UDT operations (cell finding, basic balance) to CCC where possible.
 
 ### Fragile CCC Local Override Mechanism (Medium)
 
-- Issue: The `.pnpmfile.cjs` hook and `ccc-dev/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-dev/ccc/packages/*/`.
+- Issue: The `.pnpmfile.cjs` hook and `fork-scripts/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-fork/ccc/packages/*/`.
 - Files:
   - `.pnpmfile.cjs` - pnpm hook that overrides `@ckb-ccc/*` package resolutions
-  - `ccc-dev/record.sh` - clones CCC repo, merges refs, and builds it locally
-  - `pnpm-workspace.yaml` - includes `ccc-dev/ccc/packages/*` in workspace
-  - `ccc-dev/ccc/` - local CCC checkout (when present)
+  - `fork-scripts/record.sh` - generic fork record script (clones repo, merges refs, builds locally)
+  - `ccc-fork/config.json` - CCC fork configuration (upstream URL, refs, workspace config)
+  - `pnpm-workspace.yaml` - includes `ccc-fork/ccc/packages/*` in workspace (auto-generated section)
+  - `ccc-fork/ccc/` - local CCC checkout (when present)
 - Impact: Multiple fragility points:
-  1. The local CCC repo at `ccc-dev/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
+  1. The local CCC repo at `ccc-fork/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
   2. The `readPackage` hook modifies `dependencies` objects at install time, which can silently break if CCC reorganizes its packages.
-  3. CI/CD (`ccc-dev/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
+  3. CI/CD (`fork-scripts/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
   4. The override mechanism is invisible to developers who don't read `.pnpmfile.cjs`, leading to confusion when packages resolve differently than expected from `package.json`.
 - Fix approach: Now that UDT and Epoch PRs have been merged into CCC upstream, evaluate whether the local overrides are still needed. If CCC publishes releases containing the merged features, switch to published versions and remove the override mechanism.
 
@@ -107,7 +108,7 @@
   - `packages/dao/src/dao.ts`, lines 326-334 (called in async generator loop)
   - `packages/core/src/owned_owner.ts`, lines 229-234 (same pattern)
 - Cause: Each `daoCellFrom()` call makes 1-2 RPC calls that cannot be parallelized within a single cell construction.
-- Improvement path: The `SmartTransaction.headers` cache in `packages/utils/src/transaction.ts` partially mitigates this by caching fetched headers. For batch operations, consider prefetching all needed headers in parallel before constructing DAO cells.
+- Improvement path: CCC's Client Cache transparently caches fetched headers (SmartTransaction's header cache was deleted in Phase 1). For batch operations, consider prefetching all needed headers in parallel before constructing DAO cells.
 
 ### Duplicated RPC Batching Code in Legacy Apps
 
@@ -128,12 +129,9 @@
 
 ## Fragile Areas
 
-### SmartTransaction Class Extending ccc.Transaction
+### SmartTransaction Class Extending ccc.Transaction (RESOLVED)
 
-- Files: `packages/utils/src/transaction.ts` (517 lines)
-- Why fragile: `SmartTransaction` extends `ccc.Transaction` and overrides 8 methods: `completeFee`, `getInputsUdtBalance`, `getOutputsUdtBalance`, `getInputsCapacity`, `clone`, `copy`, `from`, `default`, and `fromLumosSkeleton`. Changes to `ccc.Transaction`'s interface or behavior upstream can silently break `SmartTransaction`.
-- Safe modification: When updating CCC dependency, review `ccc.Transaction` changelog for breaking changes to overridden methods. The `completeFee` override (lines 63-98) is particularly fragile as it calls `super.completeFee()` and also queries the client for the NervosDAO script to check the 64-output limit.
-- Test coverage: No tests for `SmartTransaction`.
+- Status: **Resolved in Phase 1** — SmartTransaction class and CapacityManager were fully deleted from `@ickb/utils`. All manager methods now accept `ccc.TransactionLike` and return `ccc.Transaction` directly. Header caching is handled by CCC Client Cache. The 64-output DAO limit check was contributed to CCC core.
 
 ### Bot Order Matching Algorithm
 
@@ -154,11 +152,11 @@
 ### 64 Output Cell Limit for NervosDAO Transactions
 
 - Current capacity: Maximum 64 output cells per transaction containing NervosDAO operations.
-- Limit: Enforced by the NervosDAO script itself. Checked in 6 locations throughout the codebase.
+- Limit: Enforced by the NervosDAO script itself. Consolidated into CCC core in Phase 1.
 - Files:
-  - `packages/dao/src/dao.ts`, lines 99-103, 174-177, 244-248
-  - `packages/core/src/owned_owner.ts`, lines 102-106, 144-148
-  - `packages/utils/src/transaction.ts`, lines 85-95
+  - `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` — `assertDaoOutputLimit` utility + `completeFee` safety net (contributed to CCC core in Phase 1)
+  - `packages/dao/src/dao.ts` — calls `assertDaoOutputLimit`
+  - `packages/core/src/owned_owner.ts` — calls `assertDaoOutputLimit`
   - `apps/bot/src/index.ts`, line 414 (limits to 58 outputs to reserve 6 for change)
 - Scaling path: Protocol-level constraint. The bot works around it by limiting deposit/withdrawal operations per transaction. Future NervosDAO script updates may relax this.
 
@@ -242,19 +240,13 @@
 
 ## Dead Code
 
-### `fromLumosSkeleton` in SmartTransaction
+### `fromLumosSkeleton` in SmartTransaction (RESOLVED)
 
-- Issue: `SmartTransaction.fromLumosSkeleton()` at `packages/utils/src/transaction.ts` line 432 provides Lumos interoperability. Since the new packages do not use Lumos, this method is only needed if external code passes Lumos skeletons to the new packages.
-- Files: `packages/utils/src/transaction.ts`, lines 432-436
-- Impact: Low. The method is a thin wrapper delegating to the superclass.
-- Fix approach: Remove after all apps are migrated away from Lumos.
+- Status: **Resolved in Phase 1** — SmartTransaction class was fully deleted, including `fromLumosSkeleton()`.
 
-### SmartTransaction Name is Misleading (Not Dead)
+### SmartTransaction Name is Misleading (RESOLVED)
 
-- Issue: Despite the original "SmartTransaction" concept being abandoned ecosystem-wide, the `SmartTransaction` class in `packages/utils/src/transaction.ts` is actively used throughout the new packages. It extends `ccc.Transaction` with UDT handler management and header caching (which is what replaced the abandoned SmartTransaction headers concept). The name is a vestige but the code is alive and critical.
-- Files: `packages/utils/src/transaction.ts` - definition (517 lines). Used in: `packages/sdk/src/sdk.ts`, `packages/order/src/order.ts`, `packages/dao/src/dao.ts`, `packages/core/src/owned_owner.ts`, `packages/core/src/logic.ts`, `apps/faucet/src/main.ts`
-- Impact: The name `SmartTransaction` may confuse developers familiar with the abandoned ecosystem concept.
-- Fix approach: Consider renaming to `IckbTransaction` or `EnhancedTransaction`. Low priority since the class is internal to the monorepo.
+- Status: **Resolved in Phase 1** — SmartTransaction class was fully deleted from `@ickb/utils`. All manager methods now accept `ccc.TransactionLike` directly.
 
 ---
 

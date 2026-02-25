@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 1 removes `SmartTransaction`, `CapacityManager`, `getHeader()`/`HeaderKey`, and 7 scattered 64-output DAO limit checks. It contributes the DAO check to CCC core via `ccc-dev/`, updates all manager method signatures across all 5 library packages from `SmartTransaction` to `ccc.TransactionLike`, and keeps the build green after every step.
+Phase 1 removes `SmartTransaction`, `CapacityManager`, `getHeader()`/`HeaderKey`, and 7 scattered 64-output DAO limit checks. It contributes the DAO check to CCC core via `ccc-fork/`, updates all manager method signatures across all 5 library packages from `SmartTransaction` to `ccc.TransactionLike`, and keeps the build green after every step.
 
 The codebase is well-structured: SmartTransaction has exactly 9 consumer files across 5 packages; `getHeader` has 5 standalone call sites plus 4 instance method call sites; the 64-output DAO check appears in 7 locations across 4 files. CCC's native `Transaction` already handles DAO profit in `getInputsCapacity()` via `getInputsCapacityExtra()` -> `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()`, making SmartTransaction's `getInputsCapacity` override redundant. CCC's `Transaction.from(txLike)` provides the `TransactionLike` -> `Transaction` entry-point conversion pattern that all updated method signatures will follow.
 
@@ -17,7 +17,7 @@ The codebase is well-structured: SmartTransaction has exactly 9 consumer files a
 
 ### Locked Decisions
 - Build the 64-output NervosDAO limit check **in CCC core**, not in @ickb/utils
-- Develop in `ccc-dev/ccc/`, record pins, use immediately via workspace override while waiting for upstream merge
+- Develop in `ccc-fork/ccc/`, record pins, use immediately via workspace override while waiting for upstream merge
 - **Submit the upstream CCC PR during Phase 1 execution**
 - CCC PR includes three components:
   1. **`completeFee()` safety net** -- async check using `client.getKnownScript(KnownScript.NervosDao)` with full `Script.eq()` comparison
@@ -76,14 +76,14 @@ The codebase is well-structured: SmartTransaction has exactly 9 consumer files a
 |---------|---------|---------|--------------|
 | `@ckb-ccc/core` | catalog: (^1.12.2) | CKB blockchain SDK | Project's core dependency; `Transaction`, `TransactionLike`, `Client`, `Script.eq()` |
 | TypeScript | ^5.9.3 (strict mode) | Type safety | `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `noImplicitOverride` |
-| tsgo | native-preview | Type checking | Used via `ccc-dev/tsgo-filter.sh` when CCC is cloned |
+| tsgo | native-preview | Type checking | Used via `ccc-fork/tsgo-filter.sh` when CCC is cloned |
 | vitest | ^3.2.4 | Testing | CCC's test framework; tests for the CCC PR |
 | pnpm | 10.30.1 | Package management | Workspace protocol, catalog specifiers |
 
 ### Supporting
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `ccc-dev/` system | local | Local CCC development | Building/testing CCC DAO contribution before upstream merge |
+| `ccc-fork/` system | local | Local CCC development | Building/testing CCC DAO contribution before upstream merge |
 | `@changesets/cli` | ^2.29.8 | Versioning | After API changes, run `pnpm changeset` |
 
 ### Alternatives Considered
@@ -115,7 +115,7 @@ packages/
 ├── sdk/src/
 │   ├── sdk.ts            # IckbSdk (SmartTransaction -> TransactionLike, CapacityManager removed)
 │   └── constants.ts      # getConfig (CapacityManager removed)
-ccc-dev/ccc/packages/core/src/ckb/
+ccc-fork/ccc/packages/core/src/ckb/
 ├── transactionErrors.ts  # + ErrorNervosDaoOutputLimit (new)
 └── transaction.ts        # + completeFee safety net + assertDaoOutputLimit (new)
 ```
@@ -182,7 +182,7 @@ if (!tx.headerDeps.some((h) => h === hash)) {
 **When to use:** The new `ErrorNervosDaoOutputLimit`
 **Example:**
 ```typescript
-// Source: ccc-dev/ccc/packages/core/src/ckb/transactionErrors.ts
+// Source: ccc-fork/ccc/packages/core/src/ckb/transactionErrors.ts
 // Follow the ErrorTransactionInsufficientCapacity pattern:
 export class ErrorNervosDaoOutputLimit extends Error {
   public readonly count: number;
@@ -310,17 +310,17 @@ tx.addCellDeps(this.udtHandler.cellDeps);
 **How to avoid:** Replace `tx.getHeader(client, { type: "txHash", value: outPoint.txHash })` with inlined CCC client calls. The headerDeps validation from the old `getHeader` instance method was a runtime check that headers were pre-populated -- after removal, the client call fetches headers directly.
 **Warning signs:** TypeScript error `Property 'getHeader' does not exist on type 'Transaction'`.
 
-### Pitfall 8: ccc-dev pins must be recorded after CCC changes
-**What goes wrong:** Making changes to `ccc-dev/ccc/` without running `pnpm ccc:record` means the pins don't reflect the new state.
-**Why it happens:** `ccc-dev/pins/HEAD` is a hash integrity check. If ccc code changes but pins don't update, replay won't reproduce the same state.
-**How to avoid:** After developing the DAO utility in `ccc-dev/ccc/`, run `pnpm ccc:record` to update pins. Check `pnpm ccc:status` to verify.
-**Warning signs:** `pnpm ccc:status` reports exit code 1 (pending work).
+### Pitfall 8: ccc-fork pins must be recorded after CCC changes
+**What goes wrong:** Making changes to `ccc-fork/ccc/` without running `pnpm fork:record` means the pins don't reflect the new state.
+**Why it happens:** `ccc-fork/pins/` contains an integrity check. If ccc code changes but pins don't update, replay won't reproduce the same state.
+**How to avoid:** After developing the DAO utility in `ccc-fork/ccc/`, run `pnpm fork:record` to update pins. Check `pnpm fork:status` to verify.
+**Warning signs:** `pnpm fork:status` reports exit code 1 (pending work).
 
 ## Code Examples
 
 ### Complete DAO Check Replacement Pattern
 ```typescript
-// Source: Verified from ccc-dev/ccc/packages/core/src/ckb/transaction.ts
+// Source: Verified from ccc-fork/ccc/packages/core/src/ckb/transaction.ts
 // and packages/dao/src/dao.ts
 
 // Before (scattered in 7 locations):
@@ -392,7 +392,7 @@ for (const lock of unique(this.bots)) {
 
 ### CCC Vitest Test Pattern
 ```typescript
-// Source: ccc-dev/ccc/packages/core/src/ckb/transaction.test.ts
+// Source: ccc-fork/ccc/packages/core/src/ckb/transaction.test.ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ccc } from "../index.js";
 
@@ -547,7 +547,7 @@ This interface must be moved to a surviving file before `transaction.ts` is dele
 
 ### Primary (HIGH confidence)
 - Codebase source files in `/workspaces/stack/packages/` -- all SmartTransaction consumers, getHeader call sites, DAO checks inventoried directly
-- CCC source in `/workspaces/stack/ccc-dev/ccc/packages/core/src/` -- Transaction class, TransactionLike type, error patterns, completeFee implementation, getInputsCapacity, test patterns
+- CCC source in `/workspaces/stack/ccc-fork/ccc/packages/core/src/` -- Transaction class, TransactionLike type, error patterns, completeFee implementation, getInputsCapacity, test patterns
 - `.planning/phases/01-ickb-utils-smarttransaction-removal/01-CONTEXT.md` -- User decisions and constraints
 - `.planning/REQUIREMENTS.md` -- Requirement definitions and traceability
 

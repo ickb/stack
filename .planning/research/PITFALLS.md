@@ -41,7 +41,7 @@ Concretely, `IckbUdtManager.getInputsUdtBalance` currently (a) counts xUDT balan
 The temptation is to make `IckbUdt extends Udt` so that CCC's generic transaction completion (`completeBy`, `completeInputsByBalance`) "just works" for iCKB. But iCKB's multi-representation value model is fundamentally incompatible with the assumption that UDT balance = sum of `u128 LE` fields in matching type cells. The CCC `Udt` class was designed for standard xUDT tokens, not for protocol-specific tokens with conservation laws spanning multiple cell types.
 
 **How to avoid:**
-1. The preferred approach (see ARCHITECTURE.md and STACK.md) is to subclass `Udt` as `IckbUdt`, overriding `getInputsInfo()`/`getOutputsInfo()` rather than `infoFrom()`. This avoids the `CellAnyLike` limitation (no outPoint for header fetching) while keeping CCC's completion methods functional. However, this is an **open design question** to be resolved during Phase 3 (CCC Udt Integration Investigation).
+1. The preferred approach (confirmed in Phase 3 research) is to subclass `Udt` as `IckbUdt`, overriding `infoFrom()`. Input cells have `outPoint` set (resolved via `CellInput.getCell()`), enabling header fetches for receipt/deposit value calculation. `CellAny` has `capacityFree` for deposit valuation. See 03-RESEARCH.md for the corrected design.
 2. If subclassing proves unviable, the fallback is to keep multi-representation accounting in iCKB-specific standalone functions (refactored from `IckbUdtManager`), using CCC's `Udt` only for standard xUDT operations (cell discovery, basic balance reading).
 3. Whichever approach is chosen, ensure that CCC's `Udt.completeInputsByBalance()` does not inadvertently add receipt or deposit cells as if they were standard xUDT inputs. Verify that the conservation law (`input_udt + input_receipts = output_udt + input_deposits`) is enforced correctly by the overridden methods.
 4. Always add required `headerDeps` explicitly -- CCC's client cache handles header fetching performance, but `headerDeps` must be on the transaction for on-chain validation.
@@ -176,7 +176,7 @@ Shortcuts that seem reasonable but create long-term problems.
 | Keeping SmartTransaction "just for now" while migrating apps | Apps work immediately without library changes | Two transaction models coexist, every new feature must work with both, CCC upgrades become harder | Never -- library refactor must come before app migration |
 | Passing `SmartTransaction` type through public API boundaries | Avoids rewriting callers | External consumers inherit a dependency on a non-standard Transaction subclass, blocking npm publication | Never for published packages -- internal-only is acceptable during transition |
 | Skipping codec roundtrip tests | Faster initial development | Silent byte-level bugs that only manifest on-chain | Never -- these tests are cheap to write and prevent catastrophic failures |
-| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `ccc-dev/` local builds to validate, then switch to published version) |
+| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `ccc-fork/` local builds to validate, then switch to published version) |
 | Migrating bot without parallel Lumos fallback | Cleaner codebase, single transaction path | If CCC-based bot has subtle bugs, no way to fall back; real funds at risk | Never for mainnet -- always keep Lumos bot runnable until CCC bot is validated on testnet |
 | Removing `@ickb/lumos-utils` and `@ickb/v1-core` from workspace before all apps are migrated | Simpler dependency tree | Breaks unmigrated apps, blocks incremental migration | Only after ALL apps are migrated and verified |
 
@@ -272,7 +272,7 @@ How roadmap phases should address these pitfalls.
 ## Sources
 
 - Direct codebase analysis: `packages/utils/src/transaction.ts` (SmartTransaction, 517 lines), `packages/utils/src/udt.ts` (UdtManager, 393 lines), `packages/core/src/udt.ts` (IckbUdtManager, 213 lines)
-- CCC `Udt` class source: `ccc-dev/ccc/packages/udt/src/udt/index.ts` (1798 lines)
+- CCC `Udt` class source: `ccc-fork/ccc/packages/udt/src/udt/index.ts` (1798 lines)
 - On-chain contract source: `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` (conservation law, exchange rate)
 - On-chain contract source: `reference/contracts/scripts/contracts/owned_owner/` (owner/owned pairing)
 - On-chain contract source: `reference/contracts/scripts/contracts/limit_order/` (order/master relationship)

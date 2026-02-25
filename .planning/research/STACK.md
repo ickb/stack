@@ -2,7 +2,7 @@
 
 **Domain:** CCC API adoption for iCKB protocol library migration
 **Researched:** 2026-02-21
-**Confidence:** HIGH (primary source: local CCC source code in `ccc-dev/ccc/`)
+**Confidence:** HIGH (primary source: local CCC source code in `ccc-fork/ccc/`)
 
 ## Context
 
@@ -67,7 +67,7 @@ This research focuses on the CCC APIs and patterns that should be adopted as par
 
 ### CCC `@ckb-ccc/udt` Package
 
-**Version:** Local build from `ccc-dev/ccc/packages/udt/`
+**Version:** Local build from `ccc-fork/ccc/packages/udt/`
 **Key classes:** `Udt`, `UdtInfo`, `UdtConfig`, `ErrorUdtInsufficientCoin`
 **Depends on:** `@ckb-ccc/core`, `@ckb-ccc/ssri`
 
@@ -111,7 +111,7 @@ CCC's `Client.cache` handles purpose (1) -- all `getHeaderByHash()` and `getHead
 
 CCC's `Transaction.getInputsCapacity()` now includes DAO profit via `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()`. This means SmartTransaction's override of `getInputsCapacity()` is **no longer needed** -- CCC does this natively.
 
-Verified in CCC source (`ccc-dev/ccc/packages/core/src/ckb/transaction.ts` lines 1860-1883):
+Verified in CCC source (`ccc-fork/ccc/packages/core/src/ckb/transaction.ts` lines 1860-1883):
 ```typescript
 async getInputsCapacity(client: Client): Promise<Num> {
   return (
@@ -140,30 +140,28 @@ Where `getInputsCapacityExtra` sums `getExtraCapacity()` per input, which calls 
 
 ### Recommended Approach: Subclass `Udt` from `@ckb-ccc/udt`
 
-Create `IckbUdt extends Udt` that overrides `getInputsInfo()` and `getOutputsInfo()` to recognize all three representations.
+Create `IckbUdt extends Udt` that overrides `infoFrom()` to recognize all three representations.
 
-**Why `getInputsInfo()`/`getOutputsInfo()` (not `infoFrom()`):**
-- The natural candidate would be `infoFrom()` -- it's called by all balance/info methods, so overriding it would propagate everywhere. However, `infoFrom()` receives `CellAnyLike` which lacks `outPoint`, and iCKB receipt/deposit value calculation requires the cell's outPoint to fetch the block header via transaction hash.
-- `getInputsInfo()` and `getOutputsInfo()` receive the full `TransactionLike`, so input outpoints are available for header lookups. This is cleaner than trying to thread header information through `infoFrom()`.
-- CCC's `completeInputsByBalance()` calls `this.getInputsInfo()`, so overriding it changes balancing behavior correctly.
+**Why `infoFrom()` (updated in Phase 3 research):**
+- `infoFrom()` is called by all balance/info methods, so overriding it propagates everywhere. Input cells passed via `getInputsInfo()` → `CellInput.getCell()` always have `outPoint` set on the `CellAny`/`Cell` objects, enabling header fetches for receipt/deposit value calculation. Output cells from `tx.outputCells` lack `outPoint`, allowing `infoFrom` to distinguish inputs from outputs.
+- `CellAny` has `capacityFree` (transaction.ts:404-405), so deposit cell valuation works directly. Only `DaoManager.isDeposit()` requires constructing a `Cell` from `CellAny`.
+- CCC's `completeInputsByBalance()` chains through `getInputsInfo()` → `infoFrom()`, so overriding `infoFrom` changes balancing behavior correctly without duplicating resolution logic.
 
 **Why NOT override `completeInputsByBalance()`:**
 - The base implementation's dual-constraint logic (balance + capacity) is correct for iCKB
 - The subclass only needs to change HOW balance is calculated from cells, not the input selection strategy
 
-**Implementation sketch:** See ARCHITECTURE.md "Pattern 2: IckbUdt Subclass" for the full code example with `getInputsInfo()` override.
+**Implementation sketch:** See 03-RESEARCH.md for the `infoFrom()` override pattern. ARCHITECTURE.md "CCC Udt Adoption for iCKB" section has the same corrected example.
 
-**Note:** This is a preliminary design. The viability of subclassing CCC's `Udt` is an open question to be resolved during Phase 3 (CCC Udt Integration Investigation). See Pitfall 2 in PITFALLS.md for the risks involved.
+**Header fetching within `infoFrom()` override:**
 
-**Header fetching within `getInputsInfo()`:**
+Since input cells have `outPoint` set (resolved via `CellInput.getCell(client)` in `getInputsInfo`), the `infoFrom` override can fetch headers using:
 
-Since `getInputsInfo()` receives the full transaction, input outpoints are directly available. The implementation can fetch headers using:
-
-1. **`client.getHeaderByTxHash(input.previousOutput.txHash)`** -- Fetches the block header for the transaction that created the cell. Cached by CCC Client. This is the approach used in the ARCHITECTURE.md code sketch.
+1. **`client.getTransactionWithHeader(cell.outPoint.txHash)`** -- Fetches the block header for the transaction that created the cell. Cached by CCC Client. Returns `{ transaction, header? }`.
 
 2. **`client.getTransaction()` + `client.getHeaderByHash()`** -- Alternative two-step approach: get the transaction response (which includes `blockHash`), then fetch the header. Both are cached by CCC Client.
 
-Option 1 is simpler and sufficient for the `getInputsInfo()` override.
+Option 1 is simpler and sufficient for the `infoFrom()` override.
 
 ## CCC Transaction Completion Pattern
 
@@ -277,11 +275,11 @@ Both are now redundant:
 
 PR #328 proposes a `FeePayer` abstraction for CCC that would allow specifying who pays transaction fees. This is relevant because SmartTransaction's fee completion could designate a specific lock for fee payment.
 
-**Current status:** Still open (not merged as of research date).
+**Current status (updated):** PR #328 is now integrated into `ccc-fork/ccc` via the pins/record system. FeePayer classes are available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`. The user decided during Phase 3 context that PR #328 is the target architecture -- investigation should design around it.
 
-**Impact on migration:** Do NOT wait for PR #328. CCC's existing `completeFeeChangeToLock(signer, changeLock)` already allows specifying a change destination. The FeePayer abstraction would be a further convenience but is not blocking.
+**Impact on migration:** The FeePayer abstraction is available to build against directly. The `infoFrom()` override is compatible with both the current Signer-based completion and the FeePayer-based completion -- cells flow through `getInputsInfo` → `infoFrom` regardless of which completion plumbing is used.
 
-**Recommendation:** Proceed with `completeFeeChangeToLock()` / `completeFeeBy()`. If PR #328 merges later, it can be adopted as an incremental improvement.
+**Recommendation:** Design around FeePayer as the target architecture. Use `completeFeeChangeToLock()` / `completeFeeBy()` for current execution while investigating how FeePayer's `completeInputs(tx, filter, accumulator, init)` pattern can improve iCKB's receipt/deposit cell discovery.
 
 ## Version Compatibility
 
@@ -308,17 +306,17 @@ PR #328 proposes a `FeePayer` abstraction for CCC that would allow specifying wh
 # No other new dependencies needed -- all other changes use existing @ckb-ccc/core APIs
 ```
 
-**Note:** With `ccc-dev/` local build active, `.pnpmfile.cjs` automatically rewires all `@ckb-ccc/*` dependencies to local packages, so the `@ckb-ccc/udt` package is already available from the local CCC build.
+**Note:** With `ccc-fork/` local build active, `.pnpmfile.cjs` automatically rewires all `@ckb-ccc/*` dependencies to local packages, so the `@ckb-ccc/udt` package is already available from the local CCC build.
 
 ## Sources
 
-- `ccc-dev/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class, full source (1798 lines) -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/ckb/transaction.ts` -- CCC Transaction class, full source (2537 lines) -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/client/client.ts` -- CCC Client class with caching, cell finding -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom` etc. -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom`, `bytesLen` -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/utils/index.ts` -- `reduce`, `reduceAsync`, `gcd`, `apply`, `sleep` -- HIGH confidence
-- `ccc-dev/ccc/packages/core/src/ckb/epoch.ts` -- `Epoch` class (already adopted) -- HIGH confidence
+- `ccc-fork/ccc/packages/udt/src/udt/index.ts` -- CCC Udt class, full source (1798 lines) -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` -- CCC Transaction class, full source (2537 lines) -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/client/client.ts` -- CCC Client class with caching, cell finding -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/num/index.ts` -- `numMax`, `numMin`, `numFrom` etc. -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/hex/index.ts` -- `isHex`, `hexFrom`, `bytesLen` -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/utils/index.ts` -- `reduce`, `reduceAsync`, `gcd`, `apply`, `sleep` -- HIGH confidence
+- `ccc-fork/ccc/packages/core/src/ckb/epoch.ts` -- `Epoch` class (already adopted) -- HIGH confidence
 - `packages/utils/src/transaction.ts` -- Current SmartTransaction implementation (517 lines) -- HIGH confidence
 - `packages/utils/src/udt.ts` -- Current UdtManager/UdtHandler implementation (393 lines) -- HIGH confidence
 - `packages/utils/src/capacity.ts` -- Current CapacityManager implementation (221 lines) -- HIGH confidence
