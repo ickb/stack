@@ -13,9 +13,9 @@ Delete SmartTransaction class and its infrastructure across all packages; contri
 <decisions>
 ## Implementation Decisions
 
-### CCC DAO Contribution (via ccc-fork/)
+### CCC DAO Contribution (via forks/ccc/)
 - Build the 64-output NervosDAO limit check **in CCC core**, not in @ickb/utils
-- Develop in `ccc-fork/ccc/`, record pins, use immediately via workspace override while waiting for upstream merge
+- Develop in `forks/ccc/`, record pins, use immediately via workspace override while waiting for upstream merge
 - **Submit the upstream CCC PR during Phase 1 execution**
 - CCC PR includes three components:
   1. **`completeFee()` safety net** — async check using `client.getKnownScript(KnownScript.NervosDao)` with full `Script.eq()` comparison

@@ -47,7 +47,7 @@ The iCKB protocol solves NervosDAO illiquidity by pooling DAO deposits and issui
 
 ## On-Chain Contracts (Rust)
 
-Three production smart contracts (in `reference/contracts/` reference repo) implement the protocol on CKB L1. Each TS package in `packages/` corresponds to contract logic:
+Three production smart contracts (in `forks/contracts/` reference repo) implement the protocol on CKB L1. Each TS package in `packages/` corresponds to contract logic:
 
 | Contract | Script Type | TS Package | Purpose |
 |---|---|---|---|
@@ -70,7 +70,7 @@ Receipts convert to UDT; deposits stay as deposits or convert to UDT. No iCKB ca
 
 **Foundation: CCC Framework**
 - Purpose: Provide blockchain primitives and client interface
-- Location: `@ckb-ccc/core` (npm or local `ccc-fork/ccc/`)
+- Location: `@ckb-ccc/core` (npm or local `forks/ccc/`)
 - Contains: CKB RPC clients, transaction builders, signers, Molecule codec, UDT support, Epoch handling
 - Used by: All packages and applications
 - Note: CCC now includes UDT and Epoch features contributed by this project's maintainer

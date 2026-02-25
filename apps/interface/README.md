@@ -11,7 +11,7 @@ git clone https://github.com/ickb/stack.git
 2. Enter into the repo folder:
 
 ```bash
-cd stack/app/interface
+cd stack/apps/interface
 ```
 
 3. Install dependencies:

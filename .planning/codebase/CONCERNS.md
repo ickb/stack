@@ -38,28 +38,28 @@
 
 ### Local UDT Handling May Overlap CCC Upstream (Medium)
 
-- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `ccc-fork/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
+- Issue: CCC now has a dedicated `@ckb-ccc/udt` package (at `forks/ccc/packages/udt/`). The local `packages/utils/src/udt.ts` and `packages/core/src/udt.ts` implement custom UDT handling (`UdtHandler` interface, `IckbUdtManager` class). While the local UDT handling is iCKB-specific (custom balance calculation accounting for DAO deposits), the generic UDT operations like `ccc.udtBalanceFrom()` are still being used from CCC upstream in `packages/utils/src/udt.ts` (4 locations).
 - Files:
   - `packages/utils/src/udt.ts` - `UdtHandler` interface, `UdtManager` class (~370 lines)
   - `packages/core/src/udt.ts` - `IckbUdtManager` extending UDT handling for iCKB-specific logic
-  - `ccc-fork/ccc/packages/udt/src/` - CCC upstream UDT package
+  - `forks/ccc/packages/udt/src/` - CCC upstream UDT package
   - Usage of `ccc.udtBalanceFrom()`: `packages/utils/src/udt.ts` lines 169, 197, 323, 368
 - Impact: There may be duplicated utility code for standard UDT operations (finding cells, calculating balances). The iCKB-specific extensions (e.g., `IckbUdtManager` which modifies balance calculations based on DAO deposit/withdrawal state) are domain-specific and unlikely to be in CCC.
 - Fix approach: Audit the CCC `@ckb-ccc/udt` package to identify which local utilities can be replaced. Keep iCKB-specific extensions but delegate standard UDT operations (cell finding, basic balance) to CCC where possible.
 
 ### Fragile CCC Local Override Mechanism (Medium)
 
-- Issue: The `.pnpmfile.cjs` hook and `fork-scripts/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `ccc-fork/ccc/packages/*/`.
+- Issue: The `.pnpmfile.cjs` hook and `forks/forker/record.sh` script create a fragile mechanism for overriding published CCC packages with local builds. The `.pnpmfile.cjs` `readPackage` hook intercepts pnpm's dependency resolution to redirect `@ckb-ccc/*` packages to local paths under `forks/ccc/packages/*/`.
 - Files:
   - `.pnpmfile.cjs` - pnpm hook that overrides `@ckb-ccc/*` package resolutions
-  - `fork-scripts/record.sh` - generic fork record script (clones repo, merges refs, builds locally)
-  - `ccc-fork/config.json` - CCC fork configuration (upstream URL, refs, workspace config)
-  - `pnpm-workspace.yaml` - includes `ccc-fork/ccc/packages/*` in workspace (auto-generated section)
-  - `ccc-fork/ccc/` - local CCC checkout (when present)
+  - `forks/forker/record.sh` - generic fork record script (clones repo, merges refs, builds locally)
+  - `forks/config.json` - CCC fork configuration (upstream URL, refs, workspace config)
+  - `pnpm-workspace.yaml` - includes `forks/ccc/packages/*` in workspace (auto-generated section)
+  - `forks/ccc/` - local CCC checkout (when present)
 - Impact: Multiple fragility points:
-  1. The local CCC repo at `ccc-fork/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
+  1. The local CCC repo at `forks/ccc/` must be manually cloned and kept in sync with a specific branch/commit.
   2. The `readPackage` hook modifies `dependencies` objects at install time, which can silently break if CCC reorganizes its packages.
-  3. CI/CD (`fork-scripts/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
+  3. CI/CD (`forks/forker/replay.sh`) must run this setup before `pnpm install`, creating an ordering dependency.
   4. The override mechanism is invisible to developers who don't read `.pnpmfile.cjs`, leading to confusion when packages resolve differently than expected from `package.json`.
 - Fix approach: Now that UDT and Epoch PRs have been merged into CCC upstream, evaluate whether the local overrides are still needed. If CCC publishes releases containing the merged features, switch to published versions and remove the override mechanism.
 
@@ -154,7 +154,7 @@
 - Current capacity: Maximum 64 output cells per transaction containing NervosDAO operations.
 - Limit: Enforced by the NervosDAO script itself. Consolidated into CCC core in Phase 1.
 - Files:
-  - `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` — `assertDaoOutputLimit` utility + `completeFee` safety net (contributed to CCC core in Phase 1)
+  - `forks/ccc/packages/core/src/ckb/transaction.ts` — `assertDaoOutputLimit` utility + `completeFee` safety net (contributed to CCC core in Phase 1)
   - `packages/dao/src/dao.ts` — calls `assertDaoOutputLimit`
   - `packages/core/src/owned_owner.ts` — calls `assertDaoOutputLimit`
   - `apps/bot/src/index.ts`, line 414 (limits to 58 outputs to reserve 6 for change)
@@ -217,19 +217,19 @@
 
 ### TS Exchange Rate Must Match Rust Contract Logic
 
-- What's not tested: The TypeScript exchange rate calculation (`packages/core/src/udt.ts`) must produce identical results to the Rust contract's `deposit_to_ickb()` function (`reference/contracts/scripts/contracts/ickb_logic/src/entry.rs`). Any discrepancy would cause transactions to be rejected on-chain.
+- What's not tested: The TypeScript exchange rate calculation (`packages/core/src/udt.ts`) must produce identical results to the Rust contract's `deposit_to_ickb()` function (`forks/contracts/scripts/contracts/ickb_logic/src/entry.rs`). Any discrepancy would cause transactions to be rejected on-chain.
 - Key formula: `iCKB = capacity * AR_0 / AR_m` with soft cap penalty `amount - (amount - 100000) / 10` when `amount > ICKB_SOFT_CAP_PER_DEPOSIT`
 - Contract constants that TS must match:
   - `CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000 * 100_000_000` (1,000 CKB)
   - `CKB_MAXIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT = 1,000,000 * 100_000_000` (1,000,000 CKB)
   - `ICKB_SOFT_CAP_PER_DEPOSIT = 100,000 * 100_000_000` (100,000 iCKB)
   - `GENESIS_ACCUMULATED_RATE = 10_000_000_000_000_000` (10^16)
-- Reference: `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` function `deposit_to_ickb()`
+- Reference: `forks/contracts/scripts/contracts/ickb_logic/src/entry.rs` function `deposit_to_ickb()`
 - Fix approach: Add cross-validation tests with known inputs/outputs derived from the Rust contract logic
 
 ### TS Molecule Codecs Must Match Contract Schemas
 
-- What's not tested: The TypeScript Molecule codec definitions (`@ccc.codec` decorators in `packages/order/src/entities.ts`, `packages/core/src/entities.ts`) must produce byte-identical encodings to the Molecule schema at `reference/contracts/schemas/encoding.mol`. Field order, sizes, and endianness must match exactly.
+- What's not tested: The TypeScript Molecule codec definitions (`@ccc.codec` decorators in `packages/order/src/entities.ts`, `packages/core/src/entities.ts`) must produce byte-identical encodings to the Molecule schema at `forks/contracts/schemas/encoding.mol`. Field order, sizes, and endianness must match exactly.
 - Key schemas:
   - `ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }` = 12 bytes
   - `OwnedOwnerData { owned_distance: Int32 }` = 4 bytes

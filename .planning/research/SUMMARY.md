@@ -17,11 +17,11 @@ The primary risk is losing implicit behaviors baked into `SmartTransaction` — 
 
 ### Recommended Stack
 
-The existing TypeScript/pnpm/CCC stack requires no new technology choices. The migration is a CCC API adoption exercise: replace 14 local utilities with CCC equivalents (`ccc.numMax`/`numMin`, `ccc.gcd`, `ccc.isHex`, `Udt.balanceFromUnsafe`, etc.), add `@ckb-ccc/udt` as a dependency to `@ickb/core`, and restructure transaction building around CCC's native completion pipeline. The local `ccc-fork/` build system already makes `@ckb-ccc/udt` available via `.pnpmfile.cjs` rewriting — no additional infrastructure work needed.
+The existing TypeScript/pnpm/CCC stack requires no new technology choices. The migration is a CCC API adoption exercise: replace 14 local utilities with CCC equivalents (`ccc.numMax`/`numMin`, `ccc.gcd`, `ccc.isHex`, `Udt.balanceFromUnsafe`, etc.), add `@ckb-ccc/udt` as a dependency to `@ickb/core`, and restructure transaction building around CCC's native completion pipeline. The local `forks/ccc/` build system already makes `@ckb-ccc/udt` available via `.pnpmfile.cjs` rewriting — no additional infrastructure work needed.
 
 **Core technologies:**
 - `@ckb-ccc/core` ^1.12.2: Transaction building, cell queries, signer abstraction — already adopted, native replacement for all SmartTransaction behaviors
-- `@ckb-ccc/udt` (local ccc-fork build): UDT lifecycle management (cell finding, balance calculation, input completion, change handling) — replaces local UdtManager/UdtHandler; `IckbUdt` subclasses this
+- `@ckb-ccc/udt` (local forks/ccc build): UDT lifecycle management (cell finding, balance calculation, input completion, change handling) — replaces local UdtManager/UdtHandler; `IckbUdt` subclasses this
 - `ccc.Transaction.completeFeeBy` / `completeFeeChangeToLock`: CKB fee completion — direct SmartTransaction.completeFee replacement for the CKB-change portion
 - `ccc.Transaction.completeInputsByCapacity`: CKB capacity input collection — replaces CapacityManager's cell-finding role
 - `ccc.Client.cache`: Transparent header caching — replaces SmartTransaction's `headers` map for performance; header deps must still be added explicitly
@@ -156,7 +156,7 @@ Standard patterns (skip research-phase):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Primary source is local CCC source code (`ccc-fork/ccc/`); all APIs verified by direct inspection |
+| Stack | HIGH | Primary source is local CCC source code (`forks/ccc/`); all APIs verified by direct inspection |
 | Features | HIGH | Based on direct codebase analysis + CCC docs + npm ecosystem survey; competitor analysis confirms iCKB has no direct competitors |
 | Architecture | HIGH | Build order derived from package dependency graph; key patterns verified against CCC Udt source; override point resolved (`infoFrom`, not `getInputsInfo`/`getOutputsInfo` — see Phase 3 research) |
 | Pitfalls | HIGH | Derived from direct code reading (SmartTransaction 517 lines, IckbUdtManager 213 lines, CCC Udt 1798 lines) and on-chain contract constraints |
@@ -167,20 +167,20 @@ Standard patterns (skip research-phase):
 
 - **Resolved — CCC Udt override point:** Phase 3 research (03-RESEARCH.md) determined that `infoFrom()` is the optimal override point. The earlier recommendation to override `getInputsInfo()`/`getOutputsInfo()` was based on the incorrect premise that `CellAnyLike` lacks `outPoint` — it actually has `outPoint?: OutPointLike | null`, and input cells from `getInputsInfo()` → `CellInput.getCell()` always have `outPoint` set. `CellAny` also has `capacityFree`. See 03-RESEARCH.md for the corrected design.
 - **Resolved — DAO profit in CCC `getInputsCapacity`:** Verified from CCC source (transaction.ts lines 1860-1883) that `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` → `CellInput.getExtraCapacity()` → `Cell.getDaoProfit()`. No standalone utility needed. SmartTransaction's override of `getInputsCapacity()` can be dropped without replacement.
-- **Resolved — CCC PR #328 (FeePayer):** PR #328 is now integrated into `ccc-fork/ccc` via pins. FeePayer classes are available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`. User decision during Phase 3 context: design around PR #328 as target architecture.
+- **Resolved — CCC PR #328 (FeePayer):** PR #328 is now integrated into `forks/ccc` via pins. FeePayer classes are available at `forks/ccc/packages/core/src/signer/feePayer/`. User decision during Phase 3 context: design around PR #328 as target architecture.
 - **Bot key logging security:** PITFALLS.md notes the faucet already has a private key logging bug. The bot migration must include an explicit security audit of all logging paths.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `ccc-fork/ccc/packages/udt/src/udt/index.ts` — CCC Udt class (1798 lines), complete UDT lifecycle API
-- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` — CCC Transaction class (2537 lines), completeFee/completeInputsByCapacity/getInputsCapacity
-- `ccc-fork/ccc/packages/core/src/client/client.ts` — CCC Client with cache, findCells, cell/header fetching
+- `forks/ccc/packages/udt/src/udt/index.ts` — CCC Udt class (1798 lines), complete UDT lifecycle API
+- `forks/ccc/packages/core/src/ckb/transaction.ts` — CCC Transaction class (2537 lines), completeFee/completeInputsByCapacity/getInputsCapacity
+- `forks/ccc/packages/core/src/client/client.ts` — CCC Client with cache, findCells, cell/header fetching
 - `packages/utils/src/transaction.ts` — SmartTransaction (deleted in Phase 1), was source of truth for replacement requirements
 - `packages/utils/src/udt.ts` — Current UdtManager/UdtHandler (393 lines)
 - `packages/core/src/udt.ts` — Current IckbUdtManager (213 lines), triple-representation balance logic
-- `reference/contracts/schemas/encoding.mol` — Molecule schema, byte layout ground truth
-- `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` — On-chain conservation law and exchange rate
+- `forks/contracts/schemas/encoding.mol` — Molecule schema, byte layout ground truth
+- `forks/contracts/scripts/contracts/ickb_logic/src/entry.rs` — On-chain conservation law and exchange rate
 - `.planning/PROJECT.md` — Project requirements and constraints
 
 ### Secondary (MEDIUM confidence)

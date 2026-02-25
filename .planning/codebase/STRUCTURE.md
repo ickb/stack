@@ -67,39 +67,20 @@
 │       │   ├── utils.ts            # Helper utilities (160 lines)
 │       │   └── vite-env.d.ts       # Vite type definitions
 │       └── public/                 # Static assets
-├── fork-scripts/                    # Generic fork management scripts (accept fork dir as argument)
-│   ├── lib.sh                      # Shared shell functions for fork scripts
-│   ├── patch.sh                    # Rewrites fork exports to .ts source, creates deterministic commit
-│   ├── push.sh                     # Pushes local fork changes upstream
-│   ├── record.sh                   # Records new pins with AI Coworker conflict resolution
-│   ├── replay.sh                   # Deterministically rebuilds clone from pins
-│   ├── replay-all.sh               # Replays all *-fork/ directories
-│   ├── save.sh                     # Captures local work as a patch in pins/
-│   ├── status.sh                   # Checks if fork clone has pending custom work
-│   ├── status-all.sh               # Checks status of all *-fork/ directories
-│   ├── clean.sh                    # Removes fork clone (guarded against pending work)
-│   ├── clean-all.sh                # Cleans all *-fork/ directories
-│   ├── reset.sh                    # Resets fork to published packages (guarded)
-│   └── tsgo-filter.sh              # Wrapper around tsgo filtering fork diagnostics
-├── ccc-fork/                        # CCC fork configuration and pins
-│   ├── config.json                 # Upstream URL, fork URL, refs to merge, workspace config
-│   ├── pins/                       # Committed: manifest + counted resolutions + local patches
-│   │   ├── HEAD                    # Expected final SHA after full replay
-│   │   ├── manifest                # Base SHA + merge refs (TSV, one per line)
-│   │   ├── res-N.resolution        # Conflict resolution for merge step N (counted format)
-│   │   └── local-*.patch           # Local development patches (applied after merges)
-│   ├── ccc/                        # Gitignored: ephemeral CCC clone (auto-generated)
-│   └── README.md                   # Fork documentation
-├── reference/                      # Read-only reference repos (git-ignored, clone via `pnpm reference`)
-│   ├── contracts/                 # Rust on-chain contracts
-│   │   └── scripts/contracts/
-│   │       ├── ickb_logic/        # Type script: iCKB UDT minting/validation
-│   │       ├── limit_order/       # Lock script: peer-to-peer limit orders
-│   │       ├── owned_owner/       # Lock script: DAO withdrawal delegation
-│   │       └── utils/             # Shared: DAO helpers, C256 safe math, MetaPoint
-│   └── whitepaper/                # iCKB protocol design
-│       ├── README.md              # Complete protocol specification (~49KB)
-│       └── 2024_overview.md       # Project overview and timeline
+├── tsgo-filter.sh                   # Wrapper around tsgo filtering fork diagnostics
+├── forks/                           # Unified fork management directory
+│   ├── .gitignore                  # Track only .pin/ and config.json
+│   ├── config.json                 # Unified config, all entries keyed by name
+│   ├── .pin/                       # Committed: computed state per entry
+│   │   └── ccc/
+│   │       ├── HEAD                # Expected final SHA after full replay
+│   │       ├── manifest            # Base SHA + merge refs (TSV, one per line)
+│   │       ├── res-N.resolution    # Conflict resolution for merge step N (counted format)
+│   │       └── local-*.patch       # Local development patches (applied after merges)
+│   ├── forker/                     # Gitignored: fork management tool (self-hosting clone)
+│   ├── ccc/                        # Gitignored: CCC fork clone (auto-replayed)
+│   ├── contracts/                  # Gitignored: reference clone (Rust on-chain contracts)
+│   └── whitepaper/                 # Gitignored: reference clone (iCKB protocol design)
 ├── .planning/                      # GSD analysis documents
 │   └── codebase/
 │       ├── ARCHITECTURE.md         # Architecture and data flows
@@ -109,9 +90,6 @@
 │       ├── CONCERNS.md             # Technical debt and issues
 │       ├── STACK.md                # Technology stack
 │       └── INTEGRATIONS.md         # External services and APIs
-├── scripts/                        # Developer scripts
-│   ├── pr.sh                       # Open GitHub PR creation page
-│   └── review.sh                   # Fetch PR review comments
 ├── .github/                        # GitHub configuration
 │   └── workflows/                  # CI/CD pipeline definitions
 ├── .devcontainer/                  # Dev container configuration
@@ -201,17 +179,14 @@
 - Data flow: React Query for L1 state, @ickb/v1-core for TX building
 - Styling: TailwindCSS with inline classes
 
-**fork-scripts/:**
-- Purpose: Generic fork management scripts for record/replay mechanism
-- All scripts accept a fork directory as their first argument (e.g., `fork-scripts/record.sh ccc-fork`)
-- Called via pnpm aliases: `pnpm fork:record ccc-fork`, `pnpm fork:status ccc-fork`, etc.
-
-**ccc-fork/:**
-- Purpose: CCC fork configuration and pins for local development against unpublished upstream changes
-- `config.json`: Upstream URL, fork URL, refs to merge, workspace include/exclude
-- `pins/`: Committed directory with manifest + counted resolutions + local patches (multi-file format)
-- `ccc/`: Gitignored, ephemeral clone auto-generated by `fork-scripts/replay.sh`
-- Activation: `.pnpmfile.cjs` auto-triggers replay on `pnpm install` and redirects @ckb-ccc/* deps
+**forks/:**
+- Purpose: Unified fork management directory (managed forks and reference-only clones)
+- `config.json`: Single source of truth for all entries, keyed by name
+- `.pin/<name>/`: Committed pin state per entry (manifest + counted resolutions + local patches)
+- `forker/`: Gitignored self-hosting clone of the fork management tool
+- `ccc/`: Gitignored CCC fork clone, auto-replayed from `.pin/ccc/` on `pnpm install`
+- `contracts/`, `whitepaper/`: Gitignored reference clones, shallow-cloned on `pnpm install`
+- Activation: `.pnpmfile.cjs` bootstraps forker, replays pins, and overrides @ckb-ccc/* deps
 
 **.planning/codebase/:**
 - Purpose: GSD codebase analysis documents
@@ -332,13 +307,13 @@
 
 **Dependencies:**
 - Internal package: `"@ickb/package": "workspace:*"` in package.json
-- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `ccc-fork/ccc/` exists
+- Internal CCC (local dev): Automatic via `.pnpmfile.cjs` override when `forks/ccc/` exists
 - External package: `pnpm add @vendor/package` from workspace root
 - Catalog versions: Reference via `"@vendor/package": "catalog:"` in pnpm-workspace.yaml
 
-**reference/contracts/ (reference repo):**
+**forks/contracts/ (reference entry):**
 - Purpose: Rust on-chain smart contracts for the iCKB protocol (3 production contracts + shared utils)
-- Cloned via: `pnpm reference` (git-ignored, read-only reference)
+- Auto-cloned via `pnpm install` (git-ignored, shallow clone)
 - Key paths:
   - `scripts/contracts/ickb_logic/` - Type script: iCKB UDT minting, deposit/receipt validation, conservation law
   - `scripts/contracts/limit_order/` - Lock script: peer-to-peer limit order matching (mint/match/melt lifecycle)
@@ -349,9 +324,9 @@
 - Build: Capsule v0.10.5, Rust 2021, `no_std` + alloc-only, RISC-V target
 - Audit: Scalebit (2024-09-11)
 
-**reference/whitepaper/ (reference repo):**
+**forks/whitepaper/ (reference entry):**
 - Purpose: iCKB protocol design specification
-- Cloned via: `pnpm reference` (git-ignored, read-only reference)
+- Auto-cloned via `pnpm install` (git-ignored, shallow clone)
 - Key files:
   - `README.md` (~49KB) - Complete protocol specification: deposit/withdrawal phases, exchange rate mechanics, soft cap penalty, pooled deposit model, ancillary scripts (owned owner, limit order), deployment details, attack mitigations
   - `2024_overview.md` - Project timeline and milestones
@@ -359,25 +334,25 @@
 
 ## Special Directories
 
-**fork-scripts/:**
+**forks/forker/:**
 - Purpose: Generic fork management framework for deterministic, conflict-free builds
 - System: Record/replay mechanism using pins (manifest + counted resolutions + local patches)
-- All scripts accept a `<name>-fork` directory as their first argument
-- Commands (using `ccc-fork` as example):
-  - Record: `pnpm fork:record ccc-fork` (requires AI Coworker CLI)
-  - Status: `pnpm fork:status ccc-fork` (check for pending work in clone)
-  - Save: `pnpm fork:save ccc-fork [description]` (capture local work as patch in pins/)
-  - Push: `pnpm fork:push ccc-fork` (cherry-pick commits onto a PR branch)
-  - Rebuild: `pnpm install` (automatic when pins/ exists but clone does not)
-  - Clean (re-replay): `pnpm fork:clean ccc-fork && pnpm install` (guarded)
-  - Reset (published): `pnpm fork:reset ccc-fork && pnpm install` (guarded)
+- All scripts accept an entry name as their first argument (e.g., `ccc`)
+- Commands (using `ccc` as example):
+  - Record: `bash forks/forker/record.sh ccc` (requires AI Coworker CLI)
+  - Status: `bash forks/forker/status.sh ccc` (check for pending work in clone)
+  - Save: `bash forks/forker/save.sh ccc [description]` (capture local work as patch in .pin/)
+  - Push: `bash forks/forker/push.sh ccc` (cherry-pick commits onto a PR branch)
+  - Rebuild: `pnpm install` (automatic when .pin/ exists but clone does not)
+  - Clean (re-replay): `bash forks/forker/clean.sh ccc && pnpm install` (guarded)
+  - Reset (published): `bash forks/forker/reset.sh ccc && pnpm install` (guarded)
 
-**ccc-fork/:**
-- Purpose: CCC fork configuration for local development against unpublished upstream changes
-- `config.json`: Upstream/fork URLs, merge refs, workspace include/exclude
-- `pins/`: Committed merge instructions and conflict resolutions
-- `ccc/`: Generated from pins; auto-deleted and rebuilt on `pnpm install`
-- Activation: `.pnpmfile.cjs` hook triggers `fork-scripts/replay.sh` and overrides package resolution
+**forks/ccc/:**
+- Purpose: CCC fork clone for local development against unpublished upstream changes
+- Configuration: `forks/config.json` (unified config, entry keyed by `ccc`)
+- Pin state: `forks/.pin/ccc/` (committed manifest + counted resolutions + local patches)
+- Clone: `forks/ccc/` (gitignored, generated from pins; auto-replayed on `pnpm install`)
+- Activation: `.pnpmfile.cjs` hook triggers `forks/forker/replay.sh` and overrides package resolution
 
 **node_modules/:**
 - Purpose: Installed npm/pnpm dependencies

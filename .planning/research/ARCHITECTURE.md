@@ -532,8 +532,8 @@ The dependency graph still applies to the order of operations within each featur
 
 ## Sources
 
-- CCC `@ckb-ccc/udt` source code: `/workspaces/stack/ccc-fork/ccc/packages/udt/src/udt/index.ts` (HIGH confidence -- direct code examination)
-- CCC `@ckb-ccc/core` Transaction class: `/workspaces/stack/ccc-fork/ccc/packages/core/src/ckb/transaction.ts` (HIGH confidence -- direct code examination)
+- CCC `@ckb-ccc/udt` source code: `/workspaces/stack/forks/ccc/packages/udt/src/udt/index.ts` (HIGH confidence -- direct code examination)
+- CCC `@ckb-ccc/core` Transaction class: `/workspaces/stack/forks/ccc/packages/core/src/ckb/transaction.ts` (HIGH confidence -- direct code examination)
 - Current SmartTransaction: `/workspaces/stack/packages/utils/src/transaction.ts` (HIGH confidence -- direct code examination)
 - Current IckbUdtManager: `/workspaces/stack/packages/core/src/udt.ts` (HIGH confidence -- direct code examination)
 - Current UdtManager/UdtHandler: `/workspaces/stack/packages/utils/src/udt.ts` (HIGH confidence -- direct code examination)

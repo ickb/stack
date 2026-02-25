@@ -10,34 +10,34 @@ provides:
   - ErrorNervosDaoOutputLimit error class in CCC core
   - assertDaoOutputLimit centralized utility function in CCC core
   - completeFee safety net for DAO output limit in CCC core
-  - ccc-fork local patch mechanism for deterministic builds
+  - forks/ccc local patch mechanism for deterministic builds
 affects: [01-02, 01-03, 01-04]
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: [centralized-dao-limit-check, ccc-fork-local-patches]
+  patterns: [centralized-dao-limit-check, forks/ccc-local-patches]
 
 key-files:
   created:
-    - ccc-fork/pins/local-001-dao-output-limit.patch (now part of pins/ multi-file format)
+    - forks/.pin/ccc/local-001-dao-output-limit.patch (now part of .pin/ multi-file format)
   modified:
-    - ccc-fork/ccc/packages/core/src/ckb/transactionErrors.ts
-    - ccc-fork/ccc/packages/core/src/ckb/transaction.ts
-    - ccc-fork/record.sh
-    - ccc-fork/replay.sh
+    - forks/ccc/packages/core/src/ckb/transactionErrors.ts
+    - forks/ccc/packages/core/src/ckb/transaction.ts
+    - forks/forker/record.sh
+    - forks/forker/replay.sh
     - packages/dao/src/dao.ts
     - packages/core/src/logic.ts
     - packages/core/src/owned_owner.ts
     - packages/utils/src/transaction.ts
 
 key-decisions:
-  - "Added ccc-fork local patch mechanism (pins/local-*.patch) to support deterministic replay of CCC source modifications"
+  - "Added forks/ccc local patch mechanism (.pin/ccc/local-*.patch) to support deterministic replay of CCC source modifications"
   - "Moved client parameter before optional options in DaoManager.requestWithdrawal and DaoManager.withdraw signatures"
   - "assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost in common case"
 
 patterns-established:
-  - "Local CCC patches: pins/local-*.patch files applied after standard merge+patch cycle"
+  - "Local CCC patches: .pin/ccc/local-*.patch files applied after standard merge+patch cycle"
   - "DAO output limit: always use ccc.assertDaoOutputLimit(tx, client) instead of inline checks"
 
 requirements-completed: [SMTX-06]
@@ -64,7 +64,7 @@ completed: 2026-02-22
 - Built assertDaoOutputLimit utility function that checks both inputs and outputs for DAO type script using full Script.eq() comparison
 - Added completeFee safety net in CCC Transaction class (both return paths)
 - Replaced all 7 inline DAO output checks across 4 files with centralized utility calls
-- Added local patch mechanism to ccc-fork record/replay for deterministic builds of CCC modifications
+- Added local patch mechanism to forks/ccc record/replay for deterministic builds of CCC modifications
 
 ## Task Commits
 
@@ -74,18 +74,18 @@ Each task was committed atomically:
 2. **Task 2: Replace all 7 scattered DAO checks with assertDaoOutputLimit calls** - `2decd06` (refactor)
 
 ## Files Created/Modified
-- `ccc-fork/ccc/packages/core/src/ckb/transactionErrors.ts` - ErrorNervosDaoOutputLimit error class
-- `ccc-fork/ccc/packages/core/src/ckb/transaction.ts` - assertDaoOutputLimit utility + completeFee safety net
-- `ccc-fork/pins/` - Updated pins for deterministic replay
-- `ccc-fork/record.sh` - Added local patch preservation and application
-- `ccc-fork/replay.sh` - Added local patch application after standard merge+patch
+- `forks/ccc/packages/core/src/ckb/transactionErrors.ts` - ErrorNervosDaoOutputLimit error class
+- `forks/ccc/packages/core/src/ckb/transaction.ts` - assertDaoOutputLimit utility + completeFee safety net
+- `forks/.pin/ccc/` - Updated pins for deterministic replay
+- `forks/forker/record.sh` - Added local patch preservation and application
+- `forks/forker/replay.sh` - Added local patch application after standard merge+patch
 - `packages/dao/src/dao.ts` - DaoManager.deposit/requestWithdrawal/withdraw now async with client param
 - `packages/core/src/logic.ts` - LogicManager.deposit now async with client param
 - `packages/core/src/owned_owner.ts` - OwnedOwnerManager.requestWithdrawal/withdraw now async with client param
 - `packages/utils/src/transaction.ts` - SmartTransaction.completeFee DAO check replaced
 
 ## Decisions Made
-- Added ccc-fork local patch mechanism (pins/local-*.patch) because the existing record/replay infrastructure had no way to persist source-level CCC modifications through the clean/replay cycle. This was a necessary blocking-issue fix (Rule 3).
+- Added forks/ccc local patch mechanism (.pin/ccc/local-*.patch) because the existing record/replay infrastructure had no way to persist source-level CCC modifications through the clean/replay cycle. This was a necessary blocking-issue fix (Rule 3).
 - Placed `client: ccc.Client` parameter before optional `options` parameters in DaoManager signatures for cleaner API design (required params before optional).
 - assertDaoOutputLimit uses early return when `outputs.length <= 64` so the common-case path has zero async overhead.
 
@@ -93,11 +93,11 @@ Each task was committed atomically:
 
 ### Auto-fixed Issues
 
-**1. [Rule 3 - Blocking] Added ccc-fork local patch mechanism**
+**1. [Rule 3 - Blocking] Added forks/ccc local patch mechanism**
 - **Found during:** Task 1 (CCC core changes)
-- **Issue:** ccc-fork record/replay infrastructure had no way to persist local CCC source modifications. Running `pnpm fork:record` or `pnpm check:full` would wipe changes because replay clones fresh from upstream.
-- **Fix:** Added `pins/local-*.patch` mechanism. Modified `record.sh` to preserve local patches during re-recording and apply them after standard merge+patch. Modified `replay.sh` to apply local patches after standard replay. Both use deterministic git identity/timestamps for reproducible HEAD SHAs.
-- **Files modified:** `ccc-fork/record.sh`, `ccc-fork/replay.sh`, `ccc-fork/pins/local-001-dao-output-limit.patch`
+- **Issue:** forks/ccc record/replay infrastructure had no way to persist local CCC source modifications. Running `bash forks/forker/record.sh ccc` or `pnpm check:full` would wipe changes because replay clones fresh from upstream.
+- **Fix:** Added `.pin/<name>/local-*.patch` mechanism. Modified `record.sh` to preserve local patches during re-recording and apply them after standard merge+patch. Modified `replay.sh` to apply local patches after standard replay. Both use deterministic git identity/timestamps for reproducible HEAD SHAs.
+- **Files modified:** `forks/forker/record.sh`, `forks/forker/replay.sh`, `forks/.pin/ccc/local-001-dao-output-limit.patch`
 - **Verification:** `pnpm check:full` passes (clean wipe + replay + build cycle)
 - **Committed in:** 7081869 (Task 1 commit)
 
@@ -119,7 +119,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- FOUND: ccc-fork/pins/ (local patch integrated into multi-file format)
+- FOUND: forks/.pin/ccc/ (local patch integrated into multi-file format)
 - FOUND: 01-01-SUMMARY.md
 - FOUND: commit 7081869 (Task 1)
 - FOUND: commit 2decd06 (Task 2)

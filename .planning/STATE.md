@@ -47,10 +47,10 @@ Recent decisions affecting current work:
 - [Roadmap]: Phase 1 uses feature-slice approach -- each removal chased across all packages, build stays green after every step. SMTX-01 (all signatures to TransactionLike) completed in Phase 1, not Phase 5.
 - [Roadmap]: UDT investigation (Phase 3) is a design phase that produces a decision document; its outcome determines UdtHandler/UdtManager replacement pattern used in Phases 4-5
 - [Roadmap]: Phases 4-5 reduced in scope: Phase 4 focuses on deprecated API replacement + UDT pattern finalization in dao/order; Phase 5 focuses on IckbUdt implementation + conservation law in core
-- [Phase 1 Context]: DAO 64-output limit check contributed to CCC core via ccc-fork/, CCC PR submitted during Phase 1
+- [Phase 1 Context]: DAO 64-output limit check contributed to CCC core via forks/ccc/, CCC PR submitted during Phase 1
 - [Phase 1 Context]: getHeader()/HeaderKey removed entirely -- inline CCC client calls at read-only call sites; addHeaders() call sites in DaoManager/LogicManager push to tx.headerDeps directly
 - [Phase 1 Context]: Script comparison must always use full Script.eq(), never just codeHash comparison
-- [01-01]: Added ccc-fork local patch mechanism for deterministic replay of CCC modifications (now multi-file format: manifest + res-N.resolution + local-*.patch)
+- [01-01]: Added forks/ccc local patch mechanism for deterministic replay of CCC modifications (now multi-file format: manifest + res-N.resolution + local-*.patch)
 - [01-01]: DaoManager.requestWithdrawal/withdraw client parameter placed before optional options for cleaner API
 - [01-01]: assertDaoOutputLimit uses early return when outputs <= 64 for zero-cost common case
 - [01-02]: Moved getHeader/HeaderKey to transaction.ts as non-exported internals (deleted alongside SmartTransaction in 01-03)
@@ -80,7 +80,7 @@ None yet.
 - Resolved: CCC's `Transaction.getInputsCapacity()` handles DAO profit natively via `getInputsCapacityExtra()` -> `CellInput.getExtraCapacity()` -> `Cell.getDaoProfit()` (verified in STACK.md from CCC source). No standalone utility needed.
 - Resolved: CCC Udt `getInputsInfo()` resolves inputs to `Cell` objects (which have `outPoint`) before passing to `infoFrom()`. `infoFrom()`'s `CellAnyLike` parameter has `outPoint?: OutPointLike | null` — optional, not absent. Input cells have outPoint (for header fetches), output cells don't. Both `infoFrom` and `getInputsInfo/getOutputsInfo` are viable override points for IckbUdt (verified during Phase 3 discuss-phase).
 - Resolved: STACK.md research correction applied — `client.getHeaderByTxHash()` (non-existent) replaced with `client.getTransactionWithHeader()` in STACK.md, ROADMAP.md Phase 3 success criterion #2, and REQUIREMENTS.md UDT-02.
-- Resolved: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328"). PR #328 is now integrated into `ccc-fork/ccc` via pins; FeePayer classes available at `ccc-fork/ccc/packages/core/src/signer/feePayer/`. The separate `reference/ccc-fee-payer` clone is no longer needed.
+- Resolved: PR #328 stance updated during Phase 3 context — user decision is to design around PR #328 as target architecture (overrides research recommendation to "not wait for #328"). PR #328 is now integrated into `forks/ccc/` via pins; FeePayer classes available at `forks/ccc/packages/core/src/signer/feePayer/`. The separate ccc-fee-payer reference clone is no longer needed.
 - Resolved: `CellAny` has `capacityFree` getter (CCC transaction.ts:404-405) — 03-RESEARCH.md corrected (previously claimed `CellAny` lacked it).
 
 ## Session Continuity

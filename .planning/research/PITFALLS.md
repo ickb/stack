@@ -118,7 +118,7 @@ App migration (deferred to future milestone, not in v1 roadmap). The bot is the 
 ### Pitfall 5: Molecule Codec Byte Layout Mismatch After Refactoring
 
 **What goes wrong:**
-The TypeScript Molecule codecs (`ReceiptData`, `OwnedOwnerData`, `OrderInfo`, `Ratio`, etc.) use CCC's `@ccc.codec` decorators and `mol.Entity.Base`. These produce byte encodings that must match the Molecule schema at `reference/contracts/schemas/encoding.mol` exactly -- field order, sizes, endianness, padding. A refactoring that reorders fields in a TypeScript class, changes a field type, or inadvertently uses a different encoding for the same semantic value (e.g., `Uint32` vs `Int32` for `owned_distance`) will produce silently different byte encodings. The contracts will reject the transaction or, worse, misinterpret the data.
+The TypeScript Molecule codecs (`ReceiptData`, `OwnedOwnerData`, `OrderInfo`, `Ratio`, etc.) use CCC's `@ccc.codec` decorators and `mol.Entity.Base`. These produce byte encodings that must match the Molecule schema at `forks/contracts/schemas/encoding.mol` exactly -- field order, sizes, endianness, padding. A refactoring that reorders fields in a TypeScript class, changes a field type, or inadvertently uses a different encoding for the same semantic value (e.g., `Uint32` vs `Int32` for `owned_distance`) will produce silently different byte encodings. The contracts will reject the transaction or, worse, misinterpret the data.
 
 Key risk areas:
 - `ReceiptData { deposit_quantity: Uint32, deposit_amount: Uint64 }` = 12 bytes. TypeScript uses `@ccc.codec` with fields `depositQuantity` (u32 LE) and `depositAmount` (u64 LE). If someone renames or reorders these fields, the encoded bytes change.
@@ -176,7 +176,7 @@ Shortcuts that seem reasonable but create long-term problems.
 | Keeping SmartTransaction "just for now" while migrating apps | Apps work immediately without library changes | Two transaction models coexist, every new feature must work with both, CCC upgrades become harder | Never -- library refactor must come before app migration |
 | Passing `SmartTransaction` type through public API boundaries | Avoids rewriting callers | External consumers inherit a dependency on a non-standard Transaction subclass, blocking npm publication | Never for published packages -- internal-only is acceptable during transition |
 | Skipping codec roundtrip tests | Faster initial development | Silent byte-level bugs that only manifest on-chain | Never -- these tests are cheap to write and prevent catastrophic failures |
-| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `ccc-fork/` local builds to validate, then switch to published version) |
+| Duplicating CCC utility functions locally instead of adopting upstream | Avoids dependency on specific CCC version | Drift between local and upstream implementations, double maintenance burden | Only if CCC version is not yet released (use `forks/ccc/` local builds to validate, then switch to published version) |
 | Migrating bot without parallel Lumos fallback | Cleaner codebase, single transaction path | If CCC-based bot has subtle bugs, no way to fall back; real funds at risk | Never for mainnet -- always keep Lumos bot runnable until CCC bot is validated on testnet |
 | Removing `@ickb/lumos-utils` and `@ickb/v1-core` from workspace before all apps are migrated | Simpler dependency tree | Breaks unmigrated apps, blocks incremental migration | Only after ALL apps are migrated and verified |
 
@@ -272,11 +272,11 @@ How roadmap phases should address these pitfalls.
 ## Sources
 
 - Direct codebase analysis: `packages/utils/src/transaction.ts` (SmartTransaction, 517 lines), `packages/utils/src/udt.ts` (UdtManager, 393 lines), `packages/core/src/udt.ts` (IckbUdtManager, 213 lines)
-- CCC `Udt` class source: `ccc-fork/ccc/packages/udt/src/udt/index.ts` (1798 lines)
-- On-chain contract source: `reference/contracts/scripts/contracts/ickb_logic/src/entry.rs` (conservation law, exchange rate)
-- On-chain contract source: `reference/contracts/scripts/contracts/owned_owner/` (owner/owned pairing)
-- On-chain contract source: `reference/contracts/scripts/contracts/limit_order/` (order/master relationship)
-- Molecule schema: `reference/contracts/schemas/encoding.mol` (byte layout definitions)
+- CCC `Udt` class source: `forks/ccc/packages/udt/src/udt/index.ts` (1798 lines)
+- On-chain contract source: `forks/contracts/scripts/contracts/ickb_logic/src/entry.rs` (conservation law, exchange rate)
+- On-chain contract source: `forks/contracts/scripts/contracts/owned_owner/` (owner/owned pairing)
+- On-chain contract source: `forks/contracts/scripts/contracts/limit_order/` (order/master relationship)
+- Molecule schema: `forks/contracts/schemas/encoding.mol` (byte layout definitions)
 - NervosDAO RFC: https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md (64-output limit)
 - `.planning/PROJECT.md` -- project requirements and constraints
 - `.planning/codebase/CONCERNS.md` -- known tech debt and fragile areas

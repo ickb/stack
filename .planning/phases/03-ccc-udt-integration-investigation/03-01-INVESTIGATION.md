@@ -1,14 +1,14 @@
 # Phase 3 Plan 1: CCC Udt Integration Investigation
 
 **Investigated:** 2026-02-24
-**Source base:** ccc-fork/ccc (local fork with PR #328 integrated)
+**Source base:** forks/ccc (local fork with PR #328 integrated)
 **Purpose:** Trace CCC Udt class internals end-to-end, verify infoFrom override feasibility, resolve all open questions from 03-RESEARCH.md
 
 ## CCC Udt Method Chain Trace
 
 ### Udt Constructor
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:412-425`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:412-425`
 
 ```typescript
 constructor(
@@ -35,7 +35,7 @@ constructor(
 
 ### infoFrom (Override Target)
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:624-641`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:624-641`
 
 ```typescript
 async infoFrom(
@@ -70,7 +70,7 @@ async infoFrom(
 
 ### isUdt
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:1063-1069`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:1063-1069`
 
 ```typescript
 isUdt(cellLike: ccc.CellAnyLike) {
@@ -90,7 +90,7 @@ isUdt(cellLike: ccc.CellAnyLike) {
 
 ### balanceFromUnsafe
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:590-593`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:590-593`
 
 ```typescript
 static balanceFromUnsafe(outputData: ccc.HexLike): ccc.Num {
@@ -106,7 +106,7 @@ static balanceFromUnsafe(outputData: ccc.HexLike): ccc.Num {
 
 ### getInputsInfo
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:1099-1108`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:1099-1108`
 
 ```typescript
 async getInputsInfo(
@@ -130,7 +130,7 @@ async getInputsInfo(
 
 ### getOutputsInfo
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:1178-1184`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:1178-1184`
 
 ```typescript
 async getOutputsInfo(
@@ -150,7 +150,7 @@ async getOutputsInfo(
 
 ### completeInputsByBalance
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:1394-1446`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:1394-1446`
 
 ```typescript
 async completeInputsByBalance(
@@ -203,7 +203,7 @@ async completeInputsByBalance(
 
 ### completeInputs (Low-Level)
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:1309-1331`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:1309-1331`
 
 ```typescript
 async completeInputs<T>(
@@ -224,7 +224,7 @@ async completeInputs<T>(
 
 ### CellAnyLike type
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:313-318`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:313-318`
 
 ```typescript
 export type CellAnyLike = {
@@ -239,7 +239,7 @@ export type CellAnyLike = {
 
 ### CellAny class
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:331-457`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:331-457`
 
 ```typescript
 export class CellAny {
@@ -260,7 +260,7 @@ export class CellAny {
 
 ### CellAny.from() factory
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:374-386`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:374-386`
 
 ```typescript
 static from(cell: CellAnyLike): CellAny {
@@ -278,7 +278,7 @@ static from(cell: CellAnyLike): CellAny {
 
 ### CellAny.capacityFree
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:404-405`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:404-405`
 
 ```typescript
 get capacityFree() {
@@ -290,7 +290,7 @@ get capacityFree() {
 
 ### Cell class (extends CellAny)
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:488-503`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:488-503`
 
 ```typescript
 export class Cell extends CellAny {
@@ -309,7 +309,7 @@ export class Cell extends CellAny {
 
 ### CellInput.getCell()
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:861-872`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:861-872`
 
 ```typescript
 async getCell(client: Client): Promise<Cell> {
@@ -329,7 +329,7 @@ async getCell(client: Client): Promise<Cell> {
 
 ### tx.outputCells getter
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:1715-1728`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:1715-1728`
 
 ```typescript
 get outputCells(): Iterable<CellAny> {
@@ -362,7 +362,7 @@ get outputCells(): Iterable<CellAny> {
 
 ### UdtInfo structure
 
-**File:** `ccc-fork/ccc/packages/udt/src/udt/index.ts:218-292`
+**File:** `forks/ccc/packages/udt/src/udt/index.ts:218-292`
 
 ```typescript
 export class UdtInfo {
@@ -408,7 +408,7 @@ Key difference: `addAssign` mutates in place and returns `this`. The override mu
 
 ### client.getTransactionWithHeader()
 
-**File:** `ccc-fork/ccc/packages/core/src/client/client.ts:631-661`
+**File:** `forks/ccc/packages/core/src/client/client.ts:631-661`
 
 ```typescript
 async getTransactionWithHeader(
@@ -448,7 +448,7 @@ async getTransactionWithHeader(
 
 ### client.getCellWithHeader()
 
-**File:** `ccc-fork/ccc/packages/core/src/client/client.ts:212-234`
+**File:** `forks/ccc/packages/core/src/client/client.ts:212-234`
 
 ```typescript
 async getCellWithHeader(
@@ -476,7 +476,7 @@ This is transparent to the `infoFrom` override -- just call `client.getTransacti
 
 ### FeePayer abstract class
 
-**File:** `ccc-fork/ccc/packages/core/src/signer/feePayer/feePayer.ts:14-72`
+**File:** `forks/ccc/packages/core/src/signer/feePayer/feePayer.ts:14-72`
 
 ```typescript
 export abstract class FeePayer {
@@ -502,7 +502,7 @@ export abstract class FeePayer {
 
 ### Transaction.completeByFeePayer()
 
-**File:** `ccc-fork/ccc/packages/core/src/ckb/transaction.ts:2264-2275`
+**File:** `forks/ccc/packages/core/src/ckb/transaction.ts:2264-2275`
 
 ```typescript
 async completeByFeePayer(...feePayers: FeePayer[]): Promise<void> {
