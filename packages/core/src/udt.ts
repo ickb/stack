@@ -1,50 +1,60 @@
 import { ccc } from "@ckb-ccc/core";
+import { udt } from "@ckb-ccc/udt";
 import { ReceiptData } from "./entities.js";
 import type { DaoManager } from "@ickb/dao";
-import { UdtManager, type ExchangeRatio, type UdtHandler } from "@ickb/utils";
+import type { ExchangeRatio } from "@ickb/utils";
 
 /**
- * IckbUdtManager is a class that implements the UdtHandler interface.
- * It is responsible for handling UDT (User Defined Token) operations related to iCKB.
+ * IckbUdt extends CCC's Udt class to provide accurate multi-representation
+ * balance for iCKB tokens. The iCKB conservation law is:
+ *   Input UDT + Input Receipts = Output UDT + Input Deposits
+ *
+ * `infoFrom` values three cell types:
+ * - xUDT cells: positive balance (standard UDT)
+ * - Receipt cells: positive balance (input only, valued via ickbValue)
+ * - Deposit cells: negative balance (input only, withdrawal reduces UDT supply)
+ *
+ * Output cells without outPoint are naturally excluded from receipt/deposit
+ * processing, since only input cells (resolved by CellInput.getCell()) have outPoint.
  */
-export class IckbUdtManager extends UdtManager implements UdtHandler {
+export class IckbUdt extends udt.Udt {
+  public readonly logicCode: ccc.OutPoint;
+  public readonly logicScript: ccc.Script;
+  public readonly daoManager: DaoManager;
+
   /**
-   * Creates an instance of IckbUdtManager.
-   * @param script - The script associated with the UDT.
-   * @param cellDeps - An array of cell dependencies.
+   * Creates an instance of IckbUdt.
+   *
+   * @param code - The xUDT code cell OutPoint (passed to base Udt/Trait).
+   * @param script - The iCKB UDT type script (token identity via args).
+   * @param logicCode - The iCKB Logic code cell OutPoint.
    * @param logicScript - The iCKB Logic script.
-   * @param daoManager - The DAO manager instance.
+   * @param daoManager - The DAO manager instance for deposit cell identification.
    */
   constructor(
-    script: ccc.Script,
-    cellDeps: ccc.CellDep[],
-    public readonly logicScript: ccc.Script,
-    public readonly daoManager: DaoManager,
+    code: ccc.OutPointLike,
+    script: ccc.ScriptLike,
+    logicCode: ccc.OutPointLike,
+    logicScript: ccc.ScriptLike,
+    daoManager: DaoManager,
   ) {
-    super(script, cellDeps, "iCKB", "iCKB", 8);
+    super(code, script);
+    this.logicCode = ccc.OutPoint.from(logicCode);
+    this.logicScript = ccc.Script.from(logicScript);
+    this.daoManager = daoManager;
   }
 
   /**
-   * Calculates and returns the iCKB UDT script by combining the existing UDT script
-   * with the iCKB logic script’s hash.
+   * Computes the iCKB UDT type script from raw UDT and Logic scripts.
    *
-   * This method takes the raw UDT script (user-defined token) and the iCKB logic script,
-   * then recalculates the UDT script’s `args` field by concatenating:
-   *  1. The iCKB logic script hash
-   *  2. A fixed 4-byte little-endian length postfix (`"00000080"`)
+   * Concatenates the iCKB logic script hash with a fixed 4-byte LE length
+   * postfix ("00000080") to form the UDT type script args.
    *
-   * This is used to ensure that the UDT cell carries the correct iCKB lock logic
-   * within its arguments.
-   *
-   * @param udt - The original UDT (user-defined token) script whose codeHash and hashType
-   *   will be reused for the new script.
-   * @param ickbLogic - The iCKB logic script whose `hash()` will be prepended
-   *   to the UDT args.
-   * @returns A new `ccc.Script` instance with:
-   *   - `codeHash` and `hashType` copied from the `udt` parameter
-   *   - `args` set to the concatenation of `ickbLogic.hash()` and `"00000080"`
+   * @param udt - The raw xUDT script (codeHash and hashType reused).
+   * @param ickbLogic - The iCKB logic script (hash used for args).
+   * @returns A new Script with the computed args.
    */
-  static calculateScript(udt: ccc.Script, ickbLogic: ccc.Script): ccc.Script {
+  static typeScriptFrom(udt: ccc.Script, ickbLogic: ccc.Script): ccc.Script {
     const { codeHash, hashType } = udt;
     return new ccc.Script(
       codeHash,
@@ -54,90 +64,113 @@ export class IckbUdtManager extends UdtManager implements UdtHandler {
   }
 
   /**
-   * Asynchronously retrieves the iCKB UDT input balance (token amount and capacity)
-   * for a given transaction.
+   * Computes UDT balance info for iCKB's three cell representations.
    *
-   * @param client - The CKB client to query cell data.
-   * @param txLike - The transaction whose inputs are to be balanced.
-   * @returns A promise resolving to a tuple:
-   *   - [0]: Total iCKB UDT amount in inputs (as `ccc.FixedPoint`).
-   *   - [1]: Total capacity in UDT-related inputs (as `ccc.FixedPoint`).
+   * For each cell:
+   * - xUDT cell (type === this.script, data >= 16 bytes): adds positive balance
+   * - Receipt cell (type === logicScript, has outPoint): adds positive balance
+   *   via ickbValue of deposit amount * quantity
+   * - Deposit cell (lock === logicScript, isDeposit, has outPoint): adds negative
+   *   balance via ickbValue of free capacity (withdrawal reduces UDT supply)
+   *
+   * Cells without outPoint (output cells from getOutputsInfo) skip receipt/deposit
+   * processing -- correct by design since these only appear as inputs.
+   *
+   * @param client - CKB client for header fetches (receipt/deposit valuation).
+   * @param cells - Cell or array of cells to evaluate.
+   * @param acc - Optional accumulator for running totals.
+   * @returns UdtInfo with balance, capacity, and count.
    */
-  override async getInputsUdtBalance(
+  override async infoFrom(
     client: ccc.Client,
-    txLike: ccc.TransactionLike,
-  ): Promise<[ccc.FixedPoint, ccc.FixedPoint]> {
+    cells: ccc.CellAnyLike | ccc.CellAnyLike[],
+    acc?: udt.UdtInfoLike,
+  ): Promise<udt.UdtInfo> {
+    const info = udt.UdtInfo.from(acc).clone();
+
+    for (const cellLike of [cells].flat()) {
+      const cell = ccc.CellAny.from(cellLike);
+
+      // Standard xUDT cell -- delegate to base class pattern
+      if (this.isUdt(cell)) {
+        info.addAssign({
+          balance: udt.Udt.balanceFromUnsafe(cell.outputData),
+          capacity: cell.cellOutput.capacity,
+          count: 1,
+        });
+        continue;
+      }
+
+      // Receipt and deposit cells need outPoint for header fetch.
+      // Output cells (no outPoint) are skipped -- correct by design.
+      if (!cell.outPoint) {
+        continue;
+      }
+
+      const { type, lock } = cell.cellOutput;
+
+      // Receipt cell: type === logicScript
+      if (type && this.logicScript.eq(type)) {
+        const txWithHeader = await client.getTransactionWithHeader(
+          cell.outPoint.txHash,
+        );
+        if (!txWithHeader?.header) {
+          throw new Error("Header not found for txHash");
+        }
+
+        const { depositQuantity, depositAmount } =
+          ReceiptData.decode(cell.outputData);
+        info.addAssign({
+          balance: ickbValue(depositAmount, txWithHeader.header) *
+            depositQuantity,
+          capacity: cell.cellOutput.capacity,
+          count: 1,
+        });
+        continue;
+      }
+
+      // Deposit cell: lock === logicScript AND isDeposit
+      // Output cells are gated by the !cell.outPoint check above and never reach here.
+      if (
+        this.logicScript.eq(lock) &&
+        this.daoManager.isDeposit(cell)
+      ) {
+        const txWithHeader = await client.getTransactionWithHeader(
+          cell.outPoint.txHash,
+        );
+        if (!txWithHeader?.header) {
+          throw new Error("Header not found for txHash");
+        }
+
+        info.addAssign({
+          balance: -ickbValue(cell.capacityFree, txWithHeader.header),
+          capacity: cell.cellOutput.capacity,
+          count: 1,
+        });
+        continue;
+      }
+    }
+
+    return info;
+  }
+
+  /**
+   * Adds iCKB-specific cell dependencies to a transaction.
+   *
+   * Adds individual code deps (not dep group) for:
+   * - xUDT code cell (this.code from ssri.Trait)
+   * - iCKB Logic code cell (this.logicCode)
+   *
+   * @param txLike - The transaction to add cell deps to.
+   * @returns The transaction with cell deps added.
+   */
+  override addCellDeps(txLike: ccc.TransactionLike): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
-    return ccc.reduceAsync(
-      tx.inputs,
-      async (acc, input) => {
-        // Get all cell info
-        await input.completeExtraInfos(client);
-        const { previousOutput: outPoint, cellOutput, outputData } = input;
-
-        // Input is not well defined
-        if (!cellOutput || !outputData) {
-          throw new Error("Unable to complete input");
-        }
-
-        const { type, lock } = cellOutput;
-
-        if (!type) {
-          return acc;
-        }
-
-        const cell = new ccc.Cell(outPoint, cellOutput, outputData);
-
-        const [udtValue, capacity] = acc;
-
-        // An iCKB UDT Cell
-        if (this.isUdt(cell)) {
-          return [
-            udtValue + ccc.numFromBytes(ccc.bytesFrom(outputData).slice(0, 16)),
-            capacity + cellOutput.capacity,
-          ];
-        }
-
-        // An iCKB Receipt
-        if (this.logicScript.eq(type)) {
-          // Get header of Receipt cell
-          const txWithHeader = await client.getTransactionWithHeader(
-            outPoint.txHash,
-          );
-          if (!txWithHeader?.header) {
-            throw new Error("Header not found for txHash");
-          }
-
-          const { depositQuantity, depositAmount } =
-            ReceiptData.decode(outputData);
-
-          return [
-            udtValue +
-              ickbValue(depositAmount, txWithHeader.header) * depositQuantity,
-            capacity + cellOutput.capacity,
-          ];
-        }
-
-        // An iCKB Deposit for which the withdrawal is being requested
-        if (this.logicScript.eq(lock) && this.daoManager.isDeposit(cell)) {
-          // Get header of Deposit cell
-          const txWithHeader = await client.getTransactionWithHeader(
-            outPoint.txHash,
-          );
-          if (!txWithHeader?.header) {
-            throw new Error("Header not found for txHash");
-          }
-
-          return [
-            udtValue - ickbValue(cell.capacityFree, txWithHeader.header),
-            capacity + cellOutput.capacity,
-          ];
-        }
-
-        return acc;
-      },
-      [0n, 0n],
-    );
+    // xUDT code dep
+    tx.addCellDeps({ outPoint: this.code, depType: "code" });
+    // iCKB Logic code dep
+    tx.addCellDeps({ outPoint: this.logicCode, depType: "code" });
+    return tx;
   }
 }
 

@@ -15,8 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: SmartTransaction Removal (feature-slice)** - Delete SmartTransaction class and infrastructure across all packages; contribute 64-output DAO limit check to CCC core; migrate all method signatures to ccc.TransactionLike
 - [x] **Phase 2: CCC Utility Adoption** - Replace local utility functions that duplicate CCC equivalents across all packages; preserve iCKB-unique utilities
 - [x] **Phase 3: CCC Udt Integration Investigation** - Assess feasibility of subclassing CCC's Udt class for iCKB's multi-representation value; design header access pattern; document decision
-- [ ] **Phase 4: Deprecated CCC API Replacement** - Replace deprecated CCC API calls (`udtBalanceFrom`, etc.) with `@ckb-ccc/udt` equivalents in dao and order packages; finalize UDT handler replacement pattern based on Phase 3 findings
-- [ ] **Phase 5: @ickb/core UDT Refactor** - Implement IckbUdt class or refactor IckbUdtManager based on Phase 3 findings; preserve iCKB conservation law; replace deprecated CCC API calls in core
+- [x] **Phase 4: Deprecated CCC API Replacement** - Replace UdtHandler dependency in `@ickb/order` with plain `ccc.Script`; remove UDT cellDeps management from OrderManager; correct Phase 3 docs; verify `@ickb/dao` already clean
+- [ ] **Phase 5: @ickb/core UDT Refactor** - Implement `IckbUdt extends udt.Udt` with `infoFrom` override; remove `udtHandler` from LogicManager/OwnedOwnerManager; delete UdtHandler/UdtManager/ErrorTransactionInsufficientCoin/findUdts from utils; adopt individual code deps for IckbUdt; update SDK construction and error handling
 - [ ] **Phase 6: SDK Completion Pipeline** - Wire IckbSdk facade to CCC-native fee completion; verify estimate() and maturity() work end-to-end
 - [ ] **Phase 7: Full Stack Verification** - Verify all 5 library packages compile clean with no SmartTransaction remnants and no type errors
 
@@ -70,36 +70,39 @@ Plans:
 - [x] 03-02-PLAN.md — Write formal decision document (feasibility assessment, header access pattern, decision with rationale)
 
 ### Phase 4: Deprecated CCC API Replacement
-**Goal**: Deprecated CCC API calls are replaced with `@ckb-ccc/udt` equivalents in `@ickb/dao` and `@ickb/order`; UDT handler usage is finalized based on Phase 3 findings (method signatures and `addUdtHandlers()` removal already done in Phase 1)
-**Depends on**: Phase 1 (signatures migrated), Phase 3 (UDT decision — determines replacement pattern for UdtHandler usage)
-**Requirements**: SMTX-05, SMTX-10
+**Goal**: `UdtHandler` dependency in `@ickb/order` is replaced with plain `ccc.Script` (`udtScript`); UDT cellDeps management removed from OrderManager (caller/CCC Udt handles externally during balance completion); `@ickb/dao` verified clean (no UdtHandler, no deprecated APIs); Phase 3 decision doc corrected to match actual codebase state
+**Depends on**: Phase 1 (signatures migrated), Phase 3 (UDT decision)
+**Requirements**: SMTX-05
 **Success Criteria** (what must be TRUE):
-  1. No calls to deprecated CCC APIs (`udtBalanceFrom`, `getInputsUdtBalance`, `getOutputsUdtBalance`, `completeInputsByUdt`) exist in `@ickb/dao` or `@ickb/order`
-  2. UDT-related operations in `@ickb/dao` and `@ickb/order` use the pattern chosen in Phase 3 (direct `Udt` instance methods, refactored UdtManager, or hybrid)
-  3. Both `@ickb/dao` and `@ickb/order` compile successfully
-**Plans**: TBD
+  1. `OrderManager` constructor accepts `udtScript: ccc.Script` instead of `udtHandler: UdtHandler` -- all 9 `this.udtHandler.script` references replaced with `this.udtScript`
+  2. All `tx.addCellDeps(this.udtHandler.cellDeps)` calls removed from `mint()`, `addMatch()`, `melt()` -- UDT cellDeps are caller responsibility
+  3. `@ickb/order` no longer imports `UdtHandler` from `@ickb/utils`; no new `@ckb-ccc/udt` dependency added
+  4. `@ickb/dao` has no UdtHandler references and no deprecated CCC API calls (verified, no changes needed)
+  5. Phase 3 decision doc `03-DECISION.md` "Implementation Guidance for Phase 4" section corrected
+  6. `pnpm check:full` passes
+**Plans**: 1 plan
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [x] 04-01-PLAN.md — Replace OrderManager udtHandler with udtScript: ccc.Script, remove UDT cellDeps, update SDK caller, verify dao and decision doc clean
 
 ### Phase 5: @ickb/core UDT Refactor
-**Goal**: IckbUdt class is implemented or IckbUdtManager is refactored based on Phase 3 findings; the iCKB conservation law is preserved through the refactor; deprecated CCC API calls are replaced in `@ickb/core`; UdtHandler/UdtManager are removed from `@ickb/utils` (manager method signatures already migrated to `ccc.TransactionLike` in Phase 1)
-**Depends on**: Phase 3 (UDT decision), Phase 4 (dao+order UDT pattern finalized)
-**Requirements**: SMTX-05, SMTX-07, SMTX-10, UDT-04, UDT-05
+**Goal**: `IckbUdt extends udt.Udt` implemented in `@ickb/core` with `infoFrom` override for multi-representation balance; iCKB conservation law preserved via accurate balance reporting; `udtHandler` removed from LogicManager/OwnedOwnerManager (Phase 4 pattern); `UdtHandler`, `UdtManager`, `ErrorTransactionInsufficientCoin`, `UdtCell`, `findUdts`, `addUdts` deleted from `@ickb/utils`; IckbUdt uses individual code deps (not dep group) with overridden `addCellDeps`; SDK updated to construct `IckbUdt` and handle CCC's `ErrorUdtInsufficientCoin`. See `05-CONTEXT.md` for full decisions.
+**Depends on**: Phase 3 (UDT decision), Phase 4 (order UDT pattern finalized)
+**Requirements**: SMTX-05, SMTX-07, SMTX-10, UDT-04
 **Success Criteria** (what must be TRUE):
-  1. The iCKB conservation law (`Input UDT + Input Receipts = Output UDT + Input Deposits`) is enforced correctly in the refactored code -- multi-representation UDT balance logic survives intact
-  2. If Phase 3 concluded subclassing is viable: `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `infoFrom()` that accounts for xUDT cells, receipt cells, and deposit cells
-  3. If Phase 3 concluded subclassing is not viable: `IckbUdtManager` is refactored to work with plain `ccc.Transaction` while maintaining a compatible interface for balance calculation
-  4. `UdtHandler` interface and `UdtManager` class are removed from `@ickb/utils` (their responsibilities absorbed by the Phase 3 outcome implementation)
-  5. No calls to deprecated CCC APIs exist in `@ickb/core`
-  6. `@ickb/core` compiles successfully with no SmartTransaction imports
-**Plans**: TBD
+  1. `IckbUdt extends udt.Udt` exists in `@ickb/core` with overridden `infoFrom()` that accurately values xUDT cells (positive), receipt cells (positive, input only), and deposit cells (negative, input only) -- conservation law preserved via correct sign conventions
+  2. `IckbUdt.addCellDeps` overridden to add individual code deps (xUDT code OutPoint + iCKB Logic code OutPoint) instead of dep group
+  3. `IckbUdtManager.calculateScript` renamed to `IckbUdt.typeScriptFrom` (static, same params)
+  4. `LogicManager` and `OwnedOwnerManager` no longer take `udtHandler` parameter; `tx.addCellDeps(this.udtHandler.cellDeps)` calls removed (4 sites) -- UDT cellDeps are caller responsibility (Phase 4 pattern)
+  5. `UdtHandler` interface, `UdtManager` class, `ErrorTransactionInsufficientCoin` class, `UdtCell` interface, `findUdts`, `addUdts`, `isUdtSymbol` deleted from `@ickb/utils`
+  6. No calls to deprecated CCC APIs (`ccc.udtBalanceFrom`) exist in `@ickb/core` or `@ickb/utils`
+  7. SDK constructs `IckbUdt` instead of `IckbUdtManager`; passes `ickbUdt.script` to managers; handles `ErrorUdtInsufficientCoin` from CCC (not old `ErrorTransactionInsufficientCoin`)
+  8. `pnpm check:full` passes
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
-- [ ] 05-03: TBD
+- [ ] 05-01-PLAN.md — Implement IckbUdt extends udt.Udt in core (infoFrom, addCellDeps, typeScriptFrom); remove udtHandler from LogicManager/OwnedOwnerManager; add @ckb-ccc/udt dependency
+- [ ] 05-02-PLAN.md — Delete UDT infrastructure from utils (UdtHandler, UdtManager, ErrorTransactionInsufficientCoin, UdtCell, findUdts, addUdts); update SDK to construct IckbUdt with code OutPoints; verify pnpm check:full
 
 ### Phase 6: SDK Completion Pipeline
 **Goal**: IckbSdk facade uses CCC-native fee completion pipeline; estimate() and maturity() continue working after SmartTransaction removal
@@ -140,7 +143,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 1. SmartTransaction Removal (feature-slice) | 3/3 | Complete    | 2026-02-22 |
 | 2. CCC Utility Adoption | 1/1 | Complete    | 2026-02-23 |
 | 3. CCC Udt Integration Investigation | 2/2 | Complete    | 2026-02-24 |
-| 4. Deprecated CCC API Replacement | 0/2 | Not started | - |
-| 5. @ickb/core UDT Refactor | 0/3 | Not started | - |
+| 4. Deprecated CCC API Replacement | 1/1 | Complete    | 2026-02-26 |
+| 5. @ickb/core UDT Refactor | 0/2 | Not started | - |
 | 6. SDK Completion Pipeline | 0/2 | Not started | - |
 | 7. Full Stack Verification | 0/1 | Not started | - |

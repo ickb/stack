@@ -15,10 +15,10 @@ Requirements for initial milestone. Each maps to roadmap phases.
 - [x] **SMTX-04**: `getHeader()` function and `HeaderKey` type are removed from `@ickb/utils`; all call sites inline CCC client calls (`client.getTransactionWithHeader()`, `client.getHeaderByNumber()`); header caching handled transparently by `ccc.Client.cache`
 - [x] **SMTX-05**: UDT handler registration (`addUdtHandlers()`) is replaced by direct `Udt` instance usage or standalone utility functions
 - [x] **SMTX-06**: 64-output NervosDAO limit check is consolidated into a single utility function (currently scattered across 6 locations)
-- [ ] **SMTX-07**: `IckbUdtManager` multi-representation UDT balance logic (xUDT + receipts + deposits) survives removal intact -- conservation law `Input UDT + Input Receipts = Output UDT + Input Deposits` is preserved
+- [x] **SMTX-07**: `IckbUdtManager` multi-representation UDT balance logic (xUDT + receipts + deposits) survives removal intact -- conservation law `Input UDT + Input Receipts = Output UDT + Input Deposits` preserved via accurate balance reporting in `IckbUdt.infoFrom` (on-chain script is authoritative enforcer)
 - [ ] **SMTX-08**: `IckbSdk.estimate()` and `IckbSdk.maturity()` continue working after SmartTransaction removal
 - [ ] **SMTX-09**: All 5 library packages (`@ickb/utils`, `@ickb/dao`, `@ickb/order`, `@ickb/core`, `@ickb/sdk`) compile and pass type checking after removal
-- [ ] **SMTX-10**: Deprecated CCC API calls (`udtBalanceFrom`, `getInputsUdtBalance`, `getOutputsUdtBalance`, `completeInputsByUdt`) are replaced with `@ckb-ccc/udt` equivalents
+- [x] **SMTX-10**: Deprecated CCC API calls (`udtBalanceFrom`, `getInputsUdtBalance`, `getOutputsUdtBalance`, `completeInputsByUdt`) are replaced with `@ckb-ccc/udt` equivalents
 
 ### CCC Utility Deduplication
 
@@ -33,8 +33,8 @@ Requirements for initial milestone. Each maps to roadmap phases.
 - [x] **UDT-01**: Feasibility assessment completed: can `IckbUdt extends udt.Udt` override `infoFrom()` or `getInputsInfo()`/`getOutputsInfo()` to account for receipt cells and deposit cells alongside xUDT cells
 - [x] **UDT-02**: Header access pattern for receipt value calculation is designed -- determine whether `client.getCellWithHeader()`, `client.getTransactionWithHeader()`, or direct CCC client calls are used within the Udt override (`getHeader()` utility removed in Phase 1)
 - [x] **UDT-03**: Decision documented: subclass CCC `Udt` vs. keep custom `UdtHandler` interface vs. hybrid approach
-- [ ] **UDT-04**: If subclassing is viable, `IckbUdt` class is implemented in `@ickb/core` with multi-representation balance calculation
-- [ ] **UDT-05**: If subclassing is not viable, `IckbUdtManager` is refactored to work with plain `ccc.Transaction` (no SmartTransaction dependency) while maintaining a compatible interface
+- [x] **UDT-04**: `IckbUdt extends udt.Udt` implemented in `@ickb/core` with `infoFrom` override for multi-representation balance; individual code deps via overridden `addCellDeps`; `typeScriptFrom` static method; LogicManager/OwnedOwnerManager `udtHandler` removed
+- [x] **UDT-05**: N/A -- Phase 3 confirmed subclassing IS viable (option a chosen)
 
 ## v2 Requirements
 
@@ -85,12 +85,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SMTX-02 | Phase 1 | Complete | SmartTransaction class deleted from @ickb/utils (01-03) |
 | SMTX-03 | Phase 6 | Pending | |
 | SMTX-04 | Phase 1 | Complete | getHeader()/HeaderKey removed, CCC client calls inlined |
-| SMTX-05 | Phase 1, 4, 5 | Complete | addUdtHandlers() replaced with tx.addCellDeps(udtHandler.cellDeps) (01-03); UdtHandler/UdtManager replacement deferred to Phase 4-5 |
+| SMTX-05 | Phase 1, 4, 5 | In Progress | addUdtHandlers() replaced with tx.addCellDeps(udtHandler.cellDeps) (01-03); Phase 4: OrderManager.udtHandler→udtScript; Phase 5: LogicManager/OwnedOwnerManager.udtHandler removed + UdtHandler/UdtManager/ErrorTransactionInsufficientCoin/findUdts/UdtCell deleted from utils |
 | SMTX-06 | Phase 1 | Complete | DAO check contributed to CCC core via forks/ccc/ (01-01) |
-| SMTX-07 | Phase 5 | Pending | |
+| SMTX-07 | Phase 5 | Complete | |
 | SMTX-08 | Phase 6 | Pending | |
 | SMTX-09 | Phase 7 | Pending | |
-| SMTX-10 | Phase 4, 5 | Pending | Deprecated calls in dao/order (Phase 4) and core (Phase 5) |
+| SMTX-10 | Phase 5 | Complete | Deprecated ccc.udtBalanceFrom() calls are in utils (UdtManager) and core (IckbUdtManager), not dao/order. All replaced when UdtManager deleted and IckbUdt implemented in Phase 5 |
 | DEDUP-01 | Phase 2 | Complete | max()/min() replaced with Math.max()/Math.min() for number-typed contexts, local deleted (02-01) |
 | DEDUP-02 | Phase 2 | Complete | gcd() replaced with ccc.gcd(), local deleted (02-01) |
 | DEDUP-03 | Phase 2 | Complete | isHex() deleted, only used internally by deleted hexFrom() (02-01) |
@@ -99,8 +99,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UDT-01 | Phase 3 | Complete | |
 | UDT-02 | Phase 3 | Complete | |
 | UDT-03 | Phase 3 | Complete | |
-| UDT-04 | Phase 5 | Pending | |
-| UDT-05 | Phase 5 | Pending | |
+| UDT-04 | Phase 5 | Complete | IckbUdt with infoFrom override, code deps, typeScriptFrom, manager cleanup |
+| UDT-05 | Phase 3 | N/A | Subclassing confirmed viable — option (a) chosen |
 
 **Coverage:**
 - v1 requirements: 20 total
@@ -109,4 +109,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-24 after Phase 3 completion (UDT-01 through UDT-03 completed; Phase 3 complete)*
+*Last updated: 2026-02-26 after Phase 5 context (UDT-05 N/A — subclassing viable; SMTX-05 expanded with LogicManager/OwnedOwnerManager cleanup; UDT-04 detailed with code deps, typeScriptFrom, manager cleanup)*

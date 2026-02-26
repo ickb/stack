@@ -24,7 +24,7 @@ Clean, CCC-aligned library packages published to npm that frontends can depend o
 ### Active
 
 - [ ] Remove SmartTransaction — replace with `ccc.Transaction` + utility functions
-- [ ] Adopt CCC UDT handling — investigate subclassing `Udt` for iCKB's multi-representation value (xUDT + receipts + deposits)
+- [ ] Adopt CCC UDT handling — `IckbUdt extends udt.Udt` decided (Phase 3); managers get plain `ccc.Script` not `udt.Udt` instances (Phase 4); implementation in Phase 5
 - [ ] Systematic CCC alignment audit — replace local utilities with CCC equivalents from merged upstream PRs
 - [ ] Migrate bot app from Lumos to CCC + new packages
 - [ ] Migrate interface app from Lumos to CCC + new packages (straight swap, same UI)
@@ -73,10 +73,13 @@ Clean, CCC-aligned library packages published to npm that frontends can depend o
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Remove SmartTransaction, use ccc.Transaction directly | SmartTransaction concept abandoned by ecosystem, no adoption from CCC maintainers | — Pending |
-| Investigate CCC Udt subclassing for iCKB | iCKB value is multi-representation (xUDT + receipts + deposits); need to determine if CCC's Udt can be extended | — Pending |
+| Subclass CCC Udt for iCKB | iCKB value is multi-representation (xUDT + receipts + deposits); Phase 3 confirmed `IckbUdt extends udt.Udt` with `infoFrom` override is feasible and chosen | Decided (Phase 3) |
+| IckbUdt uses individual code deps | CCC author dislikes dep groups for breaking semantics; IckbUdt overrides `addCellDeps` with xUDT + Logic code OutPoints; other managers keep dep groups for now | Decided (Phase 5 context) |
+| Drop compressState, accept CCC errors | `completeInputsByBalance` replaces `completeUdt`; CCC's `ErrorUdtInsufficientCoin` replaces custom error class; callers format messages | Decided (Phase 5 context) |
+| Managers get plain ccc.Script only | LogicManager/OwnedOwnerManager udtHandler removed (Phase 5), matching OrderManager pattern (Phase 4); udt.Udt instance lives at SDK level | Decided (Phase 5 context) |
 | Library refactor before app migration | Clean packages first, then migrate apps on stable foundation | — Pending |
 | Interface app: straight migration only | No UI/UX redesign — swap Lumos internals for CCC packages | — Pending |
 | Track CCC PR #328 (FeePayer) | Could become CCC-native solution for what SmartTransaction does for fee completion | — Pending |
 
 ---
-*Last updated: 2026-02-20 after initialization*
+*Last updated: 2026-02-26 after Phase 5 context (code deps for IckbUdt, manager udtHandler removal, compressState dropped, CCC error adoption)*

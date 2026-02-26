@@ -260,15 +260,17 @@ This code sketch is derived from:
 
 | Current | Replacement | Package |
 |---------|-------------|---------|
-| `UdtHandler` interface | Deleted -- replaced by `udt.Udt` instance | `@ickb/utils` |
-| `UdtManager` class | Deleted -- replaced by `udt.Udt` base class | `@ickb/utils` |
-| `IckbUdtManager` class | `IckbUdt extends udt.Udt` | `@ickb/core` |
-| `DaoManager` constructor `udtHandler` param | `DaoManager` receives `udt.Udt` instance | `@ickb/dao` |
-| `OrderManager` constructor `udtHandler` param | `OrderManager` receives `udt.Udt` instance | `@ickb/order` |
-| `tx.getInputsUdtBalance()` (deprecated) | `ickbUdt.getInputsInfo(client, tx)` | All packages |
-| `tx.getOutputsUdtBalance()` (deprecated) | `ickbUdt.getOutputsInfo(client, tx)` | All packages |
-| `tx.completeInputsByUdt()` (deprecated) | `ickbUdt.completeInputsByBalance(tx, signer)` | All packages |
-| `ccc.udtBalanceFrom()` (deprecated) | `udt.Udt.balanceFromUnsafe(outputData)` | All packages |
+| `UdtHandler` interface | Deleted (Phase 5) | `@ickb/utils` |
+| `UdtManager` class | Deleted (Phase 5) | `@ickb/utils` |
+| `IckbUdtManager` class | `IckbUdt extends udt.Udt` (Phase 5) | `@ickb/core` |
+| `OrderManager` constructor `udtHandler: UdtHandler` | `udtScript: ccc.Script` (Phase 4) | `@ickb/order` |
+| `tx.addCellDeps(this.udtHandler.cellDeps)` in OrderManager | Removed -- caller/CCC Udt handles UDT cellDeps (Phase 4) | `@ickb/order` |
+| `tx.getInputsUdtBalance()` (deprecated) | `ickbUdt.getInputsInfo(client, tx)` (Phase 5) | `@ickb/core` |
+| `tx.getOutputsUdtBalance()` (deprecated) | `ickbUdt.getOutputsInfo(client, tx)` (Phase 5) | `@ickb/core` |
+| `tx.completeInputsByUdt()` (deprecated) | `ickbUdt.completeInputsByBalance(tx, signer)` (Phase 5) | `@ickb/core` |
+| `ccc.udtBalanceFrom()` (deprecated) | `udt.Udt.balanceFromUnsafe(outputData)` (Phase 5) | `@ickb/utils`, `@ickb/core` |
+
+**Note:** `DaoManager` never had a `UdtHandler` parameter -- it only manages DAO operations (deposit, withdrawal request, withdraw). No UDT-related changes needed in `@ickb/dao`.
 
 ### What CCC Features It Gains
 
@@ -366,23 +368,28 @@ The correct pattern is:
 
 ## Implementation Guidance for Phases 4-5
 
-### Phase 4: dao and order Packages (Deprecated API Replacement)
+### Phase 4: order Package (UdtHandler Replacement)
 
-Replace deprecated CCC API calls with `udt.Udt` instance methods:
+*Updated 2026-02-26 based on Phase 4 discuss-phase. See `04-CONTEXT.md` for full decisions.*
 
-| Deprecated API | Replacement | Notes |
-|----------------|-------------|-------|
-| `ccc.udtBalanceFrom(outputData)` | `udt.Udt.balanceFromUnsafe(outputData)` | Static method on Udt class |
-| `tx.getInputsUdtBalance(client)` | `ickbUdt.getInputsInfo(client, tx)` | Returns `UdtInfo` not `[FixedPoint, FixedPoint]` |
-| `tx.getOutputsUdtBalance(client)` | `ickbUdt.getOutputsInfo(client, tx)` | Returns `UdtInfo` not `[FixedPoint, FixedPoint]` |
-| `tx.completeInputsByUdt(signer, handler)` | `ickbUdt.completeInputsByBalance(tx, signer)` | On Udt instance, not Transaction |
+**Scope clarification:** `@ickb/dao` has no `UdtHandler` references and no deprecated CCC API calls -- it only manages DAO operations. No changes needed. `@ickb/order` uses `UdtHandler` for two things: the UDT type script (`.script`) and cellDeps (`.cellDeps`). Neither package calls deprecated CCC APIs like `udtBalanceFrom` directly -- those calls are in `@ickb/utils`'s `UdtManager` class (deleted in Phase 5).
 
-Manager constructor changes:
-- `DaoManager` and `OrderManager` receive a `udt.Udt` instance instead of `UdtHandler`
-- The `UdtHandler.cellDeps` pattern is replaced by `udt.addCellDeps(tx)` (inherited from `ssri.Trait`)
-- Balance queries use the Udt instance: `this.udt.getInputsInfo(client, tx)` instead of `this.udtHandler.getInputsUdtBalance(client, tx)`
+**OrderManager constructor change:**
+- `udtHandler: UdtHandler` replaced with `udtScript: ccc.Script`
+- All 9 `this.udtHandler.script` references become `this.udtScript`
+- No `@ckb-ccc/udt` dependency needed -- `ccc.Script` comes from existing `@ckb-ccc/core`
+
+**UDT cellDeps removal:**
+- Remove all `tx.addCellDeps(this.udtHandler.cellDeps)` calls from `mint()`, `addMatch()`, `melt()`
+- UDT cellDeps are caller responsibility -- CCC Udt adds its own cellDeps during balance completion
+- OrderManager keeps `tx.addCellDeps(this.cellDeps)` for its own order script deps
+- Add JSDoc note on affected methods: caller must ensure UDT cellDeps are present
+
+**Pattern established:** Managers receive plain `ccc.Script` for UDT type identification. The `udt.Udt` instance (including `IckbUdt`) lives at SDK/caller level and handles cellDeps + balance operations externally. This is simpler than initially anticipated.
 
 ### Phase 5: core Package (IckbUdt Implementation)
+
+*Updated 2026-02-26: Phase 5 discuss-phase expanded scope significantly. See `05-CONTEXT.md` in `.planning/phases/05-ickb-core-udt-refactor/` for authoritative decisions including: individual code deps (not dep group), LogicManager/OwnedOwnerManager udtHandler removal, typeScriptFrom rename, findUdts/UdtCell/ErrorTransactionInsufficientCoin deletion, CCC error adoption. The guidance below is the Phase 3 starting point; 05-CONTEXT.md supersedes it.*
 
 **Create `IckbUdt extends udt.Udt`** in `packages/core/src/udt.ts`:
 
@@ -417,7 +424,8 @@ Override:
 
 **Update SDK (`packages/sdk/src/sdk.ts`):**
 - Construct `IckbUdt` instance instead of `IckbUdtManager`
-- Pass `IckbUdt` instance to managers that need UDT operations
+- Pass `ickbUdt.script` (plain `ccc.Script`) to `OrderManager` constructor, not the `IckbUdt` instance itself
+- `IckbUdt` instance used directly by SDK for balance queries and completion -- not propagated to dao/order managers
 - Update balance queries from `[FixedPoint, FixedPoint]` tuple to `UdtInfo` destructuring
 
 ---
