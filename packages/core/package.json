@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
+    "@ckb-ccc/udt": "catalog:",
     "@ickb/dao": "workspace:*",
     "@ickb/utils": "workspace:*"
   }
