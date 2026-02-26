@@ -27,7 +27,7 @@ export class DaoManager implements ScriptDeps {
    * @param cell - The cell to check.
    * @returns True if the cell is a deposit, otherwise false.
    */
-  isDeposit(cell: ccc.Cell): boolean {
+  isDeposit(cell: ccc.CellAny): boolean {
     const {
       cellOutput: { type },
       outputData,
