@@ -1,3 +1,16 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-02-26T16:31:09.127Z"
+progress:
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 9
+  completed_plans: 9
+---
+
 # Project State
 
 ## Project Reference
@@ -5,23 +18,23 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Clean, CCC-aligned library packages published to npm that frontends can depend on to interact with iCKB contracts -- no Lumos, no abandoned abstractions, no duplicated functionality with CCC.
-**Current focus:** Phase 4: Deprecated CCC API Replacement
+**Current focus:** Phase 5: @ickb/core UDT Refactor
 
 ## Current Position
 
-Phase: 3 of 7 (CCC Udt Integration Investigation) -- COMPLETE
-Plan: 2 of 2 in current phase (all plans complete)
-Status: Phase 3 complete, ready for Phase 4
-Last activity: 2026-02-24 -- Plan 03-02 decision document complete (execute-phase)
+Phase: 5 of 7 (@ickb/core UDT Refactor) -- Complete
+Plan: 2 of 2 in current phase (all complete)
+Status: Phase 5 complete -- all UDT infrastructure deleted, SDK rewired
+Last activity: 2026-02-26 -- Completed 05-02-PLAN.md (delete UDT infra + wire SDK)
 
-Progress: [████░░░░░░] 43%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~12min
-- Total execution time: 1.2 hours
+- Total plans completed: 9
+- Average duration: ~10min
+- Total execution time: 1.5 hours
 
 **By Phase:**
 
@@ -30,10 +43,12 @@ Progress: [████░░░░░░] 43%
 | 01 | 3/3 | 52min | 17min |
 | 02 | 1/1 | 7min | 7min |
 | 03 | 2/2 | 9min | 4.5min |
+| 04 | 1/1 | 4min | 4min |
+| 05 | 2/2 | 11min | 5.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (~16min), 02-01 (~7min), 03-01 (~5min), 03-02 (~4min)
-- Trend: accelerating
+- Last 5 plans: 03-02 (~4min), 04-01 (~4min), 05-01 (~7min), 05-02 (~4min)
+- Trend: stable at ~5min per plan
 
 *Updated after each plan completion*
 
@@ -70,6 +85,31 @@ Recent decisions affecting current work:
 - [03-02]: Conservation law: accurate balance reporting only; on-chain script is authoritative enforcer; build-time validation optional later
 - [03-02]: Cell discovery boundary: infoFrom values cells already in transaction; callers (LogicManager/OwnedOwnerManager) find and add receipt/deposit cells
 - [03-02]: UdtHandler interface and UdtManager class to be deleted in Phase 5, replaced by udt.Udt type
+- [04-context]: DaoManager never had UdtHandler parameter -- @ickb/dao has no UDT-related code, no changes needed in Phase 4
+- [04-context]: OrderManager gets udtScript: ccc.Script (not udt.Udt) -- simpler pattern than Phase 3 anticipated
+- [04-context]: UDT cellDeps removed from OrderManager -- caller/CCC Udt manages externally during balance completion
+- [04-context]: No deprecated CCC API calls in dao or order packages -- those calls (ccc.udtBalanceFrom) are in utils (UdtManager) and core (IckbUdtManager), handled in Phase 5
+- [04-context]: Pattern established: managers receive plain ccc.Script for UDT type identification; udt.Udt instance lives at SDK/caller level
+- [04-context]: Phase 3 decision doc corrected (DaoManager row removed, OrderManager updated, Phase 4 guidance rewritten)
+- [04-01]: OrderManager receives ccc.Script (not udt.Udt) -- simpler than Phase 3 anticipated
+- [04-01]: UDT cellDeps are caller responsibility -- documented via JSDoc @remarks on mint/addMatch/melt
+- [05-context]: IckbUdt uses individual code deps (xUDT + Logic OutPoints), not dep group -- CCC author dislikes dep groups for breaking semantics
+- [05-context]: Override addCellDeps on IckbUdt to add both code deps; other managers keep dep groups for now (mixed coexistence OK)
+- [05-context]: Drop compressState feature -- CCC completeInputsByBalance handles completion; no wrapper needed
+- [05-context]: Accept CCC's ErrorUdtInsufficientCoin; delete ErrorTransactionInsufficientCoin from utils; callers format messages
+- [05-context]: Delete findUdts/addUdts/UdtCell/isUdtSymbol -- all internal to UdtManager, no external consumers
+- [05-context]: LogicManager/OwnedOwnerManager: remove udtHandler param + cellDeps calls (Phase 4 pattern); UdtHandler interface has zero consumers → delete
+- [05-context]: calculateScript renamed to IckbUdt.typeScriptFrom (static, same params)
+- [05-context]: ValueComponents kept as-is for Phase 5; redesign deferred (ambiguous naming in multi-UDT context)
+- [05-context]: Phase 5 handles SDK error handling updates (not deferred to Phase 6)
+- [05-context]: CCC isUdt length check (>=16 bytes) equivalent to old >=34 hex chars -- no iCKB-specific reason for old threshold
+- [05-context]: Matching bot infoFrom caching concern noted for researcher -- CCC Client.cache handles header dedup
+- [05-01]: IckbUdt.infoFrom handles three cell types: xUDT (positive), receipt (positive via ickbValue), deposit (negative via ickbValue)
+- [05-01]: addCellDeps adds individual code deps (xUDT + Logic OutPoints), not dep group
+- [05-01]: CellAny cast to Cell for daoManager.isDeposit is safe: input cells are Cell instances, output cells gated by !cell.outPoint check
+- [05-02]: IckbUdt.typeScriptFrom computes type script dynamically from raw UDT and Logic scripts (not hardcoded)
+- [05-02]: Devnet code OutPoints fallback to cellDeps[0].outPoint -- pragmatic since devnet deps are typically depType: code
+- [05-02]: ErrorTransactionInsufficientCoin had zero catch blocks across entire codebase -- clean deletion with no migration
 
 ### Pending Todos
 
@@ -85,6 +125,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-24
-Stopped at: Completed 03-02-PLAN.md (Phase 3 complete)
-Resume file: Phase 4 planning needed
+Last session: 2026-02-26
+Stopped at: Completed 05-02-PLAN.md -- Phase 5 complete
+Resume file: N/A (all phases complete)
+Next action: PR preparation or Phase 6 planning
