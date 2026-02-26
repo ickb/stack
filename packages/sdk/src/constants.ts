@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbUdtManager, LogicManager, OwnedOwnerManager } from "@ickb/core";
+import { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
 import { DaoManager } from "@ickb/dao";
 import { OrderManager } from "@ickb/order";
 import { unique, type ScriptDeps } from "@ickb/utils";
@@ -34,13 +34,16 @@ export function getConfig(
 ): {
   managers: {
     dao: DaoManager;
-    ickbUdt: IckbUdtManager;
+    ickbUdt: IckbUdt;
     logic: LogicManager;
     ownedOwner: OwnedOwnerManager;
     order: OrderManager;
   };
   bots: ccc.Script[];
 } {
+  // Capture network before d gets reassigned to ScriptDeps.
+  const network = typeof d === "string" ? d : undefined;
+
   // If deps is provided as a network string, use the pre-defined constants.
   if (d === "mainnet" || d === "testnet") {
     bots = bots.concat(
@@ -57,25 +60,49 @@ export function getConfig(
   }
 
   const dao = new DaoManager(d.dao.script, d.dao.cellDeps);
-  const ickbUdt = new IckbUdtManager(
-    d.udt.script,
-    d.udt.cellDeps,
+
+  // xUDT code cell OutPoint: use known constants for mainnet/testnet,
+  // fall back to first cellDep's outPoint for devnet.
+  const xudtCode = network
+    ? network === "mainnet"
+      ? MAINNET_XUDT_CODE
+      : TESTNET_XUDT_CODE
+    : d.udt.cellDeps[0]?.outPoint;
+  if (!xudtCode) {
+    throw new Error(
+      "devnet config missing xUDT code cell outPoint in udt.cellDeps",
+    );
+  }
+
+  // iCKB Logic code cell OutPoint: same pattern as above.
+  const logicCode = network
+    ? network === "mainnet"
+      ? MAINNET_LOGIC_CODE
+      : TESTNET_LOGIC_CODE
+    : d.logic.cellDeps[0]?.outPoint;
+  if (!logicCode) {
+    throw new Error(
+      "devnet config missing Logic code cell outPoint in logic.cellDeps",
+    );
+  }
+
+  const ickbUdt = new IckbUdt(
+    xudtCode,
+    IckbUdt.typeScriptFrom(
+      ccc.Script.from(d.udt.script),
+      ccc.Script.from(d.logic.script),
+    ),
+    logicCode,
     d.logic.script,
     dao,
   );
-  const logic = new LogicManager(
-    d.logic.script,
-    d.logic.cellDeps,
-    dao,
-    ickbUdt,
-  );
+  const logic = new LogicManager(d.logic.script, d.logic.cellDeps, dao);
   const ownedOwner = new OwnedOwnerManager(
     d.ownedOwner.script,
     d.ownedOwner.cellDeps,
     dao,
-    ickbUdt,
   );
-  const order = new OrderManager(d.order.script, d.order.cellDeps, ickbUdt);
+  const order = new OrderManager(d.order.script, d.order.cellDeps, ickbUdt.script);
 
   return {
     managers: {
@@ -114,13 +141,15 @@ const DAO = {
 };
 
 /**
- * UDT (User Defined Token) lock script information used for onchain validation.
+ * Raw xUDT type script (codeHash + hashType only).
+ * The iCKB UDT type script args are computed dynamically by
+ * IckbUdt.typeScriptFrom() from ICKB_LOGIC.
  */
 const UDT = {
   codeHash:
     "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
   hashType: "data1",
-  args: "0xb73b6ab39d79390c6de90a09c96b290c331baf1798ed6f97aed02590929734e800000080",
+  args: "0x",
 };
 
 /**
@@ -151,6 +180,46 @@ const ORDER = {
     "0x49dfb6afee5cc8ac4225aeea8cb8928b150caf3cd92fea33750683c74b13254a",
   hashType: "data1",
   args: "0x",
+};
+
+/**
+ * Mainnet xUDT code cell OutPoint.
+ * Source: forks/contracts/scripts/deployment/mainnet/deployment.toml
+ */
+const MAINNET_XUDT_CODE = {
+  txHash:
+    "0xc07844ce21b38e4b071dd0e1ee3b0e27afd8d7532491327f39b786343f558ab7",
+  index: "0x0",
+};
+
+/**
+ * Mainnet iCKB Logic code cell OutPoint.
+ * Source: forks/contracts/scripts/deployment/mainnet/deployment.toml
+ */
+const MAINNET_LOGIC_CODE = {
+  txHash:
+    "0xd7309191381f5a8a2904b8a79958a9be2752dbba6871fa193dab6aeb29dc8f44",
+  index: "0x0",
+};
+
+/**
+ * Testnet xUDT code cell OutPoint.
+ * Source: forks/contracts/scripts/deployment/testnet/deployment.toml
+ */
+const TESTNET_XUDT_CODE = {
+  txHash:
+    "0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc63a9d337f5f",
+  index: "0x0",
+};
+
+/**
+ * Testnet iCKB Logic code cell OutPoint.
+ * Source: forks/contracts/scripts/deployment/testnet/deployment.toml
+ */
+const TESTNET_LOGIC_CODE = {
+  txHash:
+    "0x9ac989b3355764f76cdce02c69dedb819fdfbcbda49a7db1a2c9facdfdb9a7fe",
+  index: "0x0",
 };
 
 /**

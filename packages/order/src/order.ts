@@ -4,7 +4,6 @@ import {
   defaultFindCellsLimit,
   type ExchangeRatio,
   type ScriptDeps,
-  type UdtHandler,
   type ValueComponents,
 } from "@ickb/utils";
 import { Info, OrderData, Ratio, Relative, type InfoLike } from "./entities.js";
@@ -19,12 +18,12 @@ export class OrderManager implements ScriptDeps {
    *
    * @param script - The order script.
    * @param cellDeps - The cell dependencies for the order.
-   * @param udtHandler - The handler for UDT (User Defined Token).
+   * @param udtScript - The UDT (User Defined Token) type script.
    */
   constructor(
     public readonly script: ccc.Script,
     public readonly cellDeps: ccc.CellDep[],
-    public readonly udtHandler: UdtHandler,
+    public readonly udtScript: ccc.Script,
   ) {}
 
   /**
@@ -39,7 +38,7 @@ export class OrderManager implements ScriptDeps {
   isOrder(cell: ccc.Cell): boolean {
     return (
       cell.cellOutput.lock.eq(this.script) &&
-      Boolean(cell.cellOutput.type?.eq(this.udtHandler.script))
+      Boolean(cell.cellOutput.type?.eq(this.udtScript))
     );
   }
 
@@ -156,9 +155,11 @@ export class OrderManager implements ScriptDeps {
    *
    * The method performs the following:
    * - Creates order data using the provided amounts and order information.
-   * - Adds required cell dependencies and UDT handlers to the transaction.
+   * - Adds required cell dependencies to the transaction.
    * - Appends the order cell to the outputs with the UDT data and adjusts the CKB capacity.
    * - Appends a corresponding master cell immediately after the order cell.
+   *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
    *
    * @param txLike - The transaction to which the order will be added.
    * @param lock - The lock script for the master cell.
@@ -187,13 +188,12 @@ export class OrderManager implements ScriptDeps {
     });
 
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     // Append order cell to Outputs
     const position = tx.addOutput(
       {
         lock: this.script,
-        type: this.udtHandler.script,
+        type: this.udtScript,
       },
       data.toBytes(),
     );
@@ -215,6 +215,8 @@ export class OrderManager implements ScriptDeps {
    * - Adds the original order as an input.
    * - Creates an updated output with adjusted CKB capacity and UDT data.
    *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
+   *
    * @param txLike - The transaction to which the matches will be added.
    * @param match - The match object containing partial matches.
    */
@@ -226,14 +228,13 @@ export class OrderManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const { order, ckbOut, udtOut } of partials) {
       tx.addInput(order.cell);
       tx.addOutput(
         {
           lock: this.script,
-          type: this.udtHandler.script,
+          type: this.udtScript,
           capacity: ckbOut,
         },
         OrderData.from({
@@ -495,6 +496,8 @@ export class OrderManager implements ScriptDeps {
    *
    * @param txLike - The transaction to which the groups will be added.
    * @param groups - The array of OrderGroup instances to melt.
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
+   *
    * @param options - Optional parameters:
    *    @param options.isFulfilledOnly - If true, only groups with fulfilled orders will be melted.
    *
@@ -516,7 +519,6 @@ export class OrderManager implements ScriptDeps {
       return tx;
     }
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const group of groups) {
       tx.addInput(group.order.cell);
@@ -615,7 +617,7 @@ export class OrderManager implements ScriptDeps {
    * Finds simple orders on the blockchain.
    *
    * Queries cells whose lock script equals the order script and whose type script
-   * matches the UDT handler's script, returning only valid {@link OrderCell} instances.
+   * matches the UDT type script, returning only valid {@link OrderCell} instances.
    *
    * @param client – The client used to interact with the blockchain.
    * @param limit – Maximum cells to scan per findCells batch.
@@ -632,7 +634,7 @@ export class OrderManager implements ScriptDeps {
         script: this.script,
         scriptType: "lock",
         filter: {
-          script: this.udtHandler.script,
+          script: this.udtScript,
         },
         scriptSearchMode: "exact",
         withData: true,

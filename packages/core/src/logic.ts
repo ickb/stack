@@ -3,7 +3,6 @@ import { DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
   type ScriptDeps,
-  type UdtHandler,
   unique,
 } from "@ickb/utils";
 import {
@@ -25,13 +24,11 @@ export class LogicManager implements ScriptDeps {
    * @param script - The script associated with the manager.
    * @param cellDeps - The cell dependencies for the manager.
    * @param daoManager - The DAO manager for handling deposits and receipts.
-   * @param udtHandler - The handler for User Defined Tokens (UDTs).
    */
   constructor(
     public readonly script: ccc.Script,
     public readonly cellDeps: ccc.CellDep[],
     public readonly daoManager: DaoManager,
-    public readonly udtHandler: UdtHandler,
   ) {}
 
   /**
@@ -63,6 +60,9 @@ export class LogicManager implements ScriptDeps {
    * @param depositQuantity - The quantity of deposits.
    * @param depositAmount - The amount of each deposit.
    * @param lock - The lock script for the output receipt cell.
+   *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction
+   * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   async deposit(
     txLike: ccc.TransactionLike,
@@ -85,7 +85,6 @@ export class LogicManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const capacities = Array.from(
       { length: depositQuantity },
@@ -111,6 +110,9 @@ export class LogicManager implements ScriptDeps {
    *
    * @param txLike - The transaction to add the receipts to.
    * @param receipts - The receipts to add to the transaction.
+   *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction
+   * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   completeDeposit(
     txLike: ccc.TransactionLike,
@@ -122,7 +124,6 @@ export class LogicManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     for (const r of receipts) {
       const hash = r.header.header.hash;

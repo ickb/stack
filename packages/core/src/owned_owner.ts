@@ -3,7 +3,6 @@ import {
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
-  type UdtHandler,
 } from "@ickb/utils";
 import { daoCellFrom, DaoManager } from "@ickb/dao";
 import { OwnerData } from "./entities.js";
@@ -20,13 +19,11 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param script - The script associated with the OwnedOwner script.
    * @param cellDeps - The cell dependencies for the OwnedOwner script.
    * @param daoManager - The DAO manager for handling withdrawal requests.
-   * @param udtHandler - The handler for User Defined Tokens (UDTs).
    */
   constructor(
     public readonly script: ccc.Script,
     public readonly cellDeps: ccc.CellDep[],
     public readonly daoManager: DaoManager,
-    public readonly udtHandler: UdtHandler,
   ) {}
 
   /**
@@ -64,6 +61,9 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param options - Optional parameters for the withdrawal request.
    * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
    * @returns void
+   *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction
+   * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   async requestWithdrawal(
     txLike: ccc.TransactionLike,
@@ -92,7 +92,6 @@ export class OwnedOwnerManager implements ScriptDeps {
       options,
     );
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const outputData = OwnerData.encode({ ownedDistance: -deposits.length });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -118,6 +117,9 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param options - Optional parameters for the withdrawal process.
    * @param options.isReadyOnly - Whether to only process ready withdrawal groups (default: false).
    * @returns void
+   *
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction
+   * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   async withdraw(
     txLike: ccc.TransactionLike,
@@ -137,7 +139,6 @@ export class OwnedOwnerManager implements ScriptDeps {
     }
 
     tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.udtHandler.cellDeps);
 
     const requests = withdrawalGroups.map((g) => g.owned);
     tx = await this.daoManager.withdraw(tx, requests, client);
