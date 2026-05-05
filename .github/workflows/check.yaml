@@ -1,6 +1,9 @@
 name: Check (lint, build and test)
 
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+    branches: [master]
 
 jobs:
   build:
