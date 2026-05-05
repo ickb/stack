@@ -1,58 +1,58 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import Connector from "./Connector.tsx";
-import { getIckbScriptConfigs } from "@ickb/v1-core";
-import { chainConfigFrom } from "@ickb/lumos-utils";
-import { prefetchData } from "./queries.ts";
 import { ccc, JoyId } from "@ckb-ccc/ccc";
+import { getConfig, IckbSdk } from "@ickb/sdk";
+import Connector from "./Connector.tsx";
+import type { RootConfig } from "./utils.ts";
 import appIcon from "/favicon.png?url";
+
 const appName = "iCKB DApp";
 
-const testnetRootConfigPromise = chainConfigFrom(
-  "testnet",
-  "https://testnet.ckb.dev/",
-  true,
-  getIckbScriptConfigs,
-).then((chainConfig) => {
-  const rootConfig = {
-    ...chainConfig,
+function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
+  const { managers, bots } = getConfig(chain);
+
+  return {
+    chain,
     queryClient: new QueryClient(),
-    cccClient: new ccc.ClientPublicTestnet(),
+    cccClient:
+      chain === "mainnet"
+        ? new ccc.ClientPublicMainnet()
+        : new ccc.ClientPublicTestnet(),
+    sdk: new IckbSdk(
+      managers.ownedOwner,
+      managers.logic,
+      managers.order,
+      bots,
+    ),
+    managers: {
+      ickbUdt: managers.ickbUdt,
+      logic: managers.logic,
+      ownedOwner: managers.ownedOwner,
+      order: managers.order,
+    },
   };
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  prefetchData(rootConfig);
-  return rootConfig;
-});
+}
 
-const mainnetRootConfigPromise = chainConfigFrom(
-  "mainnet",
-  "https://mainnet.ckb.dev/",
-  true,
-  getIckbScriptConfigs,
-).then((chainConfig) => {
-  const rootConfig = {
-    ...chainConfig,
-    queryClient: new QueryClient(),
-    cccClient: new ccc.ClientPublicMainnet(),
-  };
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  prefetchData(rootConfig);
-  return rootConfig;
-});
+const rootConfigs = {
+  mainnet: createRootConfig("mainnet"),
+  testnet: createRootConfig("testnet"),
+};
 
-export async function startApp(wallet_chain: string): Promise<void> {
-  const [walletName, chain] = wallet_chain.split("_");
-  const rootConfig = await (chain === "mainnet"
-    ? mainnetRootConfigPromise
-    : testnetRootConfigPromise);
+export function startApp(walletChain: string): void {
+  const [walletName, chain] = walletChain.split("_");
+  const rootConfig = chain === "mainnet" ? rootConfigs.mainnet : rootConfigs.testnet;
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const signer = JoyId.getJoyIdSigners(
+  const signerInfo = JoyId.getJoyIdSigners(
     rootConfig.cccClient,
     appName,
     ["https://ickb.org", appIcon].join(""),
-  ).find((i) => i.name === "CKB")!.signer;
+  ).find((candidate) => candidate.name === "CKB");
+  if (!signerInfo) {
+    throw new Error("CKB signer not found. Please ensure it is enabled in your JoyID app.");
+  }
+
+  const { signer } = signerInfo;
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const rootElement = document.getElementById("app")!;

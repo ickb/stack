@@ -1,40 +1,13 @@
+import { ccc } from "@ckb-ccc/ccc";
+import type { WithdrawalGroup } from "@ickb/core";
+import { type OrderGroup } from "@ickb/order";
+import { type SystemState } from "@ickb/sdk";
+import { collect, sum } from "@ickb/utils";
 import {
-  encodeToAddress,
-  type TransactionSkeletonType,
-} from "@ckb-lumos/helpers";
-import { queryOptions } from "@tanstack/react-query";
-import {
-  CKB,
-  I8Header,
-  calculateTxFee,
-  capacitySifter,
-  ckbDelta,
-  hex,
-  i8ScriptPadding,
-  lockExpanderFrom,
-  maturityDiscriminator,
-  max,
-  shuffle,
-  since,
-  txSize,
-} from "@ickb/lumos-utils";
-import {
-  ickbDelta,
-  ickbLogicScript,
-  ickbPoolSifter,
-  ickbSifter,
-  limitOrderScript,
-  orderSifter,
-  ownedOwnerScript,
-} from "@ickb/v1-core";
-import {
-  txInfoPadding,
-  type RootConfig,
-  type TxInfo,
-  type WalletConfig,
-} from "./utils.ts";
-import { addChange, base as add, convert } from "./transaction.ts";
-import type { Cell, Header, HexNumber, Transaction } from "@ckb-lumos/base";
+  buildTransactionPreview,
+  type TransactionContext,
+} from "./transaction.ts";
+import { type TxInfo, type WalletConfig } from "./utils.ts";
 
 export interface L1StateType {
   ckbNative: bigint;
@@ -43,201 +16,130 @@ export interface L1StateType {
   ickbBalance: bigint;
   ckbAvailable: bigint;
   ickbAvailable: bigint;
-  tipHeader: Readonly<I8Header>;
-  txBuilder: (isCkb2Udt: boolean, amount: bigint) => TxInfo;
+  tipTimestamp: bigint;
+  system: SystemState;
+  stateId: string;
+  txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
   hasMatchable: boolean;
+}
+
+export function l1StateQueryKey(
+  walletConfig: WalletConfig,
+): readonly [WalletConfig["chain"], string, "l1State"] {
+  return [walletConfig.chain, walletConfig.address, "l1State"] as const;
 }
 
 export function l1StateOptions(
   walletConfig: WalletConfig,
   isFrozen: boolean,
-): ReturnType<
-  typeof queryOptions<L1StateType, unknown, L1StateType, string[]>
-> {
-  return queryOptions({
-    retry: true,
+): {
+  retry: number;
+  refetchInterval: (context: { state: { data?: L1StateType } }) => number;
+  staleTime: number;
+  queryKey: readonly [WalletConfig["chain"], string, "l1State"];
+  queryFn: () => Promise<L1StateType>;
+  enabled: boolean;
+} {
+  return {
+    retry: 2,
     refetchInterval: ({ state }) => 60000 * (state.data?.hasMatchable ? 1 : 10),
     staleTime: 10000,
-    queryKey: [walletConfig.chain, walletConfig.address, "l1State"],
-    queryFn: async (): Promise<L1StateType> => {
-      return getL1State(walletConfig).catch((e: unknown) => {
-        console.log(e);
-        throw e;
-      });
-    },
-    placeholderData: {
-      ckbNative: 6n * CKB * CKB,
-      ickbNative: 3n * CKB * CKB,
-      ckbAvailable: 6n * CKB * CKB,
-      ickbAvailable: 3n * CKB * CKB,
-      ckbBalance: 6n * CKB * CKB,
-      ickbBalance: 3n * CKB * CKB,
-      tipHeader: headerPlaceholder,
-      txBuilder: () => txInfoPadding,
-      hasMatchable: false,
-    },
+    queryKey: l1StateQueryKey(walletConfig),
+    queryFn: async () => await getL1State(walletConfig),
     enabled: !isFrozen,
-  });
+  };
 }
 
-async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
-  const { rpc, config, expander, getTxSizeOverhead } = walletConfig;
-
-  const mixedCells = await getMixedCells(walletConfig);
-
-  // Prefetch feeRate and tipHeader
-  const feeRatePromise = rpc.getFeeRate(61n);
-  const tipHeaderPromise = rpc.getTipHeader();
-
-  // Prefetch headers
-  const wanted = new Set<HexNumber>();
-  const deferredGetHeader = (blockNumber: string): Readonly<I8Header> => {
-    wanted.add(blockNumber);
-    return headerPlaceholder;
-  };
-  ickbSifter(mixedCells, expander, deferredGetHeader, config);
-  const headersPromise = getHeadersByNumber(wanted, walletConfig);
-
-  // Prefetch txs outputs
-  const wantedTxsOutputs = new Set<string>();
-  const deferredGetTxsOutputs = (txHash: string): never[] => {
-    wantedTxsOutputs.add(txHash);
-    return [];
-  };
-  orderSifter(mixedCells, expander, deferredGetTxsOutputs, config);
-  const txsOutputsPromise = getTxsOutputs(wantedTxsOutputs, walletConfig);
-
-  // Do potentially costly operations
-  const { capacities, notCapacities } = capacitySifter(mixedCells, expander);
-
-  // Await for headers
-  const headers = await headersPromise;
-
-  // Sift through iCKB related cells
-  const {
-    udts,
-    receipts,
-    withdrawalRequestGroups,
-    ickbPool: pool,
-    notIckbs,
-  } = ickbSifter(
-    notCapacities,
-    expander,
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    (blockNumber) => headers.get(blockNumber)!,
-    config,
+export async function getL1State(
+  walletConfig: WalletConfig,
+): Promise<L1StateType> {
+  const sdkState = await walletConfig.sdk.getL1State(
+    walletConfig.cccClient,
+    walletConfig.accountLocks,
   );
-
-  const tipHeader = I8Header.from(await tipHeaderPromise);
-  // Partition between ripe and non ripe withdrawal requests
-  const { mature, notMature } = maturityDiscriminator(
-    withdrawalRequestGroups,
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    (g) => g.ownedWithdrawalRequest.cellOutput.type![since],
-    tipHeader,
-  );
-
-  // min lock: 1/4 epoch (~ 1 hour)
-  const minLock = { length: 4, index: 1, number: 0 };
-  // Sort the ickbPool based on the tip header
-  let ickbPool = ickbPoolSifter(pool, tipHeader, minLock);
-  // Take a random convenient subset of max 40 deposits
-  if (ickbPool.length > 40) {
-    const n = max(Math.round(ickbPool.length / 180), 40);
-    ickbPool = shuffle(ickbPool.slice(0, n).map((d, i) => ({ d, i })))
-      .slice(0, 40)
-      .sort((a, b) => a.i - b.i)
-      .map((a) => a.d);
-  }
-
-  // Await for txsOutputs
-  const txsOutputs = await txsOutputsPromise;
-
-  // Sift through Orders
-  const { myOrders } = orderSifter(
-    notIckbs,
-    expander,
-    (txHash) => txsOutputs.get(txHash) ?? [],
-    config,
-  );
-
-  const matchableOrders = [];
-  const completedOrders = [];
-  for (const o of myOrders) {
-    const { isMatchable, isDualRatio } = o.info;
-    if (isMatchable && !isDualRatio) {
-      matchableOrders.push(o);
-    } else {
-      // Withdraw completed orders and dual ratio orders
-      completedOrders.push(o);
-    }
-  }
-
-  const hasMatchable = matchableOrders.length > 0;
-
-  const txHasNonNative =
-    mature.length > 0 || receipts.length > 0 || completedOrders.length > 0;
-
-  // Calculate native balances
-  let txInfo = add({ capacities, udts, tipHeader });
-  const ckbNative = ckbDelta(txInfo.tx, config);
-  const ickbNative = ickbDelta(txInfo.tx, config);
-
-  // Calculate Available balances and baseTx
-  txInfo = add({
-    txInfo,
-    myOrders: completedOrders,
-    receipts,
-    wrGroups: mature,
-    tipHeader,
-  });
-  const txSizeOverheadPromise = getTxSizeOverhead(txInfo.tx);
-  const ckbAvailable = ckbDelta(txInfo.tx, config);
-  const ickbAvailable = ickbDelta(txInfo.tx, config);
-
-  // Calculate full balances
-  const fullTxInfo = add({
-    txInfo,
-    myOrders: matchableOrders,
-    wrGroups: notMature,
-    tipHeader,
-  });
-  const ckbBalance = ckbDelta(fullTxInfo.tx, config);
-  const ickbBalance = ickbDelta(fullTxInfo.tx, config);
-  txInfo = Object.freeze({
-    ...txInfo,
-    estimatedMaturity: fullTxInfo.estimatedMaturity,
-  });
-
-  const [txSizeOverhead, feeRate] = await Promise.all([
-    txSizeOverheadPromise,
-    feeRatePromise,
+  const { system, user } = sdkState;
+  const [accountCells, receipts, withdrawalGroups] = await Promise.all([
+    getAccountCells(walletConfig),
+    collect(
+      walletConfig.managers.logic.findReceipts(
+        walletConfig.cccClient,
+        walletConfig.accountLocks,
+        { onChain: true },
+      ),
+    ),
+    collect(
+      walletConfig.managers.ownedOwner.findWithdrawalGroups(
+        walletConfig.cccClient,
+        walletConfig.accountLocks,
+        { onChain: true, tip: system.tip },
+      ),
+    ),
   ]);
 
-  const calculateFee = (tx: TransactionSkeletonType): bigint =>
-    calculateTxFee(txSize(tx) + txSizeOverhead, feeRate);
+  const capacityCells = accountCells.filter((cell) => cell.cellOutput.type === undefined);
+  const udtCells = accountCells.filter((cell) =>
+    walletConfig.managers.ickbUdt.isUdt(cell),
+  );
+  const nativeUdtInfo = await walletConfig.managers.ickbUdt.infoFrom(
+    walletConfig.cccClient,
+    udtCells,
+  );
 
-  const txBuilder = (isCkb2Udt: boolean, amount: bigint): TxInfo => {
-    if (amount > 0n) {
-      return convert(
-        txInfo,
-        isCkb2Udt,
-        amount,
-        ickbPool,
-        tipHeader,
-        calculateFee,
-        walletConfig,
-      );
+  const ckbNative =
+    sum(0n, ...capacityCells.map((cell) => cell.cellOutput.capacity)) +
+    nativeUdtInfo.capacity;
+  const ickbNative = nativeUdtInfo.balance;
+
+  const readyWithdrawals: WithdrawalGroup[] = [];
+  const pendingWithdrawals: WithdrawalGroup[] = [];
+  for (const group of withdrawalGroups) {
+    if (group.owned.isReady) {
+      readyWithdrawals.push(group);
+    } else {
+      pendingWithdrawals.push(group);
     }
+  }
 
-    if (txHasNonNative) {
-      return addChange(txInfo, calculateFee, walletConfig);
+  const availableOrders: OrderGroup[] = [];
+  const pendingOrders: OrderGroup[] = [];
+  for (const group of user.orders) {
+    if (group.order.isDualRatio() || !group.order.isMatchable()) {
+      availableOrders.push(group);
+    } else {
+      pendingOrders.push(group);
     }
+  }
 
-    return Object.freeze({
-      ...txInfo,
-      error: "Nothing to do for now",
-    });
+  const ckbAvailable =
+    ckbNative +
+    sumCkb(receipts) +
+    sumCkb(readyWithdrawals) +
+    sumCkb(availableOrders);
+  const ickbAvailable =
+    ickbNative +
+    sumUdt(receipts) +
+    sumUdt(readyWithdrawals) +
+    sumUdt(availableOrders);
+
+  const ckbBalance = ckbAvailable + sumCkb(pendingWithdrawals) + sumCkb(pendingOrders);
+  const ickbBalance = ickbAvailable + sumUdt(pendingWithdrawals) + sumUdt(pendingOrders);
+
+  const estimatedMaturity = [
+    system.tip.timestamp,
+    ...pendingWithdrawals.map((group) => group.owned.maturity.toUnix(system.tip)),
+    ...pendingOrders
+      .map((group) => group.order.maturity)
+      .filter((maturity): maturity is bigint => maturity !== undefined),
+  ].reduce((best, maturity) => (best > maturity ? best : maturity));
+
+  const txContext: TransactionContext = {
+    system,
+    receipts,
+    readyWithdrawals,
+    availableOrders,
+    ckbAvailable,
+    ickbAvailable,
+    estimatedMaturity,
   };
 
   return {
@@ -247,149 +149,48 @@ async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
     ickbBalance,
     ckbAvailable,
     ickbAvailable,
-    tipHeader,
-    txBuilder,
-    hasMatchable,
+    tipTimestamp: system.tip.timestamp,
+    system,
+    stateId: [
+      walletConfig.chain,
+      String(system.tip.timestamp),
+      String(receipts.length),
+      String(readyWithdrawals.length),
+      String(pendingWithdrawals.length),
+      String(availableOrders.length),
+      String(pendingOrders.length),
+    ].join(":"),
+    txBuilder: (isCkb2Udt, amount) =>
+      buildTransactionPreview(txContext, isCkb2Udt, amount, walletConfig),
+    hasMatchable: pendingOrders.length > 0,
   };
 }
 
-export async function prefetchData(rootConfig: RootConfig): Promise<void> {
-  const { queryClient } = rootConfig;
-  const dummy: WalletConfig = {
-    ...rootConfig,
-    accountLocks: [i8ScriptPadding],
-    address: encodeToAddress(i8ScriptPadding, rootConfig),
-    expander: lockExpanderFrom(i8ScriptPadding),
-    getTxSizeOverhead: () => Promise.resolve(0),
-    sendSigned: () => Promise.resolve("0x0"),
-  };
+async function getAccountCells(walletConfig: WalletConfig): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
 
-  return queryClient.prefetchQuery(l1StateOptions(dummy, false));
-}
-
-async function getMixedCells(
-  walletConfig: WalletConfig,
-): Promise<readonly Cell[]> {
-  const { accountLocks, config, rpc } = walletConfig;
-
-  return Object.freeze(
-    (
-      await Promise.all(
-        [
-          ...accountLocks,
-          ickbLogicScript(config),
-          ownedOwnerScript(config),
-          limitOrderScript(config),
-        ].map((lock) => rpc.getCellsByLock(lock, "desc", "max")),
-      )
-    ).flat(),
-  );
-}
-
-async function getTxsOutputs(
-  txHashes: Set<string>,
-  walletConfig: WalletConfig,
-): Promise<Readonly<Map<string, readonly Cell[]>>> {
-  const { chain, rpc, queryClient } = walletConfig;
-
-  const known: Readonly<Map<HexNumber, readonly Cell[]>> =
-    queryClient.getQueryData([chain, "txsOutputs"]) ?? Object.freeze(new Map());
-
-  const result = new Map<string, readonly Cell[]>();
-  const batch = rpc.createBatchRequest();
-  for (const txHash of txHashes) {
-    const outputs = known.get(txHash);
-    if (outputs !== undefined) {
-      result.set(txHash, outputs);
-      continue;
+  for (const lock of walletConfig.accountLocks) {
+    for await (const cell of walletConfig.cccClient.findCellsOnChain(
+      {
+        script: lock,
+        scriptType: "lock",
+        scriptSearchMode: "exact",
+        withData: true,
+      },
+      "asc",
+      400,
+    )) {
+      cells.push(cell);
     }
-    batch.add("getTransaction", txHash);
   }
 
-  if (batch.length === 0) {
-    return known;
-  }
-
-  for (const tx of (await batch.exec()).map(
-    ({ transaction: tx }: { transaction: Transaction }) => tx,
-  )) {
-    result.set(
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      tx.hash!,
-      Object.freeze(
-        tx.outputs.map(({ lock, type, capacity }, index) =>
-          Object.freeze({
-            cellOutput: Object.freeze({
-              lock: Object.freeze(lock),
-              type: Object.freeze(type),
-              capacity: Object.freeze(capacity),
-            }),
-            data: Object.freeze(tx.outputsData[index] ?? "0x"),
-            outPoint: Object.freeze({
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              txHash: tx.hash!,
-              index: hex(index),
-            }),
-          } as Cell),
-        ),
-      ),
-    );
-  }
-
-  const frozenResult = Object.freeze(result);
-  queryClient.setQueryData([chain, "txsOutputs"], frozenResult);
-  return frozenResult;
+  return cells;
 }
 
-async function getHeadersByNumber(
-  wanted: Set<HexNumber>,
-  walletConfig: WalletConfig,
-): Promise<Readonly<Map<string, Readonly<I8Header>>>> {
-  const { chain, rpc, queryClient } = walletConfig;
-
-  const known: Readonly<Map<HexNumber, Readonly<I8Header>>> =
-    queryClient.getQueryData([chain, "headers"]) ?? Object.freeze(new Map());
-
-  const result = new Map<HexNumber, Readonly<I8Header>>();
-  const batch = rpc.createBatchRequest();
-  for (const blockNum of wanted) {
-    const h = known.get(blockNum);
-    if (h !== undefined) {
-      result.set(blockNum, h);
-      continue;
-    }
-    batch.add("getHeaderByNumber", blockNum);
-  }
-
-  if (batch.length === 0) {
-    return known;
-  }
-
-  for (const h of (await batch.exec()) as Header[]) {
-    result.set(h.number, I8Header.from(h));
-  }
-
-  const frozenResult = Object.freeze(result);
-  queryClient.setQueryData([chain, "headers"], frozenResult);
-
-  return frozenResult;
+function sumCkb(items: { ckbValue: bigint }[]): bigint {
+  return sum(0n, ...items.map((item) => item.ckbValue));
 }
 
-export const headerPlaceholder = I8Header.from({
-  compactTarget: "0x1a08a97e",
-  parentHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  transactionsRoot:
-    "0x31bf3fdf4bc16d6ea195dbae808e2b9a8eca6941d589f6959b1d070d51ac28f7",
-  proposalsHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  extraHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  dao: "0x8874337e541ea12e0000c16ff286230029bfa3320800000000710b00c0fefe06",
-  epoch: "0x0",
-  hash: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5",
-  nonce: "0x0",
-  number: "0x0",
-  timestamp: "0x16e70e6985c",
-  version: "0x0",
-});
+function sumUdt(items: { udtValue: bigint }[]): bigint {
+  return sum(0n, ...items.map((item) => item.udtValue));
+}

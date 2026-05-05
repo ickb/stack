@@ -1,13 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { I8Script, i8ScriptPadding, scriptEq } from "@ickb/lumos-utils";
-import type { Cell } from "@ckb-lumos/base";
-import type { RootConfig } from "./utils.ts";
-import { EmptyDashboard } from "./Dashboard.tsx";
-import App from "./App.tsx";
-import Progress from "./Progress.tsx";
-import { Transaction, type Signer } from "@ckb-ccc/ccc";
-import type { TransactionSkeletonType } from "@ckb-lumos/helpers";
+import { ccc } from "@ckb-ccc/ccc";
 import type { JSX } from "react/jsx-runtime";
+import App from "./App.tsx";
+import { EmptyDashboard } from "./Dashboard.tsx";
+import Progress from "./Progress.tsx";
+import { errorMessageOf, type RootConfig } from "./utils.ts";
 
 export default function Connector({
   rootConfig,
@@ -15,7 +12,7 @@ export default function Connector({
   walletName,
 }: {
   rootConfig: RootConfig;
-  signer: Signer;
+  signer: ccc.Signer;
   walletName: string;
 }): JSX.Element {
   const {
@@ -23,81 +20,47 @@ export default function Connector({
     error,
     data: walletConfig,
   } = useQuery({
-    queryKey: ["walletConfig"],
+    queryKey: [rootConfig.chain, "walletConfig"],
     queryFn: async () => {
       if (!(await signer.isConnected())) {
         await signer.connect();
       }
 
-      const [address, recommendedAddressObj, addressObjs] = await Promise.all([
-        signer.getRecommendedAddress(),
+      const [recommendedAddressObj, addressObjs] = await Promise.all([
         signer.getRecommendedAddressObj(),
         signer.getAddressObjs(),
       ]);
 
-      let accountLocks = [recommendedAddressObj, ...addressObjs].map((s) =>
-        I8Script.from({
-          ...i8ScriptPadding,
-          // eslint-disable-next-line @typescript-eslint/no-misused-spread
-          ...s.script,
-        }),
+      let accountLocks = [recommendedAddressObj, ...addressObjs].map(({ script }) =>
+        ccc.Script.from(script),
       );
-      // Keep unique account locks, preferred one is the first one
+
+      // Keep unique account locks, preferred one is the first one.
       accountLocks = [
-        ...new Map(
-          accountLocks.map((s) => [`${s.args}-${s.hashType}-${s.codeHash}`, s]),
-        ).values(),
+        ...new Map(accountLocks.map((script) => [script.toHex(), script])).values(),
       ];
-
-      const expander = (c: Cell): Readonly<I8Script> | undefined => {
-        const lock = c.cellOutput.lock;
-        for (const s of accountLocks) {
-          if (scriptEq(lock, s)) {
-            return s;
-          }
-        }
-      };
-
-      const getTxSizeOverhead = async (
-        tx: TransactionSkeletonType,
-      ): Promise<number> => {
-        const t0 = Transaction.fromLumosSkeleton(tx);
-        const size0 = t0.toBytes().length; // +4
-        const t1 = await signer.prepareTransaction(t0);
-        const size1 = t1.toBytes().length; // +4
-        return size1 - size0;
-      };
-
-      const sendSigned = async (
-        tx: TransactionSkeletonType,
-      ): Promise<`0x${string}`> =>
-        signer.sendTransaction(Transaction.fromLumosSkeleton(tx));
 
       return {
         ...rootConfig,
-        address,
+        signer,
+        address: recommendedAddressObj.toString(),
         accountLocks,
-        expander,
-        getTxSizeOverhead,
-        sendSigned,
+        primaryLock: accountLocks[0] ?? ccc.Script.from(recommendedAddressObj.script),
       };
     },
   });
 
-  if (isPending)
+  if (isPending) {
     return (
       <>
         <EmptyDashboard />
         <Progress>Waiting for {walletName} authorization...</Progress>
       </>
     );
+  }
 
   if (error) {
-    setTimeout(function () {
-      console.log(error);
-      location.reload();
-    }, 10000);
-    return <p>Unable to connect to {walletName} ⚠️</p>;
+    return <p>Unable to connect to {walletName}: {errorMessageOf(error)}</p>;
   }
 
   return <App {...{ walletConfig }} />;

@@ -1,291 +1,344 @@
-import { type TransactionSkeletonType } from "@ckb-lumos/helpers";
+import { ccc } from "@ckb-ccc/ccc";
 import {
-  addCells,
-  addCkbChange,
-  binarySearch,
-  since,
-  type I8Cell,
-  type I8Header,
-} from "@ickb/lumos-utils";
+  ICKB_DEPOSIT_CAP,
+  convert,
+  type IckbDepositCell,
+  type ReceiptCell,
+  type WithdrawalGroup,
+} from "@ickb/core";
+import { type OrderGroup } from "@ickb/order";
+import { collect, sum } from "@ickb/utils";
+import { IckbSdk, type SystemState } from "@ickb/sdk";
 import {
-  addIckbUdtChange,
-  addOwnedWithdrawalRequestsChange,
-  addReceiptDepositsChange,
-  addWithdrawalRequestGroups,
-  ickb2Ckb,
-  ickbDeposit,
-  ickbRequestWithdrawalFrom,
-  orderMelt,
-  orderMint,
-  type ExtendedDeposit,
-  type MyOrder,
-  type OrderRatio,
-} from "@ickb/v1-core";
-import {
-  calculateOrderRatio,
-  calculateOrderResult,
-  maxEpoch,
-  orderMaturityEstimate,
+  errorMessageOf,
+  hasTransactionActivity,
   txInfoPadding,
   type TxInfo,
   type WalletConfig,
 } from "./utils.ts";
-import { ckbSoftCapPerDeposit } from "@ickb/v1-core";
-import {
-  parseAbsoluteEpochSince,
-  parseEpoch,
-  type EpochSinceValue,
-} from "@ckb-lumos/base/lib/since";
-import { headerPlaceholder } from "./queries.ts";
 
-export function base({
-  txInfo = txInfoPadding,
-  capacities = new Array<I8Cell>(),
-  udts = new Array<I8Cell>(),
-  receipts = new Array<I8Cell>(),
-  wrGroups = new Array<
-    Readonly<{
-      ownedWithdrawalRequest: I8Cell;
-      owner: I8Cell;
-    }>
-  >(),
-  myOrders = new Array<MyOrder>(),
-  tipHeader = headerPlaceholder,
-}): Readonly<ConversionAttempt> {
-  let { tx } = txInfo;
-  const estimatedMaturities = [
-    txInfo.estimatedMaturity,
-    parseEpoch(tipHeader.epoch),
-  ];
+const MAX_DIRECT_DEPOSITS = 60;
+const MAX_WITHDRAWAL_REQUESTS = 30;
 
-  if (myOrders.length > 0) {
-    tx = orderMelt(tx, myOrders);
-    for (const { info: i } of myOrders) {
-      if (!i.isMatchable || i.isDualRatio) {
-        continue;
+export interface TransactionContext {
+  system: SystemState;
+  receipts: ReceiptCell[];
+  readyWithdrawals: WithdrawalGroup[];
+  availableOrders: OrderGroup[];
+  ckbAvailable: bigint;
+  ickbAvailable: bigint;
+  estimatedMaturity: bigint;
+}
+
+export async function buildTransactionPreview(
+  context: TransactionContext,
+  isCkb2Udt: boolean,
+  amount: bigint,
+  walletConfig: WalletConfig,
+): Promise<TxInfo> {
+  try {
+    if (amount < 0n) {
+      return txInfoWithError("Amount must be positive", context.estimatedMaturity);
+    }
+
+    if (isCkb2Udt && amount > context.ckbAvailable) {
+      return txInfoWithError("Not enough CKB", context.estimatedMaturity);
+    }
+
+    if (!isCkb2Udt && amount > context.ickbAvailable) {
+      return txInfoWithError("Not enough iCKB", context.estimatedMaturity);
+    }
+
+    const baseTx = await buildBaseTransaction(context, walletConfig);
+
+    if (amount === 0n) {
+      if (!hasTransactionActivity(baseTx)) {
+        return txInfoWithError("Nothing to do for now", context.estimatedMaturity);
       }
-      const isCkb2Udt = i.isCkb2UdtMatchable;
-      estimatedMaturities.push(
-        orderMaturityEstimate(
-          isCkb2Udt,
-          isCkb2Udt ? i.ckbUnoccupied : i.udtAmount,
-          tipHeader,
-        ),
+
+      return await finalizeTransaction(
+        baseTx,
+        context.estimatedMaturity,
+        walletConfig,
       );
     }
-  }
-  const cc = [capacities, udts, receipts].flat();
-  if (cc.length > 0) {
-    tx = addCells(tx, "append", cc, []);
-  }
-  if (wrGroups.length > 0) {
-    tx = addWithdrawalRequestGroups(tx, wrGroups);
-    estimatedMaturities.push(
-      ...wrGroups.map((g) =>
-        parseAbsoluteEpochSince(
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          g.ownedWithdrawalRequest.cellOutput.type![since],
-        ),
-      ),
-    );
-  }
 
-  const estimatedMaturity = Object.freeze(maxEpoch(estimatedMaturities));
-  return Object.freeze({ ...txInfo, tx, estimatedMaturity });
+    return await (isCkb2Udt
+      ? buildCkbToIckbPreview(baseTx, context, amount, walletConfig)
+      : buildIckbToCkbPreview(baseTx, context, amount, walletConfig));
+  } catch (error) {
+    return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
+  }
 }
 
-type MyExtendedDeposit = ExtendedDeposit & { ickbCumulative: bigint };
-
-export interface ConversionAttempt {
-  tx: TransactionSkeletonType;
-  error: string;
-  fee: bigint;
-  estimatedMaturity: EpochSinceValue;
-}
-
-export function convert(
-  txInfo: TxInfo,
-  isCkb2Udt: boolean,
-  amount: bigint,
-  deposits: readonly ExtendedDeposit[],
-  tipHeader: I8Header,
-  calculateFee: (tx: TransactionSkeletonType) => bigint,
+async function buildBaseTransaction(
+  context: TransactionContext,
   walletConfig: WalletConfig,
-): Readonly<ConversionAttempt> {
-  if (txInfo.error !== "") {
-    return txInfo;
+): Promise<ccc.Transaction> {
+  let tx = ccc.Transaction.default();
+
+  if (context.availableOrders.length > 0) {
+    tx = walletConfig.sdk.collect(tx, context.availableOrders);
   }
 
-  const ickbPool: MyExtendedDeposit[] = [];
-  if (!isCkb2Udt) {
-    // Filter deposits
-    let ickbCumulative = 0n;
-    for (const d of deposits) {
-      const c = ickbCumulative + d.ickbValue;
-      if (c > amount) {
-        continue;
-      }
-      ickbCumulative = c;
-      ickbPool.push(Object.freeze({ ...d, ickbCumulative }));
-      if (ickbPool.length >= 30) {
-        break;
-      }
-    }
-  }
-  Object.freeze(ickbPool);
-
-  const ratio = calculateOrderRatio(isCkb2Udt, tipHeader);
-  const depositAmount = ckbSoftCapPerDeposit(tipHeader);
-  const N = isCkb2Udt ? Number(amount / depositAmount) : ickbPool.length;
-  const txCache = Array<TxInfo | undefined>(N);
-  const attempt = (n: number): Readonly<ConversionAttempt> => {
-    n = N - n;
-    return (txCache[n] =
-      txCache[n] ??
-      convertAttempt(
-        n,
-        isCkb2Udt,
-        amount,
-        txInfo,
-        ratio,
-        depositAmount,
-        ickbPool,
-        tipHeader,
-        calculateFee,
-        walletConfig,
-      ));
-  };
-  return Object.freeze(
-    attempt(binarySearch(N, (n) => attempt(n).error === "")),
-  );
-}
-
-function convertAttempt(
-  quantity: number,
-  isCkb2Udt: boolean,
-  amount: bigint,
-  txInfo: TxInfo,
-  ratio: OrderRatio,
-  depositAmount: bigint,
-  ickbPool: readonly MyExtendedDeposit[],
-  tipHeader: I8Header,
-  calculateFee: (tx: TransactionSkeletonType) => bigint,
-  walletConfig: WalletConfig,
-): ConversionAttempt {
-  let { tx } = txInfo;
-  const { accountLocks, config } = walletConfig;
-  const estimatedMaturities = [txInfo.estimatedMaturity];
-  if (quantity > 0) {
-    if (isCkb2Udt) {
-      amount -= depositAmount * BigInt(quantity);
-      if (amount < 0n) {
-        return {
-          ...txInfo,
-          error: "Too many Deposits respectfully to the amount",
-        };
-      }
-      tx = ickbDeposit(tx, quantity, depositAmount, config);
-      tx = addReceiptDepositsChange(tx, accountLocks[0], config);
-    } else {
-      if (ickbPool.length < quantity) {
-        return {
-          ...txInfo,
-          error: "Not enough Deposits to withdraw from",
-        };
-      }
-      amount -= ickbPool[quantity - 1].ickbCumulative;
-      if (amount < 0n) {
-        return {
-          ...txInfo,
-          error: "Too many Withdrawal Requests respectfully to the amount",
-        };
-      }
-      ickbPool = ickbPool.slice(0, quantity);
-      const deposits = ickbPool.map((d) => d.deposit);
-      tx = ickbRequestWithdrawalFrom(tx, deposits, config);
-      tx = addOwnedWithdrawalRequestsChange(tx, accountLocks[0], config);
-      estimatedMaturities.push(...ickbPool.map((d) => d.estimatedMaturity));
-    }
+  if (context.receipts.length > 0) {
+    tx = walletConfig.managers.logic.completeDeposit(tx, context.receipts);
   }
 
-  let orderFee = 0n;
-  if (amount > 0n) {
-    tx = orderMint(
+  if (context.readyWithdrawals.length > 0) {
+    tx = await walletConfig.managers.ownedOwner.withdraw(
       tx,
-      accountLocks[0],
-      config,
-      isCkb2Udt ? amount : undefined,
-      isCkb2Udt ? undefined : amount,
-      isCkb2Udt ? ratio : undefined,
-      isCkb2Udt ? undefined : ratio,
-    );
-
-    const convertedAmount = calculateOrderResult(isCkb2Udt, amount, ratio);
-    orderFee += isCkb2Udt
-      ? amount - ickb2Ckb(convertedAmount, tipHeader)
-      : ickb2Ckb(amount, tipHeader) - convertedAmount;
-
-    estimatedMaturities.push(
-      orderMaturityEstimate(isCkb2Udt, amount, tipHeader),
+      context.readyWithdrawals,
+      walletConfig.cccClient,
     );
   }
 
-  const estimatedMaturity = maxEpoch(estimatedMaturities);
-
-  txInfo = addChange(
-    { ...txInfo, tx, estimatedMaturity, fee: txInfo.fee + orderFee },
-    calculateFee,
-    walletConfig,
-  );
-
-  // Check that order provides enough fee to the bot for being matched
-  if (!txInfo.error && 10n * (txInfo.fee - orderFee) > orderFee) {
-    if (isCkb2Udt) {
-      return { ...txInfo, error: "CKB amount too small" };
-    } else {
-      return { ...txInfo, error: "iCKB amount too small" };
-    }
-  }
-  return txInfo;
+  return tx;
 }
 
-export function addChange(
-  txInfo: TxInfo,
-  calculateFee: (tx: TransactionSkeletonType) => bigint,
+async function buildCkbToIckbPreview(
+  baseTx: ccc.Transaction,
+  context: TransactionContext,
+  amount: bigint,
   walletConfig: WalletConfig,
-): Readonly<{
-  tx: TransactionSkeletonType;
-  error: string;
-  fee: bigint;
-  estimatedMaturity: EpochSinceValue;
-}> {
-  const { accountLocks, config } = walletConfig;
-  const { tx: intermediateTx, freeIckbUdt: freeIckb } = addIckbUdtChange(
-    txInfo.tx,
-    accountLocks[0],
-    config,
+): Promise<TxInfo> {
+  const depositAmount = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
+  const depositQuotient = depositAmount === 0n ? 0n : amount / depositAmount;
+  const maxDeposits =
+    depositQuotient > BigInt(MAX_DIRECT_DEPOSITS)
+      ? MAX_DIRECT_DEPOSITS
+      : Number(depositQuotient);
+
+  return findBestAttempt(maxDeposits, async (depositCount) => {
+    try {
+      let tx = baseTx.clone();
+      let estimatedMaturity = context.estimatedMaturity;
+
+      if (depositCount > 0) {
+        tx = await walletConfig.managers.logic.deposit(
+          tx,
+          depositCount,
+          depositAmount,
+          walletConfig.primaryLock,
+          walletConfig.cccClient,
+        );
+      }
+
+      const remainder = amount - depositAmount * BigInt(depositCount);
+      if (remainder > 0n) {
+        const amounts = { ckbValue: remainder, udtValue: 0n };
+        const estimate = IckbSdk.estimate(true, amounts, context.system);
+        if (estimate.maturity === undefined) {
+          return txInfoWithError("Amount too small to build a transaction", estimatedMaturity);
+        }
+
+        estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
+        tx = await walletConfig.sdk.request(
+          tx,
+          walletConfig.primaryLock,
+          estimate.info,
+          amounts,
+        );
+      }
+
+      return await finalizeTransaction(tx, estimatedMaturity, walletConfig);
+    } catch (error) {
+      return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
+    }
+  });
+}
+
+async function buildIckbToCkbPreview(
+  baseTx: ccc.Transaction,
+  context: TransactionContext,
+  amount: bigint,
+  walletConfig: WalletConfig,
+): Promise<TxInfo> {
+  const deposits = await collect(
+    walletConfig.managers.logic.findDeposits(walletConfig.cccClient, {
+      onChain: true,
+      tip: context.system.tip,
+    }),
   );
-  const { tx, txFee, freeCkb } = addCkbChange(
-    intermediateTx,
-    accountLocks[0],
-    calculateFee,
-    config,
+
+  const candidates = deposits
+    .filter((deposit) => deposit.isReady)
+    .sort((left, right) => compareBigInt(
+      left.maturity.toUnix(context.system.tip),
+      right.maturity.toUnix(context.system.tip),
+    ));
+
+  return findBestAttempt(
+    Math.min(candidates.length, MAX_WITHDRAWAL_REQUESTS),
+    async (withdrawalCount) => {
+      try {
+        let tx = ccc.Transaction.default();
+        let estimatedMaturity = context.estimatedMaturity;
+        let remainder = amount;
+
+        if (withdrawalCount > 0) {
+          const selectedDeposits = selectReadyDeposits(
+            candidates,
+            withdrawalCount,
+            remainder,
+          );
+          if (selectedDeposits.length !== withdrawalCount) {
+            return txInfoWithError(
+              "Not enough ready deposits to convert now",
+              estimatedMaturity,
+            );
+          }
+
+          tx = await walletConfig.managers.ownedOwner.requestWithdrawal(
+            tx,
+            selectedDeposits,
+            walletConfig.primaryLock,
+            walletConfig.cccClient,
+          );
+
+          remainder -= sum(0n, ...selectedDeposits.map((deposit) => deposit.udtValue));
+          for (const deposit of selectedDeposits) {
+            estimatedMaturity = maxMaturity(
+              estimatedMaturity,
+              deposit.maturity.toUnix(context.system.tip),
+            );
+          }
+        }
+
+        tx = appendTransaction(tx, baseTx);
+
+        if (remainder > 0n) {
+          const amounts = { ckbValue: 0n, udtValue: remainder };
+          const estimate = IckbSdk.estimate(false, amounts, context.system);
+          if (estimate.maturity === undefined) {
+            return txInfoWithError("Amount too small to build a transaction", estimatedMaturity);
+          }
+
+          estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
+          tx = await walletConfig.sdk.request(
+            tx,
+            walletConfig.primaryLock,
+            estimate.info,
+            amounts,
+          );
+        }
+
+        return await finalizeTransaction(tx, estimatedMaturity, walletConfig);
+      } catch (error) {
+        return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
+      }
+    },
   );
+}
 
-  const fee = txInfo.fee + txFee;
-  txInfo = { ...txInfo, tx, fee };
+async function finalizeTransaction(
+  tx: ccc.Transaction,
+  estimatedMaturity: bigint,
+  walletConfig: WalletConfig,
+): Promise<TxInfo> {
+  tx = await walletConfig.managers.ickbUdt.completeBy(tx, walletConfig.signer);
+  await tx.completeFeeBy(walletConfig.signer);
 
-  if (freeCkb < 0n) {
-    return { ...txInfo, error: "Not enough CKB" };
+  if (await ccc.isDaoOutputLimitExceeded(tx, walletConfig.cccClient)) {
+    throw new Error(
+      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
+    );
   }
 
-  if (freeIckb < 0n) {
-    return { ...txInfo, error: "Not enough iCKB" };
+  return Object.freeze({
+    tx,
+    error: "",
+    fee: await tx.getFee(walletConfig.cccClient),
+    estimatedMaturity,
+  });
+}
+
+async function findBestAttempt(
+  maxQuantity: number,
+  build: (quantity: number) => Promise<TxInfo>,
+): Promise<TxInfo> {
+  let firstError: TxInfo | undefined;
+  for (let quantity = maxQuantity; quantity >= 0; quantity -= 1) {
+    const attempt = await build(quantity);
+    if (attempt.error === "") {
+      return attempt;
+    }
+
+    firstError ??= attempt;
   }
 
-  if (tx.outputs.size > 64) {
-    return { ...txInfo, error: "More than 64 output cells" };
+  return firstError ?? txInfoWithError("Nothing to do for now", 0n);
+}
+
+function selectReadyDeposits(
+  deposits: IckbDepositCell[],
+  wanted: number,
+  amount: bigint,
+): IckbDepositCell[] {
+  const selected: IckbDepositCell[] = [];
+  let cumulative = 0n;
+
+  for (const deposit of deposits) {
+    if (selected.length >= wanted) {
+      break;
+    }
+
+    if (cumulative + deposit.udtValue > amount) {
+      continue;
+    }
+
+    cumulative += deposit.udtValue;
+    selected.push(deposit);
   }
 
-  return txInfo;
+  return selected;
+}
+
+function appendTransaction(
+  target: ccc.Transaction,
+  source: ccc.Transaction,
+): ccc.Transaction {
+  for (const cellDep of source.cellDeps) {
+    target.addCellDeps(cellDep);
+  }
+
+  for (const headerDep of source.headerDeps) {
+    if (!target.headerDeps.some((hash) => hash === headerDep)) {
+      target.headerDeps.push(headerDep);
+    }
+  }
+
+  for (const input of source.inputs) {
+    target.inputs.push(input);
+  }
+
+  target.outputs.push(...source.outputs);
+  target.outputsData.push(...source.outputsData);
+  target.witnesses.push(...source.witnesses);
+
+  return target;
+}
+
+function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
+  return Object.freeze({
+    ...txInfoPadding,
+    error,
+    estimatedMaturity,
+  });
+}
+
+function compareBigInt(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function maxMaturity(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
 }

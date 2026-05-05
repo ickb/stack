@@ -24,6 +24,7 @@ export function Dashboard({
     <a
       href={href}
       target="_blank"
+      rel="noopener noreferrer"
       className="flex flex-row items-center justify-center rounded-2xl py-4 font-medium"
     >
       <span className="mr-2 text-5xl text-amber-400">{"{"}</span>

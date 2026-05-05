@@ -1,20 +1,21 @@
 import { useDeferredValue, useState, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Action from "./Action.tsx";
 import { Dashboard } from "./Dashboard.tsx";
 import Form from "./Form.tsx";
-import {
-  type WalletConfig,
-  symbol2Direction,
-  direction2Symbol,
-  toText,
-  sanitize,
-  toBigInt,
-  reservedCKB,
-} from "./utils.ts";
-import { headerPlaceholder, l1StateOptions } from "./queries.ts";
-import Action from "./Action.tsx";
 import Progress from "./Progress.tsx";
-import { max } from "@ickb/lumos-utils";
+import {
+  getL1State,
+  l1StateQueryKey,
+  type L1StateType,
+} from "./queries.ts";
+import {
+  direction2Symbol,
+  errorMessageOf,
+  symbol2Direction,
+  toBigInt,
+  type WalletConfig,
+} from "./utils.ts";
 
 export default function App({
   walletConfig,
@@ -23,68 +24,88 @@ export default function App({
 }): JSX.Element {
   const [isFrozen, freeze] = useState(false);
   const [rawText, setRawText] = useState(direction2Symbol(true));
-  const symbol = rawText[0];
+  const l1StateQuery = useQuery<L1StateType>({
+    retry: 2,
+    refetchInterval: ({ state }) => 60000 * (state.data?.hasMatchable ? 1 : 10),
+    staleTime: 10000,
+    queryKey: l1StateQueryKey(walletConfig),
+    queryFn: async () => await getL1State(walletConfig),
+    enabled: !isFrozen,
+  });
+  const symbol = rawText.startsWith("I") ? "I" : "C";
   const isCkb2Udt = symbol2Direction(symbol);
-  let text = sanitize(rawText);
-  let amount = toBigInt(text);
-
-  const {
-    ckbNative,
-    ickbNative,
-    ckbAvailable,
-    ickbAvailable,
-    ckbBalance,
-    ickbBalance,
-    tipHeader,
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  } = useQuery(l1StateOptions(walletConfig, isFrozen)).data!;
-
-  const conversionCap = isCkb2Udt
-    ? max(ckbAvailable - reservedCKB, 0n)
-    : ickbAvailable;
-  if (amount > conversionCap) {
-    amount = conversionCap;
-    text = toText(conversionCap);
-  }
-
+  const amount = toBigInt(rawText.slice(1));
   const formReset = (): void => {
     setRawText(direction2Symbol(isCkb2Udt));
   };
-  const deferredActionParams = useDeferredValue({
+  const deferredActionParams = useDeferredValue<{
+    isCkb2Udt: boolean;
+    amount: bigint;
+    freeze: (value: boolean) => void;
+    formReset: () => void;
+    walletConfig: WalletConfig;
+    l1State: L1StateType | undefined;
+    isStateFetching: boolean;
+    isStateStale: boolean;
+  }>({
     isCkb2Udt,
     amount,
     freeze,
     formReset,
     walletConfig,
+    l1State: l1StateQuery.data,
+    isStateFetching: l1StateQuery.isFetching,
+    isStateStale: l1StateQuery.isStale,
   });
 
-  if (tipHeader === headerPlaceholder) {
+  if (l1StateQuery.data === undefined) {
+    if (l1StateQuery.isError) {
+      return (
+        <>
+          <Dashboard {...{ walletConfig }} />
+          <Progress isDone={true}>
+            <span className="flex flex-col gap-4 text-center">
+              <span>Unable to load live iCKB state: {errorMessageOf(l1StateQuery.error)}</span>
+              <button
+                className="cursor-pointer rounded border-2 border-amber-400 px-4 py-2 font-bold tracking-wider text-amber-400 uppercase"
+                onClick={() => {
+                  void l1StateQuery.refetch();
+                }}
+              >
+                Retry
+              </button>
+            </span>
+          </Progress>
+        </>
+      );
+    }
+
     return (
       <>
         <Dashboard {...{ walletConfig }} />
-        <Progress>
-          Downloading the latest L1 Cell data, just for you. Hang tight!
-        </Progress>
+        <Progress>Loading live iCKB state...</Progress>
       </>
     );
   }
+
+  const l1State = l1StateQuery.data;
 
   return (
     <>
       <Dashboard {...{ walletConfig }} />
       <Form
         {...{
-          rawText: symbol + text,
+          rawText,
           setRawText,
           amount,
-          tipHeader,
+          system: l1State.system,
           isFrozen,
-          ckbNative,
-          ickbNative,
-          ckbAvailable,
-          ickbAvailable,
-          ckbBalance,
-          ickbBalance,
+          ckbNative: l1State.ckbNative,
+          ickbNative: l1State.ickbNative,
+          ckbAvailable: l1State.ckbAvailable,
+          ickbAvailable: l1State.ickbAvailable,
+          ckbBalance: l1State.ckbBalance,
+          ickbBalance: l1State.ickbBalance,
         }}
       />
       <Action {...deferredActionParams} />
