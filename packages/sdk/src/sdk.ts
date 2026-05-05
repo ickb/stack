@@ -24,6 +24,10 @@ import { PoolSnapshot } from "./codec.js";
 
 /**
  * SDK for managing iCKB operations.
+ *
+ * This facade intentionally stops at protocol-specific transaction construction.
+ * Callers complete iCKB UDT balance first, then CKB capacity and fees, with
+ * CCC-native APIs before sending the transaction.
  */
 export class IckbSdk {
   /**
@@ -208,7 +212,7 @@ export class IckbSdk {
    *
    * The method performs the following operations:
    * - Creates order cell data using provided amounts and order information.
-   * - Adds required cell dependencies and UDT handlers to the transaction.
+   * - Adds the required order cell dependencies to the transaction.
    * - Appends the order cell to the transaction outputs.
    *
    * @param txLike - The transaction to which the order cell is added.
@@ -218,7 +222,11 @@ export class IckbSdk {
    *    - ckbValue: The CKB amount (may include an internal surplus).
    *    - udtValue: The UDT amount.
    *
-   * @returns A Promise resolving to void.
+   * @returns A Promise resolving to the updated transaction.
+   *
+   * @remarks The returned transaction is not finalized. Callers own the
+   * completion pipeline: finish iCKB UDT completion first, then CKB
+   * capacity/fee completion, before sending.
    */
   async request(
     txLike: ccc.TransactionLike,
@@ -247,7 +255,11 @@ export class IckbSdk {
    * @param options - Optional parameters:
    *    - isFulfilledOnly: If true, only order groups with fully or partially fulfilled orders are processed.
    *
-   * @returns void
+   * @returns The updated transaction.
+   *
+   * @remarks The returned transaction is not finalized. Callers own the
+   * completion pipeline: finish iCKB UDT completion first, then CKB
+   * capacity/fee completion, before sending.
    */
   collect(
     txLike: ccc.TransactionLike,

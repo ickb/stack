@@ -1,19 +1,29 @@
 packages:
   - packages/*
   - apps/*
-  # @generated begin forker-workspaces
-  - forks/ccc/packages/*
-  - "!forks/ccc/packages/demo"
-  - "!forks/ccc/packages/docs"
-  - "!forks/ccc/packages/examples"
-  - "!forks/ccc/packages/faucet"
-  - "!forks/ccc/packages/playground"
-  - "!forks/ccc/packages/tests"
-  # @generated end forker-workspaces
+  # Local CCC workspace when materialized via `pnpm forks:bootstrap`.
+  - forks/ccc/repo/packages/*
+  - "!forks/ccc/repo/packages/demo"
+  - "!forks/ccc/repo/packages/docs"
+  - "!forks/ccc/repo/packages/examples"
+  - "!forks/ccc/repo/packages/faucet"
+  - "!forks/ccc/repo/packages/playground"
+  - "!forks/ccc/repo/packages/tests"
+
+overrides:
+  # Keep published manifests on `catalog:` while forcing the materialized
+  # local CCC workspace to satisfy direct stack dependencies during installs.
+  # Update this list alongside any new direct `@ckb-ccc/*` dependency.
+  "@ckb-ccc/ccc": workspace:*
+  "@ckb-ccc/core": workspace:*
+  "@ckb-ccc/udt": workspace:*
 
 catalog:
+  # Catalog tracks published fallback versions; forks/config.json only owns the
+  # local clone refs that pnpm forks:bootstrap materializes under forks/ccc/repo.
+  "@ckb-ccc/ccc": ^1.1.21
   "@ckb-ccc/core": ^1.12.2
-  "@ckb-ccc/udt": ^1.12.2
+  "@ckb-ccc/udt": ^0.1.24
   "@types/node": ^24.8.1
 
 minimumReleaseAge: 1440

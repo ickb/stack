@@ -1,88 +1,64 @@
 # iCKB Stack
 
-iCKB Stack Monorepo: all TS libs, web UI, bot, CLI and shared packages, built on top of [CCC](https://github.com/ckb-devrel/ccc).
+iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps built on top of [CCC](https://github.com/ckb-devrel/ccc).
 
-## Status
+## Transaction Completion Boundary
 
-This monorepo is developing the **new generation** of iCKB libraries, replacing the deprecated `@ickb/lumos-utils` and `@ickb/v1-core` (which were built on the now-deprecated [Lumos](https://github.com/ckb-js/lumos) framework).
+`@ickb/sdk` stops at protocol-specific transaction construction. It returns partial `ccc.Transaction` values and does not finalize iCKB UDT balance, CKB capacity, or fees on behalf of the caller.
 
-**New packages** (under `packages/`, built on CCC):
+Callers own the final completion pipeline:
 
-| Package       | Purpose                                                                    | Status             |
-| ------------- | -------------------------------------------------------------------------- | ------------------ |
-| `@ickb/utils` | Blockchain primitives, transaction helpers, epoch arithmetic, UDT handling | Active development |
-| `@ickb/dao`   | Nervos DAO abstraction layer                                               | Active development |
-| `@ickb/order` | Limit order cell management                                                | Active development |
-| `@ickb/core`  | iCKB core protocol logic (deposits, receipts, owned owner)                 | Active development |
-| `@ickb/sdk`   | High-level SDK composing all packages                                      | Active development |
+1. Use `getConfig(...).managers.ickbUdt` to finish iCKB UDT completion.
+2. Then run CCC-native CKB capacity and fee completion.
+3. Only then send the transaction.
 
-**Apps migration status:**
+## Local CCC Workflow
 
-| App              | Purpose                     | Stack                              |
-| ---------------- | --------------------------- | ---------------------------------- |
-| `apps/faucet`    | Testnet CKB distribution    | **Migrated** to new packages + CCC |
-| `apps/sampler`   | iCKB exchange rate sampling | **Migrated** to new packages + CCC |
-| `apps/bot`       | Automated order matching    | Legacy (`@ickb/v1-core` + Lumos)   |
-| `apps/tester`    | Order creation simulator    | Legacy (`@ickb/v1-core` + Lumos)   |
-| `apps/interface` | React web UI                | Legacy (`@ickb/v1-core` + Lumos)   |
+The shared CCC baseline lives in `forks/ccc/pin/` and materializes into `forks/ccc/repo/`.
 
-**Key upstream contributions:** UDT and Epoch support were contributed to CCC upstream and have been merged. Some local utilities may overlap with features now available natively in CCC.
+Prerequisites: `git` and `jq`.
 
-## Dependencies
-
-```mermaid
-graph TD;
-    B["@ickb/utils"] --> A["@ckb-ccc/core"];
-    C["@ickb/dao"] --> A;
-    C --> B;
-    D["@ickb/core"] --> A;
-    D --> B;
-    D --> C;
-    E["@ickb/order"] --> A;
-    E --> B;
-    F["@ickb/sdk"] --> A;
-    F --> B;
-    F --> C;
-    F --> D;
-    F --> E;
-
-    click A "https://github.com/ckb-devrel/ccc/tree/master/packages/core" "Go to @ckb-ccc/core"
-    click B "https://github.com/ickb/stack/tree/master/packages/utils" "Go to @ickb/utils"
-    click C "https://github.com/ickb/stack/tree/master/packages/dao" "Go to @ickb/dao"
-    click D "https://github.com/ickb/stack/tree/master/packages/core" "Go to @ickb/core"
-    click E "https://github.com/ickb/stack/tree/master/packages/order" "Go to @ickb/order"
-    click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
-```
-
-## Develop with Forks
-
-When `forks/.pin/<name>/manifest` is committed, `pnpm install` automatically sets up the local fork development environment on first run (by replaying pinned merges via `forks/forker/replay.sh`). No manual setup step is needed — just clone and install:
+From a plain checkout:
 
 ```bash
-git clone git@github.com:ickb/stack.git && cd stack && pnpm install
+git clone git@github.com:ickb/stack.git && cd stack
+pnpm forks:bootstrap
+pnpm install
+pnpm forks:ccc
+pnpm check
 ```
 
-To redo the setup from scratch: `bash forks/forker/clean-all.sh && pnpm install`.
+`pnpm check` is the validation gate. It always runs with `CI=true`.
 
-After `pnpm install`, see `forks/forker/README.md` for recording new pins, developing fork PRs, and the full workflow.
+`pnpm forks:ccc` computes the local CCC build surface from the stack's direct `@ckb-ccc/*` dependencies and their current CCC dependency closure, so it avoids rebuilding unrelated packages like `ckb-ccc`, `@ckb-ccc/connector`, `@ckb-ccc/connector-react`, and `@ckb-ccc/lumos-patches`.
 
-## Developer Scripts
+To inspect that current CCC surface without building anything:
 
-| Command                          | Description                                                                       |
-| -------------------------------- | --------------------------------------------------------------------------------- |
-| `pnpm coworker`                  | Launch an interactive AI Coworker session (full autonomy, opus model).             |
-| `pnpm coworker:ask`              | One-shot AI query for scripting (sonnet model, stateless). Used by record.sh.      |
-| `bash forks/forker/status.sh <name>`  | Check if fork clone matches pinned state. Exit 0 = safe to wipe.                  |
-| `bash forks/forker/record.sh <name>`  | Record fork pins (clone, merge refs, build). Guarded against pending work.         |
-| `bash forks/forker/save.sh <name>`    | Capture local fork work as a patch in .pin/ (survives re-records and replays).     |
-| `bash forks/forker/push.sh <name>`    | Cherry-pick commits from wip branch onto a PR branch for pushing to the fork.      |
-| `bash forks/forker/clean.sh <name>`   | Remove fork clone, keep pins (guarded). Re-replay on next `pnpm install`.          |
-| `bash forks/forker/reset.sh <name>`   | Remove fork clone and pins (guarded). Restores published packages.                 |
-| `pnpm check:full`                | Wipe derived state and validate from scratch. Skips wipe if forks have pending work.|
+```bash
+pnpm forks:ccc:plan
+```
 
-## Epoch Semantic Versioning
+For machine-readable inspection, use `pnpm -s forks:ccc --json`.
 
-This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.
+For active CCC work, keep built output fresh with:
+
+```bash
+pnpm forks:ccc --watch
+```
+
+Watch mode keeps the ESM `dist/` output fresh for the closure's `tsc` packages, including `@ckb-ccc/spore`, and prebuilds `@ckb-ccc/did-ckb` plus `@ckb-ccc/type-id` once so `@ckb-ccc/shell` and `@ckb-ccc/ccc` keep resolving against built output. If you change either `tsdown` package, rerun `pnpm forks:ccc`.
+
+For quick consumer-context sanity checks after rebuilding CCC:
+
+```bash
+pnpm forks:ccc:smoke
+```
+
+That smoke path verifies the current direct Stack import surface through real consumers: `@ckb-ccc/core` from `@ickb/utils`, `@ckb-ccc/udt` from `@ickb/core`, and `@ckb-ccc/ccc` from `apps/interface`.
+
+If you add a new direct `@ckb-ccc/*` dependency to any stack package, add the matching root override in `pnpm-workspace.yaml`. `pnpm check:ccc-overrides` enforces this.
+
+If you need to update or save the shared CCC baseline, use `forks/phroi_forker/repo/` directly. `forks/ccc/pin/manifest` is the source of truth for the shared upstream refs.
 
 ## Licensing
 

@@ -4,7 +4,7 @@ import {
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
-import { daoCellFrom, DaoManager } from "@ickb/dao";
+import { assertDaoOutputLimit, daoCellFrom, DaoManager } from "@ickb/dao";
 import { OwnerData } from "./entities.js";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.js";
 
@@ -105,7 +105,7 @@ export class OwnedOwnerManager implements ScriptDeps {
       );
     }
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    await assertDaoOutputLimit(tx, client);
     return tx;
   }
 
