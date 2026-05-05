@@ -1,19 +1,29 @@
 {
-  "name": "interface",
-  "version": "1.4.3",
-  "description": "iCKB Web DApp",
+  "name": "@ickb/interface",
+  "version": "1001.0.0",
+  "description": "iCKB interface built on top of CCC",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
   "author": "phroi",
   "license": "MIT",
-  "private": false,
-  "homepage": "https://github.com/ickb/interface",
+  "homepage": "https://ickb.org",
   "repository": {
     "type": "git",
-    "url": "git://github.com/ickb/interface.git"
+    "url": "https://github.com/ickb/stack"
   },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "sideEffects": false,
   "type": "module",
+  "private": false,
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && vite",
+    "build": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
@@ -34,16 +44,11 @@
   },
   "dependencies": {
     "@ckb-ccc/ccc": "catalog:",
-    "@ckb-lumos/base": "^0.23.0",
-    "@ckb-lumos/codec": "^0.23.0",
-    "@ckb-lumos/common-scripts": "^0.23.0",
-    "@ckb-lumos/config-manager": "^0.23.0",
-    "@ckb-lumos/helpers": "^0.23.0",
-    "@ckb-lumos/rpc": "^0.23.0",
-    "@ickb/lumos-utils": "1.4.2",
-    "@ickb/v1-core": "1.4.2",
+    "@ickb/core": "workspace:*",
+    "@ickb/order": "workspace:*",
+    "@ickb/sdk": "workspace:*",
+    "@ickb/utils": "workspace:*",
     "@tanstack/react-query": "^5.90.5",
-    "immutable": "^4.3.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   }

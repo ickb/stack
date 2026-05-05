@@ -108,36 +108,21 @@ importers:
       '@ckb-ccc/ccc':
         specifier: workspace:*
         version: link:../../forks/ccc/repo/packages/ccc
-      '@ckb-lumos/base':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/codec':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/common-scripts':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/config-manager':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/helpers':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/rpc':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ickb/lumos-utils':
-        specifier: 1.4.2
-        version: 1.4.2
-      '@ickb/v1-core':
-        specifier: 1.4.2
-        version: 1.4.2
+      '@ickb/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@ickb/order':
+        specifier: workspace:*
+        version: link:../../packages/order
+      '@ickb/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@ickb/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       '@tanstack/react-query':
         specifier: ^5.90.5
         version: 5.100.9(react@19.2.5)
-      immutable:
-        specifier: ^4.3.7
-        version: 4.3.8
       react:
         specifier: ^19.2.0
         version: 19.2.5

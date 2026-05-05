@@ -1,160 +1,121 @@
-import type { Cell, HexString } from "@ckb-lumos/base";
-import {
-  TransactionSkeleton,
-  type TransactionSkeletonType,
-} from "@ckb-lumos/helpers";
+import { ccc } from "@ckb-ccc/ccc";
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  CKB,
-  epochSinceAdd,
-  epochSinceCompare,
-  type ChainConfig,
-  type I8Header,
-  type I8Script,
-} from "@ickb/lumos-utils";
-import { parseEpoch, type EpochSinceValue } from "@ckb-lumos/base/lib/since";
-import { ickbExchangeRatio, type OrderRatio } from "@ickb/v1-core";
+import type { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
+import type { OrderManager } from "@ickb/order";
+import type { IckbSdk } from "@ickb/sdk";
 
-export interface RootConfig extends ChainConfig {
+export interface RootConfig {
+  chain: "mainnet" | "testnet";
+  cccClient: ccc.Client;
   queryClient: QueryClient;
+  sdk: IckbSdk;
+  managers: {
+    ickbUdt: IckbUdt;
+    logic: LogicManager;
+    ownedOwner: OwnedOwnerManager;
+    order: OrderManager;
+  };
 }
 
 export interface WalletConfig extends RootConfig {
-  address: HexString;
-  accountLocks: I8Script[];
-  expander: (c: Cell) => I8Script | undefined;
-  getTxSizeOverhead: (tx: TransactionSkeletonType) => Promise<number>;
-  sendSigned: (tx: TransactionSkeletonType) => Promise<`0x${string}`>;
+  signer: ccc.Signer;
+  address: string;
+  accountLocks: ccc.Script[];
+  primaryLock: ccc.Script;
 }
-
-export function symbol2Direction(s: string): boolean {
-  return s === "C";
-}
-
-export function direction2Symbol(d: boolean): string {
-  return d ? "C" : "I";
-}
-
-export function sanitize(text: string): string {
-  // Filter leading zeros
-  let i = 0;
-  for (; i < text.length; i++) {
-    const c = text[i];
-    if (("1" <= c && c <= "9") || c === ".") {
-      break;
-    }
-  }
-
-  //Filter decimal part
-  let dot = "";
-  const decimalChars: string[] = [];
-  for (; i < text.length; i++) {
-    const c = text[i];
-    if ("0" <= c && c <= "9") {
-      decimalChars.push(c);
-    } else if (c == ".") {
-      dot = ".";
-      break;
-    }
-  }
-
-  //Filter fractional part
-  const fractionalChars: string[] = [];
-  for (; i < text.length && fractionalChars.length < 8; i++) {
-    const c = text[i];
-    if ("0" <= c && c <= "9") {
-      fractionalChars.push(c);
-    }
-  }
-
-  return (
-    (decimalChars.length > 0
-      ? BigInt(decimalChars.join("")).toLocaleString("en-US")
-      : dot.length > 0
-        ? "0"
-        : "") +
-    dot +
-    fractionalChars.join("")
-  );
-}
-
-export function toText(n: bigint): string {
-  return (
-    (n / CKB).toLocaleString("en-US") +
-    String(Number(n % CKB) / Number(CKB)).slice(1)
-  );
-}
-
-export function toBigInt(text: string): bigint {
-  const [decimal, ...fractionals] = text.split(",").join("").split(".");
-  return BigInt(decimal + (fractionals.join("") + "00000000").slice(0, 8));
-}
-
-// Estimate bot ability to fulfill orders:
-// - CKB to iCKB orders at 100k CKB every minute
-// - iCKB to CKB orders at 200 CKB every minute
-export function orderMaturityEstimate(
-  isCkb2Udt: boolean,
-  amount: bigint,
-  tipHeader: I8Header,
-): Readonly<EpochSinceValue> {
-  return Object.freeze(
-    epochSinceAdd(parseEpoch(tipHeader.epoch), {
-      number: 0,
-      index: 1 + Number(amount / (isCkb2Udt ? 100000n * CKB : 200n * CKB)),
-      length: 4 * 60,
-    }),
-  );
-}
-
-export function maxEpoch(ee: EpochSinceValue[]): EpochSinceValue {
-  return ee.reduce((a, b) => (epochSinceCompare(a, b) === -1 ? b : a));
-}
-
-export const epochSinceValuePadding = Object.freeze({
-  number: 0,
-  index: 0,
-  length: 1,
-});
 
 export type TxInfo = Readonly<{
-  tx: TransactionSkeletonType;
+  tx: ccc.Transaction;
   error: string;
   fee: bigint;
-  estimatedMaturity: EpochSinceValue;
+  estimatedMaturity: bigint;
 }>;
 
 export const txInfoPadding: TxInfo = Object.freeze({
-  tx: TransactionSkeleton(),
+  tx: ccc.Transaction.default(),
   error: "",
   fee: 0n,
-  estimatedMaturity: epochSinceValuePadding,
+  estimatedMaturity: 0n,
 });
+
+export const CKB = ccc.fixedPointFrom(1);
 
 // reservedCKB are reserved for state rent in conversions
 export const reservedCKB = 600n * CKB;
 
-// Calculate ratio in a way to pay 0.001% fee to bot
-export function calculateOrderRatio(
-  isCkb2Udt: boolean,
-  tipHeader: I8Header,
-): OrderRatio {
-  const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(tipHeader);
-  return {
-    ckbMultiplier,
-    udtMultiplier:
-      // Pay 0.001% fee to bot
-      udtMultiplier + (isCkb2Udt ? 1n : -1n) * (udtMultiplier / 100000n),
-  };
+export function symbol2Direction(symbol: string): boolean {
+  return symbol !== "I";
 }
 
-export function calculateOrderResult(
-  isCkb2Udt: boolean,
-  amount: bigint,
-  ratio: OrderRatio,
-): bigint {
-  const { ckbMultiplier, udtMultiplier } = ratio;
-  return isCkb2Udt
-    ? (amount * ckbMultiplier) / udtMultiplier
-    : (amount * udtMultiplier) / ckbMultiplier;
+export function direction2Symbol(isCkb2Udt: boolean): string {
+  return isCkb2Udt ? "C" : "I";
+}
+
+export function sanitizeAmountInput(text: string): string {
+  let sanitized = "";
+  let seenDot = false;
+  let fractionalDigits = 0;
+
+  for (const char of text) {
+    if (char >= "0" && char <= "9") {
+      if (!seenDot) {
+        sanitized += char;
+      } else if (fractionalDigits < 8) {
+        sanitized += char;
+        fractionalDigits += 1;
+      }
+      continue;
+    }
+
+    if (char === "." && !seenDot) {
+      sanitized = sanitized === "" ? "0." : `${sanitized}.`;
+      seenDot = true;
+    }
+  }
+
+  return sanitized;
+}
+
+export function toText(amount: bigint): string {
+  const text = ccc.fixedPointToString(amount);
+  return text.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0*$/u, "");
+}
+
+export function toBigInt(text: string): bigint {
+  if (text === "") {
+    return 0n;
+  }
+
+  const [wholePart, fractionalPart = ""] = text.split(".", 2);
+  const whole = wholePart === "" ? "0" : wholePart;
+  const fraction = (fractionalPart + "00000000").slice(0, 8);
+  return BigInt(whole) * CKB + BigInt(fraction);
+}
+
+export function errorMessageOf(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error";
+    }
+  }
+
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
+    return String(error);
+  }
+
+  return "Unknown error";
+}
+
+export function hasTransactionActivity(tx: ccc.Transaction): boolean {
+  return tx.inputs.length > 0 || tx.outputs.length > 0;
 }

@@ -1,16 +1,15 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState, type JSX } from "react";
+import type { L1StateType } from "./queries.ts";
+import Progress from "./Progress.tsx";
 import {
-  epochSinceValuePadding,
+  errorMessageOf,
+  hasTransactionActivity,
   toText,
   txInfoPadding,
   type TxInfo,
   type WalletConfig,
 } from "./utils.ts";
-import Progress from "./Progress.tsx";
-import { l1StateOptions } from "./queries.ts";
-import { useState, type JSX } from "react";
-import { isPopulated, type I8Header } from "@ickb/lumos-utils";
-import { useQuery } from "@tanstack/react-query";
-import { parseEpoch, type EpochSinceValue } from "@ckb-lumos/base/lib/since";
 
 export default function Action({
   isCkb2Udt,
@@ -18,87 +17,105 @@ export default function Action({
   freeze,
   formReset,
   walletConfig,
+  l1State,
+  isStateFetching,
+  isStateStale,
 }: {
   isCkb2Udt: boolean;
   amount: bigint;
-  freeze: (s: boolean) => void;
+  freeze: (value: boolean) => void;
   formReset: () => void;
   walletConfig: WalletConfig;
+  l1State: L1StateType | undefined;
+  isStateFetching: boolean;
+  isStateStale: boolean;
 }): JSX.Element {
   const [message, setMessage] = useState("");
-  const [frozenTxInfo, _setFrozenTxInfo] = useState(txInfoPadding);
+  const [failure, setFailure] = useState("");
+  const [frozenTxInfo, setFrozenTxInfoState] = useState(txInfoPadding);
   const freezeTxInfo = (txInfo: TxInfo): void => {
-    _setFrozenTxInfo(txInfo);
-    freeze(txInfo != txInfoPadding);
+    setFrozenTxInfoState(txInfo);
+    freeze(txInfo !== txInfoPadding);
   };
+
   const isFrozen = frozenTxInfo !== txInfoPadding;
-  const {
-    data: l1Data,
-    isStale,
-    isFetching,
-  } = useQuery(l1StateOptions(walletConfig, isFrozen));
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const { txBuilder, tipHeader } = l1Data!;
-  const txInfo = isFrozen ? frozenTxInfo : txBuilder(isCkb2Udt, amount);
+  const stateId = l1State?.stateId ?? "missing";
+  const txPreviewQuery = useQuery({
+    queryKey: [
+      walletConfig.chain,
+      walletConfig.address,
+      "txInfo",
+      stateId,
+      isCkb2Udt,
+      amount.toString(),
+    ],
+    queryFn: () => {
+      if (!l1State) {
+        throw new Error("Missing L1 state");
+      }
+
+      return l1State.txBuilder(isCkb2Udt, amount);
+    },
+    enabled: !isFrozen && l1State !== undefined,
+    retry: false,
+  });
+
+  if (!l1State) {
+    return <span className="grid grid-cols-2 items-center justify-items-center gap-y-4" />;
+  }
+
+  const txInfo = isFrozen ? frozenTxInfo : txPreviewQuery.data ?? txInfoPadding;
+  const isFetching = isStateFetching || txPreviewQuery.isFetching;
   const isValid =
-    isPopulated(txInfo.tx) &&
-    txInfo.fee > 0n &&
-    txInfo.estimatedMaturity !== epochSinceValuePadding &&
-    txInfo.error === "";
-  const { maturity, isReady } = timeUntilEpoch(
+    hasTransactionActivity(txInfo.tx) && txInfo.fee > 0n && txInfo.error === "";
+  const { maturity, isReady } = timeUntilMaturity(
     txInfo.estimatedMaturity,
-    tipHeader,
+    l1State.tipTimestamp,
   );
 
   return (
-    <span
-      className={"grid grid-cols-2 items-center justify-items-center gap-y-4"}
-    >
+    <span className="grid grid-cols-2 items-center justify-items-center gap-y-4">
       <Progress isDone={!isFetching && !isFrozen}>
         <button
           className="text-s col-span-2 min-h-12 w-full cursor-pointer rounded border-2 border-amber-400 px-8 leading-relaxed font-bold tracking-wider text-amber-400 uppercase disabled:cursor-default disabled:opacity-50"
-          {...{
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises
-            onClick: isStale
-              ? async (): Promise<void> =>
-                  walletConfig.queryClient.invalidateQueries({
-                    queryKey: [
-                      walletConfig.chain,
-                      walletConfig.address,
-                      "l1State",
-                    ],
-                  })
-              : async (): Promise<void> =>
-                  transact(
-                    txInfo,
-                    freezeTxInfo,
-                    setMessage,
-                    formReset,
-                    walletConfig,
-                  ),
-            disabled: isFetching || isFrozen || !isValid,
+          onClick={() => {
+            if (isStateStale) {
+              void walletConfig.queryClient.invalidateQueries({
+                queryKey: [walletConfig.chain, walletConfig.address, "l1State"],
+              });
+              return;
+            }
+
+            void transact(
+              txInfo,
+              freezeTxInfo,
+              setMessage,
+              setFailure,
+              formReset,
+              walletConfig,
+            );
           }}
+          disabled={isFetching || isFrozen || !isValid}
         >
           {isFrozen
             ? message
             : isFetching
-              ? "refreshing..."
+              ? "building preview..."
               : txInfo.error !== ""
                 ? txInfo.error
                 : !isValid
-                  ? "finding a goose egg"
-                  : isStale
-                    ? `refresh before ${amount > 0 ? `converting to ${isCkb2Udt ? "iCKB" : "CKB"}` : "collecting converted funds"}`
-                    : amount > 0
+                  ? "nothing to do right now"
+                  : isStateStale
+                    ? `refresh before ${amount > 0n ? `converting to ${isCkb2Udt ? "iCKB" : "CKB"}` : "collecting converted funds"}`
+                    : amount > 0n
                       ? `request conversion to ${isCkb2Udt ? "iCKB" : "CKB"}`
                       : `${isReady ? "fully" : "partially"} collect converted funds`}
         </button>
       </Progress>
+      {failure !== "" ? <span className="col-span-2 text-center text-red-400">{failure}</span> : null}
       <span className="leading-relaxed font-bold tracking-wider">Fee:</span>
       <span>{toText(txInfo.fee)} CKB</span>
-      <span className="leading-relaxed font-bold tracking-wider">
-        Maturity:
-      </span>
+      <span className="leading-relaxed font-bold tracking-wider">Maturity:</span>
       <span>{maturity}</span>
     </span>
   );
@@ -108,67 +125,74 @@ async function transact(
   txInfo: TxInfo,
   freezeTxInfo: (txInfo: TxInfo) => void,
   setMessage: (message: string) => void,
+  setFailure: (message: string) => void,
   formReset: () => void,
   walletConfig: WalletConfig,
 ): Promise<void> {
-  const { rpc, sendSigned, queryClient } = walletConfig;
+  const { address, chain, cccClient, queryClient, signer } = walletConfig;
+
   try {
     freezeTxInfo(txInfo);
+    setFailure("");
     setMessage("Waiting for user confirmation...");
-    const txHash = await sendSigned(txInfo.tx);
+    const txHash = await signer.sendTransaction(txInfo.tx);
 
-    let status = "pending";
-    while (status === "pending" || status === "proposed") {
+    let status: string | undefined = "sent";
+    while (status === undefined || ["sent", "pending", "proposed"].includes(status)) {
       setMessage("Waiting for network confirmation...");
-      await new Promise((r) => setTimeout(r, 10000));
-      status = (await rpc.getTransaction(txHash)).txStatus.status;
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      status = (await cccClient.getTransaction(txHash))?.status;
     }
 
-    if (status === "committed") {
-      setMessage("Transaction confirmed!!!");
-      formReset();
-    } else {
-      setMessage("Something went wrong, retry in a minute");
+    if (status !== "committed") {
+      throw new Error(`Transaction ended with status: ${status}`);
     }
-    await queryClient.invalidateQueries(l1StateOptions(walletConfig, true));
-    await new Promise((r) => setTimeout(r, 10000));
+
+    setMessage("Transaction confirmed.");
+    formReset();
+    await queryClient.invalidateQueries({ queryKey: [chain, address] });
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  } catch (error) {
+    setFailure(errorMessageOf(error));
   } finally {
-    setMessage("");
+    await queryClient.invalidateQueries({ queryKey: [chain, address] });
     freezeTxInfo(txInfoPadding);
+    setMessage("");
   }
 }
 
-function timeUntilEpoch(
-  e: EpochSinceValue,
-  tipHeader: I8Header,
+function timeUntilMaturity(
+  estimatedMaturity: bigint,
+  tipTimestamp: bigint,
 ): {
   maturity: string;
   isReady: boolean;
 } {
-  const t = parseEpoch(tipHeader.epoch);
-  const epochs = e.index / e.length - t.index / t.length + e.number - t.number;
-  if (epochs <= 0) {
+  const remaining = estimatedMaturity - tipTimestamp;
+  if (remaining <= 0n) {
     return { maturity: "⌛️ Ready", isReady: true };
   }
 
-  if (epochs <= 0.375) {
-    //90 minutes
+  const minute = 60_000n;
+  const hour = 60n * minute;
+  const day = 24n * hour;
+
+  if (remaining <= 90n * minute) {
     return {
-      maturity: `⏳ ${String(Math.ceil(epochs * 4 * 60))} minutes`,
+      maturity: `⏳ ${String(Number((remaining + minute - 1n) / minute))} minutes`,
       isReady: false,
     };
   }
 
-  if (epochs <= 6) {
-    //24 hours
+  if (remaining <= day) {
     return {
-      maturity: `⏳ ${String(1 + Math.ceil(epochs * 4))} hours`,
+      maturity: `⏳ ${String(Number((remaining + hour - 1n) / hour))} hours`,
       isReady: false,
     };
   }
 
   return {
-    maturity: `⏳ ${String(1 + Math.ceil(epochs / 6))} days`,
+    maturity: `⏳ ${String(Number((remaining + day - 1n) / day))} days`,
     isReady: false,
   };
 }
