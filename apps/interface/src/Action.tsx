@@ -160,7 +160,6 @@ async function transact(
 
     setMessage("Transaction confirmed.");
     formReset();
-    await queryClient.invalidateQueries({ queryKey: [chain, address] });
     await new Promise((resolve) => setTimeout(resolve, 2000));
   } catch (error) {
     setFailure(errorMessageOf(error));

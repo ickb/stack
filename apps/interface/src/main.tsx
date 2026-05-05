@@ -43,12 +43,16 @@ export function startApp(walletChain: string): void {
   const [walletName, chain] = walletChain.split("_");
   const rootConfig = chain === "mainnet" ? rootConfigs.mainnet : rootConfigs.testnet;
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const signer = JoyId.getJoyIdSigners(
+  const signerInfo = JoyId.getJoyIdSigners(
     rootConfig.cccClient,
     appName,
     ["https://ickb.org", appIcon].join(""),
-  ).find((candidate) => candidate.name === "CKB")!.signer;
+  ).find((candidate) => candidate.name === "CKB");
+  if (!signerInfo) {
+    throw new Error("CKB signer not found. Please ensure it is enabled in your JoyID app.");
+  }
+
+  const { signer } = signerInfo;
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const rootElement = document.getElementById("app")!;

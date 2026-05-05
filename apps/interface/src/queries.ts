@@ -180,10 +180,6 @@ async function getAccountCells(walletConfig: WalletConfig): Promise<ccc.Cell[]> 
       "asc",
       400,
     )) {
-      if (!cell.cellOutput.lock.eq(lock)) {
-        continue;
-      }
-
       cells.push(cell);
     }
   }
