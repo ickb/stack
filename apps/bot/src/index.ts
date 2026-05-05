@@ -1,75 +1,56 @@
+import { ccc } from "@ckb-ccc/core";
 import {
-  TransactionSkeleton,
-  encodeToAddress,
-  sealTransaction,
-  type TransactionSkeletonType,
-} from "@ckb-lumos/helpers";
-import { prepareSigningEntries } from "@ckb-lumos/common-scripts/lib/secp256k1_blake160.js";
-import { key } from "@ckb-lumos/hd";
+  ICKB_DEPOSIT_CAP,
+  convert,
+  type IckbDepositCell,
+  type ReceiptCell,
+  type WithdrawalGroup,
+} from "@ickb/core";
 import {
-  CKB,
-  I8Cell,
-  I8Header,
-  I8Script,
-  addCells,
-  addCkbChange,
-  addWitnessPlaceholder,
-  binarySearch,
-  calculateTxFee,
-  capacitySifter,
-  chainConfigFrom,
-  ckbDelta,
-  hex,
-  isChain,
-  isDaoDeposit,
-  isDaoWithdrawalRequest,
-  isPopulated,
-  lockExpanderFrom,
-  maturityDiscriminator,
-  shuffle,
-  since,
-  txSize,
-  type ChainConfig,
-  type ConfigAdapter,
-} from "@ickb/lumos-utils";
-import {
-  ICKB_SOFT_CAP_PER_DEPOSIT,
-  addIckbUdtChange,
-  addOwnedWithdrawalRequestsChange,
-  addReceiptDepositsChange,
-  addWithdrawalRequestGroups,
-  ckb2Ickb,
-  ckb2UdtRatioCompare,
-  ckbSoftCapPerDeposit,
-  errorAllowanceTooLow,
-  getIckbScriptConfigs,
-  ickb2Ckb,
-  ickbDelta,
-  ickbDeposit,
-  ickbExchangeRatio,
-  ickbLogicScript,
-  ickbPoolSifter,
-  ickbRequestWithdrawalFrom,
-  ickbSifter,
-  limitOrderScript,
-  orderMelt,
-  orderSatisfy,
-  orderSifter,
-  ownedOwnerScript,
-  udt2CkbRatioCompare,
-  type ExtendedDeposit,
-  type MyOrder,
-  type Order,
-} from "@ickb/v1-core";
-import type { Cell, Header, Transaction } from "@ckb-lumos/base";
+  OrderManager,
+  type OrderCell,
+  type OrderGroup,
+} from "@ickb/order";
+import { getConfig, IckbSdk, type SystemState } from "@ickb/sdk";
+import { CKB, planRebalance } from "./policy.js";
+
+const MATCH_STEP_DIVISOR = 100n;
+const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
+const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
+const MAX_OUTPUTS_BEFORE_CHANGE = 58;
+
+interface Runtime {
+  chain: SupportedChain;
+  client: ccc.Client;
+  signer: ccc.SignerCkbPrivateKey;
+  sdk: IckbSdk;
+  managers: ReturnType<typeof getConfig>["managers"];
+  primaryLock: ccc.Script;
+}
+
+interface BotState {
+  accountLocks: ccc.Script[];
+  system: SystemState;
+  userOrders: OrderGroup[];
+  marketOrders: OrderCell[];
+  receipts: ReceiptCell[];
+  readyWithdrawals: WithdrawalGroup[];
+  notReadyWithdrawals: WithdrawalGroup[];
+  readyPoolDeposits: IckbDepositCell[];
+  availableCkbBalance: bigint;
+  availableIckbBalance: bigint;
+  unavailableCkbBalance: bigint;
+  totalCkbBalance: bigint;
+  depositAmount: bigint;
+  minCkbBalance: bigint;
+}
+
+type SupportedChain = "mainnet" | "testnet";
 
 async function main(): Promise<void> {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
-  }
-  if (!isChain(CHAIN)) {
-    throw new Error("Invalid env CHAIN: " + CHAIN);
   }
   if (!BOT_PRIVATE_KEY) {
     throw new Error("Empty env BOT_PRIVATE_KEY");
@@ -78,822 +59,453 @@ async function main(): Promise<void> {
     throw new Error("Invalid env BOT_SLEEP_INTERVAL");
   }
 
-  const chainConfig = await chainConfigFrom(
-    CHAIN,
-    RPC_URL,
-    true,
-    getIckbScriptConfigs,
-  );
-  const { config, rpc } = chainConfig;
-  const account = secp256k1Blake160(BOT_PRIVATE_KEY, config);
+  const chain = parseChain(CHAIN);
+  const client = createClient(chain, RPC_URL);
+  const { managers, bots } = getConfig(chain);
+  const signer = new ccc.SignerCkbPrivateKey(client, BOT_PRIVATE_KEY);
+  const primaryLock = (await signer.getRecommendedAddressObj()).script;
+  const runtime: Runtime = {
+    chain,
+    client,
+    signer,
+    sdk: new IckbSdk(
+      managers.ownedOwner,
+      managers.logic,
+      managers.order,
+      bots,
+    ),
+    managers,
+    primaryLock,
+  };
   const sleepInterval = Number(BOT_SLEEP_INTERVAL) * 1000;
 
   for (;;) {
-    await new Promise((r) => {
-      setTimeout(r, 2 * Math.random() * sleepInterval);
-    });
-    // console.log();
+    await sleep(Math.floor(2 * Math.random() * sleepInterval));
 
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const executionLog: Record<string, any> = {};
     const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
+
     try {
-      const {
-        capacities,
-        udts,
-        receipts,
-        matureWrGroups,
-        notMatureWrGroups,
-        ickbPool,
-        orders,
-        myOrders,
-        tipHeader,
-        feeRate,
-      } = await getL1State(account, chainConfig);
-
-      // console.log(JSON.stringify(orders, replacer, " "));
-
-      // Calculate balances and baseTx
-      const baseTx = base({
-        capacities,
-        myOrders,
-        udts,
-        receipts,
-        wrGroups: matureWrGroups,
-      });
-      const availableCkbBalance = ckbDelta(baseTx, config);
-      const ickbUdtBalance = ickbDelta(baseTx, config);
-      const unavailableFunds = base({
-        wrGroups: notMatureWrGroups,
-      });
-      const unavailableCkbBalance = ckbDelta(unavailableFunds, config);
-      const ckbBalance = availableCkbBalance + unavailableCkbBalance;
+      const state = await readBotState(runtime);
 
       executionLog.balance = {
         CKB: {
-          total: fmtCkb(ckbBalance),
-          available: fmtCkb(availableCkbBalance),
-          unavailable: fmtCkb(unavailableCkbBalance),
+          total: fmtCkb(state.totalCkbBalance),
+          available: fmtCkb(state.availableCkbBalance),
+          unavailable: fmtCkb(state.unavailableCkbBalance),
         },
         ICKB: {
-          total: fmtCkb(ickbUdtBalance),
-          available: fmtCkb(ickbUdtBalance),
+          total: fmtCkb(state.availableIckbBalance),
+          available: fmtCkb(state.availableIckbBalance),
           unavailable: fmtCkb(0n),
         },
         totalEquivalent: {
-          CKB: fmtCkb(ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader)),
-          ICKB: fmtCkb(ckb2Ickb(ckbBalance, tipHeader) + ickbUdtBalance),
+          CKB: fmtCkb(
+            state.totalCkbBalance +
+              convert(false, state.availableIckbBalance, state.system.tip),
+          ),
+          ICKB: fmtCkb(
+            convert(true, state.totalCkbBalance, state.system.tip) +
+              state.availableIckbBalance,
+          ),
         },
       };
-      executionLog.ratio = ickbExchangeRatio(tipHeader);
+      executionLog.ratio = state.system.exchangeRatio;
 
-      const standardDeposit = ckbSoftCapPerDeposit(tipHeader);
-      const minCKB = (21n * standardDeposit) / 20n;
-
-      if (ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader) <= minCKB) {
+      if (
+        state.totalCkbBalance +
+          convert(false, state.availableIckbBalance, state.system.tip) <=
+        state.minCkbBalance
+      ) {
         executionLog.error =
           "The bot must have more than " +
-          String(fmtCkb(minCKB)) +
+          String(fmtCkb(state.minCkbBalance)) +
           " CKB worth of capital to be able to operate, shutting down...";
         console.log(JSON.stringify(executionLog, replacer, " "));
         return;
       }
 
-      function evaluate(combination: Combination): Readonly<{
-        tx: TransactionSkeletonType;
-        gain: bigint;
-        i: number;
-        j: number;
-        origins: readonly I8Cell[];
-        matches: readonly I8Cell[];
-      }> {
-        const { i, j, origins, matches } = combination;
-        const onlyOrders = addCells(
-          TransactionSkeleton(),
-          "append",
-          origins,
-          matches,
-        );
-        const ckbGain = ckbDelta(onlyOrders, config);
-        const ickbUdtGain = ickbDelta(onlyOrders, config);
-
-        const tx = finalize(
-          addCells(baseTx, "append", origins, matches),
-          ckbBalance + ckbGain,
-          ickbUdtBalance + ickbUdtGain,
-          ickbPool,
-          tipHeader,
-          feeRate,
-          account,
-          chainConfig,
-        );
-
-        const gain =
-          i === 0 && j === 0
-            ? 0n
-            : !isPopulated(tx)
-              ? negInf
-              : ickb2Ckb(ickbUdtGain, tipHeader) +
-                ckbGain -
-                3n * ckbDelta(tx, config); //tx fee
-        return Object.freeze({ ...combination, tx, gain });
-      }
-
-      const { tx, matches } = bestPartialFilling(
-        orders,
-        evaluate,
-        standardDeposit / 100n,
-        ICKB_SOFT_CAP_PER_DEPOSIT / 100n,
-      );
-      if (isPopulated(tx)) {
-        // console.log(JSON.stringify(tx, undefined, 2));
-
-        const matchedOrders = matches.length;
-        const deposits = tx.outputs.filter((c) => isDaoDeposit(c, config)).size;
-        const withdrawalRequests = tx.outputs.filter((c) =>
-          isDaoWithdrawalRequest(c, config),
-        ).size;
-        const withdrawals = tx.inputs.filter((c) =>
-          isDaoWithdrawalRequest(c, config),
-        ).size;
-
-        executionLog.actions = {
-          matchedOrders,
-          deposits,
-          withdrawalRequests,
-          withdrawals,
-        };
-        executionLog.txFee = {
-          fee: fmtCkb(ckbDelta(tx, config)),
-          feeRate,
-        };
-
-        if (matchedOrders + deposits + withdrawalRequests > 0) {
-          executionLog.txHash = await rpc.sendTransaction(account.signer(tx));
-        } else {
-          continue;
-        }
-      } else {
+      const result = await buildTransaction(runtime, state);
+      if (!result) {
         continue;
       }
-    } catch (e) {
-      if (e instanceof Object && "stack" in e) {
-        /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
-        executionLog.error = { ...e, stack: e.stack ?? "" };
-      } else {
-        executionLog.error = e ?? "Empty Error";
-      }
+
+      executionLog.actions = result.actions;
+      executionLog.txFee = {
+        fee: fmtCkb(await result.tx.getFee(runtime.client)),
+        feeRate: state.system.feeRate,
+      };
+      executionLog.txHash = await runtime.signer.sendTransaction(result.tx);
+    } catch (error) {
+      executionLog.error = errorToLog(error);
     }
+
     executionLog.ElapsedSeconds = Math.round(
-      (new Date().getTime() - startTime.getTime()) / 1000,
+      (Date.now() - startTime.getTime()) / 1000,
     );
     console.log(JSON.stringify(executionLog, replacer, " "));
   }
 }
 
-function fmtCkb(b: bigint): number {
-  return Number(b) / Number(CKB);
+async function readBotState(runtime: Runtime): Promise<BotState> {
+  const accountLocks = dedupeScripts(
+    (await runtime.signer.getAddressObjs()).map(({ script }) => script),
+  );
+  const { system, user } = await runtime.sdk.getL1State(
+    runtime.client,
+    accountLocks,
+  );
+
+  const [capacityCells, walletUdtCells, receipts, withdrawalGroups, readyPoolDeposits] =
+    await Promise.all([
+      collectCapacityCells(runtime.signer),
+      collectWalletUdtCells(runtime.signer, runtime.managers.ickbUdt),
+      collectAsync(
+        runtime.managers.logic.findReceipts(runtime.client, accountLocks, {
+          onChain: true,
+        }),
+      ),
+      collectAsync(
+        runtime.managers.ownedOwner.findWithdrawalGroups(
+          runtime.client,
+          accountLocks,
+          {
+            onChain: true,
+            tip: system.tip,
+          },
+        ),
+      ),
+      collectReadyPoolDeposits(runtime.client, runtime.managers.logic, system.tip),
+    ]);
+  const walletUdtInfo = await runtime.managers.ickbUdt.infoFrom(
+    runtime.client,
+    walletUdtCells,
+  );
+
+  const { yes: readyWithdrawals, no: notReadyWithdrawals } = partition(
+    withdrawalGroups,
+    (group) => group.owned.isReady,
+  );
+  const ownedOrderKeys = new Set(
+    user.orders.map((group) => outPointKey(group.order.cell.outPoint)),
+  );
+  const marketOrders = system.orderPool.filter(
+    (order) => !ownedOrderKeys.has(outPointKey(order.cell.outPoint)),
+  );
+
+  const availableCkbBalance =
+    sumValues(capacityCells, (cell) => cell.cellOutput.capacity) +
+    walletUdtInfo.capacity +
+    sumValues(user.orders, (group) => group.ckbValue) +
+    sumValues(receipts, (receipt) => receipt.ckbValue) +
+    sumValues(readyWithdrawals, (group) => group.ckbValue);
+  const availableIckbBalance =
+    walletUdtInfo.balance +
+    sumValues(user.orders, (group) => group.udtValue) +
+    sumValues(receipts, (receipt) => receipt.udtValue);
+  const unavailableCkbBalance = sumValues(
+    notReadyWithdrawals,
+    (group) => group.ckbValue,
+  );
+  const totalCkbBalance = availableCkbBalance + unavailableCkbBalance;
+  const depositAmount = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+
+  return {
+    accountLocks,
+    system,
+    userOrders: user.orders,
+    marketOrders,
+    receipts,
+    readyWithdrawals,
+    notReadyWithdrawals,
+    readyPoolDeposits,
+    availableCkbBalance,
+    availableIckbBalance,
+    unavailableCkbBalance,
+    totalCkbBalance,
+    depositAmount,
+    minCkbBalance: (21n * depositAmount) / 20n,
+  };
+}
+
+async function buildTransaction(
+  runtime: Runtime,
+  state: BotState,
+): Promise<
+  | {
+      tx: ccc.Transaction;
+      actions: {
+        collectedOrders: number;
+        completedDeposits: number;
+        matchedOrders: number;
+        deposits: number;
+        withdrawalRequests: number;
+        withdrawals: number;
+      };
+    }
+  | undefined
+> {
+  let tx = ccc.Transaction.default();
+
+  if (state.userOrders.length > 0) {
+    tx = runtime.sdk.collect(tx, state.userOrders);
+  }
+  if (state.receipts.length > 0) {
+    tx = runtime.managers.logic.completeDeposit(tx, state.receipts);
+  }
+  if (state.readyWithdrawals.length > 0) {
+    tx = await runtime.managers.ownedOwner.withdraw(
+      tx,
+      state.readyWithdrawals,
+      runtime.client,
+    );
+  }
+
+  const match = OrderManager.bestMatch(
+    state.marketOrders,
+    {
+      ckbValue: state.availableCkbBalance,
+      udtValue: state.availableIckbBalance,
+    },
+    state.system.exchangeRatio,
+    {
+      feeRate: state.system.feeRate,
+      ckbAllowanceStep: maxBigInt(1n, state.depositAmount / MATCH_STEP_DIVISOR),
+    },
+  );
+  if (match.partials.length > 0) {
+    tx = runtime.managers.order.addMatch(tx, match);
+  }
+
+  const rebalance = planRebalance({
+    outputSlots: maxInt(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length),
+    ickbBalance: state.availableIckbBalance + match.udtDelta,
+    ckbBalance: state.availableCkbBalance + match.ckbDelta,
+    depositAmount: state.depositAmount,
+    readyDeposits: state.readyPoolDeposits,
+  });
+  if (rebalance.kind === "deposit") {
+    tx = await runtime.managers.logic.deposit(
+      tx,
+      rebalance.quantity,
+      state.depositAmount,
+      runtime.primaryLock,
+      runtime.client,
+    );
+  } else if (rebalance.kind === "withdraw") {
+    tx = await runtime.managers.ownedOwner.requestWithdrawal(
+      tx,
+      rebalance.deposits,
+      runtime.primaryLock,
+      runtime.client,
+    );
+  }
+
+  const actions = {
+    collectedOrders: state.userOrders.length,
+    completedDeposits: state.receipts.length,
+    matchedOrders: match.partials.length,
+    deposits: rebalance.kind === "deposit" ? rebalance.quantity : 0,
+    withdrawalRequests:
+      rebalance.kind === "withdraw" ? rebalance.deposits.length : 0,
+    withdrawals: state.readyWithdrawals.length,
+  };
+  const actionCount = Object.values(actions).reduce((sum, count) => sum + count, 0);
+  if (actionCount === 0) {
+    return;
+  }
+
+  tx = await runtime.managers.ickbUdt.completeBy(tx, runtime.signer);
+  await tx.completeFeeBy(runtime.signer, state.system.feeRate);
+
+  if (await ccc.isDaoOutputLimitExceeded(tx, runtime.client)) {
+    throw new Error(
+      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
+    );
+  }
+
+  return { tx, actions };
+}
+
+async function collectCapacityCells(
+  signer: ccc.SignerCkbPrivateKey,
+): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
+
+  for await (const cell of signer.findCellsOnChain(
+    {
+      scriptLenRange: [0n, 1n],
+      outputDataLenRange: [0n, 1n],
+    },
+    true,
+    "asc",
+    400,
+  )) {
+    if (cell.cellOutput.type !== undefined || cell.outputData !== "0x") {
+      continue;
+    }
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+async function collectWalletUdtCells(
+  signer: ccc.SignerCkbPrivateKey,
+  ickbUdt: Runtime["managers"]["ickbUdt"],
+): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
+
+  for await (const cell of signer.findCellsOnChain(
+    ickbUdt.filter,
+    true,
+    "asc",
+    400,
+  )) {
+    if (!ickbUdt.isUdt(cell)) {
+      continue;
+    }
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+async function collectReadyPoolDeposits(
+  client: ccc.Client,
+  logic: Runtime["managers"]["logic"],
+  tip: ccc.ClientBlockHeader,
+): Promise<IckbDepositCell[]> {
+  const deposits = await collectAsync(
+    logic.findDeposits(client, {
+      onChain: true,
+      tip,
+      minLockUp: POOL_MIN_LOCK_UP,
+      maxLockUp: POOL_MAX_LOCK_UP,
+    }),
+  );
+
+  return deposits
+    .filter((deposit) => deposit.isReady)
+    .sort((left, right) =>
+      compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip)),
+    );
+}
+
+function createClient(chain: SupportedChain, rpcUrl: string | undefined): ccc.Client {
+  const config = rpcUrl ? { url: rpcUrl } : undefined;
+  return chain === "mainnet"
+    ? new ccc.ClientPublicMainnet(config)
+    : new ccc.ClientPublicTestnet(config);
+}
+
+function parseChain(chain: string): SupportedChain {
+  if (chain === "mainnet" || chain === "testnet") {
+    return chain;
+  }
+
+  throw new Error("Invalid env CHAIN: " + chain);
+}
+
+async function collectAsync<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iterable) {
+    items.push(item);
+  }
+  return items;
+}
+
+function dedupeScripts(scripts: ccc.Script[]): ccc.Script[] {
+  const seen = new Set<string>();
+  const unique: ccc.Script[] = [];
+
+  for (const script of scripts) {
+    const key = script.toHex();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(script);
+  }
+
+  return unique;
+}
+
+function partition<T>(
+  items: readonly T[],
+  predicate: (item: T) => boolean,
+): { yes: T[]; no: T[] } {
+  const yes: T[] = [];
+  const no: T[] = [];
+
+  for (const item of items) {
+    if (predicate(item)) {
+      yes.push(item);
+    } else {
+      no.push(item);
+    }
+  }
+
+  return { yes, no };
+}
+
+function sumValues<T>(items: readonly T[], project: (item: T) => bigint): bigint {
+  let total = 0n;
+  for (const item of items) {
+    total += project(item);
+  }
+  return total;
+}
+
+function compareBigInt(left: bigint, right: bigint): number {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
+function outPointKey(outPoint: ccc.OutPoint): string {
+  return ccc.hexFrom(outPoint.toBytes());
+}
+
+function maxBigInt(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
+}
+
+function maxInt(left: number, right: number): number {
+  return left > right ? left : right;
+}
+
+function fmtCkb(balance: bigint): number {
+  return Number(balance) / Number(CKB);
 }
 
 function replacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? Number(value) : value;
 }
 
-const negInf = -1n * (1n << 64n);
-
-interface Combination {
-  i: number;
-  j: number;
-  origins: readonly I8Cell[];
-  matches: readonly I8Cell[];
-  tx: TransactionSkeletonType;
-  gain: bigint;
-}
-
-function bestPartialFilling(
-  orders: Order[],
-  evaluate: (tx: Combination) => Combination,
-  ckbAllowanceStep: bigint,
-  udtAllowanceStep: bigint,
-): Combination {
-  const ckb2UdtPartials = partialsFrom(orders, true, udtAllowanceStep);
-  const udt2CkbPartials = partialsFrom(orders, false, ckbAllowanceStep);
-
-  const alreadyVisited = new Map<string, Combination>();
-  const from = (i: number, j: number): Combination => {
-    const key = `${String(i)}-${String(j)}`;
-    const cached = alreadyVisited.get(key);
-    if (cached) {
-      return cached;
-    }
-    let result: Combination = {
-      i,
-      j,
-      origins: Object.freeze([]),
-      matches: Object.freeze([]),
-      tx: TransactionSkeleton(),
-      gain: negInf,
+function errorToLog(error: unknown): unknown {
+  if (error instanceof Object && "stack" in error) {
+    const stack = error.stack ?? "";
+    return {
+      name: "name" in error ? error.name : undefined,
+      message:
+        "message" in error && typeof error.message === "string"
+          ? error.message
+          : "Unknown error",
+      stack,
     };
-    const iom = ckb2UdtPartials[i];
-    const jom = udt2CkbPartials[j];
-    if (iom && jom) {
-      result.origins = Object.freeze(iom.origins.concat(jom.origins));
-      result.matches = Object.freeze(iom.matches.concat(jom.matches));
-      result = evaluate(result);
-      // console.log(i, j, result.gain, isPopulated(result.tx));
-    }
-    alreadyVisited.set(key, Object.freeze(result));
-    return result;
-  };
-
-  let fresh = from(0, 0);
-  let old: typeof fresh | undefined = undefined;
-  while (old !== fresh) {
-    old = fresh;
-    fresh = [
-      from(fresh.i, fresh.j),
-      from(fresh.i, fresh.j + 1),
-      from(fresh.i + 1, fresh.j),
-      from(fresh.i + 1, fresh.j + 1),
-    ].reduce((a, b) => (a.gain > b.gain ? a : b));
   }
 
-  // console.log(fresh.i, fresh.j, String(fresh.gain / CKB));
-
-  return fresh;
+  return error ?? "Empty Error";
 }
 
-function partialsFrom(
-  orders: Order[],
-  isCkb2Udt: boolean,
-  allowanceStep: bigint,
-): {
-  origins: readonly I8Cell[];
-  matches: readonly I8Cell[];
-}[] {
-  let ckbAllowanceStep, udtAllowanceStep;
-  if (isCkb2Udt) {
-    ckbAllowanceStep = 0n;
-    udtAllowanceStep = allowanceStep;
-    orders = orders.filter((o) => o.info.isCkb2UdtMatchable);
-    orders.sort((o0, o1) =>
-      ckb2UdtRatioCompare(o0.info.ckbToUdt, o1.info.ckbToUdt),
-    );
-  } else {
-    ckbAllowanceStep = allowanceStep;
-    udtAllowanceStep = 0n;
-    orders = orders.filter((o) => o.info.isUdt2CkbMatchable);
-    orders.sort((o0, o1) =>
-      udt2CkbRatioCompare(o0.info.udtToCkb, o1.info.udtToCkb),
-    );
-  }
-
-  // Sometimes shuffle orders in case of stuck corner cases orders
-  if (orders.length > 1 && Math.random() > 0.9) {
-    console.log(
-      `"Shuffling ${isCkb2Udt ? "CKB to iCKB" : "iCKB to CKB"} orders!",`,
-    );
-    orders = shuffle(orders);
-  }
-
-  let origins: readonly I8Cell[] = Object.freeze([]);
-  let fulfilled: readonly I8Cell[] = Object.freeze([]);
-  let matches: readonly I8Cell[] = Object.freeze([]);
-
-  const res = [{ origins, matches }];
-
-  for (const o of orders) {
-    try {
-      let ckbAllowance = 0n;
-      let udtAllowance = 0n;
-
-      let match: I8Cell;
-      let isFulfilled = false;
-
-      const new_origins = Object.freeze(origins.concat([o.cell]));
-      while (!isFulfilled) {
-        ckbAllowance += ckbAllowanceStep;
-        udtAllowance += udtAllowanceStep;
-
-        ({ match, isFulfilled } = orderSatisfy(
-          o,
-          isCkb2Udt,
-          ckbAllowance,
-          udtAllowance,
-        ));
-        matches = Object.freeze(fulfilled.concat([match]));
-
-        res.push({ origins: new_origins, matches });
-      }
-
-      origins = new_origins;
-      fulfilled = matches;
-    } catch (e) {
-      // Skip orders whose ckbMinMatch is too high to be matched by base allowance Step
-      if (!(e instanceof Error) || e.message !== errorAllowanceTooLow) {
-        throw e;
-      }
-    }
-  }
-
-  return res;
-}
-
-function finalize(
-  tx: TransactionSkeletonType,
-  _ckbBalance: bigint,
-  ickbUdtBalance: bigint,
-  ickbPool: readonly ExtendedDeposit[],
-  tipHeader: I8Header,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): TransactionSkeletonType {
-  // For simplicity a transaction containing Nervos DAO script is currently limited to 64 output cells
-  // so that processing is simplified, this limitation may be relaxed later on in a future Nervos DAO script update.
-  //58 = 64 - 6, 6 are the estimated change cells added later
-  const daoLimit = 58 - tx.outputs.size;
-
-  // Keep most balance in CKB
-  // Ideally keep an iCKB balance between 2k iCKB and 120k iCKB
-  let isCkb2Udt = false;
-  let maxAmount = 0n;
-  const standardDeposit = ckbSoftCapPerDeposit(tipHeader);
-  if (daoLimit <= 0) {
-    // Do nothing...
-  } else if (ickbUdtBalance < 2000n * CKB) {
-    isCkb2Udt = true;
-    maxAmount = standardDeposit;
-  } else if (ickbUdtBalance > ICKB_SOFT_CAP_PER_DEPOSIT + 20000n * CKB) {
-    isCkb2Udt = false;
-    maxAmount = ickbUdtBalance - 20000n * CKB;
-  }
-
-  return convert(
-    tx,
-    isCkb2Udt,
-    maxAmount,
-    standardDeposit,
-    ickbPool,
-    tipHeader,
-    feeRate,
-    account,
-    chainConfig,
-  );
-}
-
-type MyExtendedDeposit = ExtendedDeposit & { ickbCumulative: bigint };
-
-function convert(
-  baseTx: TransactionSkeletonType,
-  isCkb2Udt: boolean,
-  maxAmount: bigint,
-  depositAmount: bigint,
-  deposits: readonly ExtendedDeposit[],
-  tipHeader: Readonly<I8Header>,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): TransactionSkeletonType {
-  const ickbPool: MyExtendedDeposit[] = [];
-  if (!isCkb2Udt) {
-    // Filter deposits
-    let ickbCumulative = 0n;
-    for (const d of deposits) {
-      const c = ickbCumulative + d.ickbValue;
-      if (c > maxAmount) {
-        continue;
-      }
-      ickbCumulative = c;
-      ickbPool.push(Object.freeze({ ...d, ickbCumulative }));
-      if (ickbPool.length >= 30) {
-        break;
-      }
-    }
-  }
-  Object.freeze(ickbPool);
-
-  const N = isCkb2Udt ? Number(maxAmount / depositAmount) : ickbPool.length;
-  const txCache = Array<TransactionSkeletonType | undefined>(N);
-  const attempt = (n: number): TransactionSkeletonType => {
-    n = N - n;
-    return (txCache[n] =
-      txCache[n] ??
-      convertAttempt(
-        n,
-        isCkb2Udt,
-        maxAmount,
-        baseTx,
-        depositAmount,
-        ickbPool,
-        tipHeader,
-        feeRate,
-        account,
-        chainConfig,
-      ));
-  };
-  return attempt(binarySearch(N, (n) => isPopulated(attempt(n))));
-}
-
-function convertAttempt(
-  quantity: number,
-  isCkb2Udt: boolean,
-  maxAmount: bigint,
-  tx: TransactionSkeletonType,
-  depositAmount: bigint,
-  ickbPool: readonly MyExtendedDeposit[],
-  _tipHeader: Readonly<I8Header>,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): TransactionSkeletonType {
-  const { config } = chainConfig;
-  if (quantity > 0) {
-    if (isCkb2Udt) {
-      maxAmount -= depositAmount * BigInt(quantity);
-      if (maxAmount < 0n) {
-        return TransactionSkeleton();
-      }
-      tx = ickbDeposit(tx, quantity, depositAmount, config);
-    } else {
-      const d = ickbPool[quantity - 1];
-      if (ickbPool.length < quantity || !d) {
-        return TransactionSkeleton();
-      }
-      maxAmount -= d.ickbCumulative;
-      if (maxAmount < 0n) {
-        return TransactionSkeleton();
-      }
-      const deposits = ickbPool.slice(0, quantity).map((d) => d.deposit);
-      tx = ickbRequestWithdrawalFrom(tx, deposits, config);
-    }
-  }
-
-  let freeCkb: bigint, freeIckbUdt: bigint;
-  ({ tx, freeCkb, freeIckbUdt } = addChange(tx, feeRate, account, chainConfig));
-
-  if (freeIckbUdt < 0n) {
-    return TransactionSkeleton();
-  }
-
-  if (quantity > 0 && !isCkb2Udt) {
-    if (freeCkb < 0n) {
-      return TransactionSkeleton();
-    }
-  } else {
-    if (freeCkb < 1000n * CKB) {
-      return TransactionSkeleton();
-    }
-  }
-
-  if (quantity > 0 && tx.outputs.size > 64) {
-    return TransactionSkeleton();
-  }
-
-  return tx;
-}
-
-function addChange(
-  tx: TransactionSkeletonType,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): {
-  tx: TransactionSkeletonType;
-  freeCkb: bigint;
-  freeIckbUdt: bigint;
-} {
-  const { lockScript: accountLock, preSigner: addPlaceholders } = account;
-  const { config } = chainConfig;
-  let freeCkb, freeIckbUdt;
-  tx = addReceiptDepositsChange(tx, accountLock, config);
-  tx = addOwnedWithdrawalRequestsChange(tx, accountLock, config);
-  ({ tx, freeIckbUdt } = addIckbUdtChange(tx, accountLock, config));
-  ({ tx, freeCkb } = addCkbChange(
-    tx,
-    accountLock,
-    (txWithDummyChange: TransactionSkeletonType) =>
-      calculateTxFee(txSize(addPlaceholders(txWithDummyChange)), feeRate),
-    config,
-  ));
-
-  return { tx, freeCkb, freeIckbUdt };
-}
-
-function base({
-  capacities = [],
-  udts = [],
-  receipts = [],
-  wrGroups = [],
-  myOrders = [],
-}: {
-  capacities?: I8Cell[];
-  udts?: I8Cell[];
-  receipts?: I8Cell[];
-  wrGroups?: Readonly<{
-    ownedWithdrawalRequest: I8Cell;
-    owner: I8Cell;
-  }>[];
-  myOrders?: MyOrder[];
-}): TransactionSkeletonType {
-  let tx = TransactionSkeleton();
-  tx = addCells(tx, "append", [capacities, udts, receipts].flat(), []);
-  tx = addWithdrawalRequestGroups(tx, wrGroups);
-  tx = orderMelt(tx, myOrders);
-  return tx;
-}
-
-async function getL1State(
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): Promise<{
-  capacities: I8Cell[];
-  udts: I8Cell[];
-  receipts: I8Cell[];
-  matureWrGroups: Readonly<{
-    ownedWithdrawalRequest: I8Cell;
-    owner: I8Cell;
-  }>[];
-  notMatureWrGroups: Readonly<{
-    ownedWithdrawalRequest: I8Cell;
-    owner: I8Cell;
-  }>[];
-  myOrders: MyOrder[];
-  orders: Order[];
-  ickbPool: Readonly<ExtendedDeposit>[];
-  tipHeader: Readonly<I8Header>;
-  feeRate: bigint;
-}> {
-  const { chain, config, rpc } = chainConfig;
-  const { expander } = account;
-
-  const mixedCells = await getMixedCells(account, chainConfig);
-
-  // Prefetch feeRate and tipHeader
-  const feeRatePromise = rpc.getFeeRate(61n);
-  const tipHeaderPromise = rpc.getTipHeader();
-
-  // Prefetch headers
-  const wantedHeaders = new Set<string>();
-  const deferredGetHeader = (blockNumber: string): Readonly<I8Header> => {
-    wantedHeaders.add(blockNumber);
-    return headerPlaceholder;
-  };
-  ickbSifter(mixedCells, expander, deferredGetHeader, config);
-  const headersPromise = getHeadersByNumber(wantedHeaders, chainConfig);
-
-  // Prefetch txs outputs
-  const wantedTxsOutputs = new Set<string>();
-  const deferredGetTxsOutputs = (txHash: string): never[] => {
-    wantedTxsOutputs.add(txHash);
-    return [];
-  };
-  orderSifter(mixedCells, expander, deferredGetTxsOutputs, config);
-  const txsOutputsPromise = getTxsOutputs(wantedTxsOutputs, chainConfig);
-
-  // Sift capacities
-  const { capacities, notCapacities } = capacitySifter(mixedCells, expander);
-
-  // Await for headers
-  const headers = await headersPromise;
-
-  // Sift through iCKB related cells
-  const {
-    udts,
-    receipts,
-    withdrawalRequestGroups,
-    ickbPool: pool,
-    notIckbs,
-  } = ickbSifter(
-    notCapacities,
-    expander,
-    (blockNumber) => headers.get(blockNumber) ?? headerPlaceholder,
-    config,
-  );
-
-  const tipHeader = I8Header.from(await tipHeaderPromise);
-  // Partition between ripe and non ripe withdrawal requests
-  const { mature: matureWrGroups, notMature: notMatureWrGroups } =
-    maturityDiscriminator(
-      withdrawalRequestGroups,
-      (g) => {
-        const type = g.ownedWithdrawalRequest.cellOutput.type;
-        if (!type) {
-          return "0x0";
-        }
-        return type[since];
-      },
-      tipHeader,
-    );
-
-  // min lock: 1/16 epoch (~ 15 minutes)
-  const minLock =
-    chain === "devnet" ? undefined : { length: 16, index: 1, number: 0 };
-  // max additional lock: 3/16 epoch (~ 45 minutes), for a total of one hours max lock
-  const maxLock =
-    chain === "devnet" ? undefined : { length: 16, index: 3, number: 0 };
-  // Sort the ickbPool based on the tip header
-  const ickbPool = ickbPoolSifter(pool, tipHeader, minLock, maxLock);
-
-  // Await for txsOutputs
-  const txsOutputs = await txsOutputsPromise;
-
-  // Sift through Orders
-  const { myOrders, orders } = orderSifter(
-    notIckbs,
-    expander,
-    (txHash) => txsOutputs.get(txHash) ?? [],
-    config,
-  );
-
-  return {
-    capacities,
-    udts,
-    receipts,
-    matureWrGroups,
-    notMatureWrGroups,
-    myOrders,
-    orders: orders.filter((o) => o.info.isMatchable),
-    ickbPool,
-    tipHeader,
-    feeRate: await feeRatePromise,
-  };
-}
-
-async function getMixedCells(
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): Promise<Cell[]> {
-  const { rpc, config } = chainConfig;
-  return (
-    await Promise.all(
-      [
-        account.lockScript,
-        ickbLogicScript(config),
-        ownedOwnerScript(config),
-        limitOrderScript(config),
-      ].map((lock) => rpc.getCellsByLock(lock, "desc", "max")),
-    )
-  ).flat();
-}
-
-async function getTxsOutputs(
-  txHashes: Set<string>,
-  chainConfig: ChainConfig,
-): Promise<Readonly<Map<string, readonly Cell[]>>> {
-  const { rpc } = chainConfig;
-
-  const result = new Map<string, readonly Cell[]>();
-  const batch = rpc.createBatchRequest();
-  for (const txHash of txHashes) {
-    const outputs = _knownTxsOutputs.get(txHash);
-    if (outputs !== undefined) {
-      result.set(txHash, outputs);
-      continue;
-    }
-    batch.add("getTransaction", txHash);
-  }
-
-  if (batch.length === 0) {
-    return _knownTxsOutputs;
-  }
-
-  for (const tx of (await batch.exec()).map(
-    ({ transaction: tx }: { transaction: Transaction }) => tx,
-  )) {
-    const txHash = tx.hash;
-    if (!txHash) {
-      throw new Error("Empty tx hash");
-    }
-    result.set(
-      txHash,
-      Object.freeze(
-        tx.outputs.map(({ lock, type, capacity }, index) =>
-          Object.freeze({
-            cellOutput: Object.freeze({
-              lock: Object.freeze(lock),
-              type: Object.freeze(type),
-              capacity: Object.freeze(capacity),
-            }),
-            data: Object.freeze(tx.outputsData[index] ?? "0x"),
-            outPoint: Object.freeze({
-              txHash: txHash,
-              index: hex(index),
-            }),
-          } as Cell),
-        ),
-      ),
-    );
-  }
-
-  const frozenResult = Object.freeze(result);
-  _knownTxsOutputs = frozenResult;
-  return frozenResult;
-}
-
-let _knownTxsOutputs = Object.freeze(new Map<string, readonly Cell[]>());
-
-async function getHeadersByNumber(
-  wanted: Set<string>,
-  chainConfig: ChainConfig,
-): Promise<Readonly<Map<string, Readonly<I8Header>>>> {
-  const { rpc } = chainConfig;
-
-  const result = new Map<string, Readonly<I8Header>>();
-  const batch = rpc.createBatchRequest();
-  for (const blockNum of wanted) {
-    const h = _knownHeaders.get(blockNum);
-    if (h !== undefined) {
-      result.set(blockNum, h);
-      continue;
-    }
-    batch.add("getHeaderByNumber", blockNum);
-  }
-
-  if (batch.length === 0) {
-    return _knownHeaders;
-  }
-
-  const headers = (await batch.exec()) as Header[];
-
-  for (const h of headers) {
-    result.set(h.number, I8Header.from(h));
-  }
-
-  const frozenResult = Object.freeze(result);
-  _knownHeaders = frozenResult;
-  return frozenResult;
-}
-
-let _knownHeaders = Object.freeze(new Map<string, Readonly<I8Header>>());
-
-const headerPlaceholder = I8Header.from({
-  compactTarget: "0x1a08a97e",
-  parentHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  transactionsRoot:
-    "0x31bf3fdf4bc16d6ea195dbae808e2b9a8eca6941d589f6959b1d070d51ac28f7",
-  proposalsHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  extraHash:
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  dao: "0x8874337e541ea12e0000c16ff286230029bfa3320800000000710b00c0fefe06",
-  epoch: "0x0",
-  hash: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5",
-  nonce: "0x0",
-  number: "0x0",
-  timestamp: "0x16e70e6985c",
-  version: "0x0",
-});
-
-function secp256k1Blake160(
-  privateKey: string,
-  config: ConfigAdapter,
-): {
-  publicKey: string;
-  lockScript: Readonly<I8Script>;
-  address: string;
-  expander: (c: Cell) => I8Script | undefined;
-  preSigner: (tx: TransactionSkeletonType) => TransactionSkeletonType;
-  signer: (tx: TransactionSkeletonType) => Transaction;
-} {
-  const publicKey = key.privateToPublic(privateKey);
-
-  const lockScript = I8Script.from({
-    /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
-    ...config.defaultScript("SECP256K1_BLAKE160"),
-    args: key.publicKeyToBlake160(publicKey),
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
-
-  const address = encodeToAddress(lockScript, { config });
-
-  const expander = lockExpanderFrom(lockScript);
-
-  function preSigner(tx: TransactionSkeletonType): TransactionSkeletonType {
-    return addWitnessPlaceholder(tx, lockScript);
-  }
-
-  function signer(tx: TransactionSkeletonType): Transaction {
-    tx = preSigner(tx);
-    tx = prepareSigningEntries(tx, { config });
-    const message = tx.get("signingEntries").get(0)?.message;
-    if (!message) {
-      throw new Error("Empty message to sign");
-    }
-    const sig = key.signRecoverable(message, privateKey);
-
-    return sealTransaction(tx, [sig]);
-  }
-
-  return {
-    publicKey,
-    lockScript,
-    address,
-    expander,
-    preSigner,
-    signer,
-  };
 }
 
 await main();
