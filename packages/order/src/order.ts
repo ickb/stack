@@ -821,6 +821,10 @@ export class OrderMatcher {
     isCkb2Udt: boolean,
     ckbMiningFee: ccc.FixedPoint,
   ): OrderMatcher | undefined {
+    if (isCkb2Udt ? !order.isCkb2UdtMatchable() : !order.isUdt2CkbMatchable()) {
+      return;
+    }
+
     let aScale: ccc.Num;
     let bScale: ccc.Num;
     let aIn: ccc.FixedPoint;
@@ -843,7 +847,7 @@ export class OrderMatcher {
       bMiningFee = 0n;
     } else {
       // When converting UDT to CKB, swap the scale factors.
-      ({ ckbScale: bScale, udtScale: aScale } = order.data.info.ckbToUdt);
+      ({ ckbScale: bScale, udtScale: aScale } = order.data.info.udtToCkb);
       [bIn, aIn] = [order.ckbValue, order.udtValue];
       bMinMatch = order.data.info.getCkbMinMatch();
       aMin = 0n;
@@ -919,6 +923,17 @@ export class OrderMatcher {
       this.aIn,
       bOut,
     );
+
+    if (
+      !this.isCkb2Udt &&
+      this.aIn * this.aScale < aOut * this.aScale + this.bMinMatch * this.bScale
+    ) {
+      return {
+        ckbDelta: 0n,
+        udtDelta: 0n,
+        partials: [],
+      };
+    }
 
     return this.create(aOut, bOut);
   }
