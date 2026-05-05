@@ -16,7 +16,7 @@ Callers own the final completion pipeline:
 
 The shared CCC baseline lives in `forks/ccc/pin/` and materializes into `forks/ccc/repo/`.
 
-Prerequisites: `curl`, `git`, and `jq`.
+Prerequisites: `git` and `jq`.
 
 From a plain checkout:
 
