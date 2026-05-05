@@ -1,5 +1,3 @@
-*
-!.gitignore
-!config.json
-!.pin/
-!.pin/**
+*/repo/
+.stage/
+.lock/

@@ -13,5 +13,8 @@ jobs:
           node-version: 24
       - uses: pnpm/action-setup@v4
 
-      - name: Check (lint, build and test)
+      - name: Install jq for fork bootstrap
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends jq
+
+      - name: Run pnpm check
         run: pnpm check

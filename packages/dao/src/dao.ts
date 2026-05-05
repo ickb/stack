@@ -6,6 +6,18 @@ import {
 } from "@ickb/utils";
 import { daoCellFrom, type DaoCell } from "./cells.js";
 
+export async function assertDaoOutputLimit(
+  txLike: ccc.TransactionLike,
+  client: ccc.Client,
+): Promise<void> {
+  const tx = ccc.Transaction.from(txLike);
+  if (await ccc.isDaoOutputLimitExceeded(tx, client)) {
+    throw new Error(
+      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
+    );
+  }
+}
+
 /**
  * Manage NervosDAO functionalities.
  */
@@ -97,7 +109,7 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    await assertDaoOutputLimit(tx, client);
     return tx;
   }
 
@@ -173,7 +185,7 @@ export class DaoManager implements ScriptDeps {
       );
     }
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    await assertDaoOutputLimit(tx, client);
     return tx;
   }
 
@@ -248,7 +260,7 @@ export class DaoManager implements ScriptDeps {
       tx.setWitnessArgsAt(inputIndex, witness);
     }
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    await assertDaoOutputLimit(tx, client);
     return tx;
   }
 

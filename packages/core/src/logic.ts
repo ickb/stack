@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoManager } from "@ickb/dao";
+import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import {
   defaultFindCellsLimit,
   type ScriptDeps,
@@ -101,7 +101,7 @@ export class LogicManager implements ScriptDeps {
       ReceiptData.encode({ depositQuantity, depositAmount }),
     );
 
-    await ccc.assertDaoOutputLimit(tx, client);
+    await assertDaoOutputLimit(tx, client);
     return tx;
   }
 

@@ -17,6 +17,10 @@ import { unique, type ScriptDeps } from "@ickb/utils";
  *   explicit script dependencies for devnet.
  * @param bots - An optional array of bot script-like objects to augment the list of known bots.
  * @returns An object containing the instantiated managers and bots.
+ *
+ * @remarks `managers.ickbUdt` stays caller-owned on purpose. `IckbSdk`
+ * builders return partial transactions, so callers should use `ickbUdt`
+ * for UDT completion before running CCC-native capacity and fee completion.
  */
 export function getConfig(
   d:
@@ -184,7 +188,6 @@ const ORDER = {
 
 /**
  * Mainnet xUDT code cell OutPoint.
- * Source: forks/contracts/scripts/deployment/mainnet/deployment.toml
  */
 const MAINNET_XUDT_CODE = {
   txHash:
@@ -194,7 +197,6 @@ const MAINNET_XUDT_CODE = {
 
 /**
  * Mainnet iCKB Logic code cell OutPoint.
- * Source: forks/contracts/scripts/deployment/mainnet/deployment.toml
  */
 const MAINNET_LOGIC_CODE = {
   txHash:
@@ -204,7 +206,6 @@ const MAINNET_LOGIC_CODE = {
 
 /**
  * Testnet xUDT code cell OutPoint.
- * Source: forks/contracts/scripts/deployment/testnet/deployment.toml
  */
 const TESTNET_XUDT_CODE = {
   txHash:
@@ -214,7 +215,6 @@ const TESTNET_XUDT_CODE = {
 
 /**
  * Testnet iCKB Logic code cell OutPoint.
- * Source: forks/contracts/scripts/deployment/testnet/deployment.toml
  */
 const TESTNET_LOGIC_CODE = {
   txHash:
