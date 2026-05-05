@@ -49,12 +49,9 @@
     "@types/node": "catalog:"
   },
   "dependencies": {
-    "@ckb-lumos/base": "^0.23.0",
-    "@ckb-lumos/common-scripts": "^0.23.0",
-    "@ckb-lumos/config-manager": "^0.23.0",
-    "@ckb-lumos/hd": "^0.23.0",
-    "@ckb-lumos/helpers": "^0.23.0",
-    "@ickb/lumos-utils": "1.4.2",
-    "@ickb/v1-core": "1.4.2"
+    "@ckb-ccc/core": "catalog:",
+    "@ickb/core": "workspace:*",
+    "@ickb/order": "workspace:*",
+    "@ickb/sdk": "workspace:*"
   }
 }

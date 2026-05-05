@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,7 +47,9 @@ function collectDirectCccDeps(root) {
     const groupDir = join(root, group);
     for (const entry of readdirSync(groupDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      manifests.push(join(groupDir, entry.name, "package.json"));
+      const manifestPath = join(groupDir, entry.name, "package.json");
+      if (!existsSync(manifestPath)) continue;
+      manifests.push(manifestPath);
     }
   }
 
