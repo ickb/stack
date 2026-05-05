@@ -130,6 +130,7 @@ async function transact(
   walletConfig: WalletConfig,
 ): Promise<void> {
   const { address, chain, cccClient, queryClient, signer } = walletConfig;
+  const maxConfirmationChecks = 60;
 
   try {
     freezeTxInfo(txInfo);
@@ -138,14 +139,23 @@ async function transact(
     const txHash = await signer.sendTransaction(txInfo.tx);
 
     let status: string | undefined = "sent";
-    while (status === undefined || ["sent", "pending", "proposed"].includes(status)) {
+    let checks = 0;
+    while (
+      checks < maxConfirmationChecks &&
+      (status === undefined || ["sent", "pending", "proposed"].includes(status))
+    ) {
       setMessage("Waiting for network confirmation...");
       await new Promise((resolve) => setTimeout(resolve, 10000));
       status = (await cccClient.getTransaction(txHash))?.status;
+      checks += 1;
+    }
+
+    if (checks >= maxConfirmationChecks) {
+      throw new Error("Transaction confirmation timed out");
     }
 
     if (status !== "committed") {
-      throw new Error(`Transaction ended with status: ${status}`);
+      throw new Error(`Transaction ended with status: ${status ?? "unknown"}`);
     }
 
     setMessage("Transaction confirmed.");
