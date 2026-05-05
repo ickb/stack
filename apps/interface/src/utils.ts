@@ -115,7 +115,7 @@ export const epochSinceValuePadding = Object.freeze({
   number: 0,
   index: 0,
   length: 1,
-} as EpochSinceValue);
+});
 
 export type TxInfo = Readonly<{
   tx: TransactionSkeletonType;
