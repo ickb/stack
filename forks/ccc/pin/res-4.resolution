@@ -1,0 +1,5 @@
+--- vitest.config.mts
+CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=fcdfad3350820e02562bb811cdd7f0d270c70547e1ac9a61c6b904d450ca9cdd
+    projects: [...packages, "packages/udt"],
+CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=ebf7d961f9311563654bf59e4e3251d6e5057b6d410a6acc419c12bd1c793e26
+      include: [...packages, "packages/udt"],
