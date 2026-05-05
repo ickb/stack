@@ -1,71 +1,69 @@
 # iCKB Bot
 
-Currently the Bot tries to minimize the amount of iCKB holdings, actively looking to convert them to CKB. This is to maximize the CKB liquidity that the bot can offer in case of a iCKB to CKB liquidity crunch, such as [when the redemptions overcome the short term availability of mature deposits](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369/14).
+The bot is now CCC-native. It reads market state from `@ickb/sdk`, melts the bot's own orders, completes matured receipts and withdrawals, matches profitable limit orders, optionally rebalances between CKB and iCKB, then completes iCKB UDT balance, CKB capacity, fees, signs, and sends.
 
-**Rules of thumb**:
-
-- Distribute liquidity across multiple isolated bots (each holding only a fraction) to keep potential hack losses manageable.
-- Each bot liquidity must be at least 130k CKB.
+The bot still aims to minimize excess iCKB holdings so more liquidity stays available in CKB during iCKB-to-CKB redemption pressure.
 
 ## Docs
-
-The docs directory aims to host comprehensive documentation outlining the inner workings of the iCKB Fulfillment Bot. As a living document, it will be continuously updated to reflect the Bot’s evolution and ongoing improvements:
 
 - [iCKB Deposit Pool Rebalancing Algorithm](pool_rebalancing.md)
 - [iCKB Deposit Pool Snapshot Encoding](pool_snapshot.md)
 
-## Run the limit order fulfillment bot on testnet
+## Environment
 
-1. Download this repo in a folder of your choice:  
+Required variables:
 
-```bash
-git clone https://github.com/ickb/stack.git
-```
-
-2. Enter into the repo folder:
-
-```bash
-cd stack/apps/bot
-```
-
-3. Install dependencies:
-
-```bash
-pnpm install
-```
-
-4. Build project:
-
-```bash
-pnpm build
-```
-
-5. In `apps/bot` define a `env/testnet/.env` file, for example:
-
-```
+```text
 CHAIN=testnet
-BOT_PRIVATE_KEY=0x-YOUR-SECP256K1-BLAKE160-PRIVATE-KEY
+BOT_PRIVATE_KEY=0x...
 BOT_SLEEP_INTERVAL=60
 ```
 
-Optionally the property `RPC_URL` can also be specified:
+Optional variable:
 
-```
+```text
 RPC_URL=http://127.0.0.1:8114/
 ```
 
-6. Start matching user limit orders:
+Current network support:
+
+- `CHAIN=testnet`
+- `CHAIN=mainnet`
+
+## Run
+
+From the repo root:
 
 ```bash
-export CHAIN=testnet;
-pnpm run start:loop;
+pnpm install
+pnpm --filter ./apps/bot build
+mkdir -p apps/bot/env/testnet
+$EDITOR apps/bot/env/testnet/.env
+export CHAIN=testnet
+pnpm --filter ./apps/bot start:loop
 ```
 
-## Questions
+Or from `apps/bot`:
 
-For questions or comments, please join the discussion via [GitHub Issues](https://github.com/ickb/stack/issues), the [Nervos Nation iCKB channel](https://t.me/NervosNation/307406/378182), or the [Nervos Talk thread](https://talk.nervos.org/t/dis-ickb-dckb-rescuer-funding-proposal-non-coding-expenses/8369).
+```bash
+pnpm install
+pnpm build
+mkdir -p env/testnet
+$EDITOR env/testnet/.env
+export CHAIN=testnet
+pnpm run start:loop
+```
 
+`CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `BOT_PRIVATE_KEY` and `BOT_SLEEP_INTERVAL`.
+
+The start script keeps the existing JSON log format and writes one log file per run.
+
+## Notes
+
+- Distribute liquidity across multiple isolated bots to limit blast radius.
+- Keep at least roughly 130k CKB worth of capital available for the bot to operate comfortably.
+- The bot relies on shared CCC packages for protocol-specific transaction content, but it still owns final iCKB completion, fee completion, signing, and send.
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack) and it is released under the [MIT License](../../LICENSE).
+Released under the [MIT License](../../LICENSE).

@@ -49,33 +49,18 @@ importers:
 
   apps/bot:
     dependencies:
-      '@ckb-lumos/base':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/ckb-indexer':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/codec':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/common-scripts':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/config-manager':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/hd':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ckb-lumos/helpers':
-        specifier: ^0.23.0
-        version: 0.23.0
-      '@ickb/lumos-utils':
-        specifier: 1.4.2
-        version: 1.4.2
-      '@ickb/v1-core':
-        specifier: 1.4.2
-        version: 1.4.2
+      '@ckb-ccc/core':
+        specifier: workspace:*
+        version: link:../../forks/ccc/repo/packages/core
+      '@ickb/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@ickb/order':
+        specifier: workspace:*
+        version: link:../../packages/order
+      '@ickb/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
