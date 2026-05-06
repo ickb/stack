@@ -61,7 +61,7 @@ export class OwnerData extends ccc.Entity.Base<OwnerDataLike, OwnerData>() {
 export interface ReceiptDataLike {
   /** The quantity of deposits. */
   depositQuantity: ccc.NumLike;
-  /** The total amount of deposits. */
+  /** The unoccupied capacity of each deposit tracked by the receipt. */
   depositAmount: ccc.FixedPointLike;
 }
 
@@ -84,7 +84,7 @@ export class ReceiptData extends ccc.Entity.Base<
    * Creates an instance of ReceiptData.
    *
    * @param depositQuantity - The quantity of deposits.
-   * @param depositAmount - The total amount of deposits.
+   * @param depositAmount - The unoccupied capacity of each tracked deposit.
    */
   constructor(
     public depositQuantity: ccc.Num,
@@ -109,5 +109,9 @@ export class ReceiptData extends ccc.Entity.Base<
       ccc.numFrom(depositQuantity),
       ccc.fixedPointFrom(depositAmount),
     );
+  }
+
+  static decodePrefix(encoded: ccc.Hex): ReceiptData {
+    return ReceiptData.decode(encoded.slice(0, 26));
   }
 }

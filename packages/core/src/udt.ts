@@ -119,7 +119,7 @@ export class IckbUdt extends udt.Udt {
         }
 
         const { depositQuantity, depositAmount } =
-          ReceiptData.decode(cell.outputData);
+          ReceiptData.decodePrefix(cell.outputData);
         info.addAssign({
           balance: ickbValue(depositAmount, txWithHeader.header) *
             depositQuantity,

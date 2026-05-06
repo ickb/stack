@@ -26,7 +26,8 @@ export interface DaoCell extends ValueComponents {
 
   /**
    * Indicates the readiness to be consumed by a transaction.
-   * In case of deposit, it is false if the cycle renewal is less than minLockUp or more than maxLockUp away,
+   * In case of deposit, it is true only when the renewal stays strictly inside the configured window:
+   * `tip + minLockUp < maturity < tip + maxLockUp`.
    * while in case of withdrawal request, it indicates the readiness for withdrawal.
    */
   isReady: boolean;
@@ -42,7 +43,7 @@ export interface DaoCell extends ValueComponents {
  *
  * The options object also include:
  * - `tip`: The current tip block header.
- * - `minLockUp`: An optional minimum lock-up period in epochs (Default 15 minutes)
+ * - `minLockUp`: An optional minimum lock-up period in epochs (Default 10 minutes)
  * - `maxLockUp`: An optional maximum lock-up period in epochs (Default 3 days)
  *
  * @returns A promise that resolves to a DaoCell.
@@ -123,11 +124,12 @@ export async function daoCellFrom(
   const minLockUp = options.minLockUp ?? defaultMinLockUp;
   const maxLockUp = options.maxLockUp ?? defaultMaxLockUp;
 
-  // Deposit: maturity > minLockUp + tip.epoch
-  // WithdrawalRequest: maturity > tip.epoch
+  // Deposit: ready only within the current/next usable DAO window.
+  // The boundaries are exclusive so callers do not race an exact-edge inclusion.
+  // WithdrawalRequest: ready once the claim epoch has been reached.
   let isReady = isDeposit
     ? maturity.compare(minLockUp.add(tip.epoch)) > 0
-    : maturity.compare(tip.epoch) > 0;
+    : maturity.compare(tip.epoch) <= 0;
 
   if (isDeposit) {
     // Deposit: maturity < tip.epoch + maxLockUp

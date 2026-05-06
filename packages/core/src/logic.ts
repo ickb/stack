@@ -58,7 +58,7 @@ export class LogicManager implements ScriptDeps {
    *
    * @param txLike - The transaction to add the deposit to.
    * @param depositQuantity - The quantity of deposits.
-   * @param depositAmount - The amount of each deposit.
+   * @param depositCapacity - The total capacity of each deposit output.
    * @param lock - The lock script for the output receipt cell.
    *
    * @remarks Caller must ensure UDT cellDeps are added to the transaction
@@ -67,7 +67,7 @@ export class LogicManager implements ScriptDeps {
   async deposit(
     txLike: ccc.TransactionLike,
     depositQuantity: number,
-    depositAmount: ccc.FixedPoint,
+    depositCapacity: ccc.FixedPoint,
     lock: ccc.Script,
     client: ccc.Client,
   ): Promise<ccc.Transaction> {
@@ -76,23 +76,41 @@ export class LogicManager implements ScriptDeps {
       return tx;
     }
 
-    if (depositAmount < ccc.fixedPointFrom(1082)) {
-      throw new Error("iCKB deposit minimum is 1082 CKB");
+    const depositCell = ccc.Cell.from({
+      previousOutput: {
+        txHash: `0x${"00".repeat(32)}`,
+        index: 0,
+      },
+      cellOutput: {
+        capacity: depositCapacity,
+        lock: this.script,
+        type: this.daoManager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    const depositAmount = depositCell.capacityFree;
+
+    if (depositAmount < ccc.fixedPointFrom(1000)) {
+      throw new Error(
+        "iCKB deposit minimum is 1000 CKB free capacity (1082 CKB total capacity)",
+      );
     }
 
-    if (depositAmount > ccc.fixedPointFrom(1000082)) {
-      throw new Error("iCKB deposit maximum is 1000082 CKB");
+    if (depositAmount > ccc.fixedPointFrom(1000000)) {
+      throw new Error(
+        "iCKB deposit maximum is 1000000 CKB free capacity (1000082 CKB total capacity)",
+      );
     }
 
     tx.addCellDeps(this.cellDeps);
 
     const capacities = Array.from(
       { length: depositQuantity },
-      () => depositAmount,
+      () => depositCapacity,
     );
     tx = await this.daoManager.deposit(tx, capacities, this.script, client);
 
-    // Add the Receipt to the outputs
+    // Receipts track the deposit's free capacity, not the full DAO cell capacity.
     tx.addOutput(
       {
         lock: lock,
