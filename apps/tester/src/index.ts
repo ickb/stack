@@ -11,6 +11,7 @@ const TESTER_FEE = 100n;
 const TESTER_FEE_BASE = 100000n;
 const MAX_ELAPSED_BLOCKS = 100800n;
 const FIND_CELLS_PAGE_SIZE = 400;
+const RANDOM_SCALE = 1000000n;
 
 interface Runtime {
   chain: SupportedChain;
@@ -106,26 +107,25 @@ async function main(): Promise<void> {
       };
       executionLog.ratio = state.system.exchangeRatio;
 
-      let r = Math.random();
-      const ickbEquivalentBalance = Number(
-        convert(true, state.availableCkbBalance, state.system.tip),
+      const ickbEquivalentBalance = convert(
+        true,
+        state.availableCkbBalance,
+        state.system.tip,
       );
-      const ickbBalance = Number(state.availableIckbBalance);
+      const totalIckbBalance = ickbEquivalentBalance + state.availableIckbBalance;
       const isCkb2Udt =
-        Math.round((ickbEquivalentBalance + ickbBalance) * r) <=
-          ickbEquivalentBalance;
+        sampleRatio(totalIckbBalance) <= ickbEquivalentBalance;
 
-      r = Math.random();
       const ckbAmount = isCkb2Udt
         ? min(
-            BigInt(Math.round(r * Number(depositAmount))),
+            sampleRatio(depositAmount),
             state.availableCkbBalance - CKB_RESERVE,
           )
         : 0n;
       const udtAmount = isCkb2Udt
         ? 0n
         : min(
-            BigInt(Math.round(r * Number(ICKB_DEPOSIT_CAP))),
+            sampleRatio(ICKB_DEPOSIT_CAP),
             state.availableIckbBalance,
           );
 
@@ -351,6 +351,18 @@ function errorToLog(error: unknown): unknown {
 
 function min(left: bigint, right: bigint): bigint {
   return left < right ? left : right;
+}
+
+function sampleRatio(amount: bigint): bigint {
+  if (amount <= 0n) {
+    return 0n;
+  }
+
+  return (amount * randomScaled()) / RANDOM_SCALE;
+}
+
+function randomScaled(): bigint {
+  return BigInt(Math.floor(Math.random() * Number(RANDOM_SCALE)));
 }
 
 function sleep(ms: number): Promise<void> {
