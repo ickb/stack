@@ -2,13 +2,26 @@ packages:
   - packages/*
   - apps/*
   # Local CCC workspace when materialized via `pnpm forks:bootstrap`.
-  - forks/ccc/repo/packages/*
-  - "!forks/ccc/repo/packages/demo"
-  - "!forks/ccc/repo/packages/docs"
-  - "!forks/ccc/repo/packages/examples"
-  - "!forks/ccc/repo/packages/faucet"
-  - "!forks/ccc/repo/packages/playground"
-  - "!forks/ccc/repo/packages/tests"
+  - forks/ccc/repo/packages/ccc
+  - forks/ccc/repo/packages/ckb-ccc
+  - forks/ccc/repo/packages/connector
+  - forks/ccc/repo/packages/connector-react
+  - forks/ccc/repo/packages/core
+  - forks/ccc/repo/packages/did-ckb
+  - forks/ccc/repo/packages/eip6963
+  - forks/ccc/repo/packages/joy-id
+  - forks/ccc/repo/packages/lumos-patches
+  - forks/ccc/repo/packages/nip07
+  - forks/ccc/repo/packages/okx
+  - forks/ccc/repo/packages/rei
+  - forks/ccc/repo/packages/shell
+  - forks/ccc/repo/packages/spore
+  - forks/ccc/repo/packages/ssri
+  - forks/ccc/repo/packages/type-id
+  - forks/ccc/repo/packages/udt
+  - forks/ccc/repo/packages/uni-sat
+  - forks/ccc/repo/packages/utxo-global
+  - forks/ccc/repo/packages/xverse
 
 overrides:
   # Keep published manifests on `catalog:` while forcing the materialized

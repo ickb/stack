@@ -1,60 +1,42 @@
-import type { Cell, Transaction } from "@ckb-lumos/base";
-import { prepareSigningEntries } from "@ckb-lumos/common-scripts/lib/secp256k1_blake160.js";
-import { key } from "@ckb-lumos/hd";
-import type { TransactionSkeletonType } from "@ckb-lumos/helpers";
-import {
-  TransactionSkeleton,
-  encodeToAddress,
-  sealTransaction,
-} from "@ckb-lumos/helpers";
-import {
-  CKB,
-  I8Cell,
-  I8Header,
-  I8Script,
-  addCells,
-  addCkbChange,
-  addWitnessPlaceholder,
-  calculateTxFee,
-  chainConfigFrom,
-  ckbDelta,
-  hex,
-  isChain,
-  lockExpanderFrom,
-  min,
-  simpleSifter,
-  txSize,
-  type ChainConfig,
-  type ConfigAdapter,
-} from "@ickb/lumos-utils";
-import type { MyOrder, OrderRatio } from "@ickb/v1-core";
-import {
-  ICKB_SOFT_CAP_PER_DEPOSIT,
-  addIckbUdtChange,
-  addOwnedWithdrawalRequestsChange,
-  addReceiptDepositsChange,
-  addWithdrawalRequestGroups,
-  ckb2Ickb,
-  ckbSoftCapPerDeposit,
-  getIckbScriptConfigs,
-  ickb2Ckb,
-  ickbDelta,
-  ickbExchangeRatio,
-  ickbUdtType,
-  limitOrderScript,
-  orderMelt,
-  orderMint,
-  orderSifter,
-} from "@ickb/v1-core";
+import { ccc } from "@ckb-ccc/core";
+import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
+import { IckbSdk, getConfig, type SystemState } from "@ickb/sdk";
+import { type OrderGroup } from "@ickb/order";
+
+const CKB = ccc.fixedPointFrom(1);
+const CKB_RESERVE = 2000n * CKB;
+const MIN_POST_TX_CKB = 1000n * CKB;
+const MIN_TOTAL_CAPITAL_DIVISOR = 20n;
+const TESTER_FEE = 100n;
+const TESTER_FEE_BASE = 100000n;
+const MAX_ELAPSED_BLOCKS = 100800n;
+const FIND_CELLS_PAGE_SIZE = 400;
+const RANDOM_SCALE = 1000000n;
+
+interface Runtime {
+  chain: SupportedChain;
+  client: ccc.Client;
+  signer: ccc.SignerCkbPrivateKey;
+  sdk: IckbSdk;
+  managers: ReturnType<typeof getConfig>["managers"];
+  primaryLock: ccc.Script;
+  accountLocks: ccc.Script[];
+}
+
+interface TesterState {
+  system: SystemState;
+  userOrders: OrderGroup[];
+  availableCkbBalance: bigint;
+  availableIckbBalance: bigint;
+}
+
+type SupportedChain = "mainnet" | "testnet";
 
 async function main(): Promise<void> {
   const { CHAIN, RPC_URL, TESTER_PRIVATE_KEY, TESTER_SLEEP_INTERVAL } =
     process.env;
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
-  }
-  if (!isChain(CHAIN)) {
-    throw new Error("Invalid env CHAIN: " + CHAIN);
   }
   if (!TESTER_PRIVATE_KEY) {
     throw new Error("Empty env TESTER_PRIVATE_KEY");
@@ -63,108 +45,92 @@ async function main(): Promise<void> {
     throw new Error("Invalid env TESTER_SLEEP_INTERVAL");
   }
 
-  const chainConfig = await chainConfigFrom(
-    CHAIN,
-    RPC_URL,
-    true,
-    getIckbScriptConfigs,
-  );
-  const { config, rpc, chain } = chainConfig;
-  const account = secp256k1Blake160(TESTER_PRIVATE_KEY, config);
+  const chain = parseChain(CHAIN);
+  const client = createClient(chain, RPC_URL);
+  const { managers, bots } = getConfig(chain);
+  const signer = new ccc.SignerCkbPrivateKey(client, TESTER_PRIVATE_KEY);
+  const primaryLock = (await signer.getRecommendedAddressObj()).script;
+  const runtime: Runtime = {
+    chain,
+    client,
+    signer,
+    sdk: new IckbSdk(
+      managers.ownedOwner,
+      managers.logic,
+      managers.order,
+      bots,
+    ),
+    managers,
+    primaryLock,
+    accountLocks: dedupeScripts(
+      (await signer.getAddressObjs()).map(({ script }) => script),
+    ),
+  };
   const sleepInterval = Number(TESTER_SLEEP_INTERVAL) * 1000;
 
   for (;;) {
-    await new Promise((r) => {
-      setTimeout(r, 2 * Math.random() * sleepInterval);
-    });
-    console.log();
+    await sleep(2 * Math.random() * sleepInterval);
 
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const executionLog: Record<string, any> = {};
+    const executionLog: Record<string, unknown> = {};
     const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
+
     try {
-      const { capacities, udts, myOrders } = await siftCells(
-        account,
-        chainConfig,
-      );
-
-      const tipHeader = I8Header.from(await rpc.getTipHeader());
-      const feeRate = await rpc.getFeeRate(61n);
-
-      const maxElapsedBlocks = chain === "devnet" ? 500n : 100800n; //One week wait on testnet
-      // Wait for new orders to be matched
-
-      // console.log(JSON.stringify(myOrders, replacer, " "));
-
-      if (
-        myOrders.some(
-          (o) =>
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            BigInt(o.cell.blockNumber!) + maxElapsedBlocks >=
-              BigInt(tipHeader.number) && o.info.isMatchable,
-        )
-      ) {
+      const state = await readTesterState(runtime);
+      if (await hasFreshMatchableOrders(runtime, state.userOrders, state.system.tip)) {
         continue;
       }
 
-      // Calculate balances and baseTx
-      const baseTx = base({
-        capacities,
-        myOrders,
-        udts,
-        receipts: [],
-        wrGroups: [],
-      });
-      const ckbBalance = ckbDelta(baseTx, config);
-      const ickbUdtBalance = ickbDelta(baseTx, config);
+      const depositAmount = convert(false, ICKB_DEPOSIT_CAP, state.system.tip);
+      const totalEquivalentCkb =
+        state.availableCkbBalance +
+        convert(false, state.availableIckbBalance, state.system.tip);
 
       executionLog.balance = {
         CKB: {
-          total: fmtCkb(ckbBalance),
-          available: fmtCkb(ckbBalance),
+          total: fmtCkb(state.availableCkbBalance),
+          available: fmtCkb(state.availableCkbBalance),
           unavailable: fmtCkb(0n),
         },
         ICKB: {
-          total: fmtCkb(ickbUdtBalance),
-          available: fmtCkb(ickbUdtBalance),
+          total: fmtCkb(state.availableIckbBalance),
+          available: fmtCkb(state.availableIckbBalance),
           unavailable: fmtCkb(0n),
         },
         totalEquivalent: {
-          CKB: fmtCkb(ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader)),
-          ICKB: fmtCkb(ckb2Ickb(ckbBalance, tipHeader) + ickbUdtBalance),
+          CKB: fmtCkb(totalEquivalentCkb),
+          ICKB: fmtCkb(
+            convert(true, state.availableCkbBalance, state.system.tip) +
+              state.availableIckbBalance,
+          ),
         },
       };
-      executionLog.ratio = ickbExchangeRatio(tipHeader);
+      executionLog.ratio = state.system.exchangeRatio;
 
-      let r = Math.random();
-      const ickbEquivalentBalance = Number(ckb2Ickb(ckbBalance, tipHeader));
-      const ickbBalance = Number(ickbUdtBalance);
+      const ickbEquivalentBalance = convert(
+        true,
+        state.availableCkbBalance,
+        state.system.tip,
+      );
+      const totalIckbBalance = ickbEquivalentBalance + state.availableIckbBalance;
       const isCkb2Udt =
-        Math.round((ickbEquivalentBalance + ickbBalance) * r) <=
-        ickbEquivalentBalance;
-      // const isCkb2Udt = false;
-      // const isCkb2Udt = true;
+        sampleRatio(totalIckbBalance) <= ickbEquivalentBalance;
 
-      r = Math.random();
       const ckbAmount = isCkb2Udt
         ? min(
-            BigInt(Math.round(r * Number(ckbSoftCapPerDeposit(tipHeader)))),
-            ckbBalance - 2000n * CKB,
+            sampleRatio(depositAmount),
+            state.availableCkbBalance - CKB_RESERVE,
           )
         : 0n;
       const udtAmount = isCkb2Udt
         ? 0n
         : min(
-            BigInt(Math.round(r * Number(ICKB_SOFT_CAP_PER_DEPOSIT))),
-            ickbUdtBalance,
+            sampleRatio(ICKB_DEPOSIT_CAP),
+            state.availableIckbBalance,
           );
 
-      if (ckbAmount <= 0n && udtAmount <= 0) {
-        if (
-          ckbBalance + ickb2Ckb(ickbUdtBalance, tipHeader) <
-          ckbSoftCapPerDeposit(tipHeader) / 20n // ~ 5000 CKB
-        ) {
+      if (ckbAmount <= 0n && udtAmount <= 0n) {
+        if (totalEquivalentCkb < depositAmount / MIN_TOTAL_CAPITAL_DIVISOR) {
           executionLog.error =
             "Not enough funds to continue testing, shutting down...";
           console.log(JSON.stringify(executionLog, replacer, " "));
@@ -173,81 +139,45 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(tipHeader);
-      const ratio: OrderRatio = {
-        ckbMultiplier,
-        //   Pay 0.1% fee to bot
-        udtMultiplier:
-          udtMultiplier + (isCkb2Udt ? 1n : -1n) * (udtMultiplier / 1000n),
-      };
-
-      const { tx, freeCkb, freeIckbUdt } = addChange(
-        orderMint(
-          baseTx,
-          account.lockScript,
-          config,
-          isCkb2Udt ? ckbAmount : undefined,
-          isCkb2Udt ? undefined : udtAmount,
-          isCkb2Udt ? ratio : undefined,
-          isCkb2Udt ? undefined : ratio,
-        ),
-        feeRate,
-        account,
-        chainConfig,
-      );
-
-      if (freeIckbUdt < 0n) {
-        throw new Error("Negative iCKB after the tx");
+      const amounts = isCkb2Udt
+        ? { ckbValue: ckbAmount, udtValue: 0n }
+        : { ckbValue: 0n, udtValue: udtAmount };
+      const estimate = IckbSdk.estimate(isCkb2Udt, amounts, state.system, {
+        fee: TESTER_FEE,
+        feeBase: TESTER_FEE_BASE,
+      });
+      if (estimate.convertedAmount <= 0n) {
+        continue;
       }
-      if (isCkb2Udt) {
-        if (freeCkb < 1000n * CKB) {
-          throw new Error("Not enough CKB, less than 1000 CKB after the tx");
-        }
-      } else {
-        if (freeCkb < 0n) {
-          throw new Error("Not enough CKB to execute the transaction");
-        }
+
+      if (isCkb2Udt && state.availableCkbBalance - ckbAmount < MIN_POST_TX_CKB) {
+        throw new Error("Not enough CKB, less than 1000 CKB after the tx");
       }
+
+      const tx = await buildTransaction(runtime, state, amounts, estimate.info);
 
       executionLog.actions = {
         newOrder: isCkb2Udt
           ? {
               giveCkb: fmtCkb(ckbAmount),
-              takeIckb: fmtCkb(
-                (ckbAmount * ratio.ckbMultiplier) / ratio.udtMultiplier,
-              ),
-              fee: fmtCkb(
-                ckbAmount -
-                  ickb2Ckb(
-                    (ckbAmount * ratio.ckbMultiplier) / ratio.udtMultiplier,
-                    tipHeader,
-                  ),
-              ),
+              takeIckb: fmtCkb(estimate.convertedAmount),
+              fee: fmtCkb(estimate.ckbFee),
             }
           : {
               giveIckb: fmtCkb(udtAmount),
-              takeCkb: fmtCkb(
-                (udtAmount * ratio.udtMultiplier) / ratio.ckbMultiplier,
-              ),
-              fee: fmtCkb(
-                ickb2Ckb(udtAmount, tipHeader) -
-                  (udtAmount * ratio.udtMultiplier) / ratio.ckbMultiplier,
-              ),
+              takeCkb: fmtCkb(estimate.convertedAmount),
+              fee: fmtCkb(estimate.ckbFee),
             },
-        cancelledOrders: myOrders.filter((o) => o.info.isMatchable).length,
+        cancelledOrders: state.userOrders.filter((group) => group.order.isMatchable())
+          .length,
       };
       executionLog.txFee = {
-        fee: fmtCkb(ckbDelta(tx, config)),
-        feeRate,
+        fee: fmtCkb(await tx.getFee(runtime.client)),
+        feeRate: state.system.feeRate,
       };
-      executionLog.txHash = await rpc.sendTransaction(account.signer(tx));
+      executionLog.txHash = await runtime.signer.sendTransaction(tx);
     } catch (e) {
-      if (e instanceof Object && "stack" in e) {
-        /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
-        executionLog.error = { ...e, stack: e.stack ?? "" };
-      } else {
-        executionLog.error = e ?? "Empty Error";
-      }
+      executionLog.error = errorToLog(e);
     }
     executionLog.ElapsedSeconds = Math.round(
       (new Date().getTime() - startTime.getTime()) / 1000,
@@ -256,216 +186,210 @@ async function main(): Promise<void> {
   }
 }
 
-function fmtCkb(b: bigint): number {
-  return Number(b) / Number(CKB);
+async function readTesterState(runtime: Runtime): Promise<TesterState> {
+  const [{ system, user }, capacityCells, udtCells] = await Promise.all([
+    runtime.sdk.getL1State(runtime.client, runtime.accountLocks),
+    collectCapacityCells(runtime.signer),
+    collectWalletUdtCells(runtime.signer, runtime.managers.ickbUdt),
+  ]);
+  const walletUdtInfo = await runtime.managers.ickbUdt.infoFrom(
+    runtime.client,
+    udtCells,
+  );
+
+  return {
+    system,
+    userOrders: user.orders,
+    availableCkbBalance:
+      sumValues(capacityCells, (cell) => cell.cellOutput.capacity) +
+      walletUdtInfo.capacity +
+      sumValues(user.orders, (group) => group.ckbValue),
+    availableIckbBalance:
+      walletUdtInfo.balance + sumValues(user.orders, (group) => group.udtValue),
+  };
+}
+
+async function collectCapacityCells(
+  signer: ccc.SignerCkbPrivateKey,
+): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
+
+  for await (const cell of signer.findCellsOnChain(
+    {
+      scriptLenRange: [0n, 1n],
+      outputDataLenRange: [0n, 1n],
+    },
+    true,
+    "asc",
+    FIND_CELLS_PAGE_SIZE,
+  )) {
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+async function collectWalletUdtCells(
+  signer: ccc.SignerCkbPrivateKey,
+  ickbUdt: Runtime["managers"]["ickbUdt"],
+): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
+
+  for await (const cell of signer.findCellsOnChain(
+    ickbUdt.filter,
+    true,
+    "asc",
+    FIND_CELLS_PAGE_SIZE,
+  )) {
+    if (!ickbUdt.isUdt(cell)) {
+      continue;
+    }
+
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+async function hasFreshMatchableOrders(
+  runtime: Runtime,
+  orders: OrderGroup[],
+  tip: ccc.ClientBlockHeader,
+): Promise<boolean> {
+  const tx2BlockNumber = new Map<string, bigint>();
+
+  for (const group of orders) {
+    if (!group.order.isMatchable()) {
+      continue;
+    }
+
+    const txHash = group.order.cell.outPoint.txHash;
+    let blockNumber = tx2BlockNumber.get(txHash);
+    if (blockNumber === undefined) {
+      const tx = await runtime.client.getTransaction(txHash);
+      if (!tx?.blockNumber) {
+        return true;
+      }
+
+      blockNumber = tx.blockNumber;
+      tx2BlockNumber.set(txHash, blockNumber);
+    }
+
+    if (blockNumber + MAX_ELAPSED_BLOCKS >= tip.number) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function buildTransaction(
+  runtime: Runtime,
+  state: TesterState,
+  amounts: { ckbValue: bigint; udtValue: bigint },
+  info: Parameters<IckbSdk["request"]>[2],
+): Promise<ccc.Transaction> {
+  let tx = ccc.Transaction.default();
+
+  if (state.userOrders.length > 0) {
+    tx = runtime.sdk.collect(tx, state.userOrders);
+  }
+
+  tx = await runtime.sdk.request(tx, runtime.primaryLock, info, amounts);
+  tx = await runtime.managers.ickbUdt.completeBy(tx, runtime.signer);
+  await tx.completeFeeBy(runtime.signer, state.system.feeRate);
+
+  if (await ccc.isDaoOutputLimitExceeded(tx, runtime.client)) {
+    throw new Error(
+      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
+    );
+  }
+
+  return tx;
+}
+
+function createClient(chain: SupportedChain, rpcUrl: string | undefined): ccc.Client {
+  const config = rpcUrl ? { url: rpcUrl } : undefined;
+  return chain === "mainnet"
+    ? new ccc.ClientPublicMainnet(config)
+    : new ccc.ClientPublicTestnet(config);
+}
+
+function parseChain(chain: string): SupportedChain {
+  if (chain === "mainnet" || chain === "testnet") {
+    return chain;
+  }
+
+  throw new Error("Invalid env CHAIN: " + chain);
+}
+
+function dedupeScripts(scripts: ccc.Script[]): ccc.Script[] {
+  const seen = new Set<string>();
+  const unique: ccc.Script[] = [];
+
+  for (const script of scripts) {
+    const key = script.toHex();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(script);
+  }
+
+  return unique;
+}
+
+function sumValues<T>(items: readonly T[], project: (item: T) => bigint): bigint {
+  let total = 0n;
+  for (const item of items) {
+    total += project(item);
+  }
+  return total;
+}
+
+function fmtCkb(balance: bigint): number {
+  return Number(balance) / Number(CKB);
 }
 
 function replacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? Number(value) : value;
 }
 
-function addChange(
-  tx: TransactionSkeletonType,
-  feeRate: bigint,
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): {
-  tx: TransactionSkeletonType;
-  freeCkb: bigint;
-  freeIckbUdt: bigint;
-} {
-  const { lockScript: accountLock, preSigner: addPlaceholders } = account;
-  const { config } = chainConfig;
-  let freeCkb, freeIckbUdt;
-  tx = addReceiptDepositsChange(tx, accountLock, config);
-  tx = addOwnedWithdrawalRequestsChange(tx, accountLock, config);
-  ({ tx, freeIckbUdt } = addIckbUdtChange(tx, accountLock, config));
-  ({ tx, freeCkb } = addCkbChange(
-    tx,
-    accountLock,
-    (txWithDummyChange: TransactionSkeletonType) =>
-      calculateTxFee(txSize(addPlaceholders(txWithDummyChange)), feeRate),
-    config,
-  ));
-
-  return { tx, freeCkb, freeIckbUdt };
-}
-
-function base({
-  capacities = [],
-  udts = [],
-  receipts = [],
-  wrGroups = [],
-  myOrders = [],
-}: {
-  capacities?: I8Cell[];
-  udts?: I8Cell[];
-  receipts?: I8Cell[];
-  wrGroups?: Readonly<{
-    ownedWithdrawalRequest: I8Cell;
-    owner: I8Cell;
-  }>[];
-  myOrders?: MyOrder[];
-}): TransactionSkeletonType {
-  let tx = TransactionSkeleton();
-  tx = addCells(tx, "append", [capacities, udts, receipts].flat(), []);
-  tx = addWithdrawalRequestGroups(tx, wrGroups);
-  tx = orderMelt(tx, myOrders);
-  return tx;
-}
-
-async function siftCells(
-  account: ReturnType<typeof secp256k1Blake160>,
-  chainConfig: ChainConfig,
-): Promise<{
-  capacities: I8Cell[];
-  udts: I8Cell[];
-  myOrders: MyOrder[];
-}> {
-  const { rpc, config } = chainConfig;
-  const mixedCells = (
-    await Promise.all(
-      [account.lockScript, limitOrderScript(config)].map((lock) =>
-        rpc.getCellsByLock(lock, "desc", "max"),
-      ),
-    )
-  ).flat();
-
-  const { expander } = account;
-
-  // Prefetch txs outputs
-  const wantedTxsOutputs = new Set<string>();
-  const deferredGetTxsOutputs = (txHash: string): never[] => {
-    wantedTxsOutputs.add(txHash);
-    return [];
-  };
-  orderSifter(mixedCells, expander, deferredGetTxsOutputs, config);
-  const txsOutputsPromise = getTxsOutputs(wantedTxsOutputs, chainConfig);
-
-  // Sift capacities and udts
-  const {
-    notSimples,
-    capacities,
-    types: udts,
-  } = simpleSifter(mixedCells, ickbUdtType(config), account.expander);
-
-  // Await for txsOutputs
-  const txsOutputs = await txsOutputsPromise;
-
-  // Sift through Orders
-  const { myOrders } = orderSifter(
-    notSimples,
-    expander,
-    (txHash) => txsOutputs.get(txHash) ?? [],
-    config,
-  );
-
-  return { capacities, udts, myOrders };
-}
-
-async function getTxsOutputs(
-  txHashes: Set<string>,
-  chainConfig: ChainConfig,
-): Promise<Readonly<Map<string, readonly Cell[]>>> {
-  const { rpc } = chainConfig;
-
-  const result = new Map<string, readonly Cell[]>();
-  const batch = rpc.createBatchRequest();
-  for (const txHash of txHashes) {
-    const outputs = _knownTxsOutputs.get(txHash);
-    if (outputs !== undefined) {
-      result.set(txHash, outputs);
-      continue;
-    }
-    batch.add("getTransaction", txHash);
+function errorToLog(error: unknown): unknown {
+  if (error instanceof Object && "stack" in error) {
+    return {
+      name: "name" in error ? error.name : undefined,
+      message:
+        "message" in error && typeof error.message === "string"
+          ? error.message
+          : "Unknown error",
+      stack: error.stack ?? "",
+    };
   }
 
-  if (batch.length === 0) {
-    return _knownTxsOutputs;
-  }
-
-  for (const tx of (await batch.exec()).map(
-    ({ transaction: tx }: { transaction: Transaction }) => tx,
-  )) {
-    const txHash = tx.hash;
-    if (!txHash) {
-      throw new Error("Empty tx hash");
-    }
-    result.set(
-      txHash,
-      Object.freeze(
-        tx.outputs.map(({ lock, type, capacity }, index) =>
-          Object.freeze({
-            cellOutput: Object.freeze({
-              lock: Object.freeze(lock),
-              type: Object.freeze(type),
-              capacity: Object.freeze(capacity),
-            }),
-            data: Object.freeze(tx.outputsData[index] ?? "0x"),
-            outPoint: Object.freeze({
-              txHash: txHash,
-              index: hex(index),
-            }),
-          } as Cell),
-        ),
-      ),
-    );
-  }
-
-  const frozenResult = Object.freeze(result);
-  _knownTxsOutputs = frozenResult;
-  return frozenResult;
+  return error ?? "Empty Error";
 }
 
-let _knownTxsOutputs = Object.freeze(new Map<string, Readonly<Cell[]>>());
+function min(left: bigint, right: bigint): bigint {
+  return left < right ? left : right;
+}
 
-function secp256k1Blake160(
-  privateKey: string,
-  config: ConfigAdapter,
-): {
-  publicKey: string;
-  lockScript: Readonly<I8Script>;
-  address: string;
-  expander: (c: Cell) => I8Script | undefined;
-  preSigner: (tx: TransactionSkeletonType) => TransactionSkeletonType;
-  signer: (tx: TransactionSkeletonType) => Transaction;
-} {
-  const publicKey = key.privateToPublic(privateKey);
+function sampleRatio(amount: bigint): bigint {
+  if (amount <= 0n) {
+    return 0n;
+  }
 
-  const lockScript = I8Script.from({
-    /* eslint-disable-next-line @typescript-eslint/no-misused-spread */
-    ...config.defaultScript("SECP256K1_BLAKE160"),
-    args: key.publicKeyToBlake160(publicKey),
+  return (amount * randomScaled()) / RANDOM_SCALE;
+}
+
+function randomScaled(): bigint {
+  return BigInt(Math.floor(Math.random() * Number(RANDOM_SCALE)));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
-
-  const address = encodeToAddress(lockScript, { config });
-
-  const expander = lockExpanderFrom(lockScript);
-
-  function preSigner(tx: TransactionSkeletonType): TransactionSkeletonType {
-    return addWitnessPlaceholder(tx, lockScript);
-  }
-
-  function signer(tx: TransactionSkeletonType): Transaction {
-    tx = preSigner(tx);
-    tx = prepareSigningEntries(tx, { config });
-    const message = tx.get("signingEntries").get(0)?.message;
-    if (!message) {
-      throw new Error("Empty message to sign");
-    }
-    const sig = key.signRecoverable(message, privateKey);
-
-    return sealTransaction(tx, [sig]);
-  }
-
-  return {
-    publicKey,
-    lockScript,
-    address,
-    expander,
-    preSigner,
-    signer,
-  };
 }
 
 await main();

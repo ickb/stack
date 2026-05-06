@@ -12,15 +12,26 @@
     ],
     "workspace": {
       "include": [
-        "packages/*"
-      ],
-      "exclude": [
-        "packages/demo",
-        "packages/docs",
-        "packages/examples",
-        "packages/faucet",
-        "packages/playground",
-        "packages/tests"
+        "packages/ccc",
+        "packages/ckb-ccc",
+        "packages/connector",
+        "packages/connector-react",
+        "packages/core",
+        "packages/did-ckb",
+        "packages/eip6963",
+        "packages/joy-id",
+        "packages/lumos-patches",
+        "packages/nip07",
+        "packages/okx",
+        "packages/rei",
+        "packages/shell",
+        "packages/spore",
+        "packages/ssri",
+        "packages/type-id",
+        "packages/udt",
+        "packages/uni-sat",
+        "packages/utxo-global",
+        "packages/xverse"
       ]
     }
   },

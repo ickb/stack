@@ -1,51 +1,53 @@
 # iCKB Tester
 
-## Run the simulation of iCKB limit order creation on testnet
+The tester is now CCC-native. It cancels the tester's own active orders, then places randomized iCKB limit orders against the live testnet exchange ratio using the shared `@ickb/sdk`, `@ickb/core`, and `@ickb/order` packages.
 
-1. Download this repo in a folder of your choice:  
+## Environment
 
-```bash
-git clone https://github.com/ickb/stack.git
-```
+Required variables:
 
-2. Enter into the repo folder:
-
-```bash
-cd stack/apps/tester
-```
-
-3. Install dependencies:
-
-```bash
-pnpm install
-```
-
-4. Build project:
-
-```bash
-pnpm build
-```
-
-5. Inside `apps/tester` define a `env/testnet/.env` file, for example:
-
-```
+```text
 CHAIN=testnet
-TESTER_PRIVATE_KEY=0x-YOUR-SECP256K1-BLAKE160-PRIVATE-KEY
+TESTER_PRIVATE_KEY=0x...
 TESTER_SLEEP_INTERVAL=10
 ```
 
-Optionally the property `RPC_URL` can also be specified:
+Optional variable:
 
-```
+```text
 RPC_URL=http://127.0.0.1:8114/
 ```
 
-6. Start simulation of user interactions:
+Current network support:
+
+- `CHAIN=testnet`
+- `CHAIN=mainnet`
+
+## Run
 
 ```bash
-export CHAIN=testnet;
-pnpm run start;
+pnpm install
+pnpm --filter ./apps/tester build
+mkdir -p apps/tester/env/testnet
+$EDITOR apps/tester/env/testnet/.env
+export CHAIN=testnet
+pnpm --filter ./apps/tester start
 ```
+
+Or from `apps/tester`:
+
+```bash
+pnpm install
+pnpm build
+mkdir -p env/testnet
+$EDITOR env/testnet/.env
+export CHAIN=testnet
+pnpm run start
+```
+
+`CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `TESTER_PRIVATE_KEY` and `TESTER_SLEEP_INTERVAL`.
+
+The start script keeps the existing JSON log format and writes one log file per run.
 
 ## Licensing
 
