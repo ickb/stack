@@ -26,6 +26,14 @@ graph TD;
     click F "https://github.com/ickb/stack/tree/master/packages/sdk" "Go to @ickb/sdk"
 ```
 
+## Pool Maturity Estimates
+
+`@ickb/sdk` owns the stack-level summary that interface consumers use to estimate iCKB-to-CKB timing.
+
+The current runtime path uses direct deposit scans together with bot liquidity and withdrawal-request state. The older pool snapshot idea is archived because its old format was not safely self-identifying.
+
+See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
+
 ## Epoch Semantic Versioning
 
 This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.

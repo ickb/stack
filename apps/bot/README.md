@@ -6,8 +6,10 @@ The bot still aims to minimize excess iCKB holdings so more liquidity stays avai
 
 ## Docs
 
-- [iCKB Deposit Pool Rebalancing Algorithm](pool_rebalancing.md)
-- [iCKB Deposit Pool Snapshot Encoding](pool_snapshot.md)
+- [Current Bot Rebalancing Policy](docs/current_rebalancing_policy.md)
+- Future improvement ideas:
+  - [iCKB Deposit Pool Rebalancing Algorithm](docs/pool_rebalancing.md)
+  - [iCKB Deposit Pool Snapshot Encoding](docs/pool_snapshot.md)
 
 ## Environment
 
@@ -63,6 +65,7 @@ The start script keeps the existing JSON log format and writes one log file per 
 - Distribute liquidity across multiple isolated bots to limit blast radius.
 - Keep at least roughly 130k CKB worth of capital available for the bot to operate comfortably.
 - The bot relies on shared CCC packages for protocol-specific transaction content, but it still owns final iCKB completion, fee completion, signing, and send.
+- The interface-side maturity estimate contract now lives with `@ickb/sdk`, because the SDK owns how bot liquidity and pool maturities are summarized for UI consumers.
 
 ## Licensing
 
