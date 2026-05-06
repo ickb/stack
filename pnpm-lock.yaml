@@ -61,6 +61,9 @@ importers:
       '@ickb/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@ickb/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -157,6 +160,9 @@ importers:
       '@ickb/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@ickb/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

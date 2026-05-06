@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
 import { IckbSdk, getConfig, type SystemState } from "@ickb/sdk";
 import { type OrderGroup } from "@ickb/order";
+import { collectCapacityCells } from "./cells.js";
 
 const CKB = ccc.fixedPointFrom(1);
 const CKB_RESERVE = 2000n * CKB;
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const depositAmount = convert(false, ICKB_DEPOSIT_CAP, state.system.tip);
+      const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, state.system.tip);
       const totalEquivalentCkb =
         state.availableCkbBalance +
         convert(false, state.availableIckbBalance, state.system.tip);
@@ -118,7 +119,7 @@ async function main(): Promise<void> {
 
       const ckbAmount = isCkb2Udt
         ? min(
-            sampleRatio(depositAmount),
+            sampleRatio(depositCapacity),
             state.availableCkbBalance - CKB_RESERVE,
           )
         : 0n;
@@ -130,7 +131,7 @@ async function main(): Promise<void> {
           );
 
       if (ckbAmount <= 0n && udtAmount <= 0n) {
-        if (totalEquivalentCkb < depositAmount / MIN_TOTAL_CAPITAL_DIVISOR) {
+        if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
           executionLog.error =
             "Not enough funds to continue testing, shutting down...";
           console.log(JSON.stringify(executionLog, replacer, " "));
@@ -207,26 +208,6 @@ async function readTesterState(runtime: Runtime): Promise<TesterState> {
     availableIckbBalance:
       walletUdtInfo.balance + sumValues(user.orders, (group) => group.udtValue),
   };
-}
-
-async function collectCapacityCells(
-  signer: ccc.SignerCkbPrivateKey,
-): Promise<ccc.Cell[]> {
-  const cells: ccc.Cell[] = [];
-
-  for await (const cell of signer.findCellsOnChain(
-    {
-      scriptLenRange: [0n, 1n],
-      outputDataLenRange: [0n, 1n],
-    },
-    true,
-    "asc",
-    FIND_CELLS_PAGE_SIZE,
-  )) {
-    cells.push(cell);
-  }
-
-  return cells;
 }
 
 async function collectWalletUdtCells(

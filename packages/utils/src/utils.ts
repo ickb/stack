@@ -78,6 +78,13 @@ export interface ScriptDeps {
 }
 
 /**
+ * True when a cell is plain spendable CKB capacity with no type script and no data payload.
+ */
+export function isPlainCapacityCell(cell: ccc.Cell): boolean {
+  return cell.cellOutput.type === undefined && cell.outputData === "0x";
+}
+
+/**
  * Shuffles in-place an array using the Durstenfeld shuffle algorithm.
  * @link https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
  *
