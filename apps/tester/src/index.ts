@@ -268,7 +268,7 @@ async function hasFreshMatchableOrders(
     if (blockNumber === undefined) {
       const tx = await runtime.client.getTransaction(txHash);
       if (!tx?.blockNumber) {
-        throw new Error("Block number not found for order tx");
+        return true;
       }
 
       blockNumber = tx.blockNumber;
