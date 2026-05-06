@@ -17,10 +17,16 @@ export function planRebalance(options: {
   outputSlots: number;
   ickbBalance: bigint;
   ckbBalance: bigint;
-  depositAmount: bigint;
+  depositCapacity: bigint;
   readyDeposits: readonly IckbDepositCell[];
 }): RebalancePlan {
-  const { outputSlots, ickbBalance, ckbBalance, depositAmount, readyDeposits } =
+  const {
+    outputSlots,
+    ickbBalance,
+    ckbBalance,
+    depositCapacity,
+    readyDeposits,
+  } =
     options;
 
   if (outputSlots < 2) {
@@ -28,7 +34,7 @@ export function planRebalance(options: {
   }
 
   if (ickbBalance < MIN_ICKB_BALANCE) {
-    if (ckbBalance >= depositAmount + CKB_RESERVE) {
+    if (ckbBalance >= depositCapacity + CKB_RESERVE) {
       return { kind: "deposit", quantity: 1 };
     }
     return { kind: "none" };

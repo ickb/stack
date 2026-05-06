@@ -28,7 +28,7 @@ describe("planRebalance", () => {
         outputSlots: 1,
         ickbBalance: 0n,
         ckbBalance: 2000n * 100000000n,
-        depositAmount: 1000n * 100000000n,
+        depositCapacity: 1000n * 100000000n,
         readyDeposits: [],
       }),
     ).toEqual({ kind: "none" });
@@ -40,7 +40,7 @@ describe("planRebalance", () => {
         outputSlots: 4,
         ickbBalance: 0n,
         ckbBalance: 2000n * 100000000n,
-        depositAmount: 1000n * 100000000n,
+        depositCapacity: 1000n * 100000000n,
         readyDeposits: [],
       }),
     ).toEqual({ kind: "deposit", quantity: 1 });
@@ -52,7 +52,7 @@ describe("planRebalance", () => {
         outputSlots: 4,
         ickbBalance: 0n,
         ckbBalance: 1999n * 100000000n,
-        depositAmount: 1000n * 100000000n,
+        depositCapacity: 1000n * 100000000n,
         readyDeposits: [],
       }),
     ).toEqual({ kind: "none" });
@@ -63,7 +63,7 @@ describe("planRebalance", () => {
       outputSlots: 6,
       ickbBalance: TARGET_ICKB_BALANCE + 9n,
       ckbBalance: 0n,
-      depositAmount: 1000n,
+      depositCapacity: 1000n,
       readyDeposits: [
         { udtValue: 4n },
         { udtValue: 6n },
@@ -83,7 +83,7 @@ describe("planRebalance", () => {
         outputSlots: 6,
         ickbBalance: TARGET_ICKB_BALANCE + 3n,
         ckbBalance: 0n,
-        depositAmount: 1000n,
+        depositCapacity: 1000n,
         readyDeposits: [{ udtValue: 4n }] as never[],
       }),
     ).toEqual({ kind: "none" });

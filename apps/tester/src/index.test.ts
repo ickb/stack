@@ -46,6 +46,7 @@ describe("collectCapacityCells", () => {
     });
     const signer = {
       async *findCellsOnChain() {
+        await Promise.resolve();
         yield plain;
         yield typed;
         yield dataCell;
