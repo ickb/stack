@@ -4,5 +4,11 @@ This directory hosts comprehensive documentation outlining the inner workings of
 
 ## Documents
 
+### Current runtime behavior
+
+- [Current Bot Rebalancing Policy](current_rebalancing_policy.md)
+
+### Future improvement ideas
+
 - [iCKB Deposit Pool Rebalancing Algorithm](pool_rebalancing.md)
 - [iCKB Deposit Pool Snapshot Encoding](pool_snapshot.md)

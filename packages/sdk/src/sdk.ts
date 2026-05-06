@@ -2,12 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import {
   collect,
   binarySearch,
+  isPlainCapacityCell,
   unique,
   type ValueComponents,
 } from "@ickb/utils";
 import {
   convert,
-  ICKB_DEPOSIT_CAP,
   ickbExchangeRatio,
   type LogicManager,
   type OwnedOwnerManager,
@@ -20,7 +20,6 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 import { getConfig } from "./constants.js";
-import { PoolSnapshot } from "./codec.js";
 
 /**
  * SDK for managing iCKB operations.
@@ -80,7 +79,8 @@ export class IckbSdk {
    *   - convertedAmount: The estimated converted amount as a FixedPoint.
    *   - ckbFee: The fee (or gain) in CKB, as a FixedPoint.
    *   - info: Additional conversion metadata.
-   *   - maturity: Optional maturity information (as ccc.Num) if meets criteria.
+   *   - maturity: Optional maturity information when the preview clears the
+   *     minimum match and fee threshold used for interface-sized orders.
    */
   static estimate(
     isCkb2Udt: boolean,
@@ -109,7 +109,8 @@ export class IckbSdk {
       options,
     );
 
-    // If the fee meets a threshold, calculate the order maturity; otherwise, maturity is undefined.
+    // Only previews that clear the minimum match and fee threshold get a
+    // maturity estimate. Smaller previews still return convertedAmount/info.
     const maturity =
       ckbFee >= 10n * system.feeRate
         ? IckbSdk.maturity({ info, amounts }, system)
@@ -126,7 +127,8 @@ export class IckbSdk {
    *
    * @param o - Either an OrderCell or an object containing order Info and value components.
    * @param system - The current system state.
-   * @returns The Unix timestamp of estimated maturity as a bigint (in milliseconds) or undefined if not applicable.
+   * @returns The Unix timestamp of estimated maturity as a bigint (in milliseconds),
+   *          based on `system.tip.timestamp`, or undefined if not applicable.
    */
   static maturity(
     o:
@@ -187,13 +189,13 @@ export class IckbSdk {
       if (ckb > 0n) {
         maturity *= 1n + ckb / ccc.fixedPointFrom("200000");
       }
-      return maturity + ("info" in o ? BigInt(Date.now()) : tip.timestamp);
+      return maturity + tip.timestamp;
     }
 
     // For UDT to CKB orders, add available CKB.
     ckb += ckbAvailable;
     if (ckb >= 0n) {
-      return maturity + ("info" in o ? BigInt(Date.now()) : tip.timestamp);
+      return maturity + tip.timestamp;
     }
 
     // Find the earliest maturity in the ckbMaturing array that satisfies the required CKB.
@@ -276,7 +278,7 @@ export class IckbSdk {
    *
    * The method performs the following:
    * - Obtains the current block tip and calculates the exchange ratio.
-   * - Fetches available CKB and the maturing CKB based on bot capacities and deposit snapshots.
+   * - Fetches available CKB and the maturing CKB based on bot capacities and direct deposit scans.
    * - Filters orders into user-owned and system orders based on the provided locks.
    * - Estimates user-owned orders maturity.
    *
@@ -344,10 +346,10 @@ export class IckbSdk {
    * Retrieves available CKB and maturing CKB values from the blockchain.
    *
    * This method:
-   * - Fetches bot withdrawal requests and deposit snapshots.
+   * - Fetches bot withdrawal requests and bot plain-capacity balances.
    * - Aggregates available CKB balances from bot capacities.
    * - Calculates maturing CKB values (with their expected maturity timestamps)
-   *   based on deposit pool snapshots or via direct deposit cell lookups.
+   *   via direct deposit cell lookups.
    * - Sorts and cumulatively sums the maturing values for later lookup.
    *
    * @param client - The blockchain client used for fetching data.
@@ -374,9 +376,6 @@ export class IckbSdk {
       this.ownedOwner.findWithdrawalGroups(client, this.bots, opts),
     );
 
-    // Initialize deposit pool snapshot.
-    let poolSnapshotHex: ccc.Hex = "0x";
-    let poolSnapshotEpoch = ccc.Epoch.from([0n, 0n, 1n]);
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
@@ -394,32 +393,15 @@ export class IckbSdk {
         "asc",
         400,
       )) {
-        if (
-          cell.cellOutput.type !== undefined ||
-          !cell.cellOutput.lock.eq(lock)
-        ) {
+        if (cell.cellOutput.type !== undefined || !cell.cellOutput.lock.eq(lock)) {
           continue;
         }
 
         const key = cell.cellOutput.lock.toHex();
-        const ckb =
-          (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
-        bot2Ckb.set(key, ckb);
-
-        // Find the most recent deposit pool snapshot from bot cell output data.
-        const outputData = cell.outputData;
-        if (outputData.length % 256 === 2) {
-          const txWithHeader = await client.getTransactionWithHeader(
-            cell.outPoint.txHash,
-          );
-          if (!txWithHeader?.header) {
-            throw new Error("Header not found for txHash");
-          }
-          const e = ccc.Epoch.from(txWithHeader.header.epoch);
-          if (poolSnapshotEpoch.compare(e) < 0) {
-            poolSnapshotHex = outputData;
-            poolSnapshotEpoch = e;
-          }
+        if (isPlainCapacityCell(cell)) {
+          const ckb =
+            (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
+          bot2Ckb.set(key, ckb);
         }
       }
     }
@@ -452,39 +434,19 @@ export class IckbSdk {
       }
     }
 
-    // Estimate available CKB from deposit pool snapshot.
-    const tipEpoch = ccc.Epoch.from(tip.epoch);
-    const oneCycle = ccc.Epoch.from([180n, 0n, 1n]);
-    if (poolSnapshotHex !== "0x") {
-      const eNumber = tip.epoch.integer;
-      let start = ccc.Epoch.from([eNumber - (eNumber % 180n), 0n, 1n]);
-      const step = ccc.Epoch.from([0n, 180n, 1024n]);
-      const depositSize = convert(false, ICKB_DEPOSIT_CAP, tip);
-      for (const binAmount of PoolSnapshot.decode(poolSnapshotHex)) {
-        const end = start.add(step);
-
-        if (binAmount > 0) {
-          ckbMaturing.push({
-            ckbValue: BigInt(binAmount) * depositSize,
-            maturity:
-              start.compare(tipEpoch) < 0
-                ? // If the bin has already started, assume worst-case timing.
-                  end.add(oneCycle).toUnix(tip)
-                : // Otherwise, use the bin end as the maturity.
-                  end.toUnix(tip),
-          });
-        }
-
-        start = end;
+    // Bot-owned no-type data cells are not distinguishable from arbitrary payloads,
+    // so the SDK currently falls back to direct deposit scanning instead of trusting
+    // snapshot-like bytes from wallet-owned cells.
+    for await (const d of this.ickbLogic.findDeposits(client, opts)) {
+      if (d.isReady) {
+        ckbAvailable += d.ckbValue;
+        continue;
       }
-    } else {
-      // Without snapshot data, fetch deposits directly.
-      for await (const d of this.ickbLogic.findDeposits(client, opts)) {
-        ckbMaturing.push({
-          ckbValue: d.ckbValue,
-          maturity: d.maturity.toUnix(tip),
-        });
-      }
+
+      ckbMaturing.push({
+        ckbValue: d.ckbValue,
+        maturity: d.maturity.toUnix(tip),
+      });
     }
 
     // Sort maturing CKB entries by their maturity timestamp.

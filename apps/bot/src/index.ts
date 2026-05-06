@@ -12,6 +12,7 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 import { getConfig, IckbSdk, type SystemState } from "@ickb/sdk";
+import { isPlainCapacityCell } from "@ickb/utils";
 import { CKB, planRebalance } from "./policy.js";
 
 const MATCH_STEP_DIVISOR = 100n;
@@ -41,7 +42,7 @@ interface BotState {
   availableIckbBalance: bigint;
   unavailableCkbBalance: bigint;
   totalCkbBalance: bigint;
-  depositAmount: bigint;
+  depositCapacity: bigint;
   minCkbBalance: bigint;
 }
 
@@ -210,7 +211,7 @@ async function readBotState(runtime: Runtime): Promise<BotState> {
     (group) => group.ckbValue,
   );
   const totalCkbBalance = availableCkbBalance + unavailableCkbBalance;
-  const depositAmount = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+  const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
 
   return {
     accountLocks,
@@ -225,8 +226,8 @@ async function readBotState(runtime: Runtime): Promise<BotState> {
     availableIckbBalance,
     unavailableCkbBalance,
     totalCkbBalance,
-    depositAmount,
-    minCkbBalance: (21n * depositAmount) / 20n,
+    depositCapacity,
+    minCkbBalance: (21n * depositCapacity) / 20n,
   };
 }
 
@@ -272,7 +273,7 @@ async function buildTransaction(
     state.system.exchangeRatio,
     {
       feeRate: state.system.feeRate,
-      ckbAllowanceStep: maxBigInt(1n, state.depositAmount / MATCH_STEP_DIVISOR),
+      ckbAllowanceStep: maxBigInt(1n, state.depositCapacity / MATCH_STEP_DIVISOR),
     },
   );
   if (match.partials.length > 0) {
@@ -283,14 +284,14 @@ async function buildTransaction(
     outputSlots: maxInt(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length),
     ickbBalance: state.availableIckbBalance + match.udtDelta,
     ckbBalance: state.availableCkbBalance + match.ckbDelta,
-    depositAmount: state.depositAmount,
+    depositCapacity: state.depositCapacity,
     readyDeposits: state.readyPoolDeposits,
   });
   if (rebalance.kind === "deposit") {
     tx = await runtime.managers.logic.deposit(
       tx,
       rebalance.quantity,
-      state.depositAmount,
+      state.depositCapacity,
       runtime.primaryLock,
       runtime.client,
     );
@@ -343,7 +344,7 @@ async function collectCapacityCells(
     "asc",
     400,
   )) {
-    if (cell.cellOutput.type !== undefined || cell.outputData !== "0x") {
+    if (!isPlainCapacityCell(cell)) {
       continue;
     }
     cells.push(cell);

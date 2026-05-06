@@ -120,7 +120,6 @@ export class DaoManager implements ScriptDeps {
    * @param deposits - An array of deposits to request the withdrawal from.
    * @param lock - The lock script for the withdrawal request cells.
    * @param options - Optional parameters for the withdrawal request.
-   * @param options.sameSizeOnly - Whether to enforce the same size for lock args (default: true).
    * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
    * @returns void
    * @throws Error if the transaction has different input and output lengths.
@@ -133,12 +132,10 @@ export class DaoManager implements ScriptDeps {
     lock: ccc.Script,
     client: ccc.Client,
     options?: {
-      sameSizeOnly?: boolean;
       isReadyOnly?: boolean;
     },
   ): Promise<ccc.Transaction> {
     const tx = ccc.Transaction.from(txLike);
-    const sameSizeOnly = options?.sameSizeOnly ?? true;
     const isReadyOnly = options?.isReadyOnly ?? false;
     if (isReadyOnly) {
       deposits = deposits.filter((d) => d.isReady);
@@ -159,10 +156,7 @@ export class DaoManager implements ScriptDeps {
       if (!isDeposit) {
         throw new Error("Not a deposit");
       }
-      if (
-        sameSizeOnly &&
-        cell.cellOutput.lock.args.length !== lock.args.length
-      ) {
+      if (cell.cellOutput.lock.args.length !== lock.args.length) {
         throw new Error(
           "Withdrawal request lock args has different size from deposit",
         );

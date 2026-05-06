@@ -21,7 +21,7 @@
     "coworker:ask": "opencode run --pure --agent plan"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",

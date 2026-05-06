@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/ccc";
 import type { WithdrawalGroup } from "@ickb/core";
 import { type OrderGroup } from "@ickb/order";
 import { type SystemState } from "@ickb/sdk";
-import { collect, sum } from "@ickb/utils";
+import { collect, isPlainCapacityCell, sum, unique } from "@ickb/utils";
 import {
   buildTransactionPreview,
   type TransactionContext,
@@ -76,7 +76,7 @@ export async function getL1State(
     ),
   ]);
 
-  const capacityCells = accountCells.filter((cell) => cell.cellOutput.type === undefined);
+  const capacityCells = accountCells.filter(isPlainCapacityCell);
   const udtCells = accountCells.filter((cell) =>
     walletConfig.managers.ickbUdt.isUdt(cell),
   );
@@ -169,7 +169,7 @@ export async function getL1State(
 async function getAccountCells(walletConfig: WalletConfig): Promise<ccc.Cell[]> {
   const cells: ccc.Cell[] = [];
 
-  for (const lock of walletConfig.accountLocks) {
+  for (const lock of unique(walletConfig.accountLocks)) {
     for await (const cell of walletConfig.cccClient.findCellsOnChain(
       {
         script: lock,

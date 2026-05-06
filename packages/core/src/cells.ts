@@ -85,7 +85,7 @@ export async function receiptCellFrom(
     header: txWithHeader.header,
     txHash,
   };
-  const { depositQuantity, depositAmount } = ReceiptData.decode(
+  const { depositQuantity, depositAmount } = ReceiptData.decodePrefix(
     cell.outputData,
   );
 

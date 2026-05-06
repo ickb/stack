@@ -1,5 +1,7 @@
 # iCKB Deposit Pool Snapshot Encoding
 
+Future improvement idea: this document captures a possible snapshot-based estimate path for large deposit pools. The current live runtime path is documented in `packages/sdk/docs/pool_maturity_estimates.md` and still uses direct deposit scans.
+
 ## Introduction
 
 Efficient asset conversion timing is paramount for the iCKB protocol, particularly when converting from iCKB to CKB. Although CKB-to-iCKB conversion timings are relatively simple to predict, the reverse process is influenced by factors like Bot CKB availability and, critically, the maturity of iCKB deposits available for withdrawal.

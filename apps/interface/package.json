@@ -25,6 +25,8 @@
     "dev": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && vite",
     "build": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:ci": "vitest run",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules"

@@ -1,5 +1,7 @@
 # iCKB Deposit Pool Rebalancing Algorithm
 
+Future improvement idea: this document captures a more ambitious rebalancing design that is not the current live bot policy. The current implemented behavior is documented in `current_rebalancing_policy.md`.
+
 For simplicity, let's model:
 
 - NervosDAO 180 epoch cycle as a circular clock.
