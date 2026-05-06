@@ -102,8 +102,8 @@ async function buildCkbToIckbPreview(
   amount: bigint,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
-  const depositAmount = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
-  const depositQuotient = depositAmount === 0n ? 0n : amount / depositAmount;
+  const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
+  const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
     depositQuotient > BigInt(MAX_DIRECT_DEPOSITS)
       ? MAX_DIRECT_DEPOSITS
@@ -118,18 +118,21 @@ async function buildCkbToIckbPreview(
         tx = await walletConfig.managers.logic.deposit(
           tx,
           depositCount,
-          depositAmount,
+          depositCapacity,
           walletConfig.primaryLock,
           walletConfig.cccClient,
         );
       }
 
-      const remainder = amount - depositAmount * BigInt(depositCount);
+      const remainder = amount - depositCapacity * BigInt(depositCount);
       if (remainder > 0n) {
         const amounts = { ckbValue: remainder, udtValue: 0n };
         const estimate = IckbSdk.estimate(true, amounts, context.system);
         if (estimate.maturity === undefined) {
-          return txInfoWithError("Amount too small to build a transaction", estimatedMaturity);
+          return txInfoWithError(
+            "Amount too small to exceed the minimum match and fee threshold",
+            estimatedMaturity,
+          );
         }
 
         estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
@@ -172,6 +175,8 @@ async function buildIckbToCkbPreview(
     Math.min(candidates.length, MAX_WITHDRAWAL_REQUESTS),
     async (withdrawalCount) => {
       try {
+        // DAO withdrawal requests must claim matching input/output indexes, so
+        // build those pairs first and append the input-only base activity later.
         let tx = ccc.Transaction.default();
         let estimatedMaturity = context.estimatedMaturity;
         let remainder = amount;
@@ -211,7 +216,10 @@ async function buildIckbToCkbPreview(
           const amounts = { ckbValue: 0n, udtValue: remainder };
           const estimate = IckbSdk.estimate(false, amounts, context.system);
           if (estimate.maturity === undefined) {
-            return txInfoWithError("Amount too small to build a transaction", estimatedMaturity);
+            return txInfoWithError(
+              "Amount too small to exceed the minimum match and fee threshold",
+              estimatedMaturity,
+            );
           }
 
           estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
@@ -257,38 +265,198 @@ async function findBestAttempt(
   maxQuantity: number,
   build: (quantity: number) => Promise<TxInfo>,
 ): Promise<TxInfo> {
-  let firstError: TxInfo | undefined;
+  let lastError: TxInfo | undefined;
   for (let quantity = maxQuantity; quantity >= 0; quantity -= 1) {
     const attempt = await build(quantity);
     if (attempt.error === "") {
       return attempt;
     }
 
-    firstError ??= attempt;
+    lastError = attempt;
   }
 
-  return firstError ?? txInfoWithError("Nothing to do for now", 0n);
+  return lastError ?? txInfoWithError("Nothing to do for now", 0n);
 }
 
-function selectReadyDeposits(
+export function selectReadyDeposits(
   deposits: IckbDepositCell[],
   wanted: number,
   amount: bigint,
 ): IckbDepositCell[] {
-  const selected: IckbDepositCell[] = [];
-  let cumulative = 0n;
+  const boundedDeposits = deposits.slice(0, MAX_WITHDRAWAL_REQUESTS);
+  if (wanted <= 0 || amount <= 0n || boundedDeposits.length < wanted) {
+    return [];
+  }
 
-  for (const deposit of deposits) {
-    if (selected.length >= wanted) {
-      break;
+  interface PartialSelection {
+    mask: number;
+    total: bigint;
+  }
+
+  const split = Math.floor(boundedDeposits.length / 2);
+  const firstHalf = boundedDeposits.slice(0, split);
+  const secondHalf = boundedDeposits.slice(split);
+
+  const compareMask = (left: number, right: number, length: number): number => {
+    for (let i = 0; i < length; i += 1) {
+      const leftHas = (left & (1 << i)) !== 0;
+      const rightHas = (right & (1 << i)) !== 0;
+      if (leftHas === rightHas) {
+        continue;
+      }
+
+      return leftHas ? -1 : 1;
     }
 
-    if (cumulative + deposit.udtValue > amount) {
+    return 0;
+  };
+
+  const enumerate = (items: IckbDepositCell[]): PartialSelection[][] => {
+    const groups = Array.from(
+      { length: items.length + 1 },
+      () => [] as PartialSelection[],
+    );
+
+    const search = (
+      index: number,
+      mask: number,
+      count: number,
+      total: bigint,
+    ): void => {
+      if (index === items.length) {
+        groups[count]?.push({ mask, total });
+        return;
+      }
+
+      search(index + 1, mask, count, total);
+
+      const item = items.at(index);
+      if (item === undefined) {
+        return;
+      }
+      search(index + 1, mask | (1 << index), count + 1, total + item.udtValue);
+    };
+
+    search(0, 0, 0, 0n);
+    return groups;
+  };
+
+  const compress = (items: PartialSelection[], length: number): PartialSelection[] => {
+    items.sort((left, right) => {
+      if (left.total < right.total) {
+        return -1;
+      }
+      if (left.total > right.total) {
+        return 1;
+      }
+
+      return compareMask(left.mask, right.mask, length);
+    });
+
+    const compressed: PartialSelection[] = [];
+    for (const item of items) {
+      if (compressed.at(-1)?.total !== item.total) {
+        compressed.push(item);
+      }
+    }
+
+    return compressed;
+  };
+
+  const firstByCount = enumerate(firstHalf);
+  const secondByCount = enumerate(secondHalf).map((items) =>
+    compress(items, secondHalf.length)
+  );
+
+  const findBestAtOrBelow = (
+    items: PartialSelection[],
+    limit: bigint,
+  ): PartialSelection | undefined => {
+    let low = 0;
+    let high = items.length - 1;
+    let bestIndex = -1;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const item = items.at(mid);
+      if (item === undefined) {
+        break;
+      }
+
+      if (item.total <= limit) {
+        bestIndex = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return bestIndex >= 0 ? items[bestIndex] : undefined;
+  };
+
+  let best:
+    | {
+        firstMask: number;
+        secondMask: number;
+        total: bigint;
+      }
+    | undefined;
+
+  for (let firstCount = 0; firstCount <= wanted; firstCount += 1) {
+    const secondCount = wanted - firstCount;
+    const firstSelections = firstByCount[firstCount] ?? [];
+    const secondSelections = secondByCount[secondCount] ?? [];
+    if (secondSelections.length === 0) {
       continue;
     }
 
-    cumulative += deposit.udtValue;
-    selected.push(deposit);
+    for (const first of firstSelections) {
+      const second = findBestAtOrBelow(secondSelections, amount - first.total);
+      if (!second) {
+        continue;
+      }
+
+      const total = first.total + second.total;
+      if (!best || total > best.total) {
+        best = { firstMask: first.mask, secondMask: second.mask, total };
+        continue;
+      }
+
+      if (total < best.total) {
+        continue;
+      }
+
+      const firstCompare = compareMask(first.mask, best.firstMask, firstHalf.length);
+      if (
+        firstCompare < 0 ||
+        (firstCompare === 0 &&
+          compareMask(second.mask, best.secondMask, secondHalf.length) < 0)
+      ) {
+        best = { firstMask: first.mask, secondMask: second.mask, total };
+      }
+    }
+  }
+
+  if (!best) {
+    return [];
+  }
+
+  const selected: IckbDepositCell[] = [];
+  for (let i = 0; i < firstHalf.length; i += 1) {
+    if ((best.firstMask & (1 << i)) !== 0) {
+      const deposit = firstHalf.at(i);
+      if (deposit !== undefined) {
+        selected.push(deposit);
+      }
+    }
+  }
+  for (let i = 0; i < secondHalf.length; i += 1) {
+    if ((best.secondMask & (1 << i)) !== 0) {
+      const deposit = secondHalf.at(i);
+      if (deposit !== undefined) {
+        selected.push(deposit);
+      }
+    }
   }
 
   return selected;
