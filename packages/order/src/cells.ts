@@ -239,11 +239,17 @@ export class OrderCell implements ValueComponents {
         continue;
       }
 
-      // Pick order with best absProgress. At equality of absProgress, give preference to newly minted orders
+      // Directional orders rank by irreversible progress. Dual-sided orders
+      // rank by value because absProgress === absTotal for that shape.
+      // At equal progress, prefer newly minted orders.
       if (
         !best ||
         best.absProgress < descendant.absProgress ||
-        (best.absProgress === descendant.absProgress && !best.data.isMint())
+        (
+          best.absProgress === descendant.absProgress &&
+          descendant.data.isMint() &&
+          !best.data.isMint()
+        )
       ) {
         best = descendant;
       }
