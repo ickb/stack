@@ -223,10 +223,6 @@ async function collectCapacityCells(
     "asc",
     FIND_CELLS_PAGE_SIZE,
   )) {
-    if (cell.cellOutput.type !== undefined || cell.outputData !== "0x") {
-      continue;
-    }
-
     cells.push(cell);
   }
 
@@ -260,19 +256,26 @@ async function hasFreshMatchableOrders(
   orders: OrderGroup[],
   tip: ccc.ClientBlockHeader,
 ): Promise<boolean> {
+  const tx2BlockNumber = new Map<string, bigint>();
+
   for (const group of orders) {
     if (!group.order.isMatchable()) {
       continue;
     }
 
-    const txWithHeader = await runtime.client.getTransactionWithHeader(
-      group.order.cell.outPoint.txHash,
-    );
-    if (!txWithHeader?.header) {
-      throw new Error("Header not found for txHash");
+    const txHash = group.order.cell.outPoint.txHash;
+    let blockNumber = tx2BlockNumber.get(txHash);
+    if (blockNumber === undefined) {
+      const tx = await runtime.client.getTransaction(txHash);
+      if (!tx?.blockNumber) {
+        throw new Error("Block number not found for order tx");
+      }
+
+      blockNumber = tx.blockNumber;
+      tx2BlockNumber.set(txHash, blockNumber);
     }
 
-    if (txWithHeader.header.number + MAX_ELAPSED_BLOCKS >= tip.number) {
+    if (blockNumber + MAX_ELAPSED_BLOCKS >= tip.number) {
       return true;
     }
   }
