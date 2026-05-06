@@ -187,15 +187,11 @@ async function main(): Promise<void> {
 }
 
 async function readTesterState(runtime: Runtime): Promise<TesterState> {
-  const { system, user } = await runtime.sdk.getL1State(
-    runtime.client,
-    runtime.accountLocks,
-  );
-  const accountCells = await collectAccountCells(runtime.client, runtime.accountLocks);
-  const capacityCells = accountCells.filter(
-    (cell) => cell.cellOutput.type === undefined && cell.outputData === "0x",
-  );
-  const udtCells = accountCells.filter((cell) => runtime.managers.ickbUdt.isUdt(cell));
+  const [{ system, user }, capacityCells, udtCells] = await Promise.all([
+    runtime.sdk.getL1State(runtime.client, runtime.accountLocks),
+    collectCapacityCells(runtime.signer),
+    collectWalletUdtCells(runtime.signer, runtime.managers.ickbUdt),
+  ]);
   const walletUdtInfo = await runtime.managers.ickbUdt.infoFrom(
     runtime.client,
     udtCells,
@@ -213,25 +209,47 @@ async function readTesterState(runtime: Runtime): Promise<TesterState> {
   };
 }
 
-async function collectAccountCells(
-  client: ccc.Client,
-  locks: ccc.Script[],
+async function collectCapacityCells(
+  signer: ccc.SignerCkbPrivateKey,
 ): Promise<ccc.Cell[]> {
   const cells: ccc.Cell[] = [];
 
-  for (const lock of locks) {
-    for await (const cell of client.findCellsOnChain(
-      {
-        script: lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-        withData: true,
-      },
-      "asc",
-      FIND_CELLS_PAGE_SIZE,
-    )) {
-      cells.push(cell);
+  for await (const cell of signer.findCellsOnChain(
+    {
+      scriptLenRange: [0n, 1n],
+      outputDataLenRange: [0n, 1n],
+    },
+    true,
+    "asc",
+    FIND_CELLS_PAGE_SIZE,
+  )) {
+    if (cell.cellOutput.type !== undefined || cell.outputData !== "0x") {
+      continue;
     }
+
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+async function collectWalletUdtCells(
+  signer: ccc.SignerCkbPrivateKey,
+  ickbUdt: Runtime["managers"]["ickbUdt"],
+): Promise<ccc.Cell[]> {
+  const cells: ccc.Cell[] = [];
+
+  for await (const cell of signer.findCellsOnChain(
+    ickbUdt.filter,
+    true,
+    "asc",
+    FIND_CELLS_PAGE_SIZE,
+  )) {
+    if (!ickbUdt.isUdt(cell)) {
+      continue;
+    }
+
+    cells.push(cell);
   }
 
   return cells;
