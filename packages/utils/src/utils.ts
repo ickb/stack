@@ -255,7 +255,9 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
     return groups;
   };
 
-  const firstByCount = enumerate(firstHalf);
+  const firstByCount = enumerate(firstHalf).map((selections) =>
+    compressSelections(selections, firstHalf.length)
+  );
   const secondByCount = enumerate(secondHalf).map((selections) =>
     compressSelections(selections, secondHalf.length)
   );
