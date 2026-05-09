@@ -316,8 +316,8 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
 }
 
 function assertBitmaskSearchSize(length: number): void {
-  if (length > 30) {
-    throw new Error("Bounded subset search supports at most 30 items per half");
+  if (length > 24) {
+    throw new Error("Bounded subset search supports at most 24 items per half");
   }
 }
 
