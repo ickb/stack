@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { daoCellFrom } from "./cells.js";
+import { DaoManager } from "./dao.js";
 
 function byte32FromByte(hexByte: string): `0x${string}` {
   if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
@@ -85,33 +85,33 @@ function clientFor(
 
 describe("daoCellFrom withdrawal readiness", () => {
   it("marks withdrawal requests ready once the claim epoch is reached", async () => {
+    const manager = new DaoManager(script("33"), []);
     const depositHeader = ccc.ClientBlockHeader.from(headerLike([1n, 0n, 1n], 1n));
     const withdrawHeader = ccc.ClientBlockHeader.from(headerLike([180n, 0n, 1n], 2n));
     const tip = ccc.ClientBlockHeader.from(headerLike([181n, 0n, 1n], 3n));
     const claimEpoch = ccc.calcDaoClaimEpoch(depositHeader, withdrawHeader);
 
-    const daoCell = await daoCellFrom({
-      cell: withdrawalCell(),
-      isDeposit: false,
-      client: clientFor(depositHeader, withdrawHeader),
-      tip,
-    });
+    const daoCell = await manager.withdrawalRequestCellFrom(
+      withdrawalCell(),
+      clientFor(depositHeader, withdrawHeader),
+      { tip },
+    );
 
     expect(daoCell.maturity.eq(claimEpoch)).toBe(true);
     expect(daoCell.isReady).toBe(true);
   });
 
   it("keeps withdrawal requests pending before the claim epoch", async () => {
+    const manager = new DaoManager(script("33"), []);
     const depositHeader = ccc.ClientBlockHeader.from(headerLike([1n, 0n, 1n], 1n));
     const withdrawHeader = ccc.ClientBlockHeader.from(headerLike([180n, 0n, 1n], 2n));
     const tip = ccc.ClientBlockHeader.from(headerLike([179n, 0n, 1n], 3n));
 
-    const daoCell = await daoCellFrom({
-      cell: withdrawalCell(),
-      isDeposit: false,
-      client: clientFor(depositHeader, withdrawHeader),
-      tip,
-    });
+    const daoCell = await manager.withdrawalRequestCellFrom(
+      withdrawalCell(),
+      clientFor(depositHeader, withdrawHeader),
+      { tip },
+    );
 
     expect(daoCell.isReady).toBe(false);
   });

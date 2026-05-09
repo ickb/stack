@@ -151,4 +151,25 @@ describe("receipt prefix decoding", () => {
     expect(info.capacity).toBe(ccc.fixedPointFrom(100082));
     expect(info.count).toBe(1);
   });
+
+  it("adds xUDT and logic code deps explicitly", () => {
+    const logic = script("33");
+    const xudtCode = { txHash: byte32FromByte("44"), index: 1n };
+    const logicCode = { txHash: byte32FromByte("66"), index: 2n };
+    const ickbUdt = new IckbUdt(
+      xudtCode,
+      script("55"),
+      logicCode,
+      logic,
+      new DaoManager(script("77"), []),
+    );
+
+    const tx = ickbUdt.addCellDeps(ccc.Transaction.default());
+
+    expect(tx.cellDeps).toHaveLength(2);
+    expect(tx.cellDeps[0]?.depType).toBe("code");
+    expect(tx.cellDeps[0]?.outPoint.eq(ccc.OutPoint.from(xudtCode))).toBe(true);
+    expect(tx.cellDeps[1]?.depType).toBe("code");
+    expect(tx.cellDeps[1]?.outPoint.eq(ccc.OutPoint.from(logicCode))).toBe(true);
+  });
 });

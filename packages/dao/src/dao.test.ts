@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
-import type { DaoCell } from "./cells.js";
+import type { DaoDepositCell, DaoWithdrawalRequestCell } from "./cells.js";
 import { DaoManager } from "./dao.js";
 
 function byte32FromByte(hexByte: string): `0x${string}` {
@@ -58,30 +58,44 @@ function headerWithHash(number: bigint, hashByte: string): ccc.ClientBlockHeader
   });
 }
 
+function depositCell(
+  manager: DaoManager,
+  options?: {
+    lock?: ccc.Script;
+    txHashByte?: string;
+    isReady?: boolean;
+  },
+): DaoDepositCell {
+  const depositHeader = headerLike(1n);
+  return {
+    cell: ccc.Cell.from({
+      outPoint: {
+        txHash: byte32FromByte(options?.txHashByte ?? "22"),
+        index: 0n,
+      },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: options?.lock ?? script("33"),
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    }),
+    isDeposit: true,
+    headers: [{ header: depositHeader }, { header: depositHeader }],
+    interests: 0n,
+    maturity: ccc.Epoch.from([1n, 0n, 1n]),
+    isReady: options?.isReady ?? true,
+    ckbValue: ccc.fixedPointFrom(100082),
+    udtValue: 0n,
+  };
+}
+
 describe("DaoManager.requestWithdrawal", () => {
   it("always rejects withdrawal locks with different args size", async () => {
     vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
 
     const manager = new DaoManager(script("11"), []);
-    const depositHeader = headerLike(1n);
-    const deposit: DaoCell = {
-      cell: ccc.Cell.from({
-        outPoint: { txHash: byte32FromByte("22"), index: 0n },
-        cellOutput: {
-          capacity: ccc.fixedPointFrom(100082),
-          lock: script("33", "0x1234"),
-          type: manager.script,
-        },
-        outputData: DaoManager.depositData(),
-      }),
-      isDeposit: true,
-      headers: [{ header: depositHeader }, { header: depositHeader }],
-      interests: 0n,
-      maturity: ccc.Epoch.from([1n, 0n, 1n]),
-      isReady: true,
-      ckbValue: ccc.fixedPointFrom(100082),
-      udtValue: 0n,
-    };
+    const deposit = depositCell(manager, { lock: script("33", "0x1234") });
 
     await expect(
       manager.requestWithdrawal(
@@ -92,6 +106,104 @@ describe("DaoManager.requestWithdrawal", () => {
       ),
     ).rejects.toThrow("Withdrawal request lock args has different size from deposit");
   });
+
+  it("keeps non-ready deposits unless isReadyOnly is set", async () => {
+    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
+
+    const manager = new DaoManager(script("11"), []);
+    const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
+    const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
+
+    const tx = await manager.requestWithdrawal(
+      ccc.Transaction.default(),
+      [pending, ready],
+      script("44"),
+      {} as ccc.Client,
+    );
+
+    expect(tx.inputs).toHaveLength(2);
+    expect(tx.outputs).toHaveLength(2);
+    expect(tx.outputsData).toHaveLength(2);
+  });
+
+  it("filters non-ready deposits when isReadyOnly is set", async () => {
+    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
+
+    const manager = new DaoManager(script("11"), []);
+    const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
+    const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
+
+    const tx = await manager.requestWithdrawal(
+      ccc.Transaction.default(),
+      [pending, ready],
+      script("44"),
+      {} as ccc.Client,
+      { isReadyOnly: true },
+    );
+
+    expect(tx.inputs).toHaveLength(1);
+    expect(tx.outputs).toHaveLength(1);
+    expect(tx.inputs[0]?.previousOutput.txHash).toBe(ready.cell.outPoint.txHash);
+  });
+
+  it("requires matched input and output counts before appending requests", async () => {
+    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
+
+    const manager = new DaoManager(script("11"), []);
+    const tx = ccc.Transaction.default();
+    tx.addOutput(
+      {
+        capacity: ccc.fixedPointFrom(1000),
+        lock: script("55"),
+      },
+      "0x",
+    );
+
+    await expect(
+      manager.requestWithdrawal(
+        tx,
+        [depositCell(manager)],
+        script("44"),
+        {} as ccc.Client,
+      ),
+    ).rejects.toThrow("Transaction has different inputs and outputs lengths");
+  });
+});
+
+describe("DaoManager cell decoding ownership", () => {
+  it("rejects depositCellFrom on non-deposit cells", async () => {
+    const manager = new DaoManager(script("11"), []);
+
+    await expect(
+      manager.depositCellFrom(
+        ccc.Cell.from({
+          outPoint: { txHash: byte32FromByte("22"), index: 0n },
+          cellOutput: {
+            capacity: ccc.fixedPointFrom(100082),
+            lock: script("33"),
+            type: manager.script,
+          },
+          outputData: ccc.mol.Uint64LE.encode(1n),
+        }),
+        {} as ccc.Client,
+        { tip: headerLike(2n) },
+      ),
+    ).rejects.toThrow("Not a deposit");
+  });
+
+  it("rejects withdrawalRequestCellFrom on non-withdrawal cells", async () => {
+    const manager = new DaoManager(script("11"), []);
+
+    await expect(
+      manager.withdrawalRequestCellFrom(
+        depositCell(manager).cell,
+        {} as ccc.Client,
+        {
+          tip: headerLike(2n),
+        },
+      ),
+    ).rejects.toThrow("Not a withdrawal request");
+  });
 });
 
 describe("DaoManager.withdraw", () => {
@@ -101,7 +213,7 @@ describe("DaoManager.withdraw", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
-    const withdrawal: DaoCell = {
+    const withdrawal: DaoWithdrawalRequestCell = {
       cell: ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
         cellOutput: {
@@ -145,7 +257,7 @@ describe("DaoManager.withdraw", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
-    const withdrawal: DaoCell = {
+    const withdrawal: DaoWithdrawalRequestCell = {
       cell: ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
         cellOutput: {

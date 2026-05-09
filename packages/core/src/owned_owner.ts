@@ -4,7 +4,7 @@ import {
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
-import { assertDaoOutputLimit, daoCellFrom, DaoManager } from "@ickb/dao";
+import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import { OwnerData } from "./entities.js";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.js";
 
@@ -182,7 +182,7 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @yields
    *   {@link WithdrawalGroup} objects, each containing:
    *   - the owner cell (`OwnerCell`)
-   *   - the corresponding DAO withdrawal cell (`DaoCell`)
+   *   - the corresponding DAO withdrawal request cell
    *
    * @remarks
    * - Deduplicates `locks` via `unique(locks)`.
@@ -192,9 +192,9 @@ export class OwnedOwnerManager implements ScriptDeps {
    *     1. Fails `this.isOwner(cell)`
    *     2. Has a non-matching lock script
    * - For each owner cell:
-   *     1. Construct an `OwnerCell` instance
-   *     2. Fetch the owned DAO withdrawal cell via `daoCellFrom({ outpoint, isDeposit: false, client, tip })`
-   *     3. Yield a new `WithdrawalGroup(ownedDaoCell, ownerCell)`
+   *     1. Construct an `OwnerCell` instance.
+   *     2. Fetch the referenced cell and skip it unless it is an Owned Owner withdrawal request.
+   *     3. Decode the validated withdrawal request and yield a `WithdrawalGroup`.
    */
   async *findWithdrawalGroups(
     client: ccc.Client,
@@ -230,12 +230,16 @@ export class OwnedOwnerManager implements ScriptDeps {
         }
 
         const owner = new OwnerCell(cell);
-        const owned = await daoCellFrom({
-          outpoint: owner.getOwned(),
-          isDeposit: false,
+        const ownedOutPoint = owner.getOwned();
+        const ownedCell = await client.getCell(ownedOutPoint);
+        if (!ownedCell || !this.isOwned(ownedCell)) {
+          continue;
+        }
+        const owned = await this.daoManager.withdrawalRequestCellFrom(
+          ownedCell,
           client,
-          tip,
-        });
+          { tip },
+        );
         yield new WithdrawalGroup(owned, owner);
       }
     }
