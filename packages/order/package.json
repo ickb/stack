@@ -29,8 +29,8 @@
     }
   },
   "scripts": {
-    "test": "vitest",
-    "test:ci": "vitest run",
+    "test": "NODE_OPTIONS='--disable-warning=DEP0040' vitest",
+    "test:ci": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run",
     "build": "tsc",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/utils": "workspace:*"
+    "@ickb/utils": "workspace:*",
+    "tslib": "^2.8.1"
   }
 }

@@ -23,7 +23,8 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "importHelpers": true
   },
   "include": ["packages/**/*", "vitest.config.mts"]
 }
