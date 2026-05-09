@@ -15,6 +15,22 @@ graph TD;
     click C "https://github.com/ickb/stack/tree/master/packages/order" "Go to @ickb/order"
 ```
 
+## Partial Transactions
+
+`@ickb/order` transaction builders stop at order-specific construction.
+
+If a caller will send the returned transaction, it still must:
+
+1. Finish iCKB UDT completion.
+2. Finish CCC-native CKB capacity and fee completion.
+3. Check `ccc.isDaoOutputLimitExceeded(...)` before send.
+
+## Limit Order Confusion Boundary
+
+The deployed Limit Order script has a known confusion surface because CKB does not execute output locks at creation time. `@ickb/order` keeps the stack-side mitigation in `findOrders(...)`: it fetches the mint origin for each master, rejects candidates whose order script, UDT type, resolved master, or parameters differ from the origin, rejects candidates whose normalized value or directional progress is lower than the origin, then selects the best remaining candidate by progress/value. Ambiguous mint origins and ambiguous equal-score descendants are skipped instead of selected by indexer order. This is a best-effort stack-side heuristic for immutable deployed behavior, not proof that forged higher-progress descendants cannot exist. Consumers should use resolved `OrderGroup`s from `findOrders(...)` for matching and melting instead of hand-pairing order and master cells.
+
+Minting does not execute the master output lock. If you call `OrderManager.mint(...)` with a raw `ccc.Script`, ensure it is a spendable whole-transaction-binding user lock; otherwise the order can be created but later become uncollectable.
+
 ## Epoch Semantic Versioning
 
 This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.

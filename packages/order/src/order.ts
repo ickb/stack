@@ -141,7 +141,7 @@ export class OrderManager implements ScriptDeps {
     if (amount > 0n && fee !== 0n) {
       ckbFee = isCkb2Udt
         ? amount - base.convert(false, convertedAmount, false)
-        : base.convert(true, amount, false) - convertedAmount;
+        : base.convert(false, amount, false) - convertedAmount;
     }
 
     // Generate additional conversion info for further processing.
@@ -293,6 +293,7 @@ export class OrderManager implements ScriptDeps {
    * @param options - Optional parameters for matching:
    *    @param options.feeRate - Fee rate for the transaction (defaults to 1000n if not provided).
    *    @param options.ckbAllowanceStep - The step value for CKB allowance (defaults to 1000 CKB as fixed point).
+   *    @param options.maxPartials - Maximum matched partial outputs to keep in the result.
    *
    * @returns A Match object containing the best combination of:
    *    • ckbDelta: net change in CKB,
@@ -306,6 +307,7 @@ export class OrderManager implements ScriptDeps {
     options?: {
       feeRate?: ccc.Num; // Fee rate for the transaction
       ckbAllowanceStep?: ccc.FixedPoint;
+      maxPartials?: number;
     },
   ): Match {
     const orderSize = orderPool[0]?.cell.occupiedSize ?? 0;
@@ -325,6 +327,7 @@ export class OrderManager implements ScriptDeps {
     // ckbAllowanceStep should be 1000 CKB if not provided
     const ckbAllowanceStep =
       options?.ckbAllowanceStep ?? ccc.fixedPointFrom("1000");
+    const maxPartials = options?.maxPartials;
     const udtAllowanceStep =
       (ckbAllowanceStep * ckbScale + udtScale - 1n) / udtScale;
 
@@ -357,7 +360,7 @@ export class OrderManager implements ScriptDeps {
       udtAllowance: allowance.udtValue,
       gain: -1n << 256n,
     };
-    while (best.i !== 0 && best.j !== 0) {
+    while (best.i !== 0 || best.j !== 0) {
       ckb2UdtMatches.next(best.i);
       udt2CkbMatches.next(best.j);
       best.i = 0;
@@ -368,10 +371,13 @@ export class OrderManager implements ScriptDeps {
           const ckbDelta = c2u.ckbDelta + u2c.ckbDelta;
           const udtDelta = c2u.udtDelta + u2c.udtDelta;
           const partials = c2u.partials.concat(u2c.partials);
-          const ckbFee = ckbMiningFee * ccc.fixedPointFrom(partials.length);
+          if (maxPartials !== undefined && partials.length > maxPartials) {
+            continue;
+          }
+          const ckbFee = ckbMiningFee * BigInt(partials.length);
           const ckbAllowance = allowance.ckbValue + ckbDelta - ckbFee;
           const udtAllowance = allowance.udtValue + udtDelta;
-          const gain = ckbDelta * ckbScale + udtDelta * udtScale;
+          const gain = (ckbDelta - ckbFee) * ckbScale + udtDelta * udtScale;
 
           if (ckbAllowance >= 0n && udtAllowance >= 0n && gain > best.gain) {
             best = {
@@ -433,7 +439,7 @@ export class OrderManager implements ScriptDeps {
     const matchers = orderPool
       .map((o) => OrderMatcher.from(o, isCkb2Udt, ckbMiningFee))
       .filter((m) => m !== undefined)
-      .sort((a, b) => b.realRatio - a.realRatio);
+      .sort((a, b) => OrderMatcher.compareRealRatioDesc(a, b));
 
     // Initialize an accumulator for the cumulative match.
     let acc: Match = {
@@ -540,19 +546,21 @@ export class OrderManager implements ScriptDeps {
    *      - Yield the valid `OrderGroup`.
    *
    * @param client – Client to interact with the blockchain.
+   * @param options.onChain – Defaults to true. When false, use cached cell queries.
    * @param options.limit – Maximum cells to scan per findCells batch. Defaults to `defaultFindCellsLimit` (400).
    * @yields OrderGroup instances combining master, order, and origin cells.
    */
   async *findOrders(
     client: ccc.Client,
-    options?: { limit?: number },
+    options?: { onChain?: boolean; limit?: number },
   ): AsyncGenerator<OrderGroup> {
+    const onChain = options?.onChain ?? true;
     const limit = options?.limit ?? defaultFindCellsLimit;
 
     // Fetch simple orders & master cells in parallel
     const [simpleOrders, allMasters] = await Promise.all([
-      this.findSimpleOrders(client, limit),
-      this.findAllMasters(client, limit),
+      this.findSimpleOrders(client, onChain, limit),
+      this.findAllMasters(client, onChain, limit),
     ]);
 
     // Prepare a map of masterCellKey → { master, originPromise?, orders[] }
@@ -620,16 +628,17 @@ export class OrderManager implements ScriptDeps {
    * matches the UDT type script, returning only valid {@link OrderCell} instances.
    *
    * @param client – The client used to interact with the blockchain.
+   * @param onChain - When true, use live RPC queries; otherwise, use cached results.
    * @param limit – Maximum cells to scan per findCells batch.
    * @returns Promise that resolves to an array of {@link OrderCell}.
    */
   private async findSimpleOrders(
     client: ccc.Client,
+    onChain: boolean,
     limit: number,
   ): Promise<OrderCell[]> {
     const orders: OrderCell[] = [];
-
-    for await (const cell of client.findCellsOnChain(
+    const findCellsArgs = [
       {
         script: this.script,
         scriptType: "lock",
@@ -641,7 +650,13 @@ export class OrderManager implements ScriptDeps {
       },
       "asc",
       limit,
-    )) {
+    ] as const;
+
+    let scanned = 0;
+    for await (const cell of onChain
+      ? client.findCellsOnChain(...findCellsArgs)
+      : client.findCells(...findCellsArgs)) {
+      scanned += 1;
       const order = OrderCell.tryFrom(cell);
       if (!order || !this.isOrder(cell)) {
         // Skip non-order cells or failed conversions
@@ -649,6 +664,7 @@ export class OrderManager implements ScriptDeps {
       }
       orders.push(order);
     }
+    assertCompleteScan(scanned, limit, "order cell");
 
     return orders;
   }
@@ -660,16 +676,17 @@ export class OrderManager implements ScriptDeps {
    * then wraps them as {@link MasterCell} instances.
    *
    * @param client – The client used to interact with the blockchain.
+   * @param onChain - When true, use live RPC queries; otherwise, use cached results.
    * @param limit – Maximum cells to scan per findCells batch.
    * @returns Promise that resolves to an array of {@link MasterCell}.
    */
   private async findAllMasters(
     client: ccc.Client,
+    onChain: boolean,
     limit: number,
   ): Promise<MasterCell[]> {
     const masters: MasterCell[] = [];
-
-    for await (const cell of client.findCellsOnChain(
+    const findCellsArgs = [
       {
         script: this.script,
         scriptType: "type",
@@ -678,22 +695,29 @@ export class OrderManager implements ScriptDeps {
       },
       "asc",
       limit,
-    )) {
+    ] as const;
+
+    let scanned = 0;
+    for await (const cell of onChain
+      ? client.findCellsOnChain(...findCellsArgs)
+      : client.findCells(...findCellsArgs)) {
+      scanned += 1;
       if (!this.isMaster(cell)) {
         // Skip cells that do not satisfy master criteria
         continue;
       }
       masters.push(new MasterCell(cell));
     }
+    assertCompleteScan(scanned, limit, "master cell");
 
     return masters;
   }
 
   /**
-   * Finds the origin order associated with a given master out point.
+   * Finds the mint origin order associated with a given master out point.
    *
-   * Starting from the master cell's index, the method searches backwards first for an order matching the master.
-   * If not found, it searches forwards until an order is found or there is no more cell.
+   * The origin is historical transaction output data, not live cell state: it
+   * may already be spent by later matches while still anchoring the order group.
    *
    * @param client - The client used to interact with the blockchain.
    * @param master - The master out point to find the origin for.
@@ -705,31 +729,49 @@ export class OrderManager implements ScriptDeps {
     master: ccc.OutPoint,
   ): Promise<OrderCell | undefined> {
     const { txHash, index: mIndex } = master;
-    for (let index = mIndex - 1n; index >= 0n; index--) {
-      const cell = await client.getCell({ txHash, index });
-      if (!cell) {
-        return;
-      }
-
-      const order = OrderCell.tryFrom(cell);
-      if (order?.getMaster().eq(master)) {
-        return order;
-      }
+    const res = await client.getTransaction(txHash);
+    if (!res) {
+      return;
     }
 
-    // eslint-disable-next-line no-constant-condition, @typescript-eslint/no-unnecessary-condition
-    for (let index = mIndex + 1n; true; index++) {
-      const cell = await client.getCell({ txHash, index });
-      if (!cell) {
-        return;
+    let origin: OrderCell | undefined;
+    for (let index = 0n; index < BigInt(res.transaction.outputs.length); index++) {
+      if (index === mIndex) {
+        continue;
       }
 
+      const output = res.transaction.getOutput(index);
+      if (!output) {
+        continue;
+      }
+      const cell = ccc.Cell.from({
+        cellOutput: output.cellOutput,
+        outputData: output.outputData,
+        outPoint: { txHash, index },
+      });
       const order = OrderCell.tryFrom(cell);
-      if (order?.getMaster().eq(master)) {
-        return order;
+      if (
+        order &&
+        this.isOrder(cell) &&
+        order.data.isMint() &&
+        order.getMaster().eq(master)
+      ) {
+        if (origin) {
+          return;
+        }
+        origin = order;
       }
     }
+    return origin;
   }
+}
+
+function assertCompleteScan(scanned: number, limit: number, label: string): void {
+  if (scanned < limit) {
+    return;
+  }
+
+  throw new Error(`${label} scan reached limit ${String(limit)}; state may be incomplete`);
 }
 
 /**
@@ -787,7 +829,8 @@ export class OrderMatcher {
    * @param bMinMatch - The minimum matching amount for asset B.
    * @param bMaxMatch - The maximum amount of asset B that can be matched.
    * @param bMaxOut - The maximum output amount for asset B.
-   * @param realRatio - The actual exchange ratio computed based on the available amounts.
+   * @param realRatioNumerator - Numerator of the exact effective ratio used for sorting.
+   * @param realRatioDenominator - Denominator of the exact effective ratio used for sorting.
    */
   constructor(
     public readonly order: OrderCell,
@@ -800,8 +843,16 @@ export class OrderMatcher {
     public readonly bMinMatch: ccc.FixedPoint,
     public readonly bMaxMatch: ccc.FixedPoint,
     public readonly bMaxOut: ccc.FixedPoint,
-    public readonly realRatio: number,
+    public readonly realRatioNumerator: ccc.FixedPoint,
+    public readonly realRatioDenominator: ccc.FixedPoint,
   ) {}
+
+  static compareRealRatioDesc(left: OrderMatcher, right: OrderMatcher): number {
+    return compareBigInt(
+      right.realRatioNumerator * left.realRatioDenominator,
+      left.realRatioNumerator * right.realRatioDenominator,
+    );
+  }
 
   /**
    * Factory method to create an OrderMatcher instance from an order.
@@ -867,10 +918,10 @@ export class OrderMatcher {
       bMinMatch = bMaxMatch;
     }
 
-    const realRatio =
-      Number(aIn - aMin - aMiningFee) / Number(bMaxMatch + bMiningFee);
+    const realRatioNumerator = aIn - aMin - aMiningFee;
+    const realRatioDenominator = bMaxMatch + bMiningFee;
 
-    if (realRatio <= 0) {
+    if (realRatioNumerator <= 0n || realRatioDenominator <= 0n) {
       return;
     }
 
@@ -885,7 +936,8 @@ export class OrderMatcher {
       bMinMatch,
       bMaxMatch,
       bMaxOut,
-      realRatio,
+      realRatioNumerator,
+      realRatioDenominator,
     );
   }
 
@@ -1006,4 +1058,16 @@ export class OrderMatcher {
   ): ccc.FixedPoint {
     return (aScale * (aIn - aOut) + bScale * (bIn + 1n) - 1n) / bScale;
   }
+}
+
+function compareBigInt(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }

@@ -108,19 +108,20 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
    */
   compare(other: Ratio): number {
     if (this.udtScale === other.udtScale) {
-      return Number(this.ckbScale - other.ckbScale);
+      return compareBigInt(this.ckbScale, other.ckbScale);
     }
 
     if (this.ckbScale === other.ckbScale) {
-      return Number(other.udtScale - this.udtScale);
+      return compareBigInt(other.udtScale, this.udtScale);
     }
 
     // Idea: o0.Ckb2Udt - o1.Ckb2Udt
     // ~ o0.ckbScale / o0.udtScale - o1.ckbScale / o1.udtScale
     // order equivalent to:
     // ~ o0.ckbScale * o1.udtScale - o1.ckbScale * o0.udtScale
-    return Number(
-      this.ckbScale * other.udtScale - other.ckbScale * this.udtScale,
+    return compareBigInt(
+      this.ckbScale * other.udtScale,
+      other.ckbScale * this.udtScale,
     );
   }
 
@@ -449,6 +450,18 @@ export class Info extends ccc.Entity.Base<InfoLike, Info>() {
   static ckbMinMatchLogDefault(): number {
     return 33; // ~ 86 CKB
   }
+}
+
+function compareBigInt(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 /**
