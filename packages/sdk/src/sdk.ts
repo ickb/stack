@@ -553,15 +553,20 @@ export class IckbSdk {
     ckbMaturing: CkbCumulative[];
   }> {
     const limit = defaultFindCellsLimit;
-    const opts = {
+    const withdrawalOptions = {
       onChain: true,
       tip,
       limit,
     };
+    const directDepositOptions = {
+      onChain: true,
+      tip,
+      limit: scanLimit(limit),
+    };
 
     // Start fetching bot iCKB withdrawal requests.
     const promiseBotWithdrawals = collect(
-      this.ownedOwner.findWithdrawalGroups(client, this.bots, opts),
+      this.ownedOwner.findWithdrawalGroups(client, this.bots, withdrawalOptions),
     );
 
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
@@ -580,7 +585,7 @@ export class IckbSdk {
           withData: true,
         },
         "asc",
-        limit,
+        scanLimit(limit),
       )) {
         scanned += 1;
         if (cell.cellOutput.type !== undefined || !cell.cellOutput.lock.eq(lock)) {
@@ -629,7 +634,7 @@ export class IckbSdk {
     // so the SDK currently falls back to direct deposit scanning instead of trusting
     // snapshot-like bytes from wallet-owned cells.
     let depositsScanned = 0;
-    for await (const d of this.ickbLogic.findDeposits(client, opts)) {
+    for await (const d of this.ickbLogic.findDeposits(client, directDepositOptions)) {
       depositsScanned += 1;
       if (d.isReady) {
         ckbAvailable += d.ckbValue;
@@ -676,7 +681,7 @@ export class IckbSdk {
           withData: true,
         },
         "asc",
-        limit,
+        scanLimit(limit),
       )) {
         scanned += 1;
         cells.push(cell);
@@ -693,12 +698,16 @@ function assertCompleteScan(
   label: string,
   lock?: ccc.Script,
 ): void {
-  if (scanned < limit) {
+  if (scanned <= limit) {
     return;
   }
 
   const suffix = lock ? ` for ${lock.toHex()}` : "";
   throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
+}
+
+function scanLimit(limit: number): number {
+  return limit + 1;
 }
 
 export interface AccountState {

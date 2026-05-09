@@ -948,7 +948,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     expect(state.system.ckbMaturing).toEqual([]);
   });
 
-  it("fails closed when bot capacity scanning reaches the limit", async () => {
+  it("allows bot capacity scanning to exactly reach the limit", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -972,9 +972,44 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: { scriptType?: string }) {
-        if (query.scriptType === "lock") {
+      findCellsOnChain: async function* (query: { filter?: { scriptLenRange?: unknown } }) {
+        if (query.filter?.scriptLenRange) {
           yield* repeat(defaultFindCellsLimit, plainCell);
+        }
+        await Promise.resolve();
+      },
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1State(client, [])).resolves.toBeDefined();
+  });
+
+  it("fails closed when bot capacity scanning exceeds the limit", async () => {
+    const botLock = script("11");
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      ownedOwnerManager,
+      new LogicManager(logic, [], new DaoManager(dao, [])),
+      new OrderManager(order, [], udt),
+      [botLock],
+    );
+    const plainCell = ccc.Cell.from({
+      outPoint: { txHash: hash("04"), index: 0n },
+      cellOutput: { capacity: 1n, lock: botLock },
+      outputData: "0x",
+    });
+    const client = {
+      getTipHeader: () => Promise.resolve(headerLike(1n)),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: async function* (query: { filter?: { scriptLenRange?: unknown } }) {
+        if (query.filter?.scriptLenRange) {
+          yield* repeat(defaultFindCellsLimit + 1, plainCell);
         }
         await Promise.resolve();
       },
@@ -985,7 +1020,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     );
   });
 
-  it("fails closed when direct deposit scanning reaches the limit", async () => {
+  it("allows direct deposit scanning to exactly reach the limit", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -1001,6 +1036,40 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     } as unknown as IckbDepositCell;
     vi.spyOn(logicManager, "findDeposits").mockImplementation(() =>
       repeat(defaultFindCellsLimit, deposit)
+    );
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      ownedOwnerManager,
+      logicManager,
+      new OrderManager(order, [], udt),
+      [botLock],
+    );
+    const client = {
+      getTipHeader: () => Promise.resolve(headerLike(1n)),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1State(client, [])).resolves.toBeDefined();
+  });
+
+  it("fails closed when direct deposit scanning exceeds the limit", async () => {
+    const botLock = script("11");
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const logicManager = new LogicManager(logic, [], new DaoManager(dao, []));
+    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
+    const deposit = {
+      isReady: false,
+      ckbValue: 1n,
+      maturity: { toUnix: () => 1n },
+    } as unknown as IckbDepositCell;
+    vi.spyOn(logicManager, "findDeposits").mockImplementation(() =>
+      repeat(defaultFindCellsLimit + 1, deposit)
     );
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
     const sdk = new IckbSdk(
@@ -1074,7 +1143,7 @@ describe("IckbSdk.getAccountState", () => {
     expect(ickbUdt.infoFrom).toHaveBeenCalledWith(client, [udtCell]);
   });
 
-  it("fails closed when account cell scanning reaches the limit", async () => {
+  it("allows account cell scanning to exactly reach the limit", async () => {
     const accountLock = script("11");
     const udt = script("66");
     const daoManager = new DaoManager(script("33"), []);
@@ -1096,6 +1165,33 @@ describe("IckbSdk.getAccountState", () => {
     });
     const client = {
       findCellsOnChain: () => repeat(defaultFindCellsLimit, cell),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getAccountState(client, [accountLock], tip)).resolves.toBeDefined();
+  });
+
+  it("fails closed when account cell scanning exceeds the limit", async () => {
+    const accountLock = script("11");
+    const udt = script("66");
+    const daoManager = new DaoManager(script("33"), []);
+    const logicManager = new LogicManager(script("22"), [], daoManager);
+    const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], daoManager);
+    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      ownedOwnerManager,
+      logicManager,
+      new OrderManager(script("55"), [], udt),
+      [],
+    );
+    const cell = ccc.Cell.from({
+      outPoint: { txHash: hash("92"), index: 0n },
+      cellOutput: { capacity: 5n, lock: accountLock },
+      outputData: "0x",
+    });
+    const client = {
+      findCellsOnChain: () => repeat(defaultFindCellsLimit + 1, cell),
     } as unknown as ccc.Client;
 
     await expect(sdk.getAccountState(client, [accountLock], tip)).rejects.toThrow(
