@@ -528,6 +528,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(trueOrigin.cell.cellOutput, forgedOrigin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(trueOrigin.cell.outputData, forgedOrigin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCellsOnChain: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         if (query.scriptType === "lock") {
@@ -627,6 +628,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(fakeOrigin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(fakeOrigin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCellsOnChain: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         if (query.scriptType === "lock") {
@@ -715,6 +717,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(firstOrigin.cell.cellOutput, secondOrigin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(firstOrigin.cell.outputData, secondOrigin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCellsOnChain: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         if (query.scriptType === "lock") {
@@ -788,6 +791,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCells: async function* () {
         await Promise.resolve();
         cachedCalls += 1;
@@ -821,6 +825,127 @@ describe("OrderManager.findOrders", () => {
     expect(groups).toHaveLength(1);
     expect(cachedCalls).toBe(0);
     expect(onChainCalls).toBe(2);
+  });
+
+  it("caches master transaction lookups within findOrders", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const txHash = byte32FromByte("77");
+    const firstMaster = ccc.OutPoint.from({ txHash, index: 1n });
+    const secondMaster = ccc.OutPoint.from({ txHash, index: 3n });
+    const firstOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash, index: 0n },
+    });
+    const secondOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash, index: 2n },
+    });
+    const firstMasterCell = ccc.Cell.from({
+      outPoint: firstMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const secondMasterCell = ccc.Cell.from({
+      outPoint: secondMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(
+      firstOrigin.cell.cellOutput,
+      firstMasterCell.cellOutput,
+      secondOrigin.cell.cellOutput,
+      secondMasterCell.cellOutput,
+    );
+    tx.outputsData.push(
+      firstOrigin.cell.outputData,
+      firstMasterCell.outputData,
+      secondOrigin.cell.outputData,
+      secondMasterCell.outputData,
+    );
+    const actualTxHash = tx.hash();
+    firstMaster.txHash = actualTxHash;
+    secondMaster.txHash = actualTxHash;
+    firstOrigin.cell.outPoint.txHash = actualTxHash;
+    secondOrigin.cell.outPoint.txHash = actualTxHash;
+    firstMasterCell.outPoint.txHash = actualTxHash;
+    secondMasterCell.outPoint.txHash = actualTxHash;
+    const cache = new ccc.ClientCacheMemory();
+    let getTransactionCalls = 0;
+    const client = {
+      cache,
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield firstOrigin.cell;
+          yield secondOrigin.cell;
+        } else {
+          yield firstMasterCell;
+          yield secondMasterCell;
+        }
+      },
+      getTransaction: async (queriedTxHash: ccc.Hex) => {
+        getTransactionCalls += 1;
+        await Promise.resolve();
+        const res = queriedTxHash === actualTxHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+        if (res) {
+          await cache.recordTransactionResponses(res);
+        }
+        return res;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.master.cell.outPoint.eq(firstMaster)).toBe(true);
+    expect(groups[1]?.master.cell.outPoint.eq(secondMaster)).toBe(true);
+    expect(getTransactionCalls).toBe(1);
   });
 
   it("uses cached queries when onChain is false", async () => {
@@ -867,6 +992,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCells: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         cachedCalls += 1;
@@ -961,6 +1087,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCellsOnChain: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         if (query.scriptType === "lock") {
@@ -1033,6 +1160,7 @@ describe("OrderManager.findOrders", () => {
     tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
     tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
     const client = {
+      cache: new ccc.ClientCacheMemory(),
       findCells: async function* () {
         await Promise.resolve();
         cachedCalls += 1;

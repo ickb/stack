@@ -563,19 +563,18 @@ export class OrderManager implements ScriptDeps {
       this.findAllMasters(client, onChain, limit),
     ]);
 
-    // Prepare a map of masterCellKey → { master, originPromise?, orders[] }
+    // Prepare a map of masterCellKey → { master, orders[] }
     const rawGroups = new Map(
       allMasters.map((master) => [
         master.cell.outPoint.toHex(),
         {
           master,
-          origin: undefined as Promise<OrderCell | undefined> | undefined,
           orders: [] as OrderCell[],
         },
       ]),
     );
 
-    // Group simple orders by their master cell, kick off origin lookup once per master
+    // Group simple orders by their master cell
     for (const order of simpleOrders) {
       const master = order.getMaster();
       const key = master.toHex();
@@ -587,22 +586,15 @@ export class OrderManager implements ScriptDeps {
       }
 
       rawGroup.orders.push(order);
-
-      // Only initialize origin lookup once
-      rawGroup.origin ??= this.findOrigin(client, master);
     }
 
     // For each populated group, await origin, resolve the best order, and yield OrderGroup
-    for (const {
-      master,
-      origin: originPromise,
-      orders,
-    } of rawGroups.values()) {
-      if (orders.length === 0 || !originPromise) {
+    for (const { master, orders } of rawGroups.values()) {
+      if (orders.length === 0) {
         continue;
       }
 
-      const origin = await originPromise;
+      const origin = await this.findOrigin(client, master.cell.outPoint);
       if (!origin) {
         continue;
       }
@@ -729,7 +721,9 @@ export class OrderManager implements ScriptDeps {
     master: ccc.OutPoint,
   ): Promise<OrderCell | undefined> {
     const { txHash, index: mIndex } = master;
-    const res = await client.getTransaction(txHash);
+    const res =
+      (await client.cache.getTransactionResponse(txHash)) ??
+      (await client.getTransaction(txHash));
     if (!res) {
       return;
     }
