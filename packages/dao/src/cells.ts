@@ -35,6 +35,15 @@ export interface DaoWithdrawalRequestCell extends DaoCellBase {
   readonly isDeposit: false;
 }
 
+type TransactionWithHeader = Awaited<
+  ReturnType<ccc.Client["getTransactionWithHeader"]>
+>;
+
+export type DaoCellFromCache = {
+  headerCache?: Map<ccc.Num, Promise<ccc.ClientBlockHeader | undefined>>;
+  transactionCache?: Map<ccc.Hex, Promise<TransactionWithHeader>>;
+};
+
 type DaoCell = DaoDepositCell | DaoWithdrawalRequestCell;
 
 type DaoCellFromOptions = {
@@ -42,7 +51,7 @@ type DaoCellFromOptions = {
   tip: ccc.ClientBlockHeader;
   minLockUp?: ccc.Epoch;
   maxLockUp?: ccc.Epoch;
-};
+} & DaoCellFromCache;
 
 export function daoCellFrom(
   cell: ccc.Cell,
@@ -61,13 +70,12 @@ export async function daoCellFrom(
   const { isDeposit, tip } = options;
   const txHash = cell.outPoint.txHash;
   let oldest: TransactionHeader;
-  let withdrawalTxWithHeader:
-    | Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-    | undefined;
+  let withdrawalTxWithHeader: TransactionWithHeader | undefined;
   if (!isDeposit) {
+    const depositBlockNumber = mol.Uint64LE.decode(cell.outputData);
     const [header, txWithHeader] = await Promise.all([
-      options.client.getHeaderByNumber(mol.Uint64LE.decode(cell.outputData)),
-      options.client.getTransactionWithHeader(txHash),
+      getCachedHeaderByNumber(options, depositBlockNumber),
+      getCachedTransactionWithHeader(options, txHash),
     ]);
     if (!header) {
       throw new Error("Header not found for block number");
@@ -76,7 +84,7 @@ export async function daoCellFrom(
     withdrawalTxWithHeader = txWithHeader;
   } else {
     const txWithHeader =
-      await options.client.getTransactionWithHeader(txHash);
+      await getCachedTransactionWithHeader(options, txHash);
     if (!txWithHeader?.header) {
       throw new Error("Header not found for txHash");
     }
@@ -137,6 +145,30 @@ export async function daoCellFrom(
   return isDeposit
     ? { ...common, isDeposit: true }
     : { ...common, isDeposit: false };
+}
+
+function getCachedHeaderByNumber(
+  options: DaoCellFromOptions,
+  blockNumber: ccc.Num,
+): Promise<ccc.ClientBlockHeader | undefined> {
+  let promise = options.headerCache?.get(blockNumber);
+  if (!promise) {
+    promise = options.client.getHeaderByNumber(blockNumber);
+    options.headerCache?.set(blockNumber, promise);
+  }
+  return promise;
+}
+
+function getCachedTransactionWithHeader(
+  options: DaoCellFromOptions,
+  txHash: ccc.Hex,
+): Promise<TransactionWithHeader> {
+  let promise = options.transactionCache?.get(txHash);
+  if (!promise) {
+    promise = options.client.getTransactionWithHeader(txHash);
+    options.transactionCache?.set(txHash, promise);
+  }
+  return promise;
 }
 
 /**

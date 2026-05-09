@@ -6,6 +6,7 @@ import {
 } from "@ickb/utils";
 import {
   daoCellFrom,
+  type DaoCellFromCache,
   type DaoDepositCell,
   type DaoWithdrawalRequestCell,
 } from "./cells.js";
@@ -14,7 +15,7 @@ type DaoCellFromOptions = {
   tip: ccc.ClientBlockHeader;
   minLockUp?: ccc.Epoch;
   maxLockUp?: ccc.Epoch;
-};
+} & DaoCellFromCache;
 
 export async function assertDaoOutputLimit(
   txLike: ccc.TransactionLike,
@@ -382,9 +383,14 @@ export class DaoManager implements ScriptDeps {
         depositCandidates.push(cell);
       }
 
+      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const deposits = await Promise.all(
         depositCandidates.map((cell) =>
-          this.depositCellFrom(cell, client, { ...options, tip }),
+          this.depositCellFrom(cell, client, {
+            ...options,
+            tip,
+            transactionCache,
+          }),
         ),
       );
       for (const deposit of deposits) {
@@ -467,9 +473,16 @@ export class DaoManager implements ScriptDeps {
         withdrawalCandidates.push(cell);
       }
 
+      const headerCache: DaoCellFromCache["headerCache"] = new Map();
+      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const withdrawals = await Promise.all(
         withdrawalCandidates.map((cell) =>
-          this.withdrawalRequestCellFrom(cell, client, { ...options, tip }),
+          this.withdrawalRequestCellFrom(cell, client, {
+            ...options,
+            tip,
+            headerCache,
+            transactionCache,
+          }),
         ),
       );
       for (const withdrawal of withdrawals) {
