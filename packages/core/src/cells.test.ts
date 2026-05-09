@@ -216,6 +216,54 @@ describe("receipt prefix decoding", () => {
     expect(info.count).toBe(2);
   });
 
+  it("deduplicates repeated transaction header lookups", async () => {
+    const logic = script("33");
+    const dao = script("44");
+    const txHash = byte32FromByte("88");
+    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
+    const receipt = ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: script("22"),
+        type: logic,
+      },
+      outputData: receiptOutputData(2, ccc.fixedPointFrom(100000)),
+    });
+    const deposit = ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: logic,
+        type: dao,
+      },
+      outputData: "0x0000000000000000",
+    });
+    const ickbUdt = new IckbUdt(
+      { txHash: byte32FromByte("44"), index: 0n },
+      script("55"),
+      { txHash: byte32FromByte("66"), index: 0n },
+      logic,
+      new DaoManager(dao, []),
+    );
+    let calls = 0;
+    const client = {
+      getTransactionWithHeader: async () => {
+        calls += 1;
+        await Promise.resolve();
+        return { header };
+      },
+    } as unknown as ccc.Client;
+
+    const info = await ickbUdt.infoFrom(client, [receipt, deposit]);
+
+    expect(calls).toBe(1);
+    expect(info.balance).toBe(
+      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
+        ickbValue(deposit.capacityFree, header),
+    );
+  });
+
   it("adds xUDT and logic code deps explicitly", () => {
     const logic = script("33");
     const xudtCode = { txHash: byte32FromByte("44"), index: 1n };
