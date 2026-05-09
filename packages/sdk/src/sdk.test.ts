@@ -789,14 +789,16 @@ describe("sendAndWaitForCommit", () => {
     )).resolves.toBe(txHash);
 
     expect(sendTransaction).toHaveBeenCalledTimes(1);
-    expect(onConfirmationWait).toHaveBeenCalledTimes(3);
-    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(onConfirmationWait).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(7);
     expect(getTransaction).toHaveBeenCalledTimes(3);
     expect(getTransaction).toHaveBeenCalledWith(txHash);
   });
 
   it("surfaces terminal transaction failures", async () => {
+    const sleep = vi.fn(() => Promise.resolve());
+
     await expect(sendAndWaitForCommit(
       {
         client: {
@@ -807,8 +809,10 @@ describe("sendAndWaitForCommit", () => {
         } as unknown as ccc.Signer,
       },
       ccc.Transaction.default(),
-      { sleep: () => Promise.resolve() },
+      { sleep },
     )).rejects.toThrow("Transaction ended with status: rejected");
+
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("surfaces transaction confirmation timeouts", async () => {

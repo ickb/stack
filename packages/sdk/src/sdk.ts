@@ -74,9 +74,13 @@ export async function sendAndWaitForCommit(
   let status: string | undefined = "sent";
 
   for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
+    status = (await client.getTransaction(txHash))?.status;
+    if (!isPendingStatus(status)) {
+      break;
+    }
+
     onConfirmationWait?.();
     await sleep(confirmationIntervalMs);
-    status = (await client.getTransaction(txHash))?.status;
   }
 
   if (status === "committed") {
