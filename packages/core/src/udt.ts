@@ -18,6 +18,7 @@ import type { ExchangeRatio } from "@ickb/utils";
  * processing, since only input cells (resolved by CellInput.getCell()) have outPoint.
  */
 export class IckbUdt extends udt.Udt {
+  public readonly udtCode: ccc.OutPoint;
   public readonly logicCode: ccc.OutPoint;
   public readonly logicScript: ccc.Script;
   public readonly daoManager: DaoManager;
@@ -39,6 +40,7 @@ export class IckbUdt extends udt.Udt {
     daoManager: DaoManager,
   ) {
     super(code, script);
+    this.udtCode = ccc.OutPoint.from(code);
     this.logicCode = ccc.OutPoint.from(logicCode);
     this.logicScript = ccc.Script.from(logicScript);
     this.daoManager = daoManager;
@@ -47,8 +49,8 @@ export class IckbUdt extends udt.Udt {
   /**
    * Computes the iCKB UDT type script from raw UDT and Logic scripts.
    *
-   * Concatenates the iCKB logic script hash with a fixed 4-byte LE length
-   * postfix ("00000080") to form the UDT type script args.
+   * Concatenates the iCKB logic script hash with the fixed 4-byte little-endian
+   * xUDT owner-mode flags postfix ("00000080") to form the UDT type script args.
    *
    * @param udt - The raw xUDT script (codeHash and hashType reused).
    * @param ickbLogic - The iCKB logic script (hash used for args).
@@ -158,7 +160,7 @@ export class IckbUdt extends udt.Udt {
    * Adds iCKB-specific cell dependencies to a transaction.
    *
    * Adds individual code deps (not dep group) for:
-   * - xUDT code cell (this.code from ssri.Trait)
+   * - xUDT code cell (this.udtCode)
    * - iCKB Logic code cell (this.logicCode)
    *
    * @param txLike - The transaction to add cell deps to.
@@ -167,7 +169,7 @@ export class IckbUdt extends udt.Udt {
   override addCellDeps(txLike: ccc.TransactionLike): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
     // xUDT code dep
-    tx.addCellDeps({ outPoint: this.code, depType: "code" });
+    tx.addCellDeps({ outPoint: this.udtCode, depType: "code" });
     // iCKB Logic code dep
     tx.addCellDeps({ outPoint: this.logicCode, depType: "code" });
     return tx;

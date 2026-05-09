@@ -4,13 +4,17 @@ iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps bu
 
 ## Transaction Completion Boundary
 
-`@ickb/sdk` stops at protocol-specific transaction construction. It returns partial `ccc.Transaction` values and does not finalize iCKB UDT balance, CKB capacity, or fees on behalf of the caller.
+`@ickb/sdk` builders still return partial `ccc.Transaction` values. Callers explicitly choose when to finalize, and the shared completion path now also lives in `@ickb/sdk`.
 
 Callers own the final completion pipeline:
 
-1. Use `getConfig(...).managers.ickbUdt` to finish iCKB UDT completion.
-2. Then run CCC-native CKB capacity and fee completion.
+1. Build the partial transaction through `IckbSdk` and the package managers.
+2. Before send, call `sdk.completeTransaction(...)` or `completeIckbTransaction(...)` from `@ickb/sdk`.
 3. Only then send the transaction.
+
+## User Lock Assumption
+
+Current stack flows assume user-owned cells are protected by locks whose signatures bind the whole transaction, such as standard `sighash` wallet flows. Passing a raw `ccc.Script` is only safe when that lock gives the same output and recipient binding. Delegated-signature or OTX-style locks are integration-specific and must account for the weak-lock boundary documented in the iCKB whitepaper and contracts audit.
 
 ## Local CCC Workflow
 

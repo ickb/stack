@@ -62,19 +62,15 @@ async function main(): Promise<void> {
 
   const chain = parseChain(CHAIN);
   const client = createClient(chain, RPC_URL);
-  const { managers, bots } = getConfig(chain);
+  const config = getConfig(chain);
+  const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, BOT_PRIVATE_KEY);
   const primaryLock = (await signer.getRecommendedAddressObj()).script;
   const runtime: Runtime = {
     chain,
     client,
     signer,
-    sdk: new IckbSdk(
-      managers.ownedOwner,
-      managers.logic,
-      managers.order,
-      bots,
-    ),
+    sdk: IckbSdk.fromConfig(config),
     managers,
     primaryLock,
   };

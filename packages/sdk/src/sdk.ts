@@ -1,16 +1,22 @@
 import { ccc } from "@ckb-ccc/core";
+import { assertDaoOutputLimit } from "@ickb/dao";
 import {
   collect,
   binarySearch,
+  defaultFindCellsLimit,
   isPlainCapacityCell,
   unique,
   type ValueComponents,
 } from "@ickb/utils";
 import {
   convert,
+  type IckbDepositCell,
+  type IckbUdt,
   ickbExchangeRatio,
   type LogicManager,
   type OwnedOwnerManager,
+  type ReceiptCell,
+  type WithdrawalGroup,
 } from "@ickb/core";
 import {
   Info,
@@ -21,23 +27,104 @@ import {
 } from "@ickb/order";
 import { getConfig } from "./constants.js";
 
+export interface CompleteIckbTransactionOptions {
+  signer: ccc.Signer;
+  client: ccc.Client;
+  feeRate: ccc.Num;
+}
+
+export interface SendAndWaitForCommitOptions {
+  maxConfirmationChecks?: number;
+  confirmationIntervalMs?: number;
+  onConfirmationWait?: () => void;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+type IckbUdtCompleter = Pick<IckbUdt, "completeBy" | "infoFrom" | "isUdt">;
+
+/**
+ * Completes a stack-built partial transaction with the iCKB post-processing
+ * steps.
+ *
+ * The transaction completion boundary stays the same: callers still decide when
+ * to finalize, but they no longer need to duplicate the required order.
+ */
+export async function completeIckbTransaction(
+  txLike: ccc.TransactionLike,
+  ickbUdt: IckbUdtCompleter,
+  options: CompleteIckbTransactionOptions,
+): Promise<ccc.Transaction> {
+  const tx = await ickbUdt.completeBy(txLike, options.signer);
+  await tx.completeFeeBy(options.signer, options.feeRate);
+  await assertDaoOutputLimit(tx, options.client);
+  return tx;
+}
+
+export async function sendAndWaitForCommit(
+  { client, signer }: { client: ccc.Client; signer: ccc.Signer },
+  tx: ccc.Transaction,
+  {
+    maxConfirmationChecks = 60,
+    confirmationIntervalMs = 10_000,
+    onConfirmationWait,
+    sleep = delay,
+  }: SendAndWaitForCommitOptions = {},
+): Promise<ccc.Hex> {
+  const txHash = await signer.sendTransaction(tx);
+  let status: string | undefined = "sent";
+
+  for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
+    onConfirmationWait?.();
+    await sleep(confirmationIntervalMs);
+    status = (await client.getTransaction(txHash))?.status;
+  }
+
+  if (status === "committed") {
+    return txHash;
+  }
+
+  if (isPendingStatus(status)) {
+    throw new Error("Transaction confirmation timed out");
+  }
+
+  throw new Error(`Transaction ended with status: ${status ?? "unknown"}`);
+}
+
+function isPendingStatus(status: string | undefined): boolean {
+  return (
+    status === undefined ||
+    status === "sent" ||
+    status === "pending" ||
+    status === "proposed" ||
+    status === "unknown"
+  );
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 /**
  * SDK for managing iCKB operations.
  *
  * This facade intentionally stops at protocol-specific transaction construction.
- * Callers complete iCKB UDT balance first, then CKB capacity and fees, with
- * CCC-native APIs before sending the transaction.
+ * Callers still own completion before send by explicitly calling
+ * `completeTransaction(...)`.
  */
 export class IckbSdk {
   /**
    * Creates an instance of IckbSdk.
    *
+   * @param ickbUdt - The manager for iCKB UDT completion and account balance.
    * @param ownedOwner - The manager for owned owner operations.
    * @param ickbLogic - The manager for iCKB logic operations.
    * @param order - The manager for order operations.
    * @param bots - An array of bot lock scripts.
    */
   constructor(
+    private readonly ickbUdt: IckbUdtCompleter,
     private readonly ownedOwner: OwnedOwnerManager,
     private readonly ickbLogic: LogicManager,
     private readonly order: OrderManager,
@@ -51,12 +138,23 @@ export class IckbSdk {
    * @returns A new instance of IckbSdk.
    */
   static from(...args: Parameters<typeof getConfig>): IckbSdk {
-    const {
-      managers: { ownedOwner, logic, order },
-      bots,
-    } = getConfig(...args);
+    return IckbSdk.fromConfig(getConfig(...args));
+  }
 
-    return new IckbSdk(ownedOwner, logic, order, bots);
+  static fromConfig(config: ReturnType<typeof getConfig>): IckbSdk {
+    const {
+      managers: { ickbUdt, ownedOwner, logic, order },
+      bots,
+    } = config;
+
+    return new IckbSdk(ickbUdt, ownedOwner, logic, order, bots);
+  }
+
+  async completeTransaction(
+    txLike: ccc.TransactionLike,
+    options: CompleteIckbTransactionOptions,
+  ): Promise<ccc.Transaction> {
+    return completeIckbTransaction(txLike, this.ickbUdt, options);
   }
 
   /**
@@ -227,8 +325,7 @@ export class IckbSdk {
    * @returns A Promise resolving to the updated transaction.
    *
    * @remarks The returned transaction is not finalized. Callers own the
-   * completion pipeline: finish iCKB UDT completion first, then CKB
-   * capacity/fee completion, before sending.
+   * completion pipeline and may use `completeTransaction(...)` before send.
    */
   async request(
     txLike: ccc.TransactionLike,
@@ -260,8 +357,7 @@ export class IckbSdk {
    * @returns The updated transaction.
    *
    * @remarks The returned transaction is not finalized. Callers own the
-   * completion pipeline: finish iCKB UDT completion first, then CKB
-   * capacity/fee completion, before sending.
+   * completion pipeline and may use `completeTransaction(...)` before send.
    */
   collect(
     txLike: ccc.TransactionLike,
@@ -271,6 +367,96 @@ export class IckbSdk {
     },
   ): ccc.Transaction {
     return this.order.melt(txLike, groups, options);
+  }
+
+  /**
+   * Builds the shared partial transaction from currently actionable account state.
+   *
+   * This keeps the order of stack-owned steps in one place: optional withdrawal
+   * requests first, then collect user orders, complete ready receipts, and
+   * finalize ready withdrawals.
+   *
+   * @param txLike - The transaction to extend.
+   * @param client - The blockchain client used by withdrawal completion.
+   * @param options.withdrawalRequest - Optional DAO withdrawal request to append
+   * before the input-only base activity.
+   * @param options.withdrawalRequest.requiredLiveDeposits - Live deposit anchors
+   * that must remain resolvable while the requested deposits are spent.
+   * @param options.orders - User-owned order groups to collect.
+   * @param options.receipts - Receipts ready for deposit phase 2 completion.
+   * @param options.readyWithdrawals - Mature withdrawal groups ready to complete.
+   * @returns A Promise resolving to the updated partial transaction.
+   */
+  async buildBaseTransaction(
+    txLike: ccc.TransactionLike,
+    client: ccc.Client,
+    options?: {
+      withdrawalRequest?: {
+        deposits: IckbDepositCell[];
+        requiredLiveDeposits?: IckbDepositCell[];
+        lock: ccc.Script;
+      };
+      orders?: OrderGroup[];
+      receipts?: ReceiptCell[];
+      readyWithdrawals?: WithdrawalGroup[];
+    },
+  ): Promise<ccc.Transaction> {
+    let tx = ccc.Transaction.from(txLike);
+
+    if (options?.withdrawalRequest?.deposits.length) {
+      tx = await this.ownedOwner.requestWithdrawal(
+        tx,
+        options.withdrawalRequest.deposits,
+        options.withdrawalRequest.lock,
+        client,
+      );
+      for (const deposit of options.withdrawalRequest.requiredLiveDeposits ?? []) {
+        tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
+      }
+    }
+
+    if (options?.orders?.length) {
+      tx = this.collect(tx, options.orders);
+    }
+
+    if (options?.receipts?.length) {
+      tx = this.ickbLogic.completeDeposit(tx, options.receipts);
+    }
+
+    if (options?.readyWithdrawals?.length) {
+      tx = await this.ownedOwner.withdraw(tx, options.readyWithdrawals, client);
+    }
+
+    return tx;
+  }
+
+  async getAccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    tip: ccc.ClientBlockHeader,
+  ): Promise<AccountState> {
+    const [cells, receipts, withdrawalGroups] = await Promise.all([
+      this.findAccountCells(client, locks),
+      collect(this.ickbLogic.findReceipts(client, locks, { onChain: true })),
+      collect(
+        this.ownedOwner.findWithdrawalGroups(client, locks, {
+          onChain: true,
+          tip,
+        }),
+      ),
+    ]);
+    const nativeUdtInfo = await this.ickbUdt.infoFrom(
+      client,
+      cells.filter((cell) => this.ickbUdt.isUdt(cell)),
+    );
+
+    return {
+      capacityCells: cells.filter(isPlainCapacityCell),
+      nativeUdtCapacity: nativeUdtInfo.capacity,
+      nativeUdtBalance: nativeUdtInfo.balance,
+      receipts,
+      withdrawalGroups,
+    };
   }
 
   /**
@@ -298,7 +484,7 @@ export class IckbSdk {
     // Parallel fetching of system components.
     const [{ ckbAvailable, ckbMaturing }, orders, feeRate] = await Promise.all([
       this.getCkb(client, tip),
-      collect(this.order.findOrders(client)),
+      collect(this.order.findOrders(client, { onChain: true })),
       client.getFeeRate(),
     ]);
 
@@ -366,9 +552,11 @@ export class IckbSdk {
     ckbAvailable: ccc.FixedPoint;
     ckbMaturing: CkbCumulative[];
   }> {
+    const limit = defaultFindCellsLimit;
     const opts = {
       onChain: true,
       tip,
+      limit,
     };
 
     // Start fetching bot iCKB withdrawal requests.
@@ -380,6 +568,7 @@ export class IckbSdk {
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
     for (const lock of unique(this.bots)) {
+      let scanned = 0;
       for await (const cell of client.findCellsOnChain(
         {
           script: lock,
@@ -391,8 +580,9 @@ export class IckbSdk {
           withData: true,
         },
         "asc",
-        400,
+        limit,
       )) {
+        scanned += 1;
         if (cell.cellOutput.type !== undefined || !cell.cellOutput.lock.eq(lock)) {
           continue;
         }
@@ -404,6 +594,7 @@ export class IckbSdk {
           bot2Ckb.set(key, ckb);
         }
       }
+      assertCompleteScan(scanned, limit, "bot capacity", lock);
     }
 
     const ckbMaturing = new Array<{
@@ -437,7 +628,9 @@ export class IckbSdk {
     // Bot-owned no-type data cells are not distinguishable from arbitrary payloads,
     // so the SDK currently falls back to direct deposit scanning instead of trusting
     // snapshot-like bytes from wallet-owned cells.
+    let depositsScanned = 0;
     for await (const d of this.ickbLogic.findDeposits(client, opts)) {
+      depositsScanned += 1;
       if (d.isReady) {
         ckbAvailable += d.ckbValue;
         continue;
@@ -448,6 +641,7 @@ export class IckbSdk {
         maturity: d.maturity.toUnix(tip),
       });
     }
+    assertCompleteScan(depositsScanned, limit, "iCKB deposit");
 
     // Sort maturing CKB entries by their maturity timestamp.
     ckbMaturing.sort((a, b) => Number(a.maturity - b.maturity));
@@ -465,6 +659,153 @@ export class IckbSdk {
       ckbMaturing: ckbCumulativeMaturing,
     };
   }
+
+  private async findAccountCells(
+    client: ccc.Client,
+    locks: ccc.Script[],
+  ): Promise<ccc.Cell[]> {
+    const cells: ccc.Cell[] = [];
+    const limit = defaultFindCellsLimit;
+    for (const lock of unique(locks)) {
+      let scanned = 0;
+      for await (const cell of client.findCellsOnChain(
+        {
+          script: lock,
+          scriptType: "lock",
+          scriptSearchMode: "exact",
+          withData: true,
+        },
+        "asc",
+        limit,
+      )) {
+        scanned += 1;
+        cells.push(cell);
+      }
+      assertCompleteScan(scanned, limit, "account", lock);
+    }
+    return cells;
+  }
+}
+
+function assertCompleteScan(
+  scanned: number,
+  limit: number,
+  label: string,
+  lock?: ccc.Script,
+): void {
+  if (scanned < limit) {
+    return;
+  }
+
+  const suffix = lock ? ` for ${lock.toHex()}` : "";
+  throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
+}
+
+export interface AccountState {
+  capacityCells: ccc.Cell[];
+  nativeUdtCapacity: bigint;
+  nativeUdtBalance: bigint;
+  receipts: ReceiptCell[];
+  withdrawalGroups: WithdrawalGroup[];
+}
+
+export interface AccountAvailabilityProjection {
+  ckbNative: bigint;
+  ickbNative: bigint;
+  ckbAvailable: bigint;
+  ickbAvailable: bigint;
+  ckbPending: bigint;
+  ickbPending: bigint;
+  ckbBalance: bigint;
+  ickbBalance: bigint;
+  readyWithdrawals: WithdrawalGroup[];
+  pendingWithdrawals: WithdrawalGroup[];
+  availableOrders: OrderGroup[];
+  pendingOrders: OrderGroup[];
+}
+
+export function projectAccountAvailability(
+  account: AccountState,
+  userOrders: OrderGroup[],
+  options?: {
+    /**
+     * Treat matchable orders as available only when the caller will collect them
+     * before spending the projected balance in the same transaction.
+     */
+    collectedOrdersAvailable?: boolean;
+  },
+): AccountAvailabilityProjection {
+  const readyWithdrawals: WithdrawalGroup[] = [];
+  const pendingWithdrawals: WithdrawalGroup[] = [];
+  for (const group of account.withdrawalGroups) {
+    if (group.owned.isReady) {
+      readyWithdrawals.push(group);
+    } else {
+      pendingWithdrawals.push(group);
+    }
+  }
+
+  const availableOrders: OrderGroup[] = [];
+  const pendingOrders: OrderGroup[] = [];
+  for (const group of userOrders) {
+    if (
+      options?.collectedOrdersAvailable ||
+      group.order.isDualRatio() ||
+      !group.order.isMatchable()
+    ) {
+      availableOrders.push(group);
+    } else {
+      pendingOrders.push(group);
+    }
+  }
+
+  const ckbNative = sumValues(
+    account.capacityCells,
+    (cell) => cell.cellOutput.capacity,
+  );
+  const ickbNative = account.nativeUdtBalance;
+  const ckbAvailable =
+    ckbNative +
+    sumCkb(account.receipts) +
+    sumCkb(readyWithdrawals) +
+    sumCkb(availableOrders);
+  const ickbAvailable =
+    ickbNative +
+    sumUdt(account.receipts) +
+    sumUdt(availableOrders);
+  const ckbPending = sumCkb(pendingWithdrawals) + sumCkb(pendingOrders);
+  const ickbPending = sumUdt(pendingOrders);
+
+  return {
+    ckbNative,
+    ickbNative,
+    ckbAvailable,
+    ickbAvailable,
+    ckbPending,
+    ickbPending,
+    ckbBalance: ckbAvailable + ckbPending,
+    ickbBalance: ickbAvailable + ickbPending,
+    readyWithdrawals,
+    pendingWithdrawals,
+    availableOrders,
+    pendingOrders,
+  };
+}
+
+function sumCkb(items: { ckbValue: bigint }[]): bigint {
+  return sumValues(items, (item) => item.ckbValue);
+}
+
+function sumUdt(items: { udtValue: bigint }[]): bigint {
+  return sumValues(items, (item) => item.udtValue);
+}
+
+function sumValues<T>(items: readonly T[], project: (item: T) => bigint): bigint {
+  let total = 0n;
+  for (const item of items) {
+    total += project(item);
+  }
+  return total;
 }
 
 /**

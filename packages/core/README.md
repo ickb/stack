@@ -18,6 +18,16 @@ graph TD;
     click D "https://github.com/ickb/stack/tree/master/packages/core" "Go to @ickb/core"
 ```
 
+## Partial Transactions
+
+`@ickb/core` transaction builders stop at protocol-specific construction.
+
+If a caller will send the returned transaction, it still must:
+
+1. Finish iCKB UDT completion.
+2. Finish CCC-native CKB capacity and fee completion.
+3. Check `ccc.isDaoOutputLimitExceeded(...)` before send.
+
 ## Epoch Semantic Versioning
 
 This repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). In short ESV aims to provide a more nuanced and effective way to communicate software changes, allowing for better user understanding and smoother upgrades.
