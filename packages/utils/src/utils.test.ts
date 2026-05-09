@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BufferedGenerator, selectBoundedUdtSubset } from "./utils.js";
+import { BufferedGenerator, compareBigInt, selectBoundedUdtSubset } from "./utils.js";
+
+describe("compareBigInt", () => {
+  it("orders bigint values", () => {
+    expect(compareBigInt(1n, 2n)).toBe(-1);
+    expect(compareBigInt(2n, 2n)).toBe(0);
+    expect(compareBigInt(3n, 2n)).toBe(1);
+  });
+});
 
 describe("BufferedGenerator", () => {
   it("keeps advancing the wrapped generator after the initial fill", () => {
@@ -26,7 +34,7 @@ describe("selectBoundedUdtSubset", () => {
     const deposits = [{ udtValue: 6n }, { udtValue: 5n }, { udtValue: 5n }];
 
     expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 30,
+      candidateLimit: 32,
       minCount: 2,
       maxCount: 2,
     })).toEqual([deposits[1], deposits[2]]);
@@ -36,9 +44,9 @@ describe("selectBoundedUdtSubset", () => {
     const deposits = [{ udtValue: 4n }, { udtValue: 7n }, { udtValue: 3n }];
 
     expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 30,
+      candidateLimit: 32,
       minCount: 1,
-      maxCount: 30,
+      maxCount: 32,
     })).toEqual([deposits[1], deposits[2]]);
   });
 
@@ -52,22 +60,22 @@ describe("selectBoundedUdtSubset", () => {
       [firstSix, firstFour, secondSix, secondFour],
       10n,
       {
-        candidateLimit: 30,
+        candidateLimit: 32,
         minCount: 1,
-        maxCount: 30,
+        maxCount: 32,
       },
     )).toEqual([firstSix, firstFour]);
   });
 
   it("bounds the search to the requested candidate limit", () => {
     const deposits = [
-      ...Array.from({ length: 30 }, () => ({ udtValue: 6n })),
+      ...Array.from({ length: 32 }, () => ({ udtValue: 6n })),
       { udtValue: 5n },
       { udtValue: 5n },
     ];
 
     expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 30,
+      candidateLimit: 32,
       minCount: 2,
       maxCount: 2,
     })).toEqual([]);

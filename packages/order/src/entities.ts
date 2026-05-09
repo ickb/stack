@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE, type ExchangeRatio } from "@ickb/utils";
+import { CheckedInt32LE, compareBigInt, type ExchangeRatio } from "@ickb/utils";
 
 /**
  * Represents a ratio of two scales, CKB and UDT, with validation and comparison methods.
@@ -450,18 +450,6 @@ export class Info extends ccc.Entity.Base<InfoLike, Info>() {
   static ckbMinMatchLogDefault(): number {
     return 33; // ~ 86 CKB
   }
-}
-
-function compareBigInt(left: bigint, right: bigint): number {
-  if (left < right) {
-    return -1;
-  }
-
-  if (left > right) {
-    return 1;
-  }
-
-  return 0;
 }
 
 /**

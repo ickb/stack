@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   BufferedGenerator,
+  compareBigInt,
   defaultFindCellsLimit,
   type ExchangeRatio,
   type ScriptDeps,
@@ -1052,16 +1053,4 @@ export class OrderMatcher {
   ): ccc.FixedPoint {
     return (aScale * (aIn - aOut) + bScale * (bIn + 1n) - 1n) / bScale;
   }
-}
-
-function compareBigInt(left: bigint, right: bigint): number {
-  if (left < right) {
-    return -1;
-  }
-
-  if (left > right) {
-    return 1;
-  }
-
-  return 0;
 }
