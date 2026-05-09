@@ -416,7 +416,7 @@ describe("OrderManager.findOrders", () => {
           return;
         }
 
-        for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
           yield order.cell;
         }
       },
@@ -460,7 +460,7 @@ describe("OrderManager.findOrders", () => {
           return;
         }
 
-        for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
           yield masterCell;
         }
       },
@@ -469,6 +469,105 @@ describe("OrderManager.findOrders", () => {
     await expect(collectOrders(manager, client)).rejects.toThrow(
       `master cell scan reached limit ${String(defaultFindCellsLimit)}`,
     );
+  });
+
+  it("accepts exact-limit order and master scans", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const master = ccc.OutPoint.from({ txHash: byte32FromByte("36"), index: 1n });
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: master.txHash, index: 0n },
+    });
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: master },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("37"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: master,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+            yield index === 0 ? order.cell : ccc.Cell.from({
+              outPoint: { txHash: byte32FromByte("38"), index: BigInt(index) },
+              cellOutput: {
+                capacity: ccc.fixedPointFrom(61),
+                lock: orderScript,
+                type: udtScript,
+              },
+              outputData: "0x",
+            });
+          }
+          return;
+        }
+
+        for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+          yield index === 0 ? masterCell : ccc.Cell.from({
+            outPoint: { txHash: byte32FromByte("39"), index: BigInt(index) },
+            cellOutput: {
+              capacity: ccc.fixedPointFrom(61),
+              lock: ownerLock,
+              type: orderScript,
+            },
+            outputData: "0x",
+          });
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === master.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
   });
 
   it("findOrigin skips parseable non-mint origins in the master transaction", async () => {
@@ -924,16 +1023,12 @@ describe("OrderManager.findOrders", () => {
       getTransaction: async (queriedTxHash: ccc.Hex) => {
         getTransactionCalls += 1;
         await Promise.resolve();
-        const res = queriedTxHash === actualTxHash
+        return queriedTxHash === actualTxHash
           ? ccc.ClientTransactionResponse.from({
               transaction: tx,
               status: "committed",
             })
           : undefined;
-        if (res) {
-          await cache.recordTransactionResponses(res);
-        }
-        return res;
       },
     } as unknown as ccc.Client;
 

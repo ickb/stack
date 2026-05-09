@@ -631,6 +631,7 @@ export class OrderManager implements ScriptDeps {
     limit: number,
   ): Promise<OrderCell[]> {
     const orders: OrderCell[] = [];
+    const scanLimit = limit + 1;
     const findCellsArgs = [
       {
         script: this.script,
@@ -642,7 +643,7 @@ export class OrderManager implements ScriptDeps {
         withData: true,
       },
       "asc",
-      limit,
+      scanLimit,
     ] as const;
 
     let scanned = 0;
@@ -679,6 +680,7 @@ export class OrderManager implements ScriptDeps {
     limit: number,
   ): Promise<MasterCell[]> {
     const masters: MasterCell[] = [];
+    const scanLimit = limit + 1;
     const findCellsArgs = [
       {
         script: this.script,
@@ -687,7 +689,7 @@ export class OrderManager implements ScriptDeps {
         withData: true,
       },
       "asc",
-      limit,
+      scanLimit,
     ] as const;
 
     let scanned = 0;
@@ -722,9 +724,13 @@ export class OrderManager implements ScriptDeps {
     master: ccc.OutPoint,
   ): Promise<OrderCell | undefined> {
     const { txHash, index: mIndex } = master;
-    const res =
-      (await client.cache.getTransactionResponse(txHash)) ??
-      (await client.getTransaction(txHash));
+    let res = await client.cache.getTransactionResponse(txHash);
+    if (!res) {
+      res = await client.getTransaction(txHash);
+      if (res) {
+        await client.cache.recordTransactionResponses(res);
+      }
+    }
     if (!res) {
       return;
     }
@@ -762,7 +768,7 @@ export class OrderManager implements ScriptDeps {
 }
 
 function assertCompleteScan(scanned: number, limit: number, label: string): void {
-  if (scanned < limit) {
+  if (scanned <= limit) {
     return;
   }
 
