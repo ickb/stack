@@ -221,6 +221,7 @@ export class LogicManager implements ScriptDeps {
         limit,
       ] as const;
 
+      const receiptCandidates: ccc.Cell[] = [];
       for await (const cell of options?.onChain
         ? client.findCellsOnChain(...findCellsArgs)
         : client.findCells(...findCellsArgs)) {
@@ -228,7 +229,14 @@ export class LogicManager implements ScriptDeps {
           continue;
         }
 
-        yield receiptCellFrom({ client, cell });
+        receiptCandidates.push(cell);
+      }
+
+      const receipts = await Promise.all(
+        receiptCandidates.map((cell) => receiptCellFrom({ client, cell })),
+      );
+      for (const receipt of receipts) {
+        yield receipt;
       }
     }
   }

@@ -90,66 +90,73 @@ export class IckbUdt extends udt.Udt {
   ): Promise<udt.UdtInfo> {
     const info = udt.UdtInfo.from(acc).clone();
 
-    for (const cellLike of [cells].flat()) {
-      const cell = ccc.CellAny.from(cellLike);
+    const deltas = await Promise.all(
+      [cells].flat().map(async (cellLike) => {
+        const cell = ccc.CellAny.from(cellLike);
 
       // Standard xUDT cell -- delegate to base class pattern
-      if (this.isUdt(cell)) {
-        info.addAssign({
-          balance: udt.Udt.balanceFromUnsafe(cell.outputData),
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
-      }
+        if (this.isUdt(cell)) {
+          return {
+            balance: udt.Udt.balanceFromUnsafe(cell.outputData),
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
+        }
 
       // Receipt and deposit cells need outPoint for header fetch.
       // Output cells (no outPoint) are skipped -- correct by design.
-      if (!cell.outPoint) {
-        continue;
-      }
-
-      const { type, lock } = cell.cellOutput;
-
-      // Receipt cell: type === logicScript
-      if (type && this.logicScript.eq(type)) {
-        const txWithHeader = await client.getTransactionWithHeader(
-          cell.outPoint.txHash,
-        );
-        if (!txWithHeader?.header) {
-          throw new Error("Header not found for txHash");
+        if (!cell.outPoint) {
+          return;
         }
 
-        const { depositQuantity, depositAmount } =
-          ReceiptData.decodePrefix(cell.outputData);
-        info.addAssign({
-          balance: ickbValue(depositAmount, txWithHeader.header) *
-            depositQuantity,
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
-      }
+        const { type, lock } = cell.cellOutput;
+
+      // Receipt cell: type === logicScript
+        if (type && this.logicScript.eq(type)) {
+          const txWithHeader = await client.getTransactionWithHeader(
+            cell.outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
+
+          const { depositQuantity, depositAmount } =
+            ReceiptData.decodePrefix(cell.outputData);
+          return {
+            balance: ickbValue(depositAmount, txWithHeader.header) *
+              depositQuantity,
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
+        }
 
       // Deposit cell: lock === logicScript AND isDeposit
       // Output cells are gated by the !cell.outPoint check above and never reach here.
-      if (
-        this.logicScript.eq(lock) &&
-        this.daoManager.isDeposit(cell)
-      ) {
-        const txWithHeader = await client.getTransactionWithHeader(
-          cell.outPoint.txHash,
-        );
-        if (!txWithHeader?.header) {
-          throw new Error("Header not found for txHash");
+        if (
+          this.logicScript.eq(lock) &&
+          this.daoManager.isDeposit(cell)
+        ) {
+          const txWithHeader = await client.getTransactionWithHeader(
+            cell.outPoint.txHash,
+          );
+          if (!txWithHeader?.header) {
+            throw new Error("Header not found for txHash");
+          }
+
+          return {
+            balance: -ickbValue(cell.capacityFree, txWithHeader.header),
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
         }
 
-        info.addAssign({
-          balance: -ickbValue(cell.capacityFree, txWithHeader.header),
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
+        return;
+      }),
+    );
+
+    for (const delta of deltas) {
+      if (delta) {
+        info.addAssign(delta);
       }
     }
 

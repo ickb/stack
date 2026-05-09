@@ -61,14 +61,19 @@ export async function daoCellFrom(
   const { isDeposit, tip } = options;
   const txHash = cell.outPoint.txHash;
   let oldest: TransactionHeader;
+  let withdrawalTxWithHeader:
+    | Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
+    | undefined;
   if (!isDeposit) {
-    const header = await options.client.getHeaderByNumber(
-      mol.Uint64LE.decode(cell.outputData),
-    );
+    const [header, txWithHeader] = await Promise.all([
+      options.client.getHeaderByNumber(mol.Uint64LE.decode(cell.outputData)),
+      options.client.getTransactionWithHeader(txHash),
+    ]);
     if (!header) {
       throw new Error("Header not found for block number");
     }
     oldest = { header };
+    withdrawalTxWithHeader = txWithHeader;
   } else {
     const txWithHeader =
       await options.client.getTransactionWithHeader(txHash);
@@ -80,8 +85,7 @@ export async function daoCellFrom(
 
   let newest: TransactionHeader;
   if (!isDeposit) {
-    const txWithHeader =
-      await options.client.getTransactionWithHeader(txHash);
+    const txWithHeader = withdrawalTxWithHeader;
     if (!txWithHeader?.header) {
       throw new Error("Header not found for txHash");
     }

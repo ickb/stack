@@ -371,6 +371,7 @@ export class DaoManager implements ScriptDeps {
         limit,
       ] as const;
 
+      const depositCandidates: ccc.Cell[] = [];
       for await (const cell of options?.onChain
         ? client.findCellsOnChain(...findCellsArgs)
         : client.findCells(...findCellsArgs)) {
@@ -378,7 +379,16 @@ export class DaoManager implements ScriptDeps {
           continue;
         }
 
-        yield this.depositCellFrom(cell, client, { ...options, tip });
+        depositCandidates.push(cell);
+      }
+
+      const deposits = await Promise.all(
+        depositCandidates.map((cell) =>
+          this.depositCellFrom(cell, client, { ...options, tip }),
+        ),
+      );
+      for (const deposit of deposits) {
+        yield deposit;
       }
     }
   }
@@ -446,6 +456,7 @@ export class DaoManager implements ScriptDeps {
         limit,
       ] as const;
 
+      const withdrawalCandidates: ccc.Cell[] = [];
       for await (const cell of options?.onChain
         ? client.findCellsOnChain(...findCellsArgs)
         : client.findCells(...findCellsArgs)) {
@@ -453,7 +464,16 @@ export class DaoManager implements ScriptDeps {
           continue;
         }
 
-        yield this.withdrawalRequestCellFrom(cell, client, { ...options, tip });
+        withdrawalCandidates.push(cell);
+      }
+
+      const withdrawals = await Promise.all(
+        withdrawalCandidates.map((cell) =>
+          this.withdrawalRequestCellFrom(cell, client, { ...options, tip }),
+        ),
+      );
+      for (const withdrawal of withdrawals) {
+        yield withdrawal;
       }
     }
   }

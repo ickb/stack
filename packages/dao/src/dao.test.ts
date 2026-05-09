@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { DaoDepositCell, DaoWithdrawalRequestCell } from "./cells.js";
 import { DaoManager } from "./dao.js";
 
+async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
+  const result: T[] = [];
+  for await (const input of inputs) {
+    result.push(input);
+  }
+  return result;
+}
+
 function byte32FromByte(hexByte: string): `0x${string}` {
   if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
     throw new Error("Expected exactly one byte as two hex chars");
@@ -203,6 +211,145 @@ describe("DaoManager cell decoding ownership", () => {
         },
       ),
     ).rejects.toThrow("Not a withdrawal request");
+  });
+});
+
+describe("DaoManager.findDeposits", () => {
+  it("decodes deposits concurrently and yields scan order", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const lock = script("22");
+    const firstDeposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("33"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    const secondDeposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    const tip = headerLike(3n);
+    const requests: ccc.Hex[] = [];
+    let resolveFirst!: (res: { header: ccc.ClientBlockHeader }) => void;
+    let resolveSecond!: (res: { header: ccc.ClientBlockHeader }) => void;
+    const firstFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const client = {
+      findCells: async function* () {
+        await Promise.resolve();
+        yield firstDeposit;
+        yield secondDeposit;
+      },
+      getTransactionWithHeader: async (txHash: ccc.Hex) => {
+        requests.push(txHash);
+        return txHash === firstDeposit.outPoint.txHash ? firstFetch : secondFetch;
+      },
+    } as unknown as ccc.Client;
+
+    const depositsPromise = collect(
+      manager.findDeposits(client, [lock], { tip }),
+    );
+
+    await vi.waitFor(() => {
+      expect(requests).toEqual([
+        firstDeposit.outPoint.txHash,
+        secondDeposit.outPoint.txHash,
+      ]);
+    });
+    resolveSecond({ header: headerLike(1n) });
+    await Promise.resolve();
+    resolveFirst({ header: headerLike(1n) });
+
+    const deposits = await depositsPromise;
+
+    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
+      firstDeposit.outPoint.txHash,
+      secondDeposit.outPoint.txHash,
+    ]);
+  });
+});
+
+describe("DaoManager.findWithdrawalRequests", () => {
+  it("decodes withdrawals concurrently and yields scan order", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const lock = script("22");
+    const firstWithdrawal = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("55"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const secondWithdrawal = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("66"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const tip = headerLike(3n);
+    const depositHeader = headerLike(1n);
+    const requests: ccc.Hex[] = [];
+    let resolveFirst!: (res: { header: ccc.ClientBlockHeader }) => void;
+    let resolveSecond!: (res: { header: ccc.ClientBlockHeader }) => void;
+    const firstFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const client = {
+      findCells: async function* () {
+        await Promise.resolve();
+        yield firstWithdrawal;
+        yield secondWithdrawal;
+      },
+      getHeaderByNumber: async () => {
+        await Promise.resolve();
+        return depositHeader;
+      },
+      getTransactionWithHeader: async (txHash: ccc.Hex) => {
+        requests.push(txHash);
+        return txHash === firstWithdrawal.outPoint.txHash ? firstFetch : secondFetch;
+      },
+    } as unknown as ccc.Client;
+
+    const withdrawalsPromise = collect(
+      manager.findWithdrawalRequests(client, [lock], { tip }),
+    );
+
+    await vi.waitFor(() => {
+      expect(requests).toEqual([
+        firstWithdrawal.outPoint.txHash,
+        secondWithdrawal.outPoint.txHash,
+      ]);
+    });
+    resolveSecond({ header: headerLike(2n) });
+    await Promise.resolve();
+    resolveFirst({ header: headerLike(2n) });
+
+    const withdrawals = await withdrawalsPromise;
+
+    expect(withdrawals.map((withdrawal) => withdrawal.cell.outPoint.txHash)).toEqual([
+      firstWithdrawal.outPoint.txHash,
+      secondWithdrawal.outPoint.txHash,
+    ]);
   });
 });
 

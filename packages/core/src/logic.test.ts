@@ -164,4 +164,85 @@ describe("LogicManager.deposit", () => {
     expect(receipts).toHaveLength(1);
     expect(receipts[0]?.cell.outPoint.txHash).toBe(byte32FromByte("44"));
   });
+
+  it("fetches receipt headers concurrently and yields scan order", async () => {
+    const logic = script("11");
+    const wantedLock = script("22");
+    const receiptData = ReceiptData.from({
+      depositQuantity: 1,
+      depositAmount: ccc.fixedPointFrom(100000),
+    }).toBytes();
+    const firstReceipt = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: wantedLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    const secondReceipt = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("55"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: wantedLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    const header = ccc.ClientBlockHeader.from({
+      compactTarget: 0n,
+      dao: { c: 0n, ar: 10000000000000000n, s: 0n, u: 0n },
+      epoch: [1n, 0n, 1n],
+      extraHash: byte32FromByte("aa"),
+      hash: byte32FromByte("bb"),
+      nonce: 0n,
+      number: 1n,
+      parentHash: byte32FromByte("cc"),
+      proposalsHash: byte32FromByte("dd"),
+      timestamp: 0n,
+      transactionsRoot: byte32FromByte("ee"),
+      version: 0n,
+    });
+    let resolveFirst!: (res: { header: ccc.ClientBlockHeader }) => void;
+    let resolveSecond!: (res: { header: ccc.ClientBlockHeader }) => void;
+    const firstFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const requests: ccc.Hex[] = [];
+    const client = {
+      findCells: async function* () {
+        await Promise.resolve();
+        yield firstReceipt;
+        yield secondReceipt;
+      },
+      getTransactionWithHeader: async (txHash: ccc.Hex) => {
+        requests.push(txHash);
+        return txHash === firstReceipt.outPoint.txHash ? firstFetch : secondFetch;
+      },
+    } as unknown as ccc.Client;
+    const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
+
+    const receiptsPromise = collect(manager.findReceipts(client, [wantedLock]));
+
+    await vi.waitFor(() => {
+      expect(requests).toEqual([
+        firstReceipt.outPoint.txHash,
+        secondReceipt.outPoint.txHash,
+      ]);
+    });
+    resolveSecond({ header });
+    await Promise.resolve();
+    resolveFirst({ header });
+
+    const receipts = await receiptsPromise;
+
+    expect(receipts.map((receipt) => receipt.cell.outPoint.txHash)).toEqual([
+      firstReceipt.outPoint.txHash,
+      secondReceipt.outPoint.txHash,
+    ]);
+  });
 });

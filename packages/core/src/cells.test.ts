@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DaoManager } from "@ickb/dao";
 import { receiptCellFrom } from "./cells.js";
 import { ReceiptData } from "./entities.js";
@@ -150,6 +150,70 @@ describe("receipt prefix decoding", () => {
     expect(info.balance).toBe(-ickbValue(cell.capacityFree, header));
     expect(info.capacity).toBe(ccc.fixedPointFrom(100082));
     expect(info.count).toBe(1);
+  });
+
+  it("fetches receipt and deposit headers concurrently", async () => {
+    const logic = script("33");
+    const dao = script("44");
+    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
+    const receipt = receiptCell(
+      receiptOutputData(2, ccc.fixedPointFrom(100000)),
+      logic,
+    );
+    const deposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("88"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: logic,
+        type: dao,
+      },
+      outputData: "0x0000000000000000",
+    });
+    const ickbUdt = new IckbUdt(
+      { txHash: byte32FromByte("44"), index: 0n },
+      script("55"),
+      { txHash: byte32FromByte("66"), index: 0n },
+      logic,
+      new DaoManager(dao, []),
+    );
+    let resolveReceipt!: (res: { header: ccc.ClientBlockHeader }) => void;
+    let resolveDeposit!: (res: { header: ccc.ClientBlockHeader }) => void;
+    const receiptFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveReceipt = resolve;
+    });
+    const depositFetch = new Promise<{ header: ccc.ClientBlockHeader }>((resolve) => {
+      resolveDeposit = resolve;
+    });
+    const requests: ccc.Hex[] = [];
+    const client = {
+      getTransactionWithHeader: async (txHash: ccc.Hex) => {
+        requests.push(txHash);
+        return txHash === receipt.outPoint.txHash ? receiptFetch : depositFetch;
+      },
+    } as unknown as ccc.Client;
+
+    const infoPromise = ickbUdt.infoFrom(client, [receipt, deposit]);
+
+    await vi.waitFor(() => {
+      expect(requests).toEqual([
+        receipt.outPoint.txHash,
+        deposit.outPoint.txHash,
+      ]);
+    });
+    resolveDeposit({ header });
+    await Promise.resolve();
+    resolveReceipt({ header });
+
+    const info = await infoPromise;
+
+    expect(info.balance).toBe(
+      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
+        ickbValue(deposit.capacityFree, header),
+    );
+    expect(info.capacity).toBe(
+      receipt.cellOutput.capacity + deposit.cellOutput.capacity,
+    );
+    expect(info.count).toBe(2);
   });
 
   it("adds xUDT and logic code deps explicitly", () => {

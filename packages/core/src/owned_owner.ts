@@ -222,6 +222,7 @@ export class OwnedOwnerManager implements ScriptDeps {
         limit,
       ] as const;
 
+      const ownerCandidates: OwnerCell[] = [];
       for await (const cell of options?.onChain
         ? client.findCellsOnChain(...findCellsArgs)
         : client.findCells(...findCellsArgs)) {
@@ -229,18 +230,32 @@ export class OwnedOwnerManager implements ScriptDeps {
           continue;
         }
 
-        const owner = new OwnerCell(cell);
-        const ownedOutPoint = owner.getOwned();
-        const ownedCell = await client.getCell(ownedOutPoint);
-        if (!ownedCell || !this.isOwned(ownedCell)) {
-          continue;
+        ownerCandidates.push(new OwnerCell(cell));
+      }
+
+      const ownedCells = await Promise.all(
+        ownerCandidates.map((owner) => client.getCell(owner.getOwned())),
+      );
+
+      const withdrawalGroups = await Promise.all(
+        ownerCandidates.map(async (owner, index) => {
+          const ownedCell = ownedCells[index];
+          if (!ownedCell || !this.isOwned(ownedCell)) {
+            return;
+          }
+          const owned = await this.daoManager.withdrawalRequestCellFrom(
+            ownedCell,
+            client,
+            { tip },
+          );
+          return new WithdrawalGroup(owned, owner);
+        }),
+      );
+
+      for (const group of withdrawalGroups) {
+        if (group) {
+          yield group;
         }
-        const owned = await this.daoManager.withdrawalRequestCellFrom(
-          ownedCell,
-          client,
-          { tip },
-        );
-        yield new WithdrawalGroup(owned, owner);
       }
     }
   }
