@@ -4,7 +4,11 @@ import {
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
-import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
+import {
+  assertDaoOutputLimit,
+  DaoManager,
+  type DaoCellFromCache,
+} from "@ickb/dao";
 import { OwnerData } from "./entities.js";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.js";
 
@@ -237,6 +241,8 @@ export class OwnedOwnerManager implements ScriptDeps {
         ownerCandidates.map((owner) => client.getCell(owner.getOwned())),
       );
 
+      const headerCache: DaoCellFromCache["headerCache"] = new Map();
+      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const withdrawalGroups = await Promise.all(
         ownerCandidates.map(async (owner, index) => {
           const ownedCell = ownedCells[index];
@@ -246,7 +252,7 @@ export class OwnedOwnerManager implements ScriptDeps {
           const owned = await this.daoManager.withdrawalRequestCellFrom(
             ownedCell,
             client,
-            { tip },
+            { tip, headerCache, transactionCache },
           );
           return new WithdrawalGroup(owned, owner);
         }),

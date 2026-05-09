@@ -562,4 +562,92 @@ describe("OwnedOwnerManager.findWithdrawalGroups", () => {
       secondOwner.outPoint.toHex(),
     ]);
   });
+
+  it("deduplicates referenced withdrawal header lookups during a scan", async () => {
+    const ownerLock = script("11");
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const tip = headerLike();
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const txHash = byte32FromByte("88");
+    const firstOwner = ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: {
+        capacity: 61n,
+        lock: ownerLock,
+        type: ownedOwnerScript,
+      },
+      outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
+    });
+    const secondOwner = ccc.Cell.from({
+      outPoint: { txHash, index: 3n },
+      cellOutput: {
+        capacity: 61n,
+        lock: ownerLock,
+        type: ownedOwnerScript,
+      },
+      outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
+    });
+    const firstOwned = ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: ownedOwnerScript,
+        type: daoScript,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const secondOwned = ccc.Cell.from({
+      outPoint: { txHash, index: 2n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: ownedOwnerScript,
+        type: daoScript,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const referencedCells = new Map([
+      [firstOwned.outPoint.toHex(), firstOwned],
+      [secondOwned.outPoint.toHex(), secondOwned],
+    ]);
+    let headerCalls = 0;
+    let transactionCalls = 0;
+    const client = {
+      getTipHeader: async () => {
+        await Promise.resolve();
+        return tip;
+      },
+      findCells: async function* () {
+        await Promise.resolve();
+        yield firstOwner;
+        yield secondOwner;
+      },
+      getCell: async (outPoint: ccc.OutPoint) => {
+        await Promise.resolve();
+        return referencedCells.get(outPoint.toHex());
+      },
+      getHeaderByNumber: async () => {
+        headerCalls += 1;
+        await Promise.resolve();
+        return headerLike({ number: 1n });
+      },
+      getTransactionWithHeader: async () => {
+        transactionCalls += 1;
+        await Promise.resolve();
+        return { header: headerLike({ number: 2n }) };
+      },
+    } as unknown as ccc.Client;
+
+    const groups = await collect(
+      manager.findWithdrawalGroups(client, [ownerLock], { tip }),
+    );
+
+    expect(groups).toHaveLength(2);
+    expect(headerCalls).toBe(1);
+    expect(transactionCalls).toBe(1);
+  });
 });
