@@ -16,6 +16,9 @@ export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   },
   decode: (bytesLike) => {
     const bytes = ccc.bytesFrom(bytesLike);
-    return new DataView(bytes.buffer).getInt32(0, true);
+    return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt32(
+      0,
+      true,
+    );
   },
 });
