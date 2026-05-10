@@ -163,7 +163,6 @@ async function transact(
     setFailure(errorMessageOf(error));
   } finally {
     freezeTxInfo(txInfoPadding);
-    await queryClient.invalidateQueries({ queryKey: l1StateQueryKey(walletConfig) });
     await queryClient.invalidateQueries({ queryKey: [chain, address] });
     setMessage("");
   }
