@@ -16,6 +16,7 @@ import {
   IckbSdk,
   projectAccountAvailability,
   sendAndWaitForCommit,
+  TransactionConfirmationError,
   type SystemState,
 } from "./sdk.js";
 
@@ -797,40 +798,104 @@ describe("sendAndWaitForCommit", () => {
   });
 
   it("surfaces terminal transaction failures", async () => {
+    const txHash = hash("a2");
     const sleep = vi.fn(() => Promise.resolve());
 
-    await expect(sendAndWaitForCommit(
-      {
-        client: {
-          getTransaction: vi.fn().mockResolvedValue({ status: "rejected" }),
-        } as unknown as ccc.Client,
-        signer: {
-          sendTransaction: vi.fn().mockResolvedValue(hash("a2")),
-        } as unknown as ccc.Signer,
-      },
-      ccc.Transaction.default(),
-      { sleep },
-    )).rejects.toThrow("Transaction ended with status: rejected");
+    try {
+      await sendAndWaitForCommit(
+        {
+          client: {
+            getTransaction: vi.fn().mockResolvedValue({ status: "rejected" }),
+          } as unknown as ccc.Client,
+          signer: {
+            sendTransaction: vi.fn().mockResolvedValue(txHash),
+          } as unknown as ccc.Signer,
+        },
+        ccc.Transaction.default(),
+        { sleep },
+      );
+      expect.fail("Expected sendAndWaitForCommit to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TransactionConfirmationError);
+      expect(error).toMatchObject({
+        message: "Transaction ended with status: rejected",
+        txHash,
+        status: "rejected",
+        isTimeout: false,
+      });
+    }
 
     expect(sleep).not.toHaveBeenCalled();
   });
 
-  it("surfaces transaction confirmation timeouts", async () => {
-    await expect(sendAndWaitForCommit(
-      {
-        client: {
-          getTransaction: vi.fn().mockResolvedValue({ status: "unknown" }),
-        } as unknown as ccc.Client,
-        signer: {
-          sendTransaction: vi.fn().mockResolvedValue(hash("a3")),
-        } as unknown as ccc.Signer,
-      },
-      ccc.Transaction.default(),
-      {
-        maxConfirmationChecks: 1,
-        sleep: () => Promise.resolve(),
-      },
-    )).rejects.toThrow("Transaction confirmation timed out");
+  it("surfaces transaction confirmation timeouts with the broadcast hash", async () => {
+    const txHash = hash("a3");
+    const onSent = vi.fn();
+
+    try {
+      await sendAndWaitForCommit(
+        {
+          client: {
+            getTransaction: vi.fn().mockResolvedValue({ status: "unknown" }),
+          } as unknown as ccc.Client,
+          signer: {
+            sendTransaction: vi.fn().mockResolvedValue(txHash),
+          } as unknown as ccc.Signer,
+        },
+        ccc.Transaction.default(),
+        {
+          maxConfirmationChecks: 1,
+          onSent,
+          sleep: () => Promise.resolve(),
+        },
+      );
+      expect.fail("Expected sendAndWaitForCommit to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TransactionConfirmationError);
+      expect(error).toMatchObject({
+        message: "Transaction confirmation timed out",
+        txHash,
+        status: "unknown",
+        isTimeout: true,
+      });
+    }
+
+    expect(onSent).toHaveBeenCalledWith(txHash);
+  });
+
+  it("surfaces post-broadcast polling failures with the broadcast hash", async () => {
+    const txHash = hash("a4");
+    const onSent = vi.fn();
+
+    try {
+      await sendAndWaitForCommit(
+        {
+          client: {
+            getTransaction: vi.fn().mockRejectedValue(new Error("RPC down")),
+          } as unknown as ccc.Client,
+          signer: {
+            sendTransaction: vi.fn().mockResolvedValue(txHash),
+          } as unknown as ccc.Signer,
+        },
+        ccc.Transaction.default(),
+        {
+          maxConfirmationChecks: 1,
+          onSent,
+          sleep: () => Promise.resolve(),
+        },
+      );
+      expect.fail("Expected sendAndWaitForCommit to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TransactionConfirmationError);
+      expect(error).toMatchObject({
+        message: "Transaction confirmation failed: RPC down",
+        txHash,
+        status: "sent",
+        isTimeout: true,
+      });
+    }
+
+    expect(onSent).toHaveBeenCalledWith(txHash);
   });
 });
 
