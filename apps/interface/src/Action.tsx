@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
-import type { L1StateType } from "./queries.ts";
+import { sendAndWaitForCommit } from "@ickb/sdk";
+import { getL1State, l1StateQueryKey, type L1StateType } from "./queries.ts";
 import Progress from "./Progress.tsx";
 import {
   errorMessageOf,
@@ -81,12 +82,15 @@ export default function Action({
           onClick={() => {
             if (isStateStale) {
               void walletConfig.queryClient.invalidateQueries({
-                queryKey: [walletConfig.chain, walletConfig.address, "l1State"],
+                queryKey: l1StateQueryKey(walletConfig),
               });
               return;
             }
 
             void transact(
+              () => getL1State(walletConfig).then((freshState) =>
+                freshState.txBuilder(isCkb2Udt, amount)
+              ),
               txInfo,
               freezeTxInfo,
               setMessage,
@@ -122,41 +126,35 @@ export default function Action({
 }
 
 async function transact(
-  txInfo: TxInfo,
+  buildFreshTxInfo: () => Promise<TxInfo>,
+  previewTxInfo: TxInfo,
   freezeTxInfo: (txInfo: TxInfo) => void,
   setMessage: (message: string) => void,
   setFailure: (message: string) => void,
   formReset: () => void,
   walletConfig: WalletConfig,
 ): Promise<void> {
-  const { address, chain, cccClient, queryClient, signer } = walletConfig;
-  const maxConfirmationChecks = 60;
+  const { address, chain, queryClient } = walletConfig;
 
   try {
-    freezeTxInfo(txInfo);
+    freezeTxInfo(previewTxInfo);
     setFailure("");
+    setMessage("Refreshing transaction...");
+    const txInfo = await buildFreshTxInfo();
+    if (txInfo.error !== "" || !hasTransactionActivity(txInfo.tx) || txInfo.fee <= 0n) {
+      throw new Error(txInfo.error || "Nothing to do right now");
+    }
+
+    freezeTxInfo(txInfo);
     setMessage("Waiting for user confirmation...");
-    const txHash = await signer.sendTransaction(txInfo.tx);
-
-    let status: string | undefined = "sent";
-    let checks = 0;
-    while (
-      checks < maxConfirmationChecks &&
-      (status === undefined || ["sent", "pending", "proposed"].includes(status))
-    ) {
-      setMessage("Waiting for network confirmation...");
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      status = (await cccClient.getTransaction(txHash))?.status;
-      checks += 1;
-    }
-
-    if (checks >= maxConfirmationChecks) {
-      throw new Error("Transaction confirmation timed out");
-    }
-
-    if (status !== "committed") {
-      throw new Error(`Transaction ended with status: ${status ?? "unknown"}`);
-    }
+    await sendAndWaitForCommit({
+      client: walletConfig.cccClient,
+      signer: walletConfig.signer,
+    }, txInfo.tx, {
+      onConfirmationWait: () => {
+        setMessage("Waiting for network confirmation...");
+      },
+    });
 
     setMessage("Transaction confirmed.");
     formReset();
@@ -164,8 +162,9 @@ async function transact(
   } catch (error) {
     setFailure(errorMessageOf(error));
   } finally {
-    await queryClient.invalidateQueries({ queryKey: [chain, address] });
     freezeTxInfo(txInfoPadding);
+    await queryClient.invalidateQueries({ queryKey: l1StateQueryKey(walletConfig) });
+    await queryClient.invalidateQueries({ queryKey: [chain, address] });
     setMessage("");
   }
 }

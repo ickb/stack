@@ -7,7 +7,7 @@ import {
   type WithdrawalGroup,
 } from "@ickb/core";
 import { type OrderGroup } from "@ickb/order";
-import { collect, sum } from "@ickb/utils";
+import { collect, selectBoundedUdtSubset, sum } from "@ickb/utils";
 import { IckbSdk, type SystemState } from "@ickb/sdk";
 import {
   errorMessageOf,
@@ -59,6 +59,7 @@ export async function buildTransactionPreview(
       return await finalizeTransaction(
         baseTx,
         context.estimatedMaturity,
+        context.system.feeRate,
         walletConfig,
       );
     }
@@ -74,26 +75,24 @@ export async function buildTransactionPreview(
 async function buildBaseTransaction(
   context: TransactionContext,
   walletConfig: WalletConfig,
+  withdrawalRequestDeposits: IckbDepositCell[] = [],
 ): Promise<ccc.Transaction> {
-  let tx = ccc.Transaction.default();
-
-  if (context.availableOrders.length > 0) {
-    tx = walletConfig.sdk.collect(tx, context.availableOrders);
-  }
-
-  if (context.receipts.length > 0) {
-    tx = walletConfig.managers.logic.completeDeposit(tx, context.receipts);
-  }
-
-  if (context.readyWithdrawals.length > 0) {
-    tx = await walletConfig.managers.ownedOwner.withdraw(
-      tx,
-      context.readyWithdrawals,
-      walletConfig.cccClient,
-    );
-  }
-
-  return tx;
+  return walletConfig.sdk.buildBaseTransaction(
+    ccc.Transaction.default(),
+    walletConfig.cccClient,
+    {
+      withdrawalRequest:
+        withdrawalRequestDeposits.length === 0
+          ? undefined
+          : {
+              deposits: withdrawalRequestDeposits,
+              lock: walletConfig.primaryLock,
+            },
+      orders: context.availableOrders,
+      receipts: context.receipts,
+      readyWithdrawals: context.readyWithdrawals,
+    },
+  );
 }
 
 async function buildCkbToIckbPreview(
@@ -144,7 +143,12 @@ async function buildCkbToIckbPreview(
         );
       }
 
-      return await finalizeTransaction(tx, estimatedMaturity, walletConfig);
+      return await finalizeTransaction(
+        tx,
+        estimatedMaturity,
+        context.system.feeRate,
+        walletConfig,
+      );
     } catch (error) {
       return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
     }
@@ -175,14 +179,12 @@ async function buildIckbToCkbPreview(
     Math.min(candidates.length, MAX_WITHDRAWAL_REQUESTS),
     async (withdrawalCount) => {
       try {
-        // DAO withdrawal requests must claim matching input/output indexes, so
-        // build those pairs first and append the input-only base activity later.
-        let tx = ccc.Transaction.default();
+        let tx = baseTx.clone();
         let estimatedMaturity = context.estimatedMaturity;
         let remainder = amount;
 
         if (withdrawalCount > 0) {
-          const selectedDeposits = selectReadyDeposits(
+          const selectedDeposits = selectExactCountReadyDepositsUnderAmount(
             candidates,
             withdrawalCount,
             remainder,
@@ -194,12 +196,7 @@ async function buildIckbToCkbPreview(
             );
           }
 
-          tx = await walletConfig.managers.ownedOwner.requestWithdrawal(
-            tx,
-            selectedDeposits,
-            walletConfig.primaryLock,
-            walletConfig.cccClient,
-          );
+          tx = await buildBaseTransaction(context, walletConfig, selectedDeposits);
 
           remainder -= sum(0n, ...selectedDeposits.map((deposit) => deposit.udtValue));
           for (const deposit of selectedDeposits) {
@@ -209,8 +206,6 @@ async function buildIckbToCkbPreview(
             );
           }
         }
-
-        tx = appendTransaction(tx, baseTx);
 
         if (remainder > 0n) {
           const amounts = { ckbValue: 0n, udtValue: remainder };
@@ -231,7 +226,12 @@ async function buildIckbToCkbPreview(
           );
         }
 
-        return await finalizeTransaction(tx, estimatedMaturity, walletConfig);
+        return await finalizeTransaction(
+          tx,
+          estimatedMaturity,
+          context.system.feeRate,
+          walletConfig,
+        );
       } catch (error) {
         return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
       }
@@ -242,16 +242,14 @@ async function buildIckbToCkbPreview(
 async function finalizeTransaction(
   tx: ccc.Transaction,
   estimatedMaturity: bigint,
+  feeRate: ccc.Num,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
-  tx = await walletConfig.managers.ickbUdt.completeBy(tx, walletConfig.signer);
-  await tx.completeFeeBy(walletConfig.signer);
-
-  if (await ccc.isDaoOutputLimitExceeded(tx, walletConfig.cccClient)) {
-    throw new Error(
-      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
-    );
-  }
+  tx = await walletConfig.sdk.completeTransaction(tx, {
+    signer: walletConfig.signer,
+    client: walletConfig.cccClient,
+    feeRate,
+  });
 
   return Object.freeze({
     tx,
@@ -278,213 +276,16 @@ async function findBestAttempt(
   return lastError ?? txInfoWithError("Nothing to do for now", 0n);
 }
 
-export function selectReadyDeposits(
+export function selectExactCountReadyDepositsUnderAmount(
   deposits: IckbDepositCell[],
   wanted: number,
   amount: bigint,
 ): IckbDepositCell[] {
-  const boundedDeposits = deposits.slice(0, MAX_WITHDRAWAL_REQUESTS);
-  if (wanted <= 0 || amount <= 0n || boundedDeposits.length < wanted) {
-    return [];
-  }
-
-  interface PartialSelection {
-    mask: number;
-    total: bigint;
-  }
-
-  const split = Math.floor(boundedDeposits.length / 2);
-  const firstHalf = boundedDeposits.slice(0, split);
-  const secondHalf = boundedDeposits.slice(split);
-
-  const compareMask = (left: number, right: number, length: number): number => {
-    for (let i = 0; i < length; i += 1) {
-      const leftHas = (left & (1 << i)) !== 0;
-      const rightHas = (right & (1 << i)) !== 0;
-      if (leftHas === rightHas) {
-        continue;
-      }
-
-      return leftHas ? -1 : 1;
-    }
-
-    return 0;
-  };
-
-  const enumerate = (items: IckbDepositCell[]): PartialSelection[][] => {
-    const groups = Array.from(
-      { length: items.length + 1 },
-      () => [] as PartialSelection[],
-    );
-
-    const search = (
-      index: number,
-      mask: number,
-      count: number,
-      total: bigint,
-    ): void => {
-      if (index === items.length) {
-        groups[count]?.push({ mask, total });
-        return;
-      }
-
-      search(index + 1, mask, count, total);
-
-      const item = items.at(index);
-      if (item === undefined) {
-        return;
-      }
-      search(index + 1, mask | (1 << index), count + 1, total + item.udtValue);
-    };
-
-    search(0, 0, 0, 0n);
-    return groups;
-  };
-
-  const compress = (items: PartialSelection[], length: number): PartialSelection[] => {
-    items.sort((left, right) => {
-      if (left.total < right.total) {
-        return -1;
-      }
-      if (left.total > right.total) {
-        return 1;
-      }
-
-      return compareMask(left.mask, right.mask, length);
-    });
-
-    const compressed: PartialSelection[] = [];
-    for (const item of items) {
-      if (compressed.at(-1)?.total !== item.total) {
-        compressed.push(item);
-      }
-    }
-
-    return compressed;
-  };
-
-  const firstByCount = enumerate(firstHalf);
-  const secondByCount = enumerate(secondHalf).map((items) =>
-    compress(items, secondHalf.length)
-  );
-
-  const findBestAtOrBelow = (
-    items: PartialSelection[],
-    limit: bigint,
-  ): PartialSelection | undefined => {
-    let low = 0;
-    let high = items.length - 1;
-    let bestIndex = -1;
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const item = items.at(mid);
-      if (item === undefined) {
-        break;
-      }
-
-      if (item.total <= limit) {
-        bestIndex = mid;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    return bestIndex >= 0 ? items[bestIndex] : undefined;
-  };
-
-  let best:
-    | {
-        firstMask: number;
-        secondMask: number;
-        total: bigint;
-      }
-    | undefined;
-
-  for (let firstCount = 0; firstCount <= wanted; firstCount += 1) {
-    const secondCount = wanted - firstCount;
-    const firstSelections = firstByCount[firstCount] ?? [];
-    const secondSelections = secondByCount[secondCount] ?? [];
-    if (secondSelections.length === 0) {
-      continue;
-    }
-
-    for (const first of firstSelections) {
-      const second = findBestAtOrBelow(secondSelections, amount - first.total);
-      if (!second) {
-        continue;
-      }
-
-      const total = first.total + second.total;
-      if (!best || total > best.total) {
-        best = { firstMask: first.mask, secondMask: second.mask, total };
-        continue;
-      }
-
-      if (total < best.total) {
-        continue;
-      }
-
-      const firstCompare = compareMask(first.mask, best.firstMask, firstHalf.length);
-      if (
-        firstCompare < 0 ||
-        (firstCompare === 0 &&
-          compareMask(second.mask, best.secondMask, secondHalf.length) < 0)
-      ) {
-        best = { firstMask: first.mask, secondMask: second.mask, total };
-      }
-    }
-  }
-
-  if (!best) {
-    return [];
-  }
-
-  const selected: IckbDepositCell[] = [];
-  for (let i = 0; i < firstHalf.length; i += 1) {
-    if ((best.firstMask & (1 << i)) !== 0) {
-      const deposit = firstHalf.at(i);
-      if (deposit !== undefined) {
-        selected.push(deposit);
-      }
-    }
-  }
-  for (let i = 0; i < secondHalf.length; i += 1) {
-    if ((best.secondMask & (1 << i)) !== 0) {
-      const deposit = secondHalf.at(i);
-      if (deposit !== undefined) {
-        selected.push(deposit);
-      }
-    }
-  }
-
-  return selected;
-}
-
-function appendTransaction(
-  target: ccc.Transaction,
-  source: ccc.Transaction,
-): ccc.Transaction {
-  for (const cellDep of source.cellDeps) {
-    target.addCellDeps(cellDep);
-  }
-
-  for (const headerDep of source.headerDeps) {
-    if (!target.headerDeps.some((hash) => hash === headerDep)) {
-      target.headerDeps.push(headerDep);
-    }
-  }
-
-  for (const input of source.inputs) {
-    target.inputs.push(input);
-  }
-
-  target.outputs.push(...source.outputs);
-  target.outputsData.push(...source.outputsData);
-  target.witnesses.push(...source.witnesses);
-
-  return target;
+  return selectBoundedUdtSubset(deposits, amount, {
+    candidateLimit: MAX_WITHDRAWAL_REQUESTS,
+    minCount: wanted,
+    maxCount: wanted,
+  });
 }
 
 function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
