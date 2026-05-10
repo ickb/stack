@@ -40,7 +40,6 @@ export default function App({
     walletConfig: WalletConfig;
     l1State: L1StateType | undefined;
     isStateFetching: boolean;
-    isStateStale: boolean;
   }>({
     isCkb2Udt,
     amount,
@@ -49,7 +48,6 @@ export default function App({
     walletConfig,
     l1State: l1StateQuery.data,
     isStateFetching: l1StateQuery.isFetching,
-    isStateStale: l1StateQuery.isStale,
   });
 
   if (l1StateQuery.data === undefined) {

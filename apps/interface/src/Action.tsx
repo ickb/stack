@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
 import { sendAndWaitForCommit } from "@ickb/sdk";
-import { getL1State, l1StateQueryKey, type L1StateType } from "./queries.ts";
+import { getL1State, type L1StateType } from "./queries.ts";
 import Progress from "./Progress.tsx";
 import {
   errorMessageOf,
@@ -20,7 +20,6 @@ export default function Action({
   walletConfig,
   l1State,
   isStateFetching,
-  isStateStale,
 }: {
   isCkb2Udt: boolean;
   amount: bigint;
@@ -29,7 +28,6 @@ export default function Action({
   walletConfig: WalletConfig;
   l1State: L1StateType | undefined;
   isStateFetching: boolean;
-  isStateStale: boolean;
 }): JSX.Element {
   const [message, setMessage] = useState("");
   const [failure, setFailure] = useState("");
@@ -80,13 +78,6 @@ export default function Action({
         <button
           className="text-s col-span-2 min-h-12 w-full cursor-pointer rounded border-2 border-amber-400 px-8 leading-relaxed font-bold tracking-wider text-amber-400 uppercase disabled:cursor-default disabled:opacity-50"
           onClick={() => {
-            if (isStateStale) {
-              void walletConfig.queryClient.invalidateQueries({
-                queryKey: l1StateQueryKey(walletConfig),
-              });
-              return;
-            }
-
             void transact(
               () => getL1State(walletConfig).then((freshState) =>
                 freshState.txBuilder(isCkb2Udt, amount)
@@ -109,11 +100,9 @@ export default function Action({
                 ? txInfo.error
                 : !isValid
                   ? "nothing to do right now"
-                  : isStateStale
-                    ? `refresh before ${amount > 0n ? `converting to ${isCkb2Udt ? "iCKB" : "CKB"}` : "collecting converted funds"}`
-                    : amount > 0n
-                      ? `request conversion to ${isCkb2Udt ? "iCKB" : "CKB"}`
-                      : `${isReady ? "fully" : "partially"} collect converted funds`}
+                  : amount > 0n
+                    ? `request conversion to ${isCkb2Udt ? "iCKB" : "CKB"}`
+                    : `${isReady ? "fully" : "partially"} collect converted funds`}
         </button>
       </Progress>
       {failure !== "" ? <span className="col-span-2 text-center text-red-400">{failure}</span> : null}
