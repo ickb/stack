@@ -29,8 +29,8 @@
     }
   },
   "scripts": {
-    "test": "vitest",
-    "test:ci": "vitest run",
+    "test": "NODE_OPTIONS='--disable-warning=DEP0040' vitest",
+    "test:ci": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run",
     "build": "tsc",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",

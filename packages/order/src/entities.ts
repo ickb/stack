@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE, type ExchangeRatio } from "@ickb/utils";
+import { CheckedInt32LE, compareBigInt, type ExchangeRatio } from "@ickb/utils";
 
 /**
  * Represents a ratio of two scales, CKB and UDT, with validation and comparison methods.
@@ -108,19 +108,20 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
    */
   compare(other: Ratio): number {
     if (this.udtScale === other.udtScale) {
-      return Number(this.ckbScale - other.ckbScale);
+      return compareBigInt(this.ckbScale, other.ckbScale);
     }
 
     if (this.ckbScale === other.ckbScale) {
-      return Number(other.udtScale - this.udtScale);
+      return compareBigInt(other.udtScale, this.udtScale);
     }
 
     // Idea: o0.Ckb2Udt - o1.Ckb2Udt
     // ~ o0.ckbScale / o0.udtScale - o1.ckbScale / o1.udtScale
     // order equivalent to:
     // ~ o0.ckbScale * o1.udtScale - o1.ckbScale * o0.udtScale
-    return Number(
-      this.ckbScale * other.udtScale - other.ckbScale * this.udtScale,
+    return compareBigInt(
+      this.ckbScale * other.udtScale,
+      other.ckbScale * this.udtScale,
     );
   }
 

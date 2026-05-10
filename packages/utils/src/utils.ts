@@ -193,6 +193,224 @@ export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   return res;
 }
 
+export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
+  items: readonly T[],
+  maxAmount: bigint,
+  options: {
+    candidateLimit: number;
+    minCount: number;
+    maxCount: number;
+  },
+): T[] {
+  const { candidateLimit, minCount, maxCount } = options;
+  const boundedItems = items.slice(0, candidateLimit);
+  const effectiveMaxCount = Math.min(maxCount, boundedItems.length);
+  if (
+    maxAmount <= 0n ||
+    minCount < 0 ||
+    effectiveMaxCount < minCount ||
+    boundedItems.length === 0
+  ) {
+    return [];
+  }
+
+  interface PartialSelection {
+    mask: number;
+    total: bigint;
+  }
+
+  const split = Math.floor(boundedItems.length / 2);
+  const firstHalf = boundedItems.slice(0, split);
+  const secondHalf = boundedItems.slice(split);
+  assertBitmaskSearchSize(firstHalf.length);
+  assertBitmaskSearchSize(secondHalf.length);
+
+  const enumerate = (half: readonly T[]): PartialSelection[][] => {
+    const groups = Array.from(
+      { length: half.length + 1 },
+      () => [] as PartialSelection[],
+    );
+
+    const search = (
+      index: number,
+      mask: number,
+      count: number,
+      total: bigint,
+    ): void => {
+      if (index === half.length) {
+        groups[count]?.push({ mask, total });
+        return;
+      }
+
+      search(index + 1, mask, count, total);
+
+      const item = half[index];
+      if (item === undefined) {
+        return;
+      }
+      search(index + 1, mask | (1 << index), count + 1, total + item.udtValue);
+    };
+
+    search(0, 0, 0, 0n);
+    return groups;
+  };
+
+  const firstByCount = enumerate(firstHalf).map((selections) =>
+    compressSelections(selections, firstHalf.length)
+  );
+  const secondByCount = enumerate(secondHalf).map((selections) =>
+    compressSelections(selections, secondHalf.length)
+  );
+
+  let best:
+    | {
+        firstMask: number;
+        secondMask: number;
+        total: bigint;
+      }
+    | undefined;
+
+  for (let firstCount = 0; firstCount <= effectiveMaxCount; firstCount += 1) {
+    const firstSelections = firstByCount[firstCount] ?? [];
+    for (const first of firstSelections) {
+      if (first.total > maxAmount) {
+        continue;
+      }
+
+      const minSecondCount = Math.max(0, minCount - firstCount);
+      const maxSecondCount = effectiveMaxCount - firstCount;
+      for (let secondCount = minSecondCount; secondCount <= maxSecondCount; secondCount += 1) {
+        const secondSelections = secondByCount[secondCount] ?? [];
+        const second = findBestAtOrBelow(secondSelections, maxAmount - first.total);
+        if (!second) {
+          continue;
+        }
+
+        const total = first.total + second.total;
+        if (!best || total > best.total) {
+          best = { firstMask: first.mask, secondMask: second.mask, total };
+          continue;
+        }
+
+        if (total < best.total) {
+          continue;
+        }
+
+        const firstCompare = compareMask(first.mask, best.firstMask, firstHalf.length);
+        if (
+          firstCompare < 0 ||
+          (firstCompare === 0 &&
+            compareMask(second.mask, best.secondMask, secondHalf.length) < 0)
+        ) {
+          best = { firstMask: first.mask, secondMask: second.mask, total };
+        }
+      }
+    }
+  }
+
+  if (!best) {
+    return [];
+  }
+
+  return selectByMasks(firstHalf, best.firstMask).concat(
+    selectByMasks(secondHalf, best.secondMask),
+  );
+}
+
+function assertBitmaskSearchSize(length: number): void {
+  if (length > 16) {
+    throw new Error("Bounded subset search supports at most 16 items per half");
+  }
+}
+
+function compressSelections(
+  selections: { mask: number; total: bigint }[],
+  length: number,
+): { mask: number; total: bigint }[] {
+  selections.sort((left, right) => {
+    const totalCompare = compareBigInt(left.total, right.total);
+    if (totalCompare !== 0) {
+      return totalCompare;
+    }
+
+    return compareMask(left.mask, right.mask, length);
+  });
+
+  const compressed: { mask: number; total: bigint }[] = [];
+  for (const selection of selections) {
+    if (compressed.at(-1)?.total !== selection.total) {
+      compressed.push(selection);
+    }
+  }
+
+  return compressed;
+}
+
+function findBestAtOrBelow<T extends { total: bigint }>(
+  items: readonly T[],
+  limit: bigint,
+): T | undefined {
+  let low = 0;
+  let high = items.length - 1;
+  let bestIndex = -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const item = items[mid];
+    if (item === undefined) {
+      break;
+    }
+
+    if (item.total <= limit) {
+      bestIndex = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return bestIndex >= 0 ? items[bestIndex] : undefined;
+}
+
+function selectByMasks<T>(items: readonly T[], mask: number): T[] {
+  const selected: T[] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    if ((mask & (1 << i)) !== 0) {
+      const item = items[i];
+      if (item !== undefined) {
+        selected.push(item);
+      }
+    }
+  }
+  return selected;
+}
+
+function compareMask(left: number, right: number, length: number): number {
+  for (let i = 0; i < length; i += 1) {
+    const leftHas = (left & (1 << i)) !== 0;
+    const rightHas = (right & (1 << i)) !== 0;
+    if (leftHas === rightHas) {
+      continue;
+    }
+
+    return leftHas ? -1 : 1;
+  }
+
+  return 0;
+}
+
+export function compareBigInt(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
+}
+
 /**
  * A buffered generator that tries to maintain a fixed-size buffer of values.
  */
@@ -208,12 +426,12 @@ export class BufferedGenerator<T> {
     public generator: Generator<T, void, void>,
     public maxSize: number,
   ) {
-    // Try to populate the buffer
-    for (const value of generator) {
-      this.buffer.push(value);
-      if (this.buffer.length >= this.maxSize) {
+    while (this.buffer.length < this.maxSize) {
+      const { value, done } = this.generator.next();
+      if (done) {
         break;
       }
+      this.buffer.push(value);
     }
   }
 

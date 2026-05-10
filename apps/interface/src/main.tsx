@@ -10,7 +10,8 @@ import appIcon from "/favicon.png?url";
 const appName = "iCKB DApp";
 
 function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
-  const { managers, bots } = getConfig(chain);
+  const config = getConfig(chain);
+  const { managers } = config;
 
   return {
     chain,
@@ -19,12 +20,7 @@ function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
       chain === "mainnet"
         ? new ccc.ClientPublicMainnet()
         : new ccc.ClientPublicTestnet(),
-    sdk: new IckbSdk(
-      managers.ownedOwner,
-      managers.logic,
-      managers.order,
-      bots,
-    ),
+    sdk: IckbSdk.fromConfig(config),
     managers: {
       ickbUdt: managers.ickbUdt,
       logic: managers.logic,

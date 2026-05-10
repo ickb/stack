@@ -234,6 +234,7 @@ export class OrderCell implements ValueComponents {
    */
   resolve(descendants: OrderCell[]): OrderCell | undefined {
     let best: OrderCell | undefined = undefined;
+    let isAmbiguous = false;
     for (const descendant of descendants) {
       if (!this.isValid(descendant)) {
         continue;
@@ -242,17 +243,37 @@ export class OrderCell implements ValueComponents {
       // Directional orders rank by irreversible progress. Dual-sided orders
       // rank by value because absProgress === absTotal for that shape.
       // At equal progress, prefer newly minted orders.
-      if (
-        !best ||
-        best.absProgress < descendant.absProgress ||
-        (
-          best.absProgress === descendant.absProgress &&
-          descendant.data.isMint() &&
-          !best.data.isMint()
-        )
-      ) {
+      if (!best || best.absProgress < descendant.absProgress) {
         best = descendant;
+        isAmbiguous = false;
+        continue;
       }
+
+      if (best.absProgress !== descendant.absProgress) {
+        continue;
+      }
+
+      if (best.cell.outPoint.eq(descendant.cell.outPoint)) {
+        continue;
+      }
+
+      if (descendant.data.isMint() && !best.data.isMint()) {
+        best = descendant;
+        isAmbiguous = false;
+        continue;
+      }
+
+      if (!descendant.data.isMint() && best.data.isMint()) {
+        continue;
+      }
+
+      if (best.absProgress === descendant.absProgress) {
+        isAmbiguous = true;
+      }
+    }
+
+    if (isAmbiguous) {
+      return undefined;
     }
 
     return best;

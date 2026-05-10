@@ -18,6 +18,7 @@ import type { ExchangeRatio } from "@ickb/utils";
  * processing, since only input cells (resolved by CellInput.getCell()) have outPoint.
  */
 export class IckbUdt extends udt.Udt {
+  public readonly udtCode: ccc.OutPoint;
   public readonly logicCode: ccc.OutPoint;
   public readonly logicScript: ccc.Script;
   public readonly daoManager: DaoManager;
@@ -39,6 +40,7 @@ export class IckbUdt extends udt.Udt {
     daoManager: DaoManager,
   ) {
     super(code, script);
+    this.udtCode = ccc.OutPoint.from(code);
     this.logicCode = ccc.OutPoint.from(logicCode);
     this.logicScript = ccc.Script.from(logicScript);
     this.daoManager = daoManager;
@@ -47,8 +49,8 @@ export class IckbUdt extends udt.Udt {
   /**
    * Computes the iCKB UDT type script from raw UDT and Logic scripts.
    *
-   * Concatenates the iCKB logic script hash with a fixed 4-byte LE length
-   * postfix ("00000080") to form the UDT type script args.
+   * Concatenates the iCKB logic script hash with the fixed 4-byte little-endian
+   * xUDT owner-mode flags postfix ("00000080") to form the UDT type script args.
    *
    * @param udt - The raw xUDT script (codeHash and hashType reused).
    * @param ickbLogic - The iCKB logic script (hash used for args).
@@ -87,67 +89,84 @@ export class IckbUdt extends udt.Udt {
     acc?: udt.UdtInfoLike,
   ): Promise<udt.UdtInfo> {
     const info = udt.UdtInfo.from(acc).clone();
-
-    for (const cellLike of [cells].flat()) {
-      const cell = ccc.CellAny.from(cellLike);
-
-      // Standard xUDT cell -- delegate to base class pattern
-      if (this.isUdt(cell)) {
-        info.addAssign({
-          balance: udt.Udt.balanceFromUnsafe(cell.outputData),
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
+    const headerByTx = new Map<
+      ccc.Hex,
+      Promise<ccc.ClientBlockHeader | undefined>
+    >();
+    const getTransactionHeader = async (
+      txHash: ccc.Hex,
+    ): Promise<ccc.ClientBlockHeader> => {
+      let headerPromise = headerByTx.get(txHash);
+      if (!headerPromise) {
+        headerPromise = client
+          .getTransactionWithHeader(txHash)
+          .then((res) => res?.header);
+        headerByTx.set(txHash, headerPromise);
       }
-
-      // Receipt and deposit cells need outPoint for header fetch.
-      // Output cells (no outPoint) are skipped -- correct by design.
-      if (!cell.outPoint) {
-        continue;
+      const header = await headerPromise;
+      if (!header) {
+        throw new Error("Header not found for txHash");
       }
+      return header;
+    };
 
-      const { type, lock } = cell.cellOutput;
+    const deltas = await Promise.all(
+      [cells].flat().map(async (cellLike) => {
+        const cell = ccc.CellAny.from(cellLike);
 
-      // Receipt cell: type === logicScript
-      if (type && this.logicScript.eq(type)) {
-        const txWithHeader = await client.getTransactionWithHeader(
-          cell.outPoint.txHash,
-        );
-        if (!txWithHeader?.header) {
-          throw new Error("Header not found for txHash");
+        // Standard xUDT cell -- delegate to base class pattern
+        if (this.isUdt(cell)) {
+          return {
+            balance: udt.Udt.balanceFromUnsafe(cell.outputData),
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
         }
 
-        const { depositQuantity, depositAmount } =
-          ReceiptData.decodePrefix(cell.outputData);
-        info.addAssign({
-          balance: ickbValue(depositAmount, txWithHeader.header) *
-            depositQuantity,
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
-      }
-
-      // Deposit cell: lock === logicScript AND isDeposit
-      // Output cells are gated by the !cell.outPoint check above and never reach here.
-      if (
-        this.logicScript.eq(lock) &&
-        this.daoManager.isDeposit(cell)
-      ) {
-        const txWithHeader = await client.getTransactionWithHeader(
-          cell.outPoint.txHash,
-        );
-        if (!txWithHeader?.header) {
-          throw new Error("Header not found for txHash");
+        // Receipt and deposit cells need outPoint for header fetch.
+        // Output cells (no outPoint) are skipped -- correct by design.
+        if (!cell.outPoint) {
+          return;
         }
 
-        info.addAssign({
-          balance: -ickbValue(cell.capacityFree, txWithHeader.header),
-          capacity: cell.cellOutput.capacity,
-          count: 1,
-        });
-        continue;
+        const { type, lock } = cell.cellOutput;
+
+        // Receipt cell: type === logicScript
+        if (type && this.logicScript.eq(type)) {
+          const header = await getTransactionHeader(cell.outPoint.txHash);
+
+          const { depositQuantity, depositAmount } =
+            ReceiptData.decodePrefix(cell.outputData);
+          return {
+            balance: ickbValue(depositAmount, header) *
+              depositQuantity,
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
+        }
+
+        // Deposit cell: lock === logicScript AND isDeposit
+        // Output cells are gated by the !cell.outPoint check above and never reach here.
+        if (
+          this.logicScript.eq(lock) &&
+          this.daoManager.isDeposit(cell)
+        ) {
+          const header = await getTransactionHeader(cell.outPoint.txHash);
+
+          return {
+            balance: -ickbValue(cell.capacityFree, header),
+            capacity: cell.cellOutput.capacity,
+            count: 1,
+          };
+        }
+
+        return;
+      }),
+    );
+
+    for (const delta of deltas) {
+      if (delta) {
+        info.addAssign(delta);
       }
     }
 
@@ -158,7 +177,7 @@ export class IckbUdt extends udt.Udt {
    * Adds iCKB-specific cell dependencies to a transaction.
    *
    * Adds individual code deps (not dep group) for:
-   * - xUDT code cell (this.code from ssri.Trait)
+   * - xUDT code cell (this.udtCode)
    * - iCKB Logic code cell (this.logicCode)
    *
    * @param txLike - The transaction to add cell deps to.
@@ -167,7 +186,7 @@ export class IckbUdt extends udt.Udt {
   override addCellDeps(txLike: ccc.TransactionLike): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
     // xUDT code dep
-    tx.addCellDeps({ outPoint: this.code, depType: "code" });
+    tx.addCellDeps({ outPoint: this.udtCode, depType: "code" });
     // iCKB Logic code dep
     tx.addCellDeps({ outPoint: this.logicCode, depType: "code" });
     return tx;

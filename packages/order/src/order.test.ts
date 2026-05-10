@@ -1,10 +1,74 @@
 import { ccc } from "@ckb-ccc/core";
+import { defaultFindCellsLimit } from "@ickb/utils";
 import { describe, expect, it } from "vitest";
 import { OrderCell } from "./cells.js";
-import { Info, OrderData, Ratio } from "./entities.js";
+import { Info, OrderData, Ratio, Relative } from "./entities.js";
 import { OrderManager, OrderMatcher } from "./order.js";
 
+describe("Ratio", () => {
+  it("compares ratios exactly beyond Number precision", () => {
+    const scale = 2n ** 60n;
+    const larger = Ratio.from({ ckbScale: scale + 1n, udtScale: scale });
+    const smaller = Ratio.from({ ckbScale: scale, udtScale: scale });
+
+    expect(Number((scale + 1n) * scale - scale * scale)).toBe(
+      Number(scale),
+    );
+    expect(larger.compare(smaller)).toBe(1);
+    expect(smaller.compare(larger)).toBe(-1);
+  });
+});
+
 describe("OrderMatcher", () => {
+  it("sorts effective ratios exactly beyond Number precision", () => {
+    const order = makeUdtToCkbOrder();
+    const scale = 2n ** 60n;
+    const better = new OrderMatcher(
+      order,
+      true,
+      1n,
+      1n,
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+      scale + 1n,
+      scale,
+    );
+    const worse = new OrderMatcher(
+      order,
+      true,
+      1n,
+      1n,
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+      scale,
+      scale,
+    );
+
+    expect(Number(scale + 1n) / Number(scale)).toBe(1);
+    expect(OrderMatcher.compareRealRatioDesc(better, worse)).toBeLessThan(0);
+    expect(OrderMatcher.compareRealRatioDesc(worse, better)).toBeGreaterThan(0);
+  });
+
+  it("reports UDT-to-CKB fee in CKB units", () => {
+    const result = OrderManager.convert(
+      false,
+      Ratio.from({ ckbScale: 2n, udtScale: 1n }),
+      { ckbValue: 0n, udtValue: 100n },
+      { fee: 1n, feeBase: 10n },
+    );
+
+    expect(result.convertedAmount).toBe(45n);
+    expect(result.ckbFee).toBe(5n);
+  });
+
   it("uses udtToCkb scales for UDT-to-CKB orders", () => {
     const order = makeUdtToCkbOrder();
 
@@ -39,6 +103,105 @@ describe("OrderMatcher", () => {
     expect(match.partials).toHaveLength(1);
     expect(match.ckbDelta).toBeLessThan(0n);
     expect(match.udtDelta).toBeGreaterThan(0n);
+  });
+
+  it("respects a partial cap when selecting the best match", () => {
+    const orders = [
+      makeUdtToCkbOrder({
+        txHashByte: "10",
+        orderTxHashByte: "20",
+      }),
+      makeUdtToCkbOrder({
+        txHashByte: "11",
+        orderTxHashByte: "21",
+      }),
+    ];
+
+    const uncapped = OrderManager.bestMatch(
+      orders,
+      {
+        ckbValue: ccc.fixedPointFrom(1000),
+        udtValue: 0n,
+      },
+      {
+        ckbScale: 3n,
+        udtScale: 5n,
+      },
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+    const capped = OrderManager.bestMatch(
+      orders,
+      {
+        ckbValue: ccc.fixedPointFrom(1000),
+        udtValue: 0n,
+      },
+      {
+        ckbScale: 3n,
+        udtScale: 5n,
+      },
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+        maxPartials: 1,
+      },
+    );
+
+    expect(uncapped.partials).toHaveLength(2);
+    expect(capped.partials).toHaveLength(1);
+    expect(capped.ckbDelta).toBeLessThan(0n);
+    expect(capped.udtDelta).toBeGreaterThan(0n);
+  });
+
+  it("charges one mining fee unit per selected partial", () => {
+    const order = makeUdtToCkbOrder();
+
+    const match = OrderManager.bestMatch(
+      [order],
+      {
+        ckbValue: ccc.fixedPointFrom(60),
+        udtValue: 0n,
+      },
+      {
+        ckbScale: 3n,
+        udtScale: 5n,
+      },
+      {
+        feeRate: 1000n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+
+    expect(match.partials).toHaveLength(1);
+    expect(match.ckbDelta).toBe(-ccc.fixedPointFrom(40));
+  });
+
+  it("ignores matches whose estimated mining fee exceeds the value gain", () => {
+    const order = makeUdtToCkbOrder();
+
+    const match = OrderManager.bestMatch(
+      [order],
+      {
+        ckbValue: ccc.fixedPointFrom(1000),
+        udtValue: 0n,
+      },
+      {
+        ckbScale: 3n,
+        udtScale: 5n,
+      },
+      {
+        feeRate: ccc.fixedPointFrom(1000),
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+
+    expect(match).toEqual({
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+    });
   });
 
   it("rejects UDT-to-CKB partials below the converted CKB minimum", () => {
@@ -123,7 +286,7 @@ describe("OrderCell.resolve", () => {
     expect(origin.resolve([lowerValue, higherValue])).toBe(higherValue);
   });
 
-  it("does not replace equal-progress non-mint candidates by array order", () => {
+  it("fails closed for ambiguous equal-progress non-mint candidates", () => {
     const master = {
       txHash: byte32FromByte("bb"),
       index: 10n,
@@ -157,12 +320,983 @@ describe("OrderCell.resolve", () => {
       outPoint: { txHash: byte32FromByte("dd"), index: 0n },
     });
 
-    expect(origin.resolve([nonMint, otherNonMint])).toBe(nonMint);
-    expect(origin.resolve([otherNonMint, nonMint])).toBe(otherNonMint);
+    expect(origin.resolve([nonMint, otherNonMint])).toBeUndefined();
+    expect(origin.resolve([otherNonMint, nonMint])).toBeUndefined();
+  });
+
+  it("prefers a mint candidate over an equal-progress non-mint candidate", () => {
+    const master = {
+      txHash: byte32FromByte("bc"),
+      index: 10n,
+    };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+    });
+    const nonMint = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("ce"), index: 0n },
+    });
+    const mint = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
+
+    expect(mint.getMaster().eq(origin.getMaster())).toBe(true);
+    expect(origin.resolve([nonMint, mint])).toBe(mint);
+    expect(origin.resolve([mint, nonMint])).toBe(mint);
+  });
+
+  it("does not treat duplicate same-outpoint candidates as ambiguous", () => {
+    const master = {
+      txHash: byte32FromByte("bd"),
+      index: 10n,
+    };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+    });
+    const duplicate = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("cf"), index: 0n },
+    });
+
+    expect(origin.resolve([duplicate, duplicate])).toBe(duplicate);
   });
 });
 
-function makeUdtToCkbOrder(): OrderCell {
+describe("OrderManager.findOrders", () => {
+  it("fails closed when order scanning reaches the limit", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "absolute",
+        value: { txHash: byte32FromByte("33"), index: 1n },
+      },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("34"), index: 0n },
+    });
+    const client = {
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType !== "lock") {
+          return;
+        }
+
+        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
+          yield order.cell;
+        }
+      },
+    } as unknown as ccc.Client;
+
+    await expect(collectOrders(manager, client)).rejects.toThrow(
+      `order cell scan reached limit ${String(defaultFindCellsLimit)}`,
+    );
+  });
+
+  it("fails closed when master scanning reaches the limit", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const masterCell = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("35"), index: 1n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const client = {
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType !== "type") {
+          return;
+        }
+
+        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
+          yield masterCell;
+        }
+      },
+    } as unknown as ccc.Client;
+
+    await expect(collectOrders(manager, client)).rejects.toThrow(
+      `master cell scan reached limit ${String(defaultFindCellsLimit)}`,
+    );
+  });
+
+  it("accepts exact-limit order and master scans", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const master = ccc.OutPoint.from({ txHash: byte32FromByte("36"), index: 1n });
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: master.txHash, index: 0n },
+    });
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: master },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("37"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: master,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+            yield index === 0 ? order.cell : ccc.Cell.from({
+              outPoint: { txHash: byte32FromByte("38"), index: BigInt(index) },
+              cellOutput: {
+                capacity: ccc.fixedPointFrom(61),
+                lock: orderScript,
+                type: udtScript,
+              },
+              outputData: "0x",
+            });
+          }
+          return;
+        }
+
+        for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+          yield index === 0 ? masterCell : ccc.Cell.from({
+            outPoint: { txHash: byte32FromByte("39"), index: BigInt(index) },
+            cellOutput: {
+              capacity: ccc.fixedPointFrom(61),
+              lock: ownerLock,
+              type: orderScript,
+            },
+            outputData: "0x",
+          });
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === master.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
+  });
+
+  it("findOrigin skips parseable non-mint origins in the master transaction", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("55"), index: 2n };
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const forgedOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(200),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 1n },
+    });
+    const trueOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(2n),
+      },
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const liveOrder = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("56"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(trueOrigin.cell.cellOutput, forgedOrigin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(trueOrigin.cell.outputData, forgedOrigin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield liveOrder.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    expect(trueOrigin.data.master.type).toBe("relative");
+    if (trueOrigin.data.master.type !== "relative") {
+      throw new Error("Expected relative master");
+    }
+    expect(trueOrigin.data.master.value.distance).toBe(2n);
+    expect(trueOrigin.getMaster().eq(originMaster)).toBe(true);
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.origin.cell.outPoint.eq(trueOrigin.cell.outPoint)).toBe(true);
+  });
+
+  it("round-trips non-zero relative master distances", () => {
+    const encoded = OrderData.from({
+      udtValue: 0n,
+      master: {
+        type: "relative",
+        value: Relative.create(2n),
+      },
+      info: directionalInfo(),
+    }).toBytes();
+
+    const decoded = OrderData.decode(encoded);
+
+    expect(decoded.master.type).toBe("relative");
+    if (decoded.master.type !== "relative") {
+      throw new Error("Expected relative master");
+    }
+    expect(decoded.master.value.distance).toBe(2n);
+  });
+
+  it("findOrigin requires a minted origin in the master transaction", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("65"), index: 1n };
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const fakeOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: originMaster },
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const liveOrder = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("67"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(fakeOrigin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(fakeOrigin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield liveOrder.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(0);
+  });
+
+  it("findOrigin fails closed for multiple minted origins in the master transaction", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("66"), index: 2n };
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const firstOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(2n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const secondOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 1n },
+    });
+    const liveOrder = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("68"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(firstOrigin.cell.cellOutput, secondOrigin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(firstOrigin.cell.outputData, secondOrigin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield liveOrder.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    expect(firstOrigin.getMaster().eq(originMaster)).toBe(true);
+    expect(secondOrigin.getMaster().eq(originMaster)).toBe(true);
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(0);
+  });
+
+  it("uses live queries by default", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("77"), index: 1n };
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    let cachedCalls = 0;
+    let onChainCalls = 0;
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCells: async function* () {
+        await Promise.resolve();
+        cachedCalls += 1;
+        yield* [] as ccc.Cell[];
+      },
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        onChainCalls += 1;
+        if (query.scriptType === "lock") {
+          yield origin.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
+    expect(cachedCalls).toBe(0);
+    expect(onChainCalls).toBe(2);
+  });
+
+  it("caches master transaction lookups within findOrders", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const txHash = byte32FromByte("77");
+    const firstMaster = ccc.OutPoint.from({ txHash, index: 1n });
+    const secondMaster = ccc.OutPoint.from({ txHash, index: 3n });
+    const firstOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash, index: 0n },
+    });
+    const secondOrigin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash, index: 2n },
+    });
+    const firstMasterCell = ccc.Cell.from({
+      outPoint: firstMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const secondMasterCell = ccc.Cell.from({
+      outPoint: secondMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(
+      firstOrigin.cell.cellOutput,
+      firstMasterCell.cellOutput,
+      secondOrigin.cell.cellOutput,
+      secondMasterCell.cellOutput,
+    );
+    tx.outputsData.push(
+      firstOrigin.cell.outputData,
+      firstMasterCell.outputData,
+      secondOrigin.cell.outputData,
+      secondMasterCell.outputData,
+    );
+    const actualTxHash = tx.hash();
+    firstMaster.txHash = actualTxHash;
+    secondMaster.txHash = actualTxHash;
+    firstOrigin.cell.outPoint.txHash = actualTxHash;
+    secondOrigin.cell.outPoint.txHash = actualTxHash;
+    firstMasterCell.outPoint.txHash = actualTxHash;
+    secondMasterCell.outPoint.txHash = actualTxHash;
+    const cache = new ccc.ClientCacheMemory();
+    let getTransactionCalls = 0;
+    const client = {
+      cache,
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield firstOrigin.cell;
+          yield secondOrigin.cell;
+        } else {
+          yield firstMasterCell;
+          yield secondMasterCell;
+        }
+      },
+      getTransaction: async (queriedTxHash: ccc.Hex) => {
+        getTransactionCalls += 1;
+        await Promise.resolve();
+        return queriedTxHash === actualTxHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.master.cell.outPoint.eq(firstMaster)).toBe(true);
+    expect(groups[1]?.master.cell.outPoint.eq(secondMaster)).toBe(true);
+    expect(getTransactionCalls).toBe(1);
+  });
+
+  it("uses cached queries when onChain is false", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("77"), index: 1n };
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    let cachedCalls = 0;
+    let onChainCalls = 0;
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCells: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        cachedCalls += 1;
+        if (query.scriptType === "lock") {
+          yield origin.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      findCellsOnChain: async function* () {
+        await Promise.resolve();
+        onChainCalls += 1;
+        yield* [] as ccc.Cell[];
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client, { onChain: false })) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
+    expect(cachedCalls).toBe(2);
+    expect(onChainCalls).toBe(0);
+  });
+
+  it("skips groups with ambiguous same-score descendants", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("87"), index: 1n };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const liveOrder = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("97"), index: 0n },
+    });
+    const forgedOrder = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "absolute", value: originMaster },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("98"), index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        if (query.scriptType === "lock") {
+          yield liveOrder.cell;
+          yield forgedOrder.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client)) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(0);
+  });
+
+  it("uses live queries when onChain is requested", async () => {
+    const orderScript = ccc.Script.from({
+      codeHash: byte32FromByte("11"),
+      hashType: "type",
+      args: "0x",
+    });
+    const udtScript = ccc.Script.from({
+      codeHash: byte32FromByte("22"),
+      hashType: "type",
+      args: "0x",
+    });
+    const ownerLock = ccc.Script.from({
+      codeHash: byte32FromByte("44"),
+      hashType: "type",
+      args: "0x",
+    });
+    const manager = new OrderManager(orderScript, [], udtScript);
+    const originMaster = { txHash: byte32FromByte("88"), index: 1n };
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: {
+        type: "relative",
+        value: Relative.create(1n),
+      },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const masterCell = ccc.Cell.from({
+      outPoint: originMaster,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(61),
+        lock: ownerLock,
+        type: orderScript,
+      },
+      outputData: "0x",
+    });
+    let cachedCalls = 0;
+    let onChainCalls = 0;
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(origin.cell.cellOutput, masterCell.cellOutput);
+    tx.outputsData.push(origin.cell.outputData, masterCell.outputData);
+    const client = {
+      cache: new ccc.ClientCacheMemory(),
+      findCells: async function* () {
+        await Promise.resolve();
+        cachedCalls += 1;
+        yield* [] as ccc.Cell[];
+      },
+      findCellsOnChain: async function* (query: { scriptType: string }) {
+        await Promise.resolve();
+        onChainCalls += 1;
+        if (query.scriptType === "lock") {
+          yield origin.cell;
+        } else {
+          yield masterCell;
+        }
+      },
+      getTransaction: async (txHash: ccc.Hex) => {
+        await Promise.resolve();
+        return txHash === originMaster.txHash
+          ? ccc.ClientTransactionResponse.from({
+              transaction: tx,
+              status: "committed",
+            })
+          : undefined;
+      },
+    } as unknown as ccc.Client;
+
+    const groups = [];
+    for await (const group of manager.findOrders(client, { onChain: true })) {
+      groups.push(group);
+    }
+
+    expect(groups).toHaveLength(1);
+    expect(cachedCalls).toBe(0);
+    expect(onChainCalls).toBe(2);
+  });
+});
+
+function makeUdtToCkbOrder(options?: {
+  txHashByte?: string;
+  orderTxHashByte?: string;
+  udtValue?: ccc.FixedPoint;
+}): OrderCell {
   const orderScript = ccc.Script.from({
     codeHash: byte32FromByte("11"),
     hashType: "type",
@@ -177,7 +1311,7 @@ function makeUdtToCkbOrder(): OrderCell {
   return OrderCell.mustFrom(
     ccc.Cell.from({
       outPoint: {
-        txHash: byte32FromByte("44"),
+        txHash: byte32FromByte(options?.orderTxHashByte ?? "44"),
         index: 0n,
       },
       cellOutput: {
@@ -186,11 +1320,11 @@ function makeUdtToCkbOrder(): OrderCell {
         type: udtScript,
       },
       outputData: OrderData.from({
-        udtValue: ccc.fixedPointFrom(100),
+        udtValue: options?.udtValue ?? ccc.fixedPointFrom(100),
         master: {
           type: "absolute",
           value: {
-            txHash: byte32FromByte("33"),
+            txHash: byte32FromByte(options?.txHashByte ?? "33"),
             index: 1n,
           },
         },
@@ -224,10 +1358,22 @@ function dualInfo(): Info {
   });
 }
 
+async function collectOrders(
+  manager: OrderManager,
+  client: ccc.Client,
+): Promise<unknown[]> {
+  const groups = [];
+  for await (const group of manager.findOrders(client)) {
+    groups.push(group);
+  }
+  return groups;
+}
+
 function makeOrderCell(options: {
   ckbUnoccupied: ccc.FixedPoint;
   udtValue: ccc.FixedPoint;
   info: Info;
+  lock?: ccc.Script;
   master: {
     type: "relative";
     value: {
@@ -256,6 +1402,7 @@ function makeOrderCell(options: {
     hashType: "type",
     args: "0x",
   });
+  const lock = options.lock ?? orderScript;
   const outputData = OrderData.from({
     udtValue: options.udtValue,
     master: options.master,
@@ -267,7 +1414,7 @@ function makeOrderCell(options: {
       index: 0n,
     },
     cellOutput: {
-      lock: orderScript,
+      lock,
       type: udtScript,
     },
     outputData,
@@ -278,7 +1425,7 @@ function makeOrderCell(options: {
       outPoint: options.outPoint,
       cellOutput: {
         capacity: minimalCell.cellOutput.capacity + options.ckbUnoccupied,
-        lock: orderScript,
+        lock,
         type: udtScript,
       },
       outputData,

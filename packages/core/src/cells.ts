@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { type TransactionHeader, type ValueComponents } from "@ickb/utils";
 import { OwnerData, ReceiptData } from "./entities.js";
 import { ickbValue } from "./udt.js";
-import { daoCellFrom, type DaoCell } from "@ickb/dao";
+import type { DaoDepositCell, DaoWithdrawalRequestCell } from "@ickb/dao";
 
-export interface IckbDepositCell extends DaoCell {
+export interface IckbDepositCell extends DaoDepositCell {
   /**
    * A symbol property indicating that this cell is a Ickb Deposit Cell.
    * This property is always set to true.
@@ -15,23 +15,7 @@ export interface IckbDepositCell extends DaoCell {
 // Symbol to represent the isIckbDeposit property of Ickb Deposit Cells
 const isIckbDepositSymbol = Symbol("isIckbDeposit");
 
-/**
- * Creates an IckbDepositCell from the provided parameters.
- *
- * @param options - The options to create a DaoCell. It can be one of the following:
- * - An object omitting "interests" and "maturity" from DaoCell.
- * - An object containing a cell, isDeposit flag, client, and an optional tip.
- * - An object containing an outpoint, isDeposit flag, client, and an optional tip.
- * - an instance of `DaoCell`.
- *
- * @returns A promise that resolves to a IckbDepositCell instance.
- *
- * @throws Error if the cell is not found.
- */
-export async function ickbDepositCellFrom(
-  options: Parameters<typeof daoCellFrom>[0] | DaoCell,
-): Promise<IckbDepositCell> {
-  const daoCell = "maturity" in options ? options : await daoCellFrom(options);
+export function ickbDepositCellFrom(daoCell: DaoDepositCell): IckbDepositCell {
   return {
     ...daoCell,
     udtValue: ickbValue(daoCell.cell.capacityFree, daoCell.headers[0].header),
@@ -105,7 +89,7 @@ export async function receiptCellFrom(
  */
 export class WithdrawalGroup implements ValueComponents {
   constructor(
-    public owned: DaoCell,
+    public owned: DaoWithdrawalRequestCell,
     public owner: OwnerCell,
   ) {}
 
@@ -121,10 +105,10 @@ export class WithdrawalGroup implements ValueComponents {
   /**
    * Gets the UDT value of the group.
    *
-   * @returns The UDT amount as a `ccc.FixedPoint`, derived from the owned cell.
+   * @returns The iCKB amount represented by the owned withdrawal request.
    */
   get udtValue(): ccc.FixedPoint {
-    return this.owned.udtValue;
+    return ickbValue(this.owned.cell.capacityFree, this.owned.headers[0].header);
   }
 }
 

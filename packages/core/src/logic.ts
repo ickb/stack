@@ -221,6 +221,7 @@ export class LogicManager implements ScriptDeps {
         limit,
       ] as const;
 
+      const receiptCandidates: ccc.Cell[] = [];
       for await (const cell of options?.onChain
         ? client.findCellsOnChain(...findCellsArgs)
         : client.findCells(...findCellsArgs)) {
@@ -228,7 +229,14 @@ export class LogicManager implements ScriptDeps {
           continue;
         }
 
-        yield receiptCellFrom({ client, cell });
+        receiptCandidates.push(cell);
+      }
+
+      const receipts = await Promise.all(
+        receiptCandidates.map((cell) => receiptCellFrom({ client, cell })),
+      );
+      for (const receipt of receipts) {
+        yield receipt;
       }
     }
   }
@@ -268,7 +276,7 @@ export class LogicManager implements ScriptDeps {
    *   `ClientBlockHeader.from(...)` if a plain object is provided.
    * - Delegates to `this.daoManager.findDeposits(client, [this.script], options)` to locate
    *   raw DAO deposit cells locked under `this.script`.
-   * - Converts each raw `DaoCell` into an `IckbDepositCell` via `ickbDepositCellFrom`.
+   * - Converts each validated DAO deposit into an `IckbDepositCell` via `ickbDepositCellFrom`.
    */
   async *findDeposits(
     client: ccc.Client,
@@ -290,6 +298,9 @@ export class LogicManager implements ScriptDeps {
       [this.script],
       options,
     )) {
+      if (!this.isDeposit(deposit.cell)) {
+        continue;
+      }
       yield ickbDepositCellFrom(deposit);
     }
   }

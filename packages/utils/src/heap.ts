@@ -90,7 +90,7 @@ export class MinHeap<T> {
    * @returns {T | undefined} The removed element, or undefined if the index is out of bounds.
    */
   remove(i: number): T | undefined {
-    if (this.len() <= i) {
+    if (i < 0 || this.len() <= i) {
       return;
     }
 
@@ -101,7 +101,7 @@ export class MinHeap<T> {
         this.up(i);
       }
     }
-    return this.pop();
+    return this.heap.pop();
   }
 
   /**

@@ -4,6 +4,18 @@ import { DaoManager } from "@ickb/dao";
 import { OrderManager } from "@ickb/order";
 import { unique, type ScriptDeps } from "@ickb/utils";
 
+export interface CodeScriptDeps extends ScriptDeps {
+  codeOutPoint: ccc.OutPointLike;
+}
+
+export interface IckbDeploymentConfig {
+  udt: CodeScriptDeps;
+  logic: CodeScriptDeps;
+  ownedOwner: ScriptDeps;
+  order: ScriptDeps;
+  dao: ScriptDeps;
+}
+
 /**
  * Retrieves the configuration for the given deployment environment.
  *
@@ -18,22 +30,12 @@ import { unique, type ScriptDeps } from "@ickb/utils";
  * @param bots - An optional array of bot script-like objects to augment the list of known bots.
  * @returns An object containing the instantiated managers and bots.
  *
- * @remarks `managers.ickbUdt` stays caller-owned on purpose. `IckbSdk`
- * builders return partial transactions, so callers should use `ickbUdt`
- * for UDT completion before running CCC-native capacity and fee completion.
+ * @remarks Builders still return partial transactions. `IckbSdk` owns the
+ * shared iCKB completion path as `sdk.completeTransaction(...)`, which callers
+ * should invoke explicitly before send.
  */
 export function getConfig(
-  d:
-    | "mainnet"
-    | "testnet"
-    | {
-        // For devnet configuration provide explicit script dependencies.
-        udt: ScriptDeps;
-        logic: ScriptDeps;
-        ownedOwner: ScriptDeps;
-        order: ScriptDeps;
-        dao: ScriptDeps;
-      },
+  d: "mainnet" | "testnet" | IckbDeploymentConfig,
   bots: ccc.ScriptLike[] = [],
 ): {
   managers: {
@@ -45,9 +47,6 @@ export function getConfig(
   };
   bots: ccc.Script[];
 } {
-  // Capture network before d gets reassigned to ScriptDeps.
-  const network = typeof d === "string" ? d : undefined;
-
   // If deps is provided as a network string, use the pre-defined constants.
   if (d === "mainnet" || d === "testnet") {
     bots = bots.concat(
@@ -55,8 +54,16 @@ export function getConfig(
     );
     const depGroup = d === "mainnet" ? MAINNET_DEP_GROUP : TESTNET_DEP_GROUP;
     d = {
-      udt: from(UDT, depGroup),
-      logic: from(ICKB_LOGIC, depGroup),
+      udt: fromWithCode(
+        UDT,
+        d === "mainnet" ? MAINNET_XUDT_CODE : TESTNET_XUDT_CODE,
+        depGroup,
+      ),
+      logic: fromWithCode(
+        ICKB_LOGIC,
+        d === "mainnet" ? MAINNET_LOGIC_CODE : TESTNET_LOGIC_CODE,
+        depGroup,
+      ),
       ownedOwner: from(OWNED_OWNER, depGroup),
       order: from(ORDER, depGroup),
       dao: from(DAO, depGroup),
@@ -65,38 +72,13 @@ export function getConfig(
 
   const dao = new DaoManager(d.dao.script, d.dao.cellDeps);
 
-  // xUDT code cell OutPoint: use known constants for mainnet/testnet,
-  // fall back to first cellDep's outPoint for devnet.
-  const xudtCode = network
-    ? network === "mainnet"
-      ? MAINNET_XUDT_CODE
-      : TESTNET_XUDT_CODE
-    : d.udt.cellDeps[0]?.outPoint;
-  if (!xudtCode) {
-    throw new Error(
-      "devnet config missing xUDT code cell outPoint in udt.cellDeps",
-    );
-  }
-
-  // iCKB Logic code cell OutPoint: same pattern as above.
-  const logicCode = network
-    ? network === "mainnet"
-      ? MAINNET_LOGIC_CODE
-      : TESTNET_LOGIC_CODE
-    : d.logic.cellDeps[0]?.outPoint;
-  if (!logicCode) {
-    throw new Error(
-      "devnet config missing Logic code cell outPoint in logic.cellDeps",
-    );
-  }
-
   const ickbUdt = new IckbUdt(
-    xudtCode,
+    definedCodeOutPoint(d.udt.codeOutPoint, "xUDT"),
     IckbUdt.typeScriptFrom(
       ccc.Script.from(d.udt.script),
       ccc.Script.from(d.logic.script),
     ),
-    logicCode,
+    definedCodeOutPoint(d.logic.codeOutPoint, "Logic"),
     d.logic.script,
     dao,
   );
@@ -132,6 +114,28 @@ function from(script: ccc.ScriptLike, ...cellDeps: ccc.CellDep[]): ScriptDeps {
     script: ccc.Script.from(script),
     cellDeps,
   };
+}
+
+function fromWithCode(
+  script: ccc.ScriptLike,
+  codeOutPoint: ccc.OutPointLike,
+  ...cellDeps: ccc.CellDep[]
+): CodeScriptDeps {
+  return {
+    ...from(script, ...cellDeps),
+    codeOutPoint,
+  };
+}
+
+function definedCodeOutPoint(
+  codeOutPoint: ccc.OutPointLike | undefined,
+  label: string,
+): ccc.OutPoint {
+  if (codeOutPoint === undefined) {
+    throw new Error(`custom config missing ${label} code outPoint`);
+  }
+
+  return ccc.OutPoint.from(codeOutPoint);
 }
 
 /**
