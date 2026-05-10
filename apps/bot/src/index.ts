@@ -101,7 +101,7 @@ async function main(): Promise<void> {
 
       executionLog.actions = result.actions;
       executionLog.txFee = {
-        fee: fmtCkb(await result.tx.getFee(runtime.client)),
+        fee: fmtCkb(result.tx.estimateFee(state.system.feeRate)),
         feeRate: state.system.feeRate,
       };
       executionLog.txHash = await sendAndWaitForCommit(runtime, result.tx, {

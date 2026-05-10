@@ -151,7 +151,7 @@ export async function buildTransaction(
   });
 
   if (isMatchOnly(actions)) {
-    const fee = await tx.getFee(runtime.client);
+    const fee = tx.estimateFee(state.system.feeRate);
     const matchValue =
       match.ckbDelta * state.system.exchangeRatio.ckbScale +
       match.udtDelta * state.system.exchangeRatio.udtScale;

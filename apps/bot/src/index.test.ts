@@ -108,7 +108,7 @@ describe("buildTransaction", () => {
       udtDelta: 0n,
       partials: [{} as never],
     });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const runtime = {
       client: {} as ccc.Client,
@@ -168,7 +168,7 @@ describe("buildTransaction", () => {
       udtDelta: 2n,
       partials: [{} as never],
     });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const runtime = {
       client: {} as ccc.Client,
