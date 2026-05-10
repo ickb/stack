@@ -863,9 +863,38 @@ describe("sendAndWaitForCommit", () => {
     expect(onSent).toHaveBeenCalledWith(txHash);
   });
 
-  it("surfaces post-broadcast polling failures with the broadcast hash", async () => {
+  it("treats post-broadcast polling failures as unconfirmed", async () => {
     const txHash = hash("a4");
     const onSent = vi.fn();
+    const onConfirmationWait = vi.fn();
+    const sleep = vi.fn(() => Promise.resolve());
+    const getTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("RPC down"))
+      .mockResolvedValueOnce({ status: "committed" });
+
+    await expect(sendAndWaitForCommit(
+      {
+        client: { getTransaction } as unknown as ccc.Client,
+        signer: {
+          sendTransaction: vi.fn().mockResolvedValue(txHash),
+        } as unknown as ccc.Signer,
+      },
+      ccc.Transaction.default(),
+      {
+        onConfirmationWait,
+        onSent,
+        sleep,
+      },
+    )).resolves.toBe(txHash);
+
+    expect(onSent).toHaveBeenCalledWith(txHash);
+    expect(onConfirmationWait).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out if post-broadcast polling keeps failing", async () => {
+    const txHash = hash("a5");
 
     try {
       await sendAndWaitForCommit(
@@ -880,7 +909,6 @@ describe("sendAndWaitForCommit", () => {
         ccc.Transaction.default(),
         {
           maxConfirmationChecks: 1,
-          onSent,
           sleep: () => Promise.resolve(),
         },
       );
@@ -888,14 +916,12 @@ describe("sendAndWaitForCommit", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(TransactionConfirmationError);
       expect(error).toMatchObject({
-        message: "Transaction confirmation failed: RPC down",
+        message: "Transaction confirmation timed out",
         txHash,
         status: "sent",
         isTimeout: true,
       });
     }
-
-    expect(onSent).toHaveBeenCalledWith(txHash);
   });
 });
 

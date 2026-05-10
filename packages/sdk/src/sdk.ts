@@ -91,15 +91,8 @@ export async function sendAndWaitForCommit(
   for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
     try {
       status = (await client.getTransaction(txHash))?.status;
-    } catch (error) {
-      throw new TransactionConfirmationError(
-        error instanceof Error && error.message
-          ? `Transaction confirmation failed: ${error.message}`
-          : "Transaction confirmation failed",
-        txHash,
-        status,
-        true,
-      );
+    } catch {
+      // Post-broadcast polling errors are transient; keep waiting until timeout.
     }
     if (!isPendingStatus(status)) {
       break;

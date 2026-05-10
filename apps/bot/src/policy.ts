@@ -391,7 +391,11 @@ function selectProtectedBucketDeposit(
     throw new Error("Expected at least one deposit in bucket");
   }
 
-  for (const deposit of deposits.slice(1)) {
+  for (let index = 1; index < deposits.length; index += 1) {
+    const deposit = deposits[index];
+    if (!deposit) {
+      throw new Error("Expected bucket deposit to exist");
+    }
     if (deposit.udtValue >= protectedDeposit.udtValue) {
       protectedDeposit = deposit;
     }
