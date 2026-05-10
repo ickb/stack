@@ -5,8 +5,7 @@ import { Dashboard } from "./Dashboard.tsx";
 import Form from "./Form.tsx";
 import Progress from "./Progress.tsx";
 import {
-  getL1State,
-  l1StateQueryKey,
+  l1StateOptions,
   type L1StateType,
 } from "./queries.ts";
 import {
@@ -25,12 +24,7 @@ export default function App({
   const [isFrozen, freeze] = useState(false);
   const [rawText, setRawText] = useState(direction2Symbol(true));
   const l1StateQuery = useQuery<L1StateType>({
-    retry: 2,
-    refetchInterval: ({ state }) => 60000 * (state.data?.hasMatchable ? 1 : 10),
-    staleTime: 10000,
-    queryKey: l1StateQueryKey(walletConfig),
-    queryFn: async () => await getL1State(walletConfig),
-    enabled: !isFrozen,
+    ...l1StateOptions(walletConfig, isFrozen),
   });
   const symbol = rawText.startsWith("I") ? "I" : "C";
   const isCkb2Udt = symbol2Direction(symbol);
@@ -46,7 +40,6 @@ export default function App({
     walletConfig: WalletConfig;
     l1State: L1StateType | undefined;
     isStateFetching: boolean;
-    isStateStale: boolean;
   }>({
     isCkb2Udt,
     amount,
@@ -55,7 +48,6 @@ export default function App({
     walletConfig,
     l1State: l1StateQuery.data,
     isStateFetching: l1StateQuery.isFetching,
-    isStateStale: l1StateQuery.isStale,
   });
 
   if (l1StateQuery.data === undefined) {

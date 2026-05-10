@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
-import { IckbSdk, getConfig, type SystemState } from "@ickb/sdk";
+import { IckbSdk, getConfig, sendAndWaitForCommit } from "@ickb/sdk";
 import { type OrderGroup } from "@ickb/order";
-import { collectCapacityCells } from "./cells.js";
+import { pathToFileURL } from "node:url";
+import { buildTransaction, readTesterState, type Runtime } from "./runtime.js";
 
 const CKB = ccc.fixedPointFrom(1);
 const CKB_RESERVE = 2000n * CKB;
@@ -11,25 +12,7 @@ const MIN_TOTAL_CAPITAL_DIVISOR = 20n;
 const TESTER_FEE = 100n;
 const TESTER_FEE_BASE = 100000n;
 const MAX_ELAPSED_BLOCKS = 100800n;
-const FIND_CELLS_PAGE_SIZE = 400;
 const RANDOM_SCALE = 1000000n;
-
-interface Runtime {
-  chain: SupportedChain;
-  client: ccc.Client;
-  signer: ccc.SignerCkbPrivateKey;
-  sdk: IckbSdk;
-  managers: ReturnType<typeof getConfig>["managers"];
-  primaryLock: ccc.Script;
-  accountLocks: ccc.Script[];
-}
-
-interface TesterState {
-  system: SystemState;
-  userOrders: OrderGroup[];
-  availableCkbBalance: bigint;
-  availableIckbBalance: bigint;
-}
 
 type SupportedChain = "mainnet" | "testnet";
 
@@ -42,28 +25,25 @@ async function main(): Promise<void> {
   if (!TESTER_PRIVATE_KEY) {
     throw new Error("Empty env TESTER_PRIVATE_KEY");
   }
-  if (!TESTER_SLEEP_INTERVAL || Number(TESTER_SLEEP_INTERVAL) < 1) {
-    throw new Error("Invalid env TESTER_SLEEP_INTERVAL");
-  }
+  const sleepInterval = parseSleepInterval(
+    TESTER_SLEEP_INTERVAL,
+    "TESTER_SLEEP_INTERVAL",
+  );
 
   const chain = parseChain(CHAIN);
   const client = createClient(chain, RPC_URL);
   const config = getConfig(chain);
-  const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, TESTER_PRIVATE_KEY);
   const primaryLock = (await signer.getRecommendedAddressObj()).script;
   const runtime: Runtime = {
-    chain,
     client,
     signer,
     sdk: IckbSdk.fromConfig(config),
-    managers,
     primaryLock,
     accountLocks: dedupeScripts(
       (await signer.getAddressObjs()).map(({ script }) => script),
     ),
   };
-  const sleepInterval = Number(TESTER_SLEEP_INTERVAL) * 1000;
 
   for (;;) {
     await sleep(2 * Math.random() * sleepInterval);
@@ -172,7 +152,7 @@ async function main(): Promise<void> {
         fee: fmtCkb(await tx.getFee(runtime.client)),
         feeRate: state.system.feeRate,
       };
-      executionLog.txHash = await runtime.signer.sendTransaction(tx);
+      executionLog.txHash = await sendAndWaitForCommit(runtime, tx);
     } catch (e) {
       executionLog.error = errorToLog(e);
     }
@@ -183,49 +163,16 @@ async function main(): Promise<void> {
   }
 }
 
-async function readTesterState(runtime: Runtime): Promise<TesterState> {
-  const [{ system, user }, capacityCells, udtCells] = await Promise.all([
-    runtime.sdk.getL1State(runtime.client, runtime.accountLocks),
-    collectCapacityCells(runtime.signer),
-    collectWalletUdtCells(runtime.signer, runtime.managers.ickbUdt),
-  ]);
-  const walletUdtInfo = await runtime.managers.ickbUdt.infoFrom(
-    runtime.client,
-    udtCells,
-  );
-
-  return {
-    system,
-    userOrders: user.orders,
-    availableCkbBalance:
-      sumValues(capacityCells, (cell) => cell.cellOutput.capacity) +
-      walletUdtInfo.capacity +
-      sumValues(user.orders, (group) => group.ckbValue),
-    availableIckbBalance:
-      walletUdtInfo.balance + sumValues(user.orders, (group) => group.udtValue),
-  };
-}
-
-async function collectWalletUdtCells(
-  signer: ccc.SignerCkbPrivateKey,
-  ickbUdt: Runtime["managers"]["ickbUdt"],
-): Promise<ccc.Cell[]> {
-  const cells: ccc.Cell[] = [];
-
-  for await (const cell of signer.findCellsOnChain(
-    ickbUdt.filter,
-    true,
-    "asc",
-    FIND_CELLS_PAGE_SIZE,
-  )) {
-    if (!ickbUdt.isUdt(cell)) {
-      continue;
-    }
-
-    cells.push(cell);
+export function parseSleepInterval(
+  intervalSeconds: string | undefined,
+  envName: string,
+): number {
+  const seconds = Number(intervalSeconds);
+  if (intervalSeconds === undefined || !Number.isFinite(seconds) || seconds < 1) {
+    throw new Error("Invalid env " + envName);
   }
 
-  return cells;
+  return seconds * 1000;
 }
 
 async function hasFreshMatchableOrders(
@@ -260,31 +207,6 @@ async function hasFreshMatchableOrders(
   return false;
 }
 
-async function buildTransaction(
-  runtime: Runtime,
-  state: TesterState,
-  amounts: { ckbValue: bigint; udtValue: bigint },
-  info: Parameters<IckbSdk["request"]>[2],
-): Promise<ccc.Transaction> {
-  let tx = ccc.Transaction.default();
-
-  if (state.userOrders.length > 0) {
-    tx = runtime.sdk.collect(tx, state.userOrders);
-  }
-
-  tx = await runtime.sdk.request(tx, runtime.primaryLock, info, amounts);
-  tx = await runtime.managers.ickbUdt.completeBy(tx, runtime.signer);
-  await tx.completeFeeBy(runtime.signer, state.system.feeRate);
-
-  if (await ccc.isDaoOutputLimitExceeded(tx, runtime.client)) {
-    throw new Error(
-      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
-    );
-  }
-
-  return tx;
-}
-
 function createClient(chain: SupportedChain, rpcUrl: string | undefined): ccc.Client {
   const config = rpcUrl ? { url: rpcUrl } : undefined;
   return chain === "mainnet"
@@ -314,14 +236,6 @@ function dedupeScripts(scripts: ccc.Script[]): ccc.Script[] {
   }
 
   return unique;
-}
-
-function sumValues<T>(items: readonly T[], project: (item: T) => bigint): bigint {
-  let total = 0n;
-  for (const item of items) {
-    total += project(item);
-  }
-  return total;
 }
 
 function fmtCkb(balance: bigint): number {
@@ -369,4 +283,6 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

@@ -1,8 +1,7 @@
-import { ccc } from "@ckb-ccc/ccc";
-import type { WithdrawalGroup } from "@ickb/core";
-import { type OrderGroup } from "@ickb/order";
-import { type SystemState } from "@ickb/sdk";
-import { collect, isPlainCapacityCell, sum, unique } from "@ickb/utils";
+import {
+  projectAccountAvailability,
+  type SystemState,
+} from "@ickb/sdk";
 import {
   buildTransactionPreview,
   type TransactionContext,
@@ -58,71 +57,26 @@ export async function getL1State(
     walletConfig.accountLocks,
   );
   const { system, user } = sdkState;
-  const [accountCells, receipts, withdrawalGroups] = await Promise.all([
-    getAccountCells(walletConfig),
-    collect(
-      walletConfig.managers.logic.findReceipts(
-        walletConfig.cccClient,
-        walletConfig.accountLocks,
-        { onChain: true },
-      ),
-    ),
-    collect(
-      walletConfig.managers.ownedOwner.findWithdrawalGroups(
-        walletConfig.cccClient,
-        walletConfig.accountLocks,
-        { onChain: true, tip: system.tip },
-      ),
-    ),
-  ]);
-
-  const capacityCells = accountCells.filter(isPlainCapacityCell);
-  const udtCells = accountCells.filter((cell) =>
-    walletConfig.managers.ickbUdt.isUdt(cell),
-  );
-  const nativeUdtInfo = await walletConfig.managers.ickbUdt.infoFrom(
+  const account = await walletConfig.sdk.getAccountState(
     walletConfig.cccClient,
-    udtCells,
+    walletConfig.accountLocks,
+    system.tip,
   );
-
-  const ckbNative =
-    sum(0n, ...capacityCells.map((cell) => cell.cellOutput.capacity)) +
-    nativeUdtInfo.capacity;
-  const ickbNative = nativeUdtInfo.balance;
-
-  const readyWithdrawals: WithdrawalGroup[] = [];
-  const pendingWithdrawals: WithdrawalGroup[] = [];
-  for (const group of withdrawalGroups) {
-    if (group.owned.isReady) {
-      readyWithdrawals.push(group);
-    } else {
-      pendingWithdrawals.push(group);
-    }
-  }
-
-  const availableOrders: OrderGroup[] = [];
-  const pendingOrders: OrderGroup[] = [];
-  for (const group of user.orders) {
-    if (group.order.isDualRatio() || !group.order.isMatchable()) {
-      availableOrders.push(group);
-    } else {
-      pendingOrders.push(group);
-    }
-  }
-
-  const ckbAvailable =
-    ckbNative +
-    sumCkb(receipts) +
-    sumCkb(readyWithdrawals) +
-    sumCkb(availableOrders);
-  const ickbAvailable =
-    ickbNative +
-    sumUdt(receipts) +
-    sumUdt(readyWithdrawals) +
-    sumUdt(availableOrders);
-
-  const ckbBalance = ckbAvailable + sumCkb(pendingWithdrawals) + sumCkb(pendingOrders);
-  const ickbBalance = ickbAvailable + sumUdt(pendingWithdrawals) + sumUdt(pendingOrders);
+  const projection = projectAccountAvailability(account, user.orders, {
+    collectedOrdersAvailable: true,
+  });
+  const {
+    ckbNative,
+    ickbNative,
+    ckbBalance,
+    ickbBalance,
+    ckbAvailable,
+    ickbAvailable,
+    readyWithdrawals,
+    pendingWithdrawals,
+    availableOrders,
+    pendingOrders,
+  } = projection;
 
   const estimatedMaturity = [
     system.tip.timestamp,
@@ -134,7 +88,7 @@ export async function getL1State(
 
   const txContext: TransactionContext = {
     system,
-    receipts,
+    receipts: account.receipts,
     readyWithdrawals,
     availableOrders,
     ckbAvailable,
@@ -154,7 +108,7 @@ export async function getL1State(
     stateId: [
       walletConfig.chain,
       String(system.tip.timestamp),
-      String(receipts.length),
+      String(account.receipts.length),
       String(readyWithdrawals.length),
       String(pendingWithdrawals.length),
       String(availableOrders.length),
@@ -164,33 +118,4 @@ export async function getL1State(
       buildTransactionPreview(txContext, isCkb2Udt, amount, walletConfig),
     hasMatchable: pendingOrders.length > 0,
   };
-}
-
-async function getAccountCells(walletConfig: WalletConfig): Promise<ccc.Cell[]> {
-  const cells: ccc.Cell[] = [];
-
-  for (const lock of unique(walletConfig.accountLocks)) {
-    for await (const cell of walletConfig.cccClient.findCellsOnChain(
-      {
-        script: lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-        withData: true,
-      },
-      "asc",
-      400,
-    )) {
-      cells.push(cell);
-    }
-  }
-
-  return cells;
-}
-
-function sumCkb(items: { ckbValue: bigint }[]): bigint {
-  return sum(0n, ...items.map((item) => item.ckbValue));
-}
-
-function sumUdt(items: { udtValue: bigint }[]): bigint {
-  return sum(0n, ...items.map((item) => item.udtValue));
 }

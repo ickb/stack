@@ -52,7 +52,6 @@
     "@ckb-ccc/core": "catalog:",
     "@ickb/core": "workspace:*",
     "@ickb/order": "workspace:*",
-    "@ickb/sdk": "workspace:*",
-    "@ickb/utils": "workspace:*"
+    "@ickb/sdk": "workspace:*"
   }
 }
