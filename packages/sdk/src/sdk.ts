@@ -36,8 +36,21 @@ export interface CompleteIckbTransactionOptions {
 export interface SendAndWaitForCommitOptions {
   maxConfirmationChecks?: number;
   confirmationIntervalMs?: number;
+  onSent?: (txHash: ccc.Hex) => void;
   onConfirmationWait?: () => void;
   sleep?: (ms: number) => Promise<void>;
+}
+
+export class TransactionConfirmationError extends Error {
+  constructor(
+    message: string,
+    public readonly txHash: ccc.Hex,
+    public readonly status: string | undefined,
+    public readonly isTimeout: boolean,
+  ) {
+    super(message);
+    this.name = "TransactionConfirmationError";
+  }
 }
 
 type IckbUdtCompleter = Pick<IckbUdt, "completeBy" | "infoFrom" | "isUdt">;
@@ -66,15 +79,21 @@ export async function sendAndWaitForCommit(
   {
     maxConfirmationChecks = 60,
     confirmationIntervalMs = 10_000,
+    onSent,
     onConfirmationWait,
     sleep = delay,
   }: SendAndWaitForCommitOptions = {},
 ): Promise<ccc.Hex> {
   const txHash = await signer.sendTransaction(tx);
+  onSent?.(txHash);
   let status: string | undefined = "sent";
 
   for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
-    status = (await client.getTransaction(txHash))?.status;
+    try {
+      status = (await client.getTransaction(txHash))?.status;
+    } catch {
+      // Post-broadcast polling errors are transient; keep waiting until timeout.
+    }
     if (!isPendingStatus(status)) {
       break;
     }
@@ -88,10 +107,20 @@ export async function sendAndWaitForCommit(
   }
 
   if (isPendingStatus(status)) {
-    throw new Error("Transaction confirmation timed out");
+    throw new TransactionConfirmationError(
+      "Transaction confirmation timed out",
+      txHash,
+      status,
+      true,
+    );
   }
 
-  throw new Error(`Transaction ended with status: ${status ?? "unknown"}`);
+  throw new TransactionConfirmationError(
+    `Transaction ended with status: ${status ?? "unknown"}`,
+    txHash,
+    status,
+    false,
+  );
 }
 
 function isPendingStatus(status: string | undefined): boolean {

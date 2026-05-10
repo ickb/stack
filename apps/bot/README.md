@@ -1,15 +1,12 @@
 # iCKB Bot
 
-The bot is now CCC-native. It reads market state from `@ickb/sdk`, melts the bot's own orders, completes matured receipts and withdrawals, matches profitable limit orders, optionally rebalances between CKB and iCKB, then completes iCKB UDT balance, CKB capacity, fees, signs, and sends.
+The bot is CCC-native. It reads market state from `@ickb/sdk`, matches profitable limit orders, collects the bot's own orders, completes receipts and ready withdrawals, optionally rebalances between CKB and iCKB, completes iCKB UDT balance, CKB capacity, and fees, then signs, sends, and waits for commit.
 
-The bot still aims to minimize excess iCKB holdings so more liquidity stays available in CKB during iCKB-to-CKB redemption pressure.
+The bot minimizes excess iCKB holdings so more liquidity stays available in CKB during iCKB-to-CKB redemption pressure.
 
 ## Docs
 
 - [Current Bot Rebalancing Policy](docs/current_rebalancing_policy.md)
-- Future improvement ideas:
-  - [iCKB Deposit Pool Rebalancing Algorithm](docs/pool_rebalancing.md)
-  - [iCKB Deposit Pool Snapshot Encoding](docs/pool_snapshot.md)
 
 ## Environment
 
@@ -58,15 +55,14 @@ pnpm run start:loop
 
 `CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `BOT_PRIVATE_KEY` and `BOT_SLEEP_INTERVAL`.
 
-The start script keeps the existing JSON log format and writes one log file per run.
+The start script writes JSON logs and one log file per run. Balance and fee amounts are logged as decimal strings so large on-chain values do not lose precision. Intentional shutdowns, including low capital and transaction confirmation timeouts after broadcast, exit with code `2`; `start:loop` stops on that code instead of restarting immediately.
 
 ## Notes
 
 - Distribute liquidity across multiple isolated bots to limit blast radius.
 - Keep at least roughly 130k CKB worth of capital available for the bot to operate comfortably.
-- The bot relies on shared CCC packages for protocol-specific transaction content, but it still owns final iCKB completion, fee completion, signing, and send.
-- The interface-side maturity estimate contract now lives with `@ickb/sdk`, because the SDK owns how bot liquidity and pool maturities are summarized for UI consumers.
+- The bot relies on shared CCC packages for protocol-specific transaction content and owns final iCKB completion, fee completion, signing, sending, and commit waiting.
 
 ## Licensing
 
-Released under the [MIT License](../../LICENSE).
+Released under the [MIT License](https://github.com/ickb/stack/blob/master/LICENSE).
