@@ -62,7 +62,9 @@ export async function getL1State(
     walletConfig.accountLocks,
     system.tip,
   );
-  const projection = projectAccountAvailability(account, user.orders);
+  const projection = projectAccountAvailability(account, user.orders, {
+    collectedOrdersAvailable: true,
+  });
   const {
     ckbNative,
     ickbNative,

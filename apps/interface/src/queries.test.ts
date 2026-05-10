@@ -45,7 +45,7 @@ function orderGroup(
 }
 
 describe("getL1State", () => {
-  it("projects account state through the SDK and keeps matchable orders pending", async () => {
+  it("projects account state through the SDK and makes collected orders available", async () => {
     const lock = script("11");
     const tip = { timestamp: 10n } as ccc.ClientBlockHeader;
     const nativeCapacity = ccc.fixedPointFrom(50);
@@ -106,11 +106,11 @@ describe("getL1State", () => {
 
     expect(state.ckbNative).toBe(nativeCapacity);
     expect(state.ickbNative).toBe(11n);
-    expect(state.ckbAvailable).toBe(nativeCapacity + 42n);
-    expect(state.ickbAvailable).toBe(48n);
+    expect(state.ckbAvailable).toBe(nativeCapacity + 142n);
+    expect(state.ickbAvailable).toBe(248n);
     expect(state.ckbBalance).toBe(nativeCapacity + 173n);
     expect(state.ickbBalance).toBe(248n);
-    expect(state.hasMatchable).toBe(true);
-    expect(state.stateId).toBe("testnet:10:1:1:1:1:1");
+    expect(state.hasMatchable).toBe(false);
+    expect(state.stateId).toBe("testnet:10:1:1:1:2:0");
   });
 });
