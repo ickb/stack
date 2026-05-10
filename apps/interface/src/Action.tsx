@@ -141,8 +141,14 @@ async function transact(
     setFailure("");
     setMessage("Refreshing transaction...");
     const txInfo = await buildFreshTxInfo();
-    if (txInfo.error !== "" || !hasTransactionActivity(txInfo.tx) || txInfo.fee <= 0n) {
-      throw new Error(txInfo.error || "Nothing to do right now");
+    if (txInfo.error !== "") {
+      throw new Error(txInfo.error);
+    }
+    if (!hasTransactionActivity(txInfo.tx)) {
+      throw new Error("Nothing to do right now");
+    }
+    if (txInfo.fee <= 0n) {
+      throw new Error("Transaction fee is missing or invalid");
     }
 
     freezeTxInfo(txInfo);
