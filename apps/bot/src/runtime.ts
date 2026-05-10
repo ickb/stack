@@ -97,7 +97,7 @@ export async function buildTransaction(
   }
 
   const rebalance = planRebalance({
-    outputSlots: maxInt(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length),
+    outputSlots: Math.max(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length),
     tip: state.system.tip,
     ickbBalance: state.availableIckbBalance + match.udtDelta,
     ckbBalance: state.availableCkbBalance + match.ckbDelta,
@@ -211,10 +211,6 @@ function isMatchOnly(actions: {
 }
 
 function maxBigInt(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
-}
-
-function maxInt(left: number, right: number): number {
   return left > right ? left : right;
 }
 

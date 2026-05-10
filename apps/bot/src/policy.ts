@@ -234,7 +234,7 @@ function selectionWithRequiredAnchors(
   requiredLiveDeposits: IckbDepositCell[];
 } {
   const requiredLiveDeposits: IckbDepositCell[] = [];
-  const seen = new Set<IckbDepositCell>();
+  const seen = new Set<IckbDepositCell>(deposits);
   for (const deposit of deposits) {
     const anchor = anchorsByExtra.get(deposit);
     if (!anchor || seen.has(anchor)) {
