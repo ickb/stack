@@ -8,7 +8,6 @@ import {
   sendAndWaitForCommit,
   TransactionConfirmationError,
 } from "@ickb/sdk";
-import { CKB } from "./policy.js";
 import {
   buildTransaction,
   collectPoolDeposits,
@@ -17,6 +16,7 @@ import {
   type Runtime,
   type SupportedChain,
 } from "./runtime.js";
+import { formatCkb, jsonLogReplacer } from "./log.js";
 
 const STOP_EXIT_CODE = 2;
 
@@ -87,10 +87,10 @@ async function main(): Promise<void> {
       ) {
         executionLog.error =
           "The bot must have more than " +
-          String(fmtCkb(state.minCkbBalance)) +
+          fmtCkb(state.minCkbBalance) +
           " CKB worth of capital to be able to operate, shutting down...";
         process.exitCode = STOP_EXIT_CODE;
-        console.log(JSON.stringify(executionLog, replacer, " "));
+        console.log(JSON.stringify(executionLog, jsonLogReplacer, " "));
         return;
       }
 
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
     executionLog.ElapsedSeconds = Math.round(
       (Date.now() - startTime.getTime()) / 1000,
     );
-    console.log(JSON.stringify(executionLog, replacer, " "));
+    console.log(JSON.stringify(executionLog, jsonLogReplacer, " "));
     if (stopAfterLog) {
       return;
     }
@@ -212,13 +212,7 @@ function outPointKey(outPoint: ccc.OutPoint): string {
   return ccc.hexFrom(outPoint.toBytes());
 }
 
-function fmtCkb(balance: bigint): number {
-  return Number(balance) / Number(CKB);
-}
-
-function replacer(_: unknown, value: unknown): unknown {
-  return typeof value === "bigint" ? Number(value) : value;
-}
+const fmtCkb = formatCkb;
 
 function errorToLog(error: unknown): unknown {
   if (error instanceof Object && "stack" in error) {

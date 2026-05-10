@@ -4,7 +4,8 @@ import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TARGET_ICKB_BALANCE } from "./policy.js";
+import { formatCkb, jsonLogReplacer } from "./log.js";
+import { CKB, TARGET_ICKB_BALANCE } from "./policy.js";
 import { buildTransaction, collectPoolDeposits, parseSleepInterval } from "./runtime.js";
 
 afterEach(() => {
@@ -87,6 +88,19 @@ describe("collectPoolDeposits", () => {
   });
 });
 
+describe("bot log formatting", () => {
+  it("formats CKB values without losing bigint precision", () => {
+    const whole = 123456789012345678901234567890n;
+
+    expect(formatCkb(whole * CKB + 12345670n)).toBe(`${whole.toString()}.1234567`);
+    expect(formatCkb(-CKB - 1n)).toBe("-1.00000001");
+  });
+
+  it("serializes bigint values as strings", () => {
+    expect(jsonLogReplacer("", 9007199254740993n)).toBe("9007199254740993");
+  });
+});
+
 describe("buildTransaction", () => {
   it("skips match-only transactions when the completed fee consumes the match value", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
@@ -146,6 +160,62 @@ describe("buildTransaction", () => {
     await expect(
       buildTransaction(runtime as never, state as never),
     ).resolves.toBeUndefined();
+  });
+
+  it("uses the repo exchange-ratio scale when checking match-only profitability", async () => {
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: -2n,
+      udtDelta: 2n,
+      partials: [{} as never],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+
+    const runtime = {
+      client: {} as ccc.Client,
+      signer: {} as ccc.SignerCkbPrivateKey,
+      managers: {
+        order: {
+          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
+            ccc.Transaction.from(txLike),
+        },
+      },
+      sdk: {
+        buildBaseTransaction: async (
+          txLike: ccc.TransactionLike,
+        ): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          return ccc.Transaction.from(txLike);
+        },
+        completeTransaction: async (
+          txLike: ccc.TransactionLike,
+        ): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          return ccc.Transaction.from(txLike);
+        },
+      },
+      primaryLock: script("11"),
+    };
+    const state = {
+      marketOrders: [{}],
+      availableCkbBalance: 100n,
+      availableIckbBalance: 0n,
+      depositCapacity: 100n,
+      readyPoolDeposits: [],
+      nearReadyPoolDeposits: [],
+      futurePoolDeposits: [],
+      userOrders: [],
+      receipts: [],
+      readyWithdrawals: [],
+      system: {
+        feeRate: 1n,
+        exchangeRatio: { ckbScale: 3n, udtScale: 5n },
+        tip: {} as ccc.ClientBlockHeader,
+      },
+    };
+
+    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      actions: { matchedOrders: 1 },
+    });
   });
 
   it("passes required live deposits to SDK base transaction construction", async () => {

@@ -134,7 +134,7 @@ Withdrawal count is capped by `min(MAX_WITHDRAWAL_REQUESTS, floor(outputSlots / 
 
 ## Send Loop
 
-The bot validates `BOT_SLEEP_INTERVAL` as a finite number of seconds greater than or equal to one. Each loop sleeps for a random duration from `0` to `2 * BOT_SLEEP_INTERVAL`, builds at most one transaction, sends it, and polls the transaction status every 10 seconds until it is committed. `sent`, `pending`, `proposed`, `unknown`, and missing status are treated as pending. Rejected transactions and confirmation timeouts are reported in the JSON log with the broadcast hash when one exists. Confirmation timeouts stop the loop with exit code `2` so the wrapper does not immediately build conflicting replacement work.
+The bot validates `BOT_SLEEP_INTERVAL` as a finite number of seconds greater than or equal to one. Each loop sleeps for a random duration from `0` to `2 * BOT_SLEEP_INTERVAL`, builds at most one transaction, sends it, and polls the transaction status every 10 seconds until it is committed. `sent`, `pending`, `proposed`, `unknown`, and missing status are treated as pending. Rejected transactions and confirmation timeouts are reported in the JSON log with the broadcast hash when one exists. Large numeric values are logged as strings to preserve bigint precision. Confirmation timeouts stop the loop with exit code `2` so the wrapper does not immediately build conflicting replacement work.
 
 ## Non-Goals
 
