@@ -92,7 +92,7 @@ Far-future withdrawal, same-transaction future rotation, retry widening, and per
 
 Non-standard cleanup is a narrow ready-only withdrawal path for crowded-bucket extras whose iCKB value is larger than one standard deposit. It runs only after output slots and `excessIckb` are known and only when no deposit action has already been selected.
 
-The bot admits at most one cleanup candidate per rebalance. The candidate must come from `readyPoolDeposits`, have `deposit.isReady === true`, be a withdrawable extra rather than a singleton or protected crowded anchor, have `deposit.udtValue > ICKB_DEPOSIT_CAP`, and leave `ickbBalance - deposit.udtValue >= TARGET_ICKB_BALANCE`. Cleanup also pins the protected anchor from the same ready bucket as a `cell_dep`; if that anchor is spent before inclusion, the cleanup transaction fails instead of consuming the extra as the new live anchor.
+The bot admits at most one cleanup candidate per rebalance. The candidate must come from `readyPoolDeposits`, be a withdrawable extra rather than a singleton or protected crowded anchor, have `deposit.udtValue > ICKB_DEPOSIT_CAP`, and leave `ickbBalance - deposit.udtValue >= TARGET_ICKB_BALANCE`. Cleanup also pins the protected anchor from the same ready bucket as a `cell_dep`; if that anchor is spent before inclusion, the cleanup transaction fails instead of consuming the extra as the new live anchor.
 
 The value-positive predicate is intentionally the implementation predicate from `@ickb/core`: iCKB value discounts only amounts above `ICKB_DEPOSIT_CAP`, so cleanup starts with `deposit.udtValue > ICKB_DEPOSIT_CAP`. Under-cap and cap-sized dust are ignored.
 

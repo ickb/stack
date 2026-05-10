@@ -306,7 +306,6 @@ function selectNonStandardCleanupDeposit(
 
   return cleanupExtras.find(
     ({ deposit }) =>
-      deposit.isReady &&
       deposit.udtValue > ICKB_DEPOSIT_CAP &&
       ickbBalance - deposit.udtValue >= TARGET_ICKB_BALANCE,
   );
