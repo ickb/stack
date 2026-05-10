@@ -1,14 +1,5 @@
-# iCKB Fulfillment Bot Document Directory
+# iCKB Bot Docs
 
-This directory hosts comprehensive documentation outlining the inner workings of the iCKB Fulfillment Bot. As a living document, it will be continuously updated to reflect the Bot’s evolution and ongoing improvements.
-
-## Documents
-
-### Current runtime behavior
+This directory documents the current iCKB bot runtime behavior.
 
 - [Current Bot Rebalancing Policy](current_rebalancing_policy.md)
-
-### Future improvement ideas
-
-- [iCKB Deposit Pool Rebalancing Algorithm](pool_rebalancing.md)
-- [iCKB Deposit Pool Snapshot Encoding](pool_snapshot.md)
