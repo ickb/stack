@@ -11,4 +11,4 @@ export {
   type OrderDataLike,
   type RelativeLike,
 } from "./entities.js";
-export { OrderManager, type Match } from "./order.js";
+export { OrderManager, type Match, type OrderGroupSkipReason } from "./order.js";

@@ -1,40 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { headerLike, hash, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { DaoManager } from "./dao.js";
-
-function hash(byte: string): `0x${string}` {
-  return `0x${byte.repeat(32)}`;
-}
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: hash(byte),
-    hashType: "type",
-    args: "0x",
-  });
-}
-
-function headerLike(epoch: [bigint, bigint, bigint], number: bigint): ccc.ClientBlockHeader {
-  return ccc.ClientBlockHeader.from({
-    compactTarget: 0n,
-    dao: {
-      c: 0n,
-      ar: 1000n,
-      s: 0n,
-      u: 0n,
-    },
-    epoch,
-    extraHash: hash("aa"),
-    hash: hash("bb"),
-    nonce: 0n,
-    number,
-    parentHash: hash("cc"),
-    proposalsHash: hash("dd"),
-    timestamp: 0n,
-    transactionsRoot: hash("ee"),
-    version: 0n,
-  });
-}
 
 function depositCell(lock: ccc.Script, dao: ccc.Script): ccc.Cell {
   return ccc.Cell.from({
@@ -59,8 +26,8 @@ describe("daoCellFrom deposit readiness boundaries", () => {
     const lock = script("22");
     const dao = script("33");
     const manager = new DaoManager(dao, []);
-    const depositHeader = headerLike([1n, 0n, 1n], 1n);
-    const tip = headerLike([180n, 23n, 24n], 2n);
+    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
+    const tip = headerLike({ epoch: [180n, 23n, 24n], number: 2n });
 
     const daoCell = await manager.depositCellFrom(
       depositCell(lock, dao),
@@ -80,8 +47,8 @@ describe("daoCellFrom deposit readiness boundaries", () => {
     const lock = script("22");
     const dao = script("33");
     const manager = new DaoManager(dao, []);
-    const depositHeader = headerLike([1n, 0n, 1n], 1n);
-    const tip = headerLike([163n, 0n, 1n], 2n);
+    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
+    const tip = headerLike({ epoch: [163n, 0n, 1n], number: 2n });
 
     const daoCell = await manager.depositCellFrom(
       depositCell(lock, dao),

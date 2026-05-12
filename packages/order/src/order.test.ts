@@ -1,9 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, script } from "@ickb/testkit";
 import { defaultFindCellsLimit } from "@ickb/utils";
 import { describe, expect, it } from "vitest";
 import { OrderCell } from "./cells.js";
 import { Info, OrderData, Ratio, Relative } from "./entities.js";
-import { OrderManager, OrderMatcher } from "./order.js";
+import { OrderManager, OrderMatcher, type Match, type OrderGroupSkipReason } from "./order.js";
 
 describe("Ratio", () => {
   it("compares ratios exactly beyond Number precision", () => {
@@ -16,6 +17,28 @@ describe("Ratio", () => {
     );
     expect(larger.compare(smaller)).toBe(1);
     expect(smaller.compare(larger)).toBe(-1);
+  });
+
+  it("rejects nonzero fee application to empty ratios", () => {
+    expect(() => Ratio.empty().applyFee(true, 1n, 2n)).toThrow(
+      "Invalid ExchangeRatio",
+    );
+  });
+
+  it("rejects fee-adjusted ratios that do not fit Uint64 exactly", () => {
+    expect(() =>
+      Ratio.from({ ckbScale: (2n ** 64n) + 1n, udtScale: 1n }).applyFee(true, 1n, 2n)
+    ).toThrow("Ratio scale exceeds Uint64");
+    expect(() =>
+      Ratio.from({ ckbScale: 2n ** 65n, udtScale: 1n }).applyFee(true, 1n, 2n)
+    ).toThrow("Ratio scale exceeds Uint64");
+  });
+
+  it("keeps exactly representable fee-adjusted ratios", () => {
+    expect(
+      Ratio.from({ ckbScale: (1n << 64n) - 1n, udtScale: 1n })
+        .applyFee(true, 1n, 2n),
+    ).toEqual(Ratio.from({ ckbScale: (1n << 64n) - 1n, udtScale: 2n }));
   });
 });
 
@@ -204,6 +227,113 @@ describe("OrderMatcher", () => {
     });
   });
 
+  it("does not use the same order cell in both match directions", () => {
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: ccc.fixedPointFrom(50),
+      info: dualInfo(),
+      master: {
+        type: "absolute",
+        value: {
+          txHash: byte32FromByte("33"),
+          index: 1n,
+        },
+      },
+      outPoint: {
+        txHash: byte32FromByte("44"),
+        index: 0n,
+      },
+    });
+
+    const match = OrderManager.bestMatch(
+      [order],
+      {
+        ckbValue: ccc.fixedPointFrom(50),
+        udtValue: ccc.fixedPointFrom(50),
+      },
+      {
+        ckbScale: 2n,
+        udtScale: 1n,
+      },
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+
+    expect(match.partials.map((partial) => partial.order.cell.outPoint.toHex())).toEqual([
+      order.cell.outPoint.toHex(),
+    ]);
+  });
+
+  it("rejects invalid best-match search parameters", () => {
+    const order = makeUdtToCkbOrder();
+    const allowance = {
+      ckbValue: ccc.fixedPointFrom(50),
+      udtValue: ccc.fixedPointFrom(50),
+    };
+
+    expect(() =>
+      OrderManager.bestMatch(
+        [order],
+        allowance,
+        { ckbScale: 0n, udtScale: 1n },
+        { ckbAllowanceStep: ccc.fixedPointFrom(1) },
+      )
+    ).toThrow("Exchange rate scales must be positive");
+    expect(() =>
+      OrderManager.bestMatch(
+        [order],
+        allowance,
+        { ckbScale: 1n, udtScale: 0n },
+        { ckbAllowanceStep: ccc.fixedPointFrom(1) },
+      )
+    ).toThrow("Exchange rate scales must be positive");
+    expect(() =>
+      OrderManager.bestMatch(
+        [order],
+        allowance,
+        { ckbScale: 1n, udtScale: 1n },
+        { ckbAllowanceStep: 0n },
+      )
+    ).toThrow("CKB allowance step must be positive");
+  });
+
+  it("uses the largest order size when estimating per-partial mining fees", () => {
+    const smallOrder = makeUdtToCkbOrder({
+      txHashByte: "40",
+      orderTxHashByte: "50",
+    });
+    const largeOrder = makeUdtToCkbOrder({
+      txHashByte: "41",
+      orderTxHashByte: "51",
+      lockArgs: `0x${"00".repeat(100)}`,
+    });
+    const allowance = {
+      ckbValue: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+    };
+    const exchangeRate = { ckbScale: 3n, udtScale: 5n };
+    const options = {
+      feeRate: 1000n,
+      ckbAllowanceStep: ccc.fixedPointFrom(1),
+    };
+
+    expect(largeOrder.cell.occupiedSize).toBeGreaterThan(smallOrder.cell.occupiedSize);
+
+    expect(matchKey(OrderManager.bestMatch(
+      [smallOrder, largeOrder],
+      allowance,
+      exchangeRate,
+      options,
+    ))).toEqual(matchKey(exhaustiveSequentialBestMatch(
+      [smallOrder, largeOrder],
+      allowance,
+      exchangeRate,
+      options,
+    )));
+  });
+
   it("rejects UDT-to-CKB partials below the converted CKB minimum", () => {
     const order = makeUdtToCkbOrder();
     const matcher = OrderMatcher.from(order, false, 0n);
@@ -215,6 +345,144 @@ describe("OrderMatcher", () => {
     expect(atMinimum?.partials).toHaveLength(1);
     expect(atMinimum?.partials[0]?.ckbOut).toBe(ccc.fixedPointFrom(200) + 3n);
     expect(atMinimum?.partials[0]?.udtOut).toBe(ccc.fixedPointFrom(100) - 7n);
+  });
+
+  it("allows full consumption when the remaining CKB match is below the default minimum", () => {
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(50),
+      udtValue: ccc.fixedPointFrom(50),
+      info: Info.create(false, { ckbScale: 1n, udtScale: 1n }),
+      master: {
+        type: "absolute",
+        value: {
+          txHash: byte32FromByte("33"),
+          index: 1n,
+        },
+      },
+      outPoint: {
+        txHash: byte32FromByte("45"),
+        index: 0n,
+      },
+    });
+    const matcher = OrderMatcher.from(order, false, 0n);
+
+    expect(matcher).toBeDefined();
+    if (!matcher) {
+      throw new Error("Expected order to be matchable");
+    }
+    expect(matcher.bMaxMatch).toBeLessThan(1n << 33n);
+    expect(matcher.bMinMatch).toBe(matcher.bMaxMatch);
+
+    const match = matcher.match(matcher.bMaxMatch);
+
+    expect(match.partials).toHaveLength(1);
+    expect(match.partials[0]?.ckbOut).toBe(matcher.bMaxOut);
+  });
+
+  it("continues trying larger allowances after an allowance below the minimum", () => {
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(200),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: {
+        type: "absolute",
+        value: {
+          txHash: byte32FromByte("33"),
+          index: 1n,
+        },
+      },
+      outPoint: {
+        txHash: byte32FromByte("46"),
+        index: 0n,
+      },
+    });
+    const matcher = OrderMatcher.from(order, true, 0n);
+
+    expect(matcher).toBeDefined();
+    if (!matcher) {
+      throw new Error("Expected order to be matchable");
+    }
+    expect(ccc.fixedPointFrom(50)).toBeLessThan(matcher.bMinMatch);
+
+    const matches = Array.from(
+      OrderManager.sequentialMatcher(
+        [order],
+        true,
+        ccc.fixedPointFrom(50),
+        0n,
+      ),
+    );
+
+    expect(matches.some((match) => match.partials.length === 1)).toBe(true);
+  });
+
+  it("matches an exhaustive cross-product on a bounded pool", () => {
+    const orders = [
+      makeOrderCell({
+        ckbUnoccupied: ccc.fixedPointFrom(90),
+        udtValue: ccc.fixedPointFrom(40),
+        info: dualInfo(),
+        master: {
+          type: "absolute",
+          value: { txHash: byte32FromByte("33"), index: 1n },
+        },
+        outPoint: { txHash: byte32FromByte("47"), index: 0n },
+      }),
+      makeOrderCell({
+        ckbUnoccupied: ccc.fixedPointFrom(60),
+        udtValue: ccc.fixedPointFrom(80),
+        info: dualInfo(),
+        master: {
+          type: "absolute",
+          value: { txHash: byte32FromByte("34"), index: 1n },
+        },
+        outPoint: { txHash: byte32FromByte("48"), index: 0n },
+      }),
+      makeOrderCell({
+        ckbUnoccupied: ccc.fixedPointFrom(30),
+        udtValue: ccc.fixedPointFrom(120),
+        info: dualInfo(),
+        master: {
+          type: "absolute",
+          value: { txHash: byte32FromByte("35"), index: 1n },
+        },
+        outPoint: { txHash: byte32FromByte("49"), index: 0n },
+      }),
+    ];
+    const allowance = {
+      ckbValue: ccc.fixedPointFrom(160),
+      udtValue: ccc.fixedPointFrom(120),
+    };
+    const exchangeRate = { ckbScale: 1n, udtScale: 1n };
+    const options = {
+      feeRate: 0n,
+      ckbAllowanceStep: ccc.fixedPointFrom(50),
+      maxPartials: 3,
+    };
+
+    expect(matchKey(OrderManager.bestMatch(orders, allowance, exchangeRate, options)))
+      .toEqual(matchKey(exhaustiveSequentialBestMatch(
+        orders,
+        allowance,
+        exchangeRate,
+        options,
+      )));
+  });
+});
+
+describe("OrderManager.addMatch", () => {
+  it("rejects duplicate partials for the same order cell", () => {
+    const manager = new OrderManager(script("11"), [], script("22"));
+    const order = makeUdtToCkbOrder();
+    const partial = { order, ckbOut: order.ckbValue, udtOut: order.udtValue };
+
+    expect(() =>
+      manager.addMatch(ccc.Transaction.default(), {
+        ckbDelta: 0n,
+        udtDelta: 0n,
+        partials: [partial, partial],
+      })
+    ).toThrow("Match contains duplicate order cells");
   });
 });
 
@@ -747,12 +1015,16 @@ describe("OrderManager.findOrders", () => {
       },
     } as unknown as ccc.Client;
 
+    const skippedReasons: OrderGroupSkipReason[] = [];
     const groups = [];
-    for await (const group of manager.findOrders(client)) {
+    for await (const group of manager.findOrders(client, {
+      onSkippedGroup: (reason) => skippedReasons.push(reason),
+    })) {
       groups.push(group);
     }
 
     expect(groups).toHaveLength(0);
+    expect(skippedReasons).toEqual(["missing-origin"]);
   });
 
   it("findOrigin fails closed for multiple minted origins in the master transaction", async () => {
@@ -838,12 +1110,16 @@ describe("OrderManager.findOrders", () => {
 
     expect(firstOrigin.getMaster().eq(originMaster)).toBe(true);
     expect(secondOrigin.getMaster().eq(originMaster)).toBe(true);
+    const skippedReasons: OrderGroupSkipReason[] = [];
     const groups = [];
-    for await (const group of manager.findOrders(client)) {
+    for await (const group of manager.findOrders(client, {
+      onSkippedGroup: (reason) => skippedReasons.push(reason),
+    })) {
       groups.push(group);
     }
 
     expect(groups).toHaveLength(0);
+    expect(skippedReasons).toEqual(["ambiguous-origin"]);
   });
 
   it("uses live queries by default", async () => {
@@ -1203,12 +1479,16 @@ describe("OrderManager.findOrders", () => {
       },
     } as unknown as ccc.Client;
 
+    const skippedReasons: OrderGroupSkipReason[] = [];
     const groups = [];
-    for await (const group of manager.findOrders(client)) {
+    for await (const group of manager.findOrders(client, {
+      onSkippedGroup: (reason) => skippedReasons.push(reason),
+    })) {
       groups.push(group);
     }
 
     expect(groups).toHaveLength(0);
+    expect(skippedReasons).toEqual(["ambiguous-order"]);
   });
 
   it("uses live queries when onChain is requested", async () => {
@@ -1296,11 +1576,12 @@ function makeUdtToCkbOrder(options?: {
   txHashByte?: string;
   orderTxHashByte?: string;
   udtValue?: ccc.FixedPoint;
+  lockArgs?: ccc.Hex;
 }): OrderCell {
   const orderScript = ccc.Script.from({
     codeHash: byte32FromByte("11"),
     hashType: "type",
-    args: "0x",
+    args: options?.lockArgs ?? "0x",
   });
   const udtScript = ccc.Script.from({
     codeHash: byte32FromByte("22"),
@@ -1356,6 +1637,86 @@ function dualInfo(): Info {
     udtToCkb: ratio,
     ckbMinMatchLog: 0,
   });
+}
+
+function exhaustiveSequentialBestMatch(
+  orderPool: OrderCell[],
+  allowance: { ckbValue: bigint; udtValue: bigint },
+  exchangeRate: { ckbScale: bigint; udtScale: bigint },
+  options: {
+    feeRate: bigint;
+    ckbAllowanceStep: bigint;
+    maxPartials?: number;
+  },
+): Match {
+  const orderSize = orderPool.reduce(
+    (maxSize, order) => Math.max(maxSize, order.cell.occupiedSize),
+    0,
+  );
+  const ckbMiningFee = (ccc.numFrom(36 + orderSize) * options.feeRate + 999n) / 1000n;
+  const udtAllowanceStep = (
+    options.ckbAllowanceStep * exchangeRate.ckbScale + exchangeRate.udtScale - 1n
+  ) / exchangeRate.udtScale;
+  let best: Match | undefined;
+  let bestGain = -1n << 256n;
+  for (const c2u of OrderManager.sequentialMatcher(
+    orderPool,
+    true,
+    options.ckbAllowanceStep,
+    ckbMiningFee,
+  )) {
+    for (const u2c of OrderManager.sequentialMatcher(
+      orderPool,
+      false,
+      udtAllowanceStep,
+      ckbMiningFee,
+    )) {
+      const partials = c2u.partials.concat(u2c.partials);
+      if (options.maxPartials !== undefined && partials.length > options.maxPartials) {
+        continue;
+      }
+      if (!hasUniquePartialOrderOutPoints(partials)) {
+        continue;
+      }
+
+      const ckbDelta = c2u.ckbDelta + u2c.ckbDelta;
+      const udtDelta = c2u.udtDelta + u2c.udtDelta;
+      const ckbFee = ckbMiningFee * BigInt(partials.length);
+      const ckbAllowance = allowance.ckbValue + ckbDelta - ckbFee;
+      const udtAllowance = allowance.udtValue + udtDelta;
+      const gain = (ckbDelta - ckbFee) * exchangeRate.ckbScale + udtDelta * exchangeRate.udtScale;
+
+      if (ckbAllowance >= 0n && udtAllowance >= 0n && gain > bestGain) {
+        best = { ckbDelta, udtDelta, partials };
+        bestGain = gain;
+      }
+    }
+  }
+  return best ?? { ckbDelta: 0n, udtDelta: 0n, partials: [] };
+}
+
+function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boolean {
+  const seen = new Set<string>();
+  for (const partial of partials) {
+    const key = partial.order.cell.outPoint.toHex();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+  }
+  return true;
+}
+
+function matchKey(match: Match): unknown {
+  return {
+    ckbDelta: match.ckbDelta,
+    udtDelta: match.udtDelta,
+    partials: match.partials.map((partial) => ({
+      outPoint: partial.order.cell.outPoint.toHex(),
+      ckbOut: partial.ckbOut,
+      udtOut: partial.udtOut,
+    })),
+  };
 }
 
 async function collectOrders(
@@ -1431,11 +1792,4 @@ function makeOrderCell(options: {
       outputData,
     }),
   );
-}
-
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
 }

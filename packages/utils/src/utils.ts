@@ -13,6 +13,44 @@ import { ccc } from "@ckb-ccc/core";
  */
 export const defaultFindCellsLimit = 400;
 
+export function scanLimit(limit: number): number {
+  return limit + 1;
+}
+
+export function assertCompleteScan(
+  scanned: number,
+  limit: number,
+  label: string,
+  context?: ccc.Script | string,
+): void {
+  if (scanned <= limit) {
+    return;
+  }
+
+  const suffix = typeof context === "string"
+    ? context
+    : context
+      ? ` for ${context.toHex()}`
+      : "";
+  throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
+}
+
+export async function collectCompleteScan<T>(
+  scan: (limit: number) => AsyncIterable<T>,
+  options: {
+    limit: number;
+    label: string;
+    context?: ccc.Script | string;
+  },
+): Promise<T[]> {
+  const results: T[] = [];
+  for await (const item of scan(scanLimit(options.limit))) {
+    results.push(item);
+  }
+  assertCompleteScan(results.length, options.limit, options.label, options.context);
+  return results;
+}
+
 /**
  * Represents a transaction header that includes a block header and an optional transaction hash.
  */

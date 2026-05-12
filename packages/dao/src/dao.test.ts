@@ -1,7 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, headerLike as testHeaderLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import type { DaoDepositCell, DaoWithdrawalRequestCell } from "./cells.js";
-import { DaoManager } from "./dao.js";
+import { DaoManager, DaoOutputLimitError } from "./dao.js";
 
 async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = [];
@@ -11,40 +12,10 @@ async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   return result;
 }
 
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
-
-function script(codeHashByte: string, args = "0x"): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args,
-  });
-}
-
 function headerLike(number: bigint): ccc.ClientBlockHeader {
-  return ccc.ClientBlockHeader.from({
-    compactTarget: 0n,
-    dao: {
-      c: 0n,
-      ar: 1000n,
-      s: 0n,
-      u: 0n,
-    },
+  return testHeaderLike({
     epoch: [1n, 0n, 1n],
-    extraHash: byte32FromByte("aa"),
-    hash: byte32FromByte("bb"),
-    nonce: 0n,
     number,
-    parentHash: byte32FromByte("cc"),
-    proposalsHash: byte32FromByte("dd"),
-    timestamp: 0n,
-    transactionsRoot: byte32FromByte("ee"),
-    version: 0n,
   });
 }
 
@@ -99,6 +70,21 @@ function depositCell(
 }
 
 describe("DaoManager.requestWithdrawal", () => {
+  it("throws a typed DAO output-limit error", async () => {
+    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(true);
+
+    const manager = new DaoManager(script("11"), []);
+
+    await expect(
+      manager.requestWithdrawal(
+        ccc.Transaction.default(),
+        [depositCell(manager)],
+        script("44"),
+        {} as ccc.Client,
+      ),
+    ).rejects.toBeInstanceOf(DaoOutputLimitError);
+  });
+
   it("always rejects withdrawal locks with different args size", async () => {
     vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
 
@@ -215,6 +201,43 @@ describe("DaoManager cell decoding ownership", () => {
 });
 
 describe("DaoManager.findDeposits", () => {
+  it("fails closed when deposit scanning exceeds the limit", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const lock = script("22");
+    const firstDeposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("33"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    const secondDeposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    let requestedLimit = 0;
+    const client = {
+      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
+        requestedLimit = limit;
+        await Promise.resolve();
+        yield firstDeposit;
+        yield secondDeposit;
+      },
+    } as unknown as ccc.Client;
+
+    await expect(
+      collect(manager.findDeposits(client, [lock], { tip: headerLike(3n), limit: 1 })),
+    ).rejects.toThrow("DAO deposit cell scan reached limit 1; state may be incomplete");
+    expect(requestedLimit).toBe(2);
+  });
+
   it("decodes deposits concurrently and yields scan order", async () => {
     const manager = new DaoManager(script("11"), []);
     const lock = script("22");
@@ -326,6 +349,43 @@ describe("DaoManager.findDeposits", () => {
 });
 
 describe("DaoManager.findWithdrawalRequests", () => {
+  it("fails closed when withdrawal request scanning exceeds the limit", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const lock = script("22");
+    const firstWithdrawal = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("55"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const secondWithdrawal = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("66"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    let requestedLimit = 0;
+    const client = {
+      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
+        requestedLimit = limit;
+        await Promise.resolve();
+        yield firstWithdrawal;
+        yield secondWithdrawal;
+      },
+    } as unknown as ccc.Client;
+
+    await expect(
+      collect(manager.findWithdrawalRequests(client, [lock], { tip: headerLike(3n), limit: 1 })),
+    ).rejects.toThrow("DAO withdrawal request cell scan reached limit 1; state may be incomplete");
+    expect(requestedLimit).toBe(2);
+  });
+
   it("decodes withdrawals concurrently and yields scan order", async () => {
     const manager = new DaoManager(script("11"), []);
     const lock = script("22");

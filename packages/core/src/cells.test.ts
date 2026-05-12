@@ -1,63 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, headerLike as testHeaderLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { DaoManager } from "@ickb/dao";
 import { receiptCellFrom } from "./cells.js";
 import { ReceiptData } from "./entities.js";
 import { IckbUdt, ickbValue } from "./udt.js";
 
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
-}
-
-function headerLike(ar: bigint): {
-  compactTarget: bigint;
-  dao: {
-    c: bigint;
-    ar: bigint;
-    s: bigint;
-    u: bigint;
-  };
-  epoch: [bigint, bigint, bigint];
-  extraHash: `0x${string}`;
-  hash: `0x${string}`;
-  nonce: bigint;
-  number: bigint;
-  parentHash: `0x${string}`;
-  proposalsHash: `0x${string}`;
-  timestamp: bigint;
-  transactionsRoot: `0x${string}`;
-  version: bigint;
-} {
-  return {
-    compactTarget: 0n,
-    dao: {
-      c: 0n,
-      ar,
-      s: 0n,
-      u: 0n,
-    },
+function headerLike(ar: bigint): ccc.ClientBlockHeader {
+  return testHeaderLike({
+    dao: { c: 0n, ar, s: 0n, u: 0n },
     epoch: [1n, 0n, 1n],
-    extraHash: byte32FromByte("aa"),
-    hash: byte32FromByte("bb"),
-    nonce: 0n,
     number: 1n,
-    parentHash: byte32FromByte("cc"),
-    proposalsHash: byte32FromByte("dd"),
-    timestamp: 0n,
-    transactionsRoot: byte32FromByte("ee"),
-    version: 0n,
-  };
+  });
 }
 
 function clientWithHeader(header: ccc.ClientBlockHeader): ccc.Client {

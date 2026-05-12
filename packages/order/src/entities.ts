@@ -1,6 +1,8 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedInt32LE, compareBigInt, type ExchangeRatio } from "@ickb/utils";
 
+const maxUint64 = (1n << 64n) - 1n;
+
 /**
  * Represents a ratio of two scales, CKB and UDT, with validation and comparison methods.
  *
@@ -151,6 +153,9 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
     if (fee === 0n) {
       return this;
     }
+    if (!this.isPopulated()) {
+      throw new Error("Invalid ExchangeRatio");
+    }
 
     // Extract scaling factors from the current Ratio.
     let { ckbScale: aScale, udtScale: bScale } = this;
@@ -169,12 +174,8 @@ export class Ratio extends ccc.Entity.Base<ExchangeRatio, Ratio>() {
     aScale /= g;
     bScale /= g;
 
-    // Prevent potential overflow by ensuring the bit length stays within 64 bits.
-    const maxBitLen = Math.max(aScale.toString(2).length, bScale.toString(2).length);
-    if (maxBitLen > 64) {
-      const shift = BigInt(maxBitLen - 64);
-      aScale >>= shift;
-      bScale >>= shift;
+    if (aScale > maxUint64 || bScale > maxUint64) {
+      throw new Error("Ratio scale exceeds Uint64");
     }
 
     // Rebuild and return the adjusted ratio based on the conversion direction.
