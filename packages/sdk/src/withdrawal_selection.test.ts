@@ -158,25 +158,6 @@ describe("selectReadyWithdrawalDeposits", () => {
     ).toEqual([deposits[0], deposits[1]]);
   });
 
-  it("uses an opt-in score for exact-count selection", () => {
-    const fullerFirst = scoredReadyDeposit(6n, 0n, 1n);
-    const fullerSecond = scoredReadyDeposit(4n, 15n * 60n * 1000n, 1n);
-    const scoredFirst = scoredReadyDeposit(3n, 30n * 60n * 1000n, 5n);
-    const scoredSecond = scoredReadyDeposit(3n, 45n * 60n * 1000n, 5n);
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
-        tip: TIP,
-        maxAmount: 10n,
-        minCount: 2,
-        maxCount: 2,
-        preserveSingletons: false,
-        score: (deposit) => (deposit as IckbDepositCell & { score: bigint }).score,
-      }).deposits,
-    ).toEqual([scoredFirst, scoredSecond]);
-  });
-
   it("pins protected crowded anchors for selected extras", () => {
     const extra = readyDeposit(4n, 20n * 60n * 1000n);
     const protectedAnchor = readyDeposit(6n, 25n * 60n * 1000n);
@@ -305,6 +286,28 @@ describe("selectExactReadyWithdrawalDeposits", () => {
         maturityBucket: (deposit) => deposit.maturity.toUnix(TIP) / (60n * 60n * 1000n),
       }).map((selection) => selection.deposits),
     ).toEqual([[earlier], [laterHigherScore]]);
+  });
+
+  it("uses an SDK-owned score for conversion candidates", () => {
+    const fullerFirst = scoredReadyDeposit(6n, 0n, 1n);
+    const fullerSecond = scoredReadyDeposit(4n, 15n * 60n * 1000n, 1n);
+    const scoredFirst = scoredReadyDeposit(3n, 30n * 60n * 1000n, 5n);
+    const scoredSecond = scoredReadyDeposit(3n, 45n * 60n * 1000n, 5n);
+
+    expect(
+      selectExactReadyWithdrawalDepositCandidates({
+        readyDeposits: [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
+        tip: TIP,
+        maxAmount: 10n,
+        count: 2,
+        preserveSingletons: false,
+        score: (deposit) => (deposit as IckbDepositCell & { score: bigint }).score,
+        maturityBucket: () => 0n,
+      }).map((selection) => selection.deposits),
+    ).toEqual([
+      [scoredFirst, scoredSecond],
+      [fullerFirst, fullerSecond],
+    ]);
   });
 });
 

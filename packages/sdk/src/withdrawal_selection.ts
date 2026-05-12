@@ -26,7 +26,6 @@ export interface ReadyWithdrawalSelectionOptions {
   minCount?: number;
   maxCount?: number;
   preserveSingletons?: boolean;
-  score?: (deposit: IckbDepositCell) => bigint;
 }
 
 export interface ReadyWithdrawalCleanupSelectionOptions {
@@ -36,8 +35,29 @@ export interface ReadyWithdrawalCleanupSelectionOptions {
   maxAmount?: bigint;
 }
 
+type ScoredReadyWithdrawalSelectionOptions = ReadyWithdrawalSelectionOptions & {
+  score?: (deposit: IckbDepositCell) => bigint;
+};
+
+type ExactReadyWithdrawalSelectionOptions = Omit<
+  ReadyWithdrawalSelectionOptions,
+  "minCount" | "maxCount"
+> & {
+  count: number;
+};
+
+type ScoredExactReadyWithdrawalSelectionOptions = ExactReadyWithdrawalSelectionOptions & {
+  score?: (deposit: IckbDepositCell) => bigint;
+};
+
 export function selectReadyWithdrawalDeposits(
   options: ReadyWithdrawalSelectionOptions,
+): ReadyWithdrawalSelection {
+  return selectReadyWithdrawalDepositsWithScore(options);
+}
+
+function selectReadyWithdrawalDepositsWithScore(
+  options: ScoredReadyWithdrawalSelectionOptions,
 ): ReadyWithdrawalSelection {
   const {
     tip,
@@ -126,12 +146,16 @@ export function selectReadyWithdrawalDeposits(
 }
 
 export function selectExactReadyWithdrawalDeposits(
-  options: Omit<ReadyWithdrawalSelectionOptions, "minCount" | "maxCount"> & {
-    count: number;
-  },
+  options: ExactReadyWithdrawalSelectionOptions,
+): ReadyWithdrawalSelection | undefined {
+  return selectExactReadyWithdrawalDepositsWithScore(options);
+}
+
+function selectExactReadyWithdrawalDepositsWithScore(
+  options: ScoredExactReadyWithdrawalSelectionOptions,
 ): ReadyWithdrawalSelection | undefined {
   const { count, ...selectionOptions } = options;
-  const selection = selectReadyWithdrawalDeposits({
+  const selection = selectReadyWithdrawalDepositsWithScore({
     ...selectionOptions,
     minCount: count,
     maxCount: count,
@@ -141,7 +165,7 @@ export function selectExactReadyWithdrawalDeposits(
 }
 
 export function selectExactReadyWithdrawalDepositCandidates(
-  options: Omit<Parameters<typeof selectExactReadyWithdrawalDeposits>[0], "score"> & {
+  options: ExactReadyWithdrawalSelectionOptions & {
     score: (deposit: IckbDepositCell) => bigint;
     maturityBucket: (deposit: IckbDepositCell) => bigint;
   },
@@ -176,11 +200,11 @@ export function selectExactReadyWithdrawalDepositCandidates(
       count: options.count,
       preserveSingletons: options.preserveSingletons,
     };
-    addSelection(selectExactReadyWithdrawalDeposits({
+    addSelection(selectExactReadyWithdrawalDepositsWithScore({
       ...baseOptions,
       score: options.score,
     }));
-    addSelection(selectExactReadyWithdrawalDeposits(baseOptions));
+    addSelection(selectExactReadyWithdrawalDepositsWithScore(baseOptions));
   }
 
   return selections;
