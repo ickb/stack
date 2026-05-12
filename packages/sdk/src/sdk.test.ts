@@ -1236,6 +1236,50 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
+  it("prefers the largest direct iCKB-to-CKB withdrawal value", async () => {
+    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const unit = ICKB_DEPOSIT_CAP / 10n;
+    const smallEarlier = readyDeposit(4n * unit, 0n);
+    const smallLater = readyDeposit(4n * unit, 15n * 60n * 1000n);
+    const large = readyDeposit(9n * unit, 30n * 60n * 1000n);
+    const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal")
+      .mockImplementation(async (txLike, deposits) => {
+        await Promise.resolve();
+        expect(deposits).toEqual([large]);
+        return ccc.Transaction.from(txLike);
+    });
+    const mint = vi.spyOn(orderManager, "mint").mockImplementation((txLike, _lock, _info, amounts) => {
+      expect(amounts).toEqual({ ckbValue: 0n, udtValue: unit });
+      return ccc.Transaction.from(txLike);
+    });
+
+    await expect(sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, {
+      direction: "ickb-to-ckb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({
+          exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
+          ckbAvailable: 10n,
+          poolDeposits: {
+            deposits: [smallEarlier, smallLater, large],
+            readyDeposits: [smallEarlier, smallLater, large],
+            id: "pool",
+          },
+        }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
+        estimatedMaturity: 0n,
+      },
+    })).resolves.toMatchObject({ ok: true, conversion: { kind: "direct-plus-order" } });
+
+    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
+
   it("returns typed failures for no activity and tiny orders", async () => {
     const { sdk, lock } = testSdk();
 

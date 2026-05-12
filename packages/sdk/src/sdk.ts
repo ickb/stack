@@ -777,6 +777,7 @@ export class IckbSdk {
       poolDeposits.readyDeposits.filter((deposit) => deposit.isReady),
       context.system.tip,
     );
+    const plans: IckbToCkbConversionPlan[] = [];
     let lastFailure: ConversionTransactionFailureReason | undefined;
     let lastError: unknown;
 
@@ -787,6 +788,7 @@ export class IckbSdk {
     ) {
       let estimatedMaturity = context.estimatedMaturity;
       let remainder = amount;
+      let directUdtValue = 0n;
       let selectedDeposits: IckbDepositCell[] = [];
       let requiredLiveDeposits: IckbDepositCell[] = [];
       let order: ConversionOrder | undefined;
@@ -805,7 +807,8 @@ export class IckbSdk {
         }
 
         ({ deposits: selectedDeposits, requiredLiveDeposits } = selection);
-        remainder -= sumUdtValue(selectedDeposits);
+        directUdtValue = sumUdtValue(selectedDeposits);
+        remainder -= directUdtValue;
         for (const deposit of selectedDeposits) {
           estimatedMaturity = maxMaturity(
             estimatedMaturity,
@@ -840,6 +843,28 @@ export class IckbSdk {
         continue;
       }
 
+      plans.push({
+        directUdtValue,
+        estimatedMaturity,
+        order,
+        requiredLiveDeposits,
+        selectedDeposits,
+      });
+    }
+
+    plans.sort((left, right) => {
+      const directCompare = compareBigInt(right.directUdtValue, left.directUdtValue);
+      return directCompare !== 0
+        ? directCompare
+        : right.selectedDeposits.length - left.selectedDeposits.length;
+    });
+
+    for (const {
+      estimatedMaturity,
+      order,
+      requiredLiveDeposits,
+      selectedDeposits,
+    } of plans) {
       try {
         let tx = await this.buildBaseTransaction(
           txLike,
@@ -1035,6 +1060,7 @@ export class IckbSdk {
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
     for (const lock of unique(this.bots)) {
+      const key = lock.toHex();
       for (const cell of await collectCompleteScan(
         (scanLimit) => client.findCellsOnChain(
           {
@@ -1051,11 +1077,6 @@ export class IckbSdk {
         ),
         { limit, label: "bot capacity", context: lock },
       )) {
-        if (cell.cellOutput.type !== undefined || !cell.cellOutput.lock.eq(lock)) {
-          continue;
-        }
-
-        const key = cell.cellOutput.lock.toHex();
         if (isPlainCapacityCell(cell)) {
           const ckb =
             (bot2Ckb.get(key) ?? reserved) + cell.cellOutput.capacity;
@@ -1170,6 +1191,14 @@ interface ConversionOrder {
   amounts: ValueComponents;
   estimate: ReturnType<typeof IckbSdk.estimate>;
   conversionNotice?: ConversionNotice;
+}
+
+interface IckbToCkbConversionPlan {
+  directUdtValue: bigint;
+  estimatedMaturity: bigint;
+  order?: ConversionOrder;
+  requiredLiveDeposits: IckbDepositCell[];
+  selectedDeposits: IckbDepositCell[];
 }
 
 function conversionFailure(
