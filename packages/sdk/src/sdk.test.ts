@@ -2464,6 +2464,29 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       "L1 state scan crossed chain tip",
     );
   });
+
+  it("passes a custom account scan limit through L1 account state loading", async () => {
+    const { sdk, logicManager, ownedOwnerManager, orderManager } = testSdk();
+    const accountLock = script("77");
+    vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
+    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
+    const cell = ccc.Cell.from({
+      outPoint: { txHash: hash("93"), index: 0n },
+      cellOutput: { capacity: 5n, lock: accountLock },
+      outputData: "0x",
+    });
+    const client = {
+      getTipHeader: () => Promise.resolve(tip),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => repeat(2, cell),
+    } as unknown as ccc.Client;
+
+    await expect(
+      sdk.getL1AccountState(client, [accountLock], { accountLimit: 1 }),
+    ).rejects.toThrow("account scan reached limit 1");
+  });
 });
 
 describe("IckbSdk.getAccountState", () => {
@@ -2544,6 +2567,25 @@ describe("IckbSdk.getAccountState", () => {
     } as unknown as ccc.Client;
 
     await expect(sdk.getAccountState(client, [accountLock], tip)).resolves.toBeDefined();
+  });
+
+  it("uses a custom account cell scan limit", async () => {
+    const { sdk, logicManager, ownedOwnerManager } = testSdk();
+    const accountLock = script("11");
+    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const cell = ccc.Cell.from({
+      outPoint: { txHash: hash("92"), index: 0n },
+      cellOutput: { capacity: 5n, lock: accountLock },
+      outputData: "0x",
+    });
+    const client = {
+      findCellsOnChain: () => repeat(2, cell),
+    } as unknown as ccc.Client;
+
+    await expect(
+      sdk.getAccountState(client, [accountLock], tip, { limit: 1 }),
+    ).rejects.toThrow("account scan reached limit 1");
   });
 
   it("fails closed when account cell scanning exceeds the limit", async () => {
