@@ -75,7 +75,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // Fetch tip header to bound our searches.
   const tip = await client.getTipHeader();
 
-  const n = Math.pow(2, tip.number.toString(2).length);
+  const searchBound = 1n << BigInt(tip.number.toString(2).length);
+  if (searchBound > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Tip block number exceeds sampler search range");
+  }
+  const n = Number(searchBound);
 
   const dates = sampleTargets(genesis.timestamp, tip.timestamp, options.samplesPerYear);
 

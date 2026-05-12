@@ -66,6 +66,17 @@ describe("sampler module", () => {
     expect(requests.some((blockNumber) => blockNumber > 0n)).toBe(true);
   });
 
+  it("rejects tip heights beyond the number-safe search range", async () => {
+    const genesis = sampleHeader(0n, "2024-09-12T00:00:00.000Z");
+    const tip = sampleHeader(2n ** 52n, "2024-09-13T00:00:00.000Z");
+
+    await expect(main({
+      client: sampleClient(new Map([[0, genesis]]), tip),
+      log: () => {},
+      samplesPerYear: 1,
+    })).rejects.toThrow("Tip block number exceeds sampler search range");
+  });
+
   it("throws when the selected sample header is missing", async () => {
     const genesis = sampleHeader(0n, "2024-09-12T00:00:00.000Z");
     const tip = sampleHeader(2n, "2024-09-13T00:00:00.000Z");
