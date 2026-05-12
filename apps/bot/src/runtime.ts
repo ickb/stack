@@ -10,11 +10,14 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 import { type getConfig, type IckbSdk, type SystemState } from "@ickb/sdk";
-import { defaultFindCellsLimit } from "@ickb/utils";
+import { type SupportedChain } from "@ickb/node-utils";
+import { collectCompleteScan, defaultFindCellsLimit } from "@ickb/utils";
 import { partitionPoolDeposits, planRebalance } from "./policy.js";
 
 const MATCH_STEP_DIVISOR = 100n;
 const MAX_OUTPUTS_BEFORE_CHANGE = 58;
+const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
+const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 
 export interface Runtime {
   chain: SupportedChain;
@@ -44,22 +47,7 @@ export interface BotState {
   minCkbBalance: bigint;
 }
 
-export type SupportedChain = "mainnet" | "testnet";
-
-const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
-const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
-
-export function parseSleepInterval(
-  intervalSeconds: string | undefined,
-  envName: string,
-): number {
-  const seconds = Number(intervalSeconds);
-  if (intervalSeconds === undefined || !Number.isFinite(seconds) || seconds < 1) {
-    throw new Error("Invalid env " + envName);
-  }
-
-  return seconds * 1000;
-}
+export type { SupportedChain };
 
 export async function buildTransaction(
   runtime: Runtime,
@@ -172,20 +160,17 @@ export async function collectPoolDeposits(
   nearReady: IckbDepositCell[];
   future: IckbDepositCell[];
 }> {
-  const deposits = await collectAsync(
-    logic.findDeposits(client, {
-      onChain: true,
-      tip,
-      minLockUp: POOL_MIN_LOCK_UP,
-      maxLockUp: POOL_MAX_LOCK_UP,
-      limit: defaultFindCellsLimit + 1,
-    }),
+  const deposits = await collectCompleteScan(
+    (scanLimit) =>
+      logic.findDeposits(client, {
+        onChain: true,
+        tip,
+        minLockUp: POOL_MIN_LOCK_UP,
+        maxLockUp: POOL_MAX_LOCK_UP,
+        limit: scanLimit,
+      }),
+    { limit: defaultFindCellsLimit, label: "iCKB pool deposit" },
   );
-  if (deposits.length > defaultFindCellsLimit) {
-    throw new Error(
-      `iCKB pool deposit scan reached limit ${String(defaultFindCellsLimit)}; state may be incomplete`,
-    );
-  }
 
   const readyWindowEnd = POOL_MAX_LOCK_UP.add(tip.epoch).toUnix(tip);
 
@@ -212,12 +197,4 @@ function isMatchOnly(actions: {
 
 function maxBigInt(left: bigint, right: bigint): bigint {
   return left > right ? left : right;
-}
-
-async function collectAsync<T>(iterable: AsyncIterable<T>): Promise<T[]> {
-  const items: T[] = [];
-  for await (const item of iterable) {
-    items.push(item);
-  }
-  return items;
 }

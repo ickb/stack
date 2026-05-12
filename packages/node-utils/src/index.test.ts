@@ -10,6 +10,7 @@ import {
   parseSleepInterval,
   parseSupportedChain,
   signerAccountLocks,
+  STOP_EXIT_CODE,
 } from "./index.js";
 
 describe("node utilities", () => {
@@ -88,11 +89,16 @@ describe("node utilities", () => {
       message: "failed",
     });
     expect(executionLog.error).toHaveProperty("stack");
+
+    const emptyLog: Record<string, unknown> = {};
+    expect(handleLoopError(emptyLog, undefined)).toBe(false);
+    expect(emptyLog.error).toBe("Empty Error");
   });
 
   it("stops after broadcast confirmation timeouts", () => {
+    expect(STOP_EXIT_CODE).toBe(2);
     expect(handleLoopError({}, transactionError(true))).toBe(true);
-    expect(process.exitCode).toBe(2);
+    expect(process.exitCode).toBe(STOP_EXIT_CODE);
     process.exitCode = undefined;
 
     expect(handleLoopError({}, transactionError(false))).toBe(false);
@@ -104,7 +110,7 @@ describe("node utilities", () => {
     const executionLog: Record<string, unknown> = { txHash };
 
     expect(handleLoopError(executionLog, transactionError(true, txHash))).toBe(true);
-    expect(process.exitCode).toBe(2);
+    expect(process.exitCode).toBe(STOP_EXIT_CODE);
     expect(executionLog.txHash).toBe(txHash);
     expect(executionLog.error).toMatchObject({
       name: "TransactionConfirmationError",

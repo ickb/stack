@@ -4,9 +4,8 @@ import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatCkb, jsonLogReplacer } from "./log.js";
-import { CKB, TARGET_ICKB_BALANCE } from "./policy.js";
-import { buildTransaction, collectPoolDeposits, parseSleepInterval } from "./runtime.js";
+import { TARGET_ICKB_BALANCE } from "./policy.js";
+import { buildTransaction, collectPoolDeposits } from "./runtime.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -45,21 +44,6 @@ function readyDeposit(
   } as unknown as IckbDepositCell;
 }
 
-describe("parseSleepInterval", () => {
-  it("rejects missing, non-finite, NaN, and sub-second intervals", () => {
-    for (const value of [undefined, "", "abc", "NaN", "Infinity", "0", "0.5"]) {
-      expect(() => parseSleepInterval(value, "BOT_SLEEP_INTERVAL")).toThrow(
-        "Invalid env BOT_SLEEP_INTERVAL",
-      );
-    }
-  });
-
-  it("returns milliseconds for valid second intervals", () => {
-    expect(parseSleepInterval("1", "BOT_SLEEP_INTERVAL")).toBe(1000);
-    expect(parseSleepInterval("2.5", "BOT_SLEEP_INTERVAL")).toBe(2500);
-  });
-});
-
 describe("collectPoolDeposits", () => {
   it("fails closed when the public pool scan reaches the sentinel limit", async () => {
     async function* deposits(): AsyncGenerator<IckbDepositCell> {
@@ -85,19 +69,6 @@ describe("collectPoolDeposits", () => {
       onChain: true,
       limit: defaultFindCellsLimit + 1,
     });
-  });
-});
-
-describe("bot log formatting", () => {
-  it("formats CKB values without losing bigint precision", () => {
-    const whole = 123456789012345678901234567890n;
-
-    expect(formatCkb(whole * CKB + 12345670n)).toBe(`${whole.toString()}.1234567`);
-    expect(formatCkb(-CKB - 1n)).toBe("-1.00000001");
-  });
-
-  it("serializes bigint values as strings", () => {
-    expect(jsonLogReplacer("", 9007199254740993n)).toBe("9007199254740993");
   });
 });
 

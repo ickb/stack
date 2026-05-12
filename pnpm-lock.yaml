@@ -61,6 +61,9 @@ importers:
       '@ickb/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@ickb/node-utils':
+        specifier: workspace:*
+        version: link:../../packages/node-utils
       '@ickb/order':
         specifier: workspace:*
         version: link:../../packages/order
