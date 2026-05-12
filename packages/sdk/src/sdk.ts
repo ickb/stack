@@ -1297,6 +1297,10 @@ function errorOf(error: unknown): Error {
 }
 
 function errorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error;
+  }
+
   if (
     typeof error === "object" &&
     error !== null &&
@@ -1307,7 +1311,9 @@ function errorMessage(error: unknown): string {
   }
 
   try {
-    return JSON.stringify(error);
+    return JSON.stringify(error, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    );
   } catch {
     return String(error);
   }

@@ -1690,6 +1690,35 @@ describe("IckbSdk.buildConversionTransaction", () => {
       },
     })).rejects.toThrow("RPC failed");
   });
+
+  it("uses string and bigint object error messages in conversion construction failures", async () => {
+    const { sdk, logicManager, lock } = testSdk();
+    vi.spyOn(logicManager, "deposit")
+      .mockRejectedValueOnce("RPC failed")
+      .mockRejectedValueOnce({ code: 1n });
+
+    const options = {
+      direction: "ckb-to-ickb" as const,
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({ ckbAvailable: ICKB_DEPOSIT_CAP }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: ICKB_DEPOSIT_CAP,
+        ickbAvailable: 0n,
+        estimatedMaturity: 0n,
+      },
+    };
+
+    await expect(
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, options),
+    ).rejects.toThrow("RPC failed");
+    await expect(
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, options),
+    ).rejects.toThrow('{"code":"1"}');
+  });
 });
 
 describe("completeIckbTransaction", () => {
