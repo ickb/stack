@@ -40,7 +40,11 @@ pnpm --filter ./apps/interface build
 
 Like `dev`, the build script refreshes those workspace package `dist/` outputs first so a clean checkout does not rely on stale generated files.
 
-The interface now uses CCC-native wallet connection and transaction completion. Protocol-specific transaction construction comes from `@ickb/sdk`, then the app completes iCKB UDT balance, CKB capacity, and fees before sending.
+The interface now uses CCC-native wallet connection and transaction completion. Protocol-specific conversion planning and partial transaction construction come from `@ickb/sdk`; the app maps domain results to UI copy, calls `sdk.completeTransaction(...)`, and then sends.
+
+## Small iCKB Balances
+
+For iCKB-to-CKB requests below the normal order preview threshold, the interface automatically builds a discounted dust order instead of adding another confirmation step. The preview shows the tiny iCKB input, approximate CKB output, and matcher incentive inline before the normal wallet signature. This path is useful when the user mainly wants to recover CKB capacity locked in an iCKB xUDT cell; the user accepts or rejects the exact terms by signing or cancelling the transaction.
 
 ## Licensing
 

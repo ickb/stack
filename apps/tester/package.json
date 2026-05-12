@@ -31,11 +31,11 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "tsc",
+    "build": "pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/node-utils build && pnpm clean && tsc -p tsconfig.build.json",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules",
-    "start": "[ -n \"$CHAIN\" ] || { echo 'CHAIN not set (testnet|mainnet)' >&2; exit 1; } && node --env-file=env/${CHAIN}/.env dist/index.js | tee log_${CHAIN}_$(date +%F_%H-%M-%S).json"
+    "start": "[ -n \"$CHAIN\" ] || { echo 'CHAIN not set (testnet|mainnet)' >&2; exit 1; }; bash -o pipefail -c 'node --env-file=\"env/${CHAIN}/.env\" dist/index.js | tee \"log_${CHAIN}_$(date +%F_%H-%M-%S).json\"'"
   },
   "files": [
     "dist",
@@ -46,12 +46,14 @@
     "provenance": true
   },
   "devDependencies": {
+    "@ickb/testkit": "workspace:*",
     "@types/node": "catalog:"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
     "@ickb/core": "workspace:*",
     "@ickb/order": "workspace:*",
+    "@ickb/node-utils": "workspace:*",
     "@ickb/sdk": "workspace:*"
   }
 }

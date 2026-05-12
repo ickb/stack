@@ -15,6 +15,9 @@ export default defineConfig({
       "@ickb/core": fileURLToPath(
         new URL("../../packages/core/dist/index.js", import.meta.url),
       ),
+      "@ickb/dao": fileURLToPath(
+        new URL("../../packages/dao/dist/index.js", import.meta.url),
+      ),
       "@ickb/order": fileURLToPath(
         new URL("../../packages/order/dist/index.js", import.meta.url),
       ),
@@ -35,6 +38,7 @@ export default defineConfig({
       include: [/\.[jt]sx?$/u],
       exclude: [
         /\/packages\/core\/src\//u,
+        /\/packages\/dao\/src\//u,
         /\/packages\/order\/src\//u,
         /\/packages\/sdk\/src\//u,
         /\/packages\/utils\/src\//u,
@@ -46,7 +50,7 @@ export default defineConfig({
     basicSsl(),
   ],
   optimizeDeps: {
-    exclude: ["@ickb/core", "@ickb/order", "@ickb/sdk", "@ickb/utils"],
+    exclude: ["@ickb/core", "@ickb/dao", "@ickb/order", "@ickb/sdk", "@ickb/utils"],
   },
   build: {
     commonjsOptions: {

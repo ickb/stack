@@ -71,6 +71,9 @@ export default function Action({
     txInfo.estimatedMaturity,
     l1State.tipTimestamp,
   );
+  const shownMaturity = txInfo.conversionNotice?.maturityEstimateUnavailable
+    ? "Waiting for CKB liquidity"
+    : maturity;
 
   return (
     <span className="grid grid-cols-2 items-center justify-items-center gap-y-4">
@@ -106,10 +109,36 @@ export default function Action({
         </button>
       </Progress>
       {failure !== "" ? <span className="col-span-2 text-center text-red-400">{failure}</span> : null}
+      {txInfo.conversionNotice ? <DustConversionNotice notice={txInfo.conversionNotice} /> : null}
       <span className="leading-relaxed font-bold tracking-wider">Fee:</span>
       <span>{toText(txInfo.fee)} CKB</span>
       <span className="leading-relaxed font-bold tracking-wider">Maturity:</span>
-      <span>{maturity}</span>
+      <span>{shownMaturity}</span>
+    </span>
+  );
+}
+
+function DustConversionNotice({
+  notice,
+}: {
+  notice: NonNullable<TxInfo["conversionNotice"]>;
+}): JSX.Element {
+  if (notice.kind === "maturity-unavailable") {
+    return (
+      <span className="col-span-2 rounded border border-amber-400/60 px-3 py-2 text-center text-sm leading-relaxed text-amber-200">
+        Conversion terms: this order converts {toText(notice.inputIckb)} iCKB to
+        about {toText(notice.outputCkb)} CKB with {toText(notice.incentiveCkb)}
+        CKB matcher incentive. The current pool state does not provide a maturity estimate yet.
+      </span>
+    );
+  }
+
+  return (
+    <span className="col-span-2 rounded border border-amber-400/60 px-3 py-2 text-center text-sm leading-relaxed text-amber-200">
+      Small-balance conversion: this discounted order converts{" "}
+      {toText(notice.inputIckb)} iCKB to about {toText(notice.outputCkb)} CKB
+      with {toText(notice.incentiveCkb)} CKB matcher incentive, helping recover
+      locked iCKB cell capacity after the order is fulfilled or collected.
     </span>
   );
 }

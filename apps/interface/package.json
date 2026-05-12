@@ -22,8 +22,8 @@
   "type": "module",
   "private": false,
   "scripts": {
-    "dev": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && vite",
-    "build": "pnpm --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && tsc && vite build",
+    "dev": "pnpm --filter @ickb/core --filter @ickb/dao --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && vite",
+    "build": "pnpm --filter @ickb/core --filter @ickb/dao --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:ci": "vitest run",
@@ -32,6 +32,7 @@
     "clean:deep": "rm -fr dist node_modules"
   },
   "devDependencies": {
+    "@ickb/testkit": "workspace:*",
     "@babel/preset-react": "^7.27.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.18.11",
@@ -47,6 +48,7 @@
   "dependencies": {
     "@ckb-ccc/ccc": "catalog:",
     "@ickb/core": "workspace:*",
+    "@ickb/dao": "workspace:*",
     "@ickb/order": "workspace:*",
     "@ickb/sdk": "workspace:*",
     "@ickb/utils": "workspace:*",
