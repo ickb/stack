@@ -120,8 +120,8 @@ export interface SendAndWaitForCommitOptions {
 }
 
 export interface GetL1StateOptions {
-  botCapacityLimit?: number;
-  botWithdrawalLimit?: number;
+  availableCapacityLimit?: number;
+  pendingWithdrawalLimit?: number;
   orderLimit?: number;
   poolDepositLimit?: number;
 }
@@ -1100,8 +1100,8 @@ export class IckbSdk {
     ckbAvailable: ccc.FixedPoint;
     ckbMaturing: CkbCumulative[];
   }> {
-    const botCapacityLimit = options?.botCapacityLimit ?? defaultFindCellsLimit;
-    const botWithdrawalLimit = options?.botWithdrawalLimit ?? defaultFindCellsLimit;
+    const botCapacityLimit = options?.availableCapacityLimit ?? defaultFindCellsLimit;
+    const botWithdrawalLimit = options?.pendingWithdrawalLimit ?? defaultFindCellsLimit;
     const withdrawalOptions = {
       onChain: true,
       tip,

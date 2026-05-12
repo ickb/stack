@@ -2405,7 +2405,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     });
   });
 
-  it("passes a custom bot capacity scan limit through L1 state loading", async () => {
+  it("passes a custom available capacity scan limit through L1 state loading", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2430,7 +2430,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       cellOutput: { capacity: 1n, lock: botLock },
       outputData: "0x",
     });
-    const botCapacityLimit = defaultFindCellsLimit + 1;
+    const availableCapacityLimit = defaultFindCellsLimit + 1;
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
@@ -2438,18 +2438,18 @@ describe("IckbSdk.getL1State snapshot detection", () => {
         filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
       }) {
         if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
-          yield* repeat(botCapacityLimit, plainCell);
+          yield* repeat(availableCapacityLimit, plainCell);
         }
         await Promise.resolve();
       },
     } as unknown as ccc.Client;
 
     await expect(
-      sdk.getL1State(client, [], { botCapacityLimit }),
+      sdk.getL1State(client, [], { availableCapacityLimit }),
     ).resolves.toBeDefined();
   });
 
-  it("passes a custom bot withdrawal scan limit through L1 state loading", async () => {
+  it("passes a custom pending withdrawal scan limit through L1 state loading", async () => {
     const { sdk, logicManager, ownedOwnerManager, orderManager } = testSdk();
     vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
     const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
@@ -2460,14 +2460,14 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
-    const botWithdrawalLimit = defaultFindCellsLimit + 100;
+    const pendingWithdrawalLimit = defaultFindCellsLimit + 100;
 
-    await sdk.getL1State(client, [], { botWithdrawalLimit });
+    await sdk.getL1State(client, [], { pendingWithdrawalLimit });
 
     expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
       onChain: true,
       tip,
-      limit: botWithdrawalLimit,
+      limit: pendingWithdrawalLimit,
     });
   });
 
