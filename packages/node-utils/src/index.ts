@@ -114,7 +114,7 @@ export function logExecution(
   executionLog.ElapsedSeconds = Math.round(
     (Date.now() - startTime.getTime()) / 1000,
   );
-  process.stdout.write(`${JSON.stringify(executionLog, jsonLogReplacer, " ")}\n`);
+  process.stdout.write(`${JSON.stringify(executionLog, jsonLogReplacer)}\n`);
 }
 
 export function sleep(ms: number): Promise<void> {

@@ -51,11 +51,12 @@ describe("node utilities", () => {
 
   it("keeps the primary signer lock first and deduplicates account locks", async () => {
     const primaryLock = script("11");
+    const primaryLockCopy = ccc.Script.from(primaryLock);
     const otherLock = script("22");
     const signer = {
       getAddressObjs: async () => {
         await Promise.resolve();
-        return [{ script: otherLock }, { script: primaryLock }];
+        return [{ script: otherLock }, { script: primaryLockCopy }];
       },
     } as ccc.Signer;
 
@@ -126,7 +127,15 @@ describe("node utilities", () => {
     logExecution(executionLog, new Date(1000));
 
     expect(stdoutWrite).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(stdoutWrite.mock.calls[0]?.[0]))).toMatchObject({
+    const logLine = String(stdoutWrite.mock.calls[0]?.[0]);
+    expect(logLine).toBe(
+      JSON.stringify({
+        amount: "9007199254740993",
+        txHash: byte32FromByte("44"),
+        ElapsedSeconds: 2,
+      }) + "\n",
+    );
+    expect(JSON.parse(logLine)).toMatchObject({
       amount: "9007199254740993",
       txHash: byte32FromByte("44"),
       ElapsedSeconds: 2,
