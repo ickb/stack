@@ -2104,8 +2104,10 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: { filter?: { scriptLenRange?: unknown } }) {
-        if (query.filter?.scriptLenRange) {
+      findCellsOnChain: async function* (query: {
+        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
+      }) {
+        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
           yield* repeat(defaultFindCellsLimit, plainCell);
         }
         await Promise.resolve();
@@ -2139,8 +2141,10 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: { filter?: { scriptLenRange?: unknown } }) {
-        if (query.filter?.scriptLenRange) {
+      findCellsOnChain: async function* (query: {
+        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
+      }) {
+        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
           yield* repeat(defaultFindCellsLimit + 1, plainCell);
         }
         await Promise.resolve();
@@ -2177,8 +2181,10 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: { filter?: { scriptLenRange?: unknown } }) {
-        if (query.filter?.scriptLenRange) {
+      findCellsOnChain: async function* (query: {
+        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
+      }) {
+        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
           yield* repeat(defaultFindCellsLimit + 1, plainCell);
         }
         await Promise.resolve();

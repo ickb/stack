@@ -661,9 +661,11 @@ export class IckbSdk {
       return conversionFailure("insufficient-ickb", context.estimatedMaturity);
     }
 
+    const baseTx = ccc.Transaction.from(txLike);
+
     if (amount === 0n) {
       const tx = await this.buildBaseTransaction(
-        txLike,
+        baseTx,
         client,
         baseTransactionOptions(context),
       );
@@ -680,12 +682,12 @@ export class IckbSdk {
     }
 
     return direction === "ckb-to-ickb"
-      ? await this.buildCkbToIckbConversion(txLike, client, options)
-      : await this.buildIckbToCkbConversion(txLike, client, options);
+      ? await this.buildCkbToIckbConversion(baseTx, client, options)
+      : await this.buildIckbToCkbConversion(baseTx, client, options);
   }
 
   private async buildCkbToIckbConversion(
-    txLike: ccc.TransactionLike,
+    baseTx: ccc.Transaction,
     client: ccc.Client,
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
@@ -719,7 +721,7 @@ export class IckbSdk {
       }
 
       const outputLimitError = plannedDaoOutputLimitError(
-        txLike,
+        baseTx,
         (depositCount > 0 ? depositCount + 1 : 0) + orderOutputCount(order),
         depositCount > 0 || context.readyWithdrawals.length > 0,
       );
@@ -731,7 +733,7 @@ export class IckbSdk {
 
       try {
         let tx = await this.buildBaseTransaction(
-          txLike,
+          baseTx.clone(),
           client,
           baseTransactionOptions(context),
         );
@@ -771,7 +773,7 @@ export class IckbSdk {
   }
 
   private async buildIckbToCkbConversion(
-    txLike: ccc.TransactionLike,
+    baseTx: ccc.Transaction,
     client: ccc.Client,
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
@@ -854,7 +856,7 @@ export class IckbSdk {
         }
 
         const outputLimitError = plannedDaoOutputLimitError(
-          txLike,
+          baseTx,
           selectedDeposits.length * 2 + orderOutputCount(order),
           selectedDeposits.length > 0 || context.readyWithdrawals.length > 0,
         );
@@ -909,7 +911,7 @@ export class IckbSdk {
     } of plans) {
       try {
         let tx = await this.buildBaseTransaction(
-          txLike,
+          baseTx.clone(),
           client,
           baseTransactionOptions(context, {
             deposits: selectedDeposits,
@@ -1113,6 +1115,7 @@ export class IckbSdk {
             scriptType: "lock",
             filter: {
               scriptLenRange: [0n, 1n],
+              outputDataLenRange: [0n, 1n],
             },
             scriptSearchMode: "exact",
             withData: true,
@@ -1316,7 +1319,7 @@ function isRetryableConversionBuildError(error: unknown): boolean {
 }
 
 function plannedDaoOutputLimitError(
-  txLike: ccc.TransactionLike,
+  tx: ccc.Transaction,
   additionalOutputs: number,
   hasDaoActivity: boolean,
 ): DaoOutputLimitError | undefined {
@@ -1324,7 +1327,7 @@ function plannedDaoOutputLimitError(
     return;
   }
 
-  const outputCount = ccc.Transaction.from(txLike).outputs.length + additionalOutputs;
+  const outputCount = tx.outputs.length + additionalOutputs;
   return outputCount > DAO_OUTPUT_LIMIT
     ? new DaoOutputLimitError(outputCount)
     : undefined;
