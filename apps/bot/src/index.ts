@@ -6,19 +6,24 @@ import {
   IckbSdk,
   projectAccountAvailability,
   sendAndWaitForCommit,
-  TransactionConfirmationError,
 } from "@ickb/sdk";
+import {
+  createPublicClient,
+  formatCkb,
+  handleLoopError,
+  logExecution,
+  parseSleepInterval,
+  parseSupportedChain,
+  signerAccountLocks,
+  sleep,
+  STOP_EXIT_CODE,
+} from "@ickb/node-utils";
 import {
   buildTransaction,
   collectPoolDeposits,
-  parseSleepInterval,
   type BotState,
   type Runtime,
-  type SupportedChain,
 } from "./runtime.js";
-import { formatCkb, jsonLogReplacer } from "./log.js";
-
-const STOP_EXIT_CODE = 2;
 
 async function main(): Promise<void> {
   const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
@@ -30,12 +35,13 @@ async function main(): Promise<void> {
   }
   const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
 
-  const chain = parseChain(CHAIN);
-  const client = createClient(chain, RPC_URL);
+  const chain = parseSupportedChain(CHAIN, "CHAIN");
+  const client = createPublicClient(chain, RPC_URL);
   const config = getConfig(chain);
   const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, BOT_PRIVATE_KEY);
-  const primaryLock = (await signer.getRecommendedAddressObj()).script;
+  const recommendedAddress = await signer.getRecommendedAddressObj();
+  const primaryLock = recommendedAddress.script;
   const runtime: Runtime = {
     chain,
     client,
@@ -90,7 +96,7 @@ async function main(): Promise<void> {
           fmtCkb(state.minCkbBalance) +
           " CKB worth of capital to be able to operate, shutting down...";
         process.exitCode = STOP_EXIT_CODE;
-        console.log(JSON.stringify(executionLog, jsonLogReplacer, " "));
+        logExecution(executionLog, startTime);
         return;
       }
 
@@ -110,17 +116,10 @@ async function main(): Promise<void> {
         },
       });
     } catch (error) {
-      executionLog.error = errorToLog(error);
-      if (error instanceof TransactionConfirmationError && error.isTimeout) {
-        process.exitCode = STOP_EXIT_CODE;
-        stopAfterLog = true;
-      }
+      stopAfterLog = handleLoopError(executionLog, error);
     }
 
-    executionLog.ElapsedSeconds = Math.round(
-      (Date.now() - startTime.getTime()) / 1000,
-    );
-    console.log(JSON.stringify(executionLog, jsonLogReplacer, " "));
+    logExecution(executionLog, startTime);
     if (stopAfterLog) {
       return;
     }
@@ -128,18 +127,17 @@ async function main(): Promise<void> {
 }
 
 async function readBotState(runtime: Runtime): Promise<BotState> {
-  const accountLocks = dedupeScripts(
-    (await runtime.signer.getAddressObjs()).map(({ script }) => script),
-  );
-  const { system, user } = await runtime.sdk.getL1State(
+  const accountLocks = await signerAccountLocks(runtime.signer, runtime.primaryLock);
+  const { system, user, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     accountLocks,
   );
-
-  const [account, poolDeposits] = await Promise.all([
-    runtime.sdk.getAccountState(runtime.client, accountLocks, system.tip),
-    collectPoolDeposits(runtime.client, runtime.managers.logic, system.tip),
-  ]);
+  const poolDeposits = await collectPoolDeposits(
+    runtime.client,
+    runtime.managers.logic,
+    system.tip,
+  );
+  await runtime.sdk.assertCurrentTip(runtime.client, system.tip);
 
   const projection = projectAccountAvailability(account, user.orders, {
     collectedOrdersAvailable: true,
@@ -177,66 +175,11 @@ async function readBotState(runtime: Runtime): Promise<BotState> {
   };
 }
 
-function createClient(chain: SupportedChain, rpcUrl: string | undefined): ccc.Client {
-  const config = rpcUrl ? { url: rpcUrl } : undefined;
-  return chain === "mainnet"
-    ? new ccc.ClientPublicMainnet(config)
-    : new ccc.ClientPublicTestnet(config);
-}
-
-function parseChain(chain: string): SupportedChain {
-  if (chain === "mainnet" || chain === "testnet") {
-    return chain;
-  }
-
-  throw new Error("Invalid env CHAIN: " + chain);
-}
-
-function dedupeScripts(scripts: ccc.Script[]): ccc.Script[] {
-  const seen = new Set<string>();
-  const unique: ccc.Script[] = [];
-
-  for (const script of scripts) {
-    const key = script.toHex();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(script);
-  }
-
-  return unique;
-}
-
 function outPointKey(outPoint: ccc.OutPoint): string {
   return ccc.hexFrom(outPoint.toBytes());
 }
 
 const fmtCkb = formatCkb;
-
-function errorToLog(error: unknown): unknown {
-  if (error instanceof Object && "stack" in error) {
-    const stack = error.stack ?? "";
-    return {
-      name: "name" in error ? error.name : undefined,
-      message:
-        "message" in error && typeof error.message === "string"
-          ? error.message
-          : "Unknown error",
-      txHash: "txHash" in error ? error.txHash : undefined,
-      status: "status" in error ? error.status : undefined,
-      stack,
-    };
-  }
-
-  return error ?? "Empty Error";
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();

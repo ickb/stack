@@ -5,7 +5,7 @@ import { setTimeout } from "node:timers";
 
 const CKB = 100000000n;
 
-const STOP_EXIT_CODE = 2;
+export const STOP_EXIT_CODE = 2;
 
 export type SupportedChain = "mainnet" | "testnet";
 
