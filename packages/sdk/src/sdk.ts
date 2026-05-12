@@ -120,6 +120,8 @@ export interface SendAndWaitForCommitOptions {
 }
 
 export interface GetL1StateOptions {
+  botCapacityLimit?: number;
+  botWithdrawalLimit?: number;
   orderLimit?: number;
   poolDepositLimit?: number;
 }
@@ -1032,7 +1034,7 @@ export class IckbSdk {
       })),
       client.getFeeRate(),
     ]);
-    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits);
+    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits, options);
 
     const midInfo = new Info(exchangeRatio, exchangeRatio, 1);
     const userOrders: OrderGroup[] = [];
@@ -1093,15 +1095,17 @@ export class IckbSdk {
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
     poolDeposits: PoolDepositState,
+    options?: GetL1StateOptions,
   ): Promise<{
     ckbAvailable: ccc.FixedPoint;
     ckbMaturing: CkbCumulative[];
   }> {
-    const limit = defaultFindCellsLimit;
+    const botCapacityLimit = options?.botCapacityLimit ?? defaultFindCellsLimit;
+    const botWithdrawalLimit = options?.botWithdrawalLimit ?? defaultFindCellsLimit;
     const withdrawalOptions = {
       onChain: true,
       tip,
-      limit,
+      limit: botWithdrawalLimit,
     };
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
@@ -1123,7 +1127,7 @@ export class IckbSdk {
           "asc",
           scanLimit,
         ),
-        { limit, label: "bot capacity", context: lock },
+        { limit: botCapacityLimit, label: "bot capacity", context: lock },
       )) {
         if (isPlainCapacityCell(cell)) {
           const ckb =

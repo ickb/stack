@@ -2405,6 +2405,72 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     });
   });
 
+  it("passes a custom bot capacity scan limit through L1 state loading", async () => {
+    const botLock = script("11");
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const logicManager = new LogicManager(logic, [], new DaoManager(dao, []));
+    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
+    const orderManager = new OrderManager(order, [], udt);
+    vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      ownedOwnerManager,
+      logicManager,
+      orderManager,
+      [botLock],
+    );
+    const plainCell = ccc.Cell.from({
+      outPoint: { txHash: hash("04"), index: 0n },
+      cellOutput: { capacity: 1n, lock: botLock },
+      outputData: "0x",
+    });
+    const botCapacityLimit = defaultFindCellsLimit + 1;
+    const client = {
+      getTipHeader: () => Promise.resolve(headerLike(1n)),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: async function* (query: {
+        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
+      }) {
+        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
+          yield* repeat(botCapacityLimit, plainCell);
+        }
+        await Promise.resolve();
+      },
+    } as unknown as ccc.Client;
+
+    await expect(
+      sdk.getL1State(client, [], { botCapacityLimit }),
+    ).resolves.toBeDefined();
+  });
+
+  it("passes a custom bot withdrawal scan limit through L1 state loading", async () => {
+    const { sdk, logicManager, ownedOwnerManager, orderManager } = testSdk();
+    vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
+    const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
+      .mockImplementation(() => none());
+    vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
+    const client = {
+      getTipHeader: () => Promise.resolve(tip),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+    const botWithdrawalLimit = defaultFindCellsLimit + 100;
+
+    await sdk.getL1State(client, [], { botWithdrawalLimit });
+
+    expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
+      onChain: true,
+      tip,
+      limit: botWithdrawalLimit,
+    });
+  });
+
   it("passes a custom order scan limit through L1 state loading", async () => {
     const logic = script("22");
     const dao = script("33");
