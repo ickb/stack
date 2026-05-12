@@ -145,6 +145,24 @@ describe("selectBoundedUdtSubset", () => {
     )).toEqual([firstSix, firstFour]);
   });
 
+  it("uses opt-in score before fullness", () => {
+    const fullerFirst = { udtValue: 9n, score: 1n };
+    const fullerSecond = { udtValue: 1n, score: 1n };
+    const scoredFirst = { udtValue: 4n, score: 5n };
+    const scoredSecond = { udtValue: 4n, score: 5n };
+
+    expect(selectBoundedUdtSubset(
+      [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
+      10n,
+      {
+        candidateLimit: 32,
+        minCount: 2,
+        maxCount: 2,
+        score: (deposit) => deposit.score,
+      },
+    )).toEqual([scoredFirst, scoredSecond]);
+  });
+
   it("bounds the search to the requested candidate limit", () => {
     const deposits = [
       ...Array.from({ length: 32 }, () => ({ udtValue: 6n })),

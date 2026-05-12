@@ -26,6 +26,7 @@ export interface ReadyWithdrawalSelectionOptions {
   minCount?: number;
   maxCount?: number;
   preserveSingletons?: boolean;
+  score?: (deposit: IckbDepositCell) => bigint;
 }
 
 export interface ReadyWithdrawalCleanupSelectionOptions {
@@ -46,6 +47,7 @@ export function selectReadyWithdrawalDeposits(
     minCount = 1,
     maxCount = DEFAULT_MAX_WITHDRAWAL_REQUESTS,
     preserveSingletons = true,
+    score,
   } = options;
   const requiredCount = Math.max(1, minCount);
   if (
@@ -65,6 +67,7 @@ export function selectReadyWithdrawalDeposits(
   const selectedExtras = selectReadyDeposits(extras, maxAmount, {
     maxCount,
     minCount: preserveSingletons ? requiredCount : 1,
+    score,
   });
   if (selectedExtras.length > 0) {
     if (preserveSingletons) {
@@ -80,6 +83,7 @@ export function selectReadyWithdrawalDeposits(
       {
         maxCount: remainingCount,
         minCount: remainingRequiredCount,
+        score,
       },
     );
     if (selectedSingletons.length === 0 && selectedExtras.length >= requiredCount) {
@@ -105,6 +109,7 @@ export function selectReadyWithdrawalDeposits(
   const selectedSingletons = selectReadyDeposits(singletons, maxAmount, {
     maxCount,
     minCount: requiredCount,
+    score,
   });
   if (selectedSingletons.length > 0) {
     return { deposits: selectedSingletons, requiredLiveDeposits: [] };
@@ -114,6 +119,7 @@ export function selectReadyWithdrawalDeposits(
     selectReadyDeposits(sortByMaturity(readyDeposits, tip), maxAmount, {
       maxCount,
       minCount: requiredCount,
+      score,
     }),
     anchorsByExtra,
   );
@@ -132,6 +138,52 @@ export function selectExactReadyWithdrawalDeposits(
   });
 
   return selection.deposits.length === count ? selection : undefined;
+}
+
+export function selectExactReadyWithdrawalDepositCandidates(
+  options: Omit<Parameters<typeof selectExactReadyWithdrawalDeposits>[0], "score"> & {
+    score: (deposit: IckbDepositCell) => bigint;
+    maturityBucket: (deposit: IckbDepositCell) => bigint;
+  },
+): ReadyWithdrawalSelection[] {
+  const selections: ReadyWithdrawalSelection[] = [];
+  const seen = new Set<string>();
+  const indexByDeposit = new Map(
+    options.readyDeposits.map((deposit, index) => [deposit, index] as const),
+  );
+  const addSelection = (selection: ReadyWithdrawalSelection | undefined): void => {
+    if (selection === undefined) {
+      return;
+    }
+
+    const key = selectionKey(selection.deposits, indexByDeposit);
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    selections.push(selection);
+  };
+
+  for (const bucket of uniqueBuckets(options.readyDeposits, options.maturityBucket)) {
+    const readyDeposits = options.readyDeposits.filter(
+      (deposit) => options.maturityBucket(deposit) <= bucket,
+    );
+    const baseOptions = {
+      readyDeposits,
+      tip: options.tip,
+      maxAmount: options.maxAmount,
+      count: options.count,
+      preserveSingletons: options.preserveSingletons,
+    };
+    addSelection(selectExactReadyWithdrawalDeposits({
+      ...baseOptions,
+      score: options.score,
+    }));
+    addSelection(selectExactReadyWithdrawalDeposits(baseOptions));
+  }
+
+  return selections;
 }
 
 export function selectReadyWithdrawalCleanupDeposit(
@@ -165,9 +217,10 @@ function selectReadyDeposits<T extends { udtValue: bigint }>(
   options: {
     minCount?: number;
     maxCount?: number;
+    score?: (deposit: T) => bigint;
   } = {},
 ): T[] {
-  const { minCount = 1, maxCount = DEFAULT_MAX_WITHDRAWAL_REQUESTS } = options;
+  const { minCount = 1, maxCount = DEFAULT_MAX_WITHDRAWAL_REQUESTS, score } = options;
   const requiredCount = Math.max(1, minCount);
   if (
     maxAmount <= 0n ||
@@ -182,15 +235,17 @@ function selectReadyDeposits<T extends { udtValue: bigint }>(
     candidateLimit: BEST_FIT_SEARCH_CANDIDATES,
     minCount: requiredCount,
     maxCount,
+    ...(score ? { score } : {}),
   });
   const greedy = selectGreedyDeposits(
     deposits,
     maxAmount,
     maxCount,
     requiredCount,
+    score,
   );
 
-  return pickBetterSelection(deposits, bestFit, greedy);
+  return pickBetterSelection(deposits, bestFit, greedy, score);
 }
 
 function classifyReadyDeposits(
@@ -305,11 +360,15 @@ function selectGreedyDeposits<T extends { udtValue: bigint }>(
   maxAmount: bigint,
   maxCount: number,
   minCount: number,
+  score?: (deposit: T) => bigint,
 ): T[] {
   const selected: T[] = [];
+  const candidates = score
+    ? [...deposits].sort((left, right) => compareBigInt(score(right), score(left)))
+    : deposits;
   let cumulative = 0n;
 
-  for (const deposit of deposits) {
+  for (const deposit of candidates) {
     if (selected.length >= maxCount) {
       break;
     }
@@ -329,7 +388,28 @@ function pickBetterSelection<T extends { udtValue: bigint }>(
   deposits: readonly T[],
   left: T[],
   right: T[],
+  score?: (deposit: T) => bigint,
 ): T[] {
+  if (left.length === 0) {
+    return right;
+  }
+
+  if (right.length === 0) {
+    return left;
+  }
+
+  if (score) {
+    const leftScore = sumScore(left, score);
+    const rightScore = sumScore(right, score);
+    if (leftScore > rightScore) {
+      return left;
+    }
+
+    if (rightScore > leftScore) {
+      return right;
+    }
+  }
+
   const leftTotal = sumUdtValue(left);
   const rightTotal = sumUdtValue(right);
   if (leftTotal > rightTotal) {
@@ -341,6 +421,25 @@ function pickBetterSelection<T extends { udtValue: bigint }>(
   }
 
   return compareSelectionOrder(deposits, left, right) <= 0 ? left : right;
+}
+
+function sumScore<T>(deposits: readonly T[], score: (deposit: T) => bigint): bigint {
+  let total = 0n;
+  for (const deposit of deposits) {
+    total += score(deposit);
+  }
+  return total;
+}
+
+function uniqueBuckets<T>(items: readonly T[], bucket: (item: T) => bigint): bigint[] {
+  return [...new Set(items.map(bucket))].sort(compareBigInt);
+}
+
+function selectionKey<T>(items: readonly T[], indexByItem: ReadonlyMap<T, number>): string {
+  return items
+    .map((item) => String(indexByItem.get(item)))
+    .sort()
+    .join(",");
 }
 
 function compareSelectionOrder<T>(

@@ -29,7 +29,9 @@ import {
   Ratio,
 } from "@ickb/order";
 import { getConfig } from "./constants.js";
-import { selectExactReadyWithdrawalDeposits } from "./withdrawal_selection.js";
+import {
+  selectExactReadyWithdrawalDepositCandidates,
+} from "./withdrawal_selection.js";
 
 export const MAX_DIRECT_DEPOSITS = 60;
 export const MAX_WITHDRAWAL_REQUESTS = 30;
@@ -119,6 +121,11 @@ export interface SendAndWaitForCommitOptions {
 
 export interface GetL1StateOptions {
   orderLimit?: number;
+  poolDepositLimit?: number;
+}
+
+export interface GetL1AccountStateOptions extends GetL1StateOptions {
+  accountLimit?: number;
 }
 
 export interface IckbToCkbOrderEstimate {
@@ -779,6 +786,8 @@ export class IckbSdk {
       context.system.tip,
     );
     const plans: IckbToCkbConversionPlan[] = [];
+    const score = (deposit: IckbDepositCell): bigint =>
+      directWithdrawalSurplus(deposit, context.system.exchangeRatio);
     let lastFailure: ConversionTransactionFailureReason | undefined;
     let lastError: unknown;
 
@@ -787,70 +796,83 @@ export class IckbSdk {
       withdrawalCount >= 0;
       withdrawalCount -= 1
     ) {
-      let estimatedMaturity = context.estimatedMaturity;
-      let remainder = amount;
-      let directUdtValue = 0n;
-      let selectedDeposits: IckbDepositCell[] = [];
-      let requiredLiveDeposits: IckbDepositCell[] = [];
-      let order: ConversionOrder | undefined;
-
-      if (withdrawalCount > 0) {
-        const selection = selectExactReadyWithdrawalDeposits({
+      const selections = withdrawalCount === 0
+        ? [{ deposits: [], requiredLiveDeposits: [] }]
+        : selectExactReadyWithdrawalDepositCandidates({
           readyDeposits: candidates,
           tip: context.system.tip,
-          maxAmount: remainder,
+          maxAmount: amount,
           count: withdrawalCount,
           preserveSingletons: amount < ICKB_DEPOSIT_CAP,
+          score,
+          maturityBucket: (deposit) =>
+            maturityBucket(deposit.maturity.toUnix(context.system.tip)),
         });
-        if (selection === undefined) {
-          lastFailure = "not-enough-ready-deposits";
-          continue;
-        }
-
-        ({ deposits: selectedDeposits, requiredLiveDeposits } = selection);
-        directUdtValue = sumUdtValue(selectedDeposits);
-        remainder -= directUdtValue;
-        for (const deposit of selectedDeposits) {
-          estimatedMaturity = maxMaturity(
-            estimatedMaturity,
-            deposit.maturity.toUnix(context.system.tip),
-          );
-        }
-      }
-
-      if (remainder > 0n) {
-        const amounts = { ckbValue: 0n, udtValue: remainder };
-        const preview = IckbSdk.estimateIckbToCkbOrder(amounts, context.system);
-        if (!preview) {
-          lastFailure = "amount-too-small";
-          continue;
-        }
-
-        const { estimate, maturity, notice } = preview;
-        if (maturity !== undefined) {
-          estimatedMaturity = maxMaturity(estimatedMaturity, maturity);
-        }
-        order = { amounts, estimate, conversionNotice: notice };
-      }
-
-      const outputLimitError = plannedDaoOutputLimitError(
-        txLike,
-        selectedDeposits.length * 2 + orderOutputCount(order),
-        selectedDeposits.length > 0 || context.readyWithdrawals.length > 0,
-      );
-      if (outputLimitError) {
-        lastFailure = undefined;
-        lastError ??= outputLimitError;
+      if (withdrawalCount > 0 && selections.length === 0) {
+        lastFailure = "not-enough-ready-deposits";
         continue;
       }
 
-      plans.push({
-        directUdtValue,
-        estimatedMaturity,
-        order,
-        requiredLiveDeposits,
-        selectedDeposits,
-      });
+      for (const selection of selections) {
+        let estimatedMaturity = context.estimatedMaturity;
+        let remainder = amount;
+        let directUdtValue = 0n;
+        let directSurplusCkb = 0n;
+        let selectedDeposits: IckbDepositCell[] = [];
+        let requiredLiveDeposits: IckbDepositCell[] = [];
+        let order: ConversionOrder | undefined;
+
+        if (withdrawalCount > 0) {
+          ({ deposits: selectedDeposits, requiredLiveDeposits } = selection);
+          directUdtValue = sumUdtValue(selectedDeposits);
+          directSurplusCkb = sumDirectWithdrawalSurplus(
+            selectedDeposits,
+            context.system.exchangeRatio,
+          );
+          remainder -= directUdtValue;
+          for (const deposit of selectedDeposits) {
+            estimatedMaturity = maxMaturity(
+              estimatedMaturity,
+              deposit.maturity.toUnix(context.system.tip),
+            );
+          }
+        }
+
+        if (remainder > 0n) {
+          const amounts = { ckbValue: 0n, udtValue: remainder };
+          const preview = IckbSdk.estimateIckbToCkbOrder(amounts, context.system);
+          if (!preview) {
+            lastFailure = "amount-too-small";
+            continue;
+          }
+
+          const { estimate, maturity, notice } = preview;
+          if (maturity !== undefined) {
+            estimatedMaturity = maxMaturity(estimatedMaturity, maturity);
+          }
+          order = { amounts, estimate, conversionNotice: notice };
+        }
+
+        const outputLimitError = plannedDaoOutputLimitError(
+          txLike,
+          selectedDeposits.length * 2 + orderOutputCount(order),
+          selectedDeposits.length > 0 || context.readyWithdrawals.length > 0,
+        );
+        if (outputLimitError) {
+          lastFailure = undefined;
+          lastError ??= outputLimitError;
+          continue;
+        }
+
+        plans.push({
+          directSurplusCkb,
+          directUdtValue,
+          estimatedMaturity,
+          order,
+          requiredLiveDeposits,
+          selectedDeposits,
+        });
+      }
     }
 
     plans.sort((left, right) => {
@@ -860,6 +882,17 @@ export class IckbSdk {
       );
       if (maturityCompare !== 0) {
         return maturityCompare;
+      }
+
+      const directPresenceCompare = Number(right.selectedDeposits.length > 0) -
+        Number(left.selectedDeposits.length > 0);
+      if (directPresenceCompare !== 0) {
+        return directPresenceCompare;
+      }
+
+      const surplusCompare = compareBigInt(right.directSurplusCkb, left.directSurplusCkb);
+      if (surplusCompare !== 0) {
+        return surplusCompare;
       }
 
       const directCompare = compareBigInt(right.directUdtValue, left.directUdtValue);
@@ -919,9 +952,10 @@ export class IckbSdk {
     client: ccc.Client,
     locks: ccc.Script[],
     tip: ccc.ClientBlockHeader,
+    options?: { limit?: number },
   ): Promise<AccountState> {
     const [cells, receipts, withdrawalGroups] = await Promise.all([
-      this.findAccountCells(client, locks),
+      this.findAccountCells(client, locks, options),
       collect(this.ickbLogic.findReceipts(client, locks, { onChain: true })),
       collect(
         this.ownedOwner.findWithdrawalGroups(client, locks, {
@@ -949,14 +983,16 @@ export class IckbSdk {
   async getL1AccountState(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1StateOptions,
+    options?: GetL1AccountStateOptions,
   ): Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
     account: AccountState;
   }> {
     const { system, user } = await this.getL1State(client, locks, options);
-    const account = await this.getAccountState(client, locks, system.tip);
+    const account = await this.getAccountState(client, locks, system.tip, {
+      limit: options?.accountLimit,
+    });
     await this.assertCurrentTip(client, system.tip);
 
     return { system, user, account };
@@ -987,7 +1023,7 @@ export class IckbSdk {
 
     // Parallel fetching of system components.
     const [poolDeposits, orders, feeRate] = await Promise.all([
-      this.getPoolDeposits(client, tip),
+      this.getPoolDeposits(client, tip, { limit: options?.poolDepositLimit }),
       collect(this.order.findOrders(client, {
         onChain: true,
         limit: options?.orderLimit ?? defaultFindCellsLimit,
@@ -1160,9 +1196,10 @@ export class IckbSdk {
   private async findAccountCells(
     client: ccc.Client,
     locks: ccc.Script[],
+    options?: { limit?: number },
   ): Promise<ccc.Cell[]> {
     const cells: ccc.Cell[] = [];
-    const limit = defaultFindCellsLimit;
+    const limit = options?.limit ?? defaultFindCellsLimit;
     for (const lock of unique(locks)) {
       cells.push(...await collectCompleteScan(
         (scanLimit) => client.findCellsOnChain(
@@ -1203,6 +1240,7 @@ interface ConversionOrder {
 }
 
 interface IckbToCkbConversionPlan {
+  directSurplusCkb: bigint;
   directUdtValue: bigint;
   estimatedMaturity: bigint;
   order?: ConversionOrder;
@@ -1247,7 +1285,29 @@ function hasTransactionActivity(tx: ccc.Transaction): boolean {
 }
 
 function errorOf(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const message = errorMessage(error);
+  return new Error(message, { cause: error });
+}
+
+function errorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function isRetryableConversionBuildError(error: unknown): boolean {
@@ -1339,6 +1399,21 @@ function sumUdtValue(deposits: readonly IckbDepositCell[]): bigint {
     total += deposit.udtValue;
   }
   return total;
+}
+
+function sumDirectWithdrawalSurplus(
+  deposits: readonly IckbDepositCell[],
+  exchangeRatio: Ratio,
+): bigint {
+  let total = 0n;
+  for (const deposit of deposits) {
+    total += directWithdrawalSurplus(deposit, exchangeRatio);
+  }
+  return total;
+}
+
+function directWithdrawalSurplus(deposit: IckbDepositCell, exchangeRatio: Ratio): bigint {
+  return deposit.ckbValue - convert(false, deposit.udtValue, exchangeRatio);
 }
 
 function poolDepositsKey(

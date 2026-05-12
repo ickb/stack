@@ -98,10 +98,14 @@ function orderGroup(options: {
   } as unknown as OrderGroup;
 }
 
-function readyDeposit(udtValue: bigint, maturityUnix = 0n): IckbDepositCell {
+function readyDeposit(
+  udtValue: bigint,
+  maturityUnix = 0n,
+  options: { ckbValue?: bigint; id?: string } = {},
+): IckbDepositCell {
   return {
     cell: ccc.Cell.from({
-      outPoint: { txHash: hash("aa"), index: maturityUnix },
+      outPoint: { txHash: hash(options.id ?? "aa"), index: maturityUnix },
       cellOutput: { capacity: 0n, lock: script("22") },
       outputData: "0x",
     }),
@@ -109,7 +113,7 @@ function readyDeposit(udtValue: bigint, maturityUnix = 0n): IckbDepositCell {
     interests: 0n,
     isReady: true,
     isDeposit: true,
-    ckbValue: 0n,
+    ckbValue: options.ckbValue ?? udtValue,
     udtValue,
     maturity: { toUnix: (): bigint => maturityUnix },
   } as unknown as IckbDepositCell;
@@ -1236,20 +1240,25 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
-  it("prefers the largest direct iCKB-to-CKB withdrawal value within a maturity bucket", async () => {
+  it("prefers better direct iCKB-to-CKB economic surplus within a maturity bucket", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
-    const smallEarlier = readyDeposit(4n * unit, 0n);
-    const smallLater = readyDeposit(4n * unit, 15n * 60n * 1000n);
-    const large = readyDeposit(9n * unit, 30n * 60n * 1000n);
+    const largerLowerGain = readyDeposit(9n * unit, 0n, {
+      ckbValue: 9n * unit,
+      id: "a1",
+    });
+    const smallerHigherGain = readyDeposit(8n * unit, 30n * 60n * 1000n, {
+      ckbValue: 8n * unit + 1000n,
+      id: "a2",
+    });
     const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal")
       .mockImplementation(async (txLike, deposits) => {
         await Promise.resolve();
-        expect(deposits).toEqual([large]);
+        expect(deposits).toEqual([smallerHigherGain]);
         return ccc.Transaction.from(txLike);
     });
     const mint = vi.spyOn(orderManager, "mint").mockImplementation((txLike, _lock, _info, amounts) => {
-      expect(amounts).toEqual({ ckbValue: 0n, udtValue: unit });
+      expect(amounts).toEqual({ ckbValue: 0n, udtValue: 2n * unit });
       return ccc.Transaction.from(txLike);
     });
 
@@ -1259,11 +1268,11 @@ describe("IckbSdk.buildConversionTransaction", () => {
       lock,
       context: {
         system: system({
-          exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
+          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
           ckbAvailable: 10n,
           poolDeposits: {
-            deposits: [smallEarlier, smallLater, large],
-            readyDeposits: [smallEarlier, smallLater, large],
+            deposits: [largerLowerGain, smallerHigherGain],
+            readyDeposits: [largerLowerGain, smallerHigherGain],
             id: "pool",
           },
         }),
@@ -1322,6 +1331,96 @@ describe("IckbSdk.buildConversionTransaction", () => {
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
     expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves iCKB-to-CKB maturity-bucket priority before direct surplus", async () => {
+    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const unit = ICKB_DEPOSIT_CAP / 10n;
+    const earlier = readyDeposit(8n * unit, 30n * 60n * 1000n, {
+      ckbValue: 8n * unit,
+      id: "b1",
+    });
+    const laterHigherGain = readyDeposit(8n * unit, 2n * 60n * 60n * 1000n, {
+      ckbValue: 8n * unit + 1000n,
+      id: "b2",
+    });
+    const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal")
+      .mockImplementation(async (txLike, deposits) => {
+        await Promise.resolve();
+        expect(deposits).toEqual([earlier]);
+        return ccc.Transaction.from(txLike);
+      });
+    const mint = vi.spyOn(orderManager, "mint").mockImplementation((txLike) =>
+      ccc.Transaction.from(txLike)
+    );
+
+    await expect(sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, {
+      direction: "ickb-to-ckb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({
+          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+          ckbAvailable: 10n,
+          poolDeposits: {
+            deposits: [laterHigherGain, earlier],
+            readyDeposits: [laterHigherGain, earlier],
+            id: "pool",
+          },
+        }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
+        estimatedMaturity: 0n,
+      },
+    })).resolves.toMatchObject({ ok: true, conversion: { kind: "direct-plus-order" } });
+
+    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips iCKB-to-CKB deposits above the requested amount even with high surplus", async () => {
+    const { sdk, ownedOwnerManager, lock } = testSdk();
+    const oversized = readyDeposit(ICKB_DEPOSIT_CAP + 1n, 0n, {
+      ckbValue: ICKB_DEPOSIT_CAP * 2n,
+      id: "c1",
+    });
+    const fitting = readyDeposit(ICKB_DEPOSIT_CAP, 15n * 60n * 1000n, {
+      ckbValue: ICKB_DEPOSIT_CAP,
+      id: "c2",
+    });
+    const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal")
+      .mockImplementation(async (txLike, deposits) => {
+        await Promise.resolve();
+        expect(deposits).toEqual([fitting]);
+        return ccc.Transaction.from(txLike);
+      });
+
+    await expect(sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, {
+      direction: "ickb-to-ckb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({
+          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+          poolDeposits: {
+            deposits: [oversized, fitting],
+            readyDeposits: [oversized, fitting],
+            id: "pool",
+          },
+        }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
+        estimatedMaturity: 0n,
+      },
+    })).resolves.toMatchObject({ ok: true, conversion: { kind: "direct" } });
+
+    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
   });
 
   it("returns typed failures for no activity and tiny orders", async () => {
@@ -1504,6 +1603,51 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(mint).not.toHaveBeenCalled();
   });
 
+  it("does not count input-only base activities as planned DAO outputs", async () => {
+    const { sdk, logicManager, ownedOwnerManager, orderManager, lock } = testSdk();
+    vi.spyOn(orderManager, "melt").mockImplementation((txLike) => {
+      const tx = ccc.Transaction.from(txLike);
+      tx.inputs.push(ccc.CellInput.from({ previousOutput: { txHash: hash("c1"), index: 0n } }));
+      return tx;
+    });
+    vi.spyOn(logicManager, "completeDeposit").mockImplementation((txLike) => {
+      const tx = ccc.Transaction.from(txLike);
+      tx.inputs.push(ccc.CellInput.from({ previousOutput: { txHash: hash("c2"), index: 0n } }));
+      return tx;
+    });
+    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation(async (txLike) => {
+      await Promise.resolve();
+      const tx = ccc.Transaction.from(txLike);
+      tx.inputs.push(ccc.CellInput.from({ previousOutput: { txHash: hash("c3"), index: 0n } }));
+      return tx;
+    });
+    const deposit = vi.spyOn(logicManager, "deposit").mockImplementation(
+      async (txLike) => {
+        await Promise.resolve();
+        return ccc.Transaction.from(txLike);
+      },
+    );
+    const mint = vi.spyOn(orderManager, "mint").mockImplementation((txLike) => ccc.Transaction.from(txLike));
+
+    await expect(sdk.buildConversionTransaction(transactionWithOutputs(62, lock), {} as ccc.Client, {
+      direction: "ckb-to-ickb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({ ckbAvailable: ICKB_DEPOSIT_CAP }),
+        receipts: [{} as ReceiptCell],
+        readyWithdrawals: [{} as WithdrawalGroup],
+        availableOrders: [{} as OrderGroup],
+        ckbAvailable: ICKB_DEPOSIT_CAP,
+        ickbAvailable: 0n,
+        estimatedMaturity: 0n,
+      },
+    })).resolves.toMatchObject({ ok: true, conversion: { kind: "direct" } });
+
+    expect(deposit).toHaveBeenCalledTimes(1);
+    expect(mint).not.toHaveBeenCalled();
+  });
+
   it("preserves retryable construction errors when retries exhaust into planning misses", async () => {
     const { sdk, logicManager, lock } = testSdk();
     vi.spyOn(logicManager, "deposit").mockRejectedValue(new DaoOutputLimitError(65));
@@ -1525,6 +1669,26 @@ describe("IckbSdk.buildConversionTransaction", () => {
         estimatedMaturity: 0n,
       },
     })).rejects.toBeInstanceOf(DaoOutputLimitError);
+  });
+
+  it("uses plain-object error messages in conversion construction failures", async () => {
+    const { sdk, logicManager, lock } = testSdk();
+    vi.spyOn(logicManager, "deposit").mockRejectedValue({ message: "RPC failed" });
+
+    await expect(sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, {
+      direction: "ckb-to-ickb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({ ckbAvailable: ICKB_DEPOSIT_CAP }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: ICKB_DEPOSIT_CAP,
+        ickbAvailable: 0n,
+        estimatedMaturity: 0n,
+      },
+    })).rejects.toThrow("RPC failed");
   });
 });
 
@@ -2184,6 +2348,25 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       onChain: true,
       tip,
       limit: poolLimit,
+    });
+  });
+
+  it("passes a custom pool deposit scan limit through L1 state loading", async () => {
+    const { sdk, logicManager } = testSdk();
+    const findDeposits = vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
+    const client = {
+      getTipHeader: () => Promise.resolve(tip),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+    const poolDepositLimit = defaultFindCellsLimit + 100;
+
+    await sdk.getL1State(client, [], { poolDepositLimit });
+
+    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
+      onChain: true,
+      tip,
+      limit: poolDepositLimit,
     });
   });
 

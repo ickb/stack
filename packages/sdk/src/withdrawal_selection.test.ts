@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type IckbDepositCell } from "@ickb/core";
 import {
+  selectExactReadyWithdrawalDepositCandidates,
   selectExactReadyWithdrawalDeposits,
   selectReadyWithdrawalCleanupDeposit,
   selectReadyWithdrawalDeposits,
@@ -19,6 +20,16 @@ function readyDeposit(
       toUnix: (): bigint => maturityUnix,
     },
   } as unknown as IckbDepositCell;
+}
+
+function scoredReadyDeposit(
+  udtValue: bigint,
+  maturityUnix: bigint,
+  score: bigint,
+): IckbDepositCell & { score: bigint } {
+  const deposit = readyDeposit(udtValue, maturityUnix) as IckbDepositCell & { score: bigint };
+  deposit.score = score;
+  return deposit;
 }
 
 describe("selectReadyWithdrawalDeposits", () => {
@@ -147,6 +158,25 @@ describe("selectReadyWithdrawalDeposits", () => {
     ).toEqual([deposits[0], deposits[1]]);
   });
 
+  it("uses an opt-in score for exact-count selection", () => {
+    const fullerFirst = scoredReadyDeposit(6n, 0n, 1n);
+    const fullerSecond = scoredReadyDeposit(4n, 15n * 60n * 1000n, 1n);
+    const scoredFirst = scoredReadyDeposit(3n, 30n * 60n * 1000n, 5n);
+    const scoredSecond = scoredReadyDeposit(3n, 45n * 60n * 1000n, 5n);
+
+    expect(
+      selectReadyWithdrawalDeposits({
+        readyDeposits: [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
+        tip: TIP,
+        maxAmount: 10n,
+        minCount: 2,
+        maxCount: 2,
+        preserveSingletons: false,
+        score: (deposit) => (deposit as IckbDepositCell & { score: bigint }).score,
+      }).deposits,
+    ).toEqual([scoredFirst, scoredSecond]);
+  });
+
   it("pins protected crowded anchors for selected extras", () => {
     const extra = readyDeposit(4n, 20n * 60n * 1000n);
     const protectedAnchor = readyDeposit(6n, 25n * 60n * 1000n);
@@ -258,6 +288,23 @@ describe("selectExactReadyWithdrawalDeposits", () => {
         preserveSingletons: false,
       }),
     ).toBeUndefined();
+  });
+
+  it("returns scored and unscored candidates for each maturity bucket", () => {
+    const earlier = scoredReadyDeposit(8n, 30n * 60n * 1000n, 1n);
+    const laterHigherScore = scoredReadyDeposit(8n, 2n * 60n * 60n * 1000n, 2n);
+
+    expect(
+      selectExactReadyWithdrawalDepositCandidates({
+        readyDeposits: [laterHigherScore, earlier],
+        tip: TIP,
+        maxAmount: 10n,
+        count: 1,
+        preserveSingletons: false,
+        score: (deposit) => (deposit as IckbDepositCell & { score: bigint }).score,
+        maturityBucket: (deposit) => deposit.maturity.toUnix(TIP) / (60n * 60n * 1000n),
+      }).map((selection) => selection.deposits),
+    ).toEqual([[earlier], [laterHigherScore]]);
   });
 });
 
