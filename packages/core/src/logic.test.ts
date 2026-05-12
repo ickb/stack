@@ -1,24 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DaoManager } from "@ickb/dao";
 import { collect } from "@ickb/utils";
 import { ReceiptData } from "./entities.js";
 import { LogicManager } from "./logic.js";
-
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
-}
 
 describe("LogicManager.deposit", () => {
   afterEach(() => {
@@ -89,6 +75,36 @@ describe("LogicManager.deposit", () => {
     ).rejects.toThrow(
       "iCKB deposit maximum is 1000000 CKB free capacity (1000082 CKB total capacity)",
     );
+  });
+
+  it("rejects non-safe-integer deposit quantities before allocation", async () => {
+    const manager = new LogicManager(script("11"), [], new DaoManager(script("22"), []));
+
+    for (const quantity of [1.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(
+        manager.deposit(
+          ccc.Transaction.default(),
+          quantity,
+          ccc.fixedPointFrom(1082),
+          script("33"),
+          {} as ccc.Client,
+        ),
+      ).rejects.toThrow("iCKB deposit quantity must be a safe integer");
+    }
+  });
+
+  it("rejects deposit quantities that cannot fit in one DAO transaction", async () => {
+    const manager = new LogicManager(script("11"), [], new DaoManager(script("22"), []));
+
+    await expect(
+      manager.deposit(
+        ccc.Transaction.default(),
+        64,
+        ccc.fixedPointFrom(1082),
+        script("33"),
+        {} as ccc.Client,
+      ),
+    ).rejects.toThrow("iCKB deposit quantity maximum is 63");
   });
 
   it("filters receipts by exact lock and type while deduplicating locks", async () => {
@@ -244,5 +260,47 @@ describe("LogicManager.deposit", () => {
       firstReceipt.outPoint.txHash,
       secondReceipt.outPoint.txHash,
     ]);
+  });
+
+  it("fails closed when receipt scanning exceeds the limit", async () => {
+    const logic = script("11");
+    const wantedLock = script("22");
+    const receiptData = ReceiptData.from({
+      depositQuantity: 1,
+      depositAmount: ccc.fixedPointFrom(100000),
+    }).toBytes();
+    const firstReceipt = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: wantedLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    const secondReceipt = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("55"), index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: wantedLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    let requestedLimit = 0;
+    const client = {
+      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
+        requestedLimit = limit;
+        await Promise.resolve();
+        yield firstReceipt;
+        yield secondReceipt;
+      },
+    } as unknown as ccc.Client;
+    const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
+
+    await expect(
+      collect(manager.findReceipts(client, [wantedLock], { limit: 1 })),
+    ).rejects.toThrow("receipt cell scan reached limit 1; state may be incomplete");
+    expect(requestedLimit).toBe(2);
   });
 });

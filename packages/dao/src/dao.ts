@@ -1,5 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import {
+  collectCompleteScan,
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
@@ -17,15 +18,22 @@ type DaoCellFromOptions = {
   maxLockUp?: ccc.Epoch;
 } & DaoCellFromCache;
 
+export class DaoOutputLimitError extends Error {
+  constructor(outputCount: number) {
+    super(
+      `NervosDAO transaction has ${String(outputCount)} output cells, exceeding the limit of 64`,
+    );
+    this.name = "DaoOutputLimitError";
+  }
+}
+
 export async function assertDaoOutputLimit(
   txLike: ccc.TransactionLike,
   client: ccc.Client,
 ): Promise<void> {
   const tx = ccc.Transaction.from(txLike);
   if (await ccc.isDaoOutputLimitExceeded(tx, client)) {
-    throw new Error(
-      `NervosDAO transaction has ${String(tx.outputs.length)} output cells, exceeding the limit of 64`,
-    );
+    throw new DaoOutputLimitError(tx.outputs.length);
   }
 }
 
@@ -369,19 +377,14 @@ export class DaoManager implements ScriptDeps {
           withData: true,
         },
         "asc",
-        limit,
       ] as const;
 
-      const depositCandidates: ccc.Cell[] = [];
-      for await (const cell of options?.onChain
-        ? client.findCellsOnChain(...findCellsArgs)
-        : client.findCells(...findCellsArgs)) {
-        if (!this.isDeposit(cell) || !cell.cellOutput.lock.eq(lock)) {
-          continue;
-        }
-
-        depositCandidates.push(cell);
-      }
+      const depositCandidates = (await collectCompleteScan(
+        (scanLimit) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+          : client.findCells(...findCellsArgs, scanLimit),
+        { limit, label: "DAO deposit cell" },
+      )).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
 
       const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const deposits = await Promise.all(
@@ -459,19 +462,14 @@ export class DaoManager implements ScriptDeps {
           withData: true,
         },
         "asc",
-        limit,
       ] as const;
 
-      const withdrawalCandidates: ccc.Cell[] = [];
-      for await (const cell of options?.onChain
-        ? client.findCellsOnChain(...findCellsArgs)
-        : client.findCells(...findCellsArgs)) {
-        if (!this.isWithdrawalRequest(cell) || !cell.cellOutput.lock.eq(lock)) {
-          continue;
-        }
-
-        withdrawalCandidates.push(cell);
-      }
+      const withdrawalCandidates = (await collectCompleteScan(
+        (scanLimit) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+          : client.findCells(...findCellsArgs, scanLimit),
+        { limit, label: "DAO withdrawal request cell" },
+      )).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
 
       const headerCache: DaoCellFromCache["headerCache"] = new Map();
       const transactionCache: DaoCellFromCache["transactionCache"] = new Map();

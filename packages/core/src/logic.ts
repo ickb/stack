@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import {
+  collectCompleteScan,
   defaultFindCellsLimit,
   type ScriptDeps,
   unique,
@@ -12,6 +13,8 @@ import {
   receiptCellFrom,
 } from "./cells.js";
 import { ReceiptData } from "./entities.js";
+
+const maxDepositQuantity = 63;
 
 /**
  * Manages logic related to deposits and receipts in the blockchain.
@@ -74,6 +77,14 @@ export class LogicManager implements ScriptDeps {
     let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {
       return tx;
+    }
+    if (!Number.isSafeInteger(depositQuantity)) {
+      throw new Error("iCKB deposit quantity must be a safe integer");
+    }
+    if (depositQuantity > maxDepositQuantity) {
+      throw new Error(
+        `iCKB deposit quantity maximum is ${String(maxDepositQuantity)}`,
+      );
     }
 
     const depositCell = ccc.Cell.from({
@@ -218,19 +229,14 @@ export class LogicManager implements ScriptDeps {
           withData: true,
         },
         "asc",
-        limit,
       ] as const;
 
-      const receiptCandidates: ccc.Cell[] = [];
-      for await (const cell of options?.onChain
-        ? client.findCellsOnChain(...findCellsArgs)
-        : client.findCells(...findCellsArgs)) {
-        if (!this.isReceipt(cell) || !cell.cellOutput.lock.eq(lock)) {
-          continue;
-        }
-
-        receiptCandidates.push(cell);
-      }
+      const receiptCandidates = (await collectCompleteScan(
+        (scanLimit) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+          : client.findCells(...findCellsArgs, scanLimit),
+        { limit, label: "receipt cell" },
+      )).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 
       const receipts = await Promise.all(
         receiptCandidates.map((cell) => receiptCellFrom({ client, cell })),

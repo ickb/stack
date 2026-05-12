@@ -13,6 +13,44 @@ import { ccc } from "@ckb-ccc/core";
  */
 export const defaultFindCellsLimit = 400;
 
+export function scanLimit(limit: number): number {
+  return limit + 1;
+}
+
+export function assertCompleteScan(
+  scanned: number,
+  limit: number,
+  label: string,
+  context?: ccc.Script | string,
+): void {
+  if (scanned <= limit) {
+    return;
+  }
+
+  const suffix = typeof context === "string"
+    ? context
+    : context
+      ? ` for ${context.toHex()}`
+      : "";
+  throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
+}
+
+export async function collectCompleteScan<T>(
+  scan: (limit: number) => AsyncIterable<T>,
+  options: {
+    limit: number;
+    label: string;
+    context?: ccc.Script | string;
+  },
+): Promise<T[]> {
+  const results: T[] = [];
+  for await (const item of scan(scanLimit(options.limit))) {
+    results.push(item);
+  }
+  assertCompleteScan(results.length, options.limit, options.label, options.context);
+  return results;
+}
+
 /**
  * Represents a transaction header that includes a block header and an optional transaction hash.
  */
@@ -200,9 +238,11 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
     candidateLimit: number;
     minCount: number;
     maxCount: number;
+    score?: (item: T) => bigint;
   },
 ): T[] {
   const { candidateLimit, minCount, maxCount } = options;
+  const scoreOf = options.score ?? ((item: T): bigint => item.udtValue);
   const boundedItems = items.slice(0, candidateLimit);
   const effectiveMaxCount = Math.min(maxCount, boundedItems.length);
   if (
@@ -217,6 +257,7 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
   interface PartialSelection {
     mask: number;
     total: bigint;
+    score: bigint;
   }
 
   const split = Math.floor(boundedItems.length / 2);
@@ -236,30 +277,35 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
       mask: number,
       count: number,
       total: bigint,
+      score: bigint,
     ): void => {
       if (index === half.length) {
-        groups[count]?.push({ mask, total });
+        groups[count]?.push({ mask, total, score });
         return;
       }
 
-      search(index + 1, mask, count, total);
+      search(index + 1, mask, count, total, score);
 
       const item = half[index];
       if (item === undefined) {
         return;
       }
-      search(index + 1, mask | (1 << index), count + 1, total + item.udtValue);
+      search(
+        index + 1,
+        mask | (1 << index),
+        count + 1,
+        total + item.udtValue,
+        score + scoreOf(item),
+      );
     };
 
-    search(0, 0, 0, 0n);
+    search(0, 0, 0, 0n, 0n);
     return groups;
   };
 
-  const firstByCount = enumerate(firstHalf).map((selections) =>
-    compressSelections(selections, firstHalf.length)
-  );
+  const firstByCount = enumerate(firstHalf);
   const secondByCount = enumerate(secondHalf).map((selections) =>
-    compressSelections(selections, secondHalf.length)
+    prepareSelections(selections, secondHalf.length)
   );
 
   let best:
@@ -267,6 +313,7 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
         firstMask: number;
         secondMask: number;
         total: bigint;
+        score: bigint;
       }
     | undefined;
 
@@ -287,22 +334,14 @@ export function selectBoundedUdtSubset<T extends { udtValue: bigint }>(
         }
 
         const total = first.total + second.total;
-        if (!best || total > best.total) {
-          best = { firstMask: first.mask, secondMask: second.mask, total };
-          continue;
-        }
-
-        if (total < best.total) {
-          continue;
-        }
-
-        const firstCompare = compareMask(first.mask, best.firstMask, firstHalf.length);
-        if (
-          firstCompare < 0 ||
-          (firstCompare === 0 &&
-            compareMask(second.mask, best.secondMask, secondHalf.length) < 0)
-        ) {
-          best = { firstMask: first.mask, secondMask: second.mask, total };
+        const candidate = {
+          firstMask: first.mask,
+          secondMask: second.mask,
+          total,
+          score: first.score + second.score,
+        };
+        if (!best || isBetterSelection(candidate, best, firstHalf.length, secondHalf.length)) {
+          best = candidate;
         }
       }
     }
@@ -323,10 +362,10 @@ function assertBitmaskSearchSize(length: number): void {
   }
 }
 
-function compressSelections(
-  selections: { mask: number; total: bigint }[],
+function prepareSelections(
+  selections: { mask: number; total: bigint; score: bigint }[],
   length: number,
-): { mask: number; total: bigint }[] {
+): { total: bigint; selection: { mask: number; total: bigint; score: bigint } }[] {
   selections.sort((left, right) => {
     const totalCompare = compareBigInt(left.total, right.total);
     if (totalCompare !== 0) {
@@ -336,20 +375,22 @@ function compressSelections(
     return compareMask(left.mask, right.mask, length);
   });
 
-  const compressed: { mask: number; total: bigint }[] = [];
+  const prepared: { total: bigint; selection: { mask: number; total: bigint; score: bigint } }[] = [];
+  let best: { mask: number; total: bigint; score: bigint } | undefined;
   for (const selection of selections) {
-    if (compressed.at(-1)?.total !== selection.total) {
-      compressed.push(selection);
+    if (!best || isBetterPartialSelection(selection, best, length)) {
+      best = selection;
     }
+    prepared.push({ total: selection.total, selection: best });
   }
 
-  return compressed;
+  return prepared;
 }
 
-function findBestAtOrBelow<T extends { total: bigint }>(
-  items: readonly T[],
+function findBestAtOrBelow(
+  items: readonly { total: bigint; selection: { mask: number; total: bigint; score: bigint } }[],
   limit: bigint,
-): T | undefined {
+): { mask: number; total: bigint; score: bigint } | undefined {
   let low = 0;
   let high = items.length - 1;
   let bestIndex = -1;
@@ -369,7 +410,42 @@ function findBestAtOrBelow<T extends { total: bigint }>(
     }
   }
 
-  return bestIndex >= 0 ? items[bestIndex] : undefined;
+  return bestIndex >= 0 ? items[bestIndex]?.selection : undefined;
+}
+
+function isBetterPartialSelection(
+  left: { mask: number; total: bigint; score: bigint },
+  right: { mask: number; total: bigint; score: bigint },
+  length: number,
+): boolean {
+  if (left.score !== right.score) {
+    return left.score > right.score;
+  }
+
+  if (left.total !== right.total) {
+    return left.total > right.total;
+  }
+
+  return compareMask(left.mask, right.mask, length) < 0;
+}
+
+function isBetterSelection(
+  left: { firstMask: number; secondMask: number; total: bigint; score: bigint },
+  right: { firstMask: number; secondMask: number; total: bigint; score: bigint },
+  firstLength: number,
+  secondLength: number,
+): boolean {
+  if (left.score !== right.score) {
+    return left.score > right.score;
+  }
+
+  if (left.total !== right.total) {
+    return left.total > right.total;
+  }
+
+  const firstCompare = compareMask(left.firstMask, right.firstMask, firstLength);
+  return firstCompare < 0 ||
+    (firstCompare === 0 && compareMask(left.secondMask, right.secondMask, secondLength) < 0);
 }
 
 function selectByMasks<T>(items: readonly T[], mask: number): T[] {

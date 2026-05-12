@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  collectCompleteScan,
   defaultFindCellsLimit,
   unique,
   type ScriptDeps,
@@ -64,6 +65,7 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @param lock - The lock script for the output.
    * @param options - Optional parameters for the withdrawal request.
    * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
+   * @param options.requiredLiveDeposits - Live deposit anchors that must remain resolvable while requested deposits are spent.
    * @returns void
    *
    * @remarks Caller must ensure UDT cellDeps are added to the transaction
@@ -76,6 +78,7 @@ export class OwnedOwnerManager implements ScriptDeps {
     client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
+      requiredLiveDeposits?: IckbDepositCell[];
     },
   ): Promise<ccc.Transaction> {
     let tx = ccc.Transaction.from(txLike);
@@ -86,27 +89,73 @@ export class OwnedOwnerManager implements ScriptDeps {
     if (deposits.length === 0) {
       return tx;
     }
-    options = { ...options, isReadyOnly: false }; // non isReady deposits already filtered
+    const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+    const requestedDepositOutPoints = new Set<string>();
+    for (const deposit of deposits) {
+      const outPoint = deposit.cell.outPoint.toHex();
+      if (requestedDepositOutPoints.has(outPoint)) {
+        throw new Error("Withdrawal deposit is duplicated");
+      }
+      requestedDepositOutPoints.add(outPoint);
+      if (spentOutPoints.has(outPoint)) {
+        throw new Error("Withdrawal deposit is already being spent");
+      }
+      spentOutPoints.add(outPoint);
+    }
 
+    const requiredLiveDeposits = options?.requiredLiveDeposits ?? [];
+    const requiredAnchorOutPoints = new Set<string>();
+    for (const deposit of requiredLiveDeposits) {
+      if (!deposit.isReady) {
+        throw new Error("Withdrawal live deposit anchor is not ready");
+      }
+      const outPoint = deposit.cell.outPoint.toHex();
+      if (requiredAnchorOutPoints.has(outPoint)) {
+        throw new Error("Withdrawal live deposit anchor is duplicated");
+      }
+      requiredAnchorOutPoints.add(outPoint);
+      if (spentOutPoints.has(outPoint)) {
+        throw new Error("Withdrawal live deposit anchor is also being spent");
+      }
+    }
+    const daoOptions = { isReadyOnly: false }; // non isReady deposits already filtered
+
+    const withdrawalOutputStart = tx.outputs.length;
     tx = await this.daoManager.requestWithdrawal(
       tx,
       deposits,
       this.script,
       client,
-      options,
+      daoOptions,
     );
+    if (tx.outputs.length < withdrawalOutputStart + deposits.length) {
+      throw new Error("DAO withdrawal request did not add expected outputs");
+    }
     tx.addCellDeps(this.cellDeps);
 
-    const outputData = OwnerData.encode({ ownedDistance: -deposits.length });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    for (const _ of deposits) {
+    for (let index = 0; index < deposits.length; index += 1) {
+      const withdrawalOutput = tx.outputs[withdrawalOutputStart + index];
+      if (
+        !withdrawalOutput?.lock.eq(this.script) ||
+        withdrawalOutput.type?.eq(this.daoManager.script) !== true
+      ) {
+        throw new Error("DAO withdrawal request output order changed");
+      }
+
+      const ownerOutputIndex = tx.outputs.length;
       tx.addOutput(
         {
           lock: lock,
           type: this.script,
         },
-        outputData,
+        OwnerData.encode({
+          ownedDistance: BigInt(withdrawalOutputStart + index) - BigInt(ownerOutputIndex),
+        }),
       );
+    }
+
+    for (const deposit of requiredLiveDeposits) {
+      tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
     }
 
     await assertDaoOutputLimit(tx, client);
@@ -223,19 +272,16 @@ export class OwnedOwnerManager implements ScriptDeps {
           withData: true,
         },
         "asc",
-        limit,
       ] as const;
 
-      const ownerCandidates: OwnerCell[] = [];
-      for await (const cell of options?.onChain
-        ? client.findCellsOnChain(...findCellsArgs)
-        : client.findCells(...findCellsArgs)) {
-        if (!this.isOwner(cell) || !cell.cellOutput.lock.eq(lock)) {
-          continue;
-        }
-
-        ownerCandidates.push(new OwnerCell(cell));
-      }
+      const ownerCandidates = (await collectCompleteScan(
+        (scanLimit) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+          : client.findCells(...findCellsArgs, scanLimit),
+        { limit, label: "owner cell" },
+      ))
+        .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
+        .map((cell) => new OwnerCell(cell));
 
       const ownedCells = await Promise.all(
         ownerCandidates.map((owner) => client.getCell(owner.getOwned())),

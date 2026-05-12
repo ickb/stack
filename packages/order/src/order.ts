@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   BufferedGenerator,
+  collectCompleteScan,
   compareBigInt,
   defaultFindCellsLimit,
   type ExchangeRatio,
@@ -227,6 +228,9 @@ export class OrderManager implements ScriptDeps {
     if (partials.length === 0) {
       return tx;
     }
+    if (!hasUniquePartialOrderOutPoints(partials)) {
+      throw new Error("Match contains duplicate order cells");
+    }
 
     tx.addCellDeps(this.cellDeps);
 
@@ -311,7 +315,7 @@ export class OrderManager implements ScriptDeps {
       maxPartials?: number;
     },
   ): Match {
-    const orderSize = orderPool[0]?.cell.occupiedSize ?? 0;
+    const orderSize = maxOrderOccupiedSize(orderPool);
     if (!orderSize) {
       return {
         ckbDelta: 0n,
@@ -321,13 +325,21 @@ export class OrderManager implements ScriptDeps {
     }
 
     const { ckbScale, udtScale } = exchangeRate;
-    // Get fee rate or base fee rate if not provided
-    const feeRate = options?.feeRate ?? 1000n;
-    const ckbMiningFee = (ccc.numFrom(36 + orderSize) * feeRate + 999n) / 1000n;
+    if (ckbScale <= 0n || udtScale <= 0n) {
+      throw new Error("Exchange rate scales must be positive");
+    }
 
     // ckbAllowanceStep should be 1000 CKB if not provided
     const ckbAllowanceStep =
       options?.ckbAllowanceStep ?? ccc.fixedPointFrom("1000");
+    if (ckbAllowanceStep <= 0n) {
+      throw new Error("CKB allowance step must be positive");
+    }
+
+    // Get fee rate or base fee rate if not provided
+    const feeRate = options?.feeRate ?? 1000n;
+    const ckbMiningFee = (ccc.numFrom(36 + orderSize) * feeRate + 999n) / 1000n;
+
     const maxPartials = options?.maxPartials;
     const udtAllowanceStep =
       (ckbAllowanceStep * ckbScale + udtScale - 1n) / udtScale;
@@ -361,6 +373,8 @@ export class OrderManager implements ScriptDeps {
       udtAllowance: allowance.udtValue,
       gain: -1n << 256n,
     };
+    // best.i/best.j are offsets into the current two-entry frontiers; (0, 0)
+    // means the current frontier head is already optimal, so the search stops.
     while (best.i !== 0 || best.j !== 0) {
       ckb2UdtMatches.next(best.i);
       udt2CkbMatches.next(best.j);
@@ -373,6 +387,9 @@ export class OrderManager implements ScriptDeps {
           const udtDelta = c2u.udtDelta + u2c.udtDelta;
           const partials = c2u.partials.concat(u2c.partials);
           if (maxPartials !== undefined && partials.length > maxPartials) {
+            continue;
+          }
+          if (!hasUniquePartialOrderOutPoints(partials)) {
             continue;
           }
           const ckbFee = ckbMiningFee * BigInt(partials.length);
@@ -453,7 +470,7 @@ export class OrderManager implements ScriptDeps {
     yield curr;
 
     // Process each matcher in sequence.
-    loop: for (const matcher of matchers) {
+    for (const matcher of matchers) {
       const maxMatch = matcher.bMaxMatch;
       // Distribute maxMatch into partial matches according to a fair distribution policy:
       //  - Each partial match is of at least of allowanceStep size.
@@ -477,9 +494,9 @@ export class OrderManager implements ScriptDeps {
         // Compute the match using the current allowance.
         const m = matcher.match(allowance);
         // If the current allowance is too low to yield any partial matches,
-        // skip to the next matcher.
+        // try the next allowance for the same matcher.
         if (m.partials.length === 0) {
-          continue loop;
+          continue;
         }
         // Update the cumulative match by aggregating the deltas and partials.
         curr = {
@@ -553,7 +570,11 @@ export class OrderManager implements ScriptDeps {
    */
   async *findOrders(
     client: ccc.Client,
-    options?: { onChain?: boolean; limit?: number },
+    options?: {
+      onChain?: boolean;
+      limit?: number;
+      onSkippedGroup?: (reason: OrderGroupSkipReason) => void;
+    },
   ): AsyncGenerator<OrderGroup> {
     const onChain = options?.onChain ?? true;
     const limit = options?.limit ?? defaultFindCellsLimit;
@@ -583,6 +604,7 @@ export class OrderManager implements ScriptDeps {
 
       if (!rawGroup) {
         // No matching master cell found
+        options?.onSkippedGroup?.("missing-master");
         continue;
       }
 
@@ -595,22 +617,13 @@ export class OrderManager implements ScriptDeps {
         continue;
       }
 
-      const origin = await this.findOrigin(client, master.cell.outPoint);
-      if (!origin) {
+      const orderGroup = await this.resolveOrderGroup(client, master, orders);
+      if (!orderGroup.ok) {
+        options?.onSkippedGroup?.(orderGroup.reason);
         continue;
       }
 
-      const order = origin.resolve(orders);
-      if (!order) {
-        continue;
-      }
-
-      const orderGroup = OrderGroup.tryFrom(master, order, origin);
-      if (!orderGroup) {
-        continue;
-      }
-
-      yield orderGroup;
+      yield orderGroup.group;
     }
   }
 
@@ -630,8 +643,6 @@ export class OrderManager implements ScriptDeps {
     onChain: boolean,
     limit: number,
   ): Promise<OrderCell[]> {
-    const orders: OrderCell[] = [];
-    const scanLimit = limit + 1;
     const findCellsArgs = [
       {
         script: this.script,
@@ -643,14 +654,15 @@ export class OrderManager implements ScriptDeps {
         withData: true,
       },
       "asc",
-      scanLimit,
     ] as const;
 
-    let scanned = 0;
-    for await (const cell of onChain
-      ? client.findCellsOnChain(...findCellsArgs)
-      : client.findCells(...findCellsArgs)) {
-      scanned += 1;
+    const orders: OrderCell[] = [];
+    for (const cell of await collectCompleteScan(
+      (scanLimit) => onChain
+        ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+        : client.findCells(...findCellsArgs, scanLimit),
+      { limit, label: "order cell" },
+    )) {
       const order = OrderCell.tryFrom(cell);
       if (!order || !this.isOrder(cell)) {
         // Skip non-order cells or failed conversions
@@ -658,7 +670,6 @@ export class OrderManager implements ScriptDeps {
       }
       orders.push(order);
     }
-    assertCompleteScan(scanned, limit, "order cell");
 
     return orders;
   }
@@ -679,8 +690,6 @@ export class OrderManager implements ScriptDeps {
     onChain: boolean,
     limit: number,
   ): Promise<MasterCell[]> {
-    const masters: MasterCell[] = [];
-    const scanLimit = limit + 1;
     const findCellsArgs = [
       {
         script: this.script,
@@ -689,21 +698,21 @@ export class OrderManager implements ScriptDeps {
         withData: true,
       },
       "asc",
-      scanLimit,
     ] as const;
 
-    let scanned = 0;
-    for await (const cell of onChain
-      ? client.findCellsOnChain(...findCellsArgs)
-      : client.findCells(...findCellsArgs)) {
-      scanned += 1;
+    const masters: MasterCell[] = [];
+    for (const cell of await collectCompleteScan(
+      (scanLimit) => onChain
+        ? client.findCellsOnChain(...findCellsArgs, scanLimit)
+        : client.findCells(...findCellsArgs, scanLimit),
+      { limit, label: "master cell" },
+    )) {
       if (!this.isMaster(cell)) {
         // Skip cells that do not satisfy master criteria
         continue;
       }
       masters.push(new MasterCell(cell));
     }
-    assertCompleteScan(scanned, limit, "master cell");
 
     return masters;
   }
@@ -715,14 +724,43 @@ export class OrderManager implements ScriptDeps {
    * may already be spent by later matches while still anchoring the order group.
    *
    * @param client - The client used to interact with the blockchain.
-   * @param master - The master out point to find the origin for.
+   * @param master - The master cell anchoring the order group.
+   * @param orders - Candidate live descendant orders for this master.
    *
-   * @returns A promise that resolves to the originating OrderCell or undefined if not found.
+   * @returns A promise that resolves to the validated group or a skip reason.
    */
+  private async resolveOrderGroup(
+    client: ccc.Client,
+    master: MasterCell,
+    orders: OrderCell[],
+  ): Promise<ResolveOrderGroupResult> {
+    const origin = await this.findOrigin(client, master.cell.outPoint);
+    if (!origin.ok) {
+      return origin;
+    }
+
+    const order = origin.origin.resolve(orders);
+    if (!order) {
+      return {
+        ok: false,
+        reason: orders.some((candidate) => origin.origin.isValid(candidate))
+          ? "ambiguous-order"
+          : "missing-order",
+      };
+    }
+
+    const group = OrderGroup.tryFrom(master, order, origin.origin);
+    if (!group) {
+      return { ok: false, reason: "invalid-group" };
+    }
+
+    return { ok: true, group };
+  }
+
   private async findOrigin(
     client: ccc.Client,
     master: ccc.OutPoint,
-  ): Promise<OrderCell | undefined> {
+  ): Promise<FindOriginResult> {
     const { txHash, index: mIndex } = master;
     let res = await client.cache.getTransactionResponse(txHash);
     if (!res) {
@@ -732,7 +770,7 @@ export class OrderManager implements ScriptDeps {
       }
     }
     if (!res) {
-      return;
+      return { ok: false, reason: "missing-origin" };
     }
 
     let origin: OrderCell | undefined;
@@ -758,21 +796,55 @@ export class OrderManager implements ScriptDeps {
         order.getMaster().eq(master)
       ) {
         if (origin) {
-          return;
+          return { ok: false, reason: "ambiguous-origin" };
         }
         origin = order;
       }
     }
-    return origin;
+    return origin
+      ? { ok: true, origin }
+      : { ok: false, reason: "missing-origin" };
   }
 }
 
-function assertCompleteScan(scanned: number, limit: number, label: string): void {
-  if (scanned <= limit) {
-    return;
+type FindOriginResult =
+  | { ok: true; origin: OrderCell }
+  | { ok: false; reason: "missing-origin" | "ambiguous-origin" };
+
+export type OrderGroupSkipReason =
+  | "missing-master"
+  | "missing-origin"
+  | "ambiguous-origin"
+  | "missing-order"
+  | "ambiguous-order"
+  | "invalid-group";
+
+type ResolveOrderGroupResult =
+  | { ok: true; group: OrderGroup }
+  | {
+      ok: false;
+      reason: Exclude<OrderGroupSkipReason, "missing-master">;
+    };
+
+function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boolean {
+  const outPoints = new Set<string>();
+  for (const partial of partials) {
+    const key = partial.order.cell.outPoint.toHex();
+    if (outPoints.has(key)) {
+      return false;
+    }
+    outPoints.add(key);
   }
 
-  throw new Error(`${label} scan reached limit ${String(limit)}; state may be incomplete`);
+  return true;
+}
+
+function maxOrderOccupiedSize(orderPool: OrderCell[]): number {
+  let maxSize = 0;
+  for (const order of orderPool) {
+    maxSize = Math.max(maxSize, order.cell.occupiedSize);
+  }
+  return maxSize;
 }
 
 /**

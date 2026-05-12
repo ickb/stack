@@ -24,9 +24,9 @@ graph TD;
 
 If a caller will send the returned transaction, it still must:
 
-1. Finish iCKB UDT completion.
-2. Finish CCC-native CKB capacity and fee completion.
-3. Check `ccc.isDaoOutputLimitExceeded(...)` before send.
+1. Complete the transaction before send.
+2. Prefer the shared stack path in `@ickb/sdk`: `sdk.completeTransaction(...)` or `completeIckbTransaction(...)`.
+3. Only use lower-level manual completion when the caller intentionally owns UDT completion, CCC-native fee/capacity completion, and the DAO output-limit check itself.
 
 ## Epoch Semantic Versioning
 

@@ -34,6 +34,26 @@ The current runtime path uses direct deposit scans together with bot liquidity a
 
 See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 
+## Ready Withdrawal Selection
+
+`selectReadyWithdrawalDeposits(...)` exposes the stack's pool-friendly ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, an optional near-ready refill window, the current tip, and amount/count limits. Setting `minCount` and `maxCount` to the same value requests an exact number of deposits. `preserveSingletons` defaults to `true`, so singleton bucket anchors are protected unless the caller explicitly permits selecting them. The selector prefers crowded-bucket extras before singleton anchors, returns the chosen deposits, and also returns `requiredLiveDeposits` for protected anchors that should be added as live `cell_dep` checks when building the withdrawal request.
+
+`selectReadyWithdrawalCleanupDeposit(...)` is the narrow cleanup helper used by the bot for over-standard crowded-bucket extras. It returns at most one extra plus the protected anchor that must remain live. Bot thresholds such as target balances, singleton unlock policy, and whether a cleanup is worth doing remain app policy in `apps/bot`.
+
+`IckbSdk.buildBaseTransaction(...)` accepts `withdrawalRequest.requiredLiveDeposits` and adds those cells as live cell deps. This is an inclusion-time liveness check for public pool anchors, not a reservation of those cells after the transaction commits.
+
+## Conversion Transaction Builder
+
+`IckbSdk.buildConversionTransaction(...)` builds a partial conversion transaction plus domain metadata. It owns the reusable CKB-to-iCKB and iCKB-to-CKB planning policy: base transaction assembly, direct deposit limits, exact ready-withdrawal selection, required live deposit anchors, order fallback construction, small iCKB dust order terms, and maturity metadata. The helper returns typed failures such as `amount-too-small`, `not-enough-ready-deposits`, and `nothing-to-do`; callers own user-facing copy.
+
+For iCKB-to-CKB planning, `getPoolDeposits(client, tip, options?)` fetches the public pool deposit snapshot on chain and accepts an optional scan `limit`. The underlying DAO deposit scan requests one sentinel cell beyond that limit and fails closed if the sentinel appears. `getL1State(...)` includes that snapshot in `system.poolDeposits` so UI callers can key previews by the same pool identity and avoid re-fetching for every preview. Callers that need larger bounded state scans can pass `poolDepositLimit` to `getL1State(...)` and `accountLimit` to `getL1AccountState(...)`; both preserve the sentinel fail-closed scan behavior.
+
+The returned transaction is not completed, signed, sent, or confirmed. Callers still explicitly call `sdk.completeTransaction(...)` with their signer/client/fee rate before sending.
+
+## Small iCKB Order Previews
+
+`IckbSdk.estimate(...)` returns order `info` even when the normal fee threshold is too small to produce a maturity estimate. Callers that intentionally build tiny iCKB-to-CKB orders can pass an explicit fee/feeBase discount to `estimate(...)`; the resulting order uses the existing order wire format. The limit-order contract can fully complete an order whose remaining match is below the configured minimum, so tiny dust orders do not need a special minimum-match encoding. This is how the interface presents small-balance conversions that may be worthwhile for recovering locked xUDT cell capacity.
+
 ## Send Confirmation
 
 `sendAndWaitForCommit(...)` returns the transaction hash after commit. If a transaction was broadcast but later reaches a terminal non-committed status or times out while still pending, it throws `TransactionConfirmationError` with the broadcast `txHash`, last observed `status`, and `isTimeout` flag. Callers that need to log the hash immediately after broadcast can use the `onSent` callback.

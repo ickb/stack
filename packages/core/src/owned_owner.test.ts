@@ -1,46 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
-import { describe, expect, it, vi } from "vitest";
+import { byte32FromByte, headerLike, script } from "@ickb/testkit";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { collect } from "@ickb/utils";
 import { DaoManager } from "@ickb/dao";
 import { OwnerData } from "./entities.js";
-import { OwnerCell } from "./cells.js";
+import { OwnerCell, type IckbDepositCell } from "./cells.js";
 import { ickbValue } from "./udt.js";
 import { OwnedOwnerManager } from "./owned_owner.js";
 
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
-}
-
-function headerLike(
-  overrides: Partial<ccc.ClientBlockHeaderLike> = {},
-): ccc.ClientBlockHeader {
-  return ccc.ClientBlockHeader.from({
-    compactTarget: 0n,
-    dao: { c: 0n, ar: 1000n, s: 0n, u: 0n },
-    epoch: [181n, 0n, 1n],
-    extraHash: byte32FromByte("aa"),
-    hash: byte32FromByte("bb"),
-    nonce: 0n,
-    number: 3n,
-    parentHash: byte32FromByte("cc"),
-    proposalsHash: byte32FromByte("dd"),
-    timestamp: 0n,
-    transactionsRoot: byte32FromByte("ee"),
-    version: 0n,
-    ...overrides,
-  });
-}
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("OwnedOwnerManager.findWithdrawalGroups", () => {
   it("decodes owner relative distances from prefixed data", () => {
@@ -57,6 +27,50 @@ describe("OwnedOwnerManager.findWithdrawalGroups", () => {
     );
 
     expect(ownerCell.getOwned().index).toBe(0n);
+  });
+
+  it("fails closed when owner scanning exceeds the limit", async () => {
+    const ownerLock = script("11");
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const tip = headerLike();
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const firstOwner = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("55"), index: 1n },
+      cellOutput: {
+        capacity: 61n,
+        lock: ownerLock,
+        type: ownedOwnerScript,
+      },
+      outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
+    });
+    const secondOwner = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("66"), index: 1n },
+      cellOutput: {
+        capacity: 61n,
+        lock: ownerLock,
+        type: ownedOwnerScript,
+      },
+      outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
+    });
+    let requestedLimit = 0;
+    const client = {
+      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
+        requestedLimit = limit;
+        await Promise.resolve();
+        yield firstOwner;
+        yield secondOwner;
+      },
+    } as unknown as ccc.Client;
+
+    await expect(
+      collect(manager.findWithdrawalGroups(client, [ownerLock], { tip, limit: 1 })),
+    ).rejects.toThrow("owner cell scan reached limit 1; state may be incomplete");
+    expect(requestedLimit).toBe(2);
   });
 
   it("skips owners whose referenced withdrawal is not locked by Owned Owner", async () => {
@@ -651,3 +665,209 @@ describe("OwnedOwnerManager.findWithdrawalGroups", () => {
     expect(transactionCalls).toBe(1);
   });
 });
+
+describe("OwnedOwnerManager.requestWithdrawal", () => {
+  it("encodes owner distances from the actual withdrawal output indexes", async () => {
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const ownerLock = script("44");
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const depositHeader = headerLike({ number: 1n });
+    const deposits = [
+      depositCell("55", ownedOwnerScript, daoScript, depositHeader),
+      depositCell("66", ownedOwnerScript, daoScript, depositHeader),
+    ];
+    const baseTx = ccc.Transaction.default();
+    baseTx.addInput({ previousOutput: { txHash: byte32FromByte("77"), index: 0n } });
+    baseTx.addOutput({ capacity: 1n, lock: ownerLock }, "0x");
+
+    const tx = await manager.requestWithdrawal(
+      baseTx,
+      deposits,
+      ownerLock,
+      clientForDepositHeader(depositHeader),
+    );
+
+    expect(tx.outputsData.slice(3)).toEqual([
+      ccc.hexFrom(OwnerData.encode({ ownedDistance: -2n })),
+      ccc.hexFrom(OwnerData.encode({ ownedDistance: -2n })),
+    ]);
+    const ownerAOutput = tx.outputs[3];
+    const ownerAData = tx.outputsData[3];
+    const ownerBOutput = tx.outputs[4];
+    const ownerBData = tx.outputsData[4];
+    if (!ownerAOutput || ownerAData === undefined || !ownerBOutput || ownerBData === undefined) {
+      throw new Error("Expected owner outputs");
+    }
+    const ownerA = new OwnerCell(ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("99"), index: 3n },
+      cellOutput: ownerAOutput,
+      outputData: ownerAData,
+    }));
+    const ownerB = new OwnerCell(ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("99"), index: 4n },
+      cellOutput: ownerBOutput,
+      outputData: ownerBData,
+    }));
+    expect(ownerA.getOwned().index).toBe(1n);
+    expect(ownerB.getOwned().index).toBe(2n);
+  });
+
+  it("adds required live deposit anchors as cell deps", async () => {
+    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
+
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const ownerLock = script("44");
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const depositHeader = headerLike({ number: 1n });
+    const requestedDeposit = depositCell("55", ownedOwnerScript, daoScript, depositHeader);
+    const requiredLiveDeposit = depositCell("66", ownedOwnerScript, daoScript, depositHeader);
+
+    const tx = await manager.requestWithdrawal(
+      ccc.Transaction.default(),
+      [requestedDeposit],
+      ownerLock,
+      clientForDepositHeader(depositHeader),
+      { requiredLiveDeposits: [requiredLiveDeposit] },
+    );
+
+    expect(tx.cellDeps).toContainEqual(
+      ccc.CellDep.from({
+        outPoint: requiredLiveDeposit.cell.outPoint,
+        depType: "code",
+      }),
+    );
+  });
+
+  it("rejects duplicated or already spent withdrawal deposits", async () => {
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const ownerLock = script("44");
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const depositHeader = headerLike({ number: 1n });
+    const requestedDeposit = depositCell("55", ownedOwnerScript, daoScript, depositHeader);
+    const spentTx = ccc.Transaction.default();
+    spentTx.addInput(requestedDeposit.cell);
+
+    await expect(
+      manager.requestWithdrawal(
+        ccc.Transaction.default(),
+        [requestedDeposit, requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+      ),
+    ).rejects.toThrow("Withdrawal deposit is duplicated");
+    await expect(
+      manager.requestWithdrawal(
+        spentTx,
+        [requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+      ),
+    ).rejects.toThrow("Withdrawal deposit is already being spent");
+  });
+
+  it("rejects invalid required live deposit anchors", async () => {
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const ownerLock = script("44");
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    const depositHeader = headerLike({ number: 1n });
+    const requestedDeposit = depositCell("55", ownedOwnerScript, daoScript, depositHeader);
+    const requiredLiveDeposit = depositCell("66", ownedOwnerScript, daoScript, depositHeader);
+    const notReadyLiveDeposit = {
+      ...requiredLiveDeposit,
+      isReady: false,
+    } as IckbDepositCell;
+    const spentTx = ccc.Transaction.default();
+    spentTx.addInput(requiredLiveDeposit.cell);
+
+    await expect(
+      manager.requestWithdrawal(
+        ccc.Transaction.default(),
+        [requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+        { requiredLiveDeposits: [notReadyLiveDeposit] },
+      ),
+    ).rejects.toThrow("Withdrawal live deposit anchor is not ready");
+    await expect(
+      manager.requestWithdrawal(
+        ccc.Transaction.default(),
+        [requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+        { requiredLiveDeposits: [requiredLiveDeposit, requiredLiveDeposit] },
+      ),
+    ).rejects.toThrow("Withdrawal live deposit anchor is duplicated");
+    await expect(
+      manager.requestWithdrawal(
+        spentTx,
+        [requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+        { requiredLiveDeposits: [requiredLiveDeposit] },
+      ),
+    ).rejects.toThrow("Withdrawal live deposit anchor is also being spent");
+    await expect(
+      manager.requestWithdrawal(
+        ccc.Transaction.default(),
+        [requestedDeposit],
+        ownerLock,
+        clientForDepositHeader(depositHeader),
+        { requiredLiveDeposits: [requestedDeposit] },
+      ),
+    ).rejects.toThrow("Withdrawal live deposit anchor is also being spent");
+  });
+});
+
+function depositCell(
+  txHashByte: string,
+  lock: ccc.Script,
+  dao: ccc.Script,
+  depositHeader: ccc.ClientBlockHeader,
+): IckbDepositCell {
+  const cell = ccc.Cell.from({
+    outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
+    cellOutput: {
+      capacity: ccc.fixedPointFrom(100082),
+      lock,
+      type: dao,
+    },
+    outputData: DaoManager.depositData(),
+  });
+  return {
+    cell,
+    headers: [{ header: depositHeader }],
+    ckbValue: cell.cellOutput.capacity,
+    udtValue: 0n,
+    isDeposit: true,
+    isReady: true,
+  } as unknown as IckbDepositCell;
+}
+
+function clientForDepositHeader(depositHeader: ccc.ClientBlockHeader): ccc.Client {
+  return {
+    getTransactionWithHeader: async () => {
+      await Promise.resolve();
+      return { header: depositHeader };
+    },
+  } as unknown as ccc.Client;
+}
