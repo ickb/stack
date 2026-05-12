@@ -7,7 +7,6 @@ import {
   NEAR_READY_LOOKAHEAD_MS,
   partitionPoolDeposits,
   planRebalance,
-  selectReadyDeposits,
   TARGET_ICKB_BALANCE,
 } from "./policy.js";
 
@@ -75,37 +74,6 @@ describe("partitionPoolDeposits", () => {
       nearReady: [nearReady],
       future: [future],
     });
-  });
-});
-
-describe("selectReadyDeposits", () => {
-  it("prefers the fullest valid subset under the target amount", () => {
-    const deposits = [{ udtValue: 4n }, { udtValue: 7n }, { udtValue: 3n }];
-
-    expect(selectReadyDeposits(deposits, 10n)).toEqual([
-      { udtValue: 7n },
-      { udtValue: 3n },
-    ]);
-  });
-
-  it("respects the request limit", () => {
-    const deposits = [{ udtValue: 1n }, { udtValue: 1n }, { udtValue: 1n }];
-
-    expect(selectReadyDeposits(deposits, 10n, 2)).toEqual([
-      { udtValue: 1n },
-      { udtValue: 1n },
-    ]);
-  });
-
-  it("keeps earlier-ranked deposits when equal-total subsets tie", () => {
-    const firstSix = { udtValue: 6n };
-    const firstFour = { udtValue: 4n };
-    const secondSix = { udtValue: 6n };
-    const secondFour = { udtValue: 4n };
-
-    expect(
-      selectReadyDeposits([firstSix, firstFour, secondSix, secondFour], 10n),
-    ).toEqual([firstSix, firstFour]);
   });
 });
 
@@ -585,15 +553,6 @@ describe("planRebalance", () => {
     ).toEqual({ kind: "none" });
   });
 
-  it("uses a fuller bounded subset than the old greedy walk", () => {
-    const deposits = [readyDeposit(6n, 0n), readyDeposit(5n, 1n), readyDeposit(5n, 2n)];
-
-    expect(selectReadyDeposits(deposits, 10n)).toEqual([
-      deposits[1],
-      deposits[2],
-    ]);
-  });
-
   it("requests withdrawals when iCKB is above the target band and a crowded-bucket fit exists", () => {
     const first = readyDeposit(4n, 20n * 60n * 1000n);
     const second = readyDeposit(6n, 25n * 60n * 1000n);
@@ -974,17 +933,6 @@ describe("planRebalance", () => {
 
     expect(plan).toMatchObject({ kind: "withdraw" });
     expect(plan.kind === "withdraw" ? plan.deposits : []).toHaveLength(30);
-  });
-
-  it("lets greedy fallback use later candidates beyond the bounded best-fit horizon", () => {
-    const deposits = [
-      ...Array.from({ length: 30 }, () => readyDeposit(11n, 0n)),
-      readyDeposit(10n, 31n),
-    ];
-
-    expect(selectReadyDeposits(deposits as never[], 10n, 1)).toEqual([
-      deposits[30],
-    ]);
   });
 
   it("does nothing when iCKB is above target but a full withdrawal would cut below the buffer", () => {
