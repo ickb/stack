@@ -12,6 +12,12 @@ Callers own the final completion pipeline:
 2. Before send, call `sdk.completeTransaction(...)` or `completeIckbTransaction(...)` from `@ickb/sdk`.
 3. Only then send the transaction.
 
+Withdrawal requests built from public pool ready deposits may include `requiredLiveDeposits`. `@ickb/sdk` adds those cells as live `cell_dep` checks so a transaction fails if a protected pool anchor disappears before inclusion.
+
+## Scan Completeness Boundary
+
+Stack cell scans that feed account state, pool state, order books, or maturity estimates request one sentinel entry beyond the configured logical limit and fail closed if the sentinel appears. Callers should treat these errors as incomplete state, not as zero balance or unavailable liquidity.
+
 ## User Lock Assumption
 
 Current stack flows assume user-owned cells are protected by locks whose signatures bind the whole transaction, such as standard `sighash` wallet flows. Passing a raw `ccc.Script` is only safe when that lock gives the same output and recipient binding. Delegated-signature or OTX-style locks are integration-specific and must account for the weak-lock boundary documented in the iCKB whitepaper and contracts audit.

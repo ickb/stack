@@ -25,6 +25,8 @@ Instead, `packages/sdk/src/sdk.ts` builds the estimate from:
 Ready deposits are counted as immediately available CKB.
 Not-ready deposits remain in the future maturity buckets.
 
+These scans fail closed when the scan reaches the configured cell limit sentinel. A partial pool scan is not treated as a lower-confidence estimate, because interface timing and bot liquidity decisions need to distinguish incomplete state from genuinely unavailable liquidity.
+
 ## Why The Older Snapshot Path Was Removed
 
 The older snapshot idea tried to summarize the full deposit pool without scanning every deposit.

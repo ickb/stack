@@ -1,14 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
-import { assertDaoOutputLimit } from "@ickb/dao";
+import { assertDaoOutputLimit, DaoOutputLimitError } from "@ickb/dao";
 import {
   collect,
+  collectCompleteScan,
   binarySearch,
+  compareBigInt,
   defaultFindCellsLimit,
   isPlainCapacityCell,
   unique,
   type ValueComponents,
 } from "@ickb/utils";
 import {
+  ICKB_DEPOSIT_CAP,
   convert,
   type IckbDepositCell,
   type IckbUdt,
@@ -20,12 +23,84 @@ import {
 } from "@ickb/core";
 import {
   Info,
+  OrderCell,
+  OrderGroup,
   OrderManager,
   Ratio,
-  type OrderCell,
-  type OrderGroup,
 } from "@ickb/order";
 import { getConfig } from "./constants.js";
+import { selectExactReadyWithdrawalDeposits } from "./withdrawal_selection.js";
+
+export const MAX_DIRECT_DEPOSITS = 60;
+export const MAX_WITHDRAWAL_REQUESTS = 30;
+
+const DAO_OUTPUT_LIMIT = 64;
+const ORDER_MINT_OUTPUTS = 2;
+
+type SleepScheduler = (handler: () => void, timeout?: number) => unknown;
+
+export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
+
+export interface PoolDepositState {
+  deposits: IckbDepositCell[];
+  readyDeposits: IckbDepositCell[];
+  id: string;
+}
+
+export interface ConversionTransactionContext {
+  system: SystemState;
+  receipts: ReceiptCell[];
+  readyWithdrawals: WithdrawalGroup[];
+  availableOrders: OrderGroup[];
+  ckbAvailable: bigint;
+  ickbAvailable: bigint;
+  estimatedMaturity: bigint;
+}
+
+export interface ConversionTransactionOptions {
+  direction: ConversionDirection;
+  amount: bigint;
+  lock: ccc.Script;
+  context: ConversionTransactionContext;
+  limits?: {
+    maxDirectDeposits?: number;
+    maxWithdrawalRequests?: number;
+  };
+}
+
+export type ConversionTransactionFailureReason =
+  | "amount-negative"
+  | "insufficient-ckb"
+  | "insufficient-ickb"
+  | "amount-too-small"
+  | "not-enough-ready-deposits"
+  | "nothing-to-do";
+
+export interface ConversionNotice {
+  kind: "dust-ickb-to-ckb" | "maturity-unavailable";
+  inputIckb: bigint;
+  outputCkb: bigint;
+  incentiveCkb: bigint;
+  maturityEstimateUnavailable: boolean;
+}
+
+export interface ConversionMetadata {
+  kind: "direct" | "order" | "direct-plus-order" | "collect-only";
+}
+
+export type ConversionTransactionResult =
+  | {
+      ok: true;
+      tx: ccc.Transaction;
+      estimatedMaturity: bigint;
+      conversion: ConversionMetadata;
+      conversionNotice?: ConversionNotice;
+    }
+  | {
+      ok: false;
+      reason: ConversionTransactionFailureReason;
+      estimatedMaturity: bigint;
+    };
 
 export interface CompleteIckbTransactionOptions {
   signer: ccc.Signer;
@@ -41,14 +116,25 @@ export interface SendAndWaitForCommitOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+export interface GetL1StateOptions {
+  orderLimit?: number;
+}
+
+export interface IckbToCkbOrderEstimate {
+  estimate: ReturnType<typeof IckbSdk.estimate>;
+  maturity: bigint | undefined;
+  notice?: ConversionNotice;
+}
+
 export class TransactionConfirmationError extends Error {
   constructor(
     message: string,
     public readonly txHash: ccc.Hex,
     public readonly status: string | undefined,
     public readonly isTimeout: boolean,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "TransactionConfirmationError";
   }
 }
@@ -87,12 +173,14 @@ export async function sendAndWaitForCommit(
   const txHash = await signer.sendTransaction(tx);
   onSent?.(txHash);
   let status: string | undefined = "sent";
+  let lastPollingError: unknown;
 
   for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
     try {
       status = (await client.getTransaction(txHash))?.status;
-    } catch {
+    } catch (error) {
       // Post-broadcast polling errors are transient; keep waiting until timeout.
+      lastPollingError = error;
     }
     if (!isPendingStatus(status)) {
       break;
@@ -112,6 +200,7 @@ export async function sendAndWaitForCommit(
       txHash,
       status,
       true,
+      lastPollingError === undefined ? undefined : { cause: lastPollingError },
     );
   }
 
@@ -135,8 +224,20 @@ function isPendingStatus(status: string | undefined): boolean {
 
 async function delay(ms: number): Promise<void> {
   await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
+    getSleepScheduler()(resolve, ms);
   });
+}
+
+function getSleepScheduler(): SleepScheduler {
+  const runtime = globalThis as typeof globalThis & {
+    setTimeout?: SleepScheduler;
+  };
+  const schedule = runtime.setTimeout;
+  if (!schedule) {
+    throw new Error("setTimeout is unavailable in this runtime");
+  }
+
+  return schedule;
 }
 
 /**
@@ -210,8 +311,9 @@ export class IckbSdk {
    *   - convertedAmount: The estimated converted amount as a FixedPoint.
    *   - ckbFee: The fee (or gain) in CKB, as a FixedPoint.
    *   - info: Additional conversion metadata.
-   *   - maturity: Optional maturity information when the preview clears the
-   *     minimum match and fee threshold used for interface-sized orders.
+   *   - maturity: Optional maturity information when the fee/incentive threshold
+   *     is met and the current pool state can estimate completion timing. The
+   *     order info can still be valid when maturity is undefined.
    */
   static estimate(
     isCkb2Udt: boolean,
@@ -240,14 +342,59 @@ export class IckbSdk {
       options,
     );
 
-    // Only previews that clear the minimum match and fee threshold get a
-    // maturity estimate. Smaller previews still return convertedAmount/info.
-    const maturity =
-      ckbFee >= 10n * system.feeRate
-        ? IckbSdk.maturity({ info, amounts }, system)
-        : undefined;
+    // Only previews that clear the fee/incentive threshold get a maturity
+    // estimate. Smaller previews still return convertedAmount/info.
+    const maturity = ckbFee >= estimateMaturityFeeThreshold(system)
+      ? IckbSdk.maturity({ info, amounts }, system)
+      : undefined;
 
     return { convertedAmount, ckbFee, info, maturity };
+  }
+
+  static estimateIckbToCkbOrder(
+    amounts: { ckbValue: bigint; udtValue: bigint },
+    system: SystemState,
+  ): IckbToCkbOrderEstimate | undefined {
+    const estimate = IckbSdk.estimate(false, amounts, system);
+    if (estimate.maturity !== undefined) {
+      return { estimate, maturity: estimate.maturity };
+    }
+
+    if (estimate.convertedAmount === 0n) {
+      return;
+    }
+
+    if (estimate.ckbFee >= estimateMaturityFeeThreshold(system)) {
+      return {
+        estimate,
+        maturity: undefined,
+        notice: {
+          kind: "maturity-unavailable",
+          inputIckb: amounts.udtValue,
+          outputCkb: estimate.convertedAmount,
+          incentiveCkb: positiveFee(estimate.ckbFee),
+          maturityEstimateUnavailable: true,
+        },
+      };
+    }
+
+    const dustEstimate = estimateDustIckbToCkbOrder(amounts, system);
+    const dustMaturity = IckbSdk.maturity(
+      { info: dustEstimate.info, amounts },
+      system,
+    );
+
+    return {
+      estimate: dustEstimate,
+      maturity: dustMaturity,
+      notice: {
+        kind: "dust-ickb-to-ckb",
+        inputIckb: amounts.udtValue,
+        outputCkb: dustEstimate.convertedAmount,
+        incentiveCkb: positiveFee(dustEstimate.ckbFee),
+        maturityEstimateUnavailable: dustMaturity === undefined,
+      },
+    };
   }
 
   /**
@@ -294,8 +441,10 @@ export class IckbSdk {
 
     // Create a reference ratio instance for comparison.
     const b = new Info(ratio, ratio, 1);
-    let ckb = isCkb2Udt ? amount : 0n;
-    let udt = isCkb2Udt ? 0n : amount;
+    let ckb = isCkb2Udt
+      ? amount
+      : amounts.ckbValue - ratio.convert(false, amount, true);
+    let udt = 0n;
     for (const o of orderPool) {
       const a = o.data.info;
       if (a.isCkb2Udt()) {
@@ -436,16 +585,17 @@ export class IckbSdk {
   ): Promise<ccc.Transaction> {
     let tx = ccc.Transaction.from(txLike);
 
-    if (options?.withdrawalRequest?.deposits.length) {
+    const withdrawalRequest = options?.withdrawalRequest;
+    if (withdrawalRequest?.deposits.length) {
       tx = await this.ownedOwner.requestWithdrawal(
         tx,
-        options.withdrawalRequest.deposits,
-        options.withdrawalRequest.lock,
+        withdrawalRequest.deposits,
+        withdrawalRequest.lock,
         client,
+        withdrawalRequest.requiredLiveDeposits?.length
+          ? { requiredLiveDeposits: withdrawalRequest.requiredLiveDeposits }
+          : undefined,
       );
-      for (const deposit of options.withdrawalRequest.requiredLiveDeposits ?? []) {
-        tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
-      }
     }
 
     if (options?.orders?.length) {
@@ -463,6 +613,274 @@ export class IckbSdk {
     return tx;
   }
 
+  async getPoolDeposits(
+    client: ccc.Client,
+    tip: ccc.ClientBlockHeader,
+    options?: { limit?: number },
+  ): Promise<PoolDepositState> {
+    const deposits = await collect(this.ickbLogic.findDeposits(client, {
+      onChain: true,
+      tip,
+      limit: options?.limit ?? defaultFindCellsLimit,
+    }));
+    const readyDeposits = sortDepositsByMaturity(
+      deposits.filter((deposit) => deposit.isReady),
+      tip,
+    );
+
+    return {
+      deposits,
+      readyDeposits,
+      id: poolDepositsKey(deposits, tip),
+    };
+  }
+
+  async buildConversionTransaction(
+    txLike: ccc.TransactionLike,
+    client: ccc.Client,
+    options: ConversionTransactionOptions,
+  ): Promise<ConversionTransactionResult> {
+    const { amount, context, direction } = options;
+    if (amount < 0n) {
+      return conversionFailure("amount-negative", context.estimatedMaturity);
+    }
+
+    if (direction === "ckb-to-ickb" && amount > context.ckbAvailable) {
+      return conversionFailure("insufficient-ckb", context.estimatedMaturity);
+    }
+
+    if (direction === "ickb-to-ckb" && amount > context.ickbAvailable) {
+      return conversionFailure("insufficient-ickb", context.estimatedMaturity);
+    }
+
+    if (amount === 0n) {
+      const tx = await this.buildBaseTransaction(
+        txLike,
+        client,
+        baseTransactionOptions(context),
+      );
+      if (!hasTransactionActivity(tx)) {
+        return conversionFailure("nothing-to-do", context.estimatedMaturity);
+      }
+
+      return {
+        ok: true,
+        tx,
+        estimatedMaturity: context.estimatedMaturity,
+        conversion: { kind: "collect-only" },
+      };
+    }
+
+    return direction === "ckb-to-ickb"
+      ? await this.buildCkbToIckbConversion(txLike, client, options)
+      : await this.buildIckbToCkbConversion(txLike, client, options);
+  }
+
+  private async buildCkbToIckbConversion(
+    txLike: ccc.TransactionLike,
+    client: ccc.Client,
+    options: ConversionTransactionOptions,
+  ): Promise<ConversionTransactionResult> {
+    const { amount, context, lock } = options;
+    const maxDirectDeposits = normalizeCountLimit(
+      options.limits?.maxDirectDeposits ?? MAX_DIRECT_DEPOSITS,
+    );
+    const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
+    const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
+    const maxDeposits = depositQuotient > BigInt(maxDirectDeposits)
+      ? maxDirectDeposits
+      : Number(depositQuotient);
+    let lastFailure: ConversionTransactionFailureReason | undefined;
+    let lastError: unknown;
+
+    for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
+      const remainder = amount - depositCapacity * BigInt(depositCount);
+      let estimatedMaturity = context.estimatedMaturity;
+      let order: ConversionOrder | undefined;
+
+      if (remainder > 0n) {
+        const amounts = { ckbValue: remainder, udtValue: 0n };
+        const estimate = IckbSdk.estimate(true, amounts, context.system);
+        if (estimate.maturity === undefined) {
+          lastFailure = "amount-too-small";
+          continue;
+        }
+
+        estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
+        order = { amounts, estimate };
+      }
+
+      const outputLimitError = plannedDaoOutputLimitError(
+        txLike,
+        (depositCount > 0 ? depositCount + 1 : 0) + orderOutputCount(order),
+        depositCount > 0 || context.readyWithdrawals.length > 0,
+      );
+      if (outputLimitError) {
+        lastFailure = undefined;
+        lastError ??= outputLimitError;
+        continue;
+      }
+
+      try {
+        let tx = await this.buildBaseTransaction(
+          txLike,
+          client,
+          baseTransactionOptions(context),
+        );
+        if (depositCount > 0) {
+          tx = await this.ickbLogic.deposit(
+            tx,
+            depositCount,
+            depositCapacity,
+            lock,
+            client,
+          );
+        }
+        if (order) {
+          tx = await this.request(tx, lock, order.estimate.info, order.amounts);
+        }
+
+        return {
+          ok: true,
+          tx,
+          estimatedMaturity,
+          conversion: { kind: conversionKind(depositCount > 0, order !== undefined) },
+        };
+      } catch (error) {
+        if (!isRetryableConversionBuildError(error)) {
+          throw errorOf(error);
+        }
+        lastFailure = undefined;
+        lastError ??= error;
+      }
+    }
+
+    if (lastError !== undefined) {
+      throw errorOf(lastError);
+    }
+
+    return conversionFailure(lastFailure ?? "nothing-to-do", context.estimatedMaturity);
+  }
+
+  private async buildIckbToCkbConversion(
+    txLike: ccc.TransactionLike,
+    client: ccc.Client,
+    options: ConversionTransactionOptions,
+  ): Promise<ConversionTransactionResult> {
+    const { amount, context, lock } = options;
+    const maxWithdrawalRequests = normalizeCountLimit(
+      options.limits?.maxWithdrawalRequests ?? MAX_WITHDRAWAL_REQUESTS,
+    );
+    const poolDeposits = context.system.poolDeposits ??
+      await this.getPoolDeposits(client, context.system.tip);
+    const candidates = sortDepositsByMaturity(
+      poolDeposits.readyDeposits.filter((deposit) => deposit.isReady),
+      context.system.tip,
+    );
+    let lastFailure: ConversionTransactionFailureReason | undefined;
+    let lastError: unknown;
+
+    for (
+      let withdrawalCount = Math.min(candidates.length, maxWithdrawalRequests);
+      withdrawalCount >= 0;
+      withdrawalCount -= 1
+    ) {
+      let estimatedMaturity = context.estimatedMaturity;
+      let remainder = amount;
+      let selectedDeposits: IckbDepositCell[] = [];
+      let requiredLiveDeposits: IckbDepositCell[] = [];
+      let order: ConversionOrder | undefined;
+
+      if (withdrawalCount > 0) {
+        const selection = selectExactReadyWithdrawalDeposits({
+          readyDeposits: candidates,
+          tip: context.system.tip,
+          maxAmount: remainder,
+          count: withdrawalCount,
+          preserveSingletons: amount < ICKB_DEPOSIT_CAP,
+        });
+        if (selection === undefined) {
+          lastFailure = "not-enough-ready-deposits";
+          continue;
+        }
+
+        ({ deposits: selectedDeposits, requiredLiveDeposits } = selection);
+        remainder -= sumUdtValue(selectedDeposits);
+        for (const deposit of selectedDeposits) {
+          estimatedMaturity = maxMaturity(
+            estimatedMaturity,
+            deposit.maturity.toUnix(context.system.tip),
+          );
+        }
+      }
+
+      if (remainder > 0n) {
+        const amounts = { ckbValue: 0n, udtValue: remainder };
+        const preview = IckbSdk.estimateIckbToCkbOrder(amounts, context.system);
+        if (!preview) {
+          lastFailure = "amount-too-small";
+          continue;
+        }
+
+        const { estimate, maturity, notice } = preview;
+        if (maturity !== undefined) {
+          estimatedMaturity = maxMaturity(estimatedMaturity, maturity);
+        }
+        order = { amounts, estimate, conversionNotice: notice };
+      }
+
+      const outputLimitError = plannedDaoOutputLimitError(
+        txLike,
+        selectedDeposits.length * 2 + orderOutputCount(order),
+        selectedDeposits.length > 0 || context.readyWithdrawals.length > 0,
+      );
+      if (outputLimitError) {
+        lastFailure = undefined;
+        lastError ??= outputLimitError;
+        continue;
+      }
+
+      try {
+        let tx = await this.buildBaseTransaction(
+          txLike,
+          client,
+          baseTransactionOptions(context, {
+            deposits: selectedDeposits,
+            requiredLiveDeposits,
+            lock,
+          }),
+        );
+        if (order) {
+          tx = await this.request(tx, lock, order.estimate.info, order.amounts);
+        }
+
+        return {
+          ok: true,
+          tx,
+          estimatedMaturity,
+          conversion: {
+            kind: conversionKind(selectedDeposits.length > 0, order !== undefined),
+          },
+          ...(order?.conversionNotice
+            ? { conversionNotice: order.conversionNotice }
+            : {}),
+        };
+      } catch (error) {
+        if (!isRetryableConversionBuildError(error)) {
+          throw errorOf(error);
+        }
+        lastFailure = undefined;
+        lastError ??= error;
+      }
+    }
+
+    if (lastError !== undefined) {
+      throw errorOf(lastError);
+    }
+
+    return conversionFailure(lastFailure ?? "nothing-to-do", context.estimatedMaturity);
+  }
+
   async getAccountState(
     client: ccc.Client,
     locks: ccc.Script[],
@@ -478,18 +896,36 @@ export class IckbSdk {
         }),
       ),
     ]);
+    const nativeUdtCells = cells.filter((cell) => this.ickbUdt.isUdt(cell));
     const nativeUdtInfo = await this.ickbUdt.infoFrom(
       client,
-      cells.filter((cell) => this.ickbUdt.isUdt(cell)),
+      nativeUdtCells,
     );
 
     return {
       capacityCells: cells.filter(isPlainCapacityCell),
+      nativeUdtCells,
       nativeUdtCapacity: nativeUdtInfo.capacity,
       nativeUdtBalance: nativeUdtInfo.balance,
       receipts,
       withdrawalGroups,
     };
+  }
+
+  async getL1AccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }> {
+    const { system, user } = await this.getL1State(client, locks, options);
+    const account = await this.getAccountState(client, locks, system.tip);
+    await this.assertCurrentTip(client, system.tip);
+
+    return { system, user, account };
   }
 
   /**
@@ -510,16 +946,21 @@ export class IckbSdk {
   async getL1State(
     client: ccc.Client,
     locks: ccc.Script[],
+    options?: GetL1StateOptions,
   ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
 
     // Parallel fetching of system components.
-    const [{ ckbAvailable, ckbMaturing }, orders, feeRate] = await Promise.all([
-      this.getCkb(client, tip),
-      collect(this.order.findOrders(client, { onChain: true })),
+    const [poolDeposits, orders, feeRate] = await Promise.all([
+      this.getPoolDeposits(client, tip),
+      collect(this.order.findOrders(client, {
+        onChain: true,
+        limit: options?.orderLimit ?? defaultFindCellsLimit,
+      })),
       client.getFeeRate(),
     ]);
+    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits);
 
     const midInfo = new Info(exchangeRatio, exchangeRatio, 1);
     const userOrders: OrderGroup[] = [];
@@ -527,6 +968,7 @@ export class IckbSdk {
     for (const group of orders) {
       if (group.isOwner(...locks)) {
         userOrders.push(group);
+        continue;
       }
 
       const { order } = group;
@@ -546,17 +988,14 @@ export class IckbSdk {
       orderPool: systemOrders,
       ckbAvailable,
       ckbMaturing,
+      poolDeposits,
     };
-
-    // Estimates user orders maturity.
-    for (const { order } of userOrders) {
-      order.maturity = IckbSdk.maturity(order, system);
-    }
+    await this.assertCurrentTip(client, tip);
 
     return {
       system,
       user: {
-        orders: userOrders,
+        orders: userOrders.map((group) => orderGroupWithMaturity(group, system)),
       },
     };
   }
@@ -581,6 +1020,7 @@ export class IckbSdk {
   private async getCkb(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
+    poolDeposits: PoolDepositState,
   ): Promise<{
     ckbAvailable: ccc.FixedPoint;
     ckbMaturing: CkbCumulative[];
@@ -591,36 +1031,26 @@ export class IckbSdk {
       tip,
       limit,
     };
-    const directDepositOptions = {
-      onChain: true,
-      tip,
-      limit: scanLimit(limit),
-    };
-
-    // Start fetching bot iCKB withdrawal requests.
-    const promiseBotWithdrawals = collect(
-      this.ownedOwner.findWithdrawalGroups(client, this.bots, withdrawalOptions),
-    );
-
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
     for (const lock of unique(this.bots)) {
-      let scanned = 0;
-      for await (const cell of client.findCellsOnChain(
-        {
-          script: lock,
-          scriptType: "lock",
-          filter: {
-            scriptLenRange: [0n, 1n],
+      for (const cell of await collectCompleteScan(
+        (scanLimit) => client.findCellsOnChain(
+          {
+            script: lock,
+            scriptType: "lock",
+            filter: {
+              scriptLenRange: [0n, 1n],
+            },
+            scriptSearchMode: "exact",
+            withData: true,
           },
-          scriptSearchMode: "exact",
-          withData: true,
-        },
-        "asc",
-        scanLimit(limit),
+          "asc",
+          scanLimit,
+        ),
+        { limit, label: "bot capacity", context: lock },
       )) {
-        scanned += 1;
         if (cell.cellOutput.type !== undefined || !cell.cellOutput.lock.eq(lock)) {
           continue;
         }
@@ -632,14 +1062,16 @@ export class IckbSdk {
           bot2Ckb.set(key, ckb);
         }
       }
-      assertCompleteScan(scanned, limit, "bot capacity", lock);
     }
 
     const ckbMaturing = new Array<{
       ckbValue: ccc.FixedPoint;
       maturity: ccc.Num;
     }>();
-    for (const wr of await promiseBotWithdrawals) {
+    const botWithdrawals = await collect(
+      this.ownedOwner.findWithdrawalGroups(client, this.bots, withdrawalOptions),
+    );
+    for (const wr of botWithdrawals) {
       if (wr.owned.isReady) {
         // Update the bot's CKB based on withdrawal if the bot is ready.
         const key = wr.owner.cell.cellOutput.lock.toHex();
@@ -666,9 +1098,7 @@ export class IckbSdk {
     // Bot-owned no-type data cells are not distinguishable from arbitrary payloads,
     // so the SDK currently falls back to direct deposit scanning instead of trusting
     // snapshot-like bytes from wallet-owned cells.
-    let depositsScanned = 0;
-    for await (const d of this.ickbLogic.findDeposits(client, directDepositOptions)) {
-      depositsScanned += 1;
+    for (const d of poolDeposits.deposits) {
       if (d.isReady) {
         ckbAvailable += d.ckbValue;
         continue;
@@ -679,7 +1109,6 @@ export class IckbSdk {
         maturity: d.maturity.toUnix(tip),
       });
     }
-    assertCompleteScan(depositsScanned, limit, "iCKB deposit");
 
     // Sort maturing CKB entries by their maturity timestamp.
     ckbMaturing.sort((a, b) => Number(a.maturity - b.maturity));
@@ -705,46 +1134,231 @@ export class IckbSdk {
     const cells: ccc.Cell[] = [];
     const limit = defaultFindCellsLimit;
     for (const lock of unique(locks)) {
-      let scanned = 0;
-      for await (const cell of client.findCellsOnChain(
-        {
-          script: lock,
-          scriptType: "lock",
-          scriptSearchMode: "exact",
-          withData: true,
-        },
-        "asc",
-        scanLimit(limit),
-      )) {
-        scanned += 1;
-        cells.push(cell);
-      }
-      assertCompleteScan(scanned, limit, "account", lock);
+      cells.push(...await collectCompleteScan(
+        (scanLimit) => client.findCellsOnChain(
+          {
+            script: lock,
+            scriptType: "lock",
+            scriptSearchMode: "exact",
+            withData: true,
+          },
+          "asc",
+          scanLimit,
+        ),
+        { limit, label: "account", context: lock },
+      ));
     }
     return cells;
   }
+
+  async assertCurrentTip(
+    client: ccc.Client,
+    tip: ccc.ClientBlockHeader,
+  ): Promise<void> {
+    const currentTip = await client.getTipHeader();
+    if (currentTip.hash !== tip.hash) {
+      throw new Error("L1 state scan crossed chain tip; retry with a fresh state");
+    }
+  }
 }
 
-function assertCompleteScan(
-  scanned: number,
-  limit: number,
-  label: string,
-  lock?: ccc.Script,
-): void {
-  if (scanned <= limit) {
+type BuildBaseTransactionOptions = NonNullable<
+  Parameters<IckbSdk["buildBaseTransaction"]>[2]
+>;
+
+interface ConversionOrder {
+  amounts: ValueComponents;
+  estimate: ReturnType<typeof IckbSdk.estimate>;
+  conversionNotice?: ConversionNotice;
+}
+
+function conversionFailure(
+  reason: ConversionTransactionFailureReason,
+  estimatedMaturity: bigint,
+): ConversionTransactionResult {
+  return { ok: false, reason, estimatedMaturity };
+}
+
+function baseTransactionOptions(
+  context: ConversionTransactionContext,
+  withdrawalRequest?: {
+    deposits: IckbDepositCell[];
+    requiredLiveDeposits: IckbDepositCell[];
+    lock: ccc.Script;
+  },
+): BuildBaseTransactionOptions {
+  return {
+    withdrawalRequest:
+      withdrawalRequest === undefined || withdrawalRequest.deposits.length === 0
+        ? undefined
+        : {
+            deposits: withdrawalRequest.deposits,
+            ...(withdrawalRequest.requiredLiveDeposits.length > 0
+              ? { requiredLiveDeposits: withdrawalRequest.requiredLiveDeposits }
+              : {}),
+            lock: withdrawalRequest.lock,
+          },
+    orders: context.availableOrders,
+    receipts: context.receipts,
+    readyWithdrawals: context.readyWithdrawals,
+  };
+}
+
+function hasTransactionActivity(tx: ccc.Transaction): boolean {
+  return tx.inputs.length > 0 || tx.outputs.length > 0;
+}
+
+function errorOf(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function isRetryableConversionBuildError(error: unknown): boolean {
+  return error instanceof DaoOutputLimitError ||
+    error instanceof Error && error.name === "DaoOutputLimitError";
+}
+
+function plannedDaoOutputLimitError(
+  txLike: ccc.TransactionLike,
+  additionalOutputs: number,
+  hasDaoActivity: boolean,
+): DaoOutputLimitError | undefined {
+  if (!hasDaoActivity) {
     return;
   }
 
-  const suffix = lock ? ` for ${lock.toHex()}` : "";
-  throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
+  const outputCount = ccc.Transaction.from(txLike).outputs.length + additionalOutputs;
+  return outputCount > DAO_OUTPUT_LIMIT
+    ? new DaoOutputLimitError(outputCount)
+    : undefined;
 }
 
-function scanLimit(limit: number): number {
-  return limit + 1;
+function orderOutputCount(order: ConversionOrder | undefined): number {
+  return order ? ORDER_MINT_OUTPUTS : 0;
+}
+
+function conversionKind(
+  hasDirect: boolean,
+  hasOrder: boolean,
+): ConversionMetadata["kind"] {
+  if (hasDirect && hasOrder) {
+    return "direct-plus-order";
+  }
+  if (hasDirect) {
+    return "direct";
+  }
+  if (hasOrder) {
+    return "order";
+  }
+  return "collect-only";
+}
+
+function estimateDustIckbToCkbOrder(
+  amounts: ValueComponents,
+  system: SystemState,
+): ReturnType<typeof IckbSdk.estimate> {
+  const baseEstimate = IckbSdk.estimate(false, amounts, system, {
+    fee: 0n,
+  });
+  const targetFee = estimateMaturityFeeThreshold(system);
+  const feeBase = baseEstimate.convertedAmount + 1n;
+  if (targetFee <= 0n || feeBase <= 1n) {
+    return baseEstimate;
+  }
+
+  const estimateWithFee = (fee: bigint): ReturnType<typeof IckbSdk.estimate> =>
+    IckbSdk.estimate(false, amounts, system, {
+      fee,
+      feeBase,
+    });
+
+  const highestFee = feeBase - 1n;
+  const highestDiscount = estimateWithFee(highestFee);
+  if (highestDiscount.ckbFee < targetFee) {
+    return highestDiscount;
+  }
+
+  let low = 0n;
+  let high = highestFee;
+  while (low < high) {
+    const mid = (low + high) / 2n;
+    if (estimateWithFee(mid).ckbFee >= targetFee) {
+      high = mid;
+    } else {
+      low = mid + 1n;
+    }
+  }
+
+  return estimateWithFee(low);
+}
+
+function normalizeCountLimit(limit: number): number {
+  return Number.isSafeInteger(limit) && limit > 0 ? limit : 0;
+}
+
+function sumUdtValue(deposits: readonly IckbDepositCell[]): bigint {
+  let total = 0n;
+  for (const deposit of deposits) {
+    total += deposit.udtValue;
+  }
+  return total;
+}
+
+function poolDepositsKey(
+  deposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+): string {
+  return deposits
+    .map((deposit) => [
+      deposit.cell.outPoint.toHex(),
+      deposit.isReady ? "ready" : "pending",
+      String(deposit.ckbValue),
+      String(deposit.udtValue),
+      String(deposit.maturity.toUnix(tip)),
+    ].join("@"))
+    .sort()
+    .join(",");
+}
+
+function sortDepositsByMaturity(
+  deposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+): IckbDepositCell[] {
+  return [...deposits].sort((left, right) =>
+    compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip))
+  );
+}
+
+function positiveOrZero(value: bigint): bigint {
+  return value > 0n ? value : 0n;
+}
+
+function positiveFee(fee: bigint): bigint {
+  return positiveOrZero(fee);
+}
+
+function maxMaturity(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
+}
+
+function orderGroupWithMaturity(group: OrderGroup, system: SystemState): OrderGroup {
+  const { order } = group;
+  return new OrderGroup(
+    group.master,
+    new OrderCell(
+      order.cell,
+      order.data,
+      order.ckbUnoccupied,
+      order.absTotal,
+      order.absProgress,
+      IckbSdk.maturity(order, system),
+    ),
+    group.origin,
+  );
 }
 
 export interface AccountState {
   capacityCells: ccc.Cell[];
+  nativeUdtCells: ccc.Cell[];
   nativeUdtCapacity: bigint;
   nativeUdtBalance: bigint;
   receipts: ReceiptCell[];
@@ -871,6 +1485,15 @@ export interface SystemState {
 
   /** Array of CKB maturing entries with cumulative amounts and maturity timestamps. */
   ckbMaturing: CkbCumulative[];
+
+  /** Complete public pool deposit snapshot for conversion planning at this tip. */
+  poolDeposits?: PoolDepositState;
+}
+
+export function estimateMaturityFeeThreshold(
+  system: Pick<SystemState, "feeRate">,
+): bigint {
+  return 10n * system.feeRate;
 }
 
 /**

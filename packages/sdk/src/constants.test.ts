@@ -1,25 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
+import { outPoint, script as typeScript } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IckbUdt } from "@ickb/core";
 import { getConfig } from "./constants.js";
 import { IckbSdk } from "./sdk.js";
 
-function hash(byte: string): `0x${string}` {
-  return `0x${byte.repeat(32)}`;
-}
-
 function script(byte: string): ccc.Script {
   return ccc.Script.from({
-    codeHash: hash(byte),
+    codeHash: typeScript(byte).codeHash,
     hashType: "data1",
     args: "0x",
-  });
-}
-
-function outPoint(byte: string): ccc.OutPoint {
-  return ccc.OutPoint.from({
-    txHash: hash(byte),
-    index: 0n,
   });
 }
 
