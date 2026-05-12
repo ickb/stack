@@ -36,6 +36,7 @@ export const MAX_WITHDRAWAL_REQUESTS = 30;
 
 const DAO_OUTPUT_LIMIT = 64;
 const ORDER_MINT_OUTPUTS = 2;
+const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
 
 type SleepScheduler = (handler: () => void, timeout?: number) => unknown;
 
@@ -853,6 +854,14 @@ export class IckbSdk {
     }
 
     plans.sort((left, right) => {
+      const maturityCompare = compareBigInt(
+        maturityBucket(left.estimatedMaturity),
+        maturityBucket(right.estimatedMaturity),
+      );
+      if (maturityCompare !== 0) {
+        return maturityCompare;
+      }
+
       const directCompare = compareBigInt(right.directUdtValue, left.directUdtValue);
       return directCompare !== 0
         ? directCompare
@@ -1367,6 +1376,10 @@ function positiveFee(fee: bigint): bigint {
 
 function maxMaturity(left: bigint, right: bigint): bigint {
   return left > right ? left : right;
+}
+
+function maturityBucket(maturity: bigint): bigint {
+  return maturity / CONVERSION_MATURITY_BUCKET_MS;
 }
 
 function orderGroupWithMaturity(group: OrderGroup, system: SystemState): OrderGroup {

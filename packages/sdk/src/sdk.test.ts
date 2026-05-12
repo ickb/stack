@@ -1236,7 +1236,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
-  it("prefers the largest direct iCKB-to-CKB withdrawal value", async () => {
+  it("prefers the largest direct iCKB-to-CKB withdrawal value within a maturity bucket", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const smallEarlier = readyDeposit(4n * unit, 0n);
@@ -1264,6 +1264,50 @@ describe("IckbSdk.buildConversionTransaction", () => {
           poolDeposits: {
             deposits: [smallEarlier, smallLater, large],
             readyDeposits: [smallEarlier, smallLater, large],
+            id: "pool",
+          },
+        }),
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
+        estimatedMaturity: 0n,
+      },
+    })).resolves.toMatchObject({ ok: true, conversion: { kind: "direct-plus-order" } });
+
+    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers an earlier iCKB-to-CKB maturity bucket over a marginally larger withdrawal", async () => {
+    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const unit = ICKB_DEPOSIT_CAP / 10n;
+    const smallEarlier = readyDeposit(4n * unit, 0n);
+    const smallLater = readyDeposit(4n * unit, 15n * 60n * 1000n);
+    const largeMuchLater = readyDeposit(9n * unit, 2n * 60n * 60n * 1000n);
+    const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal")
+      .mockImplementation(async (txLike, deposits) => {
+        await Promise.resolve();
+        expect(deposits).toEqual([smallEarlier, smallLater]);
+        return ccc.Transaction.from(txLike);
+      });
+    const mint = vi.spyOn(orderManager, "mint").mockImplementation((txLike, _lock, _info, amounts) => {
+      expect(amounts).toEqual({ ckbValue: 0n, udtValue: 2n * unit });
+      return ccc.Transaction.from(txLike);
+    });
+
+    await expect(sdk.buildConversionTransaction(ccc.Transaction.default(), {} as ccc.Client, {
+      direction: "ickb-to-ckb",
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      context: {
+        system: system({
+          exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
+          ckbAvailable: 10n,
+          poolDeposits: {
+            deposits: [smallEarlier, smallLater, largeMuchLater],
+            readyDeposits: [smallEarlier, smallLater, largeMuchLater],
             id: "pool",
           },
         }),
