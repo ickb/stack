@@ -1311,12 +1311,14 @@ function errorMessage(error: unknown): string {
   }
 
   try {
-    return JSON.stringify(error, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    );
+    return JSON.stringify(error, stringifyBigInt);
   } catch {
     return String(error);
   }
+}
+
+function stringifyBigInt(_key: string, value: unknown): unknown {
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 function isRetryableConversionBuildError(error: unknown): boolean {
