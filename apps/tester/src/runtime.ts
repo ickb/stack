@@ -25,14 +25,9 @@ export interface TesterState {
 }
 
 export async function readTesterState(runtime: Runtime): Promise<TesterState> {
-  const { system, user } = await runtime.sdk.getL1State(
+  const { system, user, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
-  );
-  const account = await runtime.sdk.getAccountState(
-    runtime.client,
-    runtime.accountLocks,
-    system.tip,
   );
 
   const projection = projectAccountAvailability(account, user.orders, {

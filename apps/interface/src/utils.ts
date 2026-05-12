@@ -1,7 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { QueryClient } from "@tanstack/react-query";
-import type { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
-import type { OrderManager } from "@ickb/order";
 import type { IckbSdk } from "@ickb/sdk";
 
 export interface RootConfig {
@@ -9,12 +7,13 @@ export interface RootConfig {
   cccClient: ccc.Client;
   queryClient: QueryClient;
   sdk: IckbSdk;
-  managers: {
-    ickbUdt: IckbUdt;
-    logic: LogicManager;
-    ownedOwner: OwnedOwnerManager;
-    order: OrderManager;
-  };
+}
+
+type SupportedChain = RootConfig["chain"];
+
+interface WalletChainParts {
+  walletName: string;
+  chain: SupportedChain;
 }
 
 export interface WalletConfig extends RootConfig {
@@ -29,6 +28,13 @@ export type TxInfo = Readonly<{
   error: string;
   fee: bigint;
   estimatedMaturity: bigint;
+  conversionNotice?: {
+    kind: "dust-ickb-to-ckb" | "maturity-unavailable";
+    inputIckb: bigint;
+    outputCkb: bigint;
+    incentiveCkb: bigint;
+    maturityEstimateUnavailable: boolean;
+  };
 }>;
 
 export const txInfoPadding: TxInfo = Object.freeze({
@@ -42,6 +48,21 @@ export const CKB = ccc.fixedPointFrom(1);
 
 // reservedCKB are reserved for state rent in conversions
 export const reservedCKB = 600n * CKB;
+
+export function parseWalletChain(walletChain: string): WalletChainParts {
+  const separatorIndex = walletChain.lastIndexOf("_");
+  if (separatorIndex <= 0 || separatorIndex === walletChain.length - 1) {
+    throw new Error(`Unsupported wallet chain: ${walletChain}`);
+  }
+
+  const walletName = walletChain.slice(0, separatorIndex);
+  const chain = walletChain.slice(separatorIndex + 1);
+  if (chain !== "mainnet" && chain !== "testnet") {
+    throw new Error(`Unsupported wallet chain: ${walletChain}`);
+  }
+
+  return { walletName, chain };
+}
 
 export function symbol2Direction(symbol: string): boolean {
   return symbol !== "I";

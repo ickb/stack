@@ -27,6 +27,18 @@
 import { ccc } from "@ckb-ccc/core";
 import { convert } from "@ickb/core";
 import { asyncBinarySearch } from "@ickb/utils";
+import { pathToFileURL } from "node:url";
+
+interface SamplerClient {
+  getHeaderByNumber: ccc.Client["getHeaderByNumber"];
+  getTipHeader: ccc.Client["getTipHeader"];
+}
+
+interface MainOptions {
+  client?: SamplerClient;
+  log?: (line: string) => void;
+  samplesPerYear?: number;
+}
 
 /**
  * Main program that orchestrates sampling and logging.
@@ -47,9 +59,12 @@ import { asyncBinarySearch } from "@ickb/utils";
  *
  * @public
  */
-export async function main(): Promise<void> {
+export async function main(options: MainOptions = {}): Promise<void> {
   // Create a public mainnet client (network I/O happens on method calls).
-  const client = new ccc.ClientPublicMainnet();
+  const client = options.client ?? new ccc.ClientPublicMainnet();
+  const log = options.log ?? ((line: string): void => {
+    console.log(line);
+  });
 
   // Fetch genesis header (block 0). If absent, abort early.
   const genesis = await client.getHeaderByNumber(0);
@@ -60,23 +75,13 @@ export async function main(): Promise<void> {
   // Fetch tip header to bound our searches.
   const tip = await client.getTipHeader();
 
-  // Compute an upper bound `n` for the binary search using the bit-length
-  // of the tip number. This yields a power-of-two >= tip.number.
-  const n = 1 << tip.number.toString(2).length;
+  const n = Math.pow(2, tip.number.toString(2).length);
 
-  // Generate date samples between genesis and tip (timestamps are bigints in ms).
-  // The samples(...) helper returns Date instances; attach optional notes here.
-  const dates = samples(genesis.timestamp, tip.timestamp, 4).map(
-    (d) => [d, ""] as [Date, string],
-  );
-  // Insert a named event sample (kept as an example of adding special dates).
-  dates.push([new Date("2024-09-12T15:13:19.574Z"), "iCKB Launch"]);
-  // Ensure chronological order across all samples (safety).
-  dates.sort((a, b) => a[0].getTime() - b[0].getTime());
+  const dates = sampleTargets(genesis.timestamp, tip.timestamp, options.samplesPerYear);
 
   // Emit CSV header and the genesis row.
-  console.log(["BlockNumber", "Date", "Value", "Note"].join(", "));
-  logRow(genesis, "Genesis");
+  log(["BlockNumber", "Date", "Value", "Note"].join(", "));
+  logRow(genesis, "Genesis", log);
 
   // For each sample date, find the earliest block whose timestamp is >= date.
   for (const [date, note] of dates) {
@@ -102,8 +107,20 @@ export async function main(): Promise<void> {
       throw new Error("Header not found");
     }
 
-    logRow(header, note);
+    logRow(header, note, log);
   }
+}
+
+function sampleTargets(
+  startMs: bigint,
+  endMs: bigint,
+  n = 4,
+): [Date, string][] {
+  const dates = samples(startMs, endMs, n).map((d) => [d, ""] as [Date, string]);
+  dates.push([new Date("2024-09-12T15:13:19.574Z"), "iCKB Launch"]);
+  dates.push([new Date(Number(endMs)), "Tip"]);
+  dates.sort((a, b) => a[0].getTime() - b[0].getTime());
+  return dates;
 }
 
 /**
@@ -120,13 +137,17 @@ export async function main(): Promise<void> {
  *
  * @internal
  */
-function logRow(header: ccc.ClientBlockHeader, note: string): void {
+function logRow(
+  header: ccc.ClientBlockHeader,
+  note: string,
+  log: (line: string) => void,
+): void {
   // Compute ISO timestamp from header timestamp (milliseconds).
   const date = new Date(Number(header.timestamp));
   // Convert the header's monetary value to a fixed-point representation.
   const val = convert(false, ccc.One, header);
   // Emit CSV row: blockNumber, ISO date, formatted value, note.
-  console.log(
+  log(
     [
       String(header.number),
       date.toISOString(),
@@ -187,6 +208,7 @@ export function samples(startMs: bigint, endMs: bigint, n: number): Date[] {
   return out;
 }
 
-await main();
-
-process.exit(0);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+  process.exit(0);
+}

@@ -1,19 +1,27 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio, type OrderGroup } from "@ickb/order";
-import { describe, expect, it, vi } from "vitest";
-import {
-  buildTransactionPreview,
-  selectExactCountReadyDepositsUnderAmount,
-} from "./transaction.ts";
+import { Ratio } from "@ickb/order";
+import type {
+  ConversionTransactionFailureReason,
+  ConversionTransactionResult,
+} from "@ickb/sdk";
+import { byte32FromByte } from "@ickb/testkit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildTransactionPreview } from "./transaction.ts";
 import type { TransactionContext } from "./transaction.ts";
 import type { WalletConfig } from "./utils.ts";
 
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
+type BuildConversionTransactionMock = ReturnType<
+  typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
+>;
+type CompleteTransactionMock = ReturnType<
+  typeof vi.fn<WalletConfig["sdk"]["completeTransaction"]>
+>;
+type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
+type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function script(codeHashByte: string): ccc.Script {
   return ccc.Script.from({
@@ -33,6 +41,8 @@ function context(overrides: Partial<TransactionContext> = {}): TransactionContex
       ckbAvailable: 0n,
       ckbMaturing: [],
     },
+    capacityCells: [],
+    nativeUdtCells: [],
     receipts: [],
     readyWithdrawals: [],
     availableOrders: [],
@@ -43,28 +53,48 @@ function context(overrides: Partial<TransactionContext> = {}): TransactionContex
   };
 }
 
-function identityTx(txLike: ccc.TransactionLike): ccc.Transaction {
-  return ccc.Transaction.from(txLike);
-}
-
 function resolvedTx(txLike: ccc.TransactionLike): Promise<ccc.Transaction> {
   return Promise.resolve(ccc.Transaction.from(txLike));
 }
 
-function emptyDeposits(): AsyncGenerator<never> {
-  return (async function* (): AsyncGenerator<never> {
-    await Promise.resolve();
-    yield* [] as never[];
-  })();
+function completeTransactionMock(): CompleteTransactionMock {
+  return vi.fn<WalletConfig["sdk"]["completeTransaction"]>().mockImplementation(resolvedTx);
 }
 
-function deposits<T>(...values: T[]): AsyncGenerator<T> {
-  return (async function* (): AsyncGenerator<T> {
-    await Promise.resolve();
-    for (const value of values) {
-      yield value;
-    }
-  })();
+function txWithInput(txHashByte: string): ccc.Transaction {
+  const tx = ccc.Transaction.default();
+  tx.inputs.push(
+    ccc.CellInput.from({
+      previousOutput: {
+        txHash: byte32FromByte(txHashByte),
+        index: 0n,
+      },
+    }),
+  );
+  return tx;
+}
+
+function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): SuccessfulPlan {
+  return {
+    ok: true,
+    tx: txWithInput("aa"),
+    estimatedMaturity: 0n,
+    conversion: { kind: "order" },
+    ...overrides,
+  };
+}
+
+function failedPlan(
+  reason: ConversionTransactionFailureReason,
+  estimatedMaturity = 0n,
+): FailedPlan {
+  return { ok: false, reason, estimatedMaturity };
+}
+
+function buildConversionTransactionMock(
+  result: ConversionTransactionResult = successfulPlan(),
+): BuildConversionTransactionMock {
+  return vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue(result);
 }
 
 function walletConfig(overrides: Partial<WalletConfig> = {}): WalletConfig {
@@ -77,147 +107,121 @@ function walletConfig(overrides: Partial<WalletConfig> = {}): WalletConfig {
     accountLocks: [],
     primaryLock: script("11"),
     sdk: {
-      buildBaseTransaction: resolvedTx,
+      buildConversionTransaction: buildConversionTransactionMock(),
       completeTransaction: resolvedTx,
-      collect: identityTx,
-      request: resolvedTx,
     } as unknown as WalletConfig["sdk"],
-    managers: {
-      ickbUdt: {
-        completeBy: resolvedTx,
-      } as unknown as WalletConfig["managers"]["ickbUdt"],
-      logic: {
-        completeDeposit: identityTx,
-        deposit: resolvedTx,
-        findDeposits: emptyDeposits,
-      } as unknown as WalletConfig["managers"]["logic"],
-      ownedOwner: {
-        withdraw: resolvedTx,
-        requestWithdrawal: resolvedTx,
-      } as unknown as WalletConfig["managers"]["ownedOwner"],
-      order: {} as WalletConfig["managers"]["order"],
-    },
     ...overrides,
   };
 }
 
-describe("selectExactCountReadyDepositsUnderAmount", () => {
-  it("finds an exact-count subset when the greedy maturity path fails", () => {
-    const deposits = [{ udtValue: 6n }, { udtValue: 5n }, { udtValue: 5n }];
+interface WalletConfigTestOverrides {
+  sdk?: Partial<WalletConfig["sdk"]>;
+}
 
-    expect(selectExactCountReadyDepositsUnderAmount(deposits as never[], 2, 10n)).toEqual([
-      deposits[1],
-      deposits[2],
-    ]);
+function walletConfigWith(overrides: WalletConfigTestOverrides): WalletConfig {
+  const base = walletConfig();
+  return walletConfig({
+    sdk: Object.assign({}, base.sdk, overrides.sdk),
   });
-
-  it("prefers the fullest exact-count subset under the cap", () => {
-    const deposits = [{ udtValue: 1n }, { udtValue: 4n }, { udtValue: 5n }];
-
-    expect(selectExactCountReadyDepositsUnderAmount(deposits as never[], 2, 10n)).toEqual([
-      deposits[1],
-      deposits[2],
-    ]);
-  });
-
-  it("keeps earlier deposits when equally full subsets tie", () => {
-    const deposits = [{ udtValue: 5n }, { udtValue: 5n }, { udtValue: 5n }];
-
-    expect(selectExactCountReadyDepositsUnderAmount(deposits as never[], 2, 10n)).toEqual([
-      deposits[0],
-      deposits[1],
-    ]);
-  });
-
-  it("bounds the search to the direct-withdrawal preview cap", () => {
-    const deposits = [
-      ...Array.from({ length: 30 }, () => ({ udtValue: 6n })),
-      { udtValue: 5n },
-      { udtValue: 5n },
-    ];
-
-    expect(selectExactCountReadyDepositsUnderAmount(deposits as never[], 2, 10n)).toEqual([]);
-  });
-
-  it("returns no subset when no exact-count fit exists", () => {
-    const deposits = [{ udtValue: 6n }, { udtValue: 5n }, { udtValue: 5n }];
-
-    expect(selectExactCountReadyDepositsUnderAmount(deposits as never[], 2, 9n)).toEqual([]);
-  });
-});
+}
 
 describe("buildTransactionPreview", () => {
-  it("reports the preview threshold instead of a generic build failure", async () => {
-    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
-    vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockResolvedValue([0, false]);
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(0n);
+  it("validates user amounts before delegating to the SDK planner", async () => {
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-    const txInfo = await buildTransactionPreview(
-      context({ ckbAvailable: 1n }),
-      true,
-      1n,
-      walletConfig(),
-    );
-
-    expect(txInfo.error).toBe(
-      "Amount too small to exceed the minimum match and fee threshold",
-    );
+    await expect(buildTransactionPreview(context(), true, -1n, config))
+      .resolves.toMatchObject({ error: "Amount must be positive" });
+    await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 2n, config))
+      .resolves.toMatchObject({ error: "Not enough CKB" });
+    await expect(buildTransactionPreview(context({ ickbAvailable: 1n }), false, 2n, config))
+      .resolves.toMatchObject({ error: "Not enough iCKB" });
+    expect(buildConversionTransaction).not.toHaveBeenCalled();
   });
 
-  it("passes the system fee rate through SDK completion", async () => {
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(0n);
-    const completeTransaction = vi
-      .fn<WalletConfig["sdk"]["completeTransaction"]>()
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
+  it("delegates protocol planning to the SDK and completes the partial transaction", async () => {
+    const tx = txWithInput("99");
+    const notice = {
+      kind: "dust-ickb-to-ckb" as const,
+      inputIckb: 1n,
+      outputCkb: 1n,
+      incentiveCkb: 0n,
+      maturityEstimateUnavailable: false,
+    };
+    const buildConversionTransaction = buildConversionTransactionMock(successfulPlan({
+      tx,
+      estimatedMaturity: 123n,
+      conversionNotice: notice,
+    }));
+    const completeTransaction = completeTransactionMock();
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(42n);
+    const txContext = context({
+      ckbAvailable: 7n,
+      system: { ...context().system, feeRate: 9n },
+    });
+    const config = walletConfigWith({
+      sdk: { buildConversionTransaction, completeTransaction },
+    });
+
+    const txInfo = await buildTransactionPreview(txContext, true, 7n, config);
+
+    expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
+    expect(buildConversionTransaction.mock.calls[0]?.[0]).toBeInstanceOf(ccc.Transaction);
+    expect(buildConversionTransaction.mock.calls[0]?.[1]).toBe(config.cccClient);
+    expect(buildConversionTransaction.mock.calls[0]?.[2]).toEqual({
+      direction: "ckb-to-ickb",
+      amount: 7n,
+      lock: config.primaryLock,
+      context: txContext,
+    });
+    expect(completeTransaction).toHaveBeenCalledWith(tx, {
+      signer: config.signer,
+      client: config.cccClient,
+      feeRate: 9n,
+    });
+    expect(txInfo).toMatchObject({
+      error: "",
+      fee: 42n,
+      estimatedMaturity: 123n,
+      conversionNotice: notice,
+    });
+  });
+
+  it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+
+    await buildTransactionPreview(context({ ickbAvailable: 5n }), false, 5n, config);
+
+    expect(buildConversionTransaction.mock.calls[0]?.[2]).toMatchObject({
+      direction: "ickb-to-ckb",
+      amount: 5n,
+    });
+  });
+
+  it("maps SDK planner failures to interface copy", async () => {
+    const cases: [ConversionTransactionFailureReason, string][] = [
+      ["amount-too-small", "Amount too small to exceed the minimum match and fee threshold"],
+      ["not-enough-ready-deposits", "Not enough ready deposits to convert now"],
+      ["nothing-to-do", "Nothing to do for now"],
+      ["amount-negative", "Amount must be positive"],
+      ["insufficient-ckb", "Not enough CKB"],
+      ["insufficient-ickb", "Not enough iCKB"],
+    ];
+
+    for (const [reason, message] of cases) {
+      const config = walletConfigWith({
+        sdk: { buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason, 77n)) },
       });
 
-    await buildTransactionPreview(
-      context({
-        availableOrders: [{} as OrderGroup],
-        system: {
-          ...context().system,
-          feeRate: 42n,
-        },
-      }),
-      true,
-      0n,
-      walletConfig({
-        sdk: Object.assign({}, walletConfig().sdk, {
-          completeTransaction,
-          buildBaseTransaction: async () => {
-            await Promise.resolve();
-            const tx = ccc.Transaction.default();
-            tx.inputs.push(
-              ccc.CellInput.from({
-                previousOutput: {
-                  txHash: byte32FromByte("99"),
-                  index: 0n,
-                },
-              }),
-            );
-            return tx;
-          },
-        }) as unknown as WalletConfig["sdk"],
-      }),
-    );
-
-    expect(completeTransaction.mock.calls[0]?.[1]).toEqual({
-      signer: walletConfig().signer,
-      client: walletConfig().cccClient,
-      feeRate: 42n,
-    });
+      await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config))
+        .resolves.toMatchObject({ error: message, estimatedMaturity: 77n });
+    }
   });
 
   it("uses SDK completion instead of local UDT, fee, and DAO steps", async () => {
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(0n);
     const calls: string[] = [];
-    const completeBy = vi.fn().mockImplementation(async (txLike: ccc.TransactionLike) => {
-      calls.push("udt");
-      await Promise.resolve();
-      return ccc.Transaction.from(txLike);
-    });
     const completeFeeBy = vi
       .spyOn(ccc.Transaction.prototype, "completeFeeBy")
       .mockImplementation(() => {
@@ -235,130 +239,42 @@ describe("buildTransactionPreview", () => {
         await Promise.resolve();
         return ccc.Transaction.from(txLike);
       });
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await buildTransactionPreview(
-      context({ availableOrders: [{} as OrderGroup] }),
+      context({ ckbAvailable: 1n }),
       true,
-      0n,
-      walletConfig({
-        sdk: Object.assign({}, walletConfig().sdk, {
-          completeTransaction,
-          buildBaseTransaction: async () => {
-            await Promise.resolve();
-            const tx = ccc.Transaction.default();
-            tx.inputs.push(
-              ccc.CellInput.from({
-                previousOutput: {
-                  txHash: byte32FromByte("77"),
-                  index: 0n,
-                },
-              }),
-            );
-            return tx;
-          },
-        }) as unknown as WalletConfig["sdk"],
-        managers: Object.assign({}, walletConfig().managers, {
-          ickbUdt: { completeBy } as unknown as WalletConfig["managers"]["ickbUdt"],
-        }),
+      1n,
+      walletConfigWith({
+        sdk: { completeTransaction },
       }),
     );
 
     expect(completeTransaction).toHaveBeenCalledTimes(1);
-    expect(completeBy).not.toHaveBeenCalled();
     expect(completeFeeBy).not.toHaveBeenCalled();
     expect(daoLimit).not.toHaveBeenCalled();
     expect(calls).toEqual(["sdk-complete"]);
   });
 
-  it("passes direct withdrawal requests through the SDK base builder", async () => {
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(0n);
-    const buildBaseTransaction = vi
-      .fn<WalletConfig["sdk"]["buildBaseTransaction"]>()
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
-    const request = vi
-      .fn<WalletConfig["sdk"]["request"]>()
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
-    const readyDeposit = {
-      isReady: true,
-      udtValue: 10n,
-      maturity: { toUnix: (): bigint => 5n },
-    };
-
-    const txInfo = await buildTransactionPreview(
-      context({ ickbAvailable: 10n }),
-      false,
-      10n,
-      walletConfig({
-        sdk: Object.assign({}, walletConfig().sdk, {
-          buildBaseTransaction,
-          request,
-        }) as unknown as WalletConfig["sdk"],
-        managers: Object.assign({}, walletConfig().managers, {
-          logic: Object.assign({}, walletConfig().managers.logic, {
-            findDeposits: () => deposits(readyDeposit),
-          }),
-        }),
-      }),
-    );
-
-    expect(txInfo.error).toBe("");
-    expect(buildBaseTransaction).toHaveBeenCalledTimes(2);
-    expect(buildBaseTransaction.mock.calls[0]?.[2]).toEqual({
-      withdrawalRequest: undefined,
-      orders: [],
-      receipts: [],
-      readyWithdrawals: [],
-    });
-    expect(buildBaseTransaction.mock.calls[1]?.[2]).toEqual({
-      withdrawalRequest: {
-        deposits: [readyDeposit],
-        lock: script("11"),
+  it("surfaces planner and completion failures as TxInfo errors", async () => {
+    const plannerFailure = walletConfigWith({
+      sdk: {
+        buildConversionTransaction: vi
+          .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+          .mockRejectedValue(new Error("planner failed")),
       },
-      orders: [],
-      receipts: [],
-      readyWithdrawals: [],
     });
-    expect(request).not.toHaveBeenCalled();
-  });
+    await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, plannerFailure))
+      .resolves.toMatchObject({ error: "planner failed" });
 
-  it("keeps UDT-to-CKB fallback preview buildable under live-like ratios", async () => {
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(0n);
-    const request = vi
-      .fn<WalletConfig["sdk"]["request"]>()
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
-
-    const txInfo = await buildTransactionPreview(
-      context({
-        system: {
-          ...context().system,
-          exchangeRatio: Ratio.from({
-            ckbScale: 10000000000000000n,
-            udtScale: 10100000000000000n,
-          }),
-          ckbAvailable: ccc.fixedPointFrom(1000000),
-          tip: { timestamp: 1234n } as ccc.ClientBlockHeader,
-        },
-        ickbAvailable: ccc.fixedPointFrom(10000),
-      }),
-      false,
-      ccc.fixedPointFrom(10000),
-      walletConfig({
-        sdk: Object.assign({}, walletConfig().sdk, {
-          request,
-        }) as unknown as WalletConfig["sdk"],
-      }),
-    );
-
-    expect(txInfo.error).toBe("");
-    expect(request).toHaveBeenCalledTimes(1);
+    const completionFailure = walletConfigWith({
+      sdk: {
+        completeTransaction: vi
+          .fn<WalletConfig["sdk"]["completeTransaction"]>()
+          .mockRejectedValue(new Error("completion failed")),
+      },
+    });
+    await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, completionFailure))
+      .resolves.toMatchObject({ error: "completion failed" });
   });
 });

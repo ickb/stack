@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildTransaction,
@@ -7,27 +8,44 @@ import {
   type TesterState,
 } from "./runtime.js";
 
-function byte32FromByte(hexByte: string): `0x${string}` {
-  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
-    throw new Error("Expected exactly one byte as two hex chars");
-  }
-  return `0x${hexByte.repeat(32)}`;
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
-}
-
 function cell(capacity: bigint, lock: ccc.Script, outputData = "0x"): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte("aa"), index: 0n },
     cellOutput: { capacity, lock },
     outputData,
   });
+}
+
+function buildBaseTransactionMock(calls: string[]): ReturnType<
+  typeof vi.fn<Runtime["sdk"]["buildBaseTransaction"]>
+> {
+  return vi.fn<Runtime["sdk"]["buildBaseTransaction"]>().mockImplementation((txLike) =>
+    recordTxStep("base", calls, txLike)
+  );
+}
+
+function requestMock(calls: string[]): ReturnType<typeof vi.fn<Runtime["sdk"]["request"]>> {
+  return vi.fn<Runtime["sdk"]["request"]>().mockImplementation((txLike) =>
+    recordTxStep("request", calls, txLike)
+  );
+}
+
+function completeTransactionMock(calls: string[]): ReturnType<
+  typeof vi.fn<Runtime["sdk"]["completeTransaction"]>
+> {
+  return vi.fn<Runtime["sdk"]["completeTransaction"]>().mockImplementation((txLike) =>
+    recordTxStep("complete", calls, txLike)
+  );
+}
+
+async function recordTxStep(
+  label: string,
+  calls: string[],
+  txLike: ccc.TransactionLike,
+): Promise<ccc.Transaction> {
+  calls.push(label);
+  await Promise.resolve();
+  return ccc.Transaction.from(txLike);
 }
 
 describe("readTesterState", () => {
@@ -57,21 +75,19 @@ describe("readTesterState", () => {
       client: {} as ccc.Client,
       signer: {} as ccc.SignerCkbPrivateKey,
       sdk: {
-        getL1State: async () => {
+        getL1AccountState: async () => {
           await Promise.resolve();
           return {
             system: { tip: { timestamp: 0n } } as TesterState["system"],
             user: { orders: [userOrder, pendingOrder] },
-          };
-        },
-        getAccountState: async () => {
-          await Promise.resolve();
-          return {
-            capacityCells: [plainCell],
-            nativeUdtCapacity: 7n,
-            nativeUdtBalance: 11n,
-            receipts: [receipt],
-            withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
+            account: {
+              capacityCells: [plainCell],
+              nativeUdtCells: [],
+              nativeUdtCapacity: 7n,
+              nativeUdtBalance: 11n,
+              receipts: [receipt],
+              withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
+            },
           };
         },
       } as unknown as Runtime["sdk"],
@@ -94,27 +110,9 @@ describe("readTesterState", () => {
 describe("buildTransaction", () => {
   it("delegates base construction and completion to the SDK", async () => {
     const calls: string[] = [];
-    const buildBaseTransaction = vi
-      .fn<Runtime["sdk"]["buildBaseTransaction"]>()
-      .mockImplementation(async (txLike) => {
-        calls.push("base");
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
-    const request = vi
-      .fn<Runtime["sdk"]["request"]>()
-      .mockImplementation(async (txLike) => {
-        calls.push("request");
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
-    const completeTransaction = vi
-      .fn<Runtime["sdk"]["completeTransaction"]>()
-      .mockImplementation(async (txLike) => {
-        calls.push("complete");
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
+    const buildBaseTransaction = buildBaseTransactionMock(calls);
+    const request = requestMock(calls);
+    const completeTransaction = completeTransactionMock(calls);
     const receipts = [{ id: "receipt" }];
     const readyWithdrawals = [{ id: "withdrawal" }];
     const state: TesterState = {

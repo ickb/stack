@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { ccc } from "@ckb-ccc/ccc";
+import { unique } from "@ickb/utils";
+import { useEffect, useState } from "react";
 import type { JSX } from "react/jsx-runtime";
 import App from "./App.tsx";
 import { EmptyDashboard } from "./Dashboard.tsx";
 import Progress from "./Progress.tsx";
+import {
+  connectorWalletConfigQueryKey,
+  objectIdentityKey,
+} from "./connectorQueryKey.ts";
 import { errorMessageOf, type RootConfig } from "./utils.ts";
 
 export default function Connector({
@@ -15,12 +21,25 @@ export default function Connector({
   signer: ccc.Signer;
   walletName: string;
 }): JSX.Element {
+  const signerKey = objectIdentityKey(signer);
+  const [signerVersion, setSignerVersion] = useState(0);
+  useEffect(
+    () => signer.onReplaced(() => {
+      setSignerVersion((version) => version + 1);
+    }),
+    [signer],
+  );
   const {
     isPending,
     error,
     data: walletConfig,
   } = useQuery({
-    queryKey: [rootConfig.chain, "walletConfig"],
+    queryKey: connectorWalletConfigQueryKey(
+      rootConfig,
+      walletName,
+      signerKey,
+      signerVersion,
+    ),
     queryFn: async () => {
       if (!(await signer.isConnected())) {
         await signer.connect();
@@ -31,14 +50,9 @@ export default function Connector({
         signer.getAddressObjs(),
       ]);
 
-      let accountLocks = [recommendedAddressObj, ...addressObjs].map(({ script }) =>
+      const accountLocks = [...unique([recommendedAddressObj, ...addressObjs].map(({ script }) =>
         ccc.Script.from(script),
-      );
-
-      // Keep unique account locks, preferred one is the first one.
-      accountLocks = [
-        ...new Map(accountLocks.map((script) => [script.toHex(), script])).values(),
-      ];
+      ))];
 
       return {
         ...rootConfig,

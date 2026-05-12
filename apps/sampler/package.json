@@ -31,7 +31,7 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "tsc",
+    "build": "pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core build && tsc -p tsconfig.build.json",
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules",
@@ -46,6 +46,7 @@
     "provenance": true
   },
   "devDependencies": {
+    "@ickb/testkit": "workspace:*",
     "@types/node": "catalog:"
   },
   "dependencies": {

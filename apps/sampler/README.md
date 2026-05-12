@@ -4,33 +4,21 @@ An utility to help sampling iCKB rate across time.
 
 ## Run the sampler on mainnet
 
-1. Download this repo in a folder of your choice:
+From a plain checkout, follow the root [Local CCC Workflow](../../README.md#local-ccc-workflow) first so `forks/ccc/repo` is materialized. If you are working against patched local CCC packages, rerun `pnpm forks:ccc` or keep `pnpm forks:ccc --watch` running. The app build commands below then build the runtime workspace package closure they import.
 
-```bash
-git clone https://github.com/ickb/stack.git
-```
-
-2. Enter into the repo folder:
-
-```bash
-cd stack/apps/sampler
-```
-
-3. Install dependencies:
+From the repo root:
 
 ```bash
 pnpm install
+pnpm --filter ./apps/sampler build
+pnpm --filter ./apps/sampler start
 ```
 
-4. Build project:
+Or from `apps/sampler` inside the monorepo workspace:
 
 ```bash
+pnpm install
 pnpm build
-```
-
-5. Start the sampler utility:
-
-```bash
 pnpm start
 ```
 

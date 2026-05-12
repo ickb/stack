@@ -1,0 +1,48 @@
+{
+  "name": "@ickb/node-utils",
+  "version": "1001.0.0",
+  "private": true,
+  "description": "Shared Node utilities for iCKB apps",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
+  "author": "phroi",
+  "license": "MIT",
+  "homepage": "https://ickb.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ickb/stack"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "NODE_OPTIONS='--disable-warning=DEP0040' vitest",
+    "test:ci": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run",
+    "build": "tsc",
+    "lint": "eslint ./src",
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "catalog:",
+    "@ickb/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}

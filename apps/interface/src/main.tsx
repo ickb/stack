@@ -4,14 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ccc, JoyId } from "@ckb-ccc/ccc";
 import { getConfig, IckbSdk } from "@ickb/sdk";
 import Connector from "./Connector.tsx";
-import type { RootConfig } from "./utils.ts";
+import { parseWalletChain, type RootConfig } from "./utils.ts";
 import appIcon from "/favicon.png?url";
 
 const appName = "iCKB DApp";
 
 function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
   const config = getConfig(chain);
-  const { managers } = config;
 
   return {
     chain,
@@ -21,12 +20,6 @@ function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
         ? new ccc.ClientPublicMainnet()
         : new ccc.ClientPublicTestnet(),
     sdk: IckbSdk.fromConfig(config),
-    managers: {
-      ickbUdt: managers.ickbUdt,
-      logic: managers.logic,
-      ownedOwner: managers.ownedOwner,
-      order: managers.order,
-    },
   };
 }
 
@@ -36,8 +29,8 @@ const rootConfigs = {
 };
 
 export function startApp(walletChain: string): void {
-  const [walletName, chain] = walletChain.split("_");
-  const rootConfig = chain === "mainnet" ? rootConfigs.mainnet : rootConfigs.testnet;
+  const { walletName, chain } = parseWalletChain(walletChain);
+  const rootConfig = rootConfigs[chain];
 
   const signerInfo = JoyId.getJoyIdSigners(
     rootConfig.cccClient,

@@ -1,6 +1,6 @@
 # iCKB Tester
 
-The tester is now CCC-native. It cancels the tester's own active orders, then places randomized iCKB limit orders against the live testnet exchange ratio using the shared `@ickb/sdk`, `@ickb/core`, and `@ickb/order` packages.
+The tester is now CCC-native. It waits while its own fresh matchable orders are still live, then cancels stale active orders and places randomized iCKB limit orders against the selected chain exchange ratio using the shared `@ickb/sdk`, `@ickb/core`, and `@ickb/order` packages.
 
 ## Environment
 
@@ -25,6 +25,8 @@ Current network support:
 
 ## Run
 
+From a plain checkout, follow the root [Local CCC Workflow](../../README.md#local-ccc-workflow) first so `forks/ccc/repo` is materialized. If you are working against patched local CCC packages, rerun `pnpm forks:ccc` or keep `pnpm forks:ccc --watch` running. The app build commands below then build the runtime workspace package closure they import.
+
 ```bash
 pnpm install
 pnpm --filter ./apps/tester build
@@ -47,7 +49,7 @@ pnpm run start
 
 `CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `TESTER_PRIVATE_KEY` and `TESTER_SLEEP_INTERVAL`.
 
-The start script keeps the existing JSON log format and writes one log file per run.
+The start script writes one newline-delimited JSON log stream per run. Each loop appends one JSON object to the log file. Balance, amount, and fee values are decimal strings so bigint values do not lose precision. Confirmation timeouts are logged with the broadcast hash and stop the loop with exit code `2` so a wrapper does not immediately send conflicting replacement work.
 
 ## Licensing
 
