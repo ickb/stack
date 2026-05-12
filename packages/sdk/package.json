@@ -57,5 +57,8 @@
     "@ickb/dao": "workspace:*",
     "@ickb/order": "workspace:*",
     "@ickb/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*"
   }
 }

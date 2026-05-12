@@ -54,5 +54,8 @@
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
     "@ickb/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*"
   }
 }

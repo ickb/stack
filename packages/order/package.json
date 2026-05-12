@@ -55,5 +55,8 @@
     "@ckb-ccc/core": "catalog:",
     "@ickb/utils": "workspace:*",
     "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*"
   }
 }

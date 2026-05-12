@@ -1,0 +1,24 @@
+{
+  "name": "@ickb/testkit",
+  "version": "1001.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "lint": "eslint ./src",
+    "clean": "rm -fr dist",
+    "clean:deep": "rm -fr dist node_modules"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "catalog:"
+  }
+}
