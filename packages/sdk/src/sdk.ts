@@ -1177,7 +1177,7 @@ export class IckbSdk {
     }
 
     // Sort maturing CKB entries by their maturity timestamp.
-    ckbMaturing.sort((a, b) => Number(a.maturity - b.maturity));
+    ckbMaturing.sort((a, b) => compareBigInt(a.maturity, b.maturity));
 
     // Calculate cumulative maturing CKB values.
     let cumulative = 0n;
