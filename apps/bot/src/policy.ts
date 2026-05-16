@@ -19,13 +19,46 @@ const FRESH_DEPOSIT_TARGET_EPOCH_OFFSET: [bigint, bigint, bigint] = [180n, 0n, 1
 const FUTURE_SEGMENT_UNDERCOVERAGE_RATIO_DENOMINATOR = 2n;
 
 export type RebalancePlan =
-  | { kind: "none" }
-  | { kind: "deposit"; quantity: 1 }
+  | { kind: "none"; reason: RebalanceNoopReason; diagnostics?: RebalanceDiagnostics }
+  | { kind: "deposit"; quantity: 1; diagnostics?: RebalanceDiagnostics }
   | {
       kind: "withdraw";
       deposits: IckbDepositCell[];
       requiredLiveDeposits?: IckbDepositCell[];
+      diagnostics?: RebalanceDiagnostics;
     };
+
+export type RebalanceNoopReason =
+  | "insufficient_output_slots"
+  | "low_ickb_ckb_reserve_unavailable"
+  | "target_ickb_not_exceeded"
+  | "no_ready_withdrawal_selection";
+
+export interface RebalanceDiagnostics {
+  futurePool?: FuturePoolDiagnostics;
+}
+
+export interface FuturePoolDiagnostics {
+  futureDepositCount: number;
+  canCreateFutureInventory: boolean;
+  shouldBootstrapFirstAnchor: boolean;
+  ringLength: bigint;
+  segmentCount: number;
+  targetSegmentIndex: number;
+  targetSegmentLength: bigint;
+  targetSegmentUdtValue: bigint;
+  totalFutureUdt: bigint;
+  anchorsShareOneSegment: boolean;
+  segments: FuturePoolSegmentDiagnostics[];
+}
+
+export interface FuturePoolSegmentDiagnostics {
+  index: number;
+  length: bigint;
+  depositCount: number;
+  udtValue: bigint;
+  isTarget: boolean;
+}
 
 export function partitionPoolDeposits(
   deposits: readonly IckbDepositCell[],
@@ -90,31 +123,38 @@ export function planRebalance(options: {
     options;
 
   if (outputSlots < OUTPUTS_PER_REBALANCE_ACTION) {
-    return { kind: "none" };
+    return { kind: "none", reason: "insufficient_output_slots" };
   }
 
   if (ickbBalance < MIN_ICKB_BALANCE) {
     if (ckbBalance >= depositCapacity + CKB_RESERVE) {
       return { kind: "deposit", quantity: 1 };
     }
-    return { kind: "none" };
+    return { kind: "none", reason: "low_ickb_ckb_reserve_unavailable" };
   }
 
-  if (
-    shouldSeedFutureSegment(
-      futurePoolDeposits,
-      tip,
-      ickbBalance,
-      ckbBalance,
-      depositCapacity,
-    )
-  ) {
-    return { kind: "deposit", quantity: 1 };
+  const futureSegment = evaluateFutureSegment(
+    futurePoolDeposits,
+    tip,
+    ickbBalance,
+    ckbBalance,
+    depositCapacity,
+  );
+  if (futureSegment.shouldSeed) {
+    return {
+      kind: "deposit",
+      quantity: 1,
+      ...diagnosticsField(futureSegment.diagnostics),
+    };
   }
 
   const excessIckb = ickbBalance - TARGET_ICKB_BALANCE;
   if (excessIckb <= 0n) {
-    return { kind: "none" };
+    return {
+      kind: "none",
+      reason: "target_ickb_not_exceeded",
+      ...diagnosticsField(futureSegment.diagnostics),
+    };
   }
 
   const withdrawalLimit = Math.min(
@@ -131,6 +171,7 @@ export function planRebalance(options: {
       kind: "withdraw",
       deposits: [cleanup.deposit],
       requiredLiveDeposits: [cleanup.requiredLiveDeposit],
+      ...diagnosticsField(futureSegment.diagnostics),
     };
   }
 
@@ -145,12 +186,17 @@ export function planRebalance(options: {
     return {
       kind: "withdraw",
       deposits: selection.deposits,
+      ...diagnosticsField(futureSegment.diagnostics),
       ...(selection.requiredLiveDeposits.length > 0
         ? { requiredLiveDeposits: selection.requiredLiveDeposits }
         : {}),
     };
   }
-  return { kind: "none" };
+  return {
+    kind: "none",
+    reason: "no_ready_withdrawal_selection",
+    ...diagnosticsField(futureSegment.diagnostics),
+  };
 }
 
 function selectPoolRebalancingDeposits(
@@ -177,42 +223,47 @@ function selectPoolRebalancingDeposits(
   });
 }
 
-function shouldSeedFutureSegment(
+function evaluateFutureSegment(
   futurePoolDeposits: readonly IckbDepositCell[],
   tip: ccc.ClientBlockHeader,
   ickbBalance: bigint,
   ckbBalance: bigint,
   depositCapacity: bigint,
-): boolean {
+): { shouldSeed: boolean; diagnostics?: RebalanceDiagnostics } {
   const futureDeposits = futurePoolDeposits.filter((deposit) => !deposit.isReady);
+  const canCreate = canCreateFutureInventory(ickbBalance, ckbBalance, depositCapacity);
+  const futureLayout = analyzeFutureSegments(futureDeposits, tip);
+  const diagnostics = futureDiagnostics(futureLayout, futureDeposits.length, canCreate);
 
-  if (!canCreateFutureInventory(ickbBalance, ckbBalance, depositCapacity)) {
-    return false;
+  if (!canCreate) {
+    return { shouldSeed: false, diagnostics };
   }
 
   if (futureDeposits.length === 0) {
-    return true;
+    return { shouldSeed: true, diagnostics };
   }
 
   if (futureDeposits.length === 1) {
-    return false;
+    return { shouldSeed: false, diagnostics };
   }
 
-  const futureLayout = analyzeFutureSegments(futureDeposits, tip);
   if (futureDeposits.length === 2 && !futureLayout.anchorsShareOneSegment) {
-    return false;
+    return { shouldSeed: false, diagnostics };
   }
 
   if (futureLayout.totalFutureUdt <= 0n) {
-    return false;
+    return { shouldSeed: false, diagnostics };
   }
 
-  return isUnderCoveredFutureSegment(
-    futureLayout.targetSegment.udtValue,
-    futureLayout.targetSegment.length,
-    futureLayout.totalFutureUdt,
-    futureLayout.ringLength,
-  );
+  return {
+    shouldSeed: isUnderCoveredFutureSegment(
+      futureLayout.targetSegment.udtValue,
+      futureLayout.targetSegment.length,
+      futureLayout.totalFutureUdt,
+      futureLayout.ringLength,
+    ),
+    diagnostics,
+  };
 }
 
 function canCreateFutureInventory(
@@ -238,6 +289,40 @@ function selectNonStandardCleanupDeposit(
     minAmountExclusive: ICKB_DEPOSIT_CAP,
     maxAmount: ickbBalance - TARGET_ICKB_BALANCE,
   });
+}
+
+function diagnosticsField(
+  diagnostics: RebalanceDiagnostics | undefined,
+): { diagnostics?: RebalanceDiagnostics } {
+  return diagnostics === undefined ? {} : { diagnostics };
+}
+
+function futureDiagnostics(
+  layout: FutureLayout,
+  futureDepositCount: number,
+  canCreateFutureInventory: boolean,
+): RebalanceDiagnostics {
+  return {
+    futurePool: {
+      futureDepositCount,
+      canCreateFutureInventory,
+      shouldBootstrapFirstAnchor: canCreateFutureInventory && futureDepositCount === 0,
+      ringLength: layout.ringLength,
+      segmentCount: layout.segmentCount,
+      targetSegmentIndex: layout.targetSegmentIndex,
+      targetSegmentLength: layout.targetSegment.length,
+      targetSegmentUdtValue: layout.targetSegment.udtValue,
+      totalFutureUdt: layout.totalFutureUdt,
+      anchorsShareOneSegment: layout.anchorsShareOneSegment,
+      segments: layout.segments.map((segment) => ({
+        index: segment.index,
+        length: segment.length,
+        depositCount: segment.deposits.length,
+        udtValue: segment.udtValue,
+        isTarget: segment.index === layout.targetSegmentIndex,
+      })),
+    },
+  };
 }
 
 function canSpendSingletonAnchors(excessIckb: bigint): boolean {

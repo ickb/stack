@@ -90,7 +90,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toEqual({ kind: "none", reason: "insufficient_output_slots" });
   });
 
   it("requests one deposit when iCKB is too low and CKB reserve is available", () => {
@@ -105,7 +105,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("requests one deposit when CKB is exactly at the reserve boundary", () => {
@@ -120,7 +120,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("does nothing when iCKB is too low but the CKB reserve is unavailable", () => {
@@ -135,7 +135,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toEqual({ kind: "none", reason: "low_ickb_ckb_reserve_unavailable" });
   });
 
   it("does not deposit when iCKB is exactly at the minimum balance", () => {
@@ -150,87 +150,142 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none", reason: "target_ickb_not_exceeded" });
   });
 
   it("seeds one future deposit when no future anchors exist", () => {
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 2000n * CKB,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: [futureDeposit(105n * 60n * 1000n)] as never[],
-        futurePoolDeposits: NO_FUTURE,
-      }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 2000n * CKB,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: [futureDeposit(105n * 60n * 1000n)] as never[],
+      futurePoolDeposits: NO_FUTURE,
+    });
+
+    expect(plan).toMatchObject({ kind: "deposit", quantity: 1 });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 0,
+      canCreateFutureInventory: true,
+      shouldBootstrapFirstAnchor: true,
+      segmentCount: 1,
+      segments: [
+        { index: 0, depositCount: 0, udtValue: 0n, isTarget: true },
+      ],
+    });
   });
 
   it("does not seed when a lone future anchor must be preserved", () => {
     const loneAnchor = futureDeposit(9n);
 
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 2000n * CKB,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: NO_NEAR_READY,
-        futurePoolDeposits: [loneAnchor] as never[],
-      }),
-    ).toEqual({ kind: "none" });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 2000n * CKB,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: NO_NEAR_READY,
+      futurePoolDeposits: [loneAnchor] as never[],
+    });
+
+    expect(plan).toMatchObject({ kind: "none" });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 1,
+      canCreateFutureInventory: true,
+      shouldBootstrapFirstAnchor: false,
+      segmentCount: 1,
+      segments: [
+        { index: 0, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: true },
+      ],
+    });
   });
 
   it("seeds, without withdrawing, when two future anchors crowd the same adaptive segment", () => {
     const firstDuplicate = futureDeposit(9n);
     const secondDuplicate = futureDeposit(10n);
 
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 2000n * CKB,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: NO_NEAR_READY,
-        futurePoolDeposits: [firstDuplicate, secondDuplicate] as never[],
-      }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 2000n * CKB,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: NO_NEAR_READY,
+      futurePoolDeposits: [firstDuplicate, secondDuplicate] as never[],
+    });
+
+    expect(plan).toMatchObject({ kind: "deposit", quantity: 1 });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 2,
+      canCreateFutureInventory: true,
+      ringLength: FUTURE_RING_LENGTH_MS,
+      segmentCount: 2,
+      targetSegmentIndex: 0,
+      totalFutureUdt: 2n * ICKB_DEPOSIT_CAP,
+      anchorsShareOneSegment: true,
+      segments: [
+        { index: 0, depositCount: 0, udtValue: 0n, isTarget: true },
+        { index: 1, depositCount: 2, udtValue: 2n * ICKB_DEPOSIT_CAP, isTarget: false },
+      ],
+    });
   });
 
   it("does not seed when two future anchors already span both adaptive segments", () => {
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 2000n * CKB,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: NO_NEAR_READY,
-        futurePoolDeposits: [futureDeposit(1n), futureDeposit(9n)] as never[],
-      }),
-    ).toEqual({ kind: "none" });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 2000n * CKB,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: NO_NEAR_READY,
+      futurePoolDeposits: [futureDeposit(1n), futureDeposit(9n)] as never[],
+    });
+
+    expect(plan).toMatchObject({ kind: "none" });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 2,
+      segmentCount: 2,
+      targetSegmentIndex: 0,
+      targetSegmentUdtValue: ICKB_DEPOSIT_CAP,
+      anchorsShareOneSegment: false,
+      segments: [
+        { index: 0, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: true },
+        { index: 1, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: false },
+      ],
+    });
   });
 
   it("seeds when the coarse target segment is under-covered by udt per meter", () => {
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 2000n * CKB,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: NO_NEAR_READY,
-        futurePoolDeposits: [futureDeposit(5n), futureDeposit(9n), futureDeposit(13n)] as never[],
-      }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 2000n * CKB,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: NO_NEAR_READY,
+      futurePoolDeposits: [futureDeposit(5n), futureDeposit(9n), futureDeposit(13n)] as never[],
+    });
+
+    expect(plan).toMatchObject({ kind: "deposit", quantity: 1 });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 3,
+      segmentCount: 4,
+      targetSegmentIndex: 0,
+      targetSegmentUdtValue: 0n,
+      anchorsShareOneSegment: false,
+      segments: [
+        { index: 0, depositCount: 0, udtValue: 0n, isTarget: true },
+        { index: 1, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: false },
+        { index: 2, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: false },
+        { index: 3, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: false },
+      ],
+    });
   });
 
   it("does not seed when the coarse target segment meets the density threshold", () => {
@@ -249,7 +304,7 @@ describe("planRebalance", () => {
           futureDeposit(9n, 4n),
         ] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not seed from zero-total future coverage", () => {
@@ -264,22 +319,31 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(9n, 0n), futureDeposit(10n, 0n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not seed future shaping when the reserve gate fails", () => {
-    expect(
-      planRebalance({
-        outputSlots: 4,
-        tip: TIP,
-        ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
-        ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
-        depositCapacity: 1000n * CKB,
-        readyDeposits: [],
-        nearReadyDeposits: NO_NEAR_READY,
-        futurePoolDeposits: NO_FUTURE,
-      }),
-    ).toEqual({ kind: "none" });
+    const plan = planRebalance({
+      outputSlots: 4,
+      tip: TIP,
+      ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
+      ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
+      depositCapacity: 1000n * CKB,
+      readyDeposits: [],
+      nearReadyDeposits: NO_NEAR_READY,
+      futurePoolDeposits: NO_FUTURE,
+    });
+
+    expect(plan).toMatchObject({ kind: "none" });
+    expect(plan.diagnostics?.futurePool).toMatchObject({
+      futureDepositCount: 0,
+      canCreateFutureInventory: false,
+      shouldBootstrapFirstAnchor: false,
+      segmentCount: 1,
+      segments: [
+        { index: 0, depositCount: 0, udtValue: 0n, isTarget: true },
+      ],
+    });
   });
 
   it("does not seed when one more deposit would cross the target band", () => {
@@ -294,7 +358,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not treat sparse next-hour near-ready as future-segmentation coverage", () => {
@@ -309,7 +373,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [futureDeposit(105n * 60n * 1000n)] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("does not withdraw from a duplicate dense future segment to fill an empty target segment", () => {
@@ -328,7 +392,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [firstDuplicate, secondDuplicate, otherSegment] as never[],
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("keeps direct seeding when future crowding has only deposit output slots", () => {
@@ -343,7 +407,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n), futureDeposit(6n), futureDeposit(9n)] as never[],
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("does not withdraw stale ready-shaped entries from the future pool", () => {
@@ -363,7 +427,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [readyDuplicate, pendingDuplicate, secondPendingDuplicate, otherSegment] as never[],
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("does not treat ready entries as future anchors", () => {
@@ -382,7 +446,7 @@ describe("planRebalance", () => {
           futureDeposit(9n),
         ] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("keeps direct seeding when removing a future source would leave the source segment below the preservation floor", () => {
@@ -402,7 +466,7 @@ describe("planRebalance", () => {
           futureDeposit(13n, 200n),
         ] as never[],
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("keeps direct seeding when density improvement would be too small", () => {
@@ -425,7 +489,7 @@ describe("planRebalance", () => {
           futureDeposit(9n, 10n),
         ] as never[],
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("returns none, not a withdrawal, when dust crowds the future pool without deposit budget", () => {
@@ -440,7 +504,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n, 1n), futureDeposit(6n, 1n), futureDeposit(9n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not reserve withdrawals when public drain leaves the future target under-covered", () => {
@@ -455,7 +519,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n), futureDeposit(9n, 1n), futureDeposit(13n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not expand future horizon or remove a farther source", () => {
@@ -470,7 +534,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n), futureDeposit(6n), futureDeposit(9n), futureDeposit(10_000n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("returns none when a raced future-removal source disappears", () => {
@@ -485,7 +549,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(9n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not treat pending future withdrawal value as liquid CKB for future seeding", () => {
@@ -500,7 +564,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [futureDeposit(105n * 60n * 1000n, 10n * ICKB_DEPOSIT_CAP)] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does nothing instead of withdrawing for cosmetic future smoothing", () => {
@@ -520,7 +584,7 @@ describe("planRebalance", () => {
           futureDeposit(12n),
         ] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not seed or withdraw future inventory when the reserve gate fails", () => {
@@ -535,7 +599,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n), futureDeposit(6n), futureDeposit(9n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not seed or withdraw future inventory when one more deposit would cross the target band", () => {
@@ -550,7 +614,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: [futureDeposit(5n), futureDeposit(6n), futureDeposit(9n)] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("requests withdrawals when iCKB is above the target band and a crowded-bucket fit exists", () => {
@@ -569,7 +633,7 @@ describe("planRebalance", () => {
       futurePoolDeposits: NO_FUTURE,
     });
 
-    expect(plan).toEqual({
+    expect(plan).toMatchObject({
       kind: "withdraw",
       deposits: [first],
       requiredLiveDeposits: [second],
@@ -592,7 +656,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [crowdedEarly],
       requiredLiveDeposits: [crowdedLate],
@@ -614,7 +678,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [extra],
       requiredLiveDeposits: [protectedAnchor],
@@ -657,7 +721,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [crowdedSmall],
       requiredLiveDeposits: [crowdedLarge],
@@ -680,7 +744,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [singleton, crowdedSmall],
       requiredLiveDeposits: [crowdedLarge],
@@ -704,7 +768,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [highExtra],
       requiredLiveDeposits: [highProtected],
@@ -726,7 +790,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [first],
       requiredLiveDeposits: [last],
@@ -748,7 +812,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [earlier],
       requiredLiveDeposits: [later],
@@ -770,7 +834,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("uses near-ready refill as a tie-break for equal singleton choices once anchors unlock", () => {
@@ -789,7 +853,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [nearReadyRefill] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "withdraw", deposits: [laterSingleton] });
+    ).toMatchObject({ kind: "withdraw", deposits: [laterSingleton] });
   });
 
   it("uses near-ready refill as a tie-break for equal crowded-bucket extras", () => {
@@ -870,7 +934,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("returns none when neither extras nor singletons fit", () => {
@@ -889,7 +953,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none", reason: "no_ready_withdrawal_selection" });
   });
 
   it("limits withdrawal requests by the available output slots", () => {
@@ -908,7 +972,7 @@ describe("planRebalance", () => {
       futurePoolDeposits: NO_FUTURE,
     });
 
-    expect(plan).toEqual({
+    expect(plan).toMatchObject({
       kind: "withdraw",
       deposits: [first, second],
     });
@@ -947,7 +1011,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("cleanup withdraws one over-cap extra and pins its protected anchor", () => {
@@ -965,7 +1029,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [first],
       requiredLiveDeposits: [second],
@@ -986,7 +1050,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not let cleanup consume a protected crowded ready anchor", () => {
@@ -1004,7 +1068,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({
+    ).toMatchObject({
       kind: "withdraw",
       deposits: [tinyExtra],
       requiredLiveDeposits: [protectedAnchor],
@@ -1025,7 +1089,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not clean up near-ready or future non-standard deposits", () => {
@@ -1043,7 +1107,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [nearReady] as never[],
         futurePoolDeposits: [future] as never[],
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("requests one ready singleton once anchors unlock and a full withdrawal keeps the target buffer", () => {
@@ -1060,7 +1124,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "withdraw", deposits: [deposit] });
+    ).toMatchObject({ kind: "withdraw", deposits: [deposit] });
   });
 
   it("does not request a full withdrawal that would cut below the target buffer", () => {
@@ -1075,7 +1139,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not let near-ready refill unlock cleanup below the target floor", () => {
@@ -1093,7 +1157,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [hugeNearReady] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("keeps deposit action exclusive when future seeding gates pass", () => {
@@ -1110,7 +1174,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: NO_NEAR_READY,
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "deposit", quantity: 1 });
+    ).toMatchObject({ kind: "deposit", quantity: 1 });
   });
 
   it("does not treat near-ready refill as current liquidity budget", () => {
@@ -1128,7 +1192,7 @@ describe("planRebalance", () => {
         nearReadyDeposits: [hugeNearReady] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 
   it("does not let fake near-ready refill unlock singleton anchors before the excess gate", () => {
@@ -1147,6 +1211,6 @@ describe("planRebalance", () => {
         nearReadyDeposits: [fakeRefill] as never[],
         futurePoolDeposits: NO_FUTURE,
       }),
-    ).toEqual({ kind: "none" });
+    ).toMatchObject({ kind: "none" });
   });
 });

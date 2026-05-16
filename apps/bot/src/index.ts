@@ -21,12 +21,25 @@ import {
 import {
   buildTransaction,
   collectPoolDeposits,
+  summarizeBotState,
   type BotState,
   type Runtime,
 } from "./runtime.js";
+import {
+  BotEventEmitter,
+  createRunId,
+  emitDecisionEvents,
+  errorSummary,
+  lowCapitalSkipDecision,
+  parseMaxIterations,
+  reachedMaxIterations,
+  transactionLifecycleEvents,
+  transactionSummary,
+} from "./observability.js";
 
 async function main(): Promise<void> {
-  const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL } = process.env;
+  const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL, MAX_ITERATIONS } =
+    process.env;
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
   }
@@ -34,8 +47,15 @@ async function main(): Promise<void> {
     throw new Error("Empty env BOT_PRIVATE_KEY");
   }
   const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
+  const maxIterations = parseMaxIterations(MAX_ITERATIONS);
 
   const chain = parseSupportedChain(CHAIN, "CHAIN");
+  const runId = createRunId();
+  const events = new BotEventEmitter({ chain, runId });
+  events.emit(0, "bot.run.started", {
+    maxIterations,
+    bounded: maxIterations !== undefined,
+  });
   const client = createPublicClient(chain, RPC_URL);
   const config = getConfig(chain);
   const { managers } = config;
@@ -51,6 +71,8 @@ async function main(): Promise<void> {
     primaryLock,
   };
   let stopAfterLog = false;
+  let completedIterations = 0;
+  let iterationId = 0;
   for (;;) {
     await sleep(Math.floor(2 * Math.random() * sleepInterval));
 
@@ -58,9 +80,21 @@ async function main(): Promise<void> {
     const executionLog: Record<string, any> = {};
     const startTime = new Date();
     executionLog.startTime = startTime.toLocaleString();
+    iterationId += 1;
+    events.emit(iterationId, "bot.iteration.started");
 
     try {
       const state = await readBotState(runtime);
+      const stateDecision = summarizeBotState(state);
+      events.emit(iterationId, "bot.state.read", {
+        chainTip: stateDecision.chainTip,
+        balances: stateDecision.balances,
+        orders: stateDecision.orders,
+        withdrawals: stateDecision.withdrawals,
+        poolDeposits: stateDecision.poolDeposits,
+        exchangeRatio: stateDecision.exchangeRatio,
+        depositCapacity: stateDecision.depositCapacity,
+      });
 
       executionLog.balance = {
         CKB: {
@@ -91,6 +125,8 @@ async function main(): Promise<void> {
           convert(false, state.availableIckbBalance, state.system.tip) <=
         state.minCkbBalance
       ) {
+        const skip = lowCapitalSkipDecision(stateDecision);
+        events.emit(iterationId, "bot.decision.skipped", skip);
         executionLog.error =
           "The bot must have more than " +
           fmtCkb(state.minCkbBalance) +
@@ -101,29 +137,71 @@ async function main(): Promise<void> {
       }
 
       const result = await buildTransaction(runtime, state);
-      if (!result) {
+      emitDecisionEvents(events, iterationId, result);
+      if (result.kind === "skipped") {
+        const completion = completeTerminalIteration(completedIterations, maxIterations);
+        completedIterations = completion.completedIterations;
+        if (completion.shouldStop) {
+          return;
+        }
         continue;
       }
 
       executionLog.actions = result.actions;
+      const fee = result.tx.estimateFee(state.system.feeRate);
       executionLog.txFee = {
-        fee: fmtCkb(result.tx.estimateFee(state.system.feeRate)),
+        fee: fmtCkb(fee),
         feeRate: state.system.feeRate,
       };
       executionLog.txHash = await sendAndWaitForCommit(runtime, result.tx, {
         onSent: (txHash) => {
           executionLog.txHash = txHash;
         },
+        onLifecycle: (event) => {
+          for (const lifecycle of transactionLifecycleEvents(event)) {
+            events.emit(iterationId, lifecycle.type, {
+              ...lifecycle.fields,
+              ...(event.type === "broadcasted"
+                ? { transaction: transactionSummary(result.tx, fee, state.system.feeRate) }
+                : {}),
+            });
+          }
+        },
       });
+      completedIterations = completeTerminalIteration(
+        completedIterations,
+        maxIterations,
+      ).completedIterations;
     } catch (error) {
       stopAfterLog = handleLoopError(executionLog, error);
+      events.emit(iterationId, "bot.iteration.failed", {
+        error: errorSummary(error),
+      });
+      completedIterations = completeTerminalIteration(
+        completedIterations,
+        maxIterations,
+      ).completedIterations;
     }
 
     logExecution(executionLog, startTime);
     if (stopAfterLog) {
       return;
     }
+    if (reachedMaxIterations(completedIterations, maxIterations)) {
+      return;
+    }
   }
+}
+
+export function completeTerminalIteration(
+  completedIterations: number,
+  maxIterations: number | undefined,
+): { completedIterations: number; shouldStop: boolean } {
+  const nextCompletedIterations = completedIterations + 1;
+  return {
+    completedIterations: nextCompletedIterations,
+    shouldStop: reachedMaxIterations(nextCompletedIterations, maxIterations),
+  };
 }
 
 async function readBotState(runtime: Runtime): Promise<BotState> {

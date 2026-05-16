@@ -3,8 +3,10 @@ import { type IckbDepositCell } from "@ickb/core";
 import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
+import { headerLike } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TARGET_ICKB_BALANCE } from "./policy.js";
+import { completeTerminalIteration } from "./index.js";
 import { buildTransaction, collectPoolDeposits } from "./runtime.js";
 
 afterEach(() => {
@@ -44,6 +46,32 @@ function readyDeposit(
   } as unknown as IckbDepositCell;
 }
 
+function botState(overrides: Record<string, unknown>): Record<string, unknown> {
+  return {
+    accountLocks: [],
+    marketOrders: [],
+    availableCkbBalance: 0n,
+    availableIckbBalance: 0n,
+    unavailableCkbBalance: 0n,
+    totalCkbBalance: 0n,
+    depositCapacity: 100n,
+    minCkbBalance: 0n,
+    readyPoolDeposits: [],
+    nearReadyPoolDeposits: [],
+    futurePoolDeposits: [],
+    userOrders: [],
+    receipts: [],
+    readyWithdrawals: [],
+    notReadyWithdrawals: [],
+    system: {
+      feeRate: 1n,
+      exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+      tip: headerLike(),
+    },
+    ...overrides,
+  };
+}
+
 describe("collectPoolDeposits", () => {
   it("fails closed when the public pool scan reaches the sentinel limit", async () => {
     async function* deposits(): AsyncGenerator<IckbDepositCell> {
@@ -68,6 +96,23 @@ describe("collectPoolDeposits", () => {
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
       limit: defaultFindCellsLimit + 1,
+    });
+  });
+});
+
+describe("completeTerminalIteration", () => {
+  it("counts only terminal iterations toward bounded runs", () => {
+    expect(completeTerminalIteration(0, 1)).toEqual({
+      completedIterations: 1,
+      shouldStop: true,
+    });
+    expect(completeTerminalIteration(0, 2)).toEqual({
+      completedIterations: 1,
+      shouldStop: false,
+    });
+    expect(completeTerminalIteration(999, undefined)).toEqual({
+      completedIterations: 1000,
+      shouldStop: false,
     });
   });
 });
@@ -110,27 +155,28 @@ describe("buildTransaction", () => {
         args: "0x",
       }),
     };
-    const state = {
+    const state = botState({
       marketOrders: [{}],
       availableCkbBalance: 100n,
-      availableIckbBalance: 0n,
-      depositCapacity: 100n,
-      readyPoolDeposits: [],
-      nearReadyPoolDeposits: [],
-      futurePoolDeposits: [],
-      userOrders: [],
-      receipts: [],
-      readyWithdrawals: [],
+      totalCkbBalance: 100n,
       system: {
         feeRate: 1n,
         exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-        tip: {} as ccc.ClientBlockHeader,
+        tip: headerLike(),
       },
-    };
+    });
 
-    await expect(
-      buildTransaction(runtime as never, state as never),
-    ).resolves.toBeUndefined();
+    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "match_value_not_above_fee",
+      decision: {
+        skip: {
+          reason: "match_value_not_above_fee",
+          fee: 1n,
+          matchValue: 1n,
+        },
+      },
+    });
   });
 
   it("uses the repo exchange-ratio scale when checking match-only profitability", async () => {
@@ -166,27 +212,72 @@ describe("buildTransaction", () => {
       },
       primaryLock: script("11"),
     };
-    const state = {
+    const state = botState({
       marketOrders: [{}],
       availableCkbBalance: 100n,
-      availableIckbBalance: 0n,
-      depositCapacity: 100n,
-      readyPoolDeposits: [],
-      nearReadyPoolDeposits: [],
-      futurePoolDeposits: [],
-      userOrders: [],
-      receipts: [],
-      readyWithdrawals: [],
+      totalCkbBalance: 100n,
       system: {
         feeRate: 1n,
         exchangeRatio: { ckbScale: 3n, udtScale: 5n },
-        tip: {} as ccc.ClientBlockHeader,
+        tip: headerLike(),
       },
-    };
+    });
 
     await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      kind: "built",
       actions: { matchedOrders: 1 },
     });
+  });
+
+  it("returns a structured no-action skip with rebalance reason", async () => {
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+    });
+
+    const runtime = {
+      client: {} as ccc.Client,
+      signer: {} as ccc.SignerCkbPrivateKey,
+      managers: {
+        order: {
+          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
+            ccc.Transaction.from(txLike),
+        },
+      },
+      sdk: {
+        buildBaseTransaction: async (
+          txLike: ccc.TransactionLike,
+        ): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          return ccc.Transaction.from(txLike);
+        },
+        completeTransaction: vi.fn(),
+      },
+      primaryLock: script("11"),
+    };
+    const state = botState({
+      availableCkbBalance: 0n,
+      availableIckbBalance: TARGET_ICKB_BALANCE,
+    });
+
+    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "no_actions",
+      decision: {
+        rebalance: { kind: "none", reason: "target_ickb_not_exceeded" },
+        actions: {
+          collectedOrders: 0,
+          completedDeposits: 0,
+          matchedOrders: 0,
+          deposits: 0,
+          withdrawalRequests: 0,
+          withdrawals: 0,
+        },
+        skip: { reason: "no_actions" },
+      },
+    });
+    expect(runtime.sdk.completeTransaction).not.toHaveBeenCalled();
   });
 
   it("passes required live deposits to SDK base transaction construction", async () => {
@@ -233,27 +324,25 @@ describe("buildTransaction", () => {
       },
       primaryLock: script("44"),
     };
-    const state = {
+    const state = botState({
       marketOrders: [],
-      availableCkbBalance: 0n,
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       depositCapacity: 1000n,
       readyPoolDeposits: [first, protectedAnchor, third],
-      nearReadyPoolDeposits: [],
-      futurePoolDeposits: [],
-      userOrders: [],
-      receipts: [],
-      readyWithdrawals: [],
       system: {
         feeRate: 1n,
         exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-        tip: {} as ccc.ClientBlockHeader,
+        tip: headerLike(),
       },
-    };
+    });
 
     const result = await buildTransaction(runtime as never, state as never);
 
-    expect(result?.actions.withdrawalRequests).toBe(1);
+    expect(result.kind).toBe("built");
+    if (result.kind !== "built") {
+      throw new Error("Expected built transaction");
+    }
+    expect(result.actions.withdrawalRequests).toBe(1);
     expect(buildBaseTransaction.mock.calls[0]?.[2]).toMatchObject({
       withdrawalRequest: {
         deposits: [first],
@@ -262,6 +351,6 @@ describe("buildTransaction", () => {
     });
     expect(completeTransaction).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["base", "complete"]);
-    expect(result?.tx.cellDeps).toEqual([]);
+    expect(result.tx.cellDeps).toEqual([]);
   });
 });
