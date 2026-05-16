@@ -1776,6 +1776,7 @@ describe("sendAndWaitForCommit", () => {
     const txHash = hash("a1");
     const sleep = vi.fn(() => Promise.resolve());
     const onConfirmationWait = vi.fn();
+    const onLifecycle = vi.fn<(event: unknown) => void>();
     const sendTransaction = vi.fn().mockResolvedValue(txHash);
     const getTransaction = vi
       .fn()
@@ -1792,6 +1793,7 @@ describe("sendAndWaitForCommit", () => {
       {
         confirmationIntervalMs: 7,
         onConfirmationWait,
+        onLifecycle,
         sleep,
       },
     )).resolves.toBe(txHash);
@@ -1802,11 +1804,36 @@ describe("sendAndWaitForCommit", () => {
     expect(sleep).toHaveBeenCalledWith(7);
     expect(getTransaction).toHaveBeenCalledTimes(3);
     expect(getTransaction).toHaveBeenCalledWith(txHash);
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "committed", txHash, status: "committed", checks: 3 },
+    ]);
+  });
+
+  it("emits pre-broadcast lifecycle failures without changing the thrown error", async () => {
+    const error = new Error("broadcast failed");
+    const onLifecycle = vi.fn<(event: unknown) => void>();
+
+    await expect(sendAndWaitForCommit(
+      {
+        client: {} as ccc.Client,
+        signer: {
+          sendTransaction: vi.fn().mockRejectedValue(error),
+        } as unknown as ccc.Signer,
+      },
+      ccc.Transaction.default(),
+      { onLifecycle },
+    )).rejects.toBe(error);
+
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "pre_broadcast_failed", error },
+    ]);
   });
 
   it("surfaces terminal transaction failures", async () => {
     const txHash = hash("a2");
     const sleep = vi.fn(() => Promise.resolve());
+    const onLifecycle = vi.fn<(event: unknown) => void>();
 
     try {
       await sendAndWaitForCommit(
@@ -1819,7 +1846,7 @@ describe("sendAndWaitForCommit", () => {
           } as unknown as ccc.Signer,
         },
         ccc.Transaction.default(),
-        { sleep },
+        { onLifecycle, sleep },
       );
       expect.fail("Expected sendAndWaitForCommit to reject");
     } catch (error) {
@@ -1833,11 +1860,16 @@ describe("sendAndWaitForCommit", () => {
     }
 
     expect(sleep).not.toHaveBeenCalled();
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "terminal_rejection", txHash, status: "rejected", checks: 1 },
+    ]);
   });
 
   it("surfaces transaction confirmation timeouts with the broadcast hash", async () => {
     const txHash = hash("a3");
     const onSent = vi.fn();
+    const onLifecycle = vi.fn<(event: unknown) => void>();
 
     try {
       await sendAndWaitForCommit(
@@ -1852,6 +1884,7 @@ describe("sendAndWaitForCommit", () => {
         ccc.Transaction.default(),
         {
           maxConfirmationChecks: 1,
+          onLifecycle,
           onSent,
           sleep: () => Promise.resolve(),
         },
@@ -1868,12 +1901,17 @@ describe("sendAndWaitForCommit", () => {
     }
 
     expect(onSent).toHaveBeenCalledWith(txHash);
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "timeout_after_broadcast", txHash, status: "unknown", checks: 1 },
+    ]);
   });
 
   it("treats post-broadcast polling failures as unconfirmed", async () => {
     const txHash = hash("a4");
     const onSent = vi.fn();
     const onConfirmationWait = vi.fn();
+    const onLifecycle = vi.fn<(event: unknown) => void>();
     const sleep = vi.fn(() => Promise.resolve());
     const getTransaction = vi
       .fn()
@@ -1890,6 +1928,7 @@ describe("sendAndWaitForCommit", () => {
       ccc.Transaction.default(),
       {
         onConfirmationWait,
+        onLifecycle,
         onSent,
         sleep,
       },
@@ -1898,11 +1937,16 @@ describe("sendAndWaitForCommit", () => {
     expect(onSent).toHaveBeenCalledWith(txHash);
     expect(onConfirmationWait).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledTimes(1);
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "committed", txHash, status: "committed", checks: 2 },
+    ]);
   });
 
   it("times out if post-broadcast polling keeps failing", async () => {
     const txHash = hash("a5");
     const pollingError = new Error("RPC down");
+    const onLifecycle = vi.fn<(event: unknown) => void>();
 
     try {
       await sendAndWaitForCommit(
@@ -1917,6 +1961,7 @@ describe("sendAndWaitForCommit", () => {
         ccc.Transaction.default(),
         {
           maxConfirmationChecks: 1,
+          onLifecycle,
           sleep: () => Promise.resolve(),
         },
       );
@@ -1931,6 +1976,58 @@ describe("sendAndWaitForCommit", () => {
       });
       expect(error).toHaveProperty("cause", pollingError);
     }
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      {
+        type: "post_broadcast_unresolved",
+        txHash,
+        status: "sent",
+        checks: 1,
+        error: pollingError,
+      },
+    ]);
+  });
+
+  it("classifies timeout as proven after a successful pending poll follows a transient polling error", async () => {
+    const txHash = hash("a6");
+    const pollingError = new Error("RPC down");
+    const onLifecycle = vi.fn<(event: unknown) => void>();
+
+    try {
+      await sendAndWaitForCommit(
+        {
+          client: {
+            getTransaction: vi
+              .fn()
+              .mockRejectedValueOnce(pollingError)
+              .mockResolvedValueOnce({ status: "unknown" }),
+          } as unknown as ccc.Client,
+          signer: {
+            sendTransaction: vi.fn().mockResolvedValue(txHash),
+          } as unknown as ccc.Signer,
+        },
+        ccc.Transaction.default(),
+        {
+          maxConfirmationChecks: 2,
+          onLifecycle,
+          sleep: () => Promise.resolve(),
+        },
+      );
+      expect.fail("Expected sendAndWaitForCommit to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TransactionConfirmationError);
+      expect(error).toMatchObject({
+        message: "Transaction confirmation timed out",
+        txHash,
+        status: "unknown",
+        isTimeout: true,
+      });
+      expect(error).not.toHaveProperty("cause", pollingError);
+    }
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "timeout_after_broadcast", txHash, status: "unknown", checks: 2 },
+    ]);
   });
 });
 

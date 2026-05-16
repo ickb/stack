@@ -23,7 +23,31 @@ export function formatCkb(balance: bigint): string {
 }
 
 function jsonLogReplacer(_: unknown, value: unknown): unknown {
-  return typeof value === "bigint" ? value.toString() : value;
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value === "string") {
+    return redactSensitiveLogText(value);
+  }
+  return value;
+}
+
+export function redactSensitiveLogText(value: string): string {
+  return value
+    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/giu, "$1[redacted]@")
+    .replace(
+      /\b([a-z0-9_]*private[_-]?key|[a-z0-9_]*seed(?:[_-]?phrase)?|[a-z0-9_]*mnemonic|(?:raw[_-]?)?env)\b\s*[:=]\s*\S+/giu,
+      "$1=[redacted]",
+    )
+    .replace(
+      /\b(witness(?:es)?|signed[_-]?transaction|raw[_-]?transaction|script)\b\s*[:=]?\s*0x[0-9a-f]{65,}/giu,
+      "$1 [redacted]",
+    )
+    .replace(/0x[0-9a-f]{129,}/giu, "[redacted-hex]")
+    .replace(
+      /\{[^{}]*(?:"codeHash"|"hashType"|"args")[^{}]*(?:"codeHash"|"hashType"|"args")[^{}]*\}/giu,
+      "[redacted-script]",
+    );
 }
 
 export function parseSupportedChain(
@@ -114,7 +138,11 @@ export function logExecution(
   executionLog.ElapsedSeconds = Math.round(
     (Date.now() - startTime.getTime()) / 1000,
   );
-  process.stdout.write(`${JSON.stringify(executionLog, jsonLogReplacer)}\n`);
+  writeJsonLine(executionLog);
+}
+
+export function writeJsonLine(record: unknown): void {
+  process.stdout.write(`${JSON.stringify(record, jsonLogReplacer)}\n`);
 }
 
 export function sleep(ms: number): Promise<void> {
