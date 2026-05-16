@@ -25,7 +25,7 @@ describe("bot observability", () => {
       },
     });
 
-    emitter.emit(7, "bot.decision.skipped", {
+    const event = emitter.emit(7, "bot.decision.skipped", {
       reason: "no_actions",
       amount: 9007199254740993n,
       witnesses: ["0xabc"],
@@ -37,6 +37,7 @@ describe("bot observability", () => {
     });
 
     expect(written).toHaveLength(1);
+    expect(event).toBe(written[0]);
     expect(written[0]).toMatchObject({
       version: 1,
       app: "bot",

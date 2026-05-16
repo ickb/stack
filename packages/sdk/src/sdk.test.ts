@@ -1830,6 +1830,56 @@ describe("sendAndWaitForCommit", () => {
     ]);
   });
 
+  it("does not let lifecycle callback failures replace send errors", async () => {
+    const error = new Error("broadcast failed");
+    const onLifecycle = vi.fn(() => {
+      throw new Error("observer failed");
+    });
+
+    await expect(sendAndWaitForCommit(
+      {
+        client: {} as ccc.Client,
+        signer: {
+          sendTransaction: vi.fn().mockRejectedValue(error),
+        } as unknown as ccc.Signer,
+      },
+      ccc.Transaction.default(),
+      { onLifecycle },
+    )).rejects.toBe(error);
+
+    expect(onLifecycle).toHaveBeenCalledWith(expect.objectContaining({
+      type: "pre_broadcast_failed",
+      error,
+    }));
+  });
+
+  it("does not let lifecycle callback failures interrupt confirmation", async () => {
+    const txHash = hash("a7");
+    const onSent = vi.fn();
+    const onLifecycle = vi.fn(() => {
+      throw new Error("observer failed");
+    });
+
+    await expect(sendAndWaitForCommit(
+      {
+        client: {
+          getTransaction: vi.fn().mockResolvedValue({ status: "committed" }),
+        } as unknown as ccc.Client,
+        signer: {
+          sendTransaction: vi.fn().mockResolvedValue(txHash),
+        } as unknown as ccc.Signer,
+      },
+      ccc.Transaction.default(),
+      { onLifecycle, onSent },
+    )).resolves.toBe(txHash);
+
+    expect(onSent).toHaveBeenCalledWith(txHash);
+    expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
+      { type: "broadcasted", txHash },
+      { type: "committed", txHash, status: "committed", checks: 1 },
+    ]);
+  });
+
   it("surfaces terminal transaction failures", async () => {
     const txHash = hash("a2");
     const sleep = vi.fn(() => Promise.resolve());

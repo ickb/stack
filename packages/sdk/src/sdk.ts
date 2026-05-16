@@ -228,15 +228,15 @@ export async function sendAndWaitForCommit(
   try {
     txHash = await signer.sendTransaction(tx);
   } catch (error) {
-    onLifecycle?.({
+    notifyLifecycle(onLifecycle, {
       type: "pre_broadcast_failed",
       error,
       elapsedMs: Date.now() - startedAt,
     });
     throw error;
   }
-  onLifecycle?.({ type: "broadcasted", txHash, elapsedMs: Date.now() - startedAt });
   onSent?.(txHash);
+  notifyLifecycle(onLifecycle, { type: "broadcasted", txHash, elapsedMs: Date.now() - startedAt });
   let status: string | undefined = "sent";
   let lastPollingError: unknown;
   let checks = 0;
@@ -259,7 +259,7 @@ export async function sendAndWaitForCommit(
   }
 
   if (status === "committed") {
-    onLifecycle?.({
+    notifyLifecycle(onLifecycle, {
       type: "committed",
       txHash,
       status,
@@ -270,7 +270,7 @@ export async function sendAndWaitForCommit(
   }
 
   if (isPendingStatus(status)) {
-    onLifecycle?.({
+    notifyLifecycle(onLifecycle, {
       type: lastPollingError === undefined
         ? "timeout_after_broadcast"
         : "post_broadcast_unresolved",
@@ -289,7 +289,7 @@ export async function sendAndWaitForCommit(
     );
   }
 
-  onLifecycle?.({
+  notifyLifecycle(onLifecycle, {
     type: "terminal_rejection",
     txHash,
     status,
@@ -302,6 +302,17 @@ export async function sendAndWaitForCommit(
     status,
     false,
   );
+}
+
+function notifyLifecycle(
+  onLifecycle: SendAndWaitForCommitOptions["onLifecycle"] | undefined,
+  event: SendAndWaitForCommitEvent,
+): void {
+  try {
+    onLifecycle?.(event);
+  } catch {
+    // Observability callbacks must not change transaction send/confirmation behavior.
+  }
 }
 
 function isPendingStatus(status: string | undefined): boolean {
