@@ -22,7 +22,7 @@ export function formatCkb(balance: bigint): string {
   return `${sign}${whole.toString()}.${fraction.toString().padStart(8, "0").replace(/0+$/u, "")}`;
 }
 
-function jsonLogReplacer(_: unknown, value: unknown): unknown {
+export function jsonLogReplacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 

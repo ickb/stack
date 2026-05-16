@@ -1,5 +1,5 @@
 import { type ccc } from "@ckb-ccc/core";
-import { writeJsonLine, type SupportedChain } from "@ickb/node-utils";
+import { jsonLogReplacer, writeJsonLine, type SupportedChain } from "@ickb/node-utils";
 import { type SendAndWaitForCommitEvent } from "@ickb/sdk";
 import {
   type BotActions,
@@ -256,7 +256,7 @@ function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unkn
     try {
       return {
         message: "Non-Error object",
-        details: JSON.parse(JSON.stringify(error, bigintJsonReplacer)) as unknown,
+        details: JSON.parse(JSON.stringify(error, jsonLogReplacer)) as unknown,
       };
     } catch {
       return { message: "Non-Error object (unserializable)" };
@@ -288,9 +288,5 @@ function confirmationFields(event: Extract<
 }
 
 function jsonSafeEventFields(fields: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(fields, bigintJsonReplacer)) as Record<string, unknown>;
-}
-
-function bigintJsonReplacer(_: string, value: unknown): unknown {
-  return typeof value === "bigint" ? value.toString() : value;
+  return JSON.parse(JSON.stringify(fields, jsonLogReplacer)) as Record<string, unknown>;
 }

@@ -194,8 +194,9 @@ export async function buildTransaction(
     tx = runtime.managers.order.addMatch(tx, match);
   }
 
+  const outputSlots = Math.max(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length);
   const rebalance = planRebalance({
-    outputSlots: Math.max(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length),
+    outputSlots,
     tip: state.system.tip,
     ickbBalance: state.availableIckbBalance + match.udtDelta,
     ckbBalance: state.availableCkbBalance + match.ckbDelta,
@@ -204,7 +205,6 @@ export async function buildTransaction(
     nearReadyDeposits: state.nearReadyPoolDeposits,
     futurePoolDeposits: state.futurePoolDeposits,
   });
-  const outputSlots = Math.max(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length);
   tx = await runtime.sdk.buildBaseTransaction(tx, runtime.client, {
     withdrawalRequest:
       rebalance.kind === "withdraw"
@@ -274,7 +274,6 @@ export async function buildTransaction(
     decision = {
       ...decision,
       match: { ...decision.match, value: matchValue },
-      fee: { ...decision.fee, estimated: fee },
     };
     if (matchValue <= fee * state.system.exchangeRatio.ckbScale) {
       return skippedResult("match_value_not_above_fee", actions, decision, {

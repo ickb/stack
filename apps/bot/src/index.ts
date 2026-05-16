@@ -110,10 +110,10 @@ async function main(): Promise<void> {
         totalEquivalent: {
           CKB: fmtCkb(
             state.totalCkbBalance +
-              convert(false, state.availableIckbBalance, state.system.tip),
+              convert(false, state.availableIckbBalance, state.system.exchangeRatio),
           ),
           ICKB: fmtCkb(
-            convert(true, state.totalCkbBalance, state.system.tip) +
+            convert(true, state.totalCkbBalance, state.system.exchangeRatio) +
               state.availableIckbBalance,
           ),
         },
@@ -122,7 +122,7 @@ async function main(): Promise<void> {
 
       if (
         state.totalCkbBalance +
-          convert(false, state.availableIckbBalance, state.system.tip) <=
+          convert(false, state.availableIckbBalance, state.system.exchangeRatio) <=
         state.minCkbBalance
       ) {
         const skip = lowCapitalSkipDecision(stateDecision);
