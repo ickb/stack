@@ -153,6 +153,19 @@ describe("bot observability", () => {
 
     expect(summary.name).toBe("Error");
     expect(summary.message).toBe("failed with witness 0x" + "22".repeat(80));
+    expect(summary.stack).toContain("failed with witness");
+  });
+
+  it("preserves nested error causes in structured error summaries", () => {
+    const cause = new Error("inner public failure");
+    const error = new Error("outer public failure", { cause });
+
+    const summary = errorSummary(error) as Record<string, unknown>;
+
+    expect(summary.cause).toMatchObject({
+      name: "Error",
+      message: "inner public failure",
+    });
   });
 
   it("summarizes thrown objects with JSON-safe details", () => {

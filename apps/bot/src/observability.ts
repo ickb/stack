@@ -231,13 +231,24 @@ export function lowCapitalSkipDecision(
 }
 
 export function errorSummary(error: unknown): Record<string, unknown> | string {
+  return summarizeError(error, new Set<unknown>());
+}
+
+function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unknown> | string {
   if (error instanceof Error) {
+    if (seen.has(error)) {
+      return { message: "Circular error reference" };
+    }
+    seen.add(error);
+
     return {
       name: error.name,
       message: error.message,
+      ...(error.stack === undefined ? {} : { stack: error.stack }),
       ...("txHash" in error ? { txHash: error.txHash } : {}),
       ...("status" in error ? { status: error.status } : {}),
       ...("isTimeout" in error ? { isTimeout: error.isTimeout } : {}),
+      ...("cause" in error ? { cause: summarizeError(error.cause, seen) } : {}),
     };
   }
 
