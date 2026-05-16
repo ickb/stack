@@ -15,7 +15,7 @@ import {
 } from "./runtime.js";
 
 describe("bot observability", () => {
-  it("emits one secret-safe structured JSON-compatible event", () => {
+  it("emits one structured JSON-compatible event", () => {
     const written: unknown[] = [];
     const emitter = new BotEventEmitter({
       chain: "testnet",
@@ -28,11 +28,12 @@ describe("bot observability", () => {
     emitter.emit(7, "bot.decision.skipped", {
       reason: "no_actions",
       amount: 9007199254740993n,
-      RPC_URL: "https://user:password@example.test",
-      BOT_PRIVATE_KEY: "0xsecret",
       witnesses: ["0xabc"],
+      witness: "0xabc",
+      output_data: "0xabc",
       transactionShape: { witnesses: 1 },
       lock: { codeHash: "0xabc", hashType: "type", args: "0xdef" },
+      env: "testnet",
     });
 
     expect(written).toHaveLength(1);
@@ -45,11 +46,12 @@ describe("bot observability", () => {
       type: "bot.decision.skipped",
       reason: "no_actions",
       amount: "9007199254740993",
-      RPC_URL: "[redacted]",
-      BOT_PRIVATE_KEY: "[redacted]",
-      witnesses: "[redacted]",
+      witnesses: ["0xabc"],
+      witness: "0xabc",
+      output_data: "0xabc",
       transactionShape: { witnesses: 1 },
-      lock: "[redacted]",
+      lock: { codeHash: "0xabc", hashType: "type", args: "0xdef" },
+      env: "testnet",
     });
     expect(typeof (written[0] as { timestamp: unknown }).timestamp).toBe("string");
   });
@@ -85,7 +87,7 @@ describe("bot observability", () => {
     ]);
   });
 
-  it("does not redact public chain tip block metadata", () => {
+  it("preserves public chain tip block metadata", () => {
     const written: unknown[] = [];
     const emitter = new BotEventEmitter({
       chain: "testnet",
@@ -144,19 +146,34 @@ describe("bot observability", () => {
     expect((written[0] as { timestamp: string }).timestamp).not.toBe("not-iso");
   });
 
-  it("redacts high-risk payloads from structured error summaries", () => {
-    const error = new Error(
-      "failed BOT_PRIVATE_KEY=0x" + "11".repeat(32) +
-        " witnesses: 0x" + "22".repeat(80) +
-        " {\"codeHash\":\"0x11\",\"hashType\":\"type\",\"args\":\"0x22\"}",
-    );
+  it("preserves public error messages in structured error summaries", () => {
+    const error = new Error("failed with witness 0x" + "22".repeat(80));
 
     const summary = errorSummary(error) as Record<string, unknown>;
 
-    expect(JSON.stringify(summary)).not.toContain("0x" + "11".repeat(32));
-    expect(JSON.stringify(summary)).not.toContain("0x" + "22".repeat(80));
     expect(summary.name).toBe("Error");
-    expect(summary.message).toContain("[redacted]");
+    expect(summary.message).toBe("failed with witness 0x" + "22".repeat(80));
+  });
+
+  it("summarizes thrown objects with JSON-safe details", () => {
+    const summary = errorSummary({
+      code: "RPC_FAILURE",
+      amount: 9007199254740993n,
+      message: "failed with public evidence",
+      lock: { codeHash: "0xabc", hashType: "type", args: "0xdef" },
+      witnesses: ["0x" + "22".repeat(80)],
+    }) as Record<string, unknown>;
+
+    expect(summary).toEqual({
+      message: "Non-Error object",
+      details: {
+        code: "RPC_FAILURE",
+        amount: "9007199254740993",
+        message: "failed with public evidence",
+        lock: { codeHash: "0xabc", hashType: "type", args: "0xdef" },
+        witnesses: ["0x" + "22".repeat(80)],
+      },
+    });
   });
 
   it("emits a structured decision event for no-action skips", () => {

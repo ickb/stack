@@ -1,9 +1,5 @@
 import { type ccc } from "@ckb-ccc/core";
-import {
-  redactSensitiveLogText,
-  writeJsonLine,
-  type SupportedChain,
-} from "@ickb/node-utils";
+import { writeJsonLine, type SupportedChain } from "@ickb/node-utils";
 import { type SendAndWaitForCommitEvent } from "@ickb/sdk";
 import {
   type BotActions,
@@ -55,7 +51,7 @@ export class BotEventEmitter {
     fields: Record<string, unknown> = {},
   ): BotEvent {
     const event: BotEvent = {
-      ...sanitizeEventFields(fields),
+      ...jsonSafeEventFields(fields),
       version: BOT_EVENT_VERSION,
       app: "bot",
       chain: this.context.chain,
@@ -238,7 +234,7 @@ export function errorSummary(error: unknown): Record<string, unknown> | string {
   if (error instanceof Error) {
     return {
       name: error.name,
-      message: redactSensitiveLogText(error.message),
+      message: error.message,
       ...("txHash" in error ? { txHash: error.txHash } : {}),
       ...("status" in error ? { status: error.status } : {}),
       ...("isTimeout" in error ? { isTimeout: error.isTimeout } : {}),
@@ -246,11 +242,18 @@ export function errorSummary(error: unknown): Record<string, unknown> | string {
   }
 
   if (typeof error === "object" && error !== null) {
-    return { message: "Non-Error object" };
+    try {
+      return {
+        message: "Non-Error object",
+        details: JSON.parse(JSON.stringify(error, bigintJsonReplacer)) as unknown,
+      };
+    } catch {
+      return { message: "Non-Error object (unserializable)" };
+    }
   }
 
   if (typeof error === "string") {
-    return redactSensitiveLogText(error);
+    return error;
   }
 
   if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
@@ -273,31 +276,10 @@ function confirmationFields(event: Extract<
   };
 }
 
-function sanitizeEventFields(fields: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(fields, (key, value: unknown) => {
-    if (isSensitiveField(key, value)) {
-      return "[redacted]";
-    }
-    if (typeof value === "bigint") {
-      return value.toString();
-    }
-    if (typeof value === "string") {
-      return redactSensitiveLogText(value);
-    }
-    if (value instanceof Error) {
-      return errorSummary(value);
-    }
-    return value;
-  })) as Record<string, unknown>;
+function jsonSafeEventFields(fields: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(fields, bigintJsonReplacer)) as Record<string, unknown>;
 }
 
-function isSensitiveField(key: string, value: unknown): boolean {
-  if ((key === "blockNumber" || key === "blockHash") && typeof value !== "object") {
-    return false;
-  }
-  if (key === "witnesses" && typeof value === "number") {
-    return false;
-  }
-  return /private.*key|seed|mnemonic|\benv\b|rpc.*url|signed.*transaction|raw.*transaction|outputData|outputsData|witnesses|script|lock|codeHash|hashType|args/iu
-    .test(key);
+function bigintJsonReplacer(_: string, value: unknown): unknown {
+  return typeof value === "bigint" ? value.toString() : value;
 }

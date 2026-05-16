@@ -23,31 +23,7 @@ export function formatCkb(balance: bigint): string {
 }
 
 function jsonLogReplacer(_: unknown, value: unknown): unknown {
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  if (typeof value === "string") {
-    return redactSensitiveLogText(value);
-  }
-  return value;
-}
-
-export function redactSensitiveLogText(value: string): string {
-  return value
-    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/giu, "$1[redacted]@")
-    .replace(
-      /\b([a-z0-9_]*private[_-]?key|[a-z0-9_]*seed(?:[_-]?phrase)?|[a-z0-9_]*mnemonic|(?:raw[_-]?)?env)\b\s*[:=]\s*\S+/giu,
-      "$1=[redacted]",
-    )
-    .replace(
-      /\b(witness(?:es)?|signed[_-]?transaction|raw[_-]?transaction|script)\b\s*[:=]?\s*0x[0-9a-f]{65,}/giu,
-      "$1 [redacted]",
-    )
-    .replace(/0x[0-9a-f]{129,}/giu, "[redacted-hex]")
-    .replace(
-      /\{[^{}]*(?:"codeHash"|"hashType"|"args")[^{}]*(?:"codeHash"|"hashType"|"args")[^{}]*\}/giu,
-      "[redacted-script]",
-    );
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 export function parseSupportedChain(

@@ -83,7 +83,7 @@ The decision transcript groups evidence under `chainTip`, `balances`, `orders`, 
 
 `MAX_ITERATIONS=1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. The default remains an infinite loop.
 
-For secret safety, structured events intentionally omit full signed transactions, witnesses, full scripts, raw output data, raw environment, private keys, seed phrases, and credential-bearing RPC URLs.
+Structured events should contain public evidence and summaries needed to understand bot behavior. Do not add private keys, seed phrases, mnemonics, or other secrets to log payloads; omit noisy public fields at the call site instead of relying on redaction.
 
 ## Notes
 

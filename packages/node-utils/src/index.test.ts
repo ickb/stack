@@ -96,24 +96,6 @@ describe("node utilities", () => {
     expect(emptyLog.error).toBe("Empty Error");
   });
 
-  it("redacts credential-bearing URLs from JSON log strings", () => {
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    const now = vi.spyOn(Date, "now").mockReturnValue(1000);
-    const executionLog: Record<string, unknown> = {};
-    const error = new Error("failed https://user:password@example.test/rpc");
-    error.stack = "stack https://user:password@example.test/rpc";
-
-    handleLoopError(executionLog, error);
-    logExecution(executionLog, new Date(1000));
-
-    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0]));
-    expect(parsed.error.message).toBe("failed https://[redacted]@example.test/rpc");
-    expect(parsed.error.stack).toBe("stack https://[redacted]@example.test/rpc");
-
-    now.mockRestore();
-    stdoutWrite.mockRestore();
-  });
-
   it("stops after broadcast confirmation timeouts", () => {
     expect(STOP_EXIT_CODE).toBe(2);
     expect(handleLoopError({}, transactionError(true))).toBe(true);
@@ -179,7 +161,11 @@ describe("node utilities", () => {
     });
 
     expect(stdoutWrite).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(stdoutWrite.mock.calls[0]?.[0]))).toEqual({
+    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
+      type: string;
+      amount: string;
+    };
+    expect(parsed).toEqual({
       type: "bot.decision.skipped",
       amount: "9007199254740993",
     });
@@ -188,36 +174,38 @@ describe("node utilities", () => {
     stdoutWrite.mockRestore();
   });
 
-  it("redacts credential-bearing URLs from direct JSON lines", () => {
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    writeJsonLine({ rpcUrl: "https://user:password@example.test/rpc" });
-
-    expect(JSON.parse(String(stdoutWrite.mock.calls[0]?.[0]))).toEqual({
-      rpcUrl: "https://[redacted]@example.test/rpc",
-    });
-
-    stdoutWrite.mockRestore();
-  });
-
-  it("redacts high-risk raw payloads while preserving transaction hashes", () => {
+  it("preserves public CKB metadata in JSON logs", () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const txHash = byte32FromByte("55");
 
     writeJsonLine({
       txHash,
-      privateKey: "BOT_PRIVATE_KEY=0x" + "11".repeat(32),
       witness: "witnesses: 0x" + "22".repeat(80),
       signedTx: "signed transaction 0x" + "33".repeat(80),
-      script: '{"codeHash":"0x11","hashType":"type","args":"0x22"}',
+      script: JSON.stringify({
+        codeHash: "0x" + "44".repeat(32),
+        hashType: "type",
+        args: "0x" + "55".repeat(20),
+      }),
+      env: "testnet",
     });
 
-    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0]));
+    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
+      txHash: string;
+      witness: string;
+      signedTx: string;
+      script: string;
+      env: string;
+    };
     expect(parsed.txHash).toBe(txHash);
-    expect(JSON.stringify(parsed)).not.toContain("0x" + "11".repeat(32));
-    expect(JSON.stringify(parsed)).not.toContain("0x" + "22".repeat(80));
-    expect(JSON.stringify(parsed)).not.toContain("0x" + "33".repeat(80));
-    expect(parsed.script).toBe("[redacted-script]");
+    expect(parsed.witness).toBe("witnesses: 0x" + "22".repeat(80));
+    expect(parsed.signedTx).toBe("signed transaction 0x" + "33".repeat(80));
+    expect(parsed.script).toBe(JSON.stringify({
+      codeHash: "0x" + "44".repeat(32),
+      hashType: "type",
+      args: "0x" + "55".repeat(20),
+    }));
+    expect(parsed.env).toBe("testnet");
 
     stdoutWrite.mockRestore();
   });
