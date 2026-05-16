@@ -79,6 +79,7 @@ async function main(): Promise<void> {
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const executionLog: Record<string, any> = {};
     const startTime = new Date();
+    let stopAfterIteration = false;
     executionLog.startTime = startTime.toLocaleString();
     iterationId += 1;
     events.emit(iterationId, "bot.iteration.started");
@@ -108,23 +109,13 @@ async function main(): Promise<void> {
           unavailable: fmtCkb(0n),
         },
         totalEquivalent: {
-          CKB: fmtCkb(
-            state.totalCkbBalance +
-              convert(false, state.availableIckbBalance, state.system.exchangeRatio),
-          ),
-          ICKB: fmtCkb(
-            convert(true, state.totalCkbBalance, state.system.exchangeRatio) +
-              state.availableIckbBalance,
-          ),
+          CKB: fmtCkb(stateDecision.balances.totalEquivalentCkb),
+          ICKB: fmtCkb(stateDecision.balances.totalEquivalentIckb),
         },
       };
       executionLog.ratio = state.system.exchangeRatio;
 
-      if (
-        state.totalCkbBalance +
-          convert(false, state.availableIckbBalance, state.system.exchangeRatio) <=
-        state.minCkbBalance
-      ) {
+      if (stateDecision.balances.totalEquivalentCkb <= state.minCkbBalance) {
         const skip = lowCapitalSkipDecision(stateDecision);
         events.emit(iterationId, "bot.decision.skipped", skip);
         executionLog.error =
@@ -139,39 +130,37 @@ async function main(): Promise<void> {
       const result = await buildTransaction(runtime, state);
       emitDecisionEvents(events, iterationId, result);
       if (result.kind === "skipped") {
+        executionLog.actions = result.actions;
         const completion = completeTerminalIteration(completedIterations, maxIterations);
         completedIterations = completion.completedIterations;
-        if (completion.shouldStop) {
-          return;
-        }
-        continue;
+        stopAfterIteration = completion.shouldStop;
+      } else {
+        executionLog.actions = result.actions;
+        const fee = result.tx.estimateFee(state.system.feeRate);
+        executionLog.txFee = {
+          fee: fmtCkb(fee),
+          feeRate: state.system.feeRate,
+        };
+        executionLog.txHash = await sendAndWaitForCommit(runtime, result.tx, {
+          onSent: (txHash) => {
+            executionLog.txHash = txHash;
+          },
+          onLifecycle: (event) => {
+            for (const lifecycle of transactionLifecycleEvents(event)) {
+              events.emit(iterationId, lifecycle.type, {
+                ...lifecycle.fields,
+                ...(event.type === "broadcasted"
+                  ? { transaction: transactionSummary(result.tx, fee, state.system.feeRate) }
+                  : {}),
+              });
+            }
+          },
+        });
+        completedIterations = completeTerminalIteration(
+          completedIterations,
+          maxIterations,
+        ).completedIterations;
       }
-
-      executionLog.actions = result.actions;
-      const fee = result.tx.estimateFee(state.system.feeRate);
-      executionLog.txFee = {
-        fee: fmtCkb(fee),
-        feeRate: state.system.feeRate,
-      };
-      executionLog.txHash = await sendAndWaitForCommit(runtime, result.tx, {
-        onSent: (txHash) => {
-          executionLog.txHash = txHash;
-        },
-        onLifecycle: (event) => {
-          for (const lifecycle of transactionLifecycleEvents(event)) {
-            events.emit(iterationId, lifecycle.type, {
-              ...lifecycle.fields,
-              ...(event.type === "broadcasted"
-                ? { transaction: transactionSummary(result.tx, fee, state.system.feeRate) }
-                : {}),
-            });
-          }
-        },
-      });
-      completedIterations = completeTerminalIteration(
-        completedIterations,
-        maxIterations,
-      ).completedIterations;
     } catch (error) {
       stopAfterLog = handleLoopError(executionLog, error);
       events.emit(iterationId, "bot.iteration.failed", {
@@ -185,6 +174,9 @@ async function main(): Promise<void> {
 
     logExecution(executionLog, startTime);
     if (stopAfterLog) {
+      return;
+    }
+    if (stopAfterIteration) {
       return;
     }
     if (reachedMaxIterations(completedIterations, maxIterations)) {
