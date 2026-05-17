@@ -11,6 +11,7 @@ import {
   parseSupportedChain,
   signerAccountLocks,
   STOP_EXIT_CODE,
+  writeJsonLine,
 } from "./index.js";
 
 describe("node utilities", () => {
@@ -148,6 +149,64 @@ describe("node utilities", () => {
     });
 
     now.mockRestore();
+    stdoutWrite.mockRestore();
+  });
+
+  it("writes one JSON line with bigint-safe event serialization", () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    writeJsonLine({
+      type: "bot.decision.skipped",
+      amount: 9007199254740993n,
+    });
+
+    expect(stdoutWrite).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
+      type: string;
+      amount: string;
+    };
+    expect(parsed).toEqual({
+      type: "bot.decision.skipped",
+      amount: "9007199254740993",
+    });
+    expect(String(stdoutWrite.mock.calls[0]?.[0])).toMatch(/\n$/u);
+
+    stdoutWrite.mockRestore();
+  });
+
+  it("preserves public CKB metadata in JSON logs", () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const txHash = byte32FromByte("55");
+
+    writeJsonLine({
+      txHash,
+      witness: "witnesses: 0x" + "22".repeat(80),
+      signedTx: "signed transaction 0x" + "33".repeat(80),
+      script: JSON.stringify({
+        codeHash: "0x" + "44".repeat(32),
+        hashType: "type",
+        args: "0x" + "55".repeat(20),
+      }),
+      env: "testnet",
+    });
+
+    const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
+      txHash: string;
+      witness: string;
+      signedTx: string;
+      script: string;
+      env: string;
+    };
+    expect(parsed.txHash).toBe(txHash);
+    expect(parsed.witness).toBe("witnesses: 0x" + "22".repeat(80));
+    expect(parsed.signedTx).toBe("signed transaction 0x" + "33".repeat(80));
+    expect(parsed.script).toBe(JSON.stringify({
+      codeHash: "0x" + "44".repeat(32),
+      hashType: "type",
+      args: "0x" + "55".repeat(20),
+    }));
+    expect(parsed.env).toBe("testnet");
+
     stdoutWrite.mockRestore();
   });
 });

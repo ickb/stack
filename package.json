@@ -10,7 +10,7 @@
     "madge": "madge --circular --extensions ts,tsx --ts-config ./tsconfig.json --exclude '^forks/' packages apps",
     "test": "NODE_OPTIONS='--disable-warning=DEP0040' vitest",
     "test:ci": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run && node --test scripts/*.test.mjs && pnpm test:ccc",
-    "test:ccc": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run --root forks/ccc/repo --project @ckb-ccc/core && NODE_OPTIONS='--disable-warning=DEP0040' vitest run --root forks/ccc/repo --project @ckb-ccc/udt -t 'infoFrom|isUdt'",
+    "test:ccc": "NODE_OPTIONS='--disable-warning=DEP0040' vitest run --root forks/ccc/repo --project @ckb-ccc/core && NODE_OPTIONS='--disable-warning=DEP0040' vitest run --root forks/ccc/repo/packages/udt -t 'infoFrom|isUdt'",
     "lint": "pnpm -r --filter '!./forks/**' lint",
     "clean": "rm -fr dist packages/*/dist apps/*/dist",
     "clean:deep": "pnpm clean && rm -fr node_modules packages/*/node_modules apps/*/node_modules forks/ccc/repo/packages/*/tsconfig.tsbuildinfo",

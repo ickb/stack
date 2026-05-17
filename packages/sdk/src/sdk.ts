@@ -116,8 +116,50 @@ export interface SendAndWaitForCommitOptions {
   confirmationIntervalMs?: number;
   onSent?: (txHash: ccc.Hex) => void;
   onConfirmationWait?: () => void;
+  onLifecycle?: (event: SendAndWaitForCommitEvent) => void;
   sleep?: (ms: number) => Promise<void>;
 }
+
+export type SendAndWaitForCommitEvent =
+  | {
+      type: "pre_broadcast_failed";
+      error: unknown;
+      elapsedMs: number;
+    }
+  | {
+      type: "broadcasted";
+      txHash: ccc.Hex;
+      elapsedMs: number;
+    }
+  | {
+      type: "committed";
+      txHash: ccc.Hex;
+      status: "committed";
+      checks: number;
+      elapsedMs: number;
+    }
+  | {
+      type: "timeout_after_broadcast";
+      txHash: ccc.Hex;
+      status: string | undefined;
+      checks: number;
+      elapsedMs: number;
+    }
+  | {
+      type: "post_broadcast_unresolved";
+      txHash: ccc.Hex;
+      status: string | undefined;
+      checks: number;
+      elapsedMs: number;
+      error?: unknown;
+    }
+  | {
+      type: "terminal_rejection";
+      txHash: ccc.Hex;
+      status: string | undefined;
+      checks: number;
+      elapsedMs: number;
+    };
 
 export interface GetL1StateOptions {
   availableCapacityLimit?: number;
@@ -177,21 +219,37 @@ export async function sendAndWaitForCommit(
     confirmationIntervalMs = 10_000,
     onSent,
     onConfirmationWait,
+    onLifecycle,
     sleep = delay,
   }: SendAndWaitForCommitOptions = {},
 ): Promise<ccc.Hex> {
-  const txHash = await signer.sendTransaction(tx);
+  const startedAt = Date.now();
+  let txHash: ccc.Hex;
+  try {
+    txHash = await signer.sendTransaction(tx);
+  } catch (error) {
+    notifyLifecycle(onLifecycle, {
+      type: "pre_broadcast_failed",
+      error,
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
   onSent?.(txHash);
+  notifyLifecycle(onLifecycle, { type: "broadcasted", txHash, elapsedMs: Date.now() - startedAt });
   let status: string | undefined = "sent";
   let lastPollingError: unknown;
+  let checks = 0;
 
-  for (let checks = 0; checks < maxConfirmationChecks && isPendingStatus(status); checks += 1) {
+  while (checks < maxConfirmationChecks && isPendingStatus(status)) {
     try {
       status = (await client.getTransaction(txHash))?.status;
+      lastPollingError = undefined;
     } catch (error) {
       // Post-broadcast polling errors are transient; keep waiting until timeout.
       lastPollingError = error;
     }
+    checks += 1;
     if (!isPendingStatus(status)) {
       break;
     }
@@ -201,10 +259,27 @@ export async function sendAndWaitForCommit(
   }
 
   if (status === "committed") {
+    notifyLifecycle(onLifecycle, {
+      type: "committed",
+      txHash,
+      status,
+      checks,
+      elapsedMs: Date.now() - startedAt,
+    });
     return txHash;
   }
 
   if (isPendingStatus(status)) {
+    notifyLifecycle(onLifecycle, {
+      type: lastPollingError === undefined
+        ? "timeout_after_broadcast"
+        : "post_broadcast_unresolved",
+      txHash,
+      status,
+      checks,
+      elapsedMs: Date.now() - startedAt,
+      ...(lastPollingError === undefined ? {} : { error: lastPollingError }),
+    });
     throw new TransactionConfirmationError(
       "Transaction confirmation timed out",
       txHash,
@@ -214,12 +289,30 @@ export async function sendAndWaitForCommit(
     );
   }
 
+  notifyLifecycle(onLifecycle, {
+    type: "terminal_rejection",
+    txHash,
+    status,
+    checks,
+    elapsedMs: Date.now() - startedAt,
+  });
   throw new TransactionConfirmationError(
     `Transaction ended with status: ${status ?? "unknown"}`,
     txHash,
     status,
     false,
   );
+}
+
+function notifyLifecycle(
+  onLifecycle: SendAndWaitForCommitOptions["onLifecycle"] | undefined,
+  event: SendAndWaitForCommitEvent,
+): void {
+  try {
+    onLifecycle?.(event);
+  } catch {
+    // Observability callbacks must not change transaction send/confirmation behavior.
+  }
 }
 
 function isPendingStatus(status: string | undefined): boolean {

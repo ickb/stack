@@ -22,7 +22,7 @@ export function formatCkb(balance: bigint): string {
   return `${sign}${whole.toString()}.${fraction.toString().padStart(8, "0").replace(/0+$/u, "")}`;
 }
 
-function jsonLogReplacer(_: unknown, value: unknown): unknown {
+export function jsonLogReplacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
@@ -114,7 +114,11 @@ export function logExecution(
   executionLog.ElapsedSeconds = Math.round(
     (Date.now() - startTime.getTime()) / 1000,
   );
-  process.stdout.write(`${JSON.stringify(executionLog, jsonLogReplacer)}\n`);
+  writeJsonLine(executionLog);
+}
+
+export function writeJsonLine(record: unknown): void {
+  process.stdout.write(`${JSON.stringify(record, jsonLogReplacer)}\n`);
 }
 
 export function sleep(ms: number): Promise<void> {

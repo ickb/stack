@@ -56,7 +56,7 @@ The returned transaction is not completed, signed, sent, or confirmed. Callers s
 
 ## Send Confirmation
 
-`sendAndWaitForCommit(...)` returns the transaction hash after commit. If a transaction was broadcast but later reaches a terminal non-committed status or times out while still pending, it throws `TransactionConfirmationError` with the broadcast `txHash`, last observed `status`, and `isTimeout` flag. Callers that need to log the hash immediately after broadcast can use the `onSent` callback.
+`sendAndWaitForCommit(...)` returns the transaction hash after commit. If a transaction was broadcast but later reaches a terminal non-committed status or times out while still pending, it throws `TransactionConfirmationError` with the broadcast `txHash`, last observed `status`, and `isTimeout` flag. Callers that need to log the hash immediately after broadcast can use the `onSent` callback. Callers that need structured lifecycle evidence can use `onLifecycle`, which emits `pre_broadcast_failed`, `broadcasted`, `committed`, `timeout_after_broadcast`, `post_broadcast_unresolved`, and `terminal_rejection` events without changing the returned hash or thrown transaction error contract.
 
 ## Epoch Semantic Versioning
 
