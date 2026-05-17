@@ -25,6 +25,10 @@ require_runtime() {
     printf 'pnpm is required before updating.\n' >&2
     exit 1
   }
+  command -v git >/dev/null || {
+    printf 'git is required before updating.\n' >&2
+    exit 1
+  }
 }
 
 require_clean_worktree() {
