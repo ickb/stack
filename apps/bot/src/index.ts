@@ -172,9 +172,6 @@ async function main(): Promise<void> {
     if (stopAfterIteration) {
       return;
     }
-    if (reachedMaxIterations(completedIterations, maxIterations)) {
-      return;
-    }
   }
 }
 
