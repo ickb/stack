@@ -3,3 +3,7 @@
 
 # Artifacts
 **/dist/
+
+# Local secrets and runtime env files
+**/env/
+**/.env

@@ -4,12 +4,23 @@ The tester is now CCC-native. It waits while its own fresh matchable orders are 
 
 ## Environment
 
-Required variables:
+Required shell variable:
 
 ```text
 CHAIN=testnet
-TESTER_PRIVATE_KEY=0x...
+```
+
+Required operator config variable in `env/${CHAIN}/tester.env`:
+
+```text
 TESTER_SLEEP_INTERVAL=10
+```
+
+Required secret source, exactly one of:
+
+```text
+TESTER_PRIVATE_KEY=0x...
+TESTER_PRIVATE_KEY_FILE=/path/to/tester-private-key
 ```
 
 Optional variable:
@@ -17,6 +28,8 @@ Optional variable:
 ```text
 RPC_URL=http://127.0.0.1:8114/
 ```
+
+The file form is useful when tester traffic is run under systemd credentials; keep tester keys disposable and testnet-scoped unless there is a deliberate reason to run tester on another network.
 
 Current network support:
 
@@ -30,8 +43,8 @@ From a plain checkout, follow the root [Local CCC Workflow](../../README.md#loca
 ```bash
 pnpm install
 pnpm --filter ./apps/tester build
-mkdir -p apps/tester/env/testnet
-$EDITOR apps/tester/env/testnet/.env
+mkdir -p env/testnet
+$EDITOR env/testnet/tester.env
 export CHAIN=testnet
 pnpm --filter ./apps/tester start
 ```
@@ -41,13 +54,13 @@ Or from `apps/tester`:
 ```bash
 pnpm install
 pnpm build
-mkdir -p env/testnet
-$EDITOR env/testnet/.env
+mkdir -p ../../env/testnet
+$EDITOR ../../env/testnet/tester.env
 export CHAIN=testnet
 pnpm run start
 ```
 
-`CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `TESTER_PRIVATE_KEY` and `TESTER_SLEEP_INTERVAL`.
+`CHAIN` selects the repo-root operator config file `env/${CHAIN}/tester.env`, which must contain app runtime variables such as `TESTER_SLEEP_INTERVAL` and one private-key source. Do not commit files under `env/`; the root `.gitignore` excludes them.
 
 The start script writes one newline-delimited JSON log stream per run. Each loop appends one JSON object to the log file. Balance, amount, and fee values are decimal strings so bigint values do not lose precision. Confirmation timeouts are logged with the broadcast hash and stop the loop with exit code `2` so a wrapper does not immediately send conflicting replacement work.
 

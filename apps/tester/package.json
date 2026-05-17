@@ -35,7 +35,7 @@
     "lint": "eslint ./src",
     "clean": "rm -fr dist",
     "clean:deep": "rm -fr dist node_modules",
-    "start": "[ -n \"$CHAIN\" ] || { echo 'CHAIN not set (testnet|mainnet)' >&2; exit 1; }; bash -o pipefail -c 'node --env-file=\"env/${CHAIN}/.env\" dist/index.js | tee \"log_${CHAIN}_$(date +%F_%H-%M-%S).json\"'"
+    "start": "[ -n \"$CHAIN\" ] || { echo 'CHAIN not set (testnet|mainnet)' >&2; exit 1; }; bash -o pipefail -c 'node --env-file=\"../../env/${CHAIN}/tester.env\" dist/index.js | tee \"log_${CHAIN}_$(date +%F_%H-%M-%S).json\"'"
   },
   "files": [
     "dist",
