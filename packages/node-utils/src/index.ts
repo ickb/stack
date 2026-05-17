@@ -58,6 +58,22 @@ export function parsePrivateKey(privateKey: string, envName: string): `0x${strin
   throw new Error("Invalid env " + envName);
 }
 
+export async function readPrivateKeyEnv(
+  envValue: string | undefined,
+  envName: string,
+  fileEnvValue: string | undefined,
+  fileEnvName: string,
+): Promise<`0x${string}`> {
+  const privateKey = await readSecretEnv(
+    envValue,
+    envName,
+    fileEnvValue,
+    fileEnvName,
+  );
+
+  return parsePrivateKey(privateKey, envValue === undefined || envValue === "" ? fileEnvName : envName);
+}
+
 export async function readSecretEnv(
   envValue: string | undefined,
   envName: string,

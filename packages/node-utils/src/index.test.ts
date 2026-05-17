@@ -11,6 +11,7 @@ import {
   handleLoopError,
   logExecution,
   parsePrivateKey,
+  readPrivateKeyEnv,
   readSecretEnv,
   parseSleepInterval,
   parseSupportedChain,
@@ -71,6 +72,44 @@ describe("node utilities", () => {
       expect(() => parsePrivateKey(value, "BOT_PRIVATE_KEY")).toThrow(
         "Invalid env BOT_PRIVATE_KEY",
       );
+    }
+  });
+
+  it("reports invalid private keys against their active env source", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
+    try {
+      const invalidPath = join(dir, "invalid");
+      await writeFile(invalidPath, "not-a-private-key\n", { mode: 0o600 });
+      const validPath = join(dir, "valid");
+      await writeFile(validPath, `${privateKey}\n`, { mode: 0o600 });
+
+      await expect(readPrivateKeyEnv(
+        privateKey,
+        "BOT_PRIVATE_KEY",
+        undefined,
+        "BOT_PRIVATE_KEY_FILE",
+      )).resolves.toBe(privateKey);
+      await expect(readPrivateKeyEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        validPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).resolves.toBe(privateKey);
+      await expect(readPrivateKeyEnv(
+        "not-a-private-key",
+        "BOT_PRIVATE_KEY",
+        undefined,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY");
+      await expect(readPrivateKeyEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        invalidPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
