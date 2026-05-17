@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -24,25 +24,9 @@ const tempDir = mkdtempSync(stagePrefix);
 try {
   const toolDir = join(tempDir, "repo");
   run("git", ["clone", "--filter=blob:none", "--depth", "1", upstream, toolDir]);
-  disableManagedPartialClones(toolDir);
   run("bash", [join(toolDir, "materialize-workspace.sh")]);
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
-}
-
-function disableManagedPartialClones(toolDir) {
-  const workflowPath = join(toolDir, "workflow-lib.sh");
-  const workflow = readFileSync(workflowPath, "utf8");
-  const patched = workflow.replaceAll(
-    "git clone --filter=blob:none \"$upstream\" \"$output_repo\"",
-    "git clone \"$upstream\" \"$output_repo\"",
-  );
-
-  if (patched === workflow) {
-    throw new Error("forker workflow no longer contains managed partial clone commands");
-  }
-
-  writeFileSync(workflowPath, patched);
 }
 
 function run(command, args) {
