@@ -82,7 +82,9 @@ describe("node utilities", () => {
       const invalidPath = join(dir, "invalid");
       await writeFile(invalidPath, "not-a-private-key\n", { mode: 0o600 });
       const validPath = join(dir, "valid");
-      await writeFile(validPath, `${privateKey}\n`, { mode: 0o600 });
+      await writeFile(validPath, privateKey, { mode: 0o600 });
+      const newlinePath = join(dir, "newline");
+      await writeFile(newlinePath, `${privateKey}\n`, { mode: 0o600 });
 
       await expect(readPrivateKeyEnv(
         privateKey,
@@ -96,6 +98,12 @@ describe("node utilities", () => {
         validPath,
         "BOT_PRIVATE_KEY_FILE",
       )).resolves.toBe(privateKey);
+      await expect(readPrivateKeyEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        newlinePath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
       await expect(readPrivateKeyEnv(
         "not-a-private-key",
         "BOT_PRIVATE_KEY",
@@ -159,13 +167,13 @@ describe("node utilities", () => {
         "BOT_PRIVATE_KEY",
         secretPath,
         "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe("0xabc");
+      )).resolves.toBe("0xabc\n");
       await expect(readSecretEnv(
         "",
         "BOT_PRIVATE_KEY",
         crlfSecretPath,
         "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe("0xdef");
+      )).resolves.toBe("0xdef\r\n");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -175,7 +183,7 @@ describe("node utilities", () => {
     const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
     try {
       const emptyPath = join(dir, "empty");
-      await writeFile(emptyPath, "\n", { mode: 0o600 });
+      await writeFile(emptyPath, "", { mode: 0o600 });
 
       await expect(readSecretEnv(
         undefined,

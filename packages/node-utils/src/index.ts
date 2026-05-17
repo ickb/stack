@@ -98,11 +98,10 @@ export async function readSecretEnv(
   } catch (cause) {
     throw new Error(`Invalid file from env ${fileEnvName}`, { cause });
   }
-  const secret = fileSecret.replace(/(?:\r?\n)+$/u, "");
-  if (secret === "") {
+  if (fileSecret === "") {
     throw new Error(`Empty file from env ${fileEnvName}`);
   }
-  return secret;
+  return fileSecret;
 }
 
 export function createPublicClient(

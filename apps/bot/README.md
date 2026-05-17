@@ -36,7 +36,7 @@ RPC_URL=http://127.0.0.1:8114/
 MAX_ITERATIONS=1
 ```
 
-`BOT_PRIVATE_KEY` is convenient for local testnet runs. `BOT_PRIVATE_KEY_FILE` is preferred for production services because systemd can expose an encrypted credential as a private runtime file without putting the key value in the process environment.
+`BOT_PRIVATE_KEY` is convenient for local testnet runs. `BOT_PRIVATE_KEY_FILE` is preferred for production services because systemd can expose an encrypted credential as a private runtime file without putting the key value in the process environment. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments.
 
 Current network support:
 
@@ -134,7 +134,7 @@ sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:build
 
 If `/opt/ickb-stack-testnet` or `/opt/ickb-stack-mainnet` already exists from the install script, clone into a temporary path and move the checkout into place, or initialize the existing directory with your normal deployment tooling. The update script expects each deploy directory to be a clean git checkout.
 
-Create encrypted credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host.
+Create encrypted credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. Enter the exact private key when prompted; the credential payload must not include a final newline or any other whitespace.
 
 ```bash
 sudo scripts/ickb-bot-systemd-credential.sh testnet

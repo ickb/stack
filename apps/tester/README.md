@@ -29,7 +29,7 @@ Optional variable:
 RPC_URL=http://127.0.0.1:8114/
 ```
 
-The file form is useful when tester traffic is run under systemd credentials; keep tester keys disposable and testnet-scoped unless there is a deliberate reason to run tester on another network.
+The file form is useful when tester traffic is run under systemd credentials; keep tester keys disposable and testnet-scoped unless there is a deliberate reason to run tester on another network. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments.
 
 Current network support:
 
