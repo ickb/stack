@@ -131,9 +131,6 @@ async function main(): Promise<void> {
       emitDecisionEvents(events, iterationId, result);
       if (result.kind === "skipped") {
         executionLog.actions = result.actions;
-        const completion = completeTerminalIteration(completedIterations, maxIterations);
-        completedIterations = completion.completedIterations;
-        stopAfterIteration = completion.shouldStop;
       } else {
         executionLog.actions = result.actions;
         const fee = result.tx.estimateFee(state.system.feeRate);
@@ -156,21 +153,17 @@ async function main(): Promise<void> {
             }
           },
         });
-        completedIterations = completeTerminalIteration(
-          completedIterations,
-          maxIterations,
-        ).completedIterations;
       }
     } catch (error) {
       stopAfterLog = handleLoopError(executionLog, error);
       events.emit(iterationId, "bot.iteration.failed", {
         error: errorSummary(error),
       });
-      completedIterations = completeTerminalIteration(
-        completedIterations,
-        maxIterations,
-      ).completedIterations;
     }
+
+    const completion = completeTerminalIteration(completedIterations, maxIterations);
+    completedIterations = completion.completedIterations;
+    stopAfterIteration = completion.shouldStop;
 
     logExecution(executionLog, startTime);
     if (stopAfterLog) {

@@ -72,6 +72,44 @@ function botState(overrides: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+function botRuntime(overrides: {
+  sdk?: Partial<{
+    buildBaseTransaction: IckbSdk["buildBaseTransaction"];
+    completeTransaction: IckbSdk["completeTransaction"];
+  }>;
+  primaryLock?: ccc.Script;
+} = {}): Record<string, unknown> {
+  const client: ccc.Client = {};
+  const signer: ccc.SignerCkbPrivateKey = {};
+
+  return {
+    client,
+    signer,
+    managers: {
+      order: {
+        addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
+          ccc.Transaction.from(txLike),
+      },
+    },
+    sdk: {
+      buildBaseTransaction: async (
+        txLike: ccc.TransactionLike,
+      ): Promise<ccc.Transaction> => {
+        await Promise.resolve();
+        return ccc.Transaction.from(txLike);
+      },
+      completeTransaction: async (
+        txLike: ccc.TransactionLike,
+      ): Promise<ccc.Transaction> => {
+        await Promise.resolve();
+        return ccc.Transaction.from(txLike);
+      },
+      ...overrides.sdk,
+    },
+    primaryLock: overrides.primaryLock ?? script("11"),
+  };
+}
+
 describe("collectPoolDeposits", () => {
   it("fails closed when the public pool scan reaches the sentinel limit", async () => {
     async function* deposits(): AsyncGenerator<IckbDepositCell> {
@@ -126,44 +164,11 @@ describe("buildTransaction", () => {
     });
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
-    const runtime = {
-      client: {} as ccc.Client,
-      signer: {} as ccc.SignerCkbPrivateKey,
-      managers: {
-        order: {
-          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
-            ccc.Transaction.from(txLike),
-        },
-      },
-      sdk: {
-        buildBaseTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-        completeTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-      },
-      primaryLock: ccc.Script.from({
-        codeHash: `0x${"11".repeat(32)}`,
-        hashType: "type",
-        args: "0x",
-      }),
-    };
+    const runtime = botRuntime();
     const state = botState({
       marketOrders: [{}],
       availableCkbBalance: 100n,
       totalCkbBalance: 100n,
-      system: {
-        feeRate: 1n,
-        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-        tip: headerLike(),
-      },
     });
 
     await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
@@ -187,31 +192,7 @@ describe("buildTransaction", () => {
     });
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
-    const runtime = {
-      client: {} as ccc.Client,
-      signer: {} as ccc.SignerCkbPrivateKey,
-      managers: {
-        order: {
-          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
-            ccc.Transaction.from(txLike),
-        },
-      },
-      sdk: {
-        buildBaseTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-        completeTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-      },
-      primaryLock: script("11"),
-    };
+    const runtime = botRuntime();
     const state = botState({
       marketOrders: [{}],
       availableCkbBalance: 100n,
@@ -236,26 +217,8 @@ describe("buildTransaction", () => {
       partials: [],
     });
 
-    const runtime = {
-      client: {} as ccc.Client,
-      signer: {} as ccc.SignerCkbPrivateKey,
-      managers: {
-        order: {
-          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
-            ccc.Transaction.from(txLike),
-        },
-      },
-      sdk: {
-        buildBaseTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-        completeTransaction: vi.fn(),
-      },
-      primaryLock: script("11"),
-    };
+    const completeTransaction = vi.fn();
+    const runtime = botRuntime({ sdk: { completeTransaction } });
     const state = botState({
       availableCkbBalance: 0n,
       availableIckbBalance: TARGET_ICKB_BALANCE,
@@ -277,7 +240,7 @@ describe("buildTransaction", () => {
         skip: { reason: "no_actions" },
       },
     });
-    expect(runtime.sdk.completeTransaction).not.toHaveBeenCalled();
+    expect(completeTransaction).not.toHaveBeenCalled();
   });
 
   it("passes required live deposits to SDK base transaction construction", async () => {
@@ -309,31 +272,15 @@ describe("buildTransaction", () => {
         return tx;
       },
     );
-    const runtime = {
-      client: {} as ccc.Client,
-      signer: {} as ccc.SignerCkbPrivateKey,
-      managers: {
-        order: {
-          addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
-            ccc.Transaction.from(txLike),
-        },
-      },
-      sdk: {
-        buildBaseTransaction,
-        completeTransaction,
-      },
+    const runtime = botRuntime({
+      sdk: { buildBaseTransaction, completeTransaction },
       primaryLock: script("44"),
-    };
+    });
     const state = botState({
       marketOrders: [],
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       depositCapacity: 1000n,
       readyPoolDeposits: [first, protectedAnchor, third],
-      system: {
-        feeRate: 1n,
-        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-        tip: headerLike(),
-      },
     });
 
     const result = await buildTransaction(runtime as never, state as never);

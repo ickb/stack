@@ -6,6 +6,7 @@ import {
   type BotDecisionSkipReason,
   type BotStateSummary,
   type BuildTransactionResult,
+  transactionShape,
 } from "./runtime.js";
 
 const BOT_EVENT_VERSION = 1;
@@ -129,13 +130,7 @@ export function transactionSummary(
   return {
     fee,
     feeRate,
-    shape: {
-      inputs: tx.inputs.length,
-      outputs: tx.outputs.length,
-      cellDeps: tx.cellDeps.length,
-      headerDeps: tx.headerDeps.length,
-      witnesses: tx.witnesses.length,
-    },
+    shape: transactionShape(tx),
   };
 }
 

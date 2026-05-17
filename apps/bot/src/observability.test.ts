@@ -1,3 +1,4 @@
+import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import {
   BotEventEmitter,
@@ -6,6 +7,7 @@ import {
   lowCapitalSkipDecision,
   parseMaxIterations,
   reachedMaxIterations,
+  transactionSummary,
   transactionLifecycleEvents,
 } from "./observability.js";
 import {
@@ -13,6 +15,15 @@ import {
   type BotDecisionTranscript,
   type BuildTransactionResult,
 } from "./runtime.js";
+
+const noActions: BotActions = {
+  collectedOrders: 0,
+  completedDeposits: 0,
+  matchedOrders: 0,
+  deposits: 0,
+  withdrawalRequests: 0,
+  withdrawals: 0,
+};
 
 describe("bot observability", () => {
   it("emits one structured JSON-compatible event", () => {
@@ -86,6 +97,28 @@ describe("bot observability", () => {
         },
       },
     ]);
+  });
+
+  it("summarizes transaction shape with the decision shape fields", () => {
+    const tx = {
+      inputs: [{}, {}],
+      outputs: [{}],
+      cellDeps: [{}, {}, {}],
+      headerDeps: [{}],
+      witnesses: [{}, {}],
+    } as unknown as ccc.Transaction;
+
+    expect(transactionSummary(tx, 4n, 5n)).toEqual({
+      fee: 4n,
+      feeRate: 5n,
+      shape: {
+        inputs: 2,
+        outputs: 1,
+        cellDeps: 3,
+        headerDeps: 1,
+        witnesses: 2,
+      },
+    });
   });
 
   it("preserves public chain tip block metadata", () => {
@@ -199,14 +232,7 @@ describe("bot observability", () => {
         events.push(event);
       },
     });
-    const actions: BotActions = {
-      collectedOrders: 0,
-      completedDeposits: 0,
-      matchedOrders: 0,
-      deposits: 0,
-      withdrawalRequests: 0,
-      withdrawals: 0,
-    };
+    const actions = noActions;
     const decision: BotDecisionTranscript = {
       chainTip: {
         blockNumber: 1n,
@@ -323,14 +349,7 @@ describe("bot observability", () => {
 
     expect(skip).toEqual({
       reason: "capital_below_minimum",
-      actions: {
-        collectedOrders: 0,
-        completedDeposits: 0,
-        matchedOrders: 0,
-        deposits: 0,
-        withdrawalRequests: 0,
-        withdrawals: 0,
-      },
+      actions: noActions,
       state,
     });
     expect(skip).not.toHaveProperty("decision");

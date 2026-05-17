@@ -430,7 +430,7 @@ function rebalanceSummary(
   };
 }
 
-function transactionShape(tx: ccc.Transaction): BotDecisionTranscript["transactionShape"] {
+export function transactionShape(tx: ccc.Transaction): BotDecisionTranscript["transactionShape"] {
   return {
     inputs: tx.inputs.length,
     outputs: tx.outputs.length,
