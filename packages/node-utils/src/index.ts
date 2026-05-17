@@ -57,12 +57,8 @@ export async function readSecretEnv(
   fileEnvName: string,
 ): Promise<string> {
   const hasEnvValue = envValue !== undefined && envValue !== "";
-  const hasFileEnvValue = fileEnvValue !== undefined && fileEnvValue !== "";
-  if (hasEnvValue && hasFileEnvValue) {
+  if (hasEnvValue && fileEnvValue !== undefined && fileEnvValue !== "") {
     throw new Error(`Set only one of ${envName} or ${fileEnvName}`);
-  }
-  if (!hasEnvValue && !hasFileEnvValue) {
-    throw new Error(`Empty env ${envName} or ${fileEnvName}`);
   }
   if (hasEnvValue) {
     return envValue;
