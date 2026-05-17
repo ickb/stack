@@ -103,11 +103,23 @@ describe("node utilities", () => {
         "BOT_PRIVATE_KEY_FILE",
       )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY");
       await expect(readPrivateKeyEnv(
+        `0x${"11".repeat(32)} `,
+        "BOT_PRIVATE_KEY",
+        undefined,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.not.toThrow(/0x11/u);
+      await expect(readPrivateKeyEnv(
         undefined,
         "BOT_PRIVATE_KEY",
         invalidPath,
         "BOT_PRIVATE_KEY_FILE",
       )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
+      await expect(readPrivateKeyEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        invalidPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.not.toThrow(/not-a-private-key/u);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
