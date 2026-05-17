@@ -31,12 +31,38 @@ require_runtime() {
   }
 }
 
+service_user_home() {
+  local user=$1
+  local passwd_entry
+  local user_home
+
+  passwd_entry=$(getent passwd "${user}") || {
+    printf 'User %s does not exist. Run bot:install first.\n' "${user}" >&2
+    exit 1
+  }
+  IFS=: read -r _ _ _ _ _ user_home _ <<<"${passwd_entry}"
+  if [[ -z ${user_home} ]]; then
+    printf 'User %s has no home directory.\n' "${user}" >&2
+    exit 1
+  fi
+  printf '%s\n' "${user_home}"
+}
+
+run_as_service_user() {
+  local user=$1
+  local user_home=$2
+  shift 2
+
+  runuser -u "${user}" -- env HOME="${user_home}" USER="${user}" LOGNAME="${user}" SHELL=/bin/bash "$@"
+}
+
 require_clean_worktree() {
   local user=$1
-  local deploy_dir=$2
+  local user_home=$2
+  local deploy_dir=$3
 
-  runuser -u "${user}" -- git -C "${deploy_dir}" diff --quiet
-  runuser -u "${user}" -- git -C "${deploy_dir}" diff --cached --quiet
+  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" diff --quiet
+  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" diff --cached --quiet
 }
 
 main() {
@@ -61,15 +87,16 @@ main() {
   local service="ickb-bot-${network}.service"
   local pnpm_bin
   pnpm_bin=$(command -v pnpm)
+  local user_home
 
-  id -u "${user}" >/dev/null
-  runuser -u "${user}" -- git -C "${deploy_dir}" rev-parse --is-inside-work-tree >/dev/null
-  require_clean_worktree "${user}" "${deploy_dir}"
+  user_home=$(service_user_home "${user}")
+  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" rev-parse --is-inside-work-tree >/dev/null
+  require_clean_worktree "${user}" "${user_home}" "${deploy_dir}"
 
-  runuser -u "${user}" -- git -C "${deploy_dir}" pull --ff-only
-  runuser -u "${user}" -- "${pnpm_bin}" -C "${deploy_dir}" bot:install
-  runuser -u "${user}" -- "${pnpm_bin}" -C "${deploy_dir}" bot:ccc
-  runuser -u "${user}" -- "${pnpm_bin}" -C "${deploy_dir}" bot:build
+  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" pull --ff-only
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:install
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:ccc
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:build
   systemctl restart "${service}"
   systemctl --no-pager --full status "${service}"
 }
