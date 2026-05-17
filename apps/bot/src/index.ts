@@ -12,6 +12,7 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
+  parsePrivateKey,
   parseSleepInterval,
   parseSupportedChain,
   readSecretEnv,
@@ -50,11 +51,14 @@ async function main(): Promise<void> {
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
   }
-  const privateKey = await readSecretEnv(
-    BOT_PRIVATE_KEY,
+  const privateKey = parsePrivateKey(
+    await readSecretEnv(
+      BOT_PRIVATE_KEY,
+      "BOT_PRIVATE_KEY",
+      BOT_PRIVATE_KEY_FILE,
+      "BOT_PRIVATE_KEY_FILE",
+    ),
     "BOT_PRIVATE_KEY",
-    BOT_PRIVATE_KEY_FILE,
-    "BOT_PRIVATE_KEY_FILE",
   );
   const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
   const maxIterations = parseMaxIterations(MAX_ITERATIONS);

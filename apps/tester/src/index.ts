@@ -6,6 +6,7 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
+  parsePrivateKey,
   parseSleepInterval,
   parseSupportedChain,
   readSecretEnv,
@@ -38,11 +39,14 @@ async function main(): Promise<void> {
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
   }
-  const privateKey = await readSecretEnv(
-    TESTER_PRIVATE_KEY,
+  const privateKey = parsePrivateKey(
+    await readSecretEnv(
+      TESTER_PRIVATE_KEY,
+      "TESTER_PRIVATE_KEY",
+      TESTER_PRIVATE_KEY_FILE,
+      "TESTER_PRIVATE_KEY_FILE",
+    ),
     "TESTER_PRIVATE_KEY",
-    TESTER_PRIVATE_KEY_FILE,
-    "TESTER_PRIVATE_KEY_FILE",
   );
   const sleepInterval = parseSleepInterval(
     TESTER_SLEEP_INTERVAL,

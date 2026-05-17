@@ -10,6 +10,7 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
+  parsePrivateKey,
   readSecretEnv,
   parseSleepInterval,
   parseSupportedChain,
@@ -51,6 +52,24 @@ describe("node utilities", () => {
     for (const value of [undefined, "", "abc", "NaN", "Infinity", "0", "0.5"]) {
       expect(() => parseSleepInterval(value, "SLEEP_INTERVAL")).toThrow(
         "Invalid env SLEEP_INTERVAL",
+      );
+    }
+  });
+
+  it("parses private keys as exact 0x-prefixed lowercase hex", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+
+    expect(parsePrivateKey(privateKey, "BOT_PRIVATE_KEY")).toBe(privateKey);
+    for (const value of [
+      "11".repeat(32),
+      `0X${"11".repeat(32)}`,
+      `0x${"AA".repeat(32)}`,
+      ` 0x${"11".repeat(32)}`,
+      `0x${"11".repeat(32)} `,
+      `0x${"11".repeat(31)}`,
+    ]) {
+      expect(() => parsePrivateKey(value, "BOT_PRIVATE_KEY")).toThrow(
+        "Invalid env BOT_PRIVATE_KEY",
       );
     }
   });

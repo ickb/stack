@@ -50,6 +50,14 @@ export function parseSleepInterval(
   return seconds * 1000;
 }
 
+export function parsePrivateKey(privateKey: string, envName: string): `0x${string}` {
+  if (/^0x[0-9a-f]{64}$/u.test(privateKey)) {
+    return privateKey as `0x${string}`;
+  }
+
+  throw new Error("Invalid env " + envName);
+}
+
 export async function readSecretEnv(
   envValue: string | undefined,
   envName: string,
