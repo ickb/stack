@@ -8,6 +8,7 @@ import {
   logExecution,
   parseSleepInterval,
   parseSupportedChain,
+  readSecretEnv,
   signerAccountLocks,
   sleep,
 } from "@ickb/node-utils";
@@ -27,14 +28,22 @@ const TESTER_FEE_BASE = 100000n;
 const RANDOM_SCALE = 1000000n;
 
 async function main(): Promise<void> {
-  const { CHAIN, RPC_URL, TESTER_PRIVATE_KEY, TESTER_SLEEP_INTERVAL } =
-    process.env;
+  const {
+    CHAIN,
+    RPC_URL,
+    TESTER_PRIVATE_KEY,
+    TESTER_PRIVATE_KEY_FILE,
+    TESTER_SLEEP_INTERVAL,
+  } = process.env;
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
   }
-  if (!TESTER_PRIVATE_KEY) {
-    throw new Error("Empty env TESTER_PRIVATE_KEY");
-  }
+  const privateKey = await readSecretEnv(
+    TESTER_PRIVATE_KEY,
+    "TESTER_PRIVATE_KEY",
+    TESTER_PRIVATE_KEY_FILE,
+    "TESTER_PRIVATE_KEY_FILE",
+  );
   const sleepInterval = parseSleepInterval(
     TESTER_SLEEP_INTERVAL,
     "TESTER_SLEEP_INTERVAL",
@@ -43,7 +52,7 @@ async function main(): Promise<void> {
   const chain = parseSupportedChain(CHAIN, "CHAIN");
   const client = createPublicClient(chain, RPC_URL);
   const config = getConfig(chain);
-  const signer = new ccc.SignerCkbPrivateKey(client, TESTER_PRIVATE_KEY);
+  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const recommendedAddress = await signer.getRecommendedAddressObj();
   const primaryLock = recommendedAddress.script;
   const runtime: Runtime = {

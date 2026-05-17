@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { unique } from "@ickb/utils";
+import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { setTimeout } from "node:timers";
 
@@ -47,6 +48,41 @@ export function parseSleepInterval(
   }
 
   return seconds * 1000;
+}
+
+export async function readSecretEnv(
+  envValue: string | undefined,
+  envName: string,
+  fileEnvValue: string | undefined,
+  fileEnvName: string,
+): Promise<string> {
+  const hasEnvValue = envValue !== undefined && envValue !== "";
+  const hasFileEnvValue = fileEnvValue !== undefined && fileEnvValue !== "";
+  if (hasEnvValue && hasFileEnvValue) {
+    throw new Error(`Set only one of ${envName} or ${fileEnvName}`);
+  }
+  if (!hasEnvValue && !hasFileEnvValue) {
+    throw new Error(`Empty env ${envName} or ${fileEnvName}`);
+  }
+  if (hasEnvValue) {
+    return envValue;
+  }
+  if (fileEnvValue === undefined || fileEnvValue === "") {
+    throw new Error(`Empty env ${envName} or ${fileEnvName}`);
+  }
+
+  const secretPath = fileEnvValue;
+  let fileSecret: string;
+  try {
+    fileSecret = await readFile(secretPath, "utf8");
+  } catch (cause) {
+    throw new Error(`Invalid file from env ${fileEnvName}`, { cause });
+  }
+  const secret = fileSecret.replace(/(?:\r?\n)+$/u, "");
+  if (secret === "") {
+    throw new Error(`Empty file from env ${fileEnvName}`);
+  }
+  return secret;
 }
 
 export function createPublicClient(

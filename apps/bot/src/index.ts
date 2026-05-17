@@ -14,6 +14,7 @@ import {
   logExecution,
   parseSleepInterval,
   parseSupportedChain,
+  readSecretEnv,
   signerAccountLocks,
   sleep,
   STOP_EXIT_CODE,
@@ -38,14 +39,23 @@ import {
 } from "./observability.js";
 
 async function main(): Promise<void> {
-  const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL, MAX_ITERATIONS } =
-    process.env;
+  const {
+    CHAIN,
+    RPC_URL,
+    BOT_PRIVATE_KEY,
+    BOT_PRIVATE_KEY_FILE,
+    BOT_SLEEP_INTERVAL,
+    MAX_ITERATIONS,
+  } = process.env;
   if (!CHAIN) {
     throw new Error("Invalid env CHAIN: Empty");
   }
-  if (!BOT_PRIVATE_KEY) {
-    throw new Error("Empty env BOT_PRIVATE_KEY");
-  }
+  const privateKey = await readSecretEnv(
+    BOT_PRIVATE_KEY,
+    "BOT_PRIVATE_KEY",
+    BOT_PRIVATE_KEY_FILE,
+    "BOT_PRIVATE_KEY_FILE",
+  );
   const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
   const maxIterations = parseMaxIterations(MAX_ITERATIONS);
 
@@ -59,7 +69,7 @@ async function main(): Promise<void> {
   const client = createPublicClient(chain, RPC_URL);
   const config = getConfig(chain);
   const { managers } = config;
-  const signer = new ccc.SignerCkbPrivateKey(client, BOT_PRIVATE_KEY);
+  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const recommendedAddress = await signer.getRecommendedAddressObj();
   const primaryLock = recommendedAddress.script;
   const runtime: Runtime = {

@@ -1,12 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
+import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
   createPublicClient,
   formatCkb,
   handleLoopError,
   logExecution,
+  readSecretEnv,
   parseSleepInterval,
   parseSupportedChain,
   signerAccountLocks,
@@ -48,6 +52,82 @@ describe("node utilities", () => {
       expect(() => parseSleepInterval(value, "SLEEP_INTERVAL")).toThrow(
         "Invalid env SLEEP_INTERVAL",
       );
+    }
+  });
+
+  it("reads a secret from one env source", async () => {
+    await expect(readSecretEnv(
+      "0xabc",
+      "BOT_PRIVATE_KEY",
+      undefined,
+      "BOT_PRIVATE_KEY_FILE",
+    )).resolves.toBe("0xabc");
+    await expect(readSecretEnv(
+      undefined,
+      "BOT_PRIVATE_KEY",
+      undefined,
+      "BOT_PRIVATE_KEY_FILE",
+    )).rejects.toThrow("Empty env BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
+    await expect(readSecretEnv(
+      "0xabc",
+      "BOT_PRIVATE_KEY",
+      "/tmp/secret",
+      "BOT_PRIVATE_KEY_FILE",
+    )).rejects.toThrow("Set only one of BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
+  });
+
+  it("reads a secret from a file env source", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
+    try {
+      const secretPath = join(dir, "secret");
+      await writeFile(secretPath, "0xabc\n", { mode: 0o600 });
+      const crlfSecretPath = join(dir, "crlf-secret");
+      await writeFile(crlfSecretPath, "0xdef\r\n", { mode: 0o600 });
+
+      await expect(readSecretEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        secretPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).resolves.toBe("0xabc");
+      await expect(readSecretEnv(
+        "",
+        "BOT_PRIVATE_KEY",
+        crlfSecretPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).resolves.toBe("0xdef");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid secret files without exposing file contents", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
+    try {
+      const emptyPath = join(dir, "empty");
+      await writeFile(emptyPath, "\n", { mode: 0o600 });
+
+      await expect(readSecretEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        emptyPath,
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Empty file from env BOT_PRIVATE_KEY_FILE");
+
+      await expect(readSecretEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        join(dir, "missing"),
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
+      await expect(readSecretEnv(
+        undefined,
+        "BOT_PRIVATE_KEY",
+        "",
+        "BOT_PRIVATE_KEY_FILE",
+      )).rejects.toThrow("Empty env BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
