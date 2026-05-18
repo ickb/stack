@@ -14,42 +14,39 @@ require_root() {
 
 validate_config() {
   local expected_chain=$1
+  local repo_root=$2
   node -e '
+(async () => {
 const { readFileSync } = require("node:fs");
-const expectedChain = process.argv[1];
+const { pathToFileURL } = require("node:url");
+const repoRoot = process.argv[1];
+const expectedChain = process.argv[2];
 const text = readFileSync(0, "utf8");
 let config;
 try {
+  const { parseRuntimeConfig } = await import(pathToFileURL(`${repoRoot}/packages/node-utils/dist/index.js`).href);
+  parseRuntimeConfig(text, "BOT_CONFIG_FILE");
   config = JSON.parse(text);
 } catch {
   fail();
 }
-if (typeof config !== "object" || config === null || Array.isArray(config)) fail();
-for (const key of Object.keys(config)) {
-  if (!["chain", "privateKey", "rpcUrl", "sleepIntervalSeconds", "maxIterations"].includes(key)) fail();
-}
 if (config.chain !== expectedChain) fail();
-if (typeof config.privateKey !== "string" || !/^0x[0-9a-f]{64}$/u.test(config.privateKey)) fail();
-if (typeof config.rpcUrl !== "string" || /\s|[\u0000-\u001f\u007f]/u.test(config.rpcUrl)) fail();
-let rpcUrl;
-try {
-  rpcUrl = new URL(config.rpcUrl);
-} catch {
-  fail();
-}
-if (rpcUrl.protocol !== "http:" && rpcUrl.protocol !== "https:") fail();
-if (typeof config.sleepIntervalSeconds !== "number" || !Number.isFinite(config.sleepIntervalSeconds) || config.sleepIntervalSeconds < 1) fail();
-if (config.maxIterations !== undefined && (!Number.isSafeInteger(config.maxIterations) || config.maxIterations < 1)) fail();
 process.stdout.write(JSON.stringify(config));
+})();
 function fail() {
-  process.stderr.write("Invalid bot config: expected exact JSON with chain, privateKey, rpcUrl, sleepIntervalSeconds, and optional maxIterations.\n");
+  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, rpcUrl, sleepIntervalSeconds, and optional maxIterations. Build @ickb/node-utils before running this helper.\n");
   process.exit(1);
 }
-' "${expected_chain}"
+' "${repo_root}" "${expected_chain}"
 }
 
 main() {
   require_root
+
+  local script_dir
+  local repo_root
+  script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+  repo_root=$(cd -- "${script_dir}/.." && pwd)
 
   local network=${1:-}
   local force=${2:-}
@@ -83,6 +80,10 @@ main() {
   }
   if [[ ! -e /var/lib/systemd/credential.secret ]]; then
     systemd-creds setup
+  fi
+  if [[ ! -r "${repo_root}/packages/node-utils/dist/index.js" ]]; then
+    printf 'Build @ickb/node-utils before creating credentials, for example with pnpm bot:build.\n' >&2
+    exit 1
   fi
 
   local credential_dir=/etc/ickb/credentials
@@ -123,11 +124,13 @@ if (maxIterations !== "") {
 }
 process.stdout.write(JSON.stringify(config));
 ' |
-    validate_config "${network}" |
+    validate_config "${network}" "${repo_root}" |
     systemd-creds encrypt --with-key=host --name="${credential_name}" - "${tmp}"
   install -m 600 "${tmp}" "${credential}"
-  systemd-creds decrypt --name="${credential_name}" "${credential}" | validate_config "${network}" >/dev/null
+  systemd-creds decrypt --name="${credential_name}" "${credential}" | validate_config "${network}" "${repo_root}" >/dev/null
   printf 'Wrote encrypted credential %s\n' "${credential}"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
