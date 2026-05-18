@@ -35,7 +35,8 @@ install_network() {
   local network=$1
   local user="ickb-bot-${network}"
   local deploy_dir="/opt/ickb-stack-${network}"
-  local credential="/etc/ickb/credentials/bot-${network}-private-key.cred"
+  local credential_name="ickb-bot-${network}-config.json"
+  local credential="/etc/ickb/credentials/ickb-bot-${network}-config.cred"
   local service="ickb-bot-${network}.service"
   local unit_path="/etc/systemd/system/${service}"
 
@@ -57,10 +58,8 @@ Type=simple
 User=${user}
 Group=${user}
 WorkingDirectory=${deploy_dir}
-Environment=CHAIN=${network}
-Environment=BOT_SLEEP_INTERVAL=60
-Environment=BOT_PRIVATE_KEY_FILE=%d/bot-private-key
-LoadCredentialEncrypted=bot-private-key:${credential}
+Environment=BOT_CONFIG_FILE=%d/${credential_name}
+LoadCredentialEncrypted=${credential_name}:${credential}
 ExecStart=/usr/bin/node apps/bot/dist/index.js
 Restart=on-failure
 RestartSec=10

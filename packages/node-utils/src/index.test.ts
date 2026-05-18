@@ -10,11 +10,15 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
+  parseMaxIterations,
+  parseRuntimeConfig,
   parsePrivateKey,
   readPrivateKeyEnv,
+  readRuntimeConfigEnv,
   readSecretEnv,
   parseSleepInterval,
   parseSupportedChain,
+  reachedMaxIterations,
   signerAccountLocks,
   STOP_EXIT_CODE,
   writeJsonLine,
@@ -55,6 +59,22 @@ describe("node utilities", () => {
         "Invalid env SLEEP_INTERVAL",
       );
     }
+  });
+
+  it("parses bounded-run iteration limits", () => {
+    expect(parseMaxIterations(undefined, "MAX_ITERATIONS")).toBeUndefined();
+    expect(parseMaxIterations("", "MAX_ITERATIONS")).toBeUndefined();
+    expect(parseMaxIterations("1", "MAX_ITERATIONS")).toBe(1);
+    expect(parseMaxIterations(2, "MAX_ITERATIONS")).toBe(2);
+    expect(reachedMaxIterations(0, 1)).toBe(false);
+    expect(reachedMaxIterations(1, 1)).toBe(true);
+    expect(reachedMaxIterations(10, undefined)).toBe(false);
+    expect(() => parseMaxIterations("0", "MAX_ITERATIONS")).toThrow(
+      "Invalid env MAX_ITERATIONS",
+    );
+    expect(() => parseMaxIterations(1.5, "MAX_ITERATIONS")).toThrow(
+      "Invalid env MAX_ITERATIONS",
+    );
   });
 
   it("parses private keys as exact 0x-prefixed lowercase hex", () => {
@@ -128,6 +148,91 @@ describe("node utilities", () => {
         invalidPath,
         "BOT_PRIVATE_KEY_FILE",
       )).rejects.not.toThrow(/not-a-private-key/u);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("parses exact runtime JSON config", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://rpc.example/path?token=abc",
+      sleepIntervalSeconds: 60,
+      maxIterations: 2,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://rpc.example/path?token=abc",
+      sleepIntervalMs: 60000,
+      maxIterations: 2,
+    });
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "mainnet",
+      privateKey,
+      rpcUrl: "https://mainnet.example/",
+      sleepIntervalSeconds: 1,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "mainnet",
+      privateKey,
+      rpcUrl: "https://mainnet.example/",
+      sleepIntervalMs: 1000,
+      maxIterations: undefined,
+    });
+  });
+
+  it("rejects invalid runtime JSON config without exposing contents", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const invalidValues = [
+      "not-json",
+      JSON.stringify([]),
+      JSON.stringify({ chain: "devnet", privateKey, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: privateKey, privateKey, rpcUrl: "https://rpc.example/", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, extra: true }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey: `${privateKey}\n`, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "file:///tmp/socket", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "https://rpc.example/ bad", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: "60" }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 0 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, maxIterations: "1" }),
+    ];
+
+    for (const value of invalidValues) {
+      expect(() => parseRuntimeConfig(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
+      );
+      expect(() => parseRuntimeConfig(value, "BOT_CONFIG_FILE")).not.toThrow(/rpc\.example|0x11/u);
+    }
+  });
+
+  it("reads runtime JSON config from a file env source", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-runtime-config-"));
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalSeconds: 60,
+      }), { mode: 0o600 });
+
+      await expect(readRuntimeConfigEnv(configPath, "BOT_CONFIG_FILE")).resolves.toEqual({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalMs: 60000,
+        maxIterations: undefined,
+      });
+      await expect(readRuntimeConfigEnv(undefined, "BOT_CONFIG_FILE")).rejects.toThrow(
+        "Empty env BOT_CONFIG_FILE",
+      );
+      await expect(readRuntimeConfigEnv(join(dir, "missing"), "BOT_CONFIG_FILE")).rejects.toThrow(
+        "Invalid file from env BOT_CONFIG_FILE",
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

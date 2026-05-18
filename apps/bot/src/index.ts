@@ -12,12 +12,17 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
+  parseMaxIterations,
+  parseOptionalRpcUrl,
   parseSleepInterval,
   parseSupportedChain,
   readPrivateKeyEnv,
+  readRuntimeConfigEnv,
+  reachedMaxIterations,
   signerAccountLocks,
   sleep,
   STOP_EXIT_CODE,
+  type SupportedChain,
 } from "@ickb/node-utils";
 import {
   buildTransaction,
@@ -32,41 +37,28 @@ import {
   emitDecisionEvents,
   errorSummary,
   lowCapitalSkipDecision,
-  parseMaxIterations,
-  reachedMaxIterations,
   transactionLifecycleEvents,
   transactionSummary,
 } from "./observability.js";
 
-async function main(): Promise<void> {
-  const {
-    CHAIN,
-    RPC_URL,
-    BOT_PRIVATE_KEY,
-    BOT_PRIVATE_KEY_FILE,
-    BOT_SLEEP_INTERVAL,
-    MAX_ITERATIONS,
-  } = process.env;
-  if (!CHAIN) {
-    throw new Error("Invalid env CHAIN: Empty");
-  }
-  const privateKey = await readPrivateKeyEnv(
-    BOT_PRIVATE_KEY,
-    "BOT_PRIVATE_KEY",
-    BOT_PRIVATE_KEY_FILE,
-    "BOT_PRIVATE_KEY_FILE",
-  );
-  const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
-  const maxIterations = parseMaxIterations(MAX_ITERATIONS);
+type BotRuntimeConfig = {
+  chain: SupportedChain;
+  privateKey: `0x${string}`;
+  rpcUrl: string | undefined;
+  sleepIntervalMs: number;
+  maxIterations: number | undefined;
+};
 
-  const chain = parseSupportedChain(CHAIN, "CHAIN");
+async function main(): Promise<void> {
+  const runtimeConfig = await readBotRuntimeConfig(process.env);
+  const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } = runtimeConfig;
   const runId = createRunId();
   const events = new BotEventEmitter({ chain, runId });
   events.emit(0, "bot.run.started", {
     maxIterations,
     bounded: maxIterations !== undefined,
   });
-  const client = createPublicClient(chain, RPC_URL);
+  const client = createPublicClient(chain, rpcUrl);
   const config = getConfig(chain);
   const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
@@ -84,7 +76,7 @@ async function main(): Promise<void> {
   let completedIterations = 0;
   let iterationId = 0;
   for (;;) {
-    await sleep(Math.floor(2 * Math.random() * sleepInterval));
+    await sleep(Math.floor(2 * Math.random() * sleepIntervalMs));
 
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const executionLog: Record<string, any> = {};
@@ -183,6 +175,51 @@ async function main(): Promise<void> {
       return;
     }
   }
+}
+
+export async function readBotRuntimeConfig(env: NodeJS.ProcessEnv): Promise<BotRuntimeConfig> {
+  const {
+    CHAIN,
+    RPC_URL,
+    BOT_CONFIG_FILE,
+    BOT_PRIVATE_KEY,
+    BOT_PRIVATE_KEY_FILE,
+    BOT_SLEEP_INTERVAL,
+    MAX_ITERATIONS,
+  } = env;
+  if (BOT_CONFIG_FILE !== undefined && BOT_CONFIG_FILE !== "") {
+    for (const name of [
+      "CHAIN",
+      "RPC_URL",
+      "BOT_PRIVATE_KEY",
+      "BOT_PRIVATE_KEY_FILE",
+      "BOT_SLEEP_INTERVAL",
+      "MAX_ITERATIONS",
+    ]) {
+      if (env[name] !== undefined && env[name] !== "") {
+        throw new Error(`Set only one of BOT_CONFIG_FILE or ${name}`);
+      }
+    }
+
+    return readRuntimeConfigEnv(BOT_CONFIG_FILE, "BOT_CONFIG_FILE");
+  }
+
+  if (!CHAIN) {
+    throw new Error("Invalid env CHAIN: Empty");
+  }
+  const privateKey = await readPrivateKeyEnv(
+    BOT_PRIVATE_KEY,
+    "BOT_PRIVATE_KEY",
+    BOT_PRIVATE_KEY_FILE,
+    "BOT_PRIVATE_KEY_FILE",
+  );
+  return {
+    chain: parseSupportedChain(CHAIN, "CHAIN"),
+    privateKey,
+    rpcUrl: parseOptionalRpcUrl(RPC_URL, "RPC_URL"),
+    sleepIntervalMs: parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL"),
+    maxIterations: parseMaxIterations(MAX_ITERATIONS, "MAX_ITERATIONS"),
+  };
 }
 
 export function completeTerminalIteration(

@@ -39,7 +39,7 @@ export function parseSupportedChain(
 }
 
 export function parseSleepInterval(
-  intervalSeconds: string | undefined,
+  intervalSeconds: number | string | undefined,
   envName: string,
 ): number {
   const seconds = Number(intervalSeconds);
@@ -58,6 +58,111 @@ export function parsePrivateKey(privateKey: string, envName: string): `0x${strin
   throw new Error("Invalid env " + envName);
 }
 
+export type RuntimeConfig = {
+  chain: SupportedChain;
+  privateKey: `0x${string}`;
+  rpcUrl: string;
+  sleepIntervalMs: number;
+  maxIterations: number | undefined;
+};
+
+export function parseRpcUrl(rpcUrl: string, envName: string): string {
+  for (let index = 0; index < rpcUrl.length; index += 1) {
+    const code = rpcUrl.charCodeAt(index);
+    if (/\s/u.test(rpcUrl[index] ?? "") || code < 0x20 || code === 0x7f) {
+      throw new Error("Invalid env " + envName);
+    }
+  }
+  if (rpcUrl === "") {
+    throw new Error("Invalid env " + envName);
+  }
+  let url: URL;
+  try {
+    url = new URL(rpcUrl);
+  } catch {
+    throw new Error("Invalid env " + envName);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Invalid env " + envName);
+  }
+  return rpcUrl;
+}
+
+export function parseOptionalRpcUrl(rpcUrl: string | undefined, envName: string): string | undefined {
+  if (rpcUrl === undefined || rpcUrl === "") {
+    return;
+  }
+  return parseRpcUrl(rpcUrl, envName);
+}
+
+export function parseMaxIterations(
+  value: number | string | undefined,
+  envName: string,
+): number | undefined {
+  if (value === undefined || value === "") {
+    return;
+  }
+
+  const maxIterations = Number(value);
+  if (!Number.isSafeInteger(maxIterations) || maxIterations < 1) {
+    throw new Error("Invalid env " + envName);
+  }
+
+  return maxIterations;
+}
+
+export function reachedMaxIterations(
+  completedIterations: number,
+  maxIterations: number | undefined,
+): boolean {
+  return maxIterations !== undefined && completedIterations >= maxIterations;
+}
+
+export function parseRuntimeConfig(configText: string, envName: string): RuntimeConfig {
+  let config: unknown;
+  try {
+    config = JSON.parse(configText);
+  } catch {
+    throw new Error("Invalid env " + envName);
+  }
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    throw new Error("Invalid env " + envName);
+  }
+
+  const record = config as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (
+      key !== "chain" &&
+      key !== "privateKey" &&
+      key !== "rpcUrl" &&
+      key !== "sleepIntervalSeconds" &&
+      key !== "maxIterations"
+    ) {
+      throw new Error("Invalid env " + envName);
+    }
+  }
+  if (
+    typeof record.chain !== "string" ||
+    typeof record.privateKey !== "string" ||
+    typeof record.rpcUrl !== "string" ||
+    typeof record.sleepIntervalSeconds !== "number" ||
+    record.maxIterations !== undefined && typeof record.maxIterations !== "number"
+  ) {
+    throw new Error("Invalid env " + envName);
+  }
+  if (record.chain !== "mainnet" && record.chain !== "testnet") {
+    throw new Error("Invalid env " + envName);
+  }
+
+  return {
+    chain: record.chain,
+    privateKey: parsePrivateKey(record.privateKey, envName),
+    rpcUrl: parseRpcUrl(record.rpcUrl, envName),
+    sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
+    maxIterations: parseMaxIterations(record.maxIterations, envName),
+  };
+}
+
 export async function readPrivateKeyEnv(
   envValue: string | undefined,
   envName: string,
@@ -72,6 +177,17 @@ export async function readPrivateKeyEnv(
   );
 
   return parsePrivateKey(privateKey, envValue === undefined || envValue === "" ? fileEnvName : envName);
+}
+
+export async function readRuntimeConfigEnv(
+  fileEnvValue: string | undefined,
+  fileEnvName: string,
+): Promise<RuntimeConfig> {
+  if (fileEnvValue === undefined || fileEnvValue === "") {
+    throw new Error(`Empty env ${fileEnvName}`);
+  }
+
+  return parseRuntimeConfig(await readFileEnv(fileEnvValue, fileEnvName), fileEnvName);
 }
 
 export async function readSecretEnv(
@@ -91,6 +207,10 @@ export async function readSecretEnv(
     throw new Error(`Empty env ${envName} or ${fileEnvName}`);
   }
 
+  return readFileEnv(fileEnvValue, fileEnvName);
+}
+
+async function readFileEnv(fileEnvValue: string, fileEnvName: string): Promise<string> {
   const secretPath = fileEnvValue;
   let fileSecret: string;
   try {

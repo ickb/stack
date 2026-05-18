@@ -5,8 +5,6 @@ import {
   emitDecisionEvents,
   errorSummary,
   lowCapitalSkipDecision,
-  parseMaxIterations,
-  reachedMaxIterations,
   transactionSummary,
   transactionLifecycleEvents,
 } from "./observability.js";
@@ -355,14 +353,4 @@ describe("bot observability", () => {
     expect(skip).not.toHaveProperty("decision");
   });
 
-  it("parses bounded-run iteration limits", () => {
-    expect(parseMaxIterations(undefined)).toBeUndefined();
-    expect(parseMaxIterations("")).toBeUndefined();
-    expect(parseMaxIterations("1")).toBe(1);
-    expect(reachedMaxIterations(0, 1)).toBe(false);
-    expect(reachedMaxIterations(1, 1)).toBe(true);
-    expect(reachedMaxIterations(10, undefined)).toBe(false);
-    expect(() => parseMaxIterations("0")).toThrow("Invalid env MAX_ITERATIONS");
-    expect(() => parseMaxIterations("1.5")).toThrow("Invalid env MAX_ITERATIONS");
-  });
 });

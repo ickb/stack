@@ -27,9 +27,16 @@ Optional variable:
 
 ```text
 RPC_URL=http://127.0.0.1:8114/
+MAX_ITERATIONS=1
 ```
 
-The file form is useful when tester traffic is run under systemd credentials; keep tester keys disposable and testnet-scoped unless there is a deliberate reason to run tester on another network. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments.
+`TESTER_PRIVATE_KEY_FILE` is available for simple file-backed local runs. Keep tester keys disposable and testnet-scoped unless there is a deliberate reason to run tester on another network. If tester traffic is supervised by systemd, use `TESTER_CONFIG_FILE` with one encrypted JSON credential instead of a private-key-only credential. `TESTER_CONFIG_FILE` points to the same strict JSON schema used by the bot:
+
+```json
+{"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":10,"maxIterations":1}
+```
+
+The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments. Do not set `TESTER_CONFIG_FILE` together with `CHAIN`, `RPC_URL`, `TESTER_PRIVATE_KEY`, `TESTER_PRIVATE_KEY_FILE`, `TESTER_SLEEP_INTERVAL`, or `MAX_ITERATIONS`.
 
 Current network support:
 

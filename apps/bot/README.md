@@ -36,7 +36,13 @@ RPC_URL=http://127.0.0.1:8114/
 MAX_ITERATIONS=1
 ```
 
-`BOT_PRIVATE_KEY` is convenient for local testnet runs. `BOT_PRIVATE_KEY_FILE` is preferred for production services because systemd can expose an encrypted credential as a private runtime file without putting the key value in the process environment. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments.
+`BOT_PRIVATE_KEY` is convenient for local testnet runs. `BOT_PRIVATE_KEY_FILE` is available for simple file-backed local runs. Production systemd services should use `BOT_CONFIG_FILE`, which points to an encrypted systemd credential containing one strict JSON object:
+
+```json
+{"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":60}
+```
+
+The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments. Do not set `BOT_CONFIG_FILE` together with `CHAIN`, `RPC_URL`, `BOT_PRIVATE_KEY`, `BOT_PRIVATE_KEY_FILE`, `BOT_SLEEP_INTERVAL`, or `MAX_ITERATIONS`.
 
 Current network support:
 
@@ -100,15 +106,15 @@ Structured events should contain public evidence and summaries needed to underst
 
 ## Ubuntu systemd Deployment
 
-For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for operator env-file runs and tees app-local log files.
+For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted JSON config credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for local operator env-file runs and tees app-local log files.
 
 This layout keeps the workflow simple while avoiding accidental cross-network updates:
 
 ```text
 /opt/ickb-stack-testnet
 /opt/ickb-stack-mainnet
-/etc/ickb/credentials/bot-testnet-private-key.cred
-/etc/ickb/credentials/bot-mainnet-private-key.cred
+/etc/ickb/credentials/ickb-bot-testnet-config.cred
+/etc/ickb/credentials/ickb-bot-mainnet-config.cred
 /etc/systemd/system/ickb-bot-testnet.service
 /etc/systemd/system/ickb-bot-mainnet.service
 ```
@@ -134,9 +140,10 @@ sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:build
 
 If `/opt/ickb-stack-testnet` or `/opt/ickb-stack-mainnet` already exists from the install script, clone into a temporary path and move the checkout into place, or initialize the existing directory with your normal deployment tooling. The update script expects each deploy directory to be a clean git checkout.
 
-Create encrypted credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. Enter the exact private key when prompted; the credential payload must not include a final newline or any other whitespace.
+Create encrypted config credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. The helper prompts for the private key, RPC URL, sleep interval, and optional max iterations, validates the same strict JSON schema that the app reads, and encrypts that JSON as one systemd credential.
 
 ```bash
+sudo systemd-creds setup
 sudo scripts/ickb-bot-systemd-credential.sh testnet
 sudo scripts/ickb-bot-systemd-credential.sh mainnet
 ```
@@ -154,10 +161,8 @@ Type=simple
 User=ickb-bot-testnet
 Group=ickb-bot-testnet
 WorkingDirectory=/opt/ickb-stack-testnet
-Environment=CHAIN=testnet
-Environment=BOT_SLEEP_INTERVAL=60
-Environment=BOT_PRIVATE_KEY_FILE=%d/bot-private-key
-LoadCredentialEncrypted=bot-private-key:/etc/ickb/credentials/bot-testnet-private-key.cred
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json
+LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
 ExecStart=/usr/bin/node apps/bot/dist/index.js
 Restart=on-failure
 RestartSec=10
@@ -185,10 +190,8 @@ Type=simple
 User=ickb-bot-mainnet
 Group=ickb-bot-mainnet
 WorkingDirectory=/opt/ickb-stack-mainnet
-Environment=CHAIN=mainnet
-Environment=BOT_SLEEP_INTERVAL=60
-Environment=BOT_PRIVATE_KEY_FILE=%d/bot-private-key
-LoadCredentialEncrypted=bot-private-key:/etc/ickb/credentials/bot-mainnet-private-key.cred
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-mainnet-config.json
+LoadCredentialEncrypted=ickb-bot-mainnet-config.json:/etc/ickb/credentials/ickb-bot-mainnet-config.cred
 ExecStart=/usr/bin/node apps/bot/dist/index.js
 Restart=on-failure
 RestartSec=10

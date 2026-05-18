@@ -4,9 +4,12 @@ import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
 import { headerLike } from "@ickb/testkit";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TARGET_ICKB_BALANCE } from "./policy.js";
-import { completeTerminalIteration } from "./index.js";
+import { completeTerminalIteration, readBotRuntimeConfig } from "./index.js";
 import { buildTransaction, collectPoolDeposits } from "./runtime.js";
 
 afterEach(() => {
@@ -152,6 +155,58 @@ describe("completeTerminalIteration", () => {
       completedIterations: 1000,
       shouldStop: false,
     });
+  });
+});
+
+describe("readBotRuntimeConfig", () => {
+  it("reads legacy direct env config", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+
+    await expect(readBotRuntimeConfig({
+      CHAIN: "testnet",
+      BOT_PRIVATE_KEY: privateKey,
+      BOT_SLEEP_INTERVAL: "60",
+      RPC_URL: "http://127.0.0.1:8114/",
+      MAX_ITERATIONS: "1",
+    })).resolves.toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "http://127.0.0.1:8114/",
+      sleepIntervalMs: 60000,
+      maxIterations: 1,
+    });
+  });
+
+  it("rejects mixed JSON config and legacy env config", async () => {
+    await expect(readBotRuntimeConfig({
+      BOT_CONFIG_FILE: "/run/credentials/bot/config.json",
+      BOT_SLEEP_INTERVAL: "60",
+    })).rejects.toThrow("Set only one of BOT_CONFIG_FILE or BOT_SLEEP_INTERVAL");
+  });
+
+  it("reads JSON config files", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-bot-config-"));
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalSeconds: 60,
+        maxIterations: 1,
+      }), { mode: 0o600 });
+
+      await expect(readBotRuntimeConfig({ BOT_CONFIG_FILE: configPath })).resolves.toEqual({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalMs: 60000,
+        maxIterations: 1,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
