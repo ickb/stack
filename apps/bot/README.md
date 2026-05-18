@@ -8,46 +8,20 @@ The bot minimizes excess iCKB holdings so more liquidity stays available in CKB 
 
 - [Current Bot Rebalancing Policy](docs/current_rebalancing_policy.md)
 
-## Environment
+## Runtime Config
 
-Required shell variable:
-
-```text
-CHAIN=testnet
-```
-
-Required operator config variable in `env/${CHAIN}/bot.env` or the service environment:
-
-```text
-BOT_SLEEP_INTERVAL=60
-```
-
-Required secret source, exactly one of:
-
-```text
-BOT_PRIVATE_KEY=0x...
-BOT_PRIVATE_KEY_FILE=/path/to/bot-private-key
-```
-
-Optional variable:
-
-```text
-RPC_URL=http://127.0.0.1:8114/
-MAX_ITERATIONS=1
-```
-
-`BOT_PRIVATE_KEY` is convenient for local testnet runs. `BOT_PRIVATE_KEY_FILE` is available for simple file-backed local runs. Production systemd services should use `BOT_CONFIG_FILE`, which points to an encrypted systemd credential containing one strict JSON object:
+The bot reads one strict JSON config file named by `BOT_CONFIG_FILE`:
 
 ```json
 {"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":60}
 ```
 
-The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters. A private-key file must contain exactly that key and nothing else: no final newline, spaces, tabs, or comments. Do not set `BOT_CONFIG_FILE` together with `CHAIN`, `RPC_URL`, `BOT_PRIVATE_KEY`, `BOT_PRIVATE_KEY_FILE`, `BOT_SLEEP_INTERVAL`, or `MAX_ITERATIONS`.
+The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
 
 Current network support:
 
-- `CHAIN=testnet`
-- `CHAIN=mainnet`
+- `"chain":"testnet"`
+- `"chain":"mainnet"`
 
 ## Run
 
@@ -56,9 +30,9 @@ From the repo root:
 ```bash
 pnpm install
 pnpm --filter ./apps/bot build
-mkdir -p env/testnet
-$EDITOR env/testnet/bot.env
-export CHAIN=testnet
+mkdir -p config
+$EDITOR config/bot-testnet.json
+export BOT_CONFIG_FILE="$(pwd)/config/bot-testnet.json"
 pnpm --filter ./apps/bot start:loop
 ```
 
@@ -67,19 +41,17 @@ Or from `apps/bot`:
 ```bash
 pnpm install
 pnpm build
-mkdir -p ../../env/testnet
-$EDITOR ../../env/testnet/bot.env
-export CHAIN=testnet
+mkdir -p ../../config
+$EDITOR ../../config/bot-testnet.json
+export BOT_CONFIG_FILE="$(pwd)/../../config/bot-testnet.json"
 pnpm run start:loop
 ```
 
-`CHAIN` selects the repo-root operator config file `env/${CHAIN}/bot.env`, which must contain app runtime variables such as `BOT_SLEEP_INTERVAL` and one private-key source. Do not commit files under `env/`; the root `.gitignore` excludes them.
-
-The start script writes NDJSON logs to stdout and tees one log file per run. Balance and fee amounts are logged as decimal strings so large on-chain values do not lose precision. Intentional shutdowns, including low capital and transaction confirmation timeouts after broadcast, exit with code `2`; `start:loop` stops on that code instead of restarting immediately. `start:loop` also stops on exit code `0`, so bounded runs do not relaunch after `MAX_ITERATIONS` is exhausted.
+The start script writes NDJSON logs to stdout and tees one log file per run. Balance and fee amounts are logged as decimal strings so large on-chain values do not lose precision. Intentional shutdowns, including low capital and transaction confirmation timeouts after broadcast, exit with code `2`; `start:loop` stops on that code instead of restarting immediately. `start:loop` also stops on exit code `0`, so bounded runs do not relaunch after JSON `maxIterations` is exhausted.
 
 ## Structured Events
 
-Every bot observability record is one JSON object on stdout with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and `type`. Legacy execution logs remain on stdout for compatibility, but structured bot records can be selected with `app == "bot"`.
+Every bot observability record is one JSON object on stdout with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and `type`. Execution-log records also remain on stdout, and structured bot records can be selected with `app == "bot"`.
 
 Stable event types:
 
@@ -100,13 +72,13 @@ No-action iterations emit `bot.decision.skipped` with `reason` and evidence. Bui
 
 The decision transcript groups evidence under `chainTip`, `balances`, `orders`, `withdrawals`, `poolDeposits`, `match`, `rebalance`, `actions`, `fee`, `transactionShape`, `exchangeRatio`, and `depositCapacity`. Transaction events summarize action counts, fee, fee rate, tx hash, confirmation status, check count, elapsed time, and transaction shape counts.
 
-`MAX_ITERATIONS=1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. The default remains an infinite loop.
+JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. Omitting `maxIterations` keeps the default infinite loop.
 
 Structured events should contain public evidence and summaries needed to understand bot behavior. Do not add private keys, seed phrases, mnemonics, or other secrets to log payloads; omit noisy public fields at the call site instead of relying on redaction.
 
 ## Ubuntu systemd Deployment
 
-For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted JSON config credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for local operator env-file runs and tees app-local log files.
+For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted JSON config credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for local JSON-config runs and tees app-local log files.
 
 This layout keeps the workflow simple while avoiding accidental cross-network updates:
 

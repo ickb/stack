@@ -3,7 +3,9 @@
 
 # Artifacts
 **/dist/
+apps/*/log_*.json
 
-# Local secrets and runtime env files
+# Local secrets and runtime config files
 **/env/
 **/.env
+config/

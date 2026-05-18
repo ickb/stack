@@ -159,29 +159,8 @@ describe("completeTerminalIteration", () => {
 });
 
 describe("readBotRuntimeConfig", () => {
-  it("reads legacy direct env config", async () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-
-    await expect(readBotRuntimeConfig({
-      CHAIN: "testnet",
-      BOT_PRIVATE_KEY: privateKey,
-      BOT_SLEEP_INTERVAL: "60",
-      RPC_URL: "http://127.0.0.1:8114/",
-      MAX_ITERATIONS: "1",
-    })).resolves.toEqual({
-      chain: "testnet",
-      privateKey,
-      rpcUrl: "http://127.0.0.1:8114/",
-      sleepIntervalMs: 60000,
-      maxIterations: 1,
-    });
-  });
-
-  it("rejects mixed JSON config and legacy env config", async () => {
-    await expect(readBotRuntimeConfig({
-      BOT_CONFIG_FILE: "/run/credentials/bot/config.json",
-      BOT_SLEEP_INTERVAL: "60",
-    })).rejects.toThrow("Set only one of BOT_CONFIG_FILE or BOT_SLEEP_INTERVAL");
+  it("requires a JSON config file", async () => {
+    await expect(readBotRuntimeConfig({})).rejects.toThrow("Empty env BOT_CONFIG_FILE");
   });
 
   it("reads JSON config files", async () => {

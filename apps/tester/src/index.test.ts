@@ -8,29 +8,8 @@ import { freshMatchableOrderSkip } from "./freshMatchableOrderSkip.js";
 import { readTesterRuntimeConfig } from "./index.js";
 
 describe("readTesterRuntimeConfig", () => {
-  it("reads legacy direct env config", async () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-
-    await expect(readTesterRuntimeConfig({
-      CHAIN: "testnet",
-      TESTER_PRIVATE_KEY: privateKey,
-      TESTER_SLEEP_INTERVAL: "10",
-      RPC_URL: "http://127.0.0.1:8114/",
-      MAX_ITERATIONS: "1",
-    })).resolves.toEqual({
-      chain: "testnet",
-      privateKey,
-      rpcUrl: "http://127.0.0.1:8114/",
-      sleepIntervalMs: 10000,
-      maxIterations: 1,
-    });
-  });
-
-  it("rejects mixed JSON config and legacy env config", async () => {
-    await expect(readTesterRuntimeConfig({
-      TESTER_CONFIG_FILE: "/run/credentials/tester/config.json",
-      TESTER_SLEEP_INTERVAL: "10",
-    })).rejects.toThrow("Set only one of TESTER_CONFIG_FILE or TESTER_SLEEP_INTERVAL");
+  it("requires a JSON config file", async () => {
+    await expect(readTesterRuntimeConfig({})).rejects.toThrow("Empty env TESTER_CONFIG_FILE");
   });
 
   it("reads JSON config files", async () => {

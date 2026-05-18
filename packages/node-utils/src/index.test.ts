@@ -13,11 +13,9 @@ import {
   parseMaxIterations,
   parseRuntimeConfig,
   parsePrivateKey,
-  readPrivateKeyEnv,
   readRuntimeConfigEnv,
-  readSecretEnv,
   parseSleepInterval,
-  parseSupportedChain,
+  randomSleepIntervalMs,
   reachedMaxIterations,
   signerAccountLocks,
   STOP_EXIT_CODE,
@@ -34,53 +32,50 @@ describe("node utilities", () => {
     expect(formatCkb(-100000000n - 1n)).toBe("-1.00000001");
   });
 
-  it("parses supported chain names from env values", () => {
-    expect(parseSupportedChain("mainnet", "CHAIN")).toBe("mainnet");
-    expect(parseSupportedChain("testnet", "CHAIN")).toBe("testnet");
-  });
-
-  it("rejects missing and unsupported chain env values", () => {
-    expect(() => parseSupportedChain(undefined, "CHAIN")).toThrow(
-      "Invalid env CHAIN: Empty",
-    );
-    expect(() => parseSupportedChain("devnet", "CHAIN")).toThrow(
-      "Invalid env CHAIN: devnet",
-    );
-  });
-
   it("parses positive sleep intervals as milliseconds", () => {
-    expect(parseSleepInterval("1", "SLEEP_INTERVAL")).toBe(1000);
-    expect(parseSleepInterval("2.5", "SLEEP_INTERVAL")).toBe(2500);
+    expect(parseSleepInterval(1, "BOT_CONFIG_FILE")).toBe(1000);
+    expect(parseSleepInterval(2.5, "BOT_CONFIG_FILE")).toBe(2500);
   });
 
   it("rejects missing and sub-second sleep intervals", () => {
-    for (const value of [undefined, "", "abc", "NaN", "Infinity", "0", "0.5"]) {
-      expect(() => parseSleepInterval(value, "SLEEP_INTERVAL")).toThrow(
-        "Invalid env SLEEP_INTERVAL",
+    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5]) {
+      expect(() => parseSleepInterval(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
       );
     }
   });
 
   it("parses bounded-run iteration limits", () => {
-    expect(parseMaxIterations(undefined, "MAX_ITERATIONS")).toBeUndefined();
-    expect(parseMaxIterations("", "MAX_ITERATIONS")).toBeUndefined();
-    expect(parseMaxIterations("1", "MAX_ITERATIONS")).toBe(1);
-    expect(parseMaxIterations(2, "MAX_ITERATIONS")).toBe(2);
+    expect(parseMaxIterations(undefined, "BOT_CONFIG_FILE")).toBeUndefined();
+    expect(parseMaxIterations(1, "BOT_CONFIG_FILE")).toBe(1);
+    expect(parseMaxIterations(2, "BOT_CONFIG_FILE")).toBe(2);
     expect(reachedMaxIterations(0, 1)).toBe(false);
     expect(reachedMaxIterations(1, 1)).toBe(true);
     expect(reachedMaxIterations(10, undefined)).toBe(false);
-    expect(() => parseMaxIterations("0", "MAX_ITERATIONS")).toThrow(
-      "Invalid env MAX_ITERATIONS",
+    expect(() => parseMaxIterations(0, "BOT_CONFIG_FILE")).toThrow(
+      "Invalid env BOT_CONFIG_FILE",
     );
-    expect(() => parseMaxIterations(1.5, "MAX_ITERATIONS")).toThrow(
-      "Invalid env MAX_ITERATIONS",
+    expect(() => parseMaxIterations(1.5, "BOT_CONFIG_FILE")).toThrow(
+      "Invalid env BOT_CONFIG_FILE",
     );
+  });
+
+  it("randomizes sleep with triangular jitter centered on the interval", () => {
+    expect(randomSleepIntervalMs(1000, sequence(0, 0))).toBe(0);
+    expect(randomSleepIntervalMs(1000, sequence(0.5, 0.5))).toBe(1000);
+    expect(randomSleepIntervalMs(1000, sequence(0.999, 0.999))).toBe(1998);
+
+    const samples = Array.from({ length: 1000 }, (_, index) => index / 1000);
+    const average = samples.reduce((sum, first) => (
+      sum + randomSleepIntervalMs(1000, sequence(first, 1 - first))
+    ), 0) / samples.length;
+    expect(average).toBe(1000);
   });
 
   it("parses private keys as exact 0x-prefixed lowercase hex", () => {
     const privateKey = `0x${"11".repeat(32)}`;
 
-    expect(parsePrivateKey(privateKey, "BOT_PRIVATE_KEY")).toBe(privateKey);
+    expect(parsePrivateKey(privateKey, "BOT_CONFIG_FILE")).toBe(privateKey);
     for (const value of [
       "11".repeat(32),
       `0X${"11".repeat(32)}`,
@@ -89,67 +84,9 @@ describe("node utilities", () => {
       `0x${"11".repeat(32)} `,
       `0x${"11".repeat(31)}`,
     ]) {
-      expect(() => parsePrivateKey(value, "BOT_PRIVATE_KEY")).toThrow(
-        "Invalid env BOT_PRIVATE_KEY",
+      expect(() => parsePrivateKey(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
       );
-    }
-  });
-
-  it("reports invalid private keys against their active env source", async () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
-    try {
-      const invalidPath = join(dir, "invalid");
-      await writeFile(invalidPath, "not-a-private-key\n", { mode: 0o600 });
-      const validPath = join(dir, "valid");
-      await writeFile(validPath, privateKey, { mode: 0o600 });
-      const newlinePath = join(dir, "newline");
-      await writeFile(newlinePath, `${privateKey}\n`, { mode: 0o600 });
-
-      await expect(readPrivateKeyEnv(
-        privateKey,
-        "BOT_PRIVATE_KEY",
-        undefined,
-        "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe(privateKey);
-      await expect(readPrivateKeyEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        validPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe(privateKey);
-      await expect(readPrivateKeyEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        newlinePath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
-      await expect(readPrivateKeyEnv(
-        "not-a-private-key",
-        "BOT_PRIVATE_KEY",
-        undefined,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY");
-      await expect(readPrivateKeyEnv(
-        `0x${"11".repeat(32)} `,
-        "BOT_PRIVATE_KEY",
-        undefined,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.not.toThrow(/0x11/u);
-      await expect(readPrivateKeyEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        invalidPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
-      await expect(readPrivateKeyEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        invalidPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.not.toThrow(/not-a-private-key/u);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -233,82 +170,6 @@ describe("node utilities", () => {
       await expect(readRuntimeConfigEnv(join(dir, "missing"), "BOT_CONFIG_FILE")).rejects.toThrow(
         "Invalid file from env BOT_CONFIG_FILE",
       );
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("reads a secret from one env source", async () => {
-    await expect(readSecretEnv(
-      "0xabc",
-      "BOT_PRIVATE_KEY",
-      undefined,
-      "BOT_PRIVATE_KEY_FILE",
-    )).resolves.toBe("0xabc");
-    await expect(readSecretEnv(
-      undefined,
-      "BOT_PRIVATE_KEY",
-      undefined,
-      "BOT_PRIVATE_KEY_FILE",
-    )).rejects.toThrow("Empty env BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
-    await expect(readSecretEnv(
-      "0xabc",
-      "BOT_PRIVATE_KEY",
-      "/tmp/secret",
-      "BOT_PRIVATE_KEY_FILE",
-    )).rejects.toThrow("Set only one of BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
-  });
-
-  it("reads a secret from a file env source", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
-    try {
-      const secretPath = join(dir, "secret");
-      await writeFile(secretPath, "0xabc\n", { mode: 0o600 });
-      const crlfSecretPath = join(dir, "crlf-secret");
-      await writeFile(crlfSecretPath, "0xdef\r\n", { mode: 0o600 });
-
-      await expect(readSecretEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        secretPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe("0xabc\n");
-      await expect(readSecretEnv(
-        "",
-        "BOT_PRIVATE_KEY",
-        crlfSecretPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).resolves.toBe("0xdef\r\n");
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("rejects invalid secret files without exposing file contents", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "ickb-secret-"));
-    try {
-      const emptyPath = join(dir, "empty");
-      await writeFile(emptyPath, "", { mode: 0o600 });
-
-      await expect(readSecretEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        emptyPath,
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Empty file from env BOT_PRIVATE_KEY_FILE");
-
-      await expect(readSecretEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        join(dir, "missing"),
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
-      await expect(readSecretEnv(
-        undefined,
-        "BOT_PRIVATE_KEY",
-        "",
-        "BOT_PRIVATE_KEY_FILE",
-      )).rejects.toThrow("Empty env BOT_PRIVATE_KEY or BOT_PRIVATE_KEY_FILE");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -473,6 +334,11 @@ describe("node utilities", () => {
     stdoutWrite.mockRestore();
   });
 });
+
+function sequence(...values: number[]): () => number {
+  let index = 0;
+  return () => values[index++] ?? 0;
+}
 
 function transactionError(isTimeout: boolean, txHash = byte32FromByte("11")): Error {
   return Object.assign(new Error("Transaction confirmation timed out"), {

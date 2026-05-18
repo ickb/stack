@@ -27,27 +27,15 @@ export function jsonLogReplacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
-export function parseSupportedChain(
-  chain: string | undefined,
-  envName: string,
-): SupportedChain {
-  if (chain === "mainnet" || chain === "testnet") {
-    return chain;
-  }
-
-  throw new Error("Invalid env " + envName + ": " + (chain || "Empty"));
-}
-
 export function parseSleepInterval(
-  intervalSeconds: number | string | undefined,
+  intervalSeconds: number | undefined,
   envName: string,
 ): number {
-  const seconds = Number(intervalSeconds);
-  if (intervalSeconds === undefined || !Number.isFinite(seconds) || seconds < 1) {
+  if (intervalSeconds === undefined || !Number.isFinite(intervalSeconds) || intervalSeconds < 1) {
     throw new Error("Invalid env " + envName);
   }
 
-  return seconds * 1000;
+  return intervalSeconds * 1000;
 }
 
 export function parsePrivateKey(privateKey: string, envName: string): `0x${string}` {
@@ -88,27 +76,19 @@ export function parseRpcUrl(rpcUrl: string, envName: string): string {
   return rpcUrl;
 }
 
-export function parseOptionalRpcUrl(rpcUrl: string | undefined, envName: string): string | undefined {
-  if (rpcUrl === undefined || rpcUrl === "") {
-    return;
-  }
-  return parseRpcUrl(rpcUrl, envName);
-}
-
 export function parseMaxIterations(
-  value: number | string | undefined,
+  value: number | undefined,
   envName: string,
 ): number | undefined {
-  if (value === undefined || value === "") {
+  if (value === undefined) {
     return;
   }
 
-  const maxIterations = Number(value);
-  if (!Number.isSafeInteger(maxIterations) || maxIterations < 1) {
+  if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error("Invalid env " + envName);
   }
 
-  return maxIterations;
+  return value;
 }
 
 export function reachedMaxIterations(
@@ -116,6 +96,14 @@ export function reachedMaxIterations(
   maxIterations: number | undefined,
 ): boolean {
   return maxIterations !== undefined && completedIterations >= maxIterations;
+}
+
+export function randomSleepIntervalMs(
+  sleepIntervalMs: number,
+  random: () => number = Math.random,
+): number {
+  // Sum of two uniforms gives bounded triangular jitter centered on the configured interval.
+  return Math.floor(sleepIntervalMs * (random() + random()));
 }
 
 export function parseRuntimeConfig(configText: string, envName: string): RuntimeConfig {
@@ -163,22 +151,6 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
   };
 }
 
-export async function readPrivateKeyEnv(
-  envValue: string | undefined,
-  envName: string,
-  fileEnvValue: string | undefined,
-  fileEnvName: string,
-): Promise<`0x${string}`> {
-  const privateKey = await readSecretEnv(
-    envValue,
-    envName,
-    fileEnvValue,
-    fileEnvName,
-  );
-
-  return parsePrivateKey(privateKey, envValue === undefined || envValue === "" ? fileEnvName : envName);
-}
-
 export async function readRuntimeConfigEnv(
   fileEnvValue: string | undefined,
   fileEnvName: string,
@@ -188,26 +160,6 @@ export async function readRuntimeConfigEnv(
   }
 
   return parseRuntimeConfig(await readFileEnv(fileEnvValue, fileEnvName), fileEnvName);
-}
-
-export async function readSecretEnv(
-  envValue: string | undefined,
-  envName: string,
-  fileEnvValue: string | undefined,
-  fileEnvName: string,
-): Promise<string> {
-  const hasEnvValue = envValue !== undefined && envValue !== "";
-  if (hasEnvValue && fileEnvValue !== undefined && fileEnvValue !== "") {
-    throw new Error(`Set only one of ${envName} or ${fileEnvName}`);
-  }
-  if (hasEnvValue) {
-    return envValue;
-  }
-  if (fileEnvValue === undefined || fileEnvValue === "") {
-    throw new Error(`Empty env ${envName} or ${fileEnvName}`);
-  }
-
-  return readFileEnv(fileEnvValue, fileEnvName);
 }
 
 async function readFileEnv(fileEnvValue: string, fileEnvName: string): Promise<string> {

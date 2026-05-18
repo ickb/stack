@@ -6,16 +6,12 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
-  parseMaxIterations,
-  parseOptionalRpcUrl,
-  parseSleepInterval,
-  parseSupportedChain,
-  readPrivateKeyEnv,
+  randomSleepIntervalMs,
   readRuntimeConfigEnv,
   reachedMaxIterations,
   signerAccountLocks,
   sleep,
-  type SupportedChain,
+  type RuntimeConfig,
 } from "@ickb/node-utils";
 import { pathToFileURL } from "node:url";
 import {
@@ -31,14 +27,6 @@ const MIN_TOTAL_CAPITAL_DIVISOR = 20n;
 const TESTER_FEE = 100n;
 const TESTER_FEE_BASE = 100000n;
 const RANDOM_SCALE = 1000000n;
-
-type TesterRuntimeConfig = {
-  chain: SupportedChain;
-  privateKey: `0x${string}`;
-  rpcUrl: string | undefined;
-  sleepIntervalMs: number;
-  maxIterations: number | undefined;
-};
 
 async function main(): Promise<void> {
   const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } =
@@ -59,7 +47,7 @@ async function main(): Promise<void> {
   let stopAfterLog = false;
   let completedIterations = 0;
   for (;;) {
-    await sleep(2 * Math.random() * sleepIntervalMs);
+    await sleep(randomSleepIntervalMs(sleepIntervalMs));
 
     const executionLog: Record<string, unknown> = {};
     const startTime = new Date();
@@ -210,49 +198,8 @@ function logTerminalIteration(
   return reachedMaxIterations(completedIterations, maxIterations);
 }
 
-export async function readTesterRuntimeConfig(env: NodeJS.ProcessEnv): Promise<TesterRuntimeConfig> {
-  const {
-    CHAIN,
-    RPC_URL,
-    TESTER_CONFIG_FILE,
-    TESTER_PRIVATE_KEY,
-    TESTER_PRIVATE_KEY_FILE,
-    TESTER_SLEEP_INTERVAL,
-    MAX_ITERATIONS,
-  } = env;
-  if (TESTER_CONFIG_FILE !== undefined && TESTER_CONFIG_FILE !== "") {
-    for (const name of [
-      "CHAIN",
-      "RPC_URL",
-      "TESTER_PRIVATE_KEY",
-      "TESTER_PRIVATE_KEY_FILE",
-      "TESTER_SLEEP_INTERVAL",
-      "MAX_ITERATIONS",
-    ]) {
-      if (env[name] !== undefined && env[name] !== "") {
-        throw new Error(`Set only one of TESTER_CONFIG_FILE or ${name}`);
-      }
-    }
-
-    return readRuntimeConfigEnv(TESTER_CONFIG_FILE, "TESTER_CONFIG_FILE");
-  }
-
-  if (!CHAIN) {
-    throw new Error("Invalid env CHAIN: Empty");
-  }
-  const privateKey = await readPrivateKeyEnv(
-    TESTER_PRIVATE_KEY,
-    "TESTER_PRIVATE_KEY",
-    TESTER_PRIVATE_KEY_FILE,
-    "TESTER_PRIVATE_KEY_FILE",
-  );
-  return {
-    chain: parseSupportedChain(CHAIN, "CHAIN"),
-    privateKey,
-    rpcUrl: parseOptionalRpcUrl(RPC_URL, "RPC_URL"),
-    sleepIntervalMs: parseSleepInterval(TESTER_SLEEP_INTERVAL, "TESTER_SLEEP_INTERVAL"),
-    maxIterations: parseMaxIterations(MAX_ITERATIONS, "MAX_ITERATIONS"),
-  };
+export async function readTesterRuntimeConfig(env: NodeJS.ProcessEnv): Promise<RuntimeConfig> {
+  return readRuntimeConfigEnv(env.TESTER_CONFIG_FILE, "TESTER_CONFIG_FILE");
 }
 
 function min(left: bigint, right: bigint): bigint {
