@@ -12,11 +12,13 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
-  parseSleepInterval,
-  parseSupportedChain,
+  randomSleepIntervalMs,
+  readRuntimeConfigEnv,
+  reachedMaxIterations,
   signerAccountLocks,
   sleep,
   STOP_EXIT_CODE,
+  type RuntimeConfig,
 } from "@ickb/node-utils";
 import {
   buildTransaction,
@@ -31,35 +33,23 @@ import {
   emitDecisionEvents,
   errorSummary,
   lowCapitalSkipDecision,
-  parseMaxIterations,
-  reachedMaxIterations,
   transactionLifecycleEvents,
   transactionSummary,
 } from "./observability.js";
 
 async function main(): Promise<void> {
-  const { CHAIN, RPC_URL, BOT_PRIVATE_KEY, BOT_SLEEP_INTERVAL, MAX_ITERATIONS } =
-    process.env;
-  if (!CHAIN) {
-    throw new Error("Invalid env CHAIN: Empty");
-  }
-  if (!BOT_PRIVATE_KEY) {
-    throw new Error("Empty env BOT_PRIVATE_KEY");
-  }
-  const sleepInterval = parseSleepInterval(BOT_SLEEP_INTERVAL, "BOT_SLEEP_INTERVAL");
-  const maxIterations = parseMaxIterations(MAX_ITERATIONS);
-
-  const chain = parseSupportedChain(CHAIN, "CHAIN");
+  const runtimeConfig = await readBotRuntimeConfig(process.env);
+  const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } = runtimeConfig;
   const runId = createRunId();
   const events = new BotEventEmitter({ chain, runId });
   events.emit(0, "bot.run.started", {
     maxIterations,
     bounded: maxIterations !== undefined,
   });
-  const client = createPublicClient(chain, RPC_URL);
+  const client = createPublicClient(chain, rpcUrl);
   const config = getConfig(chain);
   const { managers } = config;
-  const signer = new ccc.SignerCkbPrivateKey(client, BOT_PRIVATE_KEY);
+  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const recommendedAddress = await signer.getRecommendedAddressObj();
   const primaryLock = recommendedAddress.script;
   const runtime: Runtime = {
@@ -74,7 +64,7 @@ async function main(): Promise<void> {
   let completedIterations = 0;
   let iterationId = 0;
   for (;;) {
-    await sleep(Math.floor(2 * Math.random() * sleepInterval));
+    await sleep(randomSleepIntervalMs(sleepIntervalMs));
 
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const executionLog: Record<string, any> = {};
@@ -173,6 +163,10 @@ async function main(): Promise<void> {
       return;
     }
   }
+}
+
+export async function readBotRuntimeConfig(env: NodeJS.ProcessEnv): Promise<RuntimeConfig> {
+  return readRuntimeConfigEnv(env.BOT_CONFIG_FILE, "BOT_CONFIG_FILE");
 }
 
 export function completeTerminalIteration(

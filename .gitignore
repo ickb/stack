@@ -3,3 +3,7 @@
 
 # Artifacts
 **/dist/
+apps/*/log_*.json
+
+# Local runtime config files
+config/

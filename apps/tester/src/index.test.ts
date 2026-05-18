@@ -1,7 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { freshMatchableOrderSkip } from "./freshMatchableOrderSkip.js";
+import { readTesterRuntimeConfig } from "./index.js";
+
+describe("readTesterRuntimeConfig", () => {
+  it("requires a JSON config file", async () => {
+    await expect(readTesterRuntimeConfig({})).rejects.toThrow("Empty env TESTER_CONFIG_FILE");
+  });
+
+  it("reads JSON config files", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-tester-config-"));
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalSeconds: 10,
+        maxIterations: 1,
+      }), { mode: 0o600 });
+
+      await expect(readTesterRuntimeConfig({ TESTER_CONFIG_FILE: configPath })).resolves.toEqual({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalMs: 10000,
+        maxIterations: 1,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("freshMatchableOrderSkip", () => {
   it("explains skips caused by unavailable transaction lookup", async () => {

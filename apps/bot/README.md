@@ -8,27 +8,20 @@ The bot minimizes excess iCKB holdings so more liquidity stays available in CKB 
 
 - [Current Bot Rebalancing Policy](docs/current_rebalancing_policy.md)
 
-## Environment
+## Runtime Config
 
-Required variables:
+The bot reads one strict JSON config file named by `BOT_CONFIG_FILE`:
 
-```text
-CHAIN=testnet
-BOT_PRIVATE_KEY=0x...
-BOT_SLEEP_INTERVAL=60
+```json
+{"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":60}
 ```
 
-Optional variable:
-
-```text
-RPC_URL=http://127.0.0.1:8114/
-MAX_ITERATIONS=1
-```
+The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
 
 Current network support:
 
-- `CHAIN=testnet`
-- `CHAIN=mainnet`
+- `"chain":"testnet"`
+- `"chain":"mainnet"`
 
 ## Run
 
@@ -37,9 +30,9 @@ From the repo root:
 ```bash
 pnpm install
 pnpm --filter ./apps/bot build
-mkdir -p apps/bot/env/testnet
-$EDITOR apps/bot/env/testnet/.env
-export CHAIN=testnet
+mkdir -p config
+$EDITOR config/bot-testnet.json
+export BOT_CONFIG_FILE="$(pwd)/config/bot-testnet.json"
 pnpm --filter ./apps/bot start:loop
 ```
 
@@ -48,19 +41,17 @@ Or from `apps/bot`:
 ```bash
 pnpm install
 pnpm build
-mkdir -p env/testnet
-$EDITOR env/testnet/.env
-export CHAIN=testnet
+mkdir -p ../../config
+$EDITOR ../../config/bot-testnet.json
+export BOT_CONFIG_FILE="$(pwd)/../../config/bot-testnet.json"
 pnpm run start:loop
 ```
 
-`CHAIN` selects `env/${CHAIN}/.env`, which must contain the remaining runtime variables such as `BOT_PRIVATE_KEY` and `BOT_SLEEP_INTERVAL`.
-
-The start script writes NDJSON logs to stdout and tees one log file per run. Balance and fee amounts are logged as decimal strings so large on-chain values do not lose precision. Intentional shutdowns, including low capital and transaction confirmation timeouts after broadcast, exit with code `2`; `start:loop` stops on that code instead of restarting immediately. `start:loop` also stops on exit code `0`, so bounded runs do not relaunch after `MAX_ITERATIONS` is exhausted.
+The start script writes NDJSON logs to stdout and tees one log file per run. Balance and fee amounts are logged as decimal strings so large on-chain values do not lose precision. Intentional shutdowns, including low capital and transaction confirmation timeouts after broadcast, exit with code `2`; `start:loop` stops on that code instead of restarting immediately. `start:loop` also stops on exit code `0`, so bounded runs do not relaunch after JSON `maxIterations` is exhausted.
 
 ## Structured Events
 
-Every bot observability record is one JSON object on stdout with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and `type`. Legacy execution logs remain on stdout for compatibility, but structured bot records can be selected with `app == "bot"`.
+Every bot observability record is one JSON object on stdout with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and `type`. Execution-log records also remain on stdout, and structured bot records can be selected with `app == "bot"`.
 
 Stable event types:
 
@@ -81,9 +72,142 @@ No-action iterations emit `bot.decision.skipped` with `reason` and evidence. Bui
 
 The decision transcript groups evidence under `chainTip`, `balances`, `orders`, `withdrawals`, `poolDeposits`, `match`, `rebalance`, `actions`, `fee`, `transactionShape`, `exchangeRatio`, and `depositCapacity`. Transaction events summarize action counts, fee, fee rate, tx hash, confirmation status, check count, elapsed time, and transaction shape counts.
 
-`MAX_ITERATIONS=1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. The default remains an infinite loop.
+JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. Omitting `maxIterations` keeps the default infinite loop.
 
 Structured events should contain public evidence and summaries needed to understand bot behavior. Do not add private keys, seed phrases, mnemonics, or other secrets to log payloads; omit noisy public fields at the call site instead of relying on redaction.
+
+## Ubuntu systemd Deployment
+
+For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted JSON config credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for local JSON-config runs and tees app-local log files.
+
+This layout keeps the workflow simple while avoiding accidental cross-network updates:
+
+```text
+/opt/ickb-stack-testnet
+/opt/ickb-stack-mainnet
+/etc/ickb/credentials/ickb-bot-testnet-config.cred
+/etc/ickb/credentials/ickb-bot-mainnet-config.cred
+/etc/systemd/system/ickb-bot-testnet.service
+/etc/systemd/system/ickb-bot-mainnet.service
+```
+
+From a deployed checkout on the VM, install service users, deploy directories, and unit files:
+
+```bash
+sudo scripts/ickb-bot-systemd-install.sh all
+```
+
+Populate and build each deploy directory before starting services. Clone or copy the same repo revision into both directories, then build as the matching service user:
+
+```bash
+sudo -u ickb-bot-testnet git clone <repo-url> /opt/ickb-stack-testnet
+sudo -u ickb-bot-mainnet git clone <repo-url> /opt/ickb-stack-mainnet
+sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:install
+sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:install
+sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:ccc
+sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:ccc
+sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:build
+sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:build
+```
+
+If `/opt/ickb-stack-testnet` or `/opt/ickb-stack-mainnet` already exists from the install script, clone into a temporary path and move the checkout into place, or initialize the existing directory with your normal deployment tooling. The update script expects each deploy directory to be a clean git checkout.
+
+Create encrypted config credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. The helper prompts for the private key, RPC URL, sleep interval, and optional max iterations, validates the same strict JSON schema that the app reads, and encrypts that JSON as one systemd credential.
+
+```bash
+sudo systemd-creds setup
+sudo scripts/ickb-bot-systemd-credential.sh testnet
+sudo scripts/ickb-bot-systemd-credential.sh mainnet
+```
+
+The install script writes `/etc/systemd/system/ickb-bot-testnet.service` equivalent to:
+
+```ini
+[Unit]
+Description=iCKB bot testnet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ickb-bot-testnet
+Group=ickb-bot-testnet
+WorkingDirectory=/opt/ickb-stack-testnet
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json
+LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
+ExecStart=/usr/bin/node apps/bot/dist/index.js
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+It writes `/etc/systemd/system/ickb-bot-mainnet.service` equivalent to:
+
+```ini
+[Unit]
+Description=iCKB bot mainnet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ickb-bot-mainnet
+Group=ickb-bot-mainnet
+WorkingDirectory=/opt/ickb-stack-mainnet
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-mainnet-config.json
+LoadCredentialEncrypted=ickb-bot-mainnet-config.json:/etc/ickb/credentials/ickb-bot-mainnet-config.cred
+ExecStart=/usr/bin/node apps/bot/dist/index.js
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Validate and start the units:
+
+```bash
+sudo systemd-analyze verify /etc/systemd/system/ickb-bot-testnet.service /etc/systemd/system/ickb-bot-mainnet.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ickb-bot-testnet.service
+sudo systemctl enable --now ickb-bot-mainnet.service
+```
+
+Operate through systemd instead of logging in as the service users:
+
+```bash
+sudo systemctl status ickb-bot-testnet.service
+sudo systemctl status ickb-bot-mainnet.service
+sudo journalctl -u ickb-bot-testnet.service -f
+sudo journalctl -u ickb-bot-mainnet.service -f
+sudo systemctl restart ickb-bot-testnet.service
+sudo systemctl restart ickb-bot-mainnet.service
+```
+
+Update testnet first, then mainnet after the same revision is validated. The update script pulls, installs, and builds before restarting the service, so a failed build leaves the currently running bot alone.
+
+```bash
+sudo scripts/ickb-bot-systemd-update.sh testnet
+sudo scripts/ickb-bot-systemd-update.sh mainnet
+```
+
+Use `scripts/ickb-bot-systemd-update.sh mainnet` only after the same revision has been validated on testnet.
+
+Exit code `2` is an intentional safety stop, including low capital and transaction confirmation timeout after broadcast. Inspect the journal before restarting a service that stopped with code `2`.
 
 ## Notes
 

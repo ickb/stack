@@ -70,26 +70,6 @@ export function createRunId(): string {
   return `${new Date().toISOString()}-${process.pid.toString(36)}`;
 }
 
-export function parseMaxIterations(value: string | undefined): number | undefined {
-  if (value === undefined || value === "") {
-    return;
-  }
-
-  const maxIterations = Number(value);
-  if (!Number.isSafeInteger(maxIterations) || maxIterations < 1) {
-    throw new Error("Invalid env MAX_ITERATIONS");
-  }
-
-  return maxIterations;
-}
-
-export function reachedMaxIterations(
-  completedIterations: number,
-  maxIterations: number | undefined,
-): boolean {
-  return maxIterations !== undefined && completedIterations >= maxIterations;
-}
-
 export function emitDecisionEvents(
   emitter: BotEventEmitter,
   iterationId: number,

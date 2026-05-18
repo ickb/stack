@@ -1,14 +1,22 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
+import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
   createPublicClient,
   formatCkb,
   handleLoopError,
   logExecution,
+  parseMaxIterations,
+  parseRuntimeConfig,
+  parsePrivateKey,
+  readRuntimeConfigEnv,
   parseSleepInterval,
-  parseSupportedChain,
+  randomSleepIntervalMs,
+  reachedMaxIterations,
   signerAccountLocks,
   STOP_EXIT_CODE,
   writeJsonLine,
@@ -24,30 +32,146 @@ describe("node utilities", () => {
     expect(formatCkb(-100000000n - 1n)).toBe("-1.00000001");
   });
 
-  it("parses supported chain names from env values", () => {
-    expect(parseSupportedChain("mainnet", "CHAIN")).toBe("mainnet");
-    expect(parseSupportedChain("testnet", "CHAIN")).toBe("testnet");
-  });
-
-  it("rejects missing and unsupported chain env values", () => {
-    expect(() => parseSupportedChain(undefined, "CHAIN")).toThrow(
-      "Invalid env CHAIN: Empty",
-    );
-    expect(() => parseSupportedChain("devnet", "CHAIN")).toThrow(
-      "Invalid env CHAIN: devnet",
-    );
-  });
-
   it("parses positive sleep intervals as milliseconds", () => {
-    expect(parseSleepInterval("1", "SLEEP_INTERVAL")).toBe(1000);
-    expect(parseSleepInterval("2.5", "SLEEP_INTERVAL")).toBe(2500);
+    expect(parseSleepInterval(1, "BOT_CONFIG_FILE")).toBe(1000);
+    expect(parseSleepInterval(2.5, "BOT_CONFIG_FILE")).toBe(2500);
   });
 
   it("rejects missing and sub-second sleep intervals", () => {
-    for (const value of [undefined, "", "abc", "NaN", "Infinity", "0", "0.5"]) {
-      expect(() => parseSleepInterval(value, "SLEEP_INTERVAL")).toThrow(
-        "Invalid env SLEEP_INTERVAL",
+    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5]) {
+      expect(() => parseSleepInterval(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
       );
+    }
+  });
+
+  it("parses bounded-run iteration limits", () => {
+    expect(parseMaxIterations(undefined, "BOT_CONFIG_FILE")).toBeUndefined();
+    expect(parseMaxIterations(1, "BOT_CONFIG_FILE")).toBe(1);
+    expect(parseMaxIterations(2, "BOT_CONFIG_FILE")).toBe(2);
+    expect(reachedMaxIterations(0, 1)).toBe(false);
+    expect(reachedMaxIterations(1, 1)).toBe(true);
+    expect(reachedMaxIterations(10, undefined)).toBe(false);
+    expect(() => parseMaxIterations(0, "BOT_CONFIG_FILE")).toThrow(
+      "Invalid env BOT_CONFIG_FILE",
+    );
+    expect(() => parseMaxIterations(1.5, "BOT_CONFIG_FILE")).toThrow(
+      "Invalid env BOT_CONFIG_FILE",
+    );
+  });
+
+  it("randomizes sleep with triangular jitter centered on the interval", () => {
+    expect(randomSleepIntervalMs(1000, sequence(0, 0))).toBe(0);
+    expect(randomSleepIntervalMs(1000, sequence(0.5, 0.5))).toBe(1000);
+    expect(randomSleepIntervalMs(1000, sequence(0.999, 0.999))).toBe(1998);
+
+    const samples = Array.from({ length: 1000 }, (_, index) => index / 1000);
+    const average = samples.reduce((sum, first) => (
+      sum + randomSleepIntervalMs(1000, sequence(first, 1 - first))
+    ), 0) / samples.length;
+    expect(average).toBe(1000);
+  });
+
+  it("parses private keys as exact 0x-prefixed lowercase hex", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+
+    expect(parsePrivateKey(privateKey, "BOT_CONFIG_FILE")).toBe(privateKey);
+    for (const value of [
+      "11".repeat(32),
+      `0X${"11".repeat(32)}`,
+      `0x${"AA".repeat(32)}`,
+      ` 0x${"11".repeat(32)}`,
+      `0x${"11".repeat(32)} `,
+      `0x${"11".repeat(31)}`,
+    ]) {
+      expect(() => parsePrivateKey(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
+      );
+    }
+  });
+
+  it("parses exact runtime JSON config", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://rpc.example/path?token=abc",
+      sleepIntervalSeconds: 60,
+      maxIterations: 2,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://rpc.example/path?token=abc",
+      sleepIntervalMs: 60000,
+      maxIterations: 2,
+    });
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "mainnet",
+      privateKey,
+      rpcUrl: "https://mainnet.example/",
+      sleepIntervalSeconds: 1,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "mainnet",
+      privateKey,
+      rpcUrl: "https://mainnet.example/",
+      sleepIntervalMs: 1000,
+      maxIterations: undefined,
+    });
+  });
+
+  it("rejects invalid runtime JSON config without exposing contents", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const invalidValues = [
+      "not-json",
+      JSON.stringify([]),
+      JSON.stringify({ chain: "devnet", privateKey, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: privateKey, privateKey, rpcUrl: "https://rpc.example/", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, extra: true }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey: `${privateKey}\n`, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "file:///tmp/socket", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "https://rpc.example/ bad", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: "60" }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 0 }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, maxIterations: "1" }),
+    ];
+
+    for (const value of invalidValues) {
+      expect(() => parseRuntimeConfig(value, "BOT_CONFIG_FILE")).toThrow(
+        "Invalid env BOT_CONFIG_FILE",
+      );
+      expect(() => parseRuntimeConfig(value, "BOT_CONFIG_FILE")).not.toThrow(/rpc\.example|0x11/u);
+    }
+  });
+
+  it("reads runtime JSON config from a file env source", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-runtime-config-"));
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalSeconds: 60,
+      }), { mode: 0o600 });
+
+      await expect(readRuntimeConfigEnv(configPath, "BOT_CONFIG_FILE")).resolves.toEqual({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalMs: 60000,
+        maxIterations: undefined,
+      });
+      await expect(readRuntimeConfigEnv(undefined, "BOT_CONFIG_FILE")).rejects.toThrow(
+        "Empty env BOT_CONFIG_FILE",
+      );
+      await expect(readRuntimeConfigEnv(join(dir, "missing"), "BOT_CONFIG_FILE")).rejects.toThrow(
+        "Invalid file from env BOT_CONFIG_FILE",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -210,6 +334,11 @@ describe("node utilities", () => {
     stdoutWrite.mockRestore();
   });
 });
+
+function sequence(...values: number[]): () => number {
+  let index = 0;
+  return () => values[index++] ?? 0;
+}
 
 function transactionError(isTimeout: boolean, txHash = byte32FromByte("11")): Error {
   return Object.assign(new Error("Transaction confirmation timed out"), {

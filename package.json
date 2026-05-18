@@ -3,8 +3,12 @@
   "scripts": {
     "build": "pnpm -r --filter !./apps/** --filter '!./forks/**' build",
     "build:all": "pnpm -r --filter '!./forks/**' build",
+    "audit": "pnpm audit",
+    "bot:install": "CI=true pnpm --filter @ickb/bot... --filter @ckb-ccc/core... --filter @ckb-ccc/udt... install --frozen-lockfile",
+    "bot:ccc": "pnpm --dir forks/ccc/repo -r --filter @ckb-ccc/core... --filter @ckb-ccc/udt... run build",
+    "bot:build": "pnpm --filter @ickb/bot... build",
     "check": "CI=true pnpm check:base",
-    "check:base": "pnpm clean:deep && pnpm check:ccc-overrides && pnpm forks:bootstrap && pnpm install && pnpm forks:ccc && pnpm forks:ccc:smoke && pnpm madge && pnpm lint && pnpm build:all && pnpm test:ci",
+    "check:base": "pnpm clean:deep && pnpm check:ccc-overrides && pnpm forks:bootstrap && pnpm install && pnpm audit && pnpm forks:ccc && pnpm forks:ccc:smoke && pnpm madge && pnpm lint && pnpm build:all && pnpm test:ci",
     "check:ccc-overrides": "node scripts/check-ccc-overrides.mjs",
     "check:fresh": "rm -f pnpm-lock.yaml && pnpm check",
     "madge": "madge --circular --extensions ts,tsx --ts-config ./tsconfig.json --exclude '^forks/' packages apps",

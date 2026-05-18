@@ -6,10 +6,12 @@ import {
   formatCkb,
   handleLoopError,
   logExecution,
-  parseSleepInterval,
-  parseSupportedChain,
+  randomSleepIntervalMs,
+  readRuntimeConfigEnv,
+  reachedMaxIterations,
   signerAccountLocks,
   sleep,
+  type RuntimeConfig,
 } from "@ickb/node-utils";
 import { pathToFileURL } from "node:url";
 import {
@@ -27,23 +29,11 @@ const TESTER_FEE_BASE = 100000n;
 const RANDOM_SCALE = 1000000n;
 
 async function main(): Promise<void> {
-  const { CHAIN, RPC_URL, TESTER_PRIVATE_KEY, TESTER_SLEEP_INTERVAL } =
-    process.env;
-  if (!CHAIN) {
-    throw new Error("Invalid env CHAIN: Empty");
-  }
-  if (!TESTER_PRIVATE_KEY) {
-    throw new Error("Empty env TESTER_PRIVATE_KEY");
-  }
-  const sleepInterval = parseSleepInterval(
-    TESTER_SLEEP_INTERVAL,
-    "TESTER_SLEEP_INTERVAL",
-  );
-
-  const chain = parseSupportedChain(CHAIN, "CHAIN");
-  const client = createPublicClient(chain, RPC_URL);
+  const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } =
+    await readTesterRuntimeConfig(process.env);
+  const client = createPublicClient(chain, rpcUrl);
   const config = getConfig(chain);
-  const signer = new ccc.SignerCkbPrivateKey(client, TESTER_PRIVATE_KEY);
+  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const recommendedAddress = await signer.getRecommendedAddressObj();
   const primaryLock = recommendedAddress.script;
   const runtime: Runtime = {
@@ -55,8 +45,9 @@ async function main(): Promise<void> {
   };
 
   let stopAfterLog = false;
+  let completedIterations = 0;
   for (;;) {
-    await sleep(2 * Math.random() * sleepInterval);
+    await sleep(randomSleepIntervalMs(sleepIntervalMs));
 
     const executionLog: Record<string, unknown> = {};
     const startTime = new Date();
@@ -71,7 +62,9 @@ async function main(): Promise<void> {
       );
       if (skip) {
         executionLog.skip = skip;
-        logExecution(executionLog, startTime);
+        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+          return;
+        }
         continue;
       }
 
@@ -131,7 +124,9 @@ async function main(): Promise<void> {
           return;
         }
         executionLog.skip = { reason: "sampled-amount-too-small" };
-        logExecution(executionLog, startTime);
+        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+          return;
+        }
         continue;
       }
 
@@ -144,7 +139,9 @@ async function main(): Promise<void> {
       });
       if (estimate.convertedAmount <= 0n) {
         executionLog.skip = { reason: "estimated-conversion-too-small" };
-        logExecution(executionLog, startTime);
+        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+          return;
+        }
         continue;
       }
 
@@ -181,11 +178,28 @@ async function main(): Promise<void> {
     } catch (e) {
       stopAfterLog = handleLoopError(executionLog, e);
     }
-    logExecution(executionLog, startTime);
     if (stopAfterLog) {
+      logExecution(executionLog, startTime);
+      return;
+    }
+    if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
       return;
     }
   }
+}
+
+function logTerminalIteration(
+  executionLog: Record<string, unknown>,
+  startTime: Date,
+  completedIterations: number,
+  maxIterations: number | undefined,
+): boolean {
+  logExecution(executionLog, startTime);
+  return reachedMaxIterations(completedIterations, maxIterations);
+}
+
+export async function readTesterRuntimeConfig(env: NodeJS.ProcessEnv): Promise<RuntimeConfig> {
+  return readRuntimeConfigEnv(env.TESTER_CONFIG_FILE, "TESTER_CONFIG_FILE");
 }
 
 function min(left: bigint, right: bigint): bigint {

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { unique } from "@ickb/utils";
+import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { setTimeout } from "node:timers";
 
@@ -26,27 +27,153 @@ export function jsonLogReplacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
-export function parseSupportedChain(
-  chain: string | undefined,
-  envName: string,
-): SupportedChain {
-  if (chain === "mainnet" || chain === "testnet") {
-    return chain;
-  }
-
-  throw new Error("Invalid env " + envName + ": " + (chain || "Empty"));
-}
-
 export function parseSleepInterval(
-  intervalSeconds: string | undefined,
+  intervalSeconds: number | undefined,
   envName: string,
 ): number {
-  const seconds = Number(intervalSeconds);
-  if (intervalSeconds === undefined || !Number.isFinite(seconds) || seconds < 1) {
+  if (intervalSeconds === undefined || !Number.isFinite(intervalSeconds) || intervalSeconds < 1) {
     throw new Error("Invalid env " + envName);
   }
 
-  return seconds * 1000;
+  return intervalSeconds * 1000;
+}
+
+export function parsePrivateKey(privateKey: string, envName: string): `0x${string}` {
+  if (/^0x[0-9a-f]{64}$/u.test(privateKey)) {
+    return privateKey as `0x${string}`;
+  }
+
+  throw new Error("Invalid env " + envName);
+}
+
+export type RuntimeConfig = {
+  chain: SupportedChain;
+  privateKey: `0x${string}`;
+  rpcUrl: string;
+  sleepIntervalMs: number;
+  maxIterations: number | undefined;
+};
+
+export function parseRpcUrl(rpcUrl: string, envName: string): string {
+  for (let index = 0; index < rpcUrl.length; index += 1) {
+    const code = rpcUrl.charCodeAt(index);
+    if (/\s/u.test(rpcUrl[index] ?? "") || code < 0x20 || code === 0x7f) {
+      throw new Error("Invalid env " + envName);
+    }
+  }
+  if (rpcUrl === "") {
+    throw new Error("Invalid env " + envName);
+  }
+  let url: URL;
+  try {
+    url = new URL(rpcUrl);
+  } catch {
+    throw new Error("Invalid env " + envName);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Invalid env " + envName);
+  }
+  return rpcUrl;
+}
+
+export function parseMaxIterations(
+  value: number | undefined,
+  envName: string,
+): number | undefined {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("Invalid env " + envName);
+  }
+
+  return value;
+}
+
+export function reachedMaxIterations(
+  completedIterations: number,
+  maxIterations: number | undefined,
+): boolean {
+  return maxIterations !== undefined && completedIterations >= maxIterations;
+}
+
+export function randomSleepIntervalMs(
+  sleepIntervalMs: number,
+  random: () => number = Math.random,
+): number {
+  // Sum of two uniforms gives bounded triangular jitter centered on the configured interval.
+  return Math.floor(sleepIntervalMs * (random() + random()));
+}
+
+export function parseRuntimeConfig(configText: string, envName: string): RuntimeConfig {
+  let config: unknown;
+  try {
+    config = JSON.parse(configText);
+  } catch {
+    throw new Error("Invalid env " + envName);
+  }
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    throw new Error("Invalid env " + envName);
+  }
+
+  const record = config as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (
+      key !== "chain" &&
+      key !== "privateKey" &&
+      key !== "rpcUrl" &&
+      key !== "sleepIntervalSeconds" &&
+      key !== "maxIterations"
+    ) {
+      throw new Error("Invalid env " + envName);
+    }
+  }
+  if (
+    typeof record.chain !== "string" ||
+    typeof record.privateKey !== "string" ||
+    typeof record.rpcUrl !== "string" ||
+    typeof record.sleepIntervalSeconds !== "number" ||
+    record.maxIterations !== undefined && typeof record.maxIterations !== "number"
+  ) {
+    throw new Error("Invalid env " + envName);
+  }
+  if (record.chain !== "mainnet" && record.chain !== "testnet") {
+    throw new Error("Invalid env " + envName);
+  }
+
+  return {
+    chain: record.chain,
+    privateKey: parsePrivateKey(record.privateKey, envName),
+    rpcUrl: parseRpcUrl(record.rpcUrl, envName),
+    sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
+    maxIterations: parseMaxIterations(record.maxIterations, envName),
+  };
+}
+
+export async function readRuntimeConfigEnv(
+  fileEnvValue: string | undefined,
+  fileEnvName: string,
+): Promise<RuntimeConfig> {
+  if (fileEnvValue === undefined || fileEnvValue === "") {
+    throw new Error(`Empty env ${fileEnvName}`);
+  }
+
+  return parseRuntimeConfig(await readFileEnv(fileEnvValue, fileEnvName), fileEnvName);
+}
+
+async function readFileEnv(fileEnvValue: string, fileEnvName: string): Promise<string> {
+  const secretPath = fileEnvValue;
+  let fileSecret: string;
+  try {
+    fileSecret = await readFile(secretPath, "utf8");
+  } catch (cause) {
+    throw new Error(`Invalid file from env ${fileEnvName}`, { cause });
+  }
+  if (fileSecret === "") {
+    throw new Error(`Empty file from env ${fileEnvName}`);
+  }
+  return fileSecret;
 }
 
 export function createPublicClient(
