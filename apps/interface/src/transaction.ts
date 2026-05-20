@@ -5,6 +5,7 @@ import {
 } from "@ickb/sdk";
 import {
   errorMessageOf,
+  spendableCkb,
   txInfoPadding,
   type TxInfo,
   type WalletConfig,
@@ -26,7 +27,7 @@ export async function buildTransactionPreview(
       return txInfoWithError("Amount must be positive", context.estimatedMaturity);
     }
 
-    if (isCkb2Udt && amount > context.ckbAvailable) {
+    if (isCkb2Udt && amount > spendableCkb(context.ckbAvailable)) {
       return txInfoWithError("Not enough CKB", context.estimatedMaturity);
     }
 

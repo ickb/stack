@@ -24,6 +24,8 @@
     "forks:ccc:plan": "node scripts/forks-ccc.mjs --plan",
     "forks:ccc:smoke": "node scripts/forks-ccc-smoke.mjs",
     "forks:ccc:watch": "node scripts/forks-ccc.mjs --watch",
+    "live:generate-config": "node scripts/ickb-generate-config.mjs",
+    "live:preflight": "node scripts/ickb-live-preflight.mjs",
     "coworker:ask": "opencode run --pure --agent plan"
   },
   "engines": {

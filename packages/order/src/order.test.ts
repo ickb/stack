@@ -486,6 +486,37 @@ describe("OrderManager.addMatch", () => {
   });
 });
 
+describe("OrderManager.mint", () => {
+  it("creates an order output with the requested CKB value plus occupied capacity", () => {
+    const lock = script("11");
+    const udt = script("22");
+    const manager = new OrderManager(script("33"), [], udt);
+
+    const tx = manager.mint(
+      ccc.Transaction.default(),
+      lock,
+      dualInfo(),
+      { ckbValue: ccc.fixedPointFrom(123), udtValue: ccc.fixedPointFrom(456) },
+    );
+
+    expect(tx.outputs).toHaveLength(2);
+    const output = tx.getOutput(0);
+    if (output === undefined) {
+      throw new Error("Expected order output");
+    }
+    expect(OrderCell.mustFrom(ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("ef"), index: 0n },
+      cellOutput: output.cellOutput,
+      outputData: output.outputData,
+    })).ckbUnoccupied).toBe(ccc.fixedPointFrom(123));
+    expect(tx.outputs[0]?.capacity).toBeGreaterThan(ccc.fixedPointFrom(123));
+    expect(tx.outputs[0]?.lock.eq(manager.script)).toBe(true);
+    expect(tx.outputs[0]?.type?.eq(udt)).toBe(true);
+    expect(tx.outputs[1]?.lock.eq(lock)).toBe(true);
+    expect(tx.outputs[1]?.type?.eq(manager.script)).toBe(true);
+  });
+});
+
 describe("OrderCell.resolve", () => {
   it("prefers directional progress over a higher-value unprogressed candidate", () => {
     const master = {

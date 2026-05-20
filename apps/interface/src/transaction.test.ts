@@ -8,7 +8,7 @@ import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTransactionPreview } from "./transaction.ts";
 import type { TransactionContext } from "./transaction.ts";
-import type { WalletConfig } from "./utils.ts";
+import { CKB, reservedCKB, type WalletConfig } from "./utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
   typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
@@ -134,6 +134,8 @@ describe("buildTransactionPreview", () => {
       .resolves.toMatchObject({ error: "Amount must be positive" });
     await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 2n, config))
       .resolves.toMatchObject({ error: "Not enough CKB" });
+    await expect(buildTransactionPreview(context({ ckbAvailable: reservedCKB + CKB }), true, reservedCKB + CKB, config))
+      .resolves.toMatchObject({ error: "Not enough CKB" });
     await expect(buildTransactionPreview(context({ ickbAvailable: 1n }), false, 2n, config))
       .resolves.toMatchObject({ error: "Not enough iCKB" });
     expect(buildConversionTransaction).not.toHaveBeenCalled();
@@ -156,7 +158,7 @@ describe("buildTransactionPreview", () => {
     const completeTransaction = completeTransactionMock();
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(42n);
     const txContext = context({
-      ckbAvailable: 7n,
+      ckbAvailable: reservedCKB + 7n,
       system: { ...context().system, feeRate: 9n },
     });
     const config = walletConfigWith({
@@ -215,7 +217,7 @@ describe("buildTransactionPreview", () => {
         sdk: { buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason, 77n)) },
       });
 
-      await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config))
+      await expect(buildTransactionPreview(context({ ckbAvailable: reservedCKB + 1n }), true, 1n, config))
         .resolves.toMatchObject({ error: message, estimatedMaturity: 77n });
     }
   });
@@ -242,7 +244,7 @@ describe("buildTransactionPreview", () => {
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await buildTransactionPreview(
-      context({ ckbAvailable: 1n }),
+      context({ ckbAvailable: reservedCKB + 1n }),
       true,
       1n,
       walletConfigWith({
@@ -264,7 +266,7 @@ describe("buildTransactionPreview", () => {
           .mockRejectedValue(new Error("planner failed")),
       },
     });
-    await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, plannerFailure))
+    await expect(buildTransactionPreview(context({ ckbAvailable: reservedCKB + 1n }), true, 1n, plannerFailure))
       .resolves.toMatchObject({ error: "planner failed" });
 
     const completionFailure = walletConfigWith({
@@ -274,7 +276,7 @@ describe("buildTransactionPreview", () => {
           .mockRejectedValue(new Error("completion failed")),
       },
     });
-    await expect(buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, completionFailure))
+    await expect(buildTransactionPreview(context({ ckbAvailable: reservedCKB + 1n }), true, 1n, completionFailure))
       .resolves.toMatchObject({ error: "completion failed" });
   });
 });
