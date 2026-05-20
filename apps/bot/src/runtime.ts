@@ -272,7 +272,8 @@ export async function buildTransaction(
     tx,
   });
   decision = { ...decision, fee: { ...decision.fee, estimated: fee } };
-  if (postTxCkbBalance < CKB_RESERVE) {
+  const consumesCkbReserve = actions.deposits > 0 || match.ckbDelta < 0n;
+  if (postTxCkbBalance < CKB_RESERVE && consumesCkbReserve) {
     return skippedResult("post_tx_ckb_reserve", actions, decision, {
       postTxCkbBalance,
       reserve: CKB_RESERVE,

@@ -216,7 +216,7 @@ describe("buildTransaction", () => {
     const lock = script("11");
     const spent = capacityCell(1000n, lock, "77");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
-      ckbDelta: 1n,
+      ckbDelta: -1n,
       udtDelta: 0n,
       partials: [{} as never],
     });
@@ -247,6 +247,45 @@ describe("buildTransaction", () => {
       reason: "post_tx_ckb_reserve",
       decision: { skip: { reason: "post_tx_ckb_reserve" } },
     });
+  });
+
+  it("allows CKB-replenishing transactions even when plain CKB remains below reserve", async () => {
+    const lock = script("11");
+    const spent = capacityCell(1000n, lock, "78");
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 1n,
+      udtDelta: 0n,
+      partials: [],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+    const runtime = botRuntime({
+      primaryLock: lock,
+      sdk: {
+        completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          const tx = ccc.Transaction.from(txLike);
+          tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+          tx.addOutput({ capacity: 1n, lock });
+          return tx;
+        },
+      },
+    });
+    const state = botState({
+      accountLocks: [lock],
+      capacityCells: [spent],
+      readyWithdrawals: [{}],
+      availableCkbBalance: 1000n,
+      availableIckbBalance: TARGET_ICKB_BALANCE,
+      totalCkbBalance: 1000n,
+    });
+
+    const result = await buildTransaction(runtime as never, state as never);
+
+    expect(result).toMatchObject({
+      kind: "built",
+      actions: { withdrawals: 1 },
+    });
+    expect(result.decision.skip).toBeUndefined();
   });
 
   it("skips match-only transactions when the completed fee consumes the match value", async () => {
