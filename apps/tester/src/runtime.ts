@@ -1,9 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { type ReceiptCell, type WithdrawalGroup } from "@ickb/core";
 import { type OrderGroup } from "@ickb/order";
 import {
   IckbSdk,
-  projectAccountAvailability,
+  projectConversionTransactionContext,
+  type AccountState,
+  type ConversionTransactionContext,
+  type ConversionDirection,
+  type ConversionMetadata,
   type SystemState,
 } from "@ickb/sdk";
 
@@ -17,11 +20,16 @@ export interface Runtime {
 
 export interface TesterState {
   system: SystemState;
+  account: AccountState;
   userOrders: OrderGroup[];
-  receipts: ReceiptCell[];
-  readyWithdrawals: WithdrawalGroup[];
+  conversionContext: ConversionTransactionContext;
   availableCkbBalance: bigint;
   availableIckbBalance: bigint;
+}
+
+export interface RawOrderRequest {
+  amounts: { ckbValue: bigint; udtValue: bigint };
+  info: Parameters<IckbSdk["request"]>[2];
 }
 
 export async function readTesterState(runtime: Runtime): Promise<TesterState> {
@@ -30,15 +38,15 @@ export async function readTesterState(runtime: Runtime): Promise<TesterState> {
     runtime.accountLocks,
   );
 
-  const projection = projectAccountAvailability(account, user.orders, {
+  const { projection, context } = projectConversionTransactionContext(system, account, user.orders, {
     collectedOrdersAvailable: true,
   });
 
   return {
     system,
+    account,
     userOrders: user.orders,
-    receipts: account.receipts,
-    readyWithdrawals: projection.readyWithdrawals,
+    conversionContext: context,
     availableCkbBalance: projection.ckbAvailable,
     availableIckbBalance: projection.ickbAvailable,
   };
@@ -50,20 +58,58 @@ export async function buildTransaction(
   amounts: { ckbValue: bigint; udtValue: bigint },
   info: Parameters<IckbSdk["request"]>[2],
 ): Promise<ccc.Transaction> {
+  return buildRawOrderTransaction(runtime, state, [{ amounts, info }]);
+}
+
+export async function buildRawOrderTransaction(
+  runtime: Runtime,
+  state: TesterState,
+  orders: RawOrderRequest[],
+): Promise<ccc.Transaction> {
   let tx = await runtime.sdk.buildBaseTransaction(
     ccc.Transaction.default(),
     runtime.client,
     {
       orders: state.userOrders,
-      receipts: state.receipts,
-      readyWithdrawals: state.readyWithdrawals,
+      receipts: state.conversionContext.receipts,
+      readyWithdrawals: state.conversionContext.readyWithdrawals,
     },
   );
 
-  tx = await runtime.sdk.request(tx, runtime.primaryLock, info, amounts);
+  for (const order of orders) {
+    tx = await runtime.sdk.request(tx, runtime.primaryLock, order.info, order.amounts);
+  }
   return runtime.sdk.completeTransaction(tx, {
     signer: runtime.signer,
     client: runtime.client,
     feeRate: state.system.feeRate,
   });
+}
+
+export async function buildSdkConversionTransaction(
+  runtime: Runtime,
+  state: TesterState,
+  direction: ConversionDirection,
+  amount: bigint,
+): Promise<{ tx: ccc.Transaction; conversion: ConversionMetadata }> {
+  const result = await runtime.sdk.buildConversionTransaction(
+    ccc.Transaction.default(),
+    runtime.client,
+    {
+      direction,
+      amount,
+      lock: runtime.primaryLock,
+      context: state.conversionContext,
+    },
+  );
+  if (!result.ok) {
+    throw new Error(`SDK conversion failed: ${result.reason}`);
+  }
+
+  const tx = await runtime.sdk.completeTransaction(result.tx, {
+    signer: runtime.signer,
+    client: runtime.client,
+    feeRate: state.system.feeRate,
+  });
+  return { tx, conversion: result.conversion };
 }
