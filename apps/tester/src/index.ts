@@ -209,24 +209,19 @@ async function main(): Promise<void> {
       const { tx } = built;
       const txFee = tx.estimateFee(state.system.feeRate);
 
-      if (estimatedOrders.some((order) => order.direction === "ckb-to-ickb")) {
-        const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
-        if (postTxCkbBalance < CKB_RESERVE) {
-          if (isExplicitCkbReserveScenario(effectiveTesterScenario)) {
-            throw new TesterTerminalError(
-              `Not enough CKB to preserve tester reserve after the tx: expected ${formatCkb(CKB_RESERVE)} CKB, got ${formatCkb(postTxCkbBalance)} CKB`,
-            );
-          }
-          executionLog.skip = {
-            reason: "post-tx-ckb-reserve",
-            reserve: formatCkb(CKB_RESERVE),
-            postTxCkbBalance: formatCkb(postTxCkbBalance),
-          };
-          if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
-            return;
-          }
-          continue;
+      const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
+      const reserveSkip = testerReserveSkip(postTxCkbBalance);
+      if (reserveSkip !== undefined) {
+        if (isExplicitCkbReserveScenario(effectiveTesterScenario)) {
+          throw new TesterTerminalError(
+            `Not enough CKB to preserve tester reserve after the tx: expected ${formatCkb(CKB_RESERVE)} CKB, got ${formatCkb(postTxCkbBalance)} CKB`,
+          );
         }
+        executionLog.skip = reserveSkip;
+        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+          return;
+        }
+        continue;
       }
 
       executionLog.actions = {
@@ -365,6 +360,17 @@ export function postTransactionPlainCkbBalance(
   );
 
   return unspentCapacity + outputCapacity;
+}
+
+export function testerReserveSkip(postTxCkbBalance: bigint): Record<string, string> | undefined {
+  if (postTxCkbBalance >= CKB_RESERVE) {
+    return undefined;
+  }
+  return {
+    reason: "post-tx-ckb-reserve",
+    reserve: formatCkb(CKB_RESERVE),
+    postTxCkbBalance: formatCkb(postTxCkbBalance),
+  };
 }
 
 export function planTesterTransaction(

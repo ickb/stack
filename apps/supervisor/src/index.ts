@@ -1168,6 +1168,9 @@ function classifyBotResult(
 
   const committed = lastRecordOfType(botRecords, "bot.transaction.committed");
   if (committed !== undefined) {
+    if (!hasValidTxHash(committed)) {
+      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include a valid tx hash", publicState };
+    }
     const actions = latestBotActions(botRecords) ?? emptyActions();
     return {
       ...base,
@@ -1253,7 +1256,10 @@ function classifyTesterResult(
       return { ...base, outcome: "unknown", terminal: true, reason: `tester skip reason is not classified: ${reason}`, skipReason: reason };
     }
 
-    if (typeof latest["txHash"] === "string") {
+    if ("txHash" in latest) {
+      if (!hasValidTxHash(latest)) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence did not include a valid tx hash" };
+      }
       const actions = recordField(latest, "actions");
       const expectationFailure = validateTesterEvidenceExpectation(actions, expectation);
       if (expectationFailure !== undefined) {
@@ -1743,6 +1749,11 @@ function extractTxHashes(records: Record<string, unknown>[]): string[] {
     }
   }
   return [...hashes];
+}
+
+function hasValidTxHash(record: Record<string, unknown>): boolean {
+  const txHash = record["txHash"];
+  return typeof txHash === "string" && TX_HASH_PATTERN.test(txHash);
 }
 
 function containsSecretLeak(text: string): boolean {

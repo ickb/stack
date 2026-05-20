@@ -14,6 +14,7 @@ import {
   readTesterRuntimeConfig,
   readTesterScenario,
   resolveTesterScenario,
+  testerReserveSkip,
   TesterTerminalError,
 } from "./index.js";
 import { type TesterState } from "./runtime.js";
@@ -326,6 +327,15 @@ describe("planTesterTransaction", () => {
       testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), capacityCells: [spent, unspent, typed, data] }),
       [lock],
     )).toBe(ccc.fixedPointFrom(2300));
+  });
+
+  it("reports post-transaction reserve skips independently of order direction", () => {
+    expect(testerReserveSkip(ccc.fixedPointFrom(2000))).toBeUndefined();
+    expect(testerReserveSkip(0n)).toEqual({
+      reason: "post-tx-ckb-reserve",
+      reserve: "2000",
+      postTxCkbBalance: "0",
+    });
   });
 });
 

@@ -63,7 +63,7 @@ Keep long-running policy outside this app. A loop or human operator should run b
 The KISS watcher script runs one deterministic supervisor invocation per child output directory and prints one summary-only line per run:
 
 ```bash
-pnpm live:supervisor:loop -- --scenario standard-cycle --max-cycles 1
+node scripts/ickb-supervisor-loop.mjs --max-runs 1 --stable-limit 2 --backoff-seconds 0 -- --scenario standard-cycle --max-cycles 1
 ```
 
-Loop-owned options go before `--`; supervisor options go after `--`. The loop stops on supervisor nonzero exit, incident artifacts listed in `summary.json`, any tx hash, a new outcome after the first run, repeated no-progress signatures, or `--max-runs`.
+Loop-owned options go before `--`; supervisor options go after `--`. If using `pnpm live:supervisor:loop`, keep loop-owned options before the first `--` so they are not passed through to the supervisor. The loop stops on supervisor nonzero exit, incident artifacts listed in `summary.json`, any tx hash, a new outcome after the first run, repeated no-progress signatures, or `--max-runs`.

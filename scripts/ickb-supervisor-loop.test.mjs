@@ -46,6 +46,8 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
   assert.throws(() => parseArgs(["--stable-limit", "9007199254740992"]), /Invalid --stable-limit: expected a safe integer/u);
   assert.throws(() => parseArgs(["--backoff-seconds", "9007199254740993"]), /Invalid --backoff-seconds: expected a safe integer/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
+  assert.throws(() => parseArgs(["--", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
+  assert.throws(() => parseArgs(["--scenario", "standard-cycle", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.match(usage(), /summary/u);
 });
 

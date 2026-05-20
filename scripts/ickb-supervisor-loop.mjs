@@ -85,7 +85,7 @@ export function parseArgs(argv) {
     }
     throw new Error(`Unknown argument before --: ${arg}`);
   }
-  if (args.supervisorArgs.includes("--out-dir")) {
+  if (args.supervisorArgs.some((arg) => arg === "--out-dir" || arg.startsWith("--out-dir="))) {
     throw new Error("Do not pass supervisor --out-dir; use loop --out-root instead");
   }
   return args;

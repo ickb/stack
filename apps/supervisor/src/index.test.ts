@@ -591,6 +591,19 @@ describe("classification", () => {
     expect(classifyActorResult("tester", result).outcome).toBe("tester_conversion_created");
   });
 
+  it("rejects committed tester evidence without a valid tx hash", () => {
+    expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
+      startTime: "now",
+      actions: { newOrder: { giveCkb: "10", takeIckb: "9", fee: "0.1" }, cancelledOrders: 0 },
+      txHash: "not-a-tx-hash",
+      ElapsedSeconds: 1,
+    })))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester committed transaction evidence did not include a valid tx hash",
+    });
+  });
+
   it("classifies tester SDK order conversions as conversion coverage", () => {
     const result = commandResult("tester", JSON.stringify({
       startTime: "now",
@@ -981,6 +994,21 @@ describe("classification", () => {
       readyPoolDepositCount: 2,
       nearReadyPoolDepositCount: 1,
       futurePoolDepositCount: 3,
+    });
+  });
+
+  it("rejects committed bot evidence without a valid tx hash", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 1, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: "not-a-tx-hash", status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "bot committed transaction evidence did not include a valid tx hash",
     });
   });
 
