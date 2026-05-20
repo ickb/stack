@@ -24,7 +24,7 @@ test("config generator parses defaults and explicit options", () => {
   });
   assert.deepEqual(parseArgs([
     "--chain", "mainnet",
-    "--role", "tester",
+    "--role", "tester_role",
     "--out", "config/custom.json",
     "--rpc-url", "https://user:pass@mainnet.example/path?token=secret",
     "--sleep-interval-seconds", "10",
@@ -32,7 +32,7 @@ test("config generator parses defaults and explicit options", () => {
     "--force",
   ]), {
     chain: "mainnet",
-    role: "tester",
+    role: "tester_role",
     sleepIntervalSeconds: 10,
     maxIterations: undefined,
     force: true,
@@ -41,6 +41,9 @@ test("config generator parses defaults and explicit options", () => {
   });
   assert.throws(() => parseArgs(["--chain", "devnet"]), /Invalid --chain/u);
   assert.throws(() => parseArgs(["--role", "Bot"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--role", "bot-"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--role", "bot_"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--role", `b${"o".repeat(31)}t`]), /Invalid --role/u);
   assert.match(usage(), /ickb-generate-config/u);
   assert.match(usage(), /--sleep-interval-seconds/u);
   assert.match(usage(), /--max-iterations/u);

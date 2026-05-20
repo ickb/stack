@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
+const ROLE_PATTERN = /^[a-z](?:[a-z0-9_-]{0,30}[a-z0-9])?$/u;
 
 export function parseArgs(argv) {
   const args = { role: "preflight" };
@@ -239,8 +240,10 @@ function valueAfter(argv, index, option) {
 }
 
 function parseRole(value) {
-  if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(value)) {
-    throw new Error("Invalid --role label");
+  if (!ROLE_PATTERN.test(value)) {
+    throw new Error(
+      "Invalid --role: expected 1-32 lowercase letters, numbers, hyphens, or underscores without trailing separators",
+    );
   }
   return value;
 }

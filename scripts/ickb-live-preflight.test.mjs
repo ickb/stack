@@ -13,14 +13,17 @@ import {
 } from "./ickb-live-preflight.mjs";
 
 test("preflight CLI parses config and role arguments", () => {
-  assert.deepEqual(parseArgs(["--config", "config/bot-testnet.json", "--role", "bot"]), {
+  assert.deepEqual(parseArgs(["--config", "config/bot-testnet.json", "--role", "bot_live"]), {
     configPath: "config/bot-testnet.json",
-    role: "bot",
+    role: "bot_live",
   });
   assert.deepEqual(parseArgs(["--", "--help"]), { role: "preflight", help: true });
   assert.deepEqual(parseArgs(["--help"]), { role: "preflight", help: true });
   assert.throws(() => parseArgs([]), /Missing required --config/u);
   assert.throws(() => parseArgs(["--config", "x", "--role", "Bot!"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--config", "x", "--role", "bot-"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--config", "x", "--role", "bot_"]), /Invalid --role/u);
+  assert.throws(() => parseArgs(["--config", "x", "--role", `b${"o".repeat(31)}t`]), /Invalid --role/u);
   assert.match(usage(), /--config <ignored-json-config>/u);
 });
 

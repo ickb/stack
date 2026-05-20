@@ -12,6 +12,7 @@ const DEFAULT_RPC_URLS = {
   mainnet: "https://mainnet.ckb.dev/",
   testnet: "https://testnet.ckb.dev/",
 };
+const ROLE_PATTERN = /^[a-z](?:[a-z0-9_-]{0,30}[a-z0-9])?$/u;
 
 export function parseArgs(argv) {
   const args = {
@@ -170,8 +171,10 @@ function parseChain(value) {
 }
 
 function parseRole(value) {
-  if (!/^[a-z][a-z0-9-]*$/u.test(value)) {
-    throw new Error("Invalid --role: expected lowercase letters, numbers, and hyphens");
+  if (!ROLE_PATTERN.test(value)) {
+    throw new Error(
+      "Invalid --role: expected 1-32 lowercase letters, numbers, hyphens, or underscores without trailing separators",
+    );
   }
   return value;
 }
