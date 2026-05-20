@@ -19,6 +19,7 @@ import {
   sleep,
   STOP_EXIT_CODE,
   type RuntimeConfig,
+  verifyChainPreflight,
 } from "@ickb/node-utils";
 import {
   buildTransaction,
@@ -40,6 +41,7 @@ import {
 async function main(): Promise<void> {
   const runtimeConfig = await readBotRuntimeConfig(process.env);
   const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } = runtimeConfig;
+  const secrets = { privateKey, rpcUrl };
   const runId = createRunId();
   const events = new BotEventEmitter({ chain, runId });
   events.emit(0, "bot.run.started", {
@@ -47,6 +49,7 @@ async function main(): Promise<void> {
     bounded: maxIterations !== undefined,
   });
   const client = createPublicClient(chain, rpcUrl);
+  await verifyChainPreflight(client, chain);
   const config = getConfig(chain);
   const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
             executionLog.txHash = txHash;
           },
           onLifecycle: (event) => {
-            for (const lifecycle of transactionLifecycleEvents(event)) {
+            for (const lifecycle of transactionLifecycleEvents(event, secrets)) {
               events.emit(iterationId, lifecycle.type, {
                 ...lifecycle.fields,
                 ...(event.type === "broadcasted"
@@ -145,10 +148,14 @@ async function main(): Promise<void> {
         });
       }
     } catch (error) {
-      stopAfterLog = handleLoopError(executionLog, error);
+      stopAfterLog = handleLoopError(executionLog, error, secrets);
       events.emit(iterationId, "bot.iteration.failed", {
-        error: errorSummary(error),
+        error: errorSummary(error, secrets),
       });
+      if (isRetryableBotError(error)) {
+        logExecution(executionLog, startTime);
+        continue;
+      }
     }
 
     const completion = completeTerminalIteration(completedIterations, maxIterations);
@@ -211,6 +218,7 @@ async function readBotState(runtime: Runtime): Promise<BotState> {
 
   return {
     accountLocks,
+    capacityCells: account.capacityCells,
     system,
     userOrders: user.orders,
     marketOrders,
@@ -235,6 +243,11 @@ function outPointKey(outPoint: ccc.OutPoint): string {
 
 const fmtCkb = formatCkb;
 
+function isRetryableBotError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("L1 state scan crossed chain tip");
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
+  process.exit(process.exitCode ?? 0);
 }

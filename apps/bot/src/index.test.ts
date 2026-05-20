@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TARGET_ICKB_BALANCE } from "./policy.js";
 import { completeTerminalIteration, readBotRuntimeConfig } from "./index.js";
-import { buildTransaction, collectPoolDeposits } from "./runtime.js";
+import { buildTransaction, collectPoolDeposits, postTransactionPlainCkbBalance } from "./runtime.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,6 +52,7 @@ function readyDeposit(
 function botState(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
     accountLocks: [],
+    capacityCells: [],
     marketOrders: [],
     availableCkbBalance: 0n,
     availableIckbBalance: 0n,
@@ -92,6 +93,10 @@ function botRuntime(overrides: {
       order: {
         addMatch: (txLike: ccc.TransactionLike): ccc.Transaction =>
           ccc.Transaction.from(txLike),
+      },
+      logic: {
+        deposit: (txLike: ccc.TransactionLike): Promise<ccc.Transaction> =>
+          Promise.resolve(ccc.Transaction.from(txLike)),
       },
     },
     sdk: {
@@ -190,6 +195,99 @@ describe("readBotRuntimeConfig", () => {
 });
 
 describe("buildTransaction", () => {
+  it("preserves the bot plain CKB reserve when matching orders", async () => {
+    const bestMatch = vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+    });
+
+    await buildTransaction(botRuntime() as never, botState({
+      availableCkbBalance: ccc.fixedPointFrom(5000),
+      availableIckbBalance: TARGET_ICKB_BALANCE,
+    }) as never);
+
+    expect(bestMatch.mock.calls[0]?.[1]).toMatchObject({
+      ckbValue: ccc.fixedPointFrom(4000),
+    });
+  });
+
+  it("skips built transactions that would violate the bot plain CKB reserve", async () => {
+    const lock = script("11");
+    const spent = capacityCell(1000n, lock, "77");
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: -1n,
+      udtDelta: 0n,
+      partials: [{} as never],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+    const runtime = botRuntime({
+      primaryLock: lock,
+      sdk: {
+        completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          const tx = ccc.Transaction.from(txLike);
+          tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+          tx.addOutput({ capacity: 1n, lock });
+          return tx;
+        },
+      },
+    });
+    const state = botState({
+      accountLocks: [lock],
+      capacityCells: [spent],
+      marketOrders: [{}],
+      availableCkbBalance: ccc.fixedPointFrom(5000),
+      availableIckbBalance: TARGET_ICKB_BALANCE,
+      totalCkbBalance: ccc.fixedPointFrom(5000),
+    });
+
+    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "post_tx_ckb_reserve",
+      decision: { skip: { reason: "post_tx_ckb_reserve" } },
+    });
+  });
+
+  it("allows CKB-replenishing transactions even when plain CKB remains below reserve", async () => {
+    const lock = script("11");
+    const spent = capacityCell(1000n, lock, "78");
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 1n,
+      udtDelta: 0n,
+      partials: [],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+    const runtime = botRuntime({
+      primaryLock: lock,
+      sdk: {
+        completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          const tx = ccc.Transaction.from(txLike);
+          tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+          tx.addOutput({ capacity: 1n, lock });
+          return tx;
+        },
+      },
+    });
+    const state = botState({
+      accountLocks: [lock],
+      capacityCells: [spent],
+      readyWithdrawals: [{}],
+      availableCkbBalance: 1000n,
+      availableIckbBalance: TARGET_ICKB_BALANCE,
+      totalCkbBalance: 1000n,
+    });
+
+    const result = await buildTransaction(runtime as never, state as never);
+
+    expect(result).toMatchObject({
+      kind: "built",
+      actions: { withdrawals: 1 },
+    });
+    expect(result.decision.skip).toBeUndefined();
+  });
+
   it("skips match-only transactions when the completed fee consumes the match value", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
       ckbDelta: 1n,
@@ -198,10 +296,14 @@ describe("buildTransaction", () => {
     });
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
-    const runtime = botRuntime();
+    const lock = script("11");
+    const runtime = botRuntime({ primaryLock: lock });
     const state = botState({
+      accountLocks: [lock],
+      capacityCells: [capacityCell(ccc.fixedPointFrom(2000), lock, "66")],
       marketOrders: [{}],
       availableCkbBalance: 100n,
+      availableIckbBalance: TARGET_ICKB_BALANCE,
       totalCkbBalance: 100n,
     });
 
@@ -226,10 +328,14 @@ describe("buildTransaction", () => {
     });
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
-    const runtime = botRuntime();
+    const lock = script("11");
+    const runtime = botRuntime({ primaryLock: lock });
     const state = botState({
+      accountLocks: [lock],
+      capacityCells: [capacityCell(ccc.fixedPointFrom(2000), lock, "67")],
       marketOrders: [{}],
       availableCkbBalance: 100n,
+      availableIckbBalance: TARGET_ICKB_BALANCE,
       totalCkbBalance: 100n,
       system: {
         feeRate: 1n,
@@ -311,6 +417,8 @@ describe("buildTransaction", () => {
       primaryLock: script("44"),
     });
     const state = botState({
+      accountLocks: [script("44")],
+      capacityCells: [capacityCell(ccc.fixedPointFrom(2000), script("44"), "68")],
       marketOrders: [],
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       depositCapacity: 1000n,
@@ -335,3 +443,43 @@ describe("buildTransaction", () => {
     expect(result.tx.cellDeps).toEqual([]);
   });
 });
+
+describe("postTransactionPlainCkbBalance", () => {
+  it("counts unspent account plain CKB plus account plain outputs", () => {
+    const lock = script("11");
+    const otherLock = script("22");
+    const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "aa");
+    const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "bb");
+    const typed = ccc.Cell.from({
+      outPoint: { txHash: hash("cc"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
+      outputData: "0x",
+    });
+    const data = ccc.Cell.from({
+      outPoint: { txHash: hash("dd"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
+      outputData: "0x1234",
+    });
+    const tx = ccc.Transaction.default();
+    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+    tx.outputs.push(
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(300), lock }),
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(500), lock, type: script("33") }),
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(700), lock: otherLock }),
+    );
+    tx.outputsData.push("0x", "0x", "0x");
+
+    expect(postTransactionPlainCkbBalance(
+      tx,
+      botState({ accountLocks: [lock], capacityCells: [spent, unspent, typed, data] }) as never,
+    )).toBe(ccc.fixedPointFrom(2300));
+  });
+});
+
+function capacityCell(capacity: bigint, lock: ccc.Script, txByte: string): ccc.Cell {
+  return ccc.Cell.from({
+    outPoint: { txHash: hash(txByte), index: 0n },
+    cellOutput: { capacity, lock },
+    outputData: "0x",
+  });
+}

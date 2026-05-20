@@ -1,5 +1,11 @@
 import { type ccc } from "@ckb-ccc/core";
-import { jsonLogReplacer, writeJsonLine, type SupportedChain } from "@ickb/node-utils";
+import {
+  jsonLogReplacer,
+  redactSecretText,
+  writeJsonLine,
+  type SecretRedactionContext,
+  type SupportedChain,
+} from "@ickb/node-utils";
 import { type SendAndWaitForCommitEvent } from "@ickb/sdk";
 import {
   type BotActions,
@@ -116,6 +122,7 @@ export function transactionSummary(
 
 export function transactionLifecycleEvents(
   event: SendAndWaitForCommitEvent,
+  secrets: SecretRedactionContext = {},
 ): Array<{
   type: "bot.transaction.sent" | "bot.transaction.confirmation" | "bot.transaction.committed" | "bot.transaction.failed";
   fields: Record<string, unknown>;
@@ -130,11 +137,11 @@ export function transactionLifecycleEvents(
       return [
         {
           type: "bot.transaction.confirmation",
-          fields: { ...confirmationFields(event), outcome: "committed" },
+          fields: { ...confirmationFields(event, secrets), outcome: "committed" },
         },
         {
           type: "bot.transaction.committed",
-          fields: confirmationFields(event),
+          fields: confirmationFields(event, secrets),
         },
       ];
     case "timeout_after_broadcast":
@@ -143,14 +150,14 @@ export function transactionLifecycleEvents(
         {
           type: "bot.transaction.confirmation",
           fields: {
-            ...confirmationFields(event),
+            ...confirmationFields(event, secrets),
             outcome: event.type,
           },
         },
         {
           type: "bot.transaction.failed",
           fields: {
-            ...confirmationFields(event),
+            ...confirmationFields(event, secrets),
             outcome: event.type,
           },
         },
@@ -160,14 +167,14 @@ export function transactionLifecycleEvents(
         {
           type: "bot.transaction.confirmation",
           fields: {
-            ...confirmationFields(event),
+            ...confirmationFields(event, secrets),
             outcome: "terminal_rejection",
           },
         },
         {
           type: "bot.transaction.failed",
           fields: {
-            ...confirmationFields(event),
+            ...confirmationFields(event, secrets),
             outcome: "terminal_rejection",
           },
         },
@@ -178,7 +185,7 @@ export function transactionLifecycleEvents(
         fields: {
           phase: "pre_broadcast",
           elapsedMs: event.elapsedMs,
-          error: errorSummary(event.error),
+          error: errorSummary(event.error, secrets),
         },
       }];
   }
@@ -205,11 +212,18 @@ export function lowCapitalSkipDecision(
   };
 }
 
-export function errorSummary(error: unknown): Record<string, unknown> | string {
-  return summarizeError(error, new Set<unknown>());
+export function errorSummary(
+  error: unknown,
+  secrets: SecretRedactionContext = {},
+): Record<string, unknown> | string {
+  return summarizeError(error, new Set<unknown>(), secrets);
 }
 
-function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unknown> | string {
+function summarizeError(
+  error: unknown,
+  seen: Set<unknown>,
+  secrets: SecretRedactionContext,
+): Record<string, unknown> | string {
   if (error instanceof Error) {
     if (seen.has(error)) {
       return { message: "Circular error reference" };
@@ -218,12 +232,12 @@ function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unkn
 
     return {
       name: error.name,
-      message: error.message,
-      ...(error.stack === undefined ? {} : { stack: error.stack }),
+      message: redactSecretText(error.message, secrets),
+      ...(error.stack === undefined ? {} : { stack: redactSecretText(error.stack, secrets) }),
       ...("txHash" in error ? { txHash: error.txHash } : {}),
       ...("status" in error ? { status: error.status } : {}),
       ...("isTimeout" in error ? { isTimeout: error.isTimeout } : {}),
-      ...("cause" in error ? { cause: summarizeError(error.cause, seen) } : {}),
+      ...("cause" in error ? { cause: summarizeError(error.cause, seen, secrets) } : {}),
     };
   }
 
@@ -231,7 +245,7 @@ function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unkn
     try {
       return {
         message: "Non-Error object",
-        details: JSON.parse(JSON.stringify(error, jsonLogReplacer)) as unknown,
+        details: JSON.parse(redactSecretText(JSON.stringify(error, jsonLogReplacer), secrets)) as unknown,
       };
     } catch {
       return { message: "Non-Error object (unserializable)" };
@@ -239,7 +253,7 @@ function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unkn
   }
 
   if (typeof error === "string") {
-    return error;
+    return redactSecretText(error, secrets);
   }
 
   if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
@@ -252,13 +266,13 @@ function summarizeError(error: unknown, seen: Set<unknown>): Record<string, unkn
 function confirmationFields(event: Extract<
   SendAndWaitForCommitEvent,
   { txHash: ccc.Hex; checks: number }
->): Record<string, unknown> {
+>, secrets: SecretRedactionContext = {}): Record<string, unknown> {
   return {
     txHash: event.txHash,
     status: event.status,
     checks: event.checks,
     elapsedMs: event.elapsedMs,
-    ...("error" in event ? { error: errorSummary(event.error) } : {}),
+    ...("error" in event ? { error: errorSummary(event.error, secrets) } : {}),
   };
 }
 
