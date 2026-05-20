@@ -43,6 +43,7 @@ export function parseArgs(argv) {
     supervisorScript: DEFAULT_SUPERVISOR_SCRIPT,
     supervisorArgs: [],
   };
+  let parsedLoopOption = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--") {
@@ -55,23 +56,32 @@ export function parseArgs(argv) {
     }
     if (arg === "--out-root") {
       args.outRoot = valueAfter(argv, ++index, arg);
+      parsedLoopOption = true;
       continue;
     }
     if (arg === "--max-runs") {
       args.maxRuns = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
+      parsedLoopOption = true;
       continue;
     }
     if (arg === "--stable-limit") {
       args.stableLimit = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
+      parsedLoopOption = true;
       continue;
     }
     if (arg === "--backoff-seconds") {
       args.backoffSeconds = parseNonNegativeInteger(valueAfter(argv, ++index, arg), arg);
+      parsedLoopOption = true;
       continue;
     }
     if (arg === "--supervisor-script") {
       args.supervisorScript = valueAfter(argv, ++index, arg);
+      parsedLoopOption = true;
       continue;
+    }
+    if (!parsedLoopOption) {
+      args.supervisorArgs = argv.slice(index);
+      break;
     }
     throw new Error(`Unknown argument before --: ${arg}`);
   }

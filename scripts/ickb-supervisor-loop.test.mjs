@@ -29,6 +29,17 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
     supervisorScript: "apps/supervisor/dist/custom.js",
     supervisorArgs: ["--scenario", "bot-only"],
   });
+  assert.deepEqual(parseArgs([
+    "--scenario", "standard-cycle",
+    "--max-cycles", "1",
+  ]), {
+    help: false,
+    maxRuns: 10,
+    stableLimit: 3,
+    backoffSeconds: 30,
+    supervisorScript: "apps/supervisor/dist/index.js",
+    supervisorArgs: ["--scenario", "standard-cycle", "--max-cycles", "1"],
+  });
   assert.throws(() => parseArgs(["--max-runs", "0"]), /Invalid --max-runs/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.match(usage(), /summary/u);
