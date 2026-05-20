@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
 const DEFAULT_RPC_URLS = {
   mainnet: "https://mainnet.ckb.dev/",
   testnet: "https://testnet.ckb.dev/",
@@ -183,11 +184,11 @@ function parsePositiveInteger(value, flag) {
   if (!/^[1-9][0-9]*$/u.test(value)) {
     throw new Error(`Invalid ${flag}: expected a positive integer`);
   }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
+  const parsed = BigInt(value);
+  if (parsed > MAX_SAFE_INTEGER) {
     throw new Error(`Invalid ${flag}: expected a safe integer`);
   }
-  return parsed;
+  return Number(parsed);
 }
 
 function parseRpcUrl(value) {

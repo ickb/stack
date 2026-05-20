@@ -44,6 +44,10 @@ test("config generator parses defaults and explicit options", () => {
   assert.throws(() => parseArgs(["--role", "bot-"]), /Invalid --role/u);
   assert.throws(() => parseArgs(["--role", "bot_"]), /Invalid --role/u);
   assert.throws(() => parseArgs(["--role", `b${"o".repeat(31)}t`]), /Invalid --role/u);
+  assert.throws(
+    () => parseArgs(["--sleep-interval-seconds", "9007199254740993"]),
+    /safe integer/u,
+  );
   assert.match(usage(), /ickb-generate-config/u);
   assert.match(usage(), /--sleep-interval-seconds/u);
   assert.match(usage(), /--max-iterations/u);
