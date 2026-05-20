@@ -29,6 +29,9 @@ auditConfig:
     - CVE-2025-14505
 
 overrides:
+  # Security pins for vulnerable transitive ranges not yet lifted by upstreams.
+  "brace-expansion@>=5.0.0 <5.0.6": 5.0.6
+  "ws@>=8.0.0 <8.20.1": 8.20.1
   # Keep published manifests on `catalog:` while forcing the materialized
   # local CCC workspace to satisfy direct stack dependencies during installs.
   # Update this list alongside any new direct `@ckb-ccc/*` dependency.
