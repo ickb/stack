@@ -1,11 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, script } from "@ickb/testkit";
+import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import process from "node:process";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
+  assertChainPreflight,
+  CHAIN_IDENTITIES,
   createPublicClient,
   formatCkb,
   handleLoopError,
@@ -16,10 +18,15 @@ import {
   readRuntimeConfigEnv,
   parseSleepInterval,
   randomSleepIntervalMs,
+  readChainPreflight,
+  redactRpcUrl,
+  redactSecretText,
   reachedMaxIterations,
   signerAccountLocks,
   STOP_EXIT_CODE,
+  verifyChainPreflight,
   writeJsonLine,
+  type ChainPreflightClient,
 } from "./index.js";
 
 describe("node utilities", () => {
@@ -74,6 +81,7 @@ describe("node utilities", () => {
 
   it("parses private keys as exact 0x-prefixed lowercase hex", () => {
     const privateKey = `0x${"11".repeat(32)}`;
+    const secp256k1Order = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 
     expect(parsePrivateKey(privateKey, "BOT_CONFIG_FILE")).toBe(privateKey);
     for (const value of [
@@ -83,6 +91,9 @@ describe("node utilities", () => {
       ` 0x${"11".repeat(32)}`,
       `0x${"11".repeat(32)} `,
       `0x${"11".repeat(31)}`,
+      `0x${"00".repeat(32)}`,
+      secp256k1Order,
+      "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142",
     ]) {
       expect(() => parsePrivateKey(value, "BOT_CONFIG_FILE")).toThrow(
         "Invalid env BOT_CONFIG_FILE",
@@ -148,6 +159,7 @@ describe("node utilities", () => {
   it("reads runtime JSON config from a file env source", async () => {
     const privateKey = `0x${"11".repeat(32)}`;
     const dir = await mkdtemp(join(tmpdir(), "ickb-runtime-config-"));
+    const originalInitCwd = process.env.INIT_CWD;
     try {
       const configPath = join(dir, "config.json");
       await writeFile(configPath, JSON.stringify({
@@ -170,7 +182,20 @@ describe("node utilities", () => {
       await expect(readRuntimeConfigEnv(join(dir, "missing"), "BOT_CONFIG_FILE")).rejects.toThrow(
         "Invalid file from env BOT_CONFIG_FILE",
       );
+      process.env.INIT_CWD = dir;
+      await expect(readRuntimeConfigEnv("config.json", "BOT_CONFIG_FILE")).resolves.toMatchObject({
+        chain: "testnet",
+        privateKey,
+      });
+      await expect(readRuntimeConfigEnv(resolve("config.json"), "BOT_CONFIG_FILE")).rejects.toThrow(
+        "Invalid file from env BOT_CONFIG_FILE",
+      );
     } finally {
+      if (originalInitCwd === undefined) {
+        delete process.env.INIT_CWD;
+      } else {
+        process.env.INIT_CWD = originalInitCwd;
+      }
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -202,6 +227,133 @@ describe("node utilities", () => {
     expect(testnet.addressPrefix).toBe("ckt");
     expect((mainnet as ccc.ClientPublicMainnet).url).toBe(
       "https://mainnet.example",
+    );
+  });
+
+  it("pins official CKB chain identities for preflight checks", () => {
+    expect(CHAIN_IDENTITIES.mainnet).toMatchObject({
+      chain: "mainnet",
+      networkName: "ckb",
+      genesisHash: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5",
+      genesisMessage: "lina 0x18e020f6b1237a3d06b75121f25a7efa0550e4b3f44f974822f471902424c104",
+      genesisSource: "https://raw.githubusercontent.com/nervosnetwork/ckb/develop/resource/specs/mainnet.toml",
+      addressPrefix: "ckb",
+    });
+    expect(CHAIN_IDENTITIES.testnet).toMatchObject({
+      chain: "testnet",
+      networkName: "ckb_testnet",
+      genesisHash: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
+      genesisMessage: "aggron-v4",
+      genesisSource: "https://raw.githubusercontent.com/nervosnetwork/ckb/develop/resource/specs/testnet.toml",
+      addressPrefix: "ckt",
+    });
+  });
+
+  it("reads and verifies public chain identity evidence", async () => {
+    const client = preflightClient({
+      addressPrefix: "ckt",
+      genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
+      tipHash: byte32FromByte("22"),
+      tipNumber: 123n,
+      tipTimestamp: 456n,
+      url: "https://user:pass@testnet.example/rpc/path?token=secret&plain=value",
+    });
+
+    await expect(readChainPreflight(client, "testnet")).resolves.toEqual({
+      chain: "testnet",
+      redactedRpcUrl: "https://redacted:redacted@testnet.example/...?token=redacted&plain=redacted",
+      expected: CHAIN_IDENTITIES.testnet,
+      observed: {
+        genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
+        addressPrefix: "ckt",
+        tip: {
+          hash: byte32FromByte("22"),
+          number: 123n,
+          timestamp: 456n,
+        },
+      },
+      matches: {
+        genesisHash: true,
+        addressPrefix: true,
+      },
+    });
+    await expect(verifyChainPreflight(client, "testnet")).resolves.toMatchObject({
+      chain: "testnet",
+      matches: { genesisHash: true, addressPrefix: true },
+    });
+  });
+
+  it("rejects mismatched public chain identity evidence", () => {
+    expect(() => assertChainPreflight({
+      chain: "testnet",
+      redactedRpcUrl: "https://rpc.example/",
+      expected: CHAIN_IDENTITIES.testnet,
+      observed: {
+        genesisHash: CHAIN_IDENTITIES.mainnet.genesisHash,
+        addressPrefix: "ckb",
+        tip: { hash: byte32FromByte("22"), number: 1n, timestamp: 2n },
+      },
+      matches: { genesisHash: false, addressPrefix: false },
+    })).toThrow(
+      "Invalid testnet RPC chain identity: genesis hash expected " +
+        CHAIN_IDENTITIES.testnet.genesisHash +
+        " observed " +
+        CHAIN_IDENTITIES.mainnet.genesisHash +
+        "; address prefix expected ckt observed ckb",
+    );
+  });
+
+  it("redacts RPC URLs when chain preflight reads fail", async () => {
+    const client = preflightClient({
+      addressPrefix: "ckt",
+      genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
+      tipHash: byte32FromByte("22"),
+      tipNumber: 123n,
+      tipTimestamp: 456n,
+      url: "https://user:pass@testnet.example/rpc/path?token=secret",
+    });
+    client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
+      throw new Error("RPC failed: https://user:pass@testnet.example/rpc/path?token=secret user pass secret");
+    };
+
+    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
+      "RPC failed: https://redacted:redacted@testnet.example/...?token=redacted",
+    );
+    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/secret|user:pass/u);
+    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/\buser\b|\bpass\b/u);
+  });
+
+  it("redacts credential-bearing RPC URLs", () => {
+    expect(redactRpcUrl("https://rpc.example/")).toBe("https://rpc.example/");
+    expect(redactRpcUrl("https://rpc.example/path?token=abc&key=def")).toBe(
+      "https://rpc.example/...?token=redacted&key=redacted",
+    );
+    expect(redactRpcUrl("not a url")).toBe("<invalid-url>");
+  });
+
+  it("redacts runtime secrets from text", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+
+    expect(redactSecretText(
+      `failed for ${privateKey} via ${rpcUrl}`,
+      { privateKey, rpcUrl },
+    )).toBe(
+      "failed for <redacted-private-key> via https://redacted:redacted@testnet.example/...?token=redacted",
+    );
+    expect(redactSecretText(
+      "fetch failed for https://testnet.example/rpc/path?token=secret auth user:pass",
+      { rpcUrl },
+    )).toBe(
+      "fetch failed for https://testnet.example/rpc/path?token=<redacted-rpc-query> auth " +
+        "<redacted-rpc-username>:<redacted-rpc-password>",
+    );
+    expect(redactSecretText(
+      "fetch failed for token=a%2Fb decoded=a/b plain=value",
+      { rpcUrl: "https://testnet.example/rpc/path?token=a%2Fb&plain=value" },
+    )).toBe(
+      "fetch failed for token=<redacted-rpc-query> decoded=<redacted-rpc-query> " +
+        "plain=<redacted-rpc-query>",
     );
   });
 
@@ -245,6 +397,43 @@ describe("node utilities", () => {
     });
 
     process.exitCode = undefined;
+  });
+
+  it("redacts runtime secrets from loop errors", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+    const error = new Error(`failed for ${privateKey} via ${rpcUrl}`);
+    error.stack = `stack with ${privateKey} and ${rpcUrl}`;
+    const executionLog: Record<string, unknown> = {};
+
+    expect(handleLoopError(executionLog, error, { privateKey, rpcUrl })).toBe(false);
+    const serialized = JSON.stringify(executionLog);
+
+    expect(serialized).not.toContain(privateKey);
+    expect(serialized).not.toContain("user:pass");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).toContain("<redacted-private-key>");
+    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+  });
+
+  it("redacts runtime secrets from non-Error loop failures", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+    const executionLog: Record<string, unknown> = {};
+
+    expect(handleLoopError(executionLog, {
+      message: `failed for ${privateKey}`,
+      rpcUrl,
+      amount: 9007199254740993n,
+    }, { privateKey, rpcUrl })).toBe(false);
+    const serialized = JSON.stringify(executionLog);
+
+    expect(serialized).not.toContain(privateKey);
+    expect(serialized).not.toContain("user:pass");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).toContain("<redacted-private-key>");
+    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+    expect(executionLog.error).toMatchObject({ amount: "9007199254740993" });
   });
 
   it("logs one JSON entry with elapsed seconds", () => {
@@ -347,4 +536,36 @@ function transactionError(isTimeout: boolean, txHash = byte32FromByte("11")): Er
     status: isTimeout ? "sent" : "rejected",
     isTimeout,
   });
+}
+
+function preflightClient({
+  addressPrefix,
+  genesisHash,
+  tipHash,
+  tipNumber,
+  tipTimestamp,
+  url,
+}: {
+  addressPrefix: string;
+  genesisHash: `0x${string}`;
+  tipHash: `0x${string}`;
+  tipNumber: bigint;
+  tipTimestamp: bigint;
+  url: string;
+}): ChainPreflightClient {
+  return {
+    addressPrefix,
+    url,
+    getHeaderByNumber: async (blockNumber): Promise<ccc.ClientBlockHeader | undefined> => {
+      await Promise.resolve();
+      if (blockNumber !== 0n) {
+        return;
+      }
+      return headerLike({ hash: genesisHash, number: 0n });
+    },
+    getTipHeader: async (): Promise<ccc.ClientBlockHeader> => {
+      await Promise.resolve();
+      return headerLike({ hash: tipHash, number: tipNumber, timestamp: tipTimestamp });
+    },
+  };
 }

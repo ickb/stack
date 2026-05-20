@@ -1,0 +1,332 @@
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const rootDir = fileURLToPath(new URL("..", import.meta.url));
+const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+const DEFAULT_RPC_URLS = {
+  mainnet: "https://mainnet.ckb.dev/",
+  testnet: "https://testnet.ckb.dev/",
+};
+
+export function parseArgs(argv) {
+  const args = {
+    chain: "testnet",
+    role: "bot",
+    sleepIntervalSeconds: 1,
+    maxIterations: 1,
+    force: false,
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--") {
+      continue;
+    }
+    if (arg === "-h" || arg === "--help") {
+      args.help = true;
+      continue;
+    }
+    if (arg === "--chain") {
+      args.chain = parseChain(valueAfter(argv, ++index, arg));
+      continue;
+    }
+    if (arg === "--role") {
+      args.role = parseRole(valueAfter(argv, ++index, arg));
+      continue;
+    }
+    if (arg === "--out") {
+      args.out = valueAfter(argv, ++index, arg);
+      continue;
+    }
+    if (arg === "--rpc-url") {
+      args.rpcUrl = parseRpcUrl(valueAfter(argv, ++index, arg));
+      continue;
+    }
+    if (arg === "--sleep-interval-seconds") {
+      args.sleepIntervalSeconds = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
+      continue;
+    }
+    if (arg === "--max-iterations") {
+      args.maxIterations = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
+      continue;
+    }
+    if (arg === "--no-max-iterations") {
+      args.maxIterations = undefined;
+      continue;
+    }
+    if (arg === "--force") {
+      args.force = true;
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  args.rpcUrl ??= DEFAULT_RPC_URLS[args.chain];
+  args.out ??= `config/${args.role}-${args.chain}.json`;
+  return args;
+}
+
+export function usage() {
+  return [
+    "Usage: node scripts/ickb-generate-config.mjs [--chain testnet|mainnet] [--role <label>] [--out <ignored-json-config>] [--rpc-url <url>] [--sleep-interval-seconds <n>] [--max-iterations <n>|--no-max-iterations] [--force]",
+    "Defaults: --chain testnet --role bot --out config/<role>-<chain>.json --sleep-interval-seconds 1 --max-iterations 1",
+  ].join("\n");
+}
+
+export function generateSecp256k1PrivateKey(readRandomBytes = randomBytes) {
+  for (;;) {
+    const candidate = readRandomBytes(32);
+    if (candidate.length !== 32) {
+      throw new Error("Random byte source must return exactly 32 bytes");
+    }
+    const hex = candidate.toString("hex");
+    const value = BigInt(`0x${hex}`);
+    if (value > 0n && value < SECP256K1_ORDER) {
+      return `0x${hex}`;
+    }
+  }
+}
+
+export function buildRuntimeConfig({
+  chain,
+  privateKey,
+  rpcUrl,
+  sleepIntervalSeconds,
+  maxIterations,
+}) {
+  return {
+    chain,
+    privateKey,
+    rpcUrl,
+    sleepIntervalSeconds,
+    ...(maxIterations === undefined ? {} : { maxIterations }),
+  };
+}
+
+export async function runGenerateConfig({ argv, root = rootDir, dependencies = {} }) {
+  const args = parseArgs(argv);
+  if (args.help) {
+    return { help: usage() };
+  }
+
+  const privateKey = generateSecp256k1PrivateKey(dependencies.randomBytes ?? randomBytes);
+  const config = buildRuntimeConfig({ ...args, privateKey });
+  const output = outputPath(root, args.out);
+  assertIgnoredPath(root, output.relativePath, dependencies.checkIgnored);
+  await makeSafeParentDir(output.absolutePath, root, dependencies);
+  await writeConfigFile(
+    output.absolutePath,
+    `${JSON.stringify(config)}\n`,
+    args.force,
+    dependencies,
+  );
+
+  return {
+    outputPath: output.relativePath,
+    role: args.role,
+    chain: args.chain,
+    redactedRpcUrl: redactRpcUrl(args.rpcUrl),
+    sleepIntervalSeconds: args.sleepIntervalSeconds,
+    maxIterations: args.maxIterations,
+    privateKey: "<written-to-config-file>",
+  };
+}
+
+export async function main(argv, io = {}) {
+  const stdout = io.stdout ?? process.stdout;
+  const stderr = io.stderr ?? process.stderr;
+  try {
+    const result = await runGenerateConfig({ argv });
+    if (result.help !== undefined) {
+      stdout.write(`${result.help}\n`);
+      return 0;
+    }
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    stderr.write(`Config generation failed: ${message}\n${usage()}\n`);
+    return 1;
+  }
+}
+
+function valueAfter(argv, index, flag) {
+  const value = argv[index];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
+function parseChain(value) {
+  if (value !== "mainnet" && value !== "testnet") {
+    throw new Error("Invalid --chain: expected mainnet or testnet");
+  }
+  return value;
+}
+
+function parseRole(value) {
+  if (!/^[a-z][a-z0-9-]*$/u.test(value)) {
+    throw new Error("Invalid --role: expected lowercase letters, numbers, and hyphens");
+  }
+  return value;
+}
+
+function parsePositiveInteger(value, flag) {
+  if (!/^[1-9][0-9]*$/u.test(value)) {
+    throw new Error(`Invalid ${flag}: expected a positive integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`Invalid ${flag}: expected a safe integer`);
+  }
+  return parsed;
+}
+
+function parseRpcUrl(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (/\s/u.test(value[index] ?? "") || code < 0x20 || code === 0x7f) {
+      throw new Error("Invalid --rpc-url: expected http(s) URL");
+    }
+  }
+  const url = new URL(value);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Invalid --rpc-url: expected http(s) URL");
+  }
+  return value;
+}
+
+function redactRpcUrl(rpcUrl) {
+  let url;
+  try {
+    url = new URL(rpcUrl);
+  } catch {
+    return "<invalid-url>";
+  }
+
+  if (url.username !== "" || url.password !== "") {
+    url.username = "redacted";
+    url.password = url.password === "" ? "" : "redacted";
+  }
+  if (url.pathname !== "" && url.pathname !== "/") {
+    url.pathname = "/...";
+  }
+  if (url.search !== "") {
+    const redactedParams = new URLSearchParams();
+    for (const [key] of url.searchParams) {
+      redactedParams.append(key, "redacted");
+    }
+    url.search = redactedParams.toString();
+  }
+
+  return url.toString();
+}
+
+function outputPath(root, out) {
+  const absolutePath = isAbsolute(out) ? out : resolve(root, out);
+  const relativePath = relative(root, absolutePath);
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    throw new Error("Output path must stay inside the repo");
+  }
+  return { absolutePath, relativePath };
+}
+
+async function writeConfigFile(path, text, force, dependencies) {
+  if (dependencies.writeFile !== undefined) {
+    await dependencies.writeFile(path, text, { flag: force ? "w" : "wx", mode: 0o600 });
+    return;
+  }
+  await assertNoSymlinkTarget(path, dependencies);
+  await assertRealParent(path, dependencies);
+  const flags = constants.O_WRONLY |
+    constants.O_CREAT |
+    constants.O_NOFOLLOW |
+    (force ? constants.O_TRUNC : constants.O_EXCL);
+  const handle = await (dependencies.open ?? open)(path, flags, 0o600);
+  try {
+    await handle.writeFile(text, "utf8");
+    await handle.chmod(0o600);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function makeSafeParentDir(path, root, dependencies) {
+  const parent = dirname(path);
+  await assertRealAncestor(root, dependencies);
+  const missing = [];
+  let current = parent;
+  for (;;) {
+    try {
+      await assertRealAncestor(current, dependencies);
+      break;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        missing.push(current);
+        const next = dirname(current);
+        if (next === current) {
+          throw error;
+        }
+        current = next;
+        continue;
+      }
+      throw error;
+    }
+  }
+  for (const dir of missing.reverse()) {
+    await (dependencies.mkdir ?? mkdir)(dir, { mode: 0o700 });
+    await assertRealAncestor(dir, dependencies);
+  }
+}
+
+async function assertRealAncestor(path, dependencies) {
+  const stat = await (dependencies.lstat ?? lstat)(path);
+  if (stat.isSymbolicLink()) {
+    throw new Error("Refusing to write config through symlinked parent directory");
+  }
+}
+
+async function assertNoSymlinkTarget(path, dependencies) {
+  try {
+    const stat = await (dependencies.lstat ?? lstat)(path);
+    if (stat.isSymbolicLink()) {
+      throw new Error("Refusing to write through symlink config path");
+    }
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function assertRealParent(path, dependencies) {
+  const parent = dirname(path);
+  await assertRealAncestor(parent, dependencies);
+  const resolvedParent = await (dependencies.realpath ?? realpath)(parent);
+  if (resolvedParent !== parent) {
+    throw new Error("Refusing to write config through symlinked parent directory");
+  }
+}
+
+function assertIgnoredPath(root, relativePath, checkIgnored = defaultCheckIgnored) {
+  if (!checkIgnored(root, relativePath)) {
+    throw new Error(`Refusing to write non-ignored config path: ${relativePath}`);
+  }
+}
+
+function defaultCheckIgnored(root, relativePath) {
+  const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], {
+    encoding: "utf8",
+  });
+  return result.status === 0;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  process.exit(await main(process.argv.slice(2)));
+}
