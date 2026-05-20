@@ -40,7 +40,7 @@ The default planner prefers under-covered safe outcomes over repeating the same 
 
 ```bash
 --scenario auto|standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass
---tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|all-ickb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion
+--tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion
 --tester-fee <n>
 --tester-fee-base <n>
 --target-outcome <outcome>
@@ -50,7 +50,7 @@ Coverage goals never override stop conditions. If a requested scenario cannot be
 
 Explicit repeatable `--target-outcome` values are coverage contracts for the bounded run. If `--max-cycles` is reached before observing them, the supervisor writes a logical `unmet_coverage_goal` incident. Default coverage goals still steer the planner, but they are best-effort and do not make a bare one-cycle run fail. `--stop-after-tx-count` remains a successful operator stop even if explicit coverage remains unmet.
 
-`--tester-scenario` is passed to the tester as `TESTER_SCENARIO`. When it is left as `auto`, `--target-outcome tester_conversion_created` steers the tester to `sdk-conversion`, the SDK conversion-builder selector. Use `ickb-to-ckb-limit-order` for iCKB withdrawal-through-LO coverage; `all-ickb-limit-order` remains a compatibility alias. Use `sdk-conversion` when the intended behavior is the SDK conversion builder, including direct conversions that do not create limit orders, `multi-order-limit-orders` for any funded two-order raw limit-order type, `two-ckb-to-ickb-limit-orders`, `two-ickb-to-ckb-limit-orders`, or `mixed-direction-limit-orders` for a specific two-order transaction, and `extra-large-limit-order` to stress non-interface users placing large raw limit orders. An explicit `--tester-scenario` overrides target-outcome steering.
+`--tester-scenario` is passed to the tester as `TESTER_SCENARIO`. When it is left as `auto`, `--target-outcome tester_conversion_created` steers the tester to `sdk-conversion`, the SDK conversion-builder selector. Use `ickb-to-ckb-limit-order` for iCKB withdrawal-through-LO coverage. Use `sdk-conversion` when the intended behavior is the SDK conversion builder, including direct conversions that do not create limit orders, `multi-order-limit-orders` for any funded two-order raw limit-order type, `two-ckb-to-ickb-limit-orders`, `two-ickb-to-ckb-limit-orders`, or `mixed-direction-limit-orders` for a specific two-order transaction, and `extra-large-limit-order` to stress non-interface users placing large raw limit orders. An explicit `--tester-scenario` overrides target-outcome steering.
 
 `tester-fresh-skip-two-pass` runs the same tester config twice in one supervisor cycle. Pass 1 uses `multi-order-limit-orders` to create any funded multi-order transaction; pass 2 leaves `TESTER_SCENARIO=auto` and is expected to classify `tester_fresh_order_skip` when the same key still owns a fresh matchable order. Artifacts use `tester-pass-1` and `tester-pass-2` labels so the two passes do not overwrite each other.
 

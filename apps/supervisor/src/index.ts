@@ -48,7 +48,7 @@ export const OUTCOME_KINDS = [
 export type OutcomeKind = typeof OUTCOME_KINDS[number];
 export type Actor = "bot" | "tester";
 export type ScenarioName = "auto" | "standard-cycle" | "tester-only" | "bot-only" | "tester-fresh-skip-two-pass";
-export type TesterScenario = "auto" | "random-order" | "sdk-conversion" | "extra-large-limit-order" | "multi-order-limit-orders" | "two-ckb-to-ickb-limit-orders" | "all-ckb-limit-order" | "all-ickb-limit-order" | "ickb-to-ckb-limit-order" | "two-ickb-to-ckb-limit-orders" | "mixed-direction-limit-orders" | "dust-ckb-conversion" | "dust-ickb-conversion";
+export type TesterScenario = "auto" | "random-order" | "sdk-conversion" | "extra-large-limit-order" | "multi-order-limit-orders" | "two-ckb-to-ickb-limit-orders" | "all-ckb-limit-order" | "ickb-to-ckb-limit-order" | "two-ickb-to-ckb-limit-orders" | "mixed-direction-limit-orders" | "dust-ckb-conversion" | "dust-ickb-conversion";
 type TesterDirection = "ckb-to-ickb" | "ickb-to-ckb";
 
 interface ScenarioStep {
@@ -313,7 +313,7 @@ export function usage(): string {
     "  --max-wall-clock-seconds <n>",
     "  --stop-after-tx-count <n>",
     "  --scenario auto|standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass",
-    "  --tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|all-ickb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion",
+    "  --tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion",
     "  --tester-fee <n>                    Default: 1",
     "  --tester-fee-base <n>               Default: 100000",
     "  --target-outcome <outcome>           Repeatable; planner prefers these first",
@@ -1394,7 +1394,7 @@ function isSdkConversionTesterScenario(scenario: TesterScenario): boolean {
 }
 
 function isIckbToCkbTesterScenario(scenario: TesterScenario): boolean {
-  return scenario === "all-ickb-limit-order" || scenario === "ickb-to-ckb-limit-order" || scenario === "two-ickb-to-ckb-limit-orders" || scenario === "dust-ickb-conversion";
+  return scenario === "ickb-to-ckb-limit-order" || scenario === "two-ickb-to-ckb-limit-orders" || scenario === "dust-ickb-conversion";
 }
 
 function classifyBotCommittedActions(actions: ActionCounts): OutcomeKind {
@@ -1871,7 +1871,6 @@ function parseTesterScenario(value: string): TesterScenario {
     value === "multi-order-limit-orders" ||
     value === "two-ckb-to-ickb-limit-orders" ||
     value === "all-ckb-limit-order" ||
-    value === "all-ickb-limit-order" ||
     value === "ickb-to-ckb-limit-order" ||
     value === "two-ickb-to-ckb-limit-orders" ||
     value === "mixed-direction-limit-orders" ||
@@ -1880,7 +1879,7 @@ function parseTesterScenario(value: string): TesterScenario {
   ) {
     return value;
   }
-  throw new Error("Invalid --tester-scenario: expected auto, random-order, sdk-conversion, extra-large-limit-order, multi-order-limit-orders, two-ckb-to-ickb-limit-orders, all-ckb-limit-order, all-ickb-limit-order, ickb-to-ckb-limit-order, two-ickb-to-ckb-limit-orders, mixed-direction-limit-orders, dust-ckb-conversion, or dust-ickb-conversion");
+  throw new Error("Invalid --tester-scenario: expected auto, random-order, sdk-conversion, extra-large-limit-order, multi-order-limit-orders, two-ckb-to-ickb-limit-orders, all-ckb-limit-order, ickb-to-ckb-limit-order, two-ickb-to-ckb-limit-orders, mixed-direction-limit-orders, dust-ckb-conversion, or dust-ickb-conversion");
 }
 
 function valueAfter(argv: string[], index: number, option: string): string {

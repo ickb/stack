@@ -40,7 +40,6 @@ const TESTER_SCENARIOS = [
   "multi-order-limit-orders",
   "two-ckb-to-ickb-limit-orders",
   "all-ckb-limit-order",
-  "all-ickb-limit-order",
   "ickb-to-ckb-limit-order",
   "two-ickb-to-ckb-limit-orders",
   "mixed-direction-limit-orders",
@@ -404,7 +403,7 @@ export function planTesterTransaction(
     }
     return { direction: "ckb-to-ickb", amount: ckbAmount, ckbAmount, udtAmount: 0n, orderCount: 1 };
   }
-  if (scenario === "all-ickb-limit-order" || scenario === "ickb-to-ckb-limit-order") {
+  if (scenario === "ickb-to-ckb-limit-order") {
     const udtAmount = state.availableIckbBalance;
     if (udtAmount <= 0n) {
       throw new TesterTerminalError("Not enough iCKB for iCKB-to-CKB limit order scenario");

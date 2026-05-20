@@ -59,7 +59,6 @@ describe("readTesterScenario", () => {
     expect(readTesterScenario({ TESTER_SCENARIO: "multi-order-limit-orders" })).toBe("multi-order-limit-orders");
     expect(readTesterScenario({ TESTER_SCENARIO: "two-ckb-to-ickb-limit-orders" })).toBe("two-ckb-to-ickb-limit-orders");
     expect(readTesterScenario({ TESTER_SCENARIO: "all-ckb-limit-order" })).toBe("all-ckb-limit-order");
-    expect(readTesterScenario({ TESTER_SCENARIO: "all-ickb-limit-order" })).toBe("all-ickb-limit-order");
     expect(readTesterScenario({ TESTER_SCENARIO: "ickb-to-ckb-limit-order" })).toBe("ickb-to-ckb-limit-order");
     expect(readTesterScenario({ TESTER_SCENARIO: "two-ickb-to-ckb-limit-orders" })).toBe("two-ickb-to-ckb-limit-orders");
     expect(readTesterScenario({ TESTER_SCENARIO: "mixed-direction-limit-orders" })).toBe("mixed-direction-limit-orders");
@@ -178,13 +177,6 @@ describe("planTesterTransaction", () => {
   it("spends all available iCKB for iCKB-to-CKB limit orders", () => {
     const state = testerState({ availableCkbBalance: 0n, availableIckbBalance: ccc.fixedPointFrom(123) });
 
-    expect(planTesterTransaction(state, 1000n, "all-ickb-limit-order")).toEqual({
-      direction: "ickb-to-ckb",
-      amount: ccc.fixedPointFrom(123),
-      ckbAmount: 0n,
-      udtAmount: ccc.fixedPointFrom(123),
-      orderCount: 1,
-    });
     expect(planTesterTransaction(state, 1000n, "ickb-to-ckb-limit-order")).toEqual({
       direction: "ickb-to-ckb",
       amount: ccc.fixedPointFrom(123),
