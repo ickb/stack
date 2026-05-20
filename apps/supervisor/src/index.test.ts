@@ -1244,6 +1244,72 @@ describe("classification", () => {
       vi.useRealTimers();
     }
   });
+
+  it("caps actor command timers to Node's maximum delay", async () => {
+    vi.useFakeTimers();
+    try {
+      const maxTimerDelayMs = 2_147_483_647;
+      const writes = new Map<string, string>();
+      const kills: Array<{ pid: number; signal: NodeJS.Signals }> = [];
+      const args = parseArgs([
+        "--out-dir", "logs/live-supervisor/timeout-cap-test",
+        "--scenario", "bot-only",
+        "--target-outcome", "bot_match_committed",
+        "--max-cycles", "1",
+        "--command-timeout-seconds", String(maxTimerDelayMs),
+      ]);
+      const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+        "logs/live-supervisor/timeout-cap-test",
+        "config/bot-testnet.json",
+        "config/tester-testnet.json",
+      ])) });
+      const child = fakeHangingChild();
+
+      const run = supervise(args, plan, {
+        skipBuiltRuntimeCheck: true,
+        commandKillGraceMs: maxTimerDelayMs + 10,
+        killProcess: (pid, signal) => {
+          kills.push({ pid, signal });
+          if (signal === "SIGKILL") {
+            queueMicrotask(() => child.emit("close", null, "SIGKILL"));
+          }
+        },
+        spawnCommand: ((_command: string, commandArgs: string[]) => isPreflightCommand(commandArgs) ? fakeSuccessfulPreflightChild() : child) as never,
+        spawnSyncCommand: ignoredChecker(true) as never,
+        lstat: missingStat,
+        stat: missingStat,
+        mkdir: () => Promise.resolve(undefined),
+        realpath: (path) => Promise.resolve(pathToString(path)),
+        appendFile: (path, text) => {
+          const key = pathToString(path);
+          writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+          return Promise.resolve();
+        },
+        writeFile: (path, text) => {
+          writes.set(pathToString(path), textToString(text));
+          return Promise.resolve();
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(maxTimerDelayMs - 1);
+      expect(kills).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(kills).toEqual([{ pid: -1234, signal: "SIGTERM" }]);
+      await vi.advanceTimersByTimeAsync(maxTimerDelayMs);
+
+      await expect(run).resolves.toBe(2);
+      expect(kills).toEqual([
+        { pid: -1234, signal: "SIGTERM" },
+        { pid: -1234, signal: "SIGKILL" },
+      ]);
+      expect(writes.get("/repo/logs/live-supervisor/timeout-cap-test/cycle-0001-incident.json")).toContain(
+        "command_timeout",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("scenario planning", () => {

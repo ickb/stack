@@ -209,19 +209,21 @@ async function main(): Promise<void> {
       const { tx } = built;
       const txFee = tx.estimateFee(state.system.feeRate);
 
-      const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
-      const reserveSkip = testerReserveSkip(postTxCkbBalance);
-      if (reserveSkip !== undefined) {
-        if (isExplicitCkbReserveScenario(effectiveTesterScenario)) {
-          throw new TesterTerminalError(
-            `Not enough CKB to preserve tester reserve after the tx: expected ${formatCkb(CKB_RESERVE)} CKB, got ${formatCkb(postTxCkbBalance)} CKB`,
-          );
+      if (estimatedOrders.some((order) => order.direction === "ckb-to-ickb")) {
+        const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
+        const reserveSkip = testerReserveSkip(postTxCkbBalance);
+        if (reserveSkip !== undefined) {
+          if (isExplicitCkbReserveScenario(effectiveTesterScenario)) {
+            throw new TesterTerminalError(
+              `Not enough CKB to preserve tester reserve after the tx: expected ${formatCkb(CKB_RESERVE)} CKB, got ${formatCkb(postTxCkbBalance)} CKB`,
+            );
+          }
+          executionLog.skip = reserveSkip;
+          if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+            return;
+          }
+          continue;
         }
-        executionLog.skip = reserveSkip;
-        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
-          return;
-        }
-        continue;
       }
 
       executionLog.actions = {

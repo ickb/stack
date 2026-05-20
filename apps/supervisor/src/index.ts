@@ -9,6 +9,7 @@ const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 15 * 60;
 const DEFAULT_COMMAND_KILL_GRACE_MS = 5 * 1000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_BOT_CONFIG_PATH = "config/bot-testnet.json";
 const DEFAULT_TESTER_CONFIG_PATH = "config/tester-testnet.json";
 const STOP_EXIT_CODE = 2;
@@ -1012,13 +1013,15 @@ async function runCommand(spec: {
     let timedOut = false;
     let settled = false;
     let killTimeout: NodeJS.Timeout | undefined;
+    const timeoutDelayMs = timerDelayMs(spec.timeoutMs);
+    const killDelayMs = timerDelayMs(dependencies.commandKillGraceMs ?? DEFAULT_COMMAND_KILL_GRACE_MS);
     const timeout = setTimeout(() => {
       timedOut = true;
       signalChild(child, "SIGTERM", dependencies);
       killTimeout = setTimeout(() => {
         signalChild(child, "SIGKILL", dependencies);
-      }, dependencies.commandKillGraceMs ?? DEFAULT_COMMAND_KILL_GRACE_MS);
-    }, spec.timeoutMs);
+      }, killDelayMs);
+    }, timeoutDelayMs);
 
     const finish = (result: Omit<CommandResult, "actor" | "command" | "args" | "elapsedMs">): void => {
       if (settled) {
@@ -2003,6 +2006,10 @@ function createRunId(): string {
 
 function now(dependencies: Dependencies): number {
   return dependencies.now?.() ?? Date.now();
+}
+
+function timerDelayMs(delayMs: number): number {
+  return Math.max(0, Math.min(delayMs, MAX_TIMER_DELAY_MS));
 }
 
 function padCycle(cycleIndex: number): string {

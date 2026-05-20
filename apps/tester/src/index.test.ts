@@ -329,7 +329,7 @@ describe("planTesterTransaction", () => {
     )).toBe(ccc.fixedPointFrom(2300));
   });
 
-  it("reports post-transaction reserve skips independently of order direction", () => {
+  it("formats post-transaction reserve skip details", () => {
     expect(testerReserveSkip(ccc.fixedPointFrom(2000))).toBeUndefined();
     expect(testerReserveSkip(0n)).toEqual({
       reason: "post-tx-ckb-reserve",
