@@ -476,6 +476,7 @@ describe("node utilities", () => {
         private_key: privateKey,
         rpc_url: rpcUrl,
         password: "hunter2",
+        apiKey: "api-key-value",
         accessToken: "secret-token",
         api_secret: "secret-value",
         message: `nested ${privateKey}`,
@@ -501,6 +502,7 @@ describe("node utilities", () => {
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("rpc_url");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("private_key");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("password");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("apiKey");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("accessToken");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("api_secret");
   });

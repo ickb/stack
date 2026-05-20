@@ -539,7 +539,7 @@ function sanitizeLogValue(
 
 function isSensitiveLogKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/gu, "");
-  return ["privatekey", "rpcurl", "password", "token", "secret"].some(
+  return ["privatekey", "rpcurl", "apikey", "password", "token", "secret"].some(
     (sensitiveKey) => normalized === sensitiveKey || normalized.endsWith(sensitiveKey),
   );
 }
