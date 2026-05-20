@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { TX_CREATING_OUTCOMES } from "../apps/supervisor/dist/index.js";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const DEFAULT_MAX_RUNS = 10;
@@ -10,20 +11,6 @@ const DEFAULT_STABLE_LIMIT = 3;
 const DEFAULT_BACKOFF_SECONDS = 30;
 const DEFAULT_SUPERVISOR_SCRIPT = "apps/supervisor/dist/index.js";
 const SUPERVISOR_OUTPUT_ROOT = "logs/live-supervisor";
-const TX_CREATING_OUTCOMES = new Set([
-  "tester_order_created",
-  "tester_conversion_created",
-  "bot_match_committed",
-  "bot_match_plus_deposit_committed",
-  "bot_receipt_completion_committed",
-  "bot_deposit_only_committed",
-  "bot_withdrawal_request_committed",
-  "bot_withdrawal_completion_committed",
-  "confirmation_timeout",
-  "terminal_chain_rejection",
-  "post_broadcast_unresolved",
-]);
-
 export function parseArgs(argv) {
   if (argv.length === 2 && argv[0] === "--" && (argv[1] === "-h" || argv[1] === "--help")) {
     return {

@@ -287,7 +287,7 @@ const DEFAULT_COVERAGE_GOALS: OutcomeKind[] = [
 ];
 
 const OUTCOME_SET = new Set<OutcomeKind>(OUTCOME_KINDS);
-const TX_CREATING_OUTCOMES = new Set<OutcomeKind>([
+export const TX_CREATING_OUTCOMES: ReadonlySet<OutcomeKind> = new Set<OutcomeKind>([
   "tester_order_created",
   "tester_conversion_created",
   "bot_match_committed",
