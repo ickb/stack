@@ -65,9 +65,10 @@ export async function runPreflight({ configPath, role, root = rootDir, dependenc
   let runtimeConfig;
   try {
     runtimeConfig = nodeUtils.parseRuntimeConfig(configText, "LIVE_PREFLIGHT_CONFIG_FILE");
-  } catch {
+  } catch (cause) {
     throw new Error(
       "Invalid live preflight config: expected exact JSON with chain, privateKey, rpcUrl, sleepIntervalSeconds, and optional maxIterations",
+      { cause },
     );
   }
 

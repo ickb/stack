@@ -108,6 +108,48 @@ test("preflight run reports public evidence for a generated unfunded key", async
   }
 });
 
+test("preflight preserves parse failure cause without leaking config contents", async () => {
+  const privateKey = `0x${"11".repeat(32)}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "not-a-url",
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const parseError = new Error("Invalid env LIVE_PREFLIGHT_CONFIG_FILE");
+
+    await assert.rejects(
+      () => runPreflight({
+        configPath,
+        role: "bot",
+        root: dir,
+        dependencies: {
+          checkIgnored: () => true,
+          nodeUtils: {
+            parseRuntimeConfig: () => {
+              throw parseError;
+            },
+          },
+        },
+      }),
+      (error) => {
+        assert(error instanceof Error);
+        assert.match(error.message, /Invalid live preflight config/u);
+        assert.doesNotMatch(error.message, new RegExp(privateKey, "u"));
+        assert.equal(error.cause, parseError);
+        return true;
+      },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("preflight refuses non-ignored and out-of-repo config paths", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
   try {
