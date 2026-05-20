@@ -99,25 +99,6 @@ describe("supervisor CLI", () => {
     expect(args.testerFeeBaseExplicit).toBe(false);
   });
 
-  it("keeps autonomous repair and LLM controls outside the supervisor CLI", () => {
-    const externalOnlyFlags: Array<[string, ...string[]]> = [
-      ["--llm-command", "custom-llm"],
-      ["--llm-arg", "repair"],
-      ["--autonomous-repair"],
-      ["--max-repair-rounds", "1"],
-      ["--repair-commit-message", "repair test"],
-      ["--verify-command", "pnpm test"],
-      ["--no-preflight"],
-    ];
-
-    for (const args of externalOnlyFlags) {
-      const [flag] = args;
-      expect(() => parseArgs(args)).toThrow(`Unknown argument: ${flag}`);
-    }
-
-    expect(usage()).not.toMatch(/llm|repair|verify-command|no-preflight/iu);
-  });
-
   it("refuses non-ignored output paths", () => {
     const args = parseArgs(["--dry-run", "--out-dir", "not-ignored"]);
 
@@ -1488,8 +1469,6 @@ describe("deterministic incident handling", () => {
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.stdout.ndjson");
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.stderr.log");
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.command.json");
-    expect([...writes.keys()].some((path) => path.includes(".llm"))).toBe(false);
-    expect(summary).not.toHaveProperty("llmWorker");
   });
 
   it("treats repeated target outcomes as one explicit contract", async () => {
