@@ -132,7 +132,7 @@ export async function verifyChainPreflight(
   } catch (error) {
     const secrets = { rpcUrl: client.url };
     throw new Error(redactRpcUrlInError(error, secrets), {
-      cause: errorToLogValue(error, secrets, new WeakSet<object>()),
+      cause: errorToLogValue(error, secrets, new WeakSet()),
     });
   }
 }
@@ -163,9 +163,9 @@ function stringifyErrorMessage(error: unknown, secrets: SecretRedactionContext):
     return "Unknown error";
   }
   try {
-    return JSON.stringify(sanitizeLogValue(error, secrets, new WeakSet<object>()), jsonLogReplacer);
+    return JSON.stringify(sanitizeLogValue(error, secrets, new WeakSet()), jsonLogReplacer);
   } catch {
-    return String(error);
+    return "Unknown error";
   }
 }
 
@@ -454,7 +454,7 @@ export async function signerAccountLocks(
 }
 
 function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unknown {
-  return errorToLogValue(error, secrets, new WeakSet<object>());
+  return errorToLogValue(error, secrets, new WeakSet());
 }
 
 function errorToLogValue(
@@ -489,7 +489,7 @@ function errorToLogValue(
   }
 
   if (typeof error === "object" && error !== null) {
-    return sanitizeLogValue(error, secrets, new WeakSet<object>());
+    return sanitizeLogValue(error, secrets, new WeakSet());
   }
 
   if (typeof error === "string") {

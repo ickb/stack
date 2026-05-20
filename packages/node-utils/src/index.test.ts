@@ -333,7 +333,12 @@ describe("node utilities", () => {
       url: "https://testnet.example/rpc/path?token=secret",
     });
     client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
-      throw { reason: "failed", amount: 9007199254740993n, token: "secret" };
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Covers defensive handling for non-Error RPC failures.
+      return Promise.reject({
+        reason: "failed",
+        amount: 9007199254740993n,
+        token: "secret",
+      });
     };
 
     await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
