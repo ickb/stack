@@ -207,7 +207,7 @@ async function main(): Promise<void> {
             conversion: undefined,
           };
       const { tx } = built;
-      const txFee = await tx.getFee(runtime.client);
+      const txFee = tx.estimateFee(state.system.feeRate);
 
       if (estimatedOrders.some((order) => order.direction === "ckb-to-ickb")) {
         const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
