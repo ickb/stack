@@ -443,11 +443,7 @@ function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unkno
   }
 
   if (typeof error === "object" && error !== null) {
-    try {
-      return JSON.parse(redactSecretText(JSON.stringify(error, jsonLogReplacer), secrets)) as unknown;
-    } catch {
-      return { message: "Non-Error object (unserializable)" };
-    }
+    return sanitizeLogValue(error, secrets, new WeakSet<object>());
   }
 
   if (typeof error === "string") {
@@ -455,6 +451,46 @@ function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unkno
   }
 
   return error ?? "Empty Error";
+}
+
+function sanitizeLogValue(
+  value: unknown,
+  secrets: SecretRedactionContext,
+  seen: WeakSet<object>,
+): unknown {
+  if (typeof value === "string") {
+    return redactSecretText(value, secrets);
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry) => sanitizeLogValue(entry, secrets, seen));
+    }
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (isSensitiveLogKey(key)) {
+        continue;
+      }
+      sanitized[key] = sanitizeLogValue(entry, secrets, seen);
+    }
+    return sanitized;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function isSensitiveLogKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[-_]/gu, "");
+  return normalized === "privatekey" || normalized === "rpcurl";
 }
 
 function shouldStopAfterError(error: unknown): boolean {

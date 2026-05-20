@@ -420,11 +420,20 @@ describe("node utilities", () => {
     const privateKey = `0x${"11".repeat(32)}`;
     const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
     const executionLog: Record<string, unknown> = {};
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
 
     expect(handleLoopError(executionLog, {
-      message: `failed for ${privateKey}`,
+      message: `failed for ${privateKey} via ${rpcUrl}`,
+      privateKey,
       rpcUrl,
       amount: 9007199254740993n,
+      nested: {
+        private_key: privateKey,
+        rpc_url: rpcUrl,
+        message: `nested ${privateKey}`,
+      },
+      circular,
     }, { privateKey, rpcUrl })).toBe(false);
     const serialized = JSON.stringify(executionLog);
 
@@ -433,7 +442,17 @@ describe("node utilities", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).toContain("<redacted-private-key>");
     expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
-    expect(executionLog.error).toMatchObject({ amount: "9007199254740993" });
+    expect(executionLog.error).toMatchObject({
+      message: "failed for <redacted-private-key> via " +
+        "https://redacted:redacted@testnet.example/...?token=redacted",
+      amount: "9007199254740993",
+      nested: { message: "nested <redacted-private-key>" },
+      circular: { self: "[Circular]" },
+    });
+    expect(executionLog.error).not.toHaveProperty("rpcUrl");
+    expect(executionLog.error).not.toHaveProperty("privateKey");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("rpc_url");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("private_key");
   });
 
   it("logs one JSON entry with elapsed seconds", () => {
