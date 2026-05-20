@@ -352,7 +352,11 @@ export function postTransactionPlainCkbBalance(
   const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
   const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
   const unspentCapacity = state.account.capacityCells.reduce(
-    (total, cell) => spentOutPoints.has(cell.outPoint.toHex()) ? total : total + cell.cellOutput.capacity,
+    (total, cell) =>
+      spentOutPoints.has(cell.outPoint.toHex()) ||
+      !isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes)
+        ? total
+        : total + cell.cellOutput.capacity,
     0n,
   );
   const outputCapacity = tx.outputs.reduce(

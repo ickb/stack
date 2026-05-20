@@ -450,6 +450,16 @@ describe("postTransactionPlainCkbBalance", () => {
     const otherLock = script("22");
     const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "aa");
     const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "bb");
+    const typed = ccc.Cell.from({
+      outPoint: { txHash: hash("cc"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
+      outputData: "0x",
+    });
+    const data = ccc.Cell.from({
+      outPoint: { txHash: hash("dd"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
+      outputData: "0x1234",
+    });
     const tx = ccc.Transaction.default();
     tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
     tx.outputs.push(
@@ -461,7 +471,7 @@ describe("postTransactionPlainCkbBalance", () => {
 
     expect(postTransactionPlainCkbBalance(
       tx,
-      botState({ accountLocks: [lock], capacityCells: [spent, unspent] }) as never,
+      botState({ accountLocks: [lock], capacityCells: [spent, unspent, typed, data] }) as never,
     )).toBe(ccc.fixedPointFrom(2300));
   });
 });

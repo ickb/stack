@@ -304,6 +304,16 @@ describe("planTesterTransaction", () => {
     const otherLock = script("22");
     const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "01");
     const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "02");
+    const typed = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("03"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
+      outputData: "0x",
+    });
+    const data = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("04"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
+      outputData: "0x1234",
+    });
     const tx = ccc.Transaction.default();
     tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
     tx.addOutput({ capacity: ccc.fixedPointFrom(300), lock });
@@ -313,7 +323,7 @@ describe("planTesterTransaction", () => {
 
     expect(postTransactionPlainCkbBalance(
       tx,
-      testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), capacityCells: [spent, unspent] }),
+      testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), capacityCells: [spent, unspent, typed, data] }),
       [lock],
     )).toBe(ccc.fixedPointFrom(2300));
   });
