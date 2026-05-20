@@ -56,7 +56,6 @@ The start script writes one newline-delimited JSON log stream per run. Each loop
 - `ickb-to-ckb-limit-order`: creates one raw iCKB-to-CKB limit order with all currently available iCKB. Use this for iCKB withdrawal-through-LO coverage.
 - `two-ickb-to-ckb-limit-orders`: creates two raw iCKB-to-CKB limit orders in one transaction. Its log uses `actions.newOrders` and `actions.orderCount`.
 - `mixed-direction-limit-orders`: creates one raw CKB-to-iCKB order and one raw iCKB-to-CKB order in one transaction. Its log uses `actions.newOrders` and `actions.orderCount`.
-- `all-ickb-limit-order`: compatibility alias for `ickb-to-ckb-limit-order`.
 - `dust-ckb-conversion`: tries a one-shannon CKB-to-iCKB conversion with the normal tester order fee.
 - `dust-ickb-conversion`: tries a one-shannon iCKB-to-CKB conversion with the normal tester order fee.
 

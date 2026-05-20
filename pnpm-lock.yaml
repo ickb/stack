@@ -166,6 +166,12 @@ importers:
         specifier: 'catalog:'
         version: 24.12.2
 
+  apps/supervisor:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.2
+
   apps/tester:
     dependencies:
       '@ckb-ccc/core':

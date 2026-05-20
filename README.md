@@ -29,6 +29,7 @@ Apps:
 - `apps/bot`: Node order-fulfillment and rebalance bot for matching profitable orders, collecting owned orders, completing receipts and withdrawals, and rebalancing pool exposure.
 - `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
 - `apps/sampler`: Mainnet sampling utility that writes historical iCKB exchange-rate CSV output.
+- `apps/supervisor`: Deterministic live testnet supervisor for bounded bot/tester stress cycles, ignored artifacts, and incident bundles.
 - `apps/tester`: Node simulator that creates random conversion orders to exercise the order and conversion flows.
 
 The Node app packages (`@ickb/bot`, `@ickb/sampler`, and `@ickb/tester`) publish their built entrypoints for distribution, but the supported reusable API surface lives in the packages below. `@ickb/interface` is a deployable browser app package and does not expose a library entrypoint.
@@ -90,6 +91,29 @@ That smoke path verifies the current direct Stack import surface through real co
 If you add a new direct `@ckb-ccc/*` dependency to any stack package, add the matching root override in `pnpm-workspace.yaml`. `pnpm check:ccc-overrides` enforces this.
 
 If you need to update or save the shared CCC baseline, use `forks/phroi_forker/repo/` directly. `forks/ccc/pin/manifest` is the source of truth for the shared upstream refs.
+
+## Live Testnet Supervisor
+
+Build the local CCC fork, shared packages, live apps, and supervisor, provide ignored bounded configs, then run the supervisor from the repo root:
+
+```bash
+pnpm forks:ccc
+pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/node-utils build
+pnpm --filter ./apps/bot build
+pnpm --filter ./apps/tester build
+pnpm --filter @ickb/supervisor build
+pnpm live:supervisor
+```
+
+By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only. It does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+
+For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:
+
+```bash
+pnpm live:supervisor:loop -- --scenario standard-cycle --max-cycles 1
+```
+
+Explicit repeatable `--target-outcome` requests become bounded coverage contracts: if `--max-cycles` ends before they are observed, the supervisor writes a logical incident for external review. The supervisor treats public testnet iCKB deposits, receipts, and orders as observable stress surface, but only bot/tester-owned state from the supplied configs is treated as spend authority.
 
 ## Licensing
 

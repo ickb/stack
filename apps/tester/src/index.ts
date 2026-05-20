@@ -40,7 +40,6 @@ const TESTER_SCENARIOS = [
   "multi-order-limit-orders",
   "two-ckb-to-ickb-limit-orders",
   "all-ckb-limit-order",
-  "all-ickb-limit-order",
   "ickb-to-ckb-limit-order",
   "two-ickb-to-ckb-limit-orders",
   "mixed-direction-limit-orders",
@@ -211,17 +210,14 @@ async function main(): Promise<void> {
 
       if (estimatedOrders.some((order) => order.direction === "ckb-to-ickb")) {
         const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, runtime.accountLocks);
-        if (postTxCkbBalance < CKB_RESERVE) {
+        const reserveSkip = testerReserveSkip(postTxCkbBalance);
+        if (reserveSkip !== undefined) {
           if (isExplicitCkbReserveScenario(effectiveTesterScenario)) {
             throw new TesterTerminalError(
               `Not enough CKB to preserve tester reserve after the tx: expected ${formatCkb(CKB_RESERVE)} CKB, got ${formatCkb(postTxCkbBalance)} CKB`,
             );
           }
-          executionLog.skip = {
-            reason: "post-tx-ckb-reserve",
-            reserve: formatCkb(CKB_RESERVE),
-            postTxCkbBalance: formatCkb(postTxCkbBalance),
-          };
+          executionLog.skip = reserveSkip;
           if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
             return;
           }
@@ -367,6 +363,17 @@ export function postTransactionPlainCkbBalance(
   return unspentCapacity + outputCapacity;
 }
 
+export function testerReserveSkip(postTxCkbBalance: bigint): Record<string, string> | undefined {
+  if (postTxCkbBalance >= CKB_RESERVE) {
+    return undefined;
+  }
+  return {
+    reason: "post-tx-ckb-reserve",
+    reserve: formatCkb(CKB_RESERVE),
+    postTxCkbBalance: formatCkb(postTxCkbBalance),
+  };
+}
+
 export function planTesterTransaction(
   state: Pick<TesterState, "availableCkbBalance" | "availableIckbBalance" | "system">,
   depositCapacity: bigint,
@@ -396,7 +403,7 @@ export function planTesterTransaction(
     }
     return { direction: "ckb-to-ickb", amount: ckbAmount, ckbAmount, udtAmount: 0n, orderCount: 1 };
   }
-  if (scenario === "all-ickb-limit-order" || scenario === "ickb-to-ckb-limit-order") {
+  if (scenario === "ickb-to-ckb-limit-order") {
     const udtAmount = state.availableIckbBalance;
     if (udtAmount <= 0n) {
       throw new TesterTerminalError("Not enough iCKB for iCKB-to-CKB limit order scenario");

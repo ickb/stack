@@ -6,8 +6,6 @@ import { defineConfig } from "vite";
 
 const monorepoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-// Local CCC iteration resolves built output from forks/ccc/repo, so the
-// interface no longer needs the old raw-fork-source Babel/shim escape hatches.
 // https://vitejs.dev/config/
 export default defineConfig({
   resolve: {

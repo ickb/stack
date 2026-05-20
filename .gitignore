@@ -7,3 +7,6 @@ apps/*/log_*.json
 
 # Local runtime config files
 config/
+
+# Local live supervisor artifacts
+logs/live-supervisor/
