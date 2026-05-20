@@ -30,7 +30,7 @@ graph TD;
 
 `@ickb/sdk` owns the stack-level summary that interface consumers use to estimate iCKB-to-CKB timing.
 
-The current runtime path uses direct deposit scans together with bot liquidity and withdrawal-request state. The older pool snapshot idea is archived because its old format was not safely self-identifying.
+The current runtime path uses direct deposit scans together with bot liquidity and withdrawal-request state. Direct scans keep the estimate source unambiguous instead of trusting bot-owned no-type bytes that are not self-identifying.
 
 See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 

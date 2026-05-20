@@ -99,23 +99,23 @@ describe("supervisor CLI", () => {
     expect(args.testerFeeBaseExplicit).toBe(false);
   });
 
-  it("rejects old LLM command-shape and repair mode flags", () => {
-    expect(() => parseArgs(["--llm-bin", "custom-llm"])).toThrow("Unknown argument: --llm-bin");
-    expect(() => parseArgs(["--llm-command", "custom-llm"])).toThrow("Unknown argument: --llm-command");
-    expect(() => parseArgs(["--llm-arg", "repair"])).toThrow("Unknown argument: --llm-arg");
-    expect(() => parseArgs(["--llm-on-incident"])).toThrow("Unknown argument: --llm-on-incident");
-    expect(() => parseArgs(["--no-llm-on-incident"])).toThrow("Unknown argument: --no-llm-on-incident");
-    expect(() => parseArgs(["--llm-timeout-seconds", "60"])).toThrow("Unknown argument: --llm-timeout-seconds");
-    expect(() => parseArgs(["--llm-max-attempts", "2"])).toThrow("Unknown argument: --llm-max-attempts");
-    expect(() => parseArgs(["--max-repair-rounds", "1"])).toThrow("Unknown argument: --max-repair-rounds");
-    expect(() => parseArgs(["--autonomous-repair"])).toThrow("Unknown argument: --autonomous-repair");
-    expect(() => parseArgs(["--repair-commit-message", "repair test"])).toThrow("Unknown argument: --repair-commit-message");
-    expect(() => parseArgs(["--coverage-goal", "bot_match_committed"])).toThrow("Unknown argument: --coverage-goal");
-    expect(() => parseArgs(["--stop-on", "unmet_coverage_goal"])).toThrow("Unknown argument: --stop-on");
-    expect(() => parseArgs(["--force"])).toThrow("Unknown argument: --force");
-    expect(() => parseArgs(["--verify-command", "pnpm test"])).toThrow("Unknown argument: --verify-command");
-    expect(() => parseArgs(["--expected-chain", "mainnet"])).toThrow("Unknown argument: --expected-chain");
-    expect(() => parseArgs(["--no-preflight"])).toThrow("Unknown argument: --no-preflight");
+  it("keeps autonomous repair and LLM controls outside the supervisor CLI", () => {
+    const externalOnlyFlags: Array<[string, ...string[]]> = [
+      ["--llm-command", "custom-llm"],
+      ["--llm-arg", "repair"],
+      ["--autonomous-repair"],
+      ["--max-repair-rounds", "1"],
+      ["--repair-commit-message", "repair test"],
+      ["--verify-command", "pnpm test"],
+      ["--no-preflight"],
+    ];
+
+    for (const args of externalOnlyFlags) {
+      const [flag] = args;
+      expect(() => parseArgs(args)).toThrow(`Unknown argument: ${flag}`);
+    }
+
+    expect(usage()).not.toMatch(/llm|repair|verify-command|no-preflight/iu);
   });
 
   it("refuses non-ignored output paths", () => {

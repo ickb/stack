@@ -27,7 +27,7 @@ Not-ready deposits remain in the future maturity buckets.
 
 These scans fail closed when the scan reaches the configured cell limit sentinel. A partial pool scan is not treated as a lower-confidence estimate, because interface timing and bot liquidity decisions need to distinguish incomplete state from genuinely unavailable liquidity.
 
-## Why The Older Snapshot Path Was Removed
+## Why Direct Scans Are Used
 
 The older snapshot idea tried to summarize the full deposit pool without scanning every deposit.
 
@@ -37,8 +37,6 @@ So the current stack chooses the smaller honest contract:
 
 - direct deposit scans are slower at large pool sizes
 - but the data source is unambiguous
-
-An archived copy of the older codec is kept at `packages/sdk/docs/pool_snapshot_codec.ts` as future implementation reference only.
 
 ## What A Future Snapshot Implementation Would Need
 
