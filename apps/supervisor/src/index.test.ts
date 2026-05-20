@@ -76,6 +76,16 @@ describe("supervisor CLI", () => {
     expect(() => parseArgs(["--tester-fee-base", "-1"])).toThrow("Invalid --tester-fee-base");
   });
 
+  it("rejects unsafe integer bounds without numeric rounding", () => {
+    expect(parseArgs(["--max-cycles", String(Number.MAX_SAFE_INTEGER)]).maxCycles).toBe(Number.MAX_SAFE_INTEGER);
+    expect(() => parseArgs(["--max-cycles", "9007199254740992"])).toThrow(
+      "Invalid --max-cycles: expected a safe integer",
+    );
+    expect(() => parseArgs(["--command-timeout-seconds", "9007199254740993"])).toThrow(
+      "Invalid --command-timeout-seconds: expected a safe integer",
+    );
+  });
+
   it("defaults bare supervisor runs to deterministic live configs", () => {
     const args = parseArgs([]);
 
@@ -505,7 +515,7 @@ describe("supervisor CLI", () => {
     let createdOutputDirectory = false;
 
     await expect(supervise(args, plan, {
-      existsSync: (path) => !pathToString(path).endsWith("packages/core/node_modules/@ckb-ccc/udt/dist/index.js"),
+      existsSync: (path) => !pathToString(path).endsWith("forks/ccc/repo/packages/udt/dist/index.js"),
       spawnCommand: (() => {
         spawned = true;
         return fakeChild("");
@@ -515,7 +525,7 @@ describe("supervisor CLI", () => {
         createdOutputDirectory = true;
         return Promise.resolve(undefined);
       },
-    })).rejects.toThrow("Missing built CCC UDT: packages/core/node_modules/@ckb-ccc/udt/dist/index.js");
+    })).rejects.toThrow("Missing built CCC UDT: forks/ccc/repo/packages/udt/dist/index.js");
     expect(spawned).toBe(false);
     expect(createdOutputDirectory).toBe(false);
   });
@@ -1021,6 +1031,24 @@ describe("classification", () => {
     expect(classifyActorResult("tester", testerResult)).toMatchObject({
       outcome: "nonzero_exit",
       terminal: true,
+    });
+  });
+
+  it("reports spawn errors before generic actor exit classification", () => {
+    expect(classifyActorResult("preflight", { ...commandResult("preflight", ""), spawnError: "ENOENT", status: null })).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: "preflight failed to spawn: ENOENT",
+    });
+    expect(classifyActorResult("bot", { ...commandResult("bot", ""), spawnError: "ENOENT", status: null })).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: "bot failed to spawn: ENOENT",
+    });
+    expect(classifyActorResult("tester", { ...commandResult("tester", ""), spawnError: "ENOENT", status: null })).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: "tester failed to spawn: ENOENT",
     });
   });
 

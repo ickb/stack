@@ -41,8 +41,25 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
     supervisorArgs: ["--scenario", "standard-cycle", "--max-cycles", "1"],
   });
   assert.throws(() => parseArgs(["--max-runs", "0"]), /Invalid --max-runs/u);
+  assert.equal(parseArgs(["--max-runs", String(Number.MAX_SAFE_INTEGER)]).maxRuns, Number.MAX_SAFE_INTEGER);
+  assert.throws(() => parseArgs(["--max-runs", "9007199254740992"]), /Invalid --max-runs: expected a safe integer/u);
+  assert.throws(() => parseArgs(["--stable-limit", "9007199254740992"]), /Invalid --stable-limit: expected a safe integer/u);
+  assert.throws(() => parseArgs(["--backoff-seconds", "9007199254740993"]), /Invalid --backoff-seconds: expected a safe integer/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.match(usage(), /summary/u);
+});
+
+test("supervisor loop summary signatures sort skip reasons", () => {
+  const base = {
+    stopped: "max_cycles",
+    aggregateCounts: { tester_fresh_order_skip: 1 },
+    publicVsOwnedStateAssumptions: { userOrderCount: 0, marketOrderCount: 1 },
+  };
+
+  assert.equal(
+    summarySignature({ ...base, skipReasons: ["b", "a"] }),
+    summarySignature({ ...base, skipReasons: ["a", "b"] }),
+  );
 });
 
 test("supervisor loop summarizes only summary json fields", () => {

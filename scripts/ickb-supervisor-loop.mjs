@@ -154,7 +154,7 @@ export function summarySignature(summary) {
   return JSON.stringify({
     stopped: typeof summary.stopped === "string" ? summary.stopped : "unknown",
     aggregateCounts: sortedEntries(countRecord(summary.aggregateCounts)),
-    skipReasons: stringArray(summary.skipReasons),
+    skipReasons: stringArray(summary.skipReasons).sort(),
     publicVsOwnedStateAssumptions: normalizeJson(summary.publicVsOwnedStateAssumptions ?? null),
   });
 }
@@ -258,8 +258,8 @@ async function readSummary(path, dependencies) {
   let parsed;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    throw new Error("summary.json invalid JSON");
+  } catch (error) {
+    throw new Error("summary.json invalid JSON", { cause: error });
   }
   if (!isRecord(parsed)) {
     throw new Error("summary.json is not a JSON object");
@@ -412,22 +412,22 @@ function parsePositiveInteger(value, flag) {
   if (!/^[1-9][0-9]*$/u.test(value)) {
     throw new Error(`Invalid ${flag}: expected a positive integer`);
   }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
+  const parsed = BigInt(value);
+  if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Invalid ${flag}: expected a safe integer`);
   }
-  return parsed;
+  return Number(parsed);
 }
 
 function parseNonNegativeInteger(value, flag) {
   if (!/^(0|[1-9][0-9]*)$/u.test(value)) {
     throw new Error(`Invalid ${flag}: expected a non-negative integer`);
   }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
+  const parsed = BigInt(value);
+  if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Invalid ${flag}: expected a safe integer`);
   }
-  return parsed;
+  return Number(parsed);
 }
 
 function padRun(index) {

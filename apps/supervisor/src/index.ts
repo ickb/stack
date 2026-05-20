@@ -529,6 +529,14 @@ export function classifyActorResult(
       reason: "supervisor command timeout expired",
     };
   }
+  if (result.spawnError !== undefined) {
+    return {
+      ...base,
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: `${actor} failed to spawn: ${result.spawnError}`,
+    };
+  }
   if (evidence.malformedLines.length > 0) {
     return {
       ...base,
@@ -880,8 +888,8 @@ async function assertRealOutputDirectory(plan: SupervisorPlan, dependencies: Dep
 
 function assertBuiltRuntime(plan: SupervisorPlan, dependencies: Dependencies): void {
   const required = [
-    ["CCC core", join(plan.rootDir, "packages/node-utils/node_modules/@ckb-ccc/core/dist/index.js")],
-    ["CCC UDT", join(plan.rootDir, "packages/core/node_modules/@ckb-ccc/udt/dist/index.js")],
+    ["CCC core", join(plan.rootDir, "forks/ccc/repo/packages/core/dist/index.js")],
+    ["CCC UDT", join(plan.rootDir, "forks/ccc/repo/packages/udt/dist/index.js")],
     ["utils package", join(plan.rootDir, "packages/utils/dist/index.js")],
     ["DAO package", join(plan.rootDir, "packages/dao/dist/index.js")],
     ["core package", join(plan.rootDir, "packages/core/dist/index.js")],
@@ -1873,11 +1881,11 @@ function parsePositiveInteger(value: string, flag: string): number {
   if (!/^[1-9][0-9]*$/u.test(value)) {
     throw new Error(`Invalid ${flag}: expected a positive integer`);
   }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
+  const parsed = BigInt(value);
+  if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Invalid ${flag}: expected a safe integer`);
   }
-  return parsed;
+  return Number(parsed);
 }
 
 function parseTesterFeeValue(value: string, flag: string): string {
