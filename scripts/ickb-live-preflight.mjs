@@ -219,7 +219,7 @@ async function loadBuiltStack(root) {
     const [sdk, core, cccModule] = await Promise.all([
       import(pathToFileURL(join(root, "packages/sdk/dist/index.js")).href),
       import(pathToFileURL(join(root, "packages/core/dist/index.js")).href),
-      import(pathToFileURL(join(root, "packages/node-utils/node_modules/@ckb-ccc/core/dist/index.js")).href),
+      import(pathToFileURL(join(root, "forks/ccc/repo/packages/core/dist/index.js")).href),
     ]);
     return { sdk, core, ccc: cccModule.ccc };
   } catch (cause) {
