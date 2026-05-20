@@ -1323,7 +1323,7 @@ export class IckbSdk {
     tip: ccc.ClientBlockHeader,
   ): Promise<void> {
     const currentTip = await client.getTipHeader();
-    if (currentTip.hash !== tip.hash) {
+    if (currentTip.number !== tip.number || currentTip.hash !== tip.hash) {
       throw new Error("L1 state scan crossed chain tip; retry with a fresh state");
     }
   }
@@ -1603,6 +1603,40 @@ export interface AccountAvailabilityProjection {
   pendingWithdrawals: WithdrawalGroup[];
   availableOrders: OrderGroup[];
   pendingOrders: OrderGroup[];
+}
+
+export interface ConversionTransactionContextProjection {
+  projection: AccountAvailabilityProjection;
+  context: ConversionTransactionContext;
+}
+
+export function projectConversionTransactionContext(
+  system: SystemState,
+  account: AccountState,
+  userOrders: OrderGroup[],
+  options?: Parameters<typeof projectAccountAvailability>[2],
+): ConversionTransactionContextProjection {
+  const projection = projectAccountAvailability(account, userOrders, options);
+  const estimatedMaturity = [
+    system.tip.timestamp,
+    ...projection.pendingWithdrawals.map((group) => group.owned.maturity.toUnix(system.tip)),
+    ...projection.pendingOrders
+      .map((group) => group.order.maturity)
+      .filter((maturity): maturity is bigint => maturity !== undefined),
+  ].reduce((best, maturity) => (best > maturity ? best : maturity));
+
+  return {
+    projection,
+    context: {
+      system,
+      receipts: account.receipts,
+      readyWithdrawals: projection.readyWithdrawals,
+      availableOrders: projection.availableOrders,
+      ckbAvailable: projection.ckbAvailable,
+      ickbAvailable: projection.ickbAvailable,
+      estimatedMaturity,
+    },
+  };
 }
 
 export function projectAccountAvailability(

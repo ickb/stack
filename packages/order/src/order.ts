@@ -192,15 +192,18 @@ export class OrderManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
 
     // Append order cell to Outputs
-    const position = tx.addOutput(
+    const outputCount = tx.addOutput(
       {
         lock: this.script,
         type: this.udtScript,
       },
       data.toBytes(),
     );
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    tx.outputs[position]!.capacity += ckbValue;
+    const orderOutput = tx.outputs[outputCount - 1];
+    if (orderOutput === undefined) {
+      throw new Error("Failed to append order output");
+    }
+    orderOutput.capacity += ckbValue;
 
     // Append master cell to Outputs right after its order
     tx.addOutput({

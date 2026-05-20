@@ -30,6 +30,7 @@ import {
   IckbSdk,
   MAX_DIRECT_DEPOSITS,
   projectAccountAvailability,
+  projectConversionTransactionContext,
   sendAndWaitForCommit,
   TransactionConfirmationError,
   type SystemState,
@@ -536,6 +537,77 @@ describe("projectAccountAvailability", () => {
     expect(projection.ickbAvailable).toBe(7n);
     expect(projection.ickbPending).toBe(0n);
     expect(projection.ickbBalance).toBe(7n);
+  });
+});
+
+describe("projectConversionTransactionContext", () => {
+  it("projects conversion context from account state and collected-order policy", () => {
+    const readyWithdrawal = { owned: { isReady: true }, ckbValue: 11n, udtValue: 0n } as WithdrawalGroup;
+    const pendingWithdrawal = {
+      owned: { isReady: false, maturity: { toUnix: (): bigint => 5000n } },
+      ckbValue: 17n,
+      udtValue: 0n,
+    } as WithdrawalGroup;
+    const matchable = orderGroup({
+      ckbValue: 31n,
+      udtValue: 37n,
+      isDualRatio: false,
+      isMatchable: true,
+    });
+    Object.defineProperty(matchable.order, "maturity", { value: 7000n });
+    const receipt = { ckbValue: 41n, udtValue: 43n } as ReceiptCell;
+    const account = {
+      capacityCells: [{ cellOutput: { capacity: 3n } } as ccc.Cell],
+      nativeUdtCells: [],
+      nativeUdtCapacity: 0n,
+      nativeUdtBalance: 7n,
+      receipts: [receipt],
+      withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
+    };
+    const currentSystem = system({ tip: headerLike(0n, { timestamp: 1000n }) });
+
+    const { projection, context } = projectConversionTransactionContext(
+      currentSystem,
+      account,
+      [matchable],
+      { collectedOrdersAvailable: true },
+    );
+
+    expect(projection.availableOrders).toEqual([matchable]);
+    expect(context).toEqual({
+      system: currentSystem,
+      receipts: [receipt],
+      readyWithdrawals: [readyWithdrawal],
+      availableOrders: [matchable],
+      ckbAvailable: projection.ckbAvailable,
+      ickbAvailable: projection.ickbAvailable,
+      estimatedMaturity: 5000n,
+    });
+  });
+
+  it("includes pending order maturity when collected orders are not budgeted", () => {
+    const matchable = orderGroup({
+      ckbValue: 31n,
+      udtValue: 37n,
+      isDualRatio: false,
+      isMatchable: true,
+    });
+    Object.defineProperty(matchable.order, "maturity", { value: 7000n });
+
+    const { context } = projectConversionTransactionContext(
+      system({ tip: headerLike(0n, { timestamp: 1000n }) }),
+      {
+        capacityCells: [],
+        nativeUdtCells: [],
+        nativeUdtCapacity: 0n,
+        nativeUdtBalance: 0n,
+        receipts: [],
+        withdrawalGroups: [],
+      },
+      [matchable],
+    );
+
+    expect(context.estimatedMaturity).toBe(7000n);
   });
 });
 
@@ -2651,7 +2723,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     });
   });
 
-  it("fails closed when the chain tip changes during L1 state scanning", async () => {
+  it("fails closed when L1 state scanning crosses forward tip progress", async () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -2681,7 +2753,69 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     );
   });
 
-  it("fails closed when the chain tip changes during account state scanning", async () => {
+  it("fails closed when L1 state scanning crosses a reorg", async () => {
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const firstTip = headerLike(1n, { hash: hash("01") });
+    const secondTip = headerLike(2n, { hash: hash("02") });
+    const replacedFirstTip = headerLike(1n, { hash: hash("03") });
+    const getTipHeader = vi
+      .fn<ccc.Client["getTipHeader"]>()
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(secondTip);
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+      new LogicManager(logic, [], new DaoManager(dao, [])),
+      new OrderManager(order, [], udt),
+      [],
+    );
+    const client = {
+      getTipHeader,
+      getHeaderByNumber: vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1State(client, [])).rejects.toThrow(
+      "L1 state scan crossed chain tip",
+    );
+  });
+
+  it("fails closed when the chain tip is replaced during L1 state scanning", async () => {
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const firstTip = headerLike(1n, { hash: hash("01") });
+    const replacementTip = headerLike(1n, { hash: hash("02") });
+    const getTipHeader = vi
+      .fn<ccc.Client["getTipHeader"]>()
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(replacementTip);
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+      new LogicManager(logic, [], new DaoManager(dao, [])),
+      new OrderManager(order, [], udt),
+      [],
+    );
+    const client = {
+      getTipHeader,
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1State(client, [])).rejects.toThrow(
+      "L1 state scan crossed chain tip",
+    );
+  });
+
+  it("fails closed when account state scanning crosses forward tip progress", async () => {
     const accountLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2695,6 +2829,72 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       .mockResolvedValueOnce(firstTip)
       .mockResolvedValueOnce(firstTip)
       .mockResolvedValueOnce(secondTip);
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+      new LogicManager(logic, [], new DaoManager(dao, [])),
+      new OrderManager(order, [], udt),
+      [],
+    );
+    const client = {
+      getTipHeader,
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1AccountState(client, [accountLock])).rejects.toThrow(
+      "L1 state scan crossed chain tip",
+    );
+  });
+
+  it("fails closed when account state scanning crosses a reorg", async () => {
+    const accountLock = script("11");
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const firstTip = headerLike(1n, { hash: hash("01") });
+    const secondTip = headerLike(2n, { hash: hash("02") });
+    const replacedFirstTip = headerLike(1n, { hash: hash("03") });
+    const getTipHeader = vi
+      .fn<ccc.Client["getTipHeader"]>()
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(secondTip);
+    const sdk = new IckbSdk(
+      fakeIckbUdt(udt),
+      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+      new LogicManager(logic, [], new DaoManager(dao, [])),
+      new OrderManager(order, [], udt),
+      [],
+    );
+    const client = {
+      getTipHeader,
+      getHeaderByNumber: vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip),
+      getFeeRate: () => Promise.resolve(1n),
+      findCellsOnChain: () => none(),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.getL1AccountState(client, [accountLock])).rejects.toThrow(
+      "L1 state scan crossed chain tip",
+    );
+  });
+
+  it("fails closed when the chain tip is replaced during account state scanning", async () => {
+    const accountLock = script("11");
+    const logic = script("22");
+    const dao = script("33");
+    const ownedOwner = script("44");
+    const order = script("55");
+    const udt = script("66");
+    const firstTip = headerLike(1n, { hash: hash("01") });
+    const replacementTip = headerLike(1n, { hash: hash("02") });
+    const getTipHeader = vi
+      .fn<ccc.Client["getTipHeader"]>()
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(firstTip)
+      .mockResolvedValueOnce(replacementTip);
     const sdk = new IckbSdk(
       fakeIckbUdt(udt),
       new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
