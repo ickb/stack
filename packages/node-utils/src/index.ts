@@ -135,20 +135,35 @@ export async function verifyChainPreflight(
 }
 
 function redactRpcUrlInError(error: unknown, rpcUrl: string): string {
-  const message = error instanceof Error ? error.message : "Unknown error";
+  const message = typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : stringifyErrorMessage(error);
   return redactSecretText(message, { rpcUrl });
 }
 
 export function redactSecretText(text: string, secrets: SecretRedactionContext = {}): string {
   let redacted = text;
-  if (secrets.privateKey !== undefined) {
+  if (secrets.privateKey) {
     redacted = redacted.split(secrets.privateKey).join("<redacted-private-key>");
   }
-  if (secrets.rpcUrl !== undefined) {
+  if (secrets.rpcUrl) {
     redacted = redacted.split(secrets.rpcUrl).join(secrets.redactedRpcUrl ?? redactRpcUrl(secrets.rpcUrl));
     redacted = redactRpcUrlSecrets(redacted, secrets.rpcUrl);
   }
   return redacted;
+}
+
+function stringifyErrorMessage(error: unknown): string {
+  if (error === undefined || error === null) {
+    return "Unknown error";
+  }
+  try {
+    return JSON.stringify(error, jsonLogReplacer);
+  } catch {
+    return String(error);
+  }
 }
 
 function redactRpcUrlSecrets(text: string, rpcUrl: string): string {
@@ -162,11 +177,11 @@ function redactRpcUrlSecrets(text: string, rpcUrl: string): string {
   const replacements = new Array<[string, string]>();
   if (url.username !== "") {
     replacements.push([url.username, "<redacted-rpc-username>"]);
-    replacements.push([decodeURIComponent(url.username), "<redacted-rpc-username>"]);
+    replacements.push([safeDecodeURIComponent(url.username), "<redacted-rpc-username>"]);
   }
   if (url.password !== "") {
     replacements.push([url.password, "<redacted-rpc-password>"]);
-    replacements.push([decodeURIComponent(url.password), "<redacted-rpc-password>"]);
+    replacements.push([safeDecodeURIComponent(url.password), "<redacted-rpc-password>"]);
   }
   for (const value of url.searchParams.values()) {
     replacements.push([value, "<redacted-rpc-query>"]);
@@ -198,6 +213,14 @@ function replaceUrlSecrets(text: string, replacements: Array<[string, string]>):
     .map(escapeRegExp)
     .join("|");
   return text.replace(new RegExp(pattern, "gu"), (match) => unique.get(match) ?? match);
+}
+
+function safeDecodeURIComponent(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return "";
+  }
 }
 
 function escapeRegExp(text: string): string {

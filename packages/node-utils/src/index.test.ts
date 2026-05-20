@@ -323,6 +323,24 @@ describe("node utilities", () => {
     await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/\buser\b|\bpass\b/u);
   });
 
+  it("redacts non-Error preflight failures without losing thrown values", async () => {
+    const client = preflightClient({
+      addressPrefix: "ckt",
+      genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
+      tipHash: byte32FromByte("22"),
+      tipNumber: 123n,
+      tipTimestamp: 456n,
+      url: "https://testnet.example/rpc/path?token=secret",
+    });
+    client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
+      throw { reason: "failed", amount: 9007199254740993n, token: "secret" };
+    };
+
+    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
+      '{"reason":"failed","amount":"9007199254740993","token":"<redacted-rpc-query>"}',
+    );
+  });
+
   it("redacts credential-bearing RPC URLs", () => {
     expect(redactRpcUrl("https://rpc.example/")).toBe("https://rpc.example/");
     expect(redactRpcUrl("https://rpc.example/path?token=abc&key=def")).toBe(
@@ -354,6 +372,16 @@ describe("node utilities", () => {
     )).toBe(
       "fetch failed for token=<redacted-rpc-query> decoded=<redacted-rpc-query> " +
         "plain=<redacted-rpc-query>",
+    );
+    expect(redactSecretText("empty secrets stay intact", { privateKey: "", rpcUrl: "" })).toBe(
+      "empty secrets stay intact",
+    );
+    expect(redactSecretText(
+      "fetch failed for https://%E0%A4%A@testnet.example/rpc?token=secret %E0%A4%A",
+      { rpcUrl: "https://%E0%A4%A@testnet.example/rpc?token=secret" },
+    )).toBe(
+      "fetch failed for https://redacted@testnet.example/...?token=redacted " +
+        "<redacted-rpc-username>",
     );
   });
 
