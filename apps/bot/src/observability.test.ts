@@ -200,6 +200,61 @@ describe("bot observability", () => {
     });
   });
 
+  it("redacts runtime secrets in structured error summaries", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+    const cause = new Error(`inner ${privateKey} ${rpcUrl}`);
+    const error = new Error(`outer ${privateKey} ${rpcUrl}`, { cause });
+    error.stack = `outer stack ${privateKey} ${rpcUrl}`;
+    cause.stack = `inner stack ${privateKey} ${rpcUrl}`;
+
+    const summary = errorSummary(error, { privateKey, rpcUrl }) as Record<string, unknown>;
+    const serialized = JSON.stringify(summary);
+
+    expect(serialized).not.toContain(privateKey);
+    expect(serialized).not.toContain("user:pass");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).toContain("<redacted-private-key>");
+    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+  });
+
+  it("redacts runtime secrets in structured object error summaries", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+
+    const summary = errorSummary({
+      message: `object ${privateKey}`,
+      rpcUrl,
+      amount: 9007199254740993n,
+    }, { privateKey, rpcUrl }) as Record<string, unknown>;
+    const serialized = JSON.stringify(summary);
+
+    expect(serialized).not.toContain(privateKey);
+    expect(serialized).not.toContain("user:pass");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).toContain("<redacted-private-key>");
+    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+  });
+
+  it("redacts runtime secrets in transaction lifecycle errors", () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+    const error = new Error(`lifecycle ${privateKey} ${rpcUrl}`);
+
+    const events = transactionLifecycleEvents({
+      type: "pre_broadcast_failed",
+      elapsedMs: 12,
+      error,
+    }, { privateKey, rpcUrl });
+    const serialized = JSON.stringify(events);
+
+    expect(serialized).not.toContain(privateKey);
+    expect(serialized).not.toContain("user:pass");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).toContain("<redacted-private-key>");
+    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+  });
+
   it("summarizes thrown objects with JSON-safe details", () => {
     const summary = errorSummary({
       code: "RPC_FAILURE",

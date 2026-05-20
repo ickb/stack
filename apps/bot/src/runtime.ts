@@ -14,6 +14,7 @@ import { type getConfig, type IckbSdk, type SystemState } from "@ickb/sdk";
 import { type SupportedChain } from "@ickb/node-utils";
 import { collectCompleteScan, defaultFindCellsLimit } from "@ickb/utils";
 import {
+  CKB_RESERVE,
   partitionPoolDeposits,
   planRebalance,
   type RebalanceNoopReason,
@@ -36,6 +37,7 @@ export interface Runtime {
 
 export interface BotState {
   accountLocks: ccc.Script[];
+  capacityCells: ccc.Cell[];
   system: SystemState;
   userOrders: OrderGroup[];
   marketOrders: OrderCell[];
@@ -64,7 +66,8 @@ export interface BotActions {
 
 export type BuildTransactionSkipReason =
   | "no_actions"
-  | "match_value_not_above_fee";
+  | "match_value_not_above_fee"
+  | "post_tx_ckb_reserve";
 
 export type BotDecisionSkipReason =
   | BuildTransactionSkipReason
@@ -156,6 +159,8 @@ export interface BotDecisionTranscript {
     reason: BotDecisionSkipReason;
     fee?: bigint;
     matchValue?: bigint;
+    postTxCkbBalance?: bigint;
+    reserve?: bigint;
   };
 }
 
@@ -179,7 +184,7 @@ export async function buildTransaction(
   const match = OrderManager.bestMatch(
     state.marketOrders,
     {
-      ckbValue: state.availableCkbBalance,
+      ckbValue: spendableCkb(state.availableCkbBalance),
       udtValue: state.availableIckbBalance,
     },
     state.system.exchangeRatio,
@@ -257,6 +262,7 @@ export async function buildTransaction(
     feeRate: state.system.feeRate,
   });
   const fee = tx.estimateFee(state.system.feeRate);
+  const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state);
   decision = buildDecisionTranscript({
     state,
     match,
@@ -266,6 +272,12 @@ export async function buildTransaction(
     tx,
   });
   decision = { ...decision, fee: { ...decision.fee, estimated: fee } };
+  if (postTxCkbBalance < CKB_RESERVE) {
+    return skippedResult("post_tx_ckb_reserve", actions, decision, {
+      postTxCkbBalance,
+      reserve: CKB_RESERVE,
+    });
+  }
 
   if (isMatchOnly(actions)) {
     const matchValue =
@@ -440,11 +452,26 @@ export function transactionShape(tx: ccc.Transaction): BotDecisionTranscript["tr
   };
 }
 
+export function postTransactionPlainCkbBalance(tx: ccc.Transaction, state: BotState): bigint {
+  const accountLockHexes = new Set(state.accountLocks.map((lock) => lock.toHex()));
+  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  const unspentCapacity = state.capacityCells.reduce(
+    (total, cell) => spentOutPoints.has(cell.outPoint.toHex()) ? total : total + cell.cellOutput.capacity,
+    0n,
+  );
+  const outputCapacity = tx.outputs.reduce(
+    (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
+    0n,
+  );
+
+  return unspentCapacity + outputCapacity;
+}
+
 function skippedResult(
   reason: BuildTransactionSkipReason,
   actions: BotActions,
   decision: BotDecisionTranscript,
-  details?: { fee?: bigint; matchValue?: bigint },
+  details?: { fee?: bigint; matchValue?: bigint; postTxCkbBalance?: bigint; reserve?: bigint },
 ): BuildTransactionResult {
   return {
     kind: "skipped",
@@ -467,6 +494,14 @@ function actionTotal(actions: BotActions): number {
     actions.deposits +
     actions.withdrawalRequests +
     actions.withdrawals;
+}
+
+function spendableCkb(availableCkbBalance: bigint): bigint {
+  return maxBigInt(0n, availableCkbBalance - CKB_RESERVE);
+}
+
+function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): boolean {
+  return output.type === undefined && (outputData ?? "0x") === "0x" && accountLockHexes.has(output.lock.toHex());
 }
 
 function maxBigInt(left: bigint, right: bigint): bigint {
