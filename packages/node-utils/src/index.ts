@@ -130,17 +130,20 @@ export async function verifyChainPreflight(
   try {
     return assertChainPreflight(await readChainPreflight(client, chain));
   } catch (error) {
-    throw new Error(redactRpcUrlInError(error, client.url));
+    const secrets = { rpcUrl: client.url };
+    throw new Error(redactRpcUrlInError(error, secrets), {
+      cause: errorToLogValue(error, secrets, new WeakSet<object>()),
+    });
   }
 }
 
-function redactRpcUrlInError(error: unknown, rpcUrl: string): string {
+function redactRpcUrlInError(error: unknown, secrets: SecretRedactionContext): string {
   const message = typeof error === "string"
     ? error
     : error instanceof Error
       ? error.message
-      : stringifyErrorMessage(error);
-  return redactSecretText(message, { rpcUrl });
+      : stringifyErrorMessage(error, secrets);
+  return redactSecretText(message, secrets);
 }
 
 export function redactSecretText(text: string, secrets: SecretRedactionContext = {}): string {
@@ -155,12 +158,12 @@ export function redactSecretText(text: string, secrets: SecretRedactionContext =
   return redacted;
 }
 
-function stringifyErrorMessage(error: unknown): string {
+function stringifyErrorMessage(error: unknown, secrets: SecretRedactionContext): string {
   if (error === undefined || error === null) {
     return "Unknown error";
   }
   try {
-    return JSON.stringify(error, jsonLogReplacer);
+    return JSON.stringify(sanitizeLogValue(error, secrets, new WeakSet<object>()), jsonLogReplacer);
   } catch {
     return String(error);
   }
@@ -451,9 +454,21 @@ export async function signerAccountLocks(
 }
 
 function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unknown {
+  return errorToLogValue(error, secrets, new WeakSet<object>());
+}
+
+function errorToLogValue(
+  error: unknown,
+  secrets: SecretRedactionContext,
+  seen: WeakSet<object>,
+): unknown {
   if (error instanceof Object && "stack" in error) {
+    if (seen.has(error)) {
+      return "[Circular]";
+    }
+    seen.add(error);
     const stack = redactSecretText(typeof error.stack === "string" ? error.stack : "", secrets);
-    return {
+    const logged: Record<string, unknown> = {
       name: "name" in error ? error.name : undefined,
       message:
         "message" in error && typeof error.message === "string"
@@ -463,6 +478,14 @@ function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unkno
       status: "status" in error ? error.status : undefined,
       stack,
     };
+    try {
+      if ("cause" in error) {
+        logged.cause = errorToLogValue((error as { cause?: unknown }).cause, secrets, seen);
+      }
+      return logged;
+    } finally {
+      seen.delete(error);
+    }
   }
 
   if (typeof error === "object" && error !== null) {
@@ -490,6 +513,9 @@ function sanitizeLogValue(
   if (typeof value !== "object" || value === null) {
     return value;
   }
+  if (value instanceof Object && "stack" in value) {
+    return errorToLogValue(value, secrets, seen);
+  }
   if (seen.has(value)) {
     return "[Circular]";
   }
@@ -513,7 +539,9 @@ function sanitizeLogValue(
 
 function isSensitiveLogKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/gu, "");
-  return normalized === "privatekey" || normalized === "rpcurl";
+  return ["privatekey", "rpcurl", "password", "token", "secret"].some(
+    (sensitiveKey) => normalized === sensitiveKey || normalized.endsWith(sensitiveKey),
+  );
 }
 
 function shouldStopAfterError(error: unknown): boolean {

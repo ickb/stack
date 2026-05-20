@@ -337,8 +337,14 @@ describe("node utilities", () => {
     };
 
     await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      '{"reason":"failed","amount":"9007199254740993","token":"<redacted-rpc-query>"}',
+      '{"reason":"failed","amount":"9007199254740993"}',
     );
+    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
+      cause: {
+        reason: "failed",
+        amount: "9007199254740993",
+      },
+    });
   });
 
   it("redacts credential-bearing RPC URLs", () => {
@@ -430,8 +436,11 @@ describe("node utilities", () => {
   it("redacts runtime secrets from loop errors", () => {
     const privateKey = `0x${"11".repeat(32)}`;
     const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
-    const error = new Error(`failed for ${privateKey} via ${rpcUrl}`);
+    const error = new Error(`failed for ${privateKey} via ${rpcUrl}`, {
+      cause: new Error(`nested ${privateKey} via ${rpcUrl}`),
+    });
     error.stack = `stack with ${privateKey} and ${rpcUrl}`;
+    (error.cause as Error).stack = `nested stack with ${privateKey} and ${rpcUrl}`;
     const executionLog: Record<string, unknown> = {};
 
     expect(handleLoopError(executionLog, error, { privateKey, rpcUrl })).toBe(false);
@@ -442,6 +451,13 @@ describe("node utilities", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).toContain("<redacted-private-key>");
     expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+    expect(executionLog.error).toMatchObject({
+      cause: {
+        name: "Error",
+        message: "nested <redacted-private-key> via " +
+          "https://redacted:redacted@testnet.example/...?token=redacted",
+      },
+    });
   });
 
   it("redacts runtime secrets from non-Error loop failures", () => {
@@ -459,6 +475,9 @@ describe("node utilities", () => {
       nested: {
         private_key: privateKey,
         rpc_url: rpcUrl,
+        password: "hunter2",
+        accessToken: "secret-token",
+        api_secret: "secret-value",
         message: `nested ${privateKey}`,
       },
       circular,
@@ -481,6 +500,9 @@ describe("node utilities", () => {
     expect(executionLog.error).not.toHaveProperty("privateKey");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("rpc_url");
     expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("private_key");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("password");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("accessToken");
+    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("api_secret");
   });
 
   it("logs one JSON entry with elapsed seconds", () => {
