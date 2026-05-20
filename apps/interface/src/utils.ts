@@ -49,6 +49,10 @@ export const CKB = ccc.fixedPointFrom(1);
 // reservedCKB are reserved for state rent in conversions
 export const reservedCKB = 600n * CKB;
 
+export function spendableCkb(ckbAvailable: bigint): bigint {
+  return ckbAvailable > reservedCKB ? ckbAvailable - reservedCKB : 0n;
+}
+
 export function parseWalletChain(walletChain: string): WalletChainParts {
   const separatorIndex = walletChain.lastIndexOf("_");
   if (separatorIndex <= 0 || separatorIndex === walletChain.length - 1) {

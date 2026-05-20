@@ -3,8 +3,8 @@ import { IckbSdk, type SystemState } from "@ickb/sdk";
 import {
   CKB,
   direction2Symbol,
-  reservedCKB,
   sanitizeAmountInput,
+  spendableCkb,
   symbol2Direction,
   toText,
 } from "./utils.ts";
@@ -41,8 +41,8 @@ export default function Form({
     setRawText(direction2Symbol(!isCkb2Udt) + text);
   };
 
-  const spendableCkb = ckbAvailable > reservedCKB ? ckbAvailable - reservedCKB : 0n;
-  const nativeCkb = spendableCkb < ckbNative ? spendableCkb : ckbNative;
+  const maxCkb = spendableCkb(ckbAvailable);
+  const nativeCkb = maxCkb < ckbNative ? maxCkb : ckbNative;
 
   let a = {
     name: "CKB",

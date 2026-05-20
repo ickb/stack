@@ -1,5 +1,5 @@
 import {
-  projectAccountAvailability,
+  projectConversionTransactionContext,
   type SystemState,
 } from "@ickb/sdk";
 import {
@@ -88,7 +88,7 @@ export async function getL1State(
     walletConfig.accountLocks,
   );
   const { system, user, account } = sdkState;
-  const projection = projectAccountAvailability(account, user.orders, {
+  const { projection, context: conversionContext } = projectConversionTransactionContext(system, account, user.orders, {
     collectedOrdersAvailable: true,
   });
   const hasMatchable = user.orders.some((group) => group.order.isMatchable());
@@ -99,30 +99,14 @@ export async function getL1State(
     ickbBalance,
     ckbAvailable,
     ickbAvailable,
-    readyWithdrawals,
     pendingWithdrawals,
-    availableOrders,
     pendingOrders,
   } = projection;
 
-  const estimatedMaturity = [
-    system.tip.timestamp,
-    ...pendingWithdrawals.map((group) => group.owned.maturity.toUnix(system.tip)),
-    ...pendingOrders
-      .map((group) => group.order.maturity)
-      .filter((maturity): maturity is bigint => maturity !== undefined),
-  ].reduce((best, maturity) => (best > maturity ? best : maturity));
-
   const txContext: TransactionContext = {
-    system,
+    ...conversionContext,
     capacityCells: account.capacityCells,
     nativeUdtCells: account.nativeUdtCells,
-    receipts: account.receipts,
-    readyWithdrawals,
-    availableOrders,
-    ckbAvailable,
-    ickbAvailable,
-    estimatedMaturity,
   };
 
   return {
