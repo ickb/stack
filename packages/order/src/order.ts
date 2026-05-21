@@ -908,12 +908,12 @@ function summarizeMatchers(
       continue;
     }
     matchableCount += 1;
-    minAllowance = minAllowance === undefined
+    minAllowance = minAllowance === undefined || compareBigInt(matcher.bMinMatch, minAllowance) < 0
       ? matcher.bMinMatch
-      : minBigInt(minAllowance, matcher.bMinMatch);
-    maxMatch = maxMatch === undefined
+      : minAllowance;
+    maxMatch = maxMatch === undefined || compareBigInt(matcher.bMaxMatch, maxMatch) > 0
       ? matcher.bMaxMatch
-      : maxBigInt(maxMatch, matcher.bMaxMatch);
+      : maxMatch;
   }
 
   return {
@@ -921,14 +921,6 @@ function summarizeMatchers(
     ...(minAllowance === undefined ? {} : { minAllowance }),
     ...(maxMatch === undefined ? {} : { maxMatch }),
   };
-}
-
-function minBigInt(left: bigint, right: bigint): bigint {
-  return left < right ? left : right;
-}
-
-function maxBigInt(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
 }
 
 /**
