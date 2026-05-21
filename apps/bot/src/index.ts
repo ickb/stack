@@ -19,6 +19,7 @@ import {
   sleep,
   STOP_EXIT_CODE,
   type RuntimeConfig,
+  type SecretRedactionContext,
   verifyChainPreflight,
 } from "@ickb/node-utils";
 import {
@@ -149,10 +150,9 @@ async function main(): Promise<void> {
       }
     } catch (error) {
       stopAfterLog = handleLoopError(executionLog, error, secrets);
-      events.emit(iterationId, "bot.iteration.failed", {
-        error: errorSummary(error, secrets),
-      });
-      if (isRetryableBotError(error)) {
+      const failure = iterationFailureEventFields(error, secrets);
+      events.emit(iterationId, "bot.iteration.failed", failure);
+      if (failure.retryable) {
         logExecution(executionLog, startTime);
         continue;
       }
@@ -184,6 +184,19 @@ export function completeTerminalIteration(
   return {
     completedIterations: nextCompletedIterations,
     shouldStop: reachedMaxIterations(nextCompletedIterations, maxIterations),
+  };
+}
+
+export function iterationFailureEventFields(error: unknown, secrets: SecretRedactionContext = {}): {
+  error: Record<string, unknown> | string;
+  retryable: boolean;
+  terminal: boolean;
+} {
+  const retryable = isRetryableBotError(error);
+  return {
+    error: errorSummary(error, secrets),
+    retryable,
+    terminal: !retryable,
   };
 }
 
@@ -243,8 +256,11 @@ function outPointKey(outPoint: ccc.OutPoint): string {
 
 const fmtCkb = formatCkb;
 
-function isRetryableBotError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("L1 state scan crossed chain tip");
+export function isRetryableBotError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message.includes("L1 state scan crossed chain tip") ||
+    (error instanceof TypeError && error.message === "fetch failed")
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

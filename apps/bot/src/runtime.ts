@@ -7,6 +7,8 @@ import {
 } from "@ickb/core";
 import {
   OrderManager,
+  type Match,
+  type MatchDiagnostics,
   type OrderCell,
   type OrderGroup,
 } from "@ickb/order";
@@ -126,6 +128,7 @@ export interface BotDecisionTranscript {
     ckbDelta: bigint;
     udtDelta: bigint;
     value?: bigint;
+    diagnostics?: MatchDiagnostics;
   };
   rebalance: {
     kind: RebalancePlan["kind"];
@@ -397,7 +400,7 @@ function buildDecisionTranscript({
   tx,
 }: {
   state: BotState;
-  match: { partials: readonly unknown[]; ckbDelta: bigint; udtDelta: bigint };
+  match: Pick<Match, "partials" | "ckbDelta" | "udtDelta" | "diagnostics">;
   rebalance: RebalancePlan;
   outputSlots: number;
   actions: BotActions;
@@ -410,6 +413,7 @@ function buildDecisionTranscript({
       partialCount: match.partials.length,
       ckbDelta: match.ckbDelta,
       udtDelta: match.udtDelta,
+      ...(match.diagnostics === undefined ? {} : { diagnostics: match.diagnostics }),
     },
     rebalance: rebalanceSummary(rebalance, outputSlots, state, match),
     actions,
