@@ -905,11 +905,10 @@ function* sequentialMatches(
 function summarizeMatchers(
   matchers: OrderMatcher[],
 ): MatchDirectionDiagnostics {
-  let matchableCount = 0;
+  const matchableCount = matchers.length;
   let minAllowance: ccc.FixedPoint | undefined;
   let maxMatch: ccc.FixedPoint | undefined;
   for (const matcher of matchers) {
-    matchableCount += 1;
     minAllowance = minAllowance === undefined || compareBigInt(matcher.bMinMatch, minAllowance) < 0
       ? matcher.bMinMatch
       : minAllowance;
