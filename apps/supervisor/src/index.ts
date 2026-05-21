@@ -150,6 +150,10 @@ export interface PublicStateAssumption {
   marketOrderCount?: number;
   userOrderCount?: number;
   receiptCount?: number;
+  ckbToUdtMatchableOrderCount?: number;
+  udtToCkbMatchableOrderCount?: number;
+  viableMatchCandidateCount?: number;
+  positiveGainMatchCandidateCount?: number;
   readyPoolDepositCount?: number;
   nearReadyPoolDepositCount?: number;
   futurePoolDepositCount?: number;
@@ -1693,20 +1697,38 @@ function latestBotActions(records: Record<string, unknown>[]): ActionCounts | un
 }
 
 function latestPublicState(records: Record<string, unknown>[]): PublicStateAssumption | undefined {
+  const matchDiagnosticsByIteration = new Map<number, Record<string, unknown>>();
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index];
     if (record === undefined) {
       continue;
     }
-    if (stringField(record, "type") !== "bot.state.read") {
+    const type = stringField(record, "type");
+    const iterationId = numberField(record, "iterationId");
+    if (iterationId !== undefined && (type === "bot.decision.skipped" || type === "bot.transaction.built")) {
+      const matchDiagnostics = optionalRecordField(optionalRecordField(recordField(record, "decision"), "match"), "diagnostics");
+      if (matchDiagnostics !== undefined && !matchDiagnosticsByIteration.has(iterationId)) {
+        matchDiagnosticsByIteration.set(iterationId, matchDiagnostics);
+      }
+    }
+    if (type !== "bot.state.read") {
       continue;
     }
     const orders = recordField(record, "orders");
     const poolDeposits = recordField(record, "poolDeposits");
+    const latestMatchDiagnostics = iterationId === undefined ? undefined : matchDiagnosticsByIteration.get(iterationId);
+    const directions = optionalRecordField(latestMatchDiagnostics, "directions");
+    const ckbToUdt = optionalRecordField(directions, "ckbToUdt");
+    const udtToCkb = optionalRecordField(directions, "udtToCkb");
+    const candidates = optionalRecordField(latestMatchDiagnostics, "candidates");
     return {
       marketOrderCount: numberField(orders, "marketCount"),
       userOrderCount: numberField(orders, "userCount"),
       receiptCount: numberField(orders, "receiptCount"),
+      ckbToUdtMatchableOrderCount: numberField(ckbToUdt, "matchableCount"),
+      udtToCkbMatchableOrderCount: numberField(udtToCkb, "matchableCount"),
+      viableMatchCandidateCount: numberField(candidates, "viable"),
+      positiveGainMatchCandidateCount: numberField(candidates, "positiveGain"),
       readyPoolDepositCount: numberField(poolDeposits, "readyCount"),
       nearReadyPoolDepositCount: numberField(poolDeposits, "nearReadyCount"),
       futurePoolDepositCount: numberField(poolDeposits, "futureCount"),
@@ -1765,7 +1787,7 @@ function containsSecretLeak(text: string): boolean {
 }
 
 function containsTransactionLeak(text: string): boolean {
-  return /["']?(witnesses|cellDeps|headerDeps|inputs|outputs|outputsData)["']?\s*:/iu.test(text);
+  return /["']?(witnesses|cellDeps|headerDeps|inputs|outputs|outputsData)["']?\s*:\s*\[/iu.test(text);
 }
 
 export function safeArtifactText(text: string): string {
@@ -1824,6 +1846,10 @@ function lastRecordOfType(records: Record<string, unknown>[], type: string): Rec
 function recordField(record: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
   const value = record[key];
   return isRecord(value) ? value : undefined;
+}
+
+function optionalRecordField(record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+  return record === undefined ? undefined : recordField(record, key);
 }
 
 function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
