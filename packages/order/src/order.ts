@@ -426,8 +426,7 @@ export class OrderManager implements ScriptDeps {
           const gain = (ckbDelta - ckbFee) * ckbScale + udtDelta * udtScale;
           if (ckbAllowance < 0n) {
             diagnostics.candidates.rejected.insufficientCkbAllowance += 1;
-          }
-          if (udtAllowance < 0n) {
+          } else if (udtAllowance < 0n) {
             diagnostics.candidates.rejected.insufficientUdtAllowance += 1;
           }
           if (ckbAllowance < 0n || udtAllowance < 0n) {

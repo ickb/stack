@@ -249,6 +249,30 @@ describe("OrderMatcher", () => {
     expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
   });
 
+  it("reports one primary allowance rejection reason per candidate", () => {
+    const order = makeUdtToCkbOrder();
+
+    const match = OrderManager.bestMatch(
+      [order],
+      {
+        ckbValue: -ccc.fixedPointFrom(1000),
+        udtValue: -ccc.fixedPointFrom(1000),
+      },
+      {
+        ckbScale: 3n,
+        udtScale: 5n,
+      },
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+
+    const rejected = match.diagnostics?.candidates.rejected;
+    expect(rejected?.insufficientCkbAllowance).toBeGreaterThan(0);
+    expect(rejected?.insufficientUdtAllowance).toBe(0);
+  });
+
   it("does not use the same order cell in both match directions", () => {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
