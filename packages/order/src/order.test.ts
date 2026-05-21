@@ -126,6 +126,17 @@ describe("OrderMatcher", () => {
     expect(match.partials).toHaveLength(1);
     expect(match.ckbDelta).toBeLessThan(0n);
     expect(match.udtDelta).toBeGreaterThan(0n);
+    expect(match.diagnostics).toMatchObject({
+      orderCount: 1,
+      directions: {
+        ckbToUdt: { matchableCount: 0 },
+        udtToCkb: { matchableCount: 1 },
+      },
+      candidates: {
+        rejected: { nonPositiveGain: 0 },
+      },
+    });
+    expect(match.diagnostics?.candidates.positiveGain).toBeGreaterThan(0);
   });
 
   it("respects a partial cap when selecting the best match", () => {
@@ -220,11 +231,22 @@ describe("OrderMatcher", () => {
       },
     );
 
-    expect(match).toEqual({
+    expect(match).toMatchObject({
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [],
+      diagnostics: {
+        orderCount: 1,
+        directions: {
+          ckbToUdt: { matchableCount: 0 },
+          udtToCkb: { matchableCount: 1 },
+        },
+        candidates: {
+          positiveGain: 0,
+        },
+      },
     });
+    expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
   });
 
   it("does not use the same order cell in both match directions", () => {

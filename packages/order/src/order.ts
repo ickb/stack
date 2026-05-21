@@ -303,10 +303,7 @@ export class OrderManager implements ScriptDeps {
    *    @param options.ckbAllowanceStep - The step value for CKB allowance (defaults to 1000 CKB as fixed point).
    *    @param options.maxPartials - Maximum matched partial outputs to keep in the result.
    *
-   * @returns A Match object containing the best combination of:
-   *    • ckbDelta: net change in CKB,
-   *    • udtDelta: net change in UDT,
-   *    • partials: list of partial matches.
+   * @returns A Match object containing the best combination of deltas, partial matches, and search diagnostics.
    */
   static bestMatch(
     orderPool: OrderCell[],
@@ -346,6 +343,31 @@ export class OrderManager implements ScriptDeps {
     const maxPartials = options?.maxPartials;
     const udtAllowanceStep =
       (ckbAllowanceStep * ckbScale + udtScale - 1n) / udtScale;
+    const diagnostics: MatchDiagnostics = {
+      orderCount: orderPool.length,
+      allowance,
+      ckbAllowanceStep,
+      udtAllowanceStep,
+      ckbMiningFee,
+      ...(maxPartials === undefined ? {} : { maxPartials }),
+      directions: {
+        ckbToUdt: summarizeMatchers(orderPool, true, ckbMiningFee),
+        udtToCkb: summarizeMatchers(orderPool, false, ckbMiningFee),
+      },
+      candidates: {
+        total: 0,
+        viable: 0,
+        positiveGain: 0,
+        rejected: {
+          maxPartials: 0,
+          duplicateOrder: 0,
+          insufficientCkbAllowance: 0,
+          insufficientUdtAllowance: 0,
+          nonPositiveGain: 0,
+        },
+        bestGain: 0n,
+      },
+    };
 
     const ckb2UdtMatches = new BufferedGenerator(
       OrderManager.sequentialMatcher(
@@ -389,18 +411,38 @@ export class OrderManager implements ScriptDeps {
           const ckbDelta = c2u.ckbDelta + u2c.ckbDelta;
           const udtDelta = c2u.udtDelta + u2c.udtDelta;
           const partials = c2u.partials.concat(u2c.partials);
+          diagnostics.candidates.total += 1;
           if (maxPartials !== undefined && partials.length > maxPartials) {
+            diagnostics.candidates.rejected.maxPartials += 1;
             continue;
           }
           if (!hasUniquePartialOrderOutPoints(partials)) {
+            diagnostics.candidates.rejected.duplicateOrder += 1;
             continue;
           }
           const ckbFee = ckbMiningFee * BigInt(partials.length);
           const ckbAllowance = allowance.ckbValue + ckbDelta - ckbFee;
           const udtAllowance = allowance.udtValue + udtDelta;
           const gain = (ckbDelta - ckbFee) * ckbScale + udtDelta * udtScale;
+          if (ckbAllowance < 0n) {
+            diagnostics.candidates.rejected.insufficientCkbAllowance += 1;
+          }
+          if (udtAllowance < 0n) {
+            diagnostics.candidates.rejected.insufficientUdtAllowance += 1;
+          }
+          if (ckbAllowance < 0n || udtAllowance < 0n) {
+            continue;
+          }
+          diagnostics.candidates.viable += 1;
+          if (partials.length > 0) {
+            if (gain > 0n) {
+              diagnostics.candidates.positiveGain += 1;
+            } else {
+              diagnostics.candidates.rejected.nonPositiveGain += 1;
+            }
+          }
 
-          if (ckbAllowance >= 0n && udtAllowance >= 0n && gain > best.gain) {
+          if (gain > best.gain) {
             best = {
               i,
               j,
@@ -417,10 +459,12 @@ export class OrderManager implements ScriptDeps {
     }
 
     const { ckbDelta, udtDelta, partials } = best;
+    diagnostics.candidates.bestGain = best.gain;
     return {
       ckbDelta,
       udtDelta,
       partials,
+      diagnostics,
     };
   }
 
@@ -850,6 +894,43 @@ function maxOrderOccupiedSize(orderPool: OrderCell[]): number {
   return maxSize;
 }
 
+function summarizeMatchers(
+  orderPool: OrderCell[],
+  isCkb2Udt: boolean,
+  ckbMiningFee: ccc.FixedPoint,
+): MatchDirectionDiagnostics {
+  let matchableCount = 0;
+  let minAllowance: ccc.FixedPoint | undefined;
+  let maxMatch: ccc.FixedPoint | undefined;
+  for (const order of orderPool) {
+    const matcher = OrderMatcher.from(order, isCkb2Udt, ckbMiningFee);
+    if (matcher === undefined) {
+      continue;
+    }
+    matchableCount += 1;
+    minAllowance = minAllowance === undefined
+      ? matcher.bMinMatch
+      : minBigInt(minAllowance, matcher.bMinMatch);
+    maxMatch = maxMatch === undefined
+      ? matcher.bMaxMatch
+      : maxBigInt(maxMatch, matcher.bMaxMatch);
+  }
+
+  return {
+    matchableCount,
+    ...(minAllowance === undefined ? {} : { minAllowance }),
+    ...(maxMatch === undefined ? {} : { maxMatch }),
+  };
+}
+
+function minBigInt(left: bigint, right: bigint): bigint {
+  return left < right ? left : right;
+}
+
+function maxBigInt(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
+}
+
 /**
  * Represents a partial match result for an order.
  */
@@ -886,6 +967,41 @@ export interface Match {
      */
     udtOut: ccc.FixedPoint;
   }[];
+
+  /** Aggregate match-search diagnostics. It excludes order cells, scripts, and out points. */
+  diagnostics?: MatchDiagnostics;
+}
+
+export interface MatchDiagnostics {
+  orderCount: number;
+  allowance: ValueComponents;
+  ckbAllowanceStep: ccc.FixedPoint;
+  udtAllowanceStep: ccc.FixedPoint;
+  ckbMiningFee: ccc.FixedPoint;
+  maxPartials?: number;
+  directions: {
+    ckbToUdt: MatchDirectionDiagnostics;
+    udtToCkb: MatchDirectionDiagnostics;
+  };
+  candidates: {
+    total: number;
+    viable: number;
+    positiveGain: number;
+    rejected: {
+      maxPartials: number;
+      duplicateOrder: number;
+      insufficientCkbAllowance: number;
+      insufficientUdtAllowance: number;
+      nonPositiveGain: number;
+    };
+    bestGain: bigint;
+  };
+}
+
+export interface MatchDirectionDiagnostics {
+  matchableCount: number;
+  minAllowance?: ccc.FixedPoint;
+  maxMatch?: ccc.FixedPoint;
 }
 
 /**
