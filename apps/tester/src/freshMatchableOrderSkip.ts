@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { type OrderGroup } from "@ickb/order";
+import { ickbExchangeRatio } from "@ickb/core";
+import { OrderManager, type OrderGroup } from "@ickb/order";
 import { type Runtime } from "./runtime.js";
 
-const MAX_ELAPSED_BLOCKS = 100800n;
+const MAX_ELAPSED_BLOCKS = 5400n;
 
 type FreshMatchableOrderSkip =
   | {
@@ -21,11 +22,12 @@ export async function freshMatchableOrderSkip(
   runtime: Runtime,
   orders: OrderGroup[],
   tip: ccc.ClientBlockHeader,
+  feeRate: ccc.Num,
 ): Promise<FreshMatchableOrderSkip | undefined> {
   const tx2BlockNumber = new Map<string, bigint>();
 
   for (const group of orders) {
-    if (!group.order.isMatchable()) {
+    if (!isActionableOrder(group, tip, feeRate)) {
       continue;
     }
 
@@ -51,4 +53,14 @@ export async function freshMatchableOrderSkip(
       };
     }
   }
+}
+
+function isActionableOrder(group: OrderGroup, tip: ccc.ClientBlockHeader, feeRate: ccc.Num): boolean {
+  const { order } = group;
+  return OrderManager.bestMatch(
+    [order],
+    { ckbValue: ccc.fixedPointFrom(1000000), udtValue: ccc.fixedPointFrom(1000000) },
+    ickbExchangeRatio(tip),
+    { feeRate, ckbAllowanceStep: ccc.fixedPointFrom(1), maxPartials: 1 },
+  ).partials.length > 0;
 }
