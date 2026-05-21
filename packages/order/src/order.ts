@@ -343,6 +343,8 @@ export class OrderManager implements ScriptDeps {
     const maxPartials = options?.maxPartials;
     const udtAllowanceStep =
       (ckbAllowanceStep * ckbScale + udtScale - 1n) / udtScale;
+    const ckbToUdtMatchers = orderMatchers(orderPool, true, ckbMiningFee);
+    const udtToCkbMatchers = orderMatchers(orderPool, false, ckbMiningFee);
     const diagnostics: MatchDiagnostics = {
       orderCount: orderPool.length,
       allowance,
@@ -351,8 +353,8 @@ export class OrderManager implements ScriptDeps {
       ckbMiningFee,
       ...(maxPartials === undefined ? {} : { maxPartials }),
       directions: {
-        ckbToUdt: summarizeMatchers(orderPool, true, ckbMiningFee),
-        udtToCkb: summarizeMatchers(orderPool, false, ckbMiningFee),
+        ckbToUdt: summarizeMatchers(ckbToUdtMatchers),
+        udtToCkb: summarizeMatchers(udtToCkbMatchers),
       },
       candidates: {
         total: 0,
@@ -370,20 +372,16 @@ export class OrderManager implements ScriptDeps {
     };
 
     const ckb2UdtMatches = new BufferedGenerator(
-      OrderManager.sequentialMatcher(
-        orderPool,
-        true,
+      sequentialMatches(
+        ckbToUdtMatchers,
         ckbAllowanceStep,
-        ckbMiningFee,
       ),
       2,
     );
     const udt2CkbMatches = new BufferedGenerator(
-      OrderManager.sequentialMatcher(
-        orderPool,
-        false,
+      sequentialMatches(
+        udtToCkbMatchers,
         udtAllowanceStep,
-        ckbMiningFee,
       ),
       2,
     );
@@ -498,64 +496,7 @@ export class OrderManager implements ScriptDeps {
     allowanceStep: ccc.FixedPoint,
     ckbMiningFee: ccc.FixedPoint,
   ): Generator<Match, void, void> {
-    // Generate matchers from the given order pool using OrderMatcher, filter out undefined results,
-    // and sort the matchers by their real match ratio in decreasing order.
-    const matchers = orderPool
-      .map((o) => OrderMatcher.from(o, isCkb2Udt, ckbMiningFee))
-      .filter((m) => m !== undefined)
-      .sort((a, b) => OrderMatcher.compareRealRatioDesc(a, b));
-
-    // Initialize an accumulator for the cumulative match.
-    let acc: Match = {
-      ckbDelta: 0n,
-      udtDelta: 0n,
-      partials: [],
-    };
-
-    let curr = acc;
-    yield curr;
-
-    // Process each matcher in sequence.
-    for (const matcher of matchers) {
-      const maxMatch = matcher.bMaxMatch;
-      // Distribute maxMatch into partial matches according to a fair distribution policy:
-      //  - Each partial match is of at least of allowanceStep size.
-      //  - The number of partial matches is maximized.
-      //  - The distribution is as fair as possible (i.e., partial match sizes differ by at most 1 sats).
-      //
-      // Here, N is defined as ceil(maxMatch / allowanceStep).
-      const N = (maxMatch + allowanceStep - 1n) / allowanceStep;
-
-      // Determine the base quota (q) and remainder (r) for fair distribution.
-      // q = base units per partial match.
-      // r = the number of partial matches that will receive one extra unit.
-      const q = maxMatch / N;
-      const r = maxMatch % N;
-
-      let allowance = 0n;
-      for (let i = 0n; i < N; i++) {
-        // For the first r partial matches, assign an extra unit (q + 1); for the rest, assign q.
-        allowance += i < r ? q + 1n : q;
-
-        // Compute the match using the current allowance.
-        const m = matcher.match(allowance);
-        // If the current allowance is too low to yield any partial matches,
-        // try the next allowance for the same matcher.
-        if (m.partials.length === 0) {
-          continue;
-        }
-        // Update the cumulative match by aggregating the deltas and partials.
-        curr = {
-          ckbDelta: acc.ckbDelta + m.ckbDelta,
-          udtDelta: acc.udtDelta + m.udtDelta,
-          partials: acc.partials.concat(m.partials),
-        };
-        // Yield the newly updated cumulative match.
-        yield curr;
-      }
-      // Update the accumulator with the current cumulative match for the next matcher.
-      acc = curr;
-    }
+    yield* sequentialMatches(orderMatchers(orderPool, isCkb2Udt, ckbMiningFee), allowanceStep);
   }
 
   /**
@@ -893,19 +834,81 @@ function maxOrderOccupiedSize(orderPool: OrderCell[]): number {
   return maxSize;
 }
 
-function summarizeMatchers(
+function orderMatchers(
   orderPool: OrderCell[],
   isCkb2Udt: boolean,
   ckbMiningFee: ccc.FixedPoint,
+): OrderMatcher[] {
+  return orderPool
+    .map((o) => OrderMatcher.from(o, isCkb2Udt, ckbMiningFee))
+    .filter((m) => m !== undefined)
+    .sort((a, b) => OrderMatcher.compareRealRatioDesc(a, b));
+}
+
+function* sequentialMatches(
+  matchers: OrderMatcher[],
+  allowanceStep: ccc.FixedPoint,
+): Generator<Match, void, void> {
+  // Initialize an accumulator for the cumulative match.
+  let acc: Match = {
+    ckbDelta: 0n,
+    udtDelta: 0n,
+    partials: [],
+  };
+
+  let curr = acc;
+  yield curr;
+
+  // Process each matcher in sequence.
+  for (const matcher of matchers) {
+    const maxMatch = matcher.bMaxMatch;
+    // Distribute maxMatch into partial matches according to a fair distribution policy:
+    //  - Each partial match is of at least of allowanceStep size.
+    //  - The number of partial matches is maximized.
+    //  - The distribution is as fair as possible (i.e., partial match sizes differ by at most 1 sats).
+    //
+    // Here, N is defined as ceil(maxMatch / allowanceStep).
+    const N = (maxMatch + allowanceStep - 1n) / allowanceStep;
+
+    // Determine the base quota (q) and remainder (r) for fair distribution.
+    // q = base units per partial match.
+    // r = the number of partial matches that will receive one extra unit.
+    const q = maxMatch / N;
+    const r = maxMatch % N;
+
+    let allowance = 0n;
+    for (let i = 0n; i < N; i++) {
+      // For the first r partial matches, assign an extra unit (q + 1); for the rest, assign q.
+      allowance += i < r ? q + 1n : q;
+
+      // Compute the match using the current allowance.
+      const m = matcher.match(allowance);
+      // If the current allowance is too low to yield any partial matches,
+      // try the next allowance for the same matcher.
+      if (m.partials.length === 0) {
+        continue;
+      }
+      // Update the cumulative match by aggregating the deltas and partials.
+      curr = {
+        ckbDelta: acc.ckbDelta + m.ckbDelta,
+        udtDelta: acc.udtDelta + m.udtDelta,
+        partials: acc.partials.concat(m.partials),
+      };
+      // Yield the newly updated cumulative match.
+      yield curr;
+    }
+    // Update the accumulator with the current cumulative match for the next matcher.
+    acc = curr;
+  }
+}
+
+function summarizeMatchers(
+  matchers: OrderMatcher[],
 ): MatchDirectionDiagnostics {
   let matchableCount = 0;
   let minAllowance: ccc.FixedPoint | undefined;
   let maxMatch: ccc.FixedPoint | undefined;
-  for (const order of orderPool) {
-    const matcher = OrderMatcher.from(order, isCkb2Udt, ckbMiningFee);
-    if (matcher === undefined) {
-      continue;
-    }
+  for (const matcher of matchers) {
     matchableCount += 1;
     minAllowance = minAllowance === undefined || compareBigInt(matcher.bMinMatch, minAllowance) < 0
       ? matcher.bMinMatch
