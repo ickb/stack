@@ -122,6 +122,15 @@ test("supervisor loop decisions stop on incident, tx, new outcome, and stable no
     maxRuns: 10,
   }).reason, "supervisor_nonzero");
   assert.equal(decideNext({
+    run: { ...baseRun, status: 2, hasIncident: true },
+    priorOutcomes,
+    previousSignature: "other",
+    stableCount: 0,
+    stableLimit: 3,
+    runIndex: 2,
+    maxRuns: 10,
+  }).reason, "incident");
+  assert.equal(decideNext({
     run: { ...baseRun, hasIncident: true },
     priorOutcomes,
     previousSignature: "other",

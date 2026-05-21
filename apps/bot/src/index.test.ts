@@ -9,7 +9,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TARGET_ICKB_BALANCE } from "./policy.js";
-import { completeTerminalIteration, readBotRuntimeConfig } from "./index.js";
+import {
+  completeTerminalIteration,
+  isRetryableBotError,
+  iterationFailureEventFields,
+  readBotRuntimeConfig,
+} from "./index.js";
 import { buildTransaction, collectPoolDeposits, postTransactionPlainCkbBalance } from "./runtime.js";
 
 afterEach(() => {
@@ -159,6 +164,29 @@ describe("completeTerminalIteration", () => {
     expect(completeTerminalIteration(999, undefined)).toEqual({
       completedIterations: 1000,
       shouldStop: false,
+    });
+  });
+});
+
+describe("bot retryable iteration failures", () => {
+  it("treats chain-tip races and fetch transport failures as retryable", () => {
+    expect(isRetryableBotError(new Error("L1 state scan crossed chain tip; retry with a fresh state"))).toBe(true);
+    expect(isRetryableBotError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryableBotError(new Error("fetch failed"))).toBe(false);
+    expect(isRetryableBotError(new Error("deterministic build failure"))).toBe(false);
+  });
+
+  it("emits retryability metadata from the same retry decision", () => {
+    expect(iterationFailureEventFields(new TypeError("fetch failed"))).toMatchObject({
+      retryable: true,
+      terminal: false,
+      error: { name: "TypeError", message: "fetch failed" },
+    });
+
+    expect(iterationFailureEventFields(new Error("deterministic build failure"))).toMatchObject({
+      retryable: false,
+      terminal: true,
+      error: { name: "Error", message: "deterministic build failure" },
     });
   });
 });
@@ -355,6 +383,30 @@ describe("buildTransaction", () => {
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [],
+      diagnostics: {
+        orderCount: 1,
+        allowance: { ckbValue: 0n, udtValue: 0n },
+        ckbAllowanceStep: 1n,
+        udtAllowanceStep: 1n,
+        ckbMiningFee: 1n,
+        directions: {
+          ckbToUdt: { matchableCount: 0 },
+          udtToCkb: { matchableCount: 1, minAllowance: 1n, maxMatch: 2n },
+        },
+        candidates: {
+          total: 2,
+          viable: 1,
+          positiveGain: 0,
+          rejected: {
+            maxPartials: 0,
+            duplicateOrder: 0,
+            insufficientCkbAllowance: 1,
+            insufficientUdtAllowance: 0,
+            nonPositiveGain: 1,
+          },
+          bestGain: 0n,
+        },
+      },
     });
 
     const completeTransaction = vi.fn();
@@ -369,6 +421,20 @@ describe("buildTransaction", () => {
       reason: "no_actions",
       decision: {
         rebalance: { kind: "none", reason: "target_ickb_not_exceeded" },
+        match: {
+          diagnostics: {
+            orderCount: 1,
+            directions: {
+              udtToCkb: { matchableCount: 1, minAllowance: 1n, maxMatch: 2n },
+            },
+            candidates: {
+              rejected: {
+                insufficientCkbAllowance: 1,
+                nonPositiveGain: 1,
+              },
+            },
+          },
+        },
         actions: {
           collectedOrders: 0,
           completedDeposits: 0,

@@ -27,7 +27,7 @@ import {
 import { freshMatchableOrderSkip } from "./freshMatchableOrderSkip.js";
 const CKB = ccc.fixedPointFrom(1);
 const CKB_RESERVE = 2000n * CKB;
-const ALL_CKB_LIMIT_ORDER_OVERHEAD = 500n * CKB;
+const ALL_CKB_LIMIT_ORDER_OVERHEAD = 1000n * CKB;
 const MIN_TOTAL_CAPITAL_DIVISOR = 20n;
 const TESTER_FEE = 1n;
 const TESTER_FEE_BASE = 100000n;
@@ -128,6 +128,7 @@ async function main(): Promise<void> {
         runtime,
         state.userOrders,
         state.system.tip,
+        state.system.feeRate,
       );
       if (skip) {
         executionLog.skip = skip;
@@ -184,14 +185,17 @@ async function main(): Promise<void> {
       const effectiveFeePolicy = isSdkConversionScenario(effectiveTesterScenario)
         ? DEFAULT_TESTER_FEE_POLICY
         : feePolicy;
-      const estimatedOrders = rawOrders.map((order) => ({
-        ...order,
-        estimate: IckbSdk.estimate(order.direction === "ckb-to-ickb", order.amounts, state.system, {
-          fee: effectiveFeePolicy.fee,
-          feeBase: effectiveFeePolicy.feeBase,
-        }),
-      }));
-      if (estimatedOrders.some((order) => order.estimate.convertedAmount <= 0n)) {
+      const estimatedOrders: EstimatedRawOrder[] = [];
+      let estimateUnavailable = false;
+      for (const order of rawOrders) {
+        const estimate = estimateRawOrder(order, state.system, effectiveFeePolicy);
+        if (estimate === undefined) {
+          estimateUnavailable = true;
+          break;
+        }
+        estimatedOrders.push({ ...order, estimate });
+      }
+      if (estimateUnavailable || estimatedOrders.some((order) => order.estimate.convertedAmount <= 0n)) {
         executionLog.skip = { reason: "estimated-conversion-too-small" };
         if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
           return;
@@ -498,12 +502,10 @@ function hasPositiveMultiOrderEstimates(
   try {
     const plan = planTesterTransaction(state, 0n, scenario);
     const orders = plannedRawOrders(plan, scenario);
-    return orders.length >= 2 && orders.every((order) => IckbSdk.estimate(
-      order.direction === "ckb-to-ickb",
-      order.amounts,
-      state.system,
-      { fee: feePolicy.fee, feeBase: feePolicy.feeBase },
-    ).convertedAmount > 0n);
+    return orders.length >= 2 && orders.every((order) => {
+      const estimate = estimateRawOrder(order, state.system, feePolicy);
+      return estimate !== undefined && estimate.convertedAmount > 0n;
+    });
   } catch (error) {
     if (error instanceof TesterTerminalError) {
       return false;
@@ -558,6 +560,28 @@ function buildPlannedRawOrderTransaction(
     info: order.estimate.info,
   }));
   return buildRawOrderTransaction(runtime, state, rawOrders);
+}
+
+function estimateRawOrder(
+  order: PlannedRawOrder,
+  system: TesterState["system"],
+  feePolicy: TesterFeePolicy,
+): ReturnType<typeof IckbSdk.estimate> | undefined {
+  try {
+    return IckbSdk.estimate(order.direction === "ckb-to-ickb", order.amounts, system, {
+      fee: feePolicy.fee,
+      feeBase: feePolicy.feeBase,
+    });
+  } catch (error) {
+    if (isUnrepresentableTesterEstimateError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export function isUnrepresentableTesterEstimateError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Ratio scale exceeds Uint64";
 }
 
 function orderEvidence(orders: EstimatedRawOrder[], feePolicy: TesterFeePolicy): Record<string, unknown> {

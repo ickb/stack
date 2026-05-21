@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ccc } from "@ckb-ccc/core";
+import { OrderCell, OrderData, Ratio } from "@ickb/order";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { join } from "node:path";
 import { freshMatchableOrderSkip } from "./freshMatchableOrderSkip.js";
 import {
   isRetryableTesterError,
+  isUnrepresentableTesterEstimateError,
   planTesterTransaction,
   postTransactionPlainCkbBalance,
   randomTesterScenario,
@@ -102,6 +104,13 @@ describe("isRetryableTesterError", () => {
   });
 });
 
+describe("isUnrepresentableTesterEstimateError", () => {
+  it("recognizes fee-adjusted ratio overflow as an unbuildable tester estimate", () => {
+    expect(isUnrepresentableTesterEstimateError(new Error("Ratio scale exceeds Uint64"))).toBe(true);
+    expect(isUnrepresentableTesterEstimateError(new Error("L1 state scan crossed chain tip; retry with a fresh state"))).toBe(false);
+  });
+});
+
 describe("planTesterTransaction", () => {
   it("does not silently downsize extra-large limit orders", () => {
     const depositCapacity = 1000n;
@@ -133,8 +142,8 @@ describe("planTesterTransaction", () => {
 
     expect(planTesterTransaction(state, 1000n, "all-ckb-limit-order")).toEqual({
       direction: "ckb-to-ickb",
-      amount: ccc.fixedPointFrom(647500),
-      ckbAmount: ccc.fixedPointFrom(647500),
+      amount: ccc.fixedPointFrom(647000),
+      ckbAmount: ccc.fixedPointFrom(647000),
       udtAmount: 0n,
       orderCount: 1,
     });
@@ -145,8 +154,8 @@ describe("planTesterTransaction", () => {
 
     expect(planTesterTransaction(state, 1000n, "two-ckb-to-ickb-limit-orders")).toEqual({
       direction: "ckb-to-ickb",
-      amount: ccc.fixedPointFrom(647500),
-      ckbAmount: ccc.fixedPointFrom(647500),
+      amount: ccc.fixedPointFrom(647000),
+      ckbAmount: ccc.fixedPointFrom(647000),
       udtAmount: 0n,
       orderCount: 2,
     });
@@ -217,8 +226,8 @@ describe("planTesterTransaction", () => {
 
     expect(planTesterTransaction(state, 1000n, "mixed-direction-limit-orders")).toEqual({
       direction: "ckb-to-ickb",
-      amount: ccc.fixedPointFrom(647623),
-      ckbAmount: ccc.fixedPointFrom(647500),
+      amount: ccc.fixedPointFrom(647123),
+      ckbAmount: ccc.fixedPointFrom(647000),
       udtAmount: ccc.fixedPointFrom(123),
       orderCount: 2,
     });
@@ -282,7 +291,7 @@ describe("planTesterTransaction", () => {
       availableIckbBalance: ccc.fixedPointFrom(123),
     }), "multi-order-limit-orders")).toBe("two-ickb-to-ckb-limit-orders");
     expect(resolveTesterScenario(testerState({
-      availableCkbBalance: ccc.fixedPointFrom(2500) + 1n,
+      availableCkbBalance: ccc.fixedPointFrom(3000) + 1n,
       availableIckbBalance: ccc.fixedPointFrom(123),
     }), "multi-order-limit-orders")).toBe("mixed-direction-limit-orders");
     expect(() => resolveTesterScenario(testerState({
@@ -343,7 +352,8 @@ describe("freshMatchableOrderSkip", () => {
     await expect(freshMatchableOrderSkip(
       runtime as never,
       [matchableOrder(txHash)],
-      headerLike({ number: 200000n }),
+      headerLike({ number: 200000n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+      0n,
     )).resolves.toEqual({
       reason: "matchable-order-transaction-missing",
       txHash,
@@ -361,13 +371,14 @@ describe("freshMatchableOrderSkip", () => {
     await expect(freshMatchableOrderSkip(
       runtime as never,
       [matchableOrder(txHash)],
-      headerLike({ number: 200000n }),
+      headerLike({ number: 105400n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+      0n,
     )).resolves.toEqual({
       reason: "fresh-matchable-order",
       txHash,
       blockNumber: 100000n,
-      tipNumber: 200000n,
-      maxElapsedBlocks: 100800n,
+      tipNumber: 105400n,
+      maxElapsedBlocks: 5400n,
     });
   });
 
@@ -381,8 +392,40 @@ describe("freshMatchableOrderSkip", () => {
     await expect(freshMatchableOrderSkip(
       runtime as never,
       [matchableOrder(byte32FromByte("33")), nonMatchableOrder(byte32FromByte("44"))],
-      headerLike({ number: 200801n }),
+      headerLike({ number: 105401n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+      0n,
     )).resolves.toBeUndefined();
+  });
+
+  it("does not skip fresh owned orders that are not marketable at the midpoint", async () => {
+    const runtime = {
+      client: {
+        getTransaction: (): Promise<{ blockNumber: bigint }> => Promise.resolve({ blockNumber: 100000n }),
+      },
+    };
+
+    await expect(freshMatchableOrderSkip(
+      runtime as never,
+      [unmarketableOrder(byte32FromByte("45"))],
+      headerLike({ number: 105400n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+      0n,
+    )).resolves.toBeUndefined();
+  });
+
+  it("does not skip fresh owned orders whose gain is below the live fee", async () => {
+    const runtime = {
+      client: {
+        getTransaction: vi.fn<() => Promise<{ blockNumber: bigint }>>(() => Promise.resolve({ blockNumber: 100000n })),
+      },
+    };
+
+    await expect(freshMatchableOrderSkip(
+      runtime as never,
+      [matchableOrder(byte32FromByte("46"))],
+      headerLike({ number: 105400n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+      ccc.fixedPointFrom(1000),
+    )).resolves.toBeUndefined();
+    expect(runtime.client.getTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -394,16 +437,32 @@ function nonMatchableOrder(txHash: ccc.Hex): never {
   return order(txHash, false);
 }
 
-function order(txHash: ccc.Hex, isMatchable: boolean): never {
+function unmarketableOrder(txHash: ccc.Hex): never {
+  return order(txHash, true, Ratio.from({ ckbScale: 20_000_000_000_000_000n, udtScale: 1n }));
+}
+
+function order(txHash: ccc.Hex, isMatchable: boolean, ckbToUdt = Ratio.from({ ckbScale: 1n, udtScale: 2n })): never {
+  const udtScript = script("66");
+  const outputData = OrderData.from({
+    udtValue: 0n,
+    master: { type: "absolute", value: { txHash, index: 1n } },
+    info: { ckbToUdt, udtToCkb: Ratio.empty(), ckbMinMatchLog: 0 },
+  }).toBytes();
+  const minimalCell = ccc.Cell.from({
+    outPoint: { txHash, index: 0n },
+    cellOutput: { lock: script("55"), type: udtScript },
+    outputData,
+  });
   return {
-    order: {
-      isMatchable: () => isMatchable,
-      cell: ccc.Cell.from({
-        outPoint: { txHash, index: 0n },
-        cellOutput: { capacity: 0n, lock: script("55") },
-        outputData: "0x",
-      }),
-    },
+    order: OrderCell.mustFrom(ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: minimalCell.cellOutput.capacity + (isMatchable ? ccc.fixedPointFrom(100) : 0n),
+        lock: script("55"),
+        type: udtScript,
+      },
+      outputData,
+    })),
   } as never;
 }
 

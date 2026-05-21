@@ -116,11 +116,11 @@ export function summarizeRun(summary, { runIndex, relativeOutDir, status }) {
 export function decideNext({ run, priorOutcomes, previousSignature, stableCount, stableLimit, runIndex, maxRuns }) {
   const newOutcomes = run.outcomes.filter((outcome) => !priorOutcomes.has(outcome));
   const nextStableCount = previousSignature === run.signature ? stableCount + 1 : 1;
-  if (run.status !== 0) {
-    return { action: "stop", reason: "supervisor_nonzero", newOutcomes, stableCount: nextStableCount, exitCode: run.status };
-  }
   if (run.hasIncident) {
     return { action: "stop", reason: "incident", newOutcomes, stableCount: nextStableCount, exitCode: 2 };
+  }
+  if (run.status !== 0) {
+    return { action: "stop", reason: "supervisor_nonzero", newOutcomes, stableCount: nextStableCount, exitCode: run.status };
   }
   if (run.txCount > 0) {
     return { action: "stop", reason: "tx_observed", newOutcomes, stableCount: nextStableCount, exitCode: 0 };

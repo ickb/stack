@@ -961,6 +961,17 @@ describe("classification", () => {
       }),
       botEvent("bot.transaction.built", {
         actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 1, withdrawalRequests: 0, withdrawals: 0 },
+        decision: {
+          match: {
+            diagnostics: {
+              directions: {
+                ckbToUdt: { matchableCount: 5 },
+                udtToCkb: { matchableCount: 6 },
+              },
+              candidates: { viable: 7, positiveGain: 8 },
+            },
+          },
+        },
       }),
       botEvent("bot.transaction.committed", { txHash: txHash("33"), status: "committed" }),
     ].map(JSON.stringify).join("\n");
@@ -972,9 +983,63 @@ describe("classification", () => {
       marketOrderCount: 4,
       userOrderCount: 0,
       receiptCount: 1,
+      ckbToUdtMatchableOrderCount: 5,
+      udtToCkbMatchableOrderCount: 6,
+      viableMatchCandidateCount: 7,
+      positiveGainMatchCandidateCount: 8,
       readyPoolDepositCount: 2,
       nearReadyPoolDepositCount: 1,
       futurePoolDepositCount: 3,
+    });
+  });
+
+  it("keeps match diagnostics tied to the matching state-read iteration", () => {
+    const stdout = [
+      botEvent("bot.state.read", {
+        iterationId: 1,
+        orders: { marketCount: 4, userCount: 0, receiptCount: 1 },
+        poolDeposits: { readyCount: 2, nearReadyCount: 1, futureCount: 3 },
+      }),
+      botEvent("bot.transaction.built", {
+        iterationId: 1,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 1, withdrawalRequests: 0, withdrawals: 0 },
+        decision: {
+          match: {
+            diagnostics: {
+              directions: {
+                ckbToUdt: { matchableCount: 5 },
+                udtToCkb: { matchableCount: 6 },
+              },
+              candidates: { viable: 7, positiveGain: 8 },
+            },
+          },
+        },
+      }),
+      botEvent("bot.state.read", {
+        iterationId: 2,
+        orders: { marketCount: 9, userCount: 1, receiptCount: 0 },
+        poolDeposits: { readyCount: 0, nearReadyCount: 0, futureCount: 0 },
+      }),
+      botEvent("bot.iteration.failed", {
+        iterationId: 2,
+        retryable: true,
+        terminal: false,
+        error: { name: "TypeError", message: "fetch failed" },
+      }),
+    ].map(JSON.stringify).join("\n");
+    const classification = classifyActorResult("bot", commandResult("bot", stdout));
+
+    expect(classification.publicState).toEqual({
+      marketOrderCount: 9,
+      userOrderCount: 1,
+      receiptCount: 0,
+      ckbToUdtMatchableOrderCount: undefined,
+      udtToCkbMatchableOrderCount: undefined,
+      viableMatchCandidateCount: undefined,
+      positiveGainMatchCandidateCount: undefined,
+      readyPoolDepositCount: 0,
+      nearReadyPoolDepositCount: 0,
+      futurePoolDepositCount: 0,
     });
   });
 
@@ -1151,6 +1216,11 @@ describe("classification", () => {
     );
     expect(safeArtifactText(JSON.stringify({ witnesses: ["0xsignature"], inputs: [] }))).toBe(
       "<redacted: transaction-shaped output withheld by supervisor>\n",
+    );
+    expect(safeArtifactText(JSON.stringify({
+      transactionShape: { inputs: 1, outputs: 2, cellDeps: 3, headerDeps: 4, witnesses: 5 },
+    }))).toBe(
+      JSON.stringify({ transactionShape: { inputs: 1, outputs: 2, cellDeps: 3, headerDeps: 4, witnesses: 5 } }),
     );
     expect(safeArtifactText(JSON.stringify({ system: { tip: { hash: txHash("aa") } } }))).toBe(
       JSON.stringify({ system: { tip: { hash: txHash("aa") } } }),
