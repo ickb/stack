@@ -42,10 +42,11 @@ describe("node utilities", () => {
   it("parses positive sleep intervals as milliseconds", () => {
     expect(parseSleepInterval(1, "BOT_CONFIG_FILE")).toBe(1000);
     expect(parseSleepInterval(2.5, "BOT_CONFIG_FILE")).toBe(2500);
+    expect(parseSleepInterval(1073741, "BOT_CONFIG_FILE")).toBe(1073741000);
   });
 
   it("rejects missing and sub-second sleep intervals", () => {
-    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5]) {
+    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5, 1073741.824, 9007199254741]) {
       expect(() => parseSleepInterval(value, "BOT_CONFIG_FILE")).toThrow(
         "Invalid env BOT_CONFIG_FILE",
       );
@@ -116,6 +117,7 @@ describe("node utilities", () => {
       rpcUrl: "https://rpc.example/path?token=abc",
       sleepIntervalMs: 60000,
       maxIterations: 2,
+      maxRetryableAttempts: undefined,
     });
     expect(parseRuntimeConfig(JSON.stringify({
       chain: "mainnet",
@@ -128,6 +130,32 @@ describe("node utilities", () => {
       rpcUrl: "https://mainnet.example/",
       sleepIntervalMs: 1000,
       maxIterations: undefined,
+      maxRetryableAttempts: undefined,
+    });
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 5,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: undefined,
+      sleepIntervalMs: 5000,
+      maxIterations: undefined,
+      maxRetryableAttempts: undefined,
+    });
+    expect(parseRuntimeConfig(JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 5,
+      maxRetryableAttempts: 3,
+    }), "BOT_CONFIG_FILE")).toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: undefined,
+      sleepIntervalMs: 5000,
+      maxIterations: undefined,
+      maxRetryableAttempts: 3,
     });
   });
 
@@ -139,13 +167,16 @@ describe("node utilities", () => {
       JSON.stringify({ chain: "devnet", privateKey, sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: privateKey, privateKey, rpcUrl: "https://rpc.example/", sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, extra: true }),
-      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: "testnet", privateKey: `${privateKey}\n`, sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "", sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "file:///tmp/socket", sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: "testnet", privateKey, rpcUrl: "https://rpc.example/ bad", sleepIntervalSeconds: 60 }),
+      JSON.stringify({ chain: "testnet", privateKey, rpcUrl: 8114, sleepIntervalSeconds: 60 }),
       JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: "60" }),
       JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 0 }),
       JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, maxIterations: "1" }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, maxRetryableAttempts: "1" }),
+      JSON.stringify({ chain: "testnet", privateKey, sleepIntervalSeconds: 60, maxRetryableAttempts: 0 }),
     ];
 
     for (const value of invalidValues) {
@@ -175,6 +206,7 @@ describe("node utilities", () => {
         rpcUrl: "http://127.0.0.1:8114/",
         sleepIntervalMs: 60000,
         maxIterations: undefined,
+        maxRetryableAttempts: undefined,
       });
       await expect(readRuntimeConfigEnv(undefined, "BOT_CONFIG_FILE")).rejects.toThrow(
         "Empty env BOT_CONFIG_FILE",
@@ -220,6 +252,7 @@ describe("node utilities", () => {
   it("creates network-specific public clients and forwards custom RPC URLs", () => {
     const mainnet = createPublicClient("mainnet", "https://mainnet.example");
     const testnet = createPublicClient("testnet", undefined);
+    const defaultTestnet = new ccc.ClientPublicTestnet();
 
     expect(mainnet).toBeInstanceOf(ccc.ClientPublicMainnet);
     expect(testnet).toBeInstanceOf(ccc.ClientPublicTestnet);
@@ -228,6 +261,7 @@ describe("node utilities", () => {
     expect((mainnet as ccc.ClientPublicMainnet).url).toBe(
       "https://mainnet.example",
     );
+    expect((testnet as ccc.ClientPublicTestnet).url).toBe(defaultTestnet.url);
   });
 
   it("pins official CKB chain identities for preflight checks", () => {
