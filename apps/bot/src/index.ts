@@ -162,15 +162,17 @@ async function main(): Promise<void> {
         });
       }
     } catch (error) {
-      let failure = iterationFailureEventFields(error);
-      if (failure.retryable) {
+      const retryable = isRetryableBotError(error);
+      if (retryable) {
         retryableAttempt = true;
         retryableAttempts += 1;
-        failure = iterationFailureEventFields(error, {
+      }
+      const failure = retryable
+        ? iterationFailureEventFields(error, {
           retryableAttempts,
           maxRetryableAttempts,
-        });
-      }
+        })
+        : iterationFailureEventFields(error);
       events.emit(iterationId, "bot.iteration.failed", failure);
       if (failure.retryable) {
         executionLog.error = failure.error;
