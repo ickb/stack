@@ -338,16 +338,6 @@ export function parseRpcUrl(rpcUrl: string, envName: string): string {
   return rpcUrl;
 }
 
-function parseOptionalRpcUrl(rpcUrl: unknown, envName: string): string | undefined {
-  if (rpcUrl === undefined) {
-    return undefined;
-  }
-  if (typeof rpcUrl !== "string") {
-    throw new Error("Invalid env " + envName);
-  }
-  return parseRpcUrl(rpcUrl, envName);
-}
-
 export function parseMaxIterations(
   value: number | undefined,
   envName: string,
@@ -406,6 +396,7 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     typeof record.chain !== "string" ||
     typeof record.privateKey !== "string" ||
     typeof record.sleepIntervalSeconds !== "number" ||
+    (record.rpcUrl !== undefined && typeof record.rpcUrl !== "string") ||
     (record.maxIterations !== undefined && typeof record.maxIterations !== "number") ||
     (record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number")
   ) {
@@ -418,7 +409,7 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
   return {
     chain: record.chain,
     privateKey: parsePrivateKey(record.privateKey, envName),
-    rpcUrl: parseOptionalRpcUrl(record.rpcUrl, envName),
+    rpcUrl: record.rpcUrl !== undefined ? parseRpcUrl(record.rpcUrl, envName) : undefined,
     sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
     maxIterations: parseMaxIterations(record.maxIterations, envName),
     maxRetryableAttempts: parseMaxIterations(record.maxRetryableAttempts, envName),
