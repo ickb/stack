@@ -25,6 +25,7 @@
     "forks:ccc:smoke": "node scripts/forks-ccc-smoke.mjs",
     "forks:ccc:watch": "node scripts/forks-ccc.mjs --watch",
     "live:generate-config": "node scripts/ickb-generate-config.mjs",
+    "live:config-from-env": "node scripts/ickb-live-config-from-env.mjs",
     "live:preflight": "node scripts/ickb-live-preflight.mjs",
     "live:supervisor": "node apps/supervisor/dist/index.js",
     "live:supervisor:loop": "node scripts/ickb-supervisor-loop.mjs",
