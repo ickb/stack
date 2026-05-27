@@ -618,13 +618,9 @@ function fundedTesterScenarios(
     try {
       const plan = planTesterTransaction(state, depositCapacity, scenario);
       const orders = plannedRawOrders(plan, scenario);
-      const effectiveFeePolicy = isSdkConversionScenario(scenario) ? DEFAULT_TESTER_FEE_POLICY : feePolicy;
       return orders.length > 0 && orders.every((order) => {
-        const estimate = estimateRawOrder(order, state.system, effectiveFeePolicy);
-        if (estimate === undefined || estimate.convertedAmount <= 0n) {
-          return false;
-        }
-        return !isSdkConversionScenario(scenario) || isBuildableSdkConversionOrder(plan, order, estimate, state.system, depositCapacity);
+        const estimate = estimateRawOrder(order, state.system, feePolicy);
+        return estimate !== undefined && estimate.convertedAmount > 0n;
       });
     } catch (error) {
       if (error instanceof TesterTerminalError) {
