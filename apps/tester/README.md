@@ -1,6 +1,6 @@
 # iCKB Tester
 
-The tester is now CCC-native. It waits while its own fresh matchable orders are still live, then cancels stale active orders and places randomized iCKB limit orders against the selected chain exchange ratio using the shared `@ickb/sdk`, `@ickb/core`, and `@ickb/order` packages.
+The tester is now CCC-native. It waits while its own freshly minted matchable orders are still live, then cancels stale active orders and places randomized iCKB limit orders against the selected chain exchange ratio using the shared `@ickb/sdk`, `@ickb/core`, and `@ickb/order` packages.
 
 ## Runtime Config
 
@@ -45,7 +45,7 @@ The start script writes one newline-delimited JSON log stream per run. Each loop
 
 ## Test Scenarios
 
-`TESTER_SCENARIO` selects the order-building path for live supervision. Omit it, or set `auto`, to choose randomly from the supported scenarios on each tester process start:
+`TESTER_SCENARIO` selects the order-building path for live supervision. Omit it, or set `auto`, to read current balances first and then choose randomly from conservative funded scenarios on each tester iteration. `auto` does not choose the full-capital, multi-order, or dust stress scenarios; select those explicitly when that coverage is intended:
 
 - `random-order`: current randomized raw limit-order behavior.
 - `sdk-conversion`: uses the SDK conversion transaction builder, then completes and sends the transaction. Its log `actions.conversion.kind` reports whether the SDK built a direct conversion, an order, or both.
@@ -54,12 +54,15 @@ The start script writes one newline-delimited JSON log stream per run. Each loop
 - `two-ckb-to-ickb-limit-orders`: creates two raw CKB-to-iCKB limit orders in one transaction. Its log uses `actions.newOrders` and `actions.orderCount` instead of singular `actions.newOrder`.
 - `all-ckb-limit-order`: creates one raw CKB-to-iCKB limit order with all currently available CKB except the tester reserve.
 - `ickb-to-ckb-limit-order`: creates one raw iCKB-to-CKB limit order with all currently available iCKB. Use this for iCKB withdrawal-through-LO coverage.
+- `bounded-ickb-to-ckb-limit-order`: creates one raw iCKB-to-CKB limit order capped at one deposit-cap unit. Use this when the goal is a fresh non-dust tester order, not locking the full iCKB balance.
 - `two-ickb-to-ckb-limit-orders`: creates two raw iCKB-to-CKB limit orders in one transaction. Its log uses `actions.newOrders` and `actions.orderCount`.
 - `mixed-direction-limit-orders`: creates one raw CKB-to-iCKB order and one raw iCKB-to-CKB order in one transaction. Its log uses `actions.newOrders` and `actions.orderCount`.
 - `dust-ckb-conversion`: tries a one-shannon CKB-to-iCKB conversion with the normal tester order fee.
 - `dust-ickb-conversion`: tries a one-shannon iCKB-to-CKB conversion with the normal tester order fee.
 
 These are tester-owned scenario controls. The supervisor may set `TESTER_SCENARIO`, but it must not mutate funded config files in place or force tx-bearing paths outside the tester runtime.
+
+Before broadcast, every completed tester transaction is checked against the plain-CKB reserve using actual account plain-capacity outputs after the transaction shape is complete. Non-reserve-stress scenarios skip with `reason: "post-tx-ckb-reserve"` when the transaction would leave less than the reserve; those skips include `skip.attemptedOrder`, `skip.attemptedOrders`, or `skip.attemptedConversion`, not committed `actions.newOrder`. Explicit CKB reserve stress scenarios fail terminally instead of silently weakening the stress target. Estimate skips use `reason: "estimated-conversion-too-small"` and include `skip.attemptedOrder` or `skip.attemptedOrders` so dust and fee-adjusted unbuildable stimulus can be diagnosed without treating the skip as a committed order.
 
 Raw limit-order scenarios use `TESTER_FEE=1` and `TESTER_FEE_BASE=100000` by default, matching the normal 0.001% order fee. Set `TESTER_FEE` and `TESTER_FEE_BASE` to unsigned integers to exercise alternate raw order fees; `TESTER_FEE` must be less than `TESTER_FEE_BASE`, and `TESTER_FEE_BASE` is capped at `1000000`. The selected numerator/base are recorded on `actions.newOrder.feeNumerator` and `actions.newOrder.feeBase`, or on each `actions.newOrders[]` entry for multi-order scenarios. `sdk-conversion` keeps using SDK-owned fee defaults for any order remainder.
 
