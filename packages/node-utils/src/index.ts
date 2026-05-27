@@ -346,6 +346,13 @@ export function parseMaxIterations(
   return parsePositiveSafeInteger(value, envName);
 }
 
+export function parseMaxRetryableAttempts(
+  value: number | undefined,
+  envName: string,
+): number | undefined {
+  return parsePositiveSafeInteger(value, envName);
+}
+
 function parsePositiveSafeInteger(
   value: number | undefined,
   envName: string,
@@ -420,7 +427,7 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     rpcUrl: record.rpcUrl !== undefined ? parseRpcUrl(record.rpcUrl, envName) : undefined,
     sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
     maxIterations: parseMaxIterations(record.maxIterations, envName),
-    maxRetryableAttempts: parsePositiveSafeInteger(record.maxRetryableAttempts, envName),
+    maxRetryableAttempts: parseMaxRetryableAttempts(record.maxRetryableAttempts, envName),
   };
 }
 

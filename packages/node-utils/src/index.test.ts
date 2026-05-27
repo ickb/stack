@@ -13,6 +13,7 @@ import {
   handleLoopError,
   logExecution,
   parseMaxIterations,
+  parseMaxRetryableAttempts,
   parseRuntimeConfig,
   parsePrivateKey,
   readRuntimeConfigEnv,
@@ -64,6 +65,11 @@ describe("node utilities", () => {
       "Invalid env BOT_CONFIG_FILE",
     );
     expect(() => parseMaxIterations(1.5, "BOT_CONFIG_FILE")).toThrow(
+      "Invalid env BOT_CONFIG_FILE",
+    );
+    expect(parseMaxRetryableAttempts(undefined, "BOT_CONFIG_FILE")).toBeUndefined();
+    expect(parseMaxRetryableAttempts(3, "BOT_CONFIG_FILE")).toBe(3);
+    expect(() => parseMaxRetryableAttempts(0, "BOT_CONFIG_FILE")).toThrow(
       "Invalid env BOT_CONFIG_FILE",
     );
   });
