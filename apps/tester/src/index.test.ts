@@ -621,6 +621,38 @@ describe("planTesterTransaction", () => {
     });
   });
 
+  it("allows below-reserve transactions that improve plain CKB", () => {
+    const lock = script("11");
+    const tx = ccc.Transaction.default();
+    tx.addOutput({ capacity: ccc.fixedPointFrom(100), lock });
+
+    expect(enforceTesterPlainCkbReserve(
+      tx,
+      testerState({ availableCkbBalance: 0n }),
+      [lock],
+      "ickb-to-ckb-limit-order",
+    )).toBeUndefined();
+  });
+
+  it("still blocks below-reserve transactions that drain plain CKB", () => {
+    const lock = script("11");
+    const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "06");
+    const tx = ccc.Transaction.default();
+    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+    tx.addOutput({ capacity: ccc.fixedPointFrom(999), lock });
+
+    expect(enforceTesterPlainCkbReserve(
+      tx,
+      testerState({ availableCkbBalance: ccc.fixedPointFrom(1000), capacityCells: [spent] }),
+      [lock],
+      "ickb-to-ckb-limit-order",
+    )).toEqual({
+      reason: "post-tx-ckb-reserve",
+      reserve: "2000",
+      postTxCkbBalance: "999",
+    });
+  });
+
   it("fails explicit CKB reserve stress scenarios when completed transactions violate reserve", () => {
     const lock = script("11");
     const tx = ccc.Transaction.default();

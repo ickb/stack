@@ -365,13 +365,9 @@ export function postTransactionPlainCkbBalance(
 ): bigint {
   const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
   const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  const unspentCapacity = state.account.capacityCells.reduce(
-    (total, cell) =>
-      spentOutPoints.has(cell.outPoint.toHex()) ||
-      !isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes)
-        ? total
-        : total + cell.cellOutput.capacity,
-    0n,
+  const unspentCapacity = plainCapacityBalance(
+    state.account.capacityCells.filter((cell) => !spentOutPoints.has(cell.outPoint.toHex())),
+    accountLockHexes,
   );
   const outputCapacity = tx.outputs.reduce(
     (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
@@ -398,9 +394,11 @@ export function enforceTesterPlainCkbReserve(
   accountLocks: ccc.Script[],
   scenario: TesterScenario,
 ): Record<string, string> | undefined {
+  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
+  const preTxCkbBalance = plainCapacityBalance(state.account.capacityCells, accountLockHexes);
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, accountLocks);
   const reserveSkip = testerReserveSkip(postTxCkbBalance);
-  if (reserveSkip === undefined) {
+  if (reserveSkip === undefined || (!isExplicitCkbReserveScenario(scenario) && postTxCkbBalance > preTxCkbBalance)) {
     return undefined;
   }
   if (isExplicitCkbReserveScenario(scenario)) {
@@ -409,6 +407,13 @@ export function enforceTesterPlainCkbReserve(
     );
   }
   return reserveSkip;
+}
+
+function plainCapacityBalance(cells: readonly ccc.Cell[], accountLockHexes: ReadonlySet<string>): bigint {
+  return cells.reduce(
+    (total, cell) => total + (isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes) ? cell.cellOutput.capacity : 0n),
+    0n,
+  );
 }
 
 export function testerExecutionActions(
@@ -912,7 +917,7 @@ function isSdkConversionScenario(scenario: TesterScenario): boolean {
   return scenario === "sdk-conversion";
 }
 
-function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): boolean {
+function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: ReadonlySet<string>): boolean {
   return output.type === undefined && (outputData ?? "0x") === "0x" && accountLockHexes.has(output.lock.toHex());
 }
 
