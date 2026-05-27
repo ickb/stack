@@ -242,10 +242,60 @@ describe("OrderMatcher", () => {
           udtToCkb: { matchableCount: 1 },
         },
         candidates: {
+          bestGain: 0n,
           positiveGain: 0,
         },
       },
     });
+    expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
+  });
+
+  it("does not select non-positive candidates after rejecting the empty allowance", () => {
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(200),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: {
+        type: "absolute",
+        value: {
+          txHash: byte32FromByte("33"),
+          index: 1n,
+        },
+      },
+      outPoint: {
+        txHash: byte32FromByte("55"),
+        index: 0n,
+      },
+    });
+
+    const match = OrderManager.bestMatch(
+      [order],
+      {
+        ckbValue: -1n,
+        udtValue: ccc.fixedPointFrom(1000),
+      },
+      {
+        ckbScale: 1n,
+        udtScale: 1n,
+      },
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: ccc.fixedPointFrom(1),
+      },
+    );
+
+    expect(match).toMatchObject({
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+      diagnostics: {
+        candidates: {
+          bestGain: 0n,
+          positiveGain: 0,
+        },
+      },
+    });
+    expect(match.diagnostics?.candidates.rejected.insufficientCkbAllowance).toBeGreaterThan(0);
     expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
   });
 
@@ -1734,8 +1784,8 @@ function exhaustiveSequentialBestMatch(
   const udtAllowanceStep = (
     options.ckbAllowanceStep * exchangeRate.ckbScale + exchangeRate.udtScale - 1n
   ) / exchangeRate.udtScale;
-  let best: Match | undefined;
-  let bestGain = -1n << 256n;
+  let best: Match = { ckbDelta: 0n, udtDelta: 0n, partials: [] };
+  let bestGain = 0n;
   for (const c2u of OrderManager.sequentialMatcher(
     orderPool,
     true,
@@ -1763,13 +1813,18 @@ function exhaustiveSequentialBestMatch(
       const udtAllowance = allowance.udtValue + udtDelta;
       const gain = (ckbDelta - ckbFee) * exchangeRate.ckbScale + udtDelta * exchangeRate.udtScale;
 
-      if (ckbAllowance >= 0n && udtAllowance >= 0n && gain > bestGain) {
+      if (
+        ckbAllowance >= 0n &&
+        udtAllowance >= 0n &&
+        (partials.length === 0 || gain > 0n) &&
+        gain > bestGain
+      ) {
         best = { ckbDelta, udtDelta, partials };
         bestGain = gain;
       }
     }
   }
-  return best ?? { ckbDelta: 0n, udtDelta: 0n, partials: [] };
+  return best;
 }
 
 function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boolean {
