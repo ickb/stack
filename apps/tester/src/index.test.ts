@@ -670,12 +670,14 @@ describe("planTesterTransaction", () => {
 
   it("fails explicit CKB reserve stress scenarios when completed transactions violate reserve", () => {
     const lock = script("11");
+    const spent = capacityCell(ccc.fixedPointFrom(3000), lock, "08");
     const tx = ccc.Transaction.default();
+    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
     tx.addOutput({ capacity: ccc.fixedPointFrom(1999), lock });
 
     expect(() => enforceTesterPlainCkbReserve(
       tx,
-      testerState({ availableCkbBalance: 0n }),
+      testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), capacityCells: [spent] }),
       [lock],
       "all-ckb-limit-order",
     )).toThrow(TesterTerminalError);
