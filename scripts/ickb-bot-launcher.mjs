@@ -431,7 +431,7 @@ function publicErrorMessage(error) {
   return error instanceof Error ? error.message : "Unknown launcher error";
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? "")) {
   const result = await runBotLauncher();
   if (result.signal !== undefined) {
     process.kill(process.pid, result.signal);

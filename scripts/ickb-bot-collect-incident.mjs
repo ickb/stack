@@ -336,8 +336,9 @@ async function processSourceLines(path, label, dependencies, onLine) {
   try {
     let lineNumber = 0;
     let pending = "";
+    const decoder = new TextDecoder("utf-8");
     for await (const chunk of handle.readableWebStream({ type: "bytes" })) {
-      pending += Buffer.from(chunk).toString("utf8");
+      pending += decoder.decode(chunk, { stream: true });
       const parts = pending.split("\n");
       pending = parts.pop() ?? "";
       for (const part of parts) {
@@ -345,6 +346,7 @@ async function processSourceLines(path, label, dependencies, onLine) {
         onLine(`${part}\n`, lineNumber);
       }
     }
+    pending += decoder.decode();
     if (pending !== "") {
       onLine(pending, lineNumber + 1);
     }

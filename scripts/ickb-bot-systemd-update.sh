@@ -100,6 +100,7 @@ unit_has_directive() {
   local key=$2
   local expected=$3
   local line
+  local value
   local in_service=0
 
   while IFS= read -r line; do
@@ -110,11 +111,35 @@ unit_has_directive() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if [[ ${line} == "${key}=${expected}" ]]; then
+    if value=$(unit_directive_value "${line}" "${key}") && [[ ${value} == "${expected}" ]]; then
       return 0
     fi
   done <<<"${unit_text}"
   return 1
+}
+
+unit_directive_value() {
+  local line=$1
+  local expected_key=$2
+  if [[ ${line} != *=* ]]; then
+    return 1
+  fi
+
+  local key=${line%%=*}
+  local value=${line#*=}
+  key=$(trim_unit_field "${key}")
+  value=$(trim_unit_field "${value}")
+  if [[ ${key} != "${expected_key}" ]]; then
+    return 1
+  fi
+  printf '%s\n' "${value}"
+}
+
+trim_unit_field() {
+  local value=$1
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "${value}"
 }
 
 unit_launcher_log_root() {
@@ -126,6 +151,7 @@ unit_launcher_log_root() {
   local with_log_root_prefix="${prefix}--log-root "
   local suffix_with_separator=" ${suffix}"
   local line
+  local exec_start
   local in_service=0
 
   while IFS= read -r line; do
@@ -136,12 +162,15 @@ unit_launcher_log_root() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if [[ ${line} == "${prefix}${suffix}" ]]; then
+    if ! exec_start=$(unit_directive_value "${line}" "ExecStart"); then
+      continue
+    fi
+    if [[ ${exec_start} == "${prefix#ExecStart=}${suffix}" ]]; then
       printf '%s\n' "${default_log_root}"
       return 0
     fi
-    if [[ ${line} == "${with_log_root_prefix}"*"${suffix_with_separator}" ]]; then
-      local rest=${line#"${with_log_root_prefix}"}
+    if [[ ${exec_start} == "${with_log_root_prefix#ExecStart=}"*"${suffix_with_separator}" ]]; then
+      local rest=${exec_start#"${with_log_root_prefix#ExecStart=}"}
       local log_root_length=$(( ${#rest} - ${#suffix_with_separator} ))
       local log_root=${rest:0:log_root_length}
       if [[ -n ${log_root} && ${log_root} == /* && ${log_root} != *[[:space:]]* ]]; then

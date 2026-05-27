@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -163,6 +163,40 @@ test("includes a bounded tail when stderr has no timestamps", async () => {
     assert.equal(summary.sources["bot.stderr.log"].undatedLines, 205);
     assert.equal(summary.sources["bot.stderr.log"].undatedTailIncluded, true);
     assert.equal(summary.sources["bot.stderr.log"].undatedTailLimit, 200);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+test("decodes source log UTF-8 across chunk boundaries", async () => {
+  const dir = await tempDir();
+  try {
+    const marker = "snowman ☃";
+    const logDir = await writeFixtureLogs(dir, {
+      events: [botEvent("2026-05-25T10:00:00.000Z", "bot.run.started", { marker })],
+      launches: [],
+      stderr: [],
+    });
+    const eventPath = join(logDir, "bot.events.ndjson");
+    const bytes = Buffer.from(await readFile(eventPath, "utf8"));
+    const splitAt = bytes.indexOf(Buffer.from("☃")) + 1;
+
+    const result = await collectIncident({
+      argv: commonArgs(dir),
+      dependencies: {
+        open(path, flags, mode) {
+          if (path === eventPath && typeof flags === "number") {
+            return splitReadHandle(path, [bytes.subarray(0, splitAt), bytes.subarray(splitAt)]);
+          }
+          return open(path, flags, mode);
+        },
+      },
+      now: () => new Date("2026-05-25T12:00:00.000Z"),
+      root: rootDir,
+    });
+
+    const events = await readFile(join(result.incidentDir, "bot.events.ndjson"), "utf8");
+    assert.match(events, new RegExp(marker, "u"));
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
@@ -489,4 +523,25 @@ function commonArgs(logRoot) {
 
 async function mode(path) {
   return (await stat(path)).mode & 0o777;
+}
+
+async function splitReadHandle(path, chunks) {
+  return {
+    close() {
+      return Promise.resolve();
+    },
+    readableWebStream() {
+      return new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(chunk);
+          }
+          controller.close();
+        },
+      });
+    },
+    stat() {
+      return stat(path);
+    },
+  };
 }
