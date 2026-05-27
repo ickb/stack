@@ -306,8 +306,8 @@ export type RuntimeConfig = {
   privateKey: `0x${string}`;
   rpcUrl?: string;
   sleepIntervalMs: number;
-  maxIterations: number | undefined;
-  maxRetryableAttempts: number | undefined;
+  maxIterations?: number;
+  maxRetryableAttempts?: number;
 };
 
 export interface SecretRedactionContext {
