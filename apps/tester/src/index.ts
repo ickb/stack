@@ -260,7 +260,7 @@ async function main(): Promise<void> {
         },
       });
     } catch (e) {
-      stopAfterLog = handleLoopError(executionLog, e, { rpcUrl });
+      stopAfterLog = handleLoopError(executionLog, e);
       if (e instanceof TesterTerminalError) {
         process.exitCode = 1;
         stopAfterLog = true;

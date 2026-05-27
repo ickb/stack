@@ -5,23 +5,24 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
+import * as nodeUtils from "./index.js";
 import {
   assertChainPreflight,
   CHAIN_IDENTITIES,
   createPublicClient,
   formatCkb,
   handleLoopError,
+  isRetryableCkbStateRaceError,
+  isRetryableRpcTransportError,
   logExecution,
   parseMaxIterations,
-  parseMaxRetryableAttempts,
   parseRuntimeConfig,
   parsePrivateKey,
+  postTransactionAccountPlainCkbBalance,
   readRuntimeConfigEnv,
   parseSleepInterval,
   randomSleepIntervalMs,
   readChainPreflight,
-  redactRpcUrl,
-  redactSecretText,
   reachedMaxIterations,
   signerAccountLocks,
   STOP_EXIT_CODE,
@@ -31,6 +32,14 @@ import {
 } from "./index.js";
 
 describe("node utilities", () => {
+  it("does not export generic secret-policing helpers", () => {
+    expect("assertNoPrivateKeyMaterial" in nodeUtils).toBe(false);
+    expect("assertNoSecretMaterial" in nodeUtils).toBe(false);
+    expect("SecretMaterialLogError" in nodeUtils).toBe(false);
+    expect("PrivateKeyMaterialLogError" in nodeUtils).toBe(false);
+    expect("sanitizeLogValue" in nodeUtils).toBe(false);
+  });
+
   it("formats CKB values without losing bigint precision", () => {
     const whole = 123456789012345678901234567890n;
 
@@ -46,8 +55,8 @@ describe("node utilities", () => {
     expect(parseSleepInterval(1073741, "BOT_CONFIG_FILE")).toBe(1073741000);
   });
 
-  it("rejects invalid sleep intervals", () => {
-    for (const value of [undefined, Number.NaN, Infinity, -1, 0, 0.5, 1073741.824, 9007199254741]) {
+  it("rejects missing and sub-second sleep intervals", () => {
+    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5, 1073741.824, 9007199254741]) {
       expect(() => parseSleepInterval(value, "BOT_CONFIG_FILE")).toThrow(
         "Invalid env BOT_CONFIG_FILE",
       );
@@ -67,11 +76,6 @@ describe("node utilities", () => {
     expect(() => parseMaxIterations(1.5, "BOT_CONFIG_FILE")).toThrow(
       "Invalid env BOT_CONFIG_FILE",
     );
-    expect(parseMaxRetryableAttempts(undefined, "BOT_CONFIG_FILE")).toBeUndefined();
-    expect(parseMaxRetryableAttempts(3, "BOT_CONFIG_FILE")).toBe(3);
-    expect(() => parseMaxRetryableAttempts(0, "BOT_CONFIG_FILE")).toThrow(
-      "Invalid env BOT_CONFIG_FILE",
-    );
   });
 
   it("randomizes sleep with triangular jitter centered on the interval", () => {
@@ -84,6 +88,7 @@ describe("node utilities", () => {
       sum + randomSleepIntervalMs(1000, sequence(first, 1 - first))
     ), 0) / samples.length;
     expect(average).toBe(1000);
+    expect(randomSleepIntervalMs(1073741823, sequence(0.999999, 0.999999))).toBeLessThanOrEqual(2147483647);
   });
 
   it("parses private keys as exact 0x-prefixed lowercase hex", () => {
@@ -255,6 +260,37 @@ describe("node utilities", () => {
     ]);
   });
 
+  it("counts post-transaction account plain CKB from unspent cells and new outputs", () => {
+    const lock = script("11");
+    const otherLock = script("22");
+    const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "aa");
+    const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "bb");
+    const typed = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("cc"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
+      outputData: "0x",
+    });
+    const data = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("dd"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
+      outputData: "0x1234",
+    });
+    const tx = ccc.Transaction.default();
+    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+    tx.outputs.push(
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(300), lock }),
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(500), lock, type: script("33") }),
+      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(700), lock: otherLock }),
+    );
+    tx.outputsData.push("0x", "0x", "0x");
+
+    expect(postTransactionAccountPlainCkbBalance(
+      tx,
+      [spent, unspent, typed, data],
+      [lock],
+    )).toBe(ccc.fixedPointFrom(2300));
+  });
+
   it("creates network-specific public clients and forwards custom RPC URLs", () => {
     const mainnet = createPublicClient("mainnet", "https://mainnet.example");
     const testnet = createPublicClient("testnet", undefined);
@@ -296,12 +332,10 @@ describe("node utilities", () => {
       tipHash: byte32FromByte("22"),
       tipNumber: 123n,
       tipTimestamp: 456n,
-      url: "https://user:pass@testnet.example/rpc/path?token=secret&plain=value",
     });
 
     await expect(readChainPreflight(client, "testnet")).resolves.toEqual({
       chain: "testnet",
-      redactedRpcUrl: "https://redacted:redacted@testnet.example/...?token=redacted&plain=redacted",
       expected: CHAIN_IDENTITIES.testnet,
       observed: {
         genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
@@ -326,7 +360,6 @@ describe("node utilities", () => {
   it("rejects mismatched public chain identity evidence", () => {
     expect(() => assertChainPreflight({
       chain: "testnet",
-      redactedRpcUrl: "https://rpc.example/",
       expected: CHAIN_IDENTITIES.testnet,
       observed: {
         genesisHash: CHAIN_IDENTITIES.mainnet.genesisHash,
@@ -343,97 +376,100 @@ describe("node utilities", () => {
     );
   });
 
-  it("redacts RPC URLs when chain preflight reads fail", async () => {
+  it("hides non-public preflight failure details before loop logging starts", async () => {
     const client = preflightClient({
       addressPrefix: "ckt",
       genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
       tipHash: byte32FromByte("22"),
       tipNumber: 123n,
       tipTimestamp: 456n,
-      url: "https://user:pass@testnet.example/rpc/path?token=secret",
     });
     client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
-      throw new Error("RPC failed: https://user:pass@testnet.example/rpc/path?token=secret user pass secret");
+      throw new Error("RPC failed via https://user:pass@testnet.example/path?token=secret");
     };
 
     await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      "RPC failed: https://redacted:redacted@testnet.example/...?token=redacted",
+      "Failed to verify testnet RPC chain identity",
     );
-    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/secret|user:pass/u);
-    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/\buser\b|\bpass\b/u);
+    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/user|pass|secret|testnet\.example/u);
   });
 
-  it("redacts non-Error preflight failures without losing thrown values", async () => {
+  it("hides non-Error preflight failures before loop logging starts", async () => {
     const client = preflightClient({
       addressPrefix: "ckt",
       genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
       tipHash: byte32FromByte("22"),
       tipNumber: 123n,
       tipTimestamp: 456n,
-      url: "https://testnet.example/rpc/path?token=secret",
     });
     client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Covers defensive handling for non-Error RPC failures.
       return Promise.reject({
         reason: "failed",
         amount: 9007199254740993n,
-        token: "secret",
+        reasonCode: "transport",
       });
     };
 
     await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      '{"reason":"failed","amount":"9007199254740993"}',
+      "Failed to verify testnet RPC chain identity",
     );
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
-      cause: {
-        reason: "failed",
-        amount: "9007199254740993",
-      },
+  });
+
+  it("normalizes retryable preflight transport failures", async () => {
+    const client = preflightClient({
+      addressPrefix: "ckt",
+      genesisHash: CHAIN_IDENTITIES.testnet.genesisHash,
+      tipHash: byte32FromByte("22"),
+      tipNumber: 123n,
+      tipTimestamp: 456n,
     });
+    client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
+      throw new TypeError("fetch failed");
+    };
+
+    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
+      message: "fetch failed",
+      cause: { name: "TypeError", message: "fetch failed" },
+    });
+    await expect(verifyChainPreflight(client, "testnet").catch((error: unknown) => {
+      expect(isRetryableRpcTransportError(error)).toBe(true);
+    })).resolves.toBeUndefined();
   });
 
-  it("redacts credential-bearing RPC URLs", () => {
-    expect(redactRpcUrl("https://rpc.example/")).toBe("https://rpc.example/");
-    expect(redactRpcUrl("https://rpc.example/path?token=abc&key=def")).toBe(
-      "https://rpc.example/...?token=redacted&key=redacted",
-    );
-    expect(redactRpcUrl("not a url")).toBe("<invalid-url>");
+  it("classifies retryable RPC transport failures", async () => {
+    const { isRetryableRpcTransportError } = await import("./index.js");
+
+    expect(isRetryableRpcTransportError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryableRpcTransportError(new Error("fetch failed", { cause: new TypeError("fetch failed") }))).toBe(true);
+    expect(isRetryableRpcTransportError(new Error("fetch failed"))).toBe(false);
+    expect(isRetryableRpcTransportError(new Error("Invalid testnet RPC chain identity"))).toBe(false);
   });
 
-  it("redacts runtime secrets from text", () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+  it("classifies observed CKB state-race send failures", () => {
+    expect(isRetryableCkbStateRaceError(Object.assign(new Error("Client request error PoolRejectedRBF"), {
+      code: -1111,
+      data: "RBFRejected(\"Tx's current fee is 11795, expect it to >= 12326 to replace old txs\")",
+      currentFee: 11795n,
+      leastFee: 12326n,
+    }))).toBe(true);
+    expect(isRetryableCkbStateRaceError(Object.assign(new Error("Client request error TransactionFailedToResolve"), {
+      code: -301,
+      data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))`,
+    }))).toBe(true);
+    expect(isRetryableCkbStateRaceError({
+      code: -301,
+      data: `Resolve(Dead(OutPoint(0x${"11".repeat(32)}00000000)))`,
+    })).toBe(true);
+    expect(isRetryableCkbStateRaceError(Object.assign(new Error("Client request error PoolRejectedDuplicatedTransaction"), {
+      code: -1107,
+      data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
+      txHash: `0x${"22".repeat(32)}`,
+    }))).toBe(true);
 
-    expect(redactSecretText(
-      `failed for ${privateKey} via ${rpcUrl}`,
-      { privateKey, rpcUrl },
-    )).toBe(
-      "failed for <redacted-private-key> via https://redacted:redacted@testnet.example/...?token=redacted",
-    );
-    expect(redactSecretText(
-      "fetch failed for https://testnet.example/rpc/path?token=secret auth user:pass",
-      { rpcUrl },
-    )).toBe(
-      "fetch failed for https://testnet.example/rpc/path?token=<redacted-rpc-query> auth " +
-        "<redacted-rpc-username>:<redacted-rpc-password>",
-    );
-    expect(redactSecretText(
-      "fetch failed for token=a%2Fb decoded=a/b plain=value",
-      { rpcUrl: "https://testnet.example/rpc/path?token=a%2Fb&plain=value" },
-    )).toBe(
-      "fetch failed for token=<redacted-rpc-query> decoded=<redacted-rpc-query> " +
-        "plain=<redacted-rpc-query>",
-    );
-    expect(redactSecretText("empty secrets stay intact", { privateKey: "", rpcUrl: "" })).toBe(
-      "empty secrets stay intact",
-    );
-    expect(redactSecretText(
-      "fetch failed for https://%E0%A4%A@testnet.example/rpc?token=secret %E0%A4%A",
-      { rpcUrl: "https://%E0%A4%A@testnet.example/rpc?token=secret" },
-    )).toBe(
-      "fetch failed for https://redacted@testnet.example/...?token=redacted " +
-        "<redacted-rpc-username>",
-    );
+    expect(isRetryableCkbStateRaceError({ code: -301, data: "Resolve(InvalidHeader(Byte32(0x...)))" })).toBe(false);
+    expect(isRetryableCkbStateRaceError({ code: -302, data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))` })).toBe(false);
+    expect(isRetryableCkbStateRaceError(new Error("RBFRejected"))).toBe(false);
   });
 
   it("serializes error-like values for JSON logs", () => {
@@ -449,6 +485,30 @@ describe("node utilities", () => {
     const emptyLog: Record<string, unknown> = {};
     expect(handleLoopError(emptyLog, undefined)).toBe(false);
     expect(emptyLog.error).toBe("Empty Error");
+  });
+
+  it("preserves public CKB RPC Error metadata in execution logs", () => {
+    const executionLog: Record<string, unknown> = {};
+    const error = Object.assign(new Error("Client request error TransactionFailedToResolve"), {
+      code: -301,
+      data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))`,
+      outPoint: {
+        txHash: `0x${"11".repeat(32)}`,
+        index: 0n,
+      },
+    });
+
+    expect(handleLoopError(executionLog, error)).toBe(false);
+    expect(executionLog.error).toMatchObject({
+      name: "Error",
+      message: "Client request error TransactionFailedToResolve",
+      code: -301,
+      data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))`,
+      outPoint: {
+        txHash: `0x${"11".repeat(32)}`,
+        index: "0",
+      },
+    });
   });
 
   it("stops after broadcast confirmation timeouts", () => {
@@ -473,83 +533,55 @@ describe("node utilities", () => {
       message: "Transaction confirmation timed out",
       txHash,
       status: "sent",
+      isTimeout: true,
     });
 
     process.exitCode = undefined;
   });
 
-  it("redacts runtime secrets from loop errors", () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
-    const error = new Error(`failed for ${privateKey} via ${rpcUrl}`, {
-      cause: new Error(`nested ${privateKey} via ${rpcUrl}`),
-    });
-    error.stack = `stack with ${privateKey} and ${rpcUrl}`;
-    (error.cause as Error).stack = `nested stack with ${privateKey} and ${rpcUrl}`;
-    const executionLog: Record<string, unknown> = {};
+  it("records non-timeout transaction confirmation failures distinctly", () => {
+    const txHash = byte32FromByte("34");
+    const executionLog: Record<string, unknown> = { txHash };
 
-    expect(handleLoopError(executionLog, error, { privateKey, rpcUrl })).toBe(false);
-    const serialized = JSON.stringify(executionLog);
-
-    expect(serialized).not.toContain(privateKey);
-    expect(serialized).not.toContain("user:pass");
-    expect(serialized).not.toContain("secret");
-    expect(serialized).toContain("<redacted-private-key>");
-    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+    expect(handleLoopError(executionLog, transactionError(false, txHash))).toBe(false);
     expect(executionLog.error).toMatchObject({
-      cause: {
-        name: "Error",
-        message: "nested <redacted-private-key> via " +
-          "https://redacted:redacted@testnet.example/...?token=redacted",
-      },
+      name: "TransactionConfirmationError",
+      message: "Transaction confirmation timed out",
+      txHash,
+      status: "rejected",
+      isTimeout: false,
     });
   });
 
-  it("redacts runtime secrets from non-Error loop failures", () => {
-    const privateKey = `0x${"11".repeat(32)}`;
-    const rpcUrl = "https://user:pass@testnet.example/rpc/path?token=secret";
+  it("preserves CKB debugging metadata from non-Error loop failures", () => {
+    const rpcUrl = "https://testnet.example/rpc/path";
     const executionLog: Record<string, unknown> = {};
     const circular: Record<string, unknown> = {};
     circular.self = circular;
 
     expect(handleLoopError(executionLog, {
-      message: `failed for ${privateKey} via ${rpcUrl}`,
-      privateKey,
+      message: `failed via ${rpcUrl}`,
       rpcUrl,
       amount: 9007199254740993n,
       nested: {
-        private_key: privateKey,
         rpc_url: rpcUrl,
-        password: "hunter2",
-        apiKey: "api-key-value",
-        accessToken: "secret-token",
-        api_secret: "secret-value",
-        message: `nested ${privateKey}`,
+        message: "nested public evidence",
       },
       circular,
-    }, { privateKey, rpcUrl })).toBe(false);
+    })).toBe(false);
     const serialized = JSON.stringify(executionLog);
 
-    expect(serialized).not.toContain(privateKey);
-    expect(serialized).not.toContain("user:pass");
-    expect(serialized).not.toContain("secret");
-    expect(serialized).toContain("<redacted-private-key>");
-    expect(serialized).toContain("https://redacted:redacted@testnet.example/...?token=redacted");
+    expect(serialized).toContain(rpcUrl);
     expect(executionLog.error).toMatchObject({
-      message: "failed for <redacted-private-key> via " +
-        "https://redacted:redacted@testnet.example/...?token=redacted",
+      message: "failed via " + rpcUrl,
+      rpcUrl,
       amount: "9007199254740993",
-      nested: { message: "nested <redacted-private-key>" },
+      nested: {
+        rpc_url: rpcUrl,
+        message: "nested public evidence",
+      },
       circular: { self: "[Circular]" },
     });
-    expect(executionLog.error).not.toHaveProperty("rpcUrl");
-    expect(executionLog.error).not.toHaveProperty("privateKey");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("rpc_url");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("private_key");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("password");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("apiKey");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("accessToken");
-    expect((executionLog.error as { nested?: unknown }).nested).not.toHaveProperty("api_secret");
   });
 
   it("logs one JSON entry with elapsed seconds", () => {
@@ -603,41 +635,81 @@ describe("node utilities", () => {
     stdoutWrite.mockRestore();
   });
 
-  it("preserves public CKB metadata in JSON logs", () => {
+  it("preserves CKB debugging metadata", () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const txHash = byte32FromByte("55");
 
     writeJsonLine({
       txHash,
       witness: "witnesses: 0x" + "22".repeat(80),
+      witnesses: ["0x" + "22".repeat(80)],
+      inputs: [{}],
+      outputs: [{}],
+      outputsData: ["0x" + "22".repeat(80)],
+      cellDeps: [{}],
+      headerDeps: [{}],
       signedTx: "signed transaction 0x" + "33".repeat(80),
+      tx: { inputs: [], outputs: [], witnesses: [] },
+      rawTransaction: { inputs: [], outputs: [], witnesses: [] },
       script: JSON.stringify({
         codeHash: "0x" + "44".repeat(32),
         hashType: "type",
         args: "0x" + "55".repeat(20),
       }),
+      lock: { codeHash: "0x" + "44".repeat(32), hashType: "type", args: "0x" },
+      cell: { cellOutput: { lock: script("66") } },
+      transactionShape: { inputs: 1, outputs: 2, witnesses: 3 },
       env: "testnet",
+      environment: { BOT_CONFIG_FILE: "/run/credentials/config.json" },
+      config: { chain: "testnet" },
     });
 
     const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
       txHash: string;
       witness: string;
+      witnesses: string[];
+      inputs: unknown[];
+      outputs: unknown[];
+      outputsData: string[];
+      cellDeps: unknown[];
+      headerDeps: unknown[];
       signedTx: string;
+      tx: { inputs: unknown[]; outputs: unknown[]; witnesses: unknown[] };
+      rawTransaction: { inputs: unknown[]; outputs: unknown[]; witnesses: unknown[] };
       script: string;
+      lock: { codeHash: string; hashType: string; args: string };
+      cell: { cellOutput: { lock: unknown } };
+      transactionShape: { inputs: number; outputs: number; witnesses: number };
       env: string;
+      environment: { BOT_CONFIG_FILE: string };
+      config: { chain: string };
     };
     expect(parsed.txHash).toBe(txHash);
     expect(parsed.witness).toBe("witnesses: 0x" + "22".repeat(80));
+    expect(parsed.witnesses).toEqual(["0x" + "22".repeat(80)]);
+    expect(parsed.inputs).toEqual([{}]);
+    expect(parsed.outputs).toEqual([{}]);
+    expect(parsed.outputsData).toEqual(["0x" + "22".repeat(80)]);
+    expect(parsed.cellDeps).toEqual([{}]);
+    expect(parsed.headerDeps).toEqual([{}]);
     expect(parsed.signedTx).toBe("signed transaction 0x" + "33".repeat(80));
+    expect(parsed.tx).toEqual({ inputs: [], outputs: [], witnesses: [] });
+    expect(parsed.rawTransaction).toEqual({ inputs: [], outputs: [], witnesses: [] });
     expect(parsed.script).toBe(JSON.stringify({
       codeHash: "0x" + "44".repeat(32),
       hashType: "type",
       args: "0x" + "55".repeat(20),
     }));
+    expect(parsed.lock).toEqual({ codeHash: "0x" + "44".repeat(32), hashType: "type", args: "0x" });
+    expect(parsed.cell).toHaveProperty("cellOutput");
+    expect(parsed.transactionShape).toEqual({ inputs: 1, outputs: 2, witnesses: 3 });
     expect(parsed.env).toBe("testnet");
+    expect(parsed.environment).toEqual({ BOT_CONFIG_FILE: "/run/credentials/config.json" });
+    expect(parsed.config).toEqual({ chain: "testnet" });
 
     stdoutWrite.mockRestore();
   });
+
 });
 
 function sequence(...values: number[]): () => number {
@@ -654,24 +726,29 @@ function transactionError(isTimeout: boolean, txHash = byte32FromByte("11")): Er
   });
 }
 
+function capacityCell(capacity: bigint, lock: ccc.Script, txByte: string): ccc.Cell {
+  return ccc.Cell.from({
+    outPoint: { txHash: byte32FromByte(txByte), index: 0n },
+    cellOutput: { capacity, lock },
+    outputData: "0x",
+  });
+}
+
 function preflightClient({
   addressPrefix,
   genesisHash,
   tipHash,
   tipNumber,
   tipTimestamp,
-  url,
 }: {
   addressPrefix: string;
   genesisHash: `0x${string}`;
   tipHash: `0x${string}`;
   tipNumber: bigint;
   tipTimestamp: bigint;
-  url: string;
 }): ChainPreflightClient {
   return {
     addressPrefix,
-    url,
     getHeaderByNumber: async (blockNumber): Promise<ccc.ClientBlockHeader | undefined> => {
       await Promise.resolve();
       if (blockNumber !== 0n) {

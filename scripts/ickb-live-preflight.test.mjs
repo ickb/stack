@@ -6,9 +6,10 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   ckbReserveForRole,
+  isPublicChainIdentityError,
   parseArgs,
   publicScript,
-  redactErrorMessage,
+  publicErrorMessage,
   runPreflight,
   usage,
 } from "./ickb-live-preflight.mjs";
@@ -41,27 +42,14 @@ test("preflight CLI exposes public script shape only", () => {
   });
 });
 
-test("preflight CLI redacts private key and RPC URL in errors", () => {
-  const privateKey = `0x${"11".repeat(32)}`;
-  const rpcUrl = "https://user:pass@testnet.example/path?token=secret";
-  const redacted = "https://redacted:redacted@testnet.example/...?token=redacted";
-  const error = new Error(`failed with ${privateKey} using ${rpcUrl} user pass secret`);
-
-  const message = redactErrorMessage(error, {
-    privateKey,
-    rpcUrl,
-    redactedRpcUrl: redacted,
-    redactSecretText,
-  });
-
+test("preflight CLI keeps public error messages and classifies chain identity errors", () => {
+  assert.equal(publicErrorMessage(new Error("public failure")), "public failure");
+  assert.equal(publicErrorMessage(undefined), "Unknown error");
   assert.equal(
-    message,
-    `failed with <redacted-private-key> using ${redacted} ` +
-      "<redacted-rpc-username> <redacted-rpc-password> <redacted-rpc-query>",
+    isPublicChainIdentityError(new Error("Invalid testnet RPC chain identity: genesis hash expected 0x1 observed 0x2")),
+    true,
   );
-  assert.doesNotMatch(message, /0x11/u);
-  assert.doesNotMatch(message, /secret/u);
-  assert.doesNotMatch(message, /\buser\b|\bpass\b/u);
+  assert.equal(isPublicChainIdentityError(new Error("Invalid private key")), false);
 });
 
 test("preflight CLI exposes role-specific CKB reserves", () => {
@@ -101,7 +89,6 @@ test("preflight run reports public evidence for a generated unfunded key", async
     assert.equal(report.maxIterations, 1);
     assert.equal(report.maxRetryableAttempts, 3);
     assert.equal(report.rpcConfigured, true);
-    assert.equal(report.chainIdentity.redactedRpcUrl, "https://redacted:redacted@testnet.example/...?token=redacted");
     assert.equal(report.chainIdentity.matches.genesisHash, true);
     assert.equal(report.key.recommendedAddress, "ckt1generatedoffline");
     assert.deepEqual(report.key.primaryLock, {
@@ -314,6 +301,80 @@ test("preflight preserves parse failure cause without leaking config contents", 
   }
 });
 
+test("preflight marks retryable transport failures without leaking RPC URLs", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://testnet.example/path?token=secret",
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+    const dependencies = mockDependencies();
+    const fetchFailure = new TypeError("fetch failed");
+    dependencies.nodeUtils.verifyChainPreflight = async () => {
+      throw fetchFailure;
+    };
+    dependencies.nodeUtils.isRetryableRpcTransportError = (error) => error === fetchFailure;
+
+    await assert.rejects(
+      () => runPreflight({
+        configPath,
+        role: "bot",
+        root: dir,
+        dependencies: { ...dependencies, checkIgnored: () => true },
+      }),
+      (error) => {
+        assert(error instanceof Error);
+        assert.equal(error.name, "RetryablePreflightError");
+        assert.equal(error.message, "fetch failed");
+        assert.doesNotMatch(error.message, /token=secret/u);
+        return true;
+      },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight preserves public wrong-chain evidence for supervisor classification", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+    const dependencies = mockDependencies();
+    dependencies.nodeUtils.verifyChainPreflight = async () => {
+      throw new Error("Invalid testnet RPC chain identity: genesis hash expected 0x1 observed 0x2");
+    };
+
+    await assert.rejects(
+      () => runPreflight({
+        configPath,
+        role: "bot",
+        root: dir,
+        dependencies: { ...dependencies, checkIgnored: () => true },
+      }),
+      (error) => {
+        assert(error instanceof Error);
+        assert.equal(error.message, "Invalid testnet RPC chain identity: genesis hash expected 0x1 observed 0x2");
+        assert.doesNotMatch(error.message, new RegExp(privateKey, "u"));
+        return true;
+      },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("preflight refuses non-ignored and out-of-repo config paths", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
   try {
@@ -396,8 +457,6 @@ function mockDependencies(options = {}) {
         maxRetryableAttempts: parsed.maxRetryableAttempts,
       };
     },
-    redactRpcUrl: () => "https://redacted:redacted@testnet.example/...?token=redacted",
-    redactSecretText,
     createPublicClient: (chain, rpcUrl) => {
       options.createPublicClientCalls?.push({ chain, rpcUrl });
       return {
@@ -409,7 +468,6 @@ function mockDependencies(options = {}) {
     },
     verifyChainPreflight: async () => ({
       chain: "testnet",
-      redactedRpcUrl: "https://redacted:redacted@testnet.example/...?token=redacted",
       expected: { genesisHash: expectedGenesis, addressPrefix: "ckt" },
       observed: {
         genesisHash: expectedGenesis,
@@ -418,6 +476,7 @@ function mockDependencies(options = {}) {
       },
       matches: { genesisHash: true, addressPrefix: true },
     }),
+    isRetryableRpcTransportError: () => false,
     signerAccountLocks: async (_signer, primaryLock) => [primaryLock],
     formatCkb: (value) => value.toString(),
   };
@@ -461,21 +520,6 @@ function mockDependencies(options = {}) {
       convert: (_toIckb, value) => value,
     },
   };
-}
-
-function redactSecretText(text, secrets = {}) {
-  let redacted = text;
-  if (secrets.privateKey) {
-    redacted = redacted.split(secrets.privateKey).join("<redacted-private-key>");
-  }
-  if (secrets.rpcUrl) {
-    redacted = redacted
-      .split(secrets.rpcUrl).join(secrets.redactedRpcUrl)
-      .split("user").join("<redacted-rpc-username>")
-      .split("pass").join("<redacted-rpc-password>")
-      .split("secret").join("<redacted-rpc-query>");
-  }
-  return redacted;
 }
 
 function bigintReplacer(_key, value) {

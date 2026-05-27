@@ -51,13 +51,12 @@ export function publicScript(script) {
   };
 }
 
-export function redactErrorMessage(error, secrets = {}) {
-  let message = error instanceof Error ? error.message : String(error ?? "Unknown error");
-  if (secrets.privateKey) {
-    message = message.split(secrets.privateKey).join("<redacted-private-key>");
-  }
-  message = secrets.redactSecretText?.(message, secrets) ?? message;
-  return message;
+export function publicErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error ?? "Unknown error");
+}
+
+export function isPublicChainIdentityError(error) {
+  return error instanceof Error && error.message.includes("Invalid") && error.message.includes("chain identity");
 }
 
 export function ckbReserveForRole(role) {
@@ -94,13 +93,6 @@ export async function runPreflight({ configPath, role, root = rootDir, dependenc
     core,
   } = dependencies ?? await loadBuiltStack(root);
 
-  const secrets = {
-    privateKey: runtimeConfig.privateKey,
-    rpcUrl: runtimeConfig.rpcUrl,
-    redactedRpcUrl: runtimeConfig.rpcUrl === undefined ? undefined : nodeUtils.redactRpcUrl(runtimeConfig.rpcUrl),
-    redactSecretText: nodeUtils.redactSecretText,
-  };
-
   try {
     return await buildPreflightReport({
       runtimeConfig,
@@ -111,7 +103,18 @@ export async function runPreflight({ configPath, role, root = rootDir, dependenc
       core,
     });
   } catch (error) {
-    throw new Error(redactErrorMessage(error, secrets));
+    const retryable = nodeUtils.isRetryableRpcTransportError?.(error) === true;
+    const preflightError = new Error(
+      retryable
+        ? "fetch failed"
+        : isPublicChainIdentityError(error)
+          ? error.message
+          : "Live preflight failed",
+    );
+    if (retryable) {
+      preflightError.name = "RetryablePreflightError";
+    }
+    throw preflightError;
   }
 }
 
@@ -212,7 +215,7 @@ export async function main(argv, io = {}) {
   try {
     args = parseArgs(argv);
   } catch (error) {
-    stderr.write(`${redactErrorMessage(error)}\n${usage()}\n`);
+    stderr.write(`${publicErrorMessage(error)}\n${usage()}\n`);
     return 1;
   }
   if (args.help) {
@@ -228,7 +231,10 @@ export async function main(argv, io = {}) {
     stdout.write(`${JSON.stringify(report, jsonLogReplacer, 2)}\n`);
     return 0;
   } catch (error) {
-    stderr.write(`Live preflight failed: ${redactErrorMessage(error)}\n`);
+    const label = error instanceof Error && error.name === "RetryablePreflightError"
+      ? "Live preflight retryable failure"
+      : "Live preflight failed";
+    stderr.write(`${label}: ${publicErrorMessage(error)}\n`);
     return 1;
   }
 }

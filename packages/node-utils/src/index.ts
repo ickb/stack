@@ -7,8 +7,7 @@ import { setTimeout } from "node:timers";
 
 const CKB = 100000000n;
 const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
-// Jitter can double the configured interval; keep the result within Node's timer limit.
-const MAX_SAFE_SLEEP_INTERVAL_MS = 1_073_741_823;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 export const STOP_EXIT_CODE = 2;
 
@@ -44,12 +43,11 @@ export const CHAIN_IDENTITIES = {
 
 export type ChainPreflightClient = Pick<
   ccc.Client,
-  "addressPrefix" | "getHeaderByNumber" | "getTipHeader" | "url"
+  "addressPrefix" | "getHeaderByNumber" | "getTipHeader"
 >;
 
 export interface ChainPreflightEvidence {
   chain: SupportedChain;
-  redactedRpcUrl: string;
   expected: ChainIdentity;
   observed: {
     genesisHash: ccc.Hex;
@@ -86,7 +84,6 @@ export async function readChainPreflight(
 
   return {
     chain,
-    redactedRpcUrl: redactRpcUrl(client.url),
     expected,
     observed: {
       genesisHash: genesis.hash,
@@ -132,130 +129,43 @@ export async function verifyChainPreflight(
   try {
     return assertChainPreflight(await readChainPreflight(client, chain));
   } catch (error) {
-    const secrets = { rpcUrl: client.url };
-    throw new Error(redactRpcUrlInError(error, secrets), {
-      cause: errorToLogValue(error, secrets, new WeakSet()),
-    });
+    if (isPublicChainPreflightFailure(error, chain)) {
+      throw new Error(errorMessage(error), {
+        cause: errorToLogValue(error, new WeakSet()),
+      });
+    }
+    if (isRetryableRpcTransportError(error)) {
+      throw new Error("fetch failed", {
+        cause: { name: "TypeError", message: "fetch failed" },
+      });
+    }
+    throw new Error(`Failed to verify ${chain} RPC chain identity`);
   }
 }
 
-function redactRpcUrlInError(error: unknown, secrets: SecretRedactionContext): string {
-  const message = typeof error === "string"
+function isPublicChainPreflightFailure(error: unknown, chain: SupportedChain): boolean {
+  const message = errorMessage(error);
+  return message === `Missing ${chain} genesis header` ||
+    message.startsWith(`Invalid ${chain} RPC chain identity:`);
+}
+
+function errorMessage(error: unknown): string {
+  return typeof error === "string"
     ? error
     : error instanceof Error
       ? error.message
-      : stringifyErrorMessage(error, secrets);
-  return redactSecretText(message, secrets);
+      : stringifyErrorMessage(error);
 }
 
-export function redactSecretText(text: string, secrets: SecretRedactionContext = {}): string {
-  let redacted = text;
-  if (secrets.privateKey) {
-    redacted = redacted.split(secrets.privateKey).join("<redacted-private-key>");
-  }
-  if (secrets.rpcUrl) {
-    redacted = redacted.split(secrets.rpcUrl).join(secrets.redactedRpcUrl ?? redactRpcUrl(secrets.rpcUrl));
-    redacted = redactRpcUrlSecrets(redacted, secrets.rpcUrl);
-  }
-  return redacted;
-}
-
-function stringifyErrorMessage(error: unknown, secrets: SecretRedactionContext): string {
+function stringifyErrorMessage(error: unknown): string {
   if (error === undefined || error === null) {
     return "Unknown error";
   }
   try {
-    return JSON.stringify(sanitizeLogValue(error, secrets, new WeakSet()), jsonLogReplacer);
+    return JSON.stringify(toJsonLogValue(error, new WeakSet()), jsonLogReplacer);
   } catch {
     return "Unknown error";
   }
-}
-
-function redactRpcUrlSecrets(text: string, rpcUrl: string): string {
-  let url: URL;
-  try {
-    url = new URL(rpcUrl);
-  } catch {
-    return text;
-  }
-
-  const replacements = new Array<[string, string]>();
-  if (url.username !== "") {
-    replacements.push([url.username, "<redacted-rpc-username>"]);
-    replacements.push([safeDecodeURIComponent(url.username), "<redacted-rpc-username>"]);
-  }
-  if (url.password !== "") {
-    replacements.push([url.password, "<redacted-rpc-password>"]);
-    replacements.push([safeDecodeURIComponent(url.password), "<redacted-rpc-password>"]);
-  }
-  for (const value of url.searchParams.values()) {
-    replacements.push([value, "<redacted-rpc-query>"]);
-  }
-  for (const value of rawSearchParamValues(url.search)) {
-    replacements.push([value, "<redacted-rpc-query>"]);
-  }
-  return replaceUrlSecrets(text, replacements);
-}
-
-function rawSearchParamValues(search: string): string[] {
-  const query = search.startsWith("?") ? search.slice(1) : search;
-  if (query === "") {
-    return [];
-  }
-  return query.split("&").map((part) => {
-    const separator = part.indexOf("=");
-    return separator === -1 ? "" : part.slice(separator + 1);
-  });
-}
-
-function replaceUrlSecrets(text: string, replacements: Array<[string, string]>): string {
-  const unique = new Map(replacements.filter(([secret]) => secret !== ""));
-  if (unique.size === 0) {
-    return text;
-  }
-  const pattern = [...unique.keys()]
-    .sort((left, right) => right.length - left.length)
-    .map(escapeRegExp)
-    .join("|");
-  return text.replace(new RegExp(pattern, "gu"), (match) => unique.get(match) ?? match);
-}
-
-function safeDecodeURIComponent(text: string): string {
-  try {
-    return decodeURIComponent(text);
-  } catch {
-    return "";
-  }
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-
-export function redactRpcUrl(rpcUrl: string): string {
-  let url: URL;
-  try {
-    url = new URL(rpcUrl);
-  } catch {
-    return "<invalid-url>";
-  }
-
-  if (url.username !== "" || url.password !== "") {
-    url.username = "redacted";
-    url.password = url.password === "" ? "" : "redacted";
-  }
-  if (url.pathname !== "" && url.pathname !== "/") {
-    url.pathname = "/...";
-  }
-  if (url.search !== "") {
-    const redactedParams = new URLSearchParams();
-    for (const [key] of url.searchParams) {
-      redactedParams.append(key, "redacted");
-    }
-    url.search = redactedParams.toString();
-  }
-
-  return url.toString();
 }
 
 export function formatCkb(balance: bigint): string {
@@ -275,6 +185,38 @@ export function jsonLogReplacer(_: unknown, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
+const UNSAFE_LOG_VALUE = "[Unsupported log value]";
+
+export function isRetryableRpcTransportError(error: unknown): boolean {
+  if (error instanceof TypeError && error.message === "fetch failed") {
+    return true;
+  }
+  if (!(error instanceof Error) || error.message !== "fetch failed") {
+    return false;
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  return typeof cause === "object" && cause !== null &&
+    "name" in cause && cause.name === "TypeError" &&
+    "message" in cause && cause.message === "fetch failed";
+}
+
+export function isRetryableCkbStateRaceError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const code = "code" in error ? error.code : undefined;
+  const data = "data" in error ? error.data : undefined;
+  if (typeof code !== "number" || typeof data !== "string") {
+    return false;
+  }
+  return code === -1111 && data.includes("RBFRejected(") ||
+    code === -301 && (
+      data.includes("Resolve(Unknown(OutPoint(") ||
+      data.includes("Resolve(Dead(OutPoint(")
+    ) ||
+    code === -1107 && data.includes("Duplicated(Byte32(");
+}
+
 export function parseSleepInterval(
   intervalSeconds: number | undefined,
   envName: string,
@@ -284,7 +226,7 @@ export function parseSleepInterval(
   }
 
   const intervalMs = intervalSeconds * 1000;
-  if (!Number.isSafeInteger(intervalMs) || intervalMs > MAX_SAFE_SLEEP_INTERVAL_MS) {
+  if (!Number.isSafeInteger(intervalMs) || intervalMs > Math.floor(MAX_TIMER_DELAY_MS / 2)) {
     throw new Error("Invalid env " + envName);
   }
 
@@ -307,15 +249,9 @@ export type RuntimeConfig = {
   privateKey: `0x${string}`;
   rpcUrl?: string;
   sleepIntervalMs: number;
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
+  maxIterations: number | undefined;
+  maxRetryableAttempts: number | undefined;
 };
-
-export interface SecretRedactionContext {
-  privateKey?: string;
-  rpcUrl?: string;
-  redactedRpcUrl?: string;
-}
 
 export function parseRpcUrl(rpcUrl: string, envName: string): string {
   for (let index = 0; index < rpcUrl.length; index += 1) {
@@ -339,21 +275,17 @@ export function parseRpcUrl(rpcUrl: string, envName: string): string {
   return rpcUrl;
 }
 
+function parseOptionalRpcUrl(rpcUrl: unknown, envName: string): string | undefined {
+  if (rpcUrl === undefined) {
+    return undefined;
+  }
+  if (typeof rpcUrl !== "string") {
+    throw new Error("Invalid env " + envName);
+  }
+  return parseRpcUrl(rpcUrl, envName);
+}
+
 export function parseMaxIterations(
-  value: number | undefined,
-  envName: string,
-): number | undefined {
-  return parsePositiveSafeInteger(value, envName);
-}
-
-export function parseMaxRetryableAttempts(
-  value: number | undefined,
-  envName: string,
-): number | undefined {
-  return parsePositiveSafeInteger(value, envName);
-}
-
-function parsePositiveSafeInteger(
   value: number | undefined,
   envName: string,
 ): number | undefined {
@@ -411,9 +343,8 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     typeof record.chain !== "string" ||
     typeof record.privateKey !== "string" ||
     typeof record.sleepIntervalSeconds !== "number" ||
-    (record.rpcUrl !== undefined && typeof record.rpcUrl !== "string") ||
-    (record.maxIterations !== undefined && typeof record.maxIterations !== "number") ||
-    (record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number")
+    record.maxIterations !== undefined && typeof record.maxIterations !== "number" ||
+    record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number"
   ) {
     throw new Error("Invalid env " + envName);
   }
@@ -424,10 +355,10 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
   return {
     chain: record.chain,
     privateKey: parsePrivateKey(record.privateKey, envName),
-    rpcUrl: record.rpcUrl !== undefined ? parseRpcUrl(record.rpcUrl, envName) : undefined,
+    rpcUrl: parseOptionalRpcUrl(record.rpcUrl, envName),
     sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
     maxIterations: parseMaxIterations(record.maxIterations, envName),
-    maxRetryableAttempts: parseMaxRetryableAttempts(record.maxRetryableAttempts, envName),
+    maxRetryableAttempts: parseMaxIterations(record.maxRetryableAttempts, envName),
   };
 }
 
@@ -478,13 +409,39 @@ export async function signerAccountLocks(
   ])];
 }
 
-function errorToLog(error: unknown, secrets: SecretRedactionContext = {}): unknown {
-  return errorToLogValue(error, secrets, new WeakSet());
+export function postTransactionAccountPlainCkbBalance(
+  tx: ccc.Transaction,
+  capacityCells: readonly ccc.Cell[],
+  accountLocks: readonly ccc.Script[],
+): bigint {
+  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
+  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  const unspentCapacity = capacityCells.reduce(
+    (total, cell) =>
+      spentOutPoints.has(cell.outPoint.toHex()) ||
+      !isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes)
+        ? total
+        : total + cell.cellOutput.capacity,
+    0n,
+  );
+  const outputCapacity = tx.outputs.reduce(
+    (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
+    0n,
+  );
+
+  return unspentCapacity + outputCapacity;
+}
+
+function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): boolean {
+  return output.type === undefined && (outputData ?? "0x") === "0x" && accountLockHexes.has(output.lock.toHex());
+}
+
+function errorToLog(error: unknown): unknown {
+  return errorToLogValue(error, new WeakSet());
 }
 
 function errorToLogValue(
   error: unknown,
-  secrets: SecretRedactionContext,
   seen: WeakSet<object>,
 ): unknown {
   if (error instanceof Object && "stack" in error) {
@@ -492,20 +449,22 @@ function errorToLogValue(
       return "[Circular]";
     }
     seen.add(error);
-    const stack = redactSecretText(typeof error.stack === "string" ? error.stack : "", secrets);
+    const stack = typeof error.stack === "string" ? error.stack : "";
+    const message = "message" in error && typeof error.message === "string"
+      ? error.message
+      : "Unknown error";
     const logged: Record<string, unknown> = {
+      ...errorOwnProperties(error, seen),
       name: "name" in error ? error.name : undefined,
-      message:
-        "message" in error && typeof error.message === "string"
-          ? redactSecretText(error.message, secrets)
-          : "Unknown error",
+      message,
       txHash: "txHash" in error ? error.txHash : undefined,
       status: "status" in error ? error.status : undefined,
+      isTimeout: "isTimeout" in error ? error.isTimeout : undefined,
       stack,
     };
     try {
       if ("cause" in error) {
-        logged.cause = errorToLogValue((error as { cause?: unknown }).cause, secrets, seen);
+        logged.cause = errorToLogValue((error as { cause?: unknown }).cause, seen);
       }
       return logged;
     } finally {
@@ -514,32 +473,47 @@ function errorToLogValue(
   }
 
   if (typeof error === "object" && error !== null) {
-    return sanitizeLogValue(error, secrets, new WeakSet());
+    return toJsonLogValue(error, seen);
   }
 
   if (typeof error === "string") {
-    return redactSecretText(error, secrets);
+    return error;
   }
 
   return error ?? "Empty Error";
 }
 
-function sanitizeLogValue(
+const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
+
+function errorOwnProperties(error: object, seen: WeakSet<object>): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(error)) {
+    if (ERROR_BUILTIN_KEYS.has(key)) {
+      continue;
+    }
+    properties[key] = toJsonLogValue(entry, seen);
+  }
+  return properties;
+}
+
+function toJsonLogValue(
   value: unknown,
-  secrets: SecretRedactionContext,
   seen: WeakSet<object>,
 ): unknown {
   if (typeof value === "string") {
-    return redactSecretText(value, secrets);
+    return value;
   }
   if (typeof value === "bigint") {
     return value.toString();
+  }
+  if (typeof value === "function") {
+    return UNSAFE_LOG_VALUE;
   }
   if (typeof value !== "object" || value === null) {
     return value;
   }
   if (value instanceof Object && "stack" in value) {
-    return errorToLogValue(value, secrets, seen);
+    return errorToLogValue(value, seen);
   }
   if (seen.has(value)) {
     return "[Circular]";
@@ -547,26 +521,16 @@ function sanitizeLogValue(
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((entry) => sanitizeLogValue(entry, secrets, seen));
+      return value.map((entry) => toJsonLogValue(entry, seen));
     }
     const sanitized: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
-      if (isSensitiveLogKey(key)) {
-        continue;
-      }
-      sanitized[key] = sanitizeLogValue(entry, secrets, seen);
+      sanitized[key] = toJsonLogValue(entry, seen);
     }
     return sanitized;
   } finally {
     seen.delete(value);
   }
-}
-
-function isSensitiveLogKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/gu, "");
-  return ["privatekey", "rpcurl", "apikey", "password", "token", "secret"].some(
-    (sensitiveKey) => normalized === sensitiveKey || normalized.endsWith(sensitiveKey),
-  );
 }
 
 function shouldStopAfterError(error: unknown): boolean {
@@ -579,9 +543,8 @@ function shouldStopAfterError(error: unknown): boolean {
 export function handleLoopError(
   executionLog: Record<string, unknown>,
   error: unknown,
-  secrets: SecretRedactionContext = {},
 ): boolean {
-  executionLog.error = errorToLog(error, secrets);
+  executionLog.error = errorToLog(error);
   if (shouldStopAfterError(error)) {
     process.exitCode = STOP_EXIT_CODE;
     return true;
@@ -601,7 +564,7 @@ export function logExecution(
 }
 
 export function writeJsonLine(record: unknown): void {
-  process.stdout.write(`${JSON.stringify(record, jsonLogReplacer)}\n`);
+  process.stdout.write(`${JSON.stringify(toJsonLogValue(record, new WeakSet()), jsonLogReplacer)}\n`);
 }
 
 export function sleep(ms: number): Promise<void> {
