@@ -32,6 +32,7 @@ test("parses launcher arguments", () => {
   });
 
   assert.throws(() => parseArgs(["--network", "devnet", "--", process.execPath]), /Invalid network/u);
+  assert.throws(() => parseArgs(["--log-root", "--network", "testnet", "--", process.execPath]), /Missing value for --log-root/u);
   assert.throws(() => parseArgs(["--network", "testnet", "--log-dir", "log/bot/testnet", "--", process.execPath]), /exactly one/u);
   assert.throws(() => parseArgs(["--network", "testnet"]), /Missing --/u);
 });

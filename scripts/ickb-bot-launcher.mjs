@@ -202,7 +202,7 @@ export async function runBotLauncher({
 
 function requireValue(argv, index, option) {
   const value = argv[index + 1];
-  if (value === undefined || value === "") {
+  if (value === undefined || value === "" || value.startsWith("--")) {
     throw new Error(`Missing value for ${option}`);
   }
   return value;

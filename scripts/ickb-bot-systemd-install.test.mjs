@@ -44,7 +44,7 @@ test("systemd install script refuses unsafe log-root unit arguments", () => {
   const valid = validatePathArg("/srv/ickb-logs");
   assert.equal(valid.status, 0, valid.stderr);
 
-  for (const value of ["", "/srv/ickb logs", "/srv/ickb;logs", "/srv/ickb%logs", "/srv/ickb$logs", "/srv/ickb\\logs"]) {
+  for (const value of ["", "/srv/ickb logs", "/srv/ickb;logs", "/srv/ickb%logs", "/srv/ickb$logs", "/srv/ickb\\logs", "/srv/ickb`logs"]) {
     const invalid = validatePathArg(value);
     assert.equal(invalid.status, 1, value);
     assert.match(invalid.stderr, /ICKB_BOT_LOG_ROOT/u);

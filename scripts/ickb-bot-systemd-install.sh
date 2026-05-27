@@ -52,7 +52,7 @@ require_systemd_safe_path_arg() {
 
   node -e '
 const value = process.argv[1] ?? "";
-const disallowed = new Set([String.fromCharCode(34), String.fromCharCode(39), "\\", "$", "%", ";"]);
+const disallowed = new Set([String.fromCharCode(34), String.fromCharCode(39), "\\", "$", "%", ";", String.fromCharCode(96)]);
 if (value === "" || [...value].some((char) => char.charCodeAt(0) <= 32 || disallowed.has(char))) {
   process.exit(1);
 }
