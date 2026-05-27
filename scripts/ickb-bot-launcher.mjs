@@ -297,7 +297,7 @@ async function openLogSink(path) {
   }
 }
 
-class LogSink {
+export class LogSink {
   #pending = Promise.resolve();
 
   constructor(handle) {
@@ -315,12 +315,15 @@ class LogSink {
   }
 
   async close() {
-    await this.#pending;
-    await this.handle.close();
+    try {
+      await this.#pending;
+    } finally {
+      await this.handle.close();
+    }
   }
 }
 
-function copyBytes(readable, fileSink, tee) {
+export function copyBytes(readable, fileSink, tee) {
   if (readable === null) {
     return Promise.resolve();
   }
@@ -334,7 +337,10 @@ function copyBytes(readable, fileSink, tee) {
           await fileSink.write(chunk);
           await writeToStream(tee, chunk);
         })
-        .then(() => readable.resume());
+        .then(
+          () => readable.resume(),
+          (error) => readable.destroy(error),
+        );
     });
     readable.once("end", () => pending.then(resolvePromise, rejectPromise));
     readable.once("error", rejectPromise);

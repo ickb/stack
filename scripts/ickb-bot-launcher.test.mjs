@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { spawnSync } from "node:child_process";
-import { Writable } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, resolveLauncherPaths, runBotLauncher } from "./ickb-bot-launcher.mjs";
+import { LogSink, copyBytes, parseArgs, resolveLauncherPaths, runBotLauncher } from "./ickb-bot-launcher.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const launcher = join(rootDir, "scripts", "ickb-bot-launcher.mjs");
@@ -252,6 +252,44 @@ test("reports asynchronous child spawn errors", async () => {
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
+});
+
+test("copy failures destroy the readable stream", async () => {
+  const readable = new PassThrough();
+  const failure = new Error("disk full");
+  const copy = copyBytes(readable, {
+    write() {
+      return Promise.reject(failure);
+    },
+  }, new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  }));
+
+  readable.write("event\n");
+
+  await assert.rejects(copy, /disk full/u);
+  assert.equal(readable.destroyed, true);
+});
+
+test("log sinks close file handles after pending write failures", async () => {
+  let closed = false;
+  const sink = new LogSink({
+    appendFile() {
+      return Promise.reject(new Error("disk full"));
+    },
+    close() {
+      closed = true;
+      return Promise.resolve();
+    },
+  });
+
+  const write = sink.write("event\n");
+
+  await assert.rejects(write, /disk full/u);
+  await assert.rejects(sink.close(), /disk full/u);
+  assert.equal(closed, true);
 });
 
 test("preserves child signal termination", async () => {
