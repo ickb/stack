@@ -18,6 +18,7 @@ test("config generator parses defaults and explicit options", () => {
     role: "bot",
     sleepIntervalSeconds: 1,
     maxIterations: 1,
+    maxRetryableAttempts: 10,
     force: false,
     rpcUrl: "https://testnet.ckb.dev/",
     out: "config/bot-testnet.json",
@@ -29,12 +30,14 @@ test("config generator parses defaults and explicit options", () => {
     "--rpc-url", "https://user:pass@mainnet.example/path?token=secret",
     "--sleep-interval-seconds", "10",
     "--no-max-iterations",
+    "--max-retryable-attempts", "3",
     "--force",
   ]), {
     chain: "mainnet",
     role: "tester_role",
     sleepIntervalSeconds: 10,
     maxIterations: undefined,
+    maxRetryableAttempts: 3,
     force: true,
     out: "config/custom.json",
     rpcUrl: "https://user:pass@mainnet.example/path?token=secret",
@@ -52,7 +55,10 @@ test("config generator parses defaults and explicit options", () => {
   assert.match(usage(), /--sleep-interval-seconds/u);
   assert.match(usage(), /--max-iterations/u);
   assert.match(usage(), /--no-max-iterations/u);
+  assert.match(usage(), /--max-retryable-attempts/u);
+  assert.match(usage(), /--no-max-retryable-attempts/u);
   assert.match(usage(), /--force/u);
+  assert.equal(parseArgs(["--no-max-retryable-attempts"]).maxRetryableAttempts, undefined);
 });
 
 test("config generator rejects RPC URLs the runtime parser rejects", () => {
@@ -131,10 +137,13 @@ test("config generator opens output with no-follow and exclusive defaults", asyn
             close: async () => undefined,
           };
         },
+        link: async () => undefined,
+        unlink: async () => undefined,
       },
     });
 
     assert.equal(opened.length, 1);
+    assert.match(opened[0].path, /config\/bot-testnet\.json\.tmp-/u);
     assert.equal(opened[0].flags & constants.O_NOFOLLOW, constants.O_NOFOLLOW);
     assert.equal(opened[0].flags & constants.O_EXCL, constants.O_EXCL);
     assert.equal(opened[0].mode, 0o600);
@@ -172,6 +181,8 @@ test("config generator checks existing ancestors before creating missing parents
           chmod: async () => undefined,
           close: async () => undefined,
         }),
+        link: async () => undefined,
+        unlink: async () => undefined,
       },
     });
 
@@ -184,6 +195,49 @@ test("config generator checks existing ancestors before creating missing parents
   }
 });
 
+test("config generator removes staged config when final install fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-generate-config-"));
+  const unlinked = [];
+  const dirs = new Set([dir]);
+  try {
+    await assert.rejects(
+      () => runGenerateConfig({
+        argv: ["--out", "config/bot-testnet.json"],
+        root: dir,
+        dependencies: {
+          randomBytes: () => Buffer.from("66".repeat(32), "hex"),
+          checkIgnored: () => true,
+          mkdir: async (path) => {
+            dirs.add(path);
+          },
+          lstat: async (path) => {
+            if (dirs.has(path)) {
+              return { isSymbolicLink: () => false };
+            }
+            const error = new Error("missing");
+            error.code = "ENOENT";
+            throw error;
+          },
+          realpath: async (path) => path,
+          writeFile: async () => undefined,
+          link: async () => {
+            throw new Error("link failed");
+          },
+          unlink: async (path) => {
+            unlinked.push(path);
+          },
+        },
+      }),
+      /link failed/u,
+    );
+
+    assert.equal(unlinked.length, 1);
+    assert.match(unlinked[0], /config\/bot-testnet\.json\.tmp-/u);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("config generator builds strict runtime config shape", () => {
   assert.deepEqual(buildRuntimeConfig({
     chain: "testnet",
@@ -191,12 +245,14 @@ test("config generator builds strict runtime config shape", () => {
     rpcUrl: "https://testnet.ckb.dev/",
     sleepIntervalSeconds: 1,
     maxIterations: 1,
+    maxRetryableAttempts: 10,
   }), {
     chain: "testnet",
     privateKey: `0x${"11".repeat(32)}`,
     rpcUrl: "https://testnet.ckb.dev/",
     sleepIntervalSeconds: 1,
     maxIterations: 1,
+    maxRetryableAttempts: 10,
   });
   assert.deepEqual(buildRuntimeConfig({
     chain: "mainnet",
@@ -204,6 +260,7 @@ test("config generator builds strict runtime config shape", () => {
     rpcUrl: "https://mainnet.ckb.dev/",
     sleepIntervalSeconds: 60,
     maxIterations: undefined,
+    maxRetryableAttempts: undefined,
   }), {
     chain: "mainnet",
     privateKey: `0x${"22".repeat(32)}`,
@@ -238,11 +295,13 @@ test("config generator writes only ignored configs and reports public metadata",
         writeFile: async (path, text, options) => {
           written.push({ path, text, options });
         },
+        link: async () => undefined,
+        unlink: async () => undefined,
       },
     });
 
     assert.equal(written.length, 1);
-    assert.match(String(written[0].path), /config\/bot-testnet\.json$/u);
+    assert.match(String(written[0].path), /config\/bot-testnet\.json\.tmp-/u);
     assert.deepEqual(written[0].options, { flag: "wx", mode: 0o600 });
     assert.deepEqual(JSON.parse(written[0].text), {
       chain: "testnet",
@@ -250,14 +309,16 @@ test("config generator writes only ignored configs and reports public metadata",
       rpcUrl: "https://user:pass@testnet.example/path?token=secret",
       sleepIntervalSeconds: 1,
       maxIterations: 1,
+      maxRetryableAttempts: 10,
     });
     assert.deepEqual(result, {
       outputPath: "config/bot-testnet.json",
       role: "bot",
       chain: "testnet",
-      redactedRpcUrl: "https://redacted:redacted@testnet.example/...?token=redacted",
+      rpcConfigured: true,
       sleepIntervalSeconds: 1,
       maxIterations: 1,
+      maxRetryableAttempts: 10,
       privateKey: "<written-to-config-file>",
     });
     assert.doesNotMatch(JSON.stringify(result), /0x33/u);

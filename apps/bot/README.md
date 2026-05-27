@@ -13,10 +13,10 @@ The bot minimizes excess iCKB holdings so more liquidity stays available in CKB 
 The bot reads one strict JSON config file named by `BOT_CONFIG_FILE`:
 
 ```json
-{"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":60}
+{"chain":"testnet","privateKey":"0x...","sleepIntervalSeconds":60,"maxRetryableAttempts":10}
 ```
 
-The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, and optional `maxIterations`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
+The JSON config accepts exactly `chain`, `privateKey`, optional `rpcUrl`, `sleepIntervalSeconds`, optional `maxIterations`, and optional `maxRetryableAttempts`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. Omitting `rpcUrl` lets CCC use its default endpoint. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
 
 Current network support:
 
