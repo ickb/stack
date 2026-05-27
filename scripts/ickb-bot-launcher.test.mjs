@@ -273,6 +273,25 @@ test("copy failures destroy the readable stream", async () => {
   assert.equal(readable.destroyed, true);
 });
 
+test("copy failures reject even when stream destroy does not emit error", async () => {
+  const readable = new PassThrough();
+  const failure = new Error("disk full");
+  readable.destroy = () => readable;
+  const copy = copyBytes(readable, {
+    write() {
+      return Promise.reject(failure);
+    },
+  }, new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  }));
+
+  readable.write("event\n");
+
+  await assert.rejects(copy, /disk full/u);
+});
+
 test("log sinks close file handles after pending write failures", async () => {
   let closed = false;
   const sink = new LogSink({

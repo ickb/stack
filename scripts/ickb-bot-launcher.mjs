@@ -339,7 +339,10 @@ export function copyBytes(readable, fileSink, tee) {
         })
         .then(
           () => readable.resume(),
-          (error) => readable.destroy(error),
+          (error) => {
+            rejectPromise(error);
+            readable.destroy(error);
+          },
         );
     });
     readable.once("end", () => pending.then(resolvePromise, rejectPromise));

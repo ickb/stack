@@ -111,7 +111,7 @@ unit_has_directive() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if value=$(unit_directive_value "${line}" "${key}") && [[ ${value} == "${expected}" ]]; then
+    if value=$(unit_directive_value "${line}" "${key}") && unit_value_matches "${key}" "${value}" "${expected}"; then
       return 0
     fi
   done <<<"${unit_text}"
@@ -140,6 +140,36 @@ trim_unit_field() {
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s\n' "${value}"
+}
+
+unit_value_matches() {
+  local key=$1
+  local value=$2
+  local expected=$3
+
+  [[ ${value} == "${expected}" ]] && return 0
+  case "${key}" in
+    Environment|ReadWritePaths) unit_value_contains_token "${value}" "${expected}" ;;
+    *) return 1 ;;
+  esac
+}
+
+unit_value_contains_token() {
+  local value=$1
+  local expected=$2
+  local token
+  local quoted
+  local -a tokens
+
+  read -r -a tokens <<<"${value}"
+  for token in "${tokens[@]}"; do
+    if [[ ${token} == '"'*'"' && ${#token} -ge 2 ]]; then
+      quoted=${token#'"'}
+      token=${quoted%'"'}
+    fi
+    [[ ${token} == "${expected}" ]] && return 0
+  done
+  return 1
 }
 
 unit_launcher_log_root() {

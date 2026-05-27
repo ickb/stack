@@ -61,6 +61,24 @@ test("systemd update reads unit files without trailing newlines", async () => {
   }
 });
 
+test("systemd update accepts expected values inside multi-value directives", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-bot-systemd-update-"));
+  try {
+    const unitPath = join(dir, "ickb-bot-testnet.service");
+    await writeFile(unitPath, unitText({
+      network: "testnet",
+      launcher: true,
+      extraEnvironment: "NODE_ENV=production",
+      extraReadWritePath: "/var/tmp",
+    }));
+
+    const result = requireLauncherUnit(unitPath, "testnet");
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
 test("systemd update refuses stale direct-exec units", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ickb-bot-systemd-update-"));
   try {
@@ -212,6 +230,8 @@ function unitText({
   inactiveSectionSpoof = false,
   logRoot,
   readWritePath,
+  extraEnvironment,
+  extraReadWritePath,
   separator = "=",
 }) {
   const credentialName = `ickb-bot-${network}-config.json`;
@@ -221,6 +241,8 @@ function unitText({
     ? `ExecStart${separator}/usr/bin/node scripts/ickb-bot-launcher.mjs ${launcherLogRoot}--network ${network} -- /usr/bin/node apps/bot/dist/index.js`
     : `ExecStart${separator}/usr/bin/node apps/bot/dist/index.js`;
   const writablePath = readWritePath ?? logRoot ?? `/opt/ickb-stack-${network}/log`;
+  const environmentValue = [`BOT_CONFIG_FILE=%d/${credentialName}`, extraEnvironment].filter(Boolean).join(" ");
+  const readWritePaths = [writablePath, extraReadWritePath].filter(Boolean).join(" ");
 
   const comments = commentedSpoof
     ? `# ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs --network ${network} -- /usr/bin/node apps/bot/dist/index.js
@@ -238,11 +260,11 @@ WantedBy=multi-user.target
 
   return `${inactive}[Service]
 ${comments}
-Environment${separator}BOT_CONFIG_FILE=%d/${credentialName}
+Environment${separator}${environmentValue}
 LoadCredentialEncrypted${separator}${credentialName}:${credential}
 ${execStart}
 RestartPreventExitStatus${separator}2
 ${limitCore ? `LimitCORE${separator}0\n` : ""}
-ReadWritePaths${separator}${writablePath}
+ReadWritePaths${separator}${readWritePaths}
 `;
 }
