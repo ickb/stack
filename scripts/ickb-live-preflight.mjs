@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { defaultCheckIgnored } from "./ickb-live-config-git.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const ROLE_PATTERN = /^[a-z](?:[a-z0-9_-]{0,30}[a-z0-9])?$/u;
@@ -335,13 +335,6 @@ async function assertNoSymlinkedConfigAncestors(root, configPath, dependencies) 
       throw new Error(`Refusing to read config through symlinked path: ${relative(root, current)}`);
     }
   }
-}
-
-function defaultCheckIgnored(root, relativePath) {
-  const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], {
-    encoding: "utf8",
-  });
-  return result.status === 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

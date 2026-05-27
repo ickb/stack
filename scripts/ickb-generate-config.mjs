@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { link, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { defaultCheckIgnored } from "./ickb-live-config-git.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
@@ -377,13 +377,6 @@ function assertIgnoredPath(root, relativePath, checkIgnored = defaultCheckIgnore
   if (!checkIgnored(root, relativePath)) {
     throw new Error(`Refusing to write non-ignored config path: ${relativePath}`);
   }
-}
-
-function defaultCheckIgnored(root, relativePath) {
-  const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], {
-    encoding: "utf8",
-  });
-  return result.status === 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
