@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { defaultCheckIgnored } from "./ickb-live-config-git.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
@@ -21,6 +21,7 @@ export function parseArgs(argv) {
     role: "bot",
     sleepIntervalSeconds: 1,
     maxIterations: 1,
+    maxRetryableAttempts: 10,
     force: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -56,6 +57,14 @@ export function parseArgs(argv) {
       args.maxIterations = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
       continue;
     }
+    if (arg === "--max-retryable-attempts") {
+      args.maxRetryableAttempts = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
+      continue;
+    }
+    if (arg === "--no-max-retryable-attempts") {
+      args.maxRetryableAttempts = undefined;
+      continue;
+    }
     if (arg === "--no-max-iterations") {
       args.maxIterations = undefined;
       continue;
@@ -74,8 +83,8 @@ export function parseArgs(argv) {
 
 export function usage() {
   return [
-    "Usage: node scripts/ickb-generate-config.mjs [--chain testnet|mainnet] [--role <label>] [--out <ignored-json-config>] [--rpc-url <url>] [--sleep-interval-seconds <n>] [--max-iterations <n>|--no-max-iterations] [--force]",
-    "Defaults: --chain testnet --role bot --out config/<role>-<chain>.json --sleep-interval-seconds 1 --max-iterations 1",
+    "Usage: node scripts/ickb-generate-config.mjs [--chain testnet|mainnet] [--role <label>] [--out <ignored-json-config>] [--rpc-url <url>] [--sleep-interval-seconds <n>] [--max-iterations <n>|--no-max-iterations] [--max-retryable-attempts <n>|--no-max-retryable-attempts] [--force]",
+    "Defaults: --chain testnet --role bot --out config/<role>-<chain>.json --sleep-interval-seconds 1 --max-iterations 1 --max-retryable-attempts 10",
   ].join("\n");
 }
 
@@ -99,6 +108,7 @@ export function buildRuntimeConfig({
   rpcUrl,
   sleepIntervalSeconds,
   maxIterations,
+  maxRetryableAttempts,
 }) {
   return {
     chain,
@@ -106,6 +116,7 @@ export function buildRuntimeConfig({
     rpcUrl,
     sleepIntervalSeconds,
     ...(maxIterations === undefined ? {} : { maxIterations }),
+    ...(maxRetryableAttempts === undefined ? {} : { maxRetryableAttempts }),
   };
 }
 
@@ -114,26 +125,24 @@ export async function runGenerateConfig({ argv, root = rootDir, dependencies = {
   if (args.help) {
     return { help: usage() };
   }
+  const originalRoot = resolve(root);
+  const resolvedRoot = await (dependencies.realpath ?? realpath)(originalRoot);
 
   const privateKey = generateSecp256k1PrivateKey(dependencies.randomBytes ?? randomBytes);
   const config = buildRuntimeConfig({ ...args, privateKey });
-  const output = outputPath(root, args.out);
-  assertIgnoredPath(root, output.relativePath, dependencies.checkIgnored);
-  await makeSafeParentDir(output.absolutePath, root, dependencies);
-  await writeConfigFile(
-    output.absolutePath,
-    `${JSON.stringify(config)}\n`,
-    args.force,
-    dependencies,
-  );
+  const output = outputPath(originalRoot, resolvedRoot, args.out);
+  assertIgnoredPath(resolvedRoot, output.relativePath, dependencies.checkIgnored);
+  await makeSafeParentDir(output.absolutePath, resolvedRoot, dependencies);
+  await writeStagedConfigFile(output.absolutePath, `${JSON.stringify(config)}\n`, args.force, dependencies);
 
   return {
     outputPath: output.relativePath,
     role: args.role,
     chain: args.chain,
-    redactedRpcUrl: redactRpcUrl(args.rpcUrl),
+    rpcConfigured: args.rpcUrl !== undefined,
     sleepIntervalSeconds: args.sleepIntervalSeconds,
     maxIterations: args.maxIterations,
+    maxRetryableAttempts: args.maxRetryableAttempts,
     privateKey: "<written-to-config-file>",
   };
 }
@@ -205,39 +214,77 @@ function parseRpcUrl(value) {
   return value;
 }
 
-function redactRpcUrl(rpcUrl) {
-  let url;
-  try {
-    url = new URL(rpcUrl);
-  } catch {
-    return "<invalid-url>";
+function outputPath(originalRoot, resolvedRoot, out) {
+  const absolutePath = isAbsolute(out) ? out : resolve(resolvedRoot, out);
+  const relativePath = relative(resolvedRoot, absolutePath);
+  if (isInsideRelativePath(relativePath)) {
+    return { absolutePath, relativePath };
   }
-
-  if (url.username !== "" || url.password !== "") {
-    url.username = "redacted";
-    url.password = url.password === "" ? "" : "redacted";
-  }
-  if (url.pathname !== "" && url.pathname !== "/") {
-    url.pathname = "/...";
-  }
-  if (url.search !== "") {
-    const redactedParams = new URLSearchParams();
-    for (const [key] of url.searchParams) {
-      redactedParams.append(key, "redacted");
+  if (isAbsolute(out)) {
+    const originalRelativePath = relative(originalRoot, out);
+    if (isInsideRelativePath(originalRelativePath)) {
+      return {
+        absolutePath: resolve(resolvedRoot, originalRelativePath),
+        relativePath: originalRelativePath,
+      };
     }
-    url.search = redactedParams.toString();
   }
-
-  return url.toString();
+  throw new Error("Output path must stay inside the repo");
 }
 
-function outputPath(root, out) {
-  const absolutePath = isAbsolute(out) ? out : resolve(root, out);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("Output path must stay inside the repo");
+function isInsideRelativePath(relativePath) {
+  return !relativePath.startsWith("..") && !isAbsolute(relativePath);
+}
+
+async function writeStagedConfigFile(path, text, force, dependencies) {
+  const tempPath = tempConfigPath(path);
+  let caught;
+  try {
+    await writeConfigFile(tempPath, text, false, dependencies);
+    await installStagedConfig(tempPath, path, force, dependencies);
+  } catch (error) {
+    caught = error;
   }
-  return { absolutePath, relativePath };
+  try {
+    await cleanupPath(tempPath, dependencies);
+  } catch (error) {
+    if (caught === undefined) {
+      throw error;
+    }
+  }
+  if (caught !== undefined) {
+    throw caught;
+  }
+}
+
+function tempConfigPath(path) {
+  return `${path}.tmp-${process.pid}-${Date.now()}`;
+}
+
+async function installStagedConfig(tempPath, targetPath, force, dependencies) {
+  await assertNoSymlinkTarget(targetPath, dependencies);
+  if (force) {
+    await (dependencies.rename ?? rename)(tempPath, targetPath);
+    return;
+  }
+  try {
+    await (dependencies.link ?? link)(tempPath, targetPath);
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      throw new Error("Config already exists; rerun with --force to overwrite", { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function cleanupPath(path, dependencies) {
+  try {
+    await (dependencies.unlink ?? unlink)(path);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+  }
 }
 
 async function writeConfigFile(path, text, force, dependencies) {
@@ -270,7 +317,7 @@ async function makeSafeParentDir(path, root, dependencies) {
       await assertRealAncestor(current, dependencies);
       break;
     } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      if (isNotFoundError(error)) {
         missing.push(current);
         const next = dirname(current);
         if (next === current) {
@@ -302,11 +349,19 @@ async function assertNoSymlinkTarget(path, dependencies) {
       throw new Error("Refusing to write through symlink config path");
     }
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (isNotFoundError(error)) {
       return;
     }
     throw error;
   }
+}
+
+function isNotFoundError(error) {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function isAlreadyExistsError(error) {
+  return error instanceof Error && "code" in error && error.code === "EEXIST";
 }
 
 async function assertRealParent(path, dependencies) {
@@ -322,13 +377,6 @@ function assertIgnoredPath(root, relativePath, checkIgnored = defaultCheckIgnore
   if (!checkIgnored(root, relativePath)) {
     throw new Error(`Refusing to write non-ignored config path: ${relativePath}`);
   }
-}
-
-function defaultCheckIgnored(root, relativePath) {
-  const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], {
-    encoding: "utf8",
-  });
-  return result.status === 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

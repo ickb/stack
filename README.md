@@ -105,6 +105,12 @@ pnpm --filter @ickb/supervisor build
 pnpm live:supervisor
 ```
 
+To rebuild the standard ignored testnet configs from environment variables without printing private keys, set `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY`, optionally set `ICKB_TESTNET_RPC_URL`, `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS`, `ICKB_TESTNET_MAX_ITERATIONS`, and `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS`, then run:
+
+```bash
+pnpm live:config-from-env
+```
+
 By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only. It does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
 
 For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { defaultCheckIgnored } from "./ickb-live-config-git.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const ROLE_PATTERN = /^[a-z](?:[a-z0-9_-]{0,30}[a-z0-9])?$/u;
+const CKB = 100000000n;
+const BOT_CKB_RESERVE = 1000n * CKB;
+const TESTER_CKB_RESERVE = 2000n * CKB;
 
 export function parseArgs(argv) {
   const args = { role: "preflight" };
@@ -57,9 +60,22 @@ export function redactErrorMessage(error, secrets = {}) {
   return message;
 }
 
+export function ckbReserveForRole(role) {
+  if (!ROLE_PATTERN.test(role)) {
+    throw new Error(
+      "Invalid role: expected 1-32 lowercase letters, numbers, hyphens, or underscores without trailing separators",
+    );
+  }
+  return role === "tester" || role.startsWith("tester-") || role.startsWith("tester_")
+    ? TESTER_CKB_RESERVE
+    : BOT_CKB_RESERVE;
+}
+
 export async function runPreflight({ configPath, role, root = rootDir, dependencies }) {
-  const config = resolveConfigPath(root, configPath, dependencies?.checkIgnored);
-  await assertReadableConfigPath(root, config.absolutePath, dependencies);
+  const originalRoot = resolve(root);
+  const resolvedRoot = await (dependencies?.realpath ?? realpath)(originalRoot);
+  const config = resolveConfigPath(originalRoot, resolvedRoot, configPath, dependencies?.checkIgnored);
+  await assertReadableConfigPath(resolvedRoot, config.absolutePath, dependencies);
   const configText = await readFile(config.absolutePath, "utf8");
   const { nodeUtils } = dependencies ?? await loadBuiltNodeUtils(root);
   let runtimeConfig;
@@ -67,7 +83,7 @@ export async function runPreflight({ configPath, role, root = rootDir, dependenc
     runtimeConfig = nodeUtils.parseRuntimeConfig(configText, "LIVE_PREFLIGHT_CONFIG_FILE");
   } catch (cause) {
     throw new Error(
-      "Invalid live preflight config: expected exact JSON with chain, privateKey, rpcUrl, sleepIntervalSeconds, and optional maxIterations",
+      "Invalid live preflight config: expected exact JSON with chain, privateKey, optional rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts",
       { cause },
     );
   }
@@ -81,7 +97,7 @@ export async function runPreflight({ configPath, role, root = rootDir, dependenc
   const secrets = {
     privateKey: runtimeConfig.privateKey,
     rpcUrl: runtimeConfig.rpcUrl,
-    redactedRpcUrl: nodeUtils.redactRpcUrl(runtimeConfig.rpcUrl),
+    redactedRpcUrl: runtimeConfig.rpcUrl === undefined ? undefined : nodeUtils.redactRpcUrl(runtimeConfig.rpcUrl),
     redactSecretText: nodeUtils.redactSecretText,
   };
 
@@ -125,6 +141,10 @@ export async function buildPreflightReport({
     collectedOrdersAvailable: true,
   });
   const totalCkb = projection.ckbAvailable + projection.ckbPending;
+  const depositCapacity = core.convert(false, core.ICKB_DEPOSIT_CAP, exchangeRatio);
+  const minimumCkbCapital = (21n * depositCapacity) / 20n;
+  const ckbReserve = ckbReserveForRole(role);
+  const spendableCkb = maxBigInt(0n, projection.ckbAvailable - ckbReserve);
   const totalEquivalentCkb = totalCkb + core.convert(false, projection.ickbAvailable, exchangeRatio);
   const totalEquivalentIckb = core.convert(true, totalCkb, exchangeRatio) + projection.ickbAvailable;
 
@@ -133,7 +153,9 @@ export async function buildPreflightReport({
     chain: runtimeConfig.chain,
     bounded: runtimeConfig.maxIterations !== undefined,
     maxIterations: runtimeConfig.maxIterations,
+    maxRetryableAttempts: runtimeConfig.maxRetryableAttempts,
     sleepIntervalSeconds: runtimeConfig.sleepIntervalMs / 1000,
+    rpcConfigured: runtimeConfig.rpcUrl !== undefined,
     chainIdentity: chain,
     key: {
       recommendedAddress: recommended.toString(),
@@ -143,6 +165,8 @@ export async function buildPreflightReport({
     balances: {
       CKB: {
         available: nodeUtils.formatCkb(projection.ckbAvailable),
+        reserve: nodeUtils.formatCkb(ckbReserve),
+        spendable: nodeUtils.formatCkb(spendableCkb),
         unavailable: nodeUtils.formatCkb(projection.ckbPending),
         total: nodeUtils.formatCkb(totalCkb),
       },
@@ -153,6 +177,11 @@ export async function buildPreflightReport({
         CKB: nodeUtils.formatCkb(totalEquivalentCkb),
         ICKB: nodeUtils.formatCkb(totalEquivalentIckb),
       },
+    },
+    capital: {
+      depositCapacity: nodeUtils.formatCkb(depositCapacity),
+      minimumCkbCapital: nodeUtils.formatCkb(minimumCkbCapital),
+      totalEquivalentCkb: nodeUtils.formatCkb(totalEquivalentCkb),
     },
     inventory: {
       userOrderCount: null,
@@ -249,16 +278,36 @@ function parseRole(value) {
   return value;
 }
 
-function resolveConfigPath(root, configPath, checkIgnored = defaultCheckIgnored) {
-  const absolutePath = isAbsolute(configPath) ? configPath : resolve(root, configPath);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("Config path must stay inside the repo");
+function maxBigInt(left, right) {
+  return left > right ? left : right;
+}
+
+function resolveConfigPath(originalRoot, resolvedRoot, configPath, checkIgnored = defaultCheckIgnored) {
+  const absolutePath = isAbsolute(configPath) ? configPath : resolve(resolvedRoot, configPath);
+  const relativePath = relative(resolvedRoot, absolutePath);
+  if (isInsideRelativePath(relativePath)) {
+    if (!checkIgnored(resolvedRoot, relativePath)) {
+      throw new Error(`Refusing to read non-ignored config path: ${relativePath}`);
+    }
+    return { absolutePath, relativePath };
   }
-  if (!checkIgnored(root, relativePath)) {
-    throw new Error(`Refusing to read non-ignored config path: ${relativePath}`);
+  if (isAbsolute(configPath)) {
+    const originalRelativePath = relative(originalRoot, configPath);
+    if (isInsideRelativePath(originalRelativePath)) {
+      if (!checkIgnored(resolvedRoot, originalRelativePath)) {
+        throw new Error(`Refusing to read non-ignored config path: ${originalRelativePath}`);
+      }
+      return {
+        absolutePath: resolve(resolvedRoot, originalRelativePath),
+        relativePath: originalRelativePath,
+      };
+    }
   }
-  return { absolutePath, relativePath };
+  throw new Error("Config path must stay inside the repo");
+}
+
+function isInsideRelativePath(relativePath) {
+  return !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 async function assertReadableConfigPath(root, configPath, dependencies = {}) {
@@ -286,13 +335,6 @@ async function assertNoSymlinkedConfigAncestors(root, configPath, dependencies) 
       throw new Error(`Refusing to read config through symlinked path: ${relative(root, current)}`);
     }
   }
-}
-
-function defaultCheckIgnored(root, relativePath) {
-  const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], {
-    encoding: "utf8",
-  });
-  return result.status === 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

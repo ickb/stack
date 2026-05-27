@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  ckbReserveForRole,
   parseArgs,
   publicScript,
   redactErrorMessage,
@@ -63,6 +64,14 @@ test("preflight CLI redacts private key and RPC URL in errors", () => {
   assert.doesNotMatch(message, /\buser\b|\bpass\b/u);
 });
 
+test("preflight CLI exposes role-specific CKB reserves", () => {
+  assert.equal(ckbReserveForRole("bot").toString(), "100000000000");
+  assert.equal(ckbReserveForRole("tester").toString(), "200000000000");
+  assert.equal(ckbReserveForRole("tester-watch").toString(), "200000000000");
+  assert.equal(ckbReserveForRole("tester_watch").toString(), "200000000000");
+  assert.throws(() => ckbReserveForRole("tester-"), /Invalid role/u);
+});
+
 test("preflight run reports public evidence for a generated unfunded key", async () => {
   const privateKey = `0x${randomBytes(32).toString("hex")}`;
   const rawRpcUrl = "https://user:pass@testnet.example/path?token=secret";
@@ -75,6 +84,7 @@ test("preflight run reports public evidence for a generated unfunded key", async
       rpcUrl: rawRpcUrl,
       sleepIntervalSeconds: 1,
       maxIterations: 1,
+      maxRetryableAttempts: 3,
     }));
 
     const report = await runPreflight({
@@ -89,6 +99,8 @@ test("preflight run reports public evidence for a generated unfunded key", async
     assert.equal(report.chain, "testnet");
     assert.equal(report.bounded, true);
     assert.equal(report.maxIterations, 1);
+    assert.equal(report.maxRetryableAttempts, 3);
+    assert.equal(report.rpcConfigured, true);
     assert.equal(report.chainIdentity.redactedRpcUrl, "https://redacted:redacted@testnet.example/...?token=redacted");
     assert.equal(report.chainIdentity.matches.genesisHash, true);
     assert.equal(report.key.recommendedAddress, "ckt1generatedoffline");
@@ -98,11 +110,163 @@ test("preflight run reports public evidence for a generated unfunded key", async
       args: "0x" + "22".repeat(20),
     });
     assert.equal(report.balances.CKB.total, "0");
+    assert.equal(report.balances.CKB.reserve, "100000000000");
+    assert.equal(report.balances.CKB.spendable, "0");
+    assert.equal(report.capital.depositCapacity, "10000000000000");
+    assert.equal(report.capital.minimumCkbCapital, "10500000000000");
+    assert.equal(report.capital.totalEquivalentCkb, "0");
     assert.equal(report.inventory.userOrderCount, null);
     assert.equal(report.inventory.userOrderScan, "skipped-global-scan");
     assert.doesNotMatch(json, new RegExp(privateKey, "u"));
     assert.doesNotMatch(json, /secret/u);
     assert.doesNotMatch(json, /user:pass/u);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight reports CKB reserve and spendable balance separately", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const dependencies = mockDependencies({
+      projection: {
+        ckbAvailable: 150000000000n,
+        ckbPending: 25000000000n,
+        ickbAvailable: 20000000000n,
+        readyWithdrawals: [],
+        pendingWithdrawals: [],
+      },
+    });
+    const report = await runPreflight({
+      configPath,
+      role: "bot",
+      root: dir,
+      dependencies: { ...dependencies, checkIgnored: () => true },
+    });
+
+    assert.deepEqual(report.balances.CKB, {
+      available: "150000000000",
+      reserve: "100000000000",
+      spendable: "50000000000",
+      unavailable: "25000000000",
+      total: "175000000000",
+    });
+    assert.equal(report.capital.totalEquivalentCkb, "195000000000");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight reports tester reserve and spendable balance separately", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const dependencies = mockDependencies({
+      projection: {
+        ckbAvailable: 250000000000n,
+        ckbPending: 25000000000n,
+        ickbAvailable: 20000000000n,
+        readyWithdrawals: [],
+        pendingWithdrawals: [],
+      },
+    });
+    const report = await runPreflight({
+      configPath,
+      role: "tester",
+      root: dir,
+      dependencies: { ...dependencies, checkIgnored: () => true },
+    });
+
+    assert.deepEqual(report.balances.CKB, {
+      available: "250000000000",
+      reserve: "200000000000",
+      spendable: "50000000000",
+      unavailable: "25000000000",
+      total: "275000000000",
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight run accepts configs that omit custom RPC URLs", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-"));
+  try {
+    const configPath = join(dir, "config.json");
+    await writeFile(configPath, JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const calls = [];
+    const dependencies = mockDependencies({ createPublicClientCalls: calls });
+    const report = await runPreflight({
+      configPath,
+      role: "tester",
+      root: dir,
+      dependencies: { ...dependencies, checkIgnored: () => true },
+    });
+
+    assert.equal(report.role, "tester");
+    assert.equal(report.rpcConfigured, false);
+    assert.deepEqual(calls, [{ chain: "testnet", rpcUrl: undefined }]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight accepts absolute config paths through a symlinked repo root", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-root-"));
+  const realRoot = join(dir, "real");
+  const symlinkRoot = join(dir, "link");
+  try {
+    await mkdir(realRoot);
+    await symlink(realRoot, symlinkRoot, "dir");
+    await writeFile(join(realRoot, "config.json"), JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const report = await runPreflight({
+      configPath: join(symlinkRoot, "config.json"),
+      role: "bot",
+      root: symlinkRoot,
+      dependencies: { ...mockDependencies(), checkIgnored: () => true },
+    });
+
+    assert.equal(report.role, "bot");
+    await assert.rejects(
+      () => runPreflight({
+        configPath: join(dir, "outside.json"),
+        role: "bot",
+        root: symlinkRoot,
+        dependencies: { ...mockDependencies(), checkIgnored: () => true },
+      }),
+      /Config path must stay inside the repo/u,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -220,24 +384,29 @@ test("preflight refuses symlinked config parent paths", async () => {
   }
 });
 
-function mockDependencies() {
+function mockDependencies(options = {}) {
   const expectedGenesis = "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606";
   const nodeUtils = {
     parseRuntimeConfig: (text) => {
       const parsed = JSON.parse(text);
       return {
         ...parsed,
+        rpcUrl: parsed.rpcUrl,
         sleepIntervalMs: parsed.sleepIntervalSeconds * 1000,
+        maxRetryableAttempts: parsed.maxRetryableAttempts,
       };
     },
     redactRpcUrl: () => "https://redacted:redacted@testnet.example/...?token=redacted",
     redactSecretText,
-    createPublicClient: () => ({
-      url: "mock",
-      addressPrefix: "ckt",
-      getTipHeader: async () => ({ hash: "0x" + "44".repeat(32), number: 3n, timestamp: 4n }),
-      getFeeRate: async () => 1000n,
-    }),
+    createPublicClient: (chain, rpcUrl) => {
+      options.createPublicClientCalls?.push({ chain, rpcUrl });
+      return {
+        url: "mock",
+        addressPrefix: "ckt",
+        getTipHeader: async () => ({ hash: "0x" + "44".repeat(32), number: 3n, timestamp: 4n }),
+        getFeeRate: async () => 1000n,
+      };
+    },
     verifyChainPreflight: async () => ({
       chain: "testnet",
       redactedRpcUrl: "https://redacted:redacted@testnet.example/...?token=redacted",
@@ -277,15 +446,18 @@ function mockDependencies() {
         }),
       },
       projectAccountAvailability: () => ({
-        ckbAvailable: 0n,
-        ckbPending: 0n,
-        ickbAvailable: 0n,
-        readyWithdrawals: [],
-        pendingWithdrawals: [],
+        ...(options.projection ?? {
+          ckbAvailable: 0n,
+          ckbPending: 0n,
+          ickbAvailable: 0n,
+          readyWithdrawals: [],
+          pendingWithdrawals: [],
+        }),
       }),
     },
     core: {
       ickbExchangeRatio: () => ({ ckbScale: 1n, udtScale: 1n }),
+      ICKB_DEPOSIT_CAP: 10000000000000n,
       convert: (_toIckb, value) => value,
     },
   };
