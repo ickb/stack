@@ -3,7 +3,7 @@ import { ickbExchangeRatio } from "@ickb/core";
 import { OrderManager, type OrderGroup } from "@ickb/order";
 import { type Runtime } from "./runtime.js";
 
-const MAX_ELAPSED_BLOCKS = 5400n;
+const MAX_ELAPSED_BLOCKS = 180n;
 
 type FreshMatchableOrderSkip =
   | {
@@ -27,6 +27,9 @@ export async function freshMatchableOrderSkip(
   const tx2BlockNumber = new Map<string, bigint>();
 
   for (const group of orders) {
+    if (!group.order.data.isMint()) {
+      continue;
+    }
     if (!isActionableOrder(group, tip, feeRate)) {
       continue;
     }
