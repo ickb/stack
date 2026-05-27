@@ -194,7 +194,7 @@ export function isRetryableRpcTransportError(error: unknown): boolean {
   if (!(error instanceof Error) || error.message !== "fetch failed") {
     return false;
   }
-  const cause = (error as { cause?: unknown }).cause;
+  const cause = "cause" in error ? error.cause : undefined;
   return typeof cause === "object" && cause !== null &&
     "name" in cause && cause.name === "TypeError" &&
     "message" in cause && cause.message === "fetch failed";
@@ -464,7 +464,7 @@ function errorToLogValue(
     };
     try {
       if ("cause" in error) {
-        logged.cause = errorToLogValue((error as { cause?: unknown }).cause, seen);
+        logged.cause = errorToLogValue(error.cause, seen);
       }
       return logged;
     } finally {
