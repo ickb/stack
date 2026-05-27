@@ -53,6 +53,8 @@ The start script writes NDJSON logs to stdout and tees one log file per run. Bal
 
 Every bot observability record is one JSON object on stdout with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and `type`. Execution-log records also remain on stdout, and structured bot records can be selected with `app == "bot"`.
 
+The stable event contract is the bot NDJSON object stream, not a particular file path. Production launchers may route stdout to journald, files, or another operator-owned log root; consumers should depend on records with `app: "bot"` and `bot.*` event types, not supervisor/tester output, launcher metadata, rotation layout, incident bundles, `/var/log`, or validation log directories.
+
 Stable event types:
 
 - `bot.run.started`
@@ -76,15 +78,43 @@ JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `
 
 Structured events should contain public evidence and summaries needed to understand bot behavior. Do not add private keys, seed phrases, mnemonics, or other secrets to log payloads; omit noisy public fields at the call site instead of relying on redaction.
 
+Bot-only log queries, using the production event file or any saved bot stdout NDJSON stream:
+
+```bash
+LOG_DIR=/opt/ickb-stack-testnet/log/bot/testnet
+jq -c 'select(.app == "bot")' "$LOG_DIR/bot.events.ndjson"
+jq -r 'select(.app == "bot") | .type' "$LOG_DIR/bot.events.ndjson" | sort | uniq -c
+jq -c 'select(.type == "launcher.child.exited") | {timestamp, status, signal, elapsedMs, logRoot, logDir, command}' "$LOG_DIR/launches.ndjson"
+```
+
 ## Ubuntu systemd Deployment
 
-For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, and encrypted JSON config credentials. The production units should execute the built app directly with `node apps/bot/dist/index.js`; the package `start` script is for local JSON-config runs and tees app-local log files.
+For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, encrypted JSON config credentials, and bot-only file logs. The production units execute the built app through `scripts/ickb-bot-launcher.mjs`, which owns only process and file plumbing: it starts `/usr/bin/node apps/bot/dist/index.js`, writes bot stdout byte-for-byte to `bot.events.ndjson`, writes child stderr byte-for-byte to `bot.stderr.log`, writes launch metadata to `launches.ndjson`, and tees stdout/stderr to journald as a fallback. Launcher metadata records the executable basename and argument count, but not raw child argument values or environment. The package `start` script is for local JSON-config runs and tees app-local log files.
+
+The launcher resolves the log root in this order: explicit `--log-root`, runtime `ICKB_BOT_LOG_ROOT`, then `<deploy-checkout>/log`. The systemd install script bakes an explicit `--log-root` into generated units only when `ICKB_BOT_LOG_ROOT` is set during install; relative values are resolved against that network's deploy directory. Without an explicit configured root, testnet defaults to `/opt/ickb-stack-testnet/log` and mainnet defaults to `/opt/ickb-stack-mainnet/log`.
+
+The launcher refuses empty paths, log directories outside the resolved log root, symlinked log roots or parent directories, and symlinked log files. It creates `bot.events.ndjson`, `bot.stderr.log`, and `launches.ndjson` with mode `0600` for service-user writes.
+
+Production log layout:
+
+```text
+<log-root>/bot/testnet/bot.events.ndjson
+<log-root>/bot/testnet/bot.stderr.log
+<log-root>/bot/testnet/launches.ndjson
+<log-root>/bot/mainnet/bot.events.ndjson
+<log-root>/bot/mainnet/bot.stderr.log
+<log-root>/bot/mainnet/launches.ndjson
+```
+
+These are production bot-only logs. They are separate from local live validation supervisor artifacts such as `logs/live-supervisor/...`.
 
 This layout keeps the workflow simple while avoiding accidental cross-network updates:
 
 ```text
 /opt/ickb-stack-testnet
 /opt/ickb-stack-mainnet
+/opt/ickb-stack-testnet/log/bot/testnet/
+/opt/ickb-stack-mainnet/log/bot/mainnet/
 /etc/ickb/credentials/ickb-bot-testnet-config.cred
 /etc/ickb/credentials/ickb-bot-mainnet-config.cred
 /etc/systemd/system/ickb-bot-testnet.service
@@ -95,6 +125,12 @@ From a deployed checkout on the VM, install service users, deploy directories, a
 
 ```bash
 sudo scripts/ickb-bot-systemd-install.sh all
+```
+
+To use one explicit log root for both networks, set it while installing or regenerating the units:
+
+```bash
+sudo ICKB_BOT_LOG_ROOT=/path/to/ickb-log-root scripts/ickb-bot-systemd-install.sh all
 ```
 
 Populate and build each deploy directory before starting services. Clone or copy the same repo revision into both directories, then build as the matching service user:
@@ -112,7 +148,7 @@ sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:build
 
 If `/opt/ickb-stack-testnet` or `/opt/ickb-stack-mainnet` already exists from the install script, clone into a temporary path and move the checkout into place, or initialize the existing directory with your normal deployment tooling. The update script expects each deploy directory to be a clean git checkout.
 
-Create encrypted config credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. The helper prompts for the private key, RPC URL, sleep interval, and optional max iterations, validates the same strict JSON schema that the app reads, and encrypts that JSON as one systemd credential.
+Create encrypted config credentials on the VM. The tested Ubuntu 24.04 VM has `systemd-creds` and no TPM device, so host-key credentials are the compatible unattended option. If a future VM exposes a TPM, replace `--with-key=host` with the TPM-backed mode selected for that host. The helper prompts for the private key, optional RPC URL, sleep interval, optional max iterations, and max retryable attempts, validates the same strict JSON schema that the app reads, and encrypts that JSON as one systemd credential.
 
 ```bash
 sudo systemd-creds setup
@@ -135,14 +171,16 @@ Group=ickb-bot-testnet
 WorkingDirectory=/opt/ickb-stack-testnet
 Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json
 LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
-ExecStart=/usr/bin/node apps/bot/dist/index.js
+ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs --network testnet -- /usr/bin/node apps/bot/dist/index.js
 Restart=on-failure
 RestartSec=10
 RestartPreventExitStatus=2
+LimitCORE=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectProc=invisible
 ProtectSystem=strict
+ReadWritePaths=/opt/ickb-stack-testnet/log
 ProtectHome=true
 
 [Install]
@@ -164,14 +202,16 @@ Group=ickb-bot-mainnet
 WorkingDirectory=/opt/ickb-stack-mainnet
 Environment=BOT_CONFIG_FILE=%d/ickb-bot-mainnet-config.json
 LoadCredentialEncrypted=ickb-bot-mainnet-config.json:/etc/ickb/credentials/ickb-bot-mainnet-config.cred
-ExecStart=/usr/bin/node apps/bot/dist/index.js
+ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs --network mainnet -- /usr/bin/node apps/bot/dist/index.js
 Restart=on-failure
 RestartSec=10
 RestartPreventExitStatus=2
+LimitCORE=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectProc=invisible
 ProtectSystem=strict
+ReadWritePaths=/opt/ickb-stack-mainnet/log
 ProtectHome=true
 
 [Install]
@@ -194,11 +234,14 @@ sudo systemctl status ickb-bot-testnet.service
 sudo systemctl status ickb-bot-mainnet.service
 sudo journalctl -u ickb-bot-testnet.service -f
 sudo journalctl -u ickb-bot-mainnet.service -f
+sudo tail -f /opt/ickb-stack-testnet/log/bot/testnet/bot.events.ndjson
+sudo tail -f /opt/ickb-stack-mainnet/log/bot/mainnet/bot.events.ndjson
+jq -c 'select(.type == "launcher.child.exited")' /opt/ickb-stack-testnet/log/bot/testnet/launches.ndjson
 sudo systemctl restart ickb-bot-testnet.service
 sudo systemctl restart ickb-bot-mainnet.service
 ```
 
-Update testnet first, then mainnet after the same revision is validated. The update script pulls, installs, and builds before restarting the service, so a failed build leaves the currently running bot alone.
+Update testnet first, then mainnet after the same revision is validated. Regenerate the units with `scripts/ickb-bot-systemd-install.sh` before updating when the documented unit shape changes. The update script refuses stale units that are missing the production launcher wiring or `LimitCORE=0`, then pulls, installs, and builds before restarting the service, so a failed build leaves the currently running bot alone.
 
 ```bash
 sudo scripts/ickb-bot-systemd-update.sh testnet
@@ -207,7 +250,92 @@ sudo scripts/ickb-bot-systemd-update.sh mainnet
 
 Use `scripts/ickb-bot-systemd-update.sh mainnet` only after the same revision has been validated on testnet.
 
-Exit code `2` is an intentional safety stop, including low capital and transaction confirmation timeout after broadcast. Inspect the journal before restarting a service that stopped with code `2`.
+Exit code `2` is an intentional safety stop, including low capital and transaction confirmation timeout after broadcast. `RestartPreventExitStatus=2` keeps systemd from relaunching immediately. Before restarting, inspect `launches.ndjson` for the child exit record, `bot.events.ndjson` for the terminal bot event, `bot.stderr.log` for runtime errors, and journald for launcher fallback output:
+
+```bash
+LOG_DIR=/opt/ickb-stack-testnet/log/bot/testnet
+jq -c 'select(.type == "launcher.child.exited")' "$LOG_DIR/launches.ndjson"
+jq -c 'select(.app == "bot" and (.terminal == true or .type == "bot.decision.skipped" or .type == "bot.transaction.failed" or .type == "bot.iteration.failed"))' "$LOG_DIR/bot.events.ndjson"
+sudo journalctl -u ickb-bot-testnet.service -n 200 --no-pager
+```
+
+The generated units set `LimitCORE=0`, so crash diagnosis should use bot logs, launcher exit records, stderr, journald, and the bundled unit text rather than expecting a core file.
+
+### Incident Bundles
+
+Use `scripts/ickb-bot-collect-incident.mjs` before restarting after exit code `2` or any unexpected production behavior. The collector reads only bot production sources: `bot.events.ndjson`, `bot.stderr.log`, `launches.ndjson`, version metadata, and optional systemd status/journal/unit text. It keeps those sources separated and writes a restricted incident directory under the selected bot log directory:
+
+```text
+<log-root>/bot/<network>/incidents/<incident-id>/
+  README.txt
+  bot.events.ndjson
+  bot.stderr.log
+  launches.ndjson
+  summary.json
+  version.json
+  systemd.status.txt      # when systemd output is available
+  systemd.journal.txt     # when systemd output is available
+  systemd.unit.txt        # when systemd output is available
+```
+
+The log root resolves the same way as the launcher: explicit `--log-root`, then runtime `ICKB_BOT_LOG_ROOT`, then `<deploy-checkout>/log`. `--network testnet|mainnet` selects `<log-root>/bot/<network>/`. `--log-dir <path>` may be used instead of `--network` only when the resolved path stays inside the resolved log root, which is useful for copied logs or a custom contained bot log directory. The collector refuses empty paths, paths outside the resolved log root, symlinked log directories, symlinked incident parents, and symlinked source log files.
+
+Examples from the deployed checkout:
+
+```bash
+sudo -u ickb-bot-testnet node scripts/ickb-bot-collect-incident.mjs --network testnet --since 2h --until now
+sudo -u ickb-bot-mainnet node scripts/ickb-bot-collect-incident.mjs --network mainnet --since 2026-05-25T10:00:00Z --until 2026-05-25T11:00:00Z
+sudo -u ickb-bot-testnet node scripts/ickb-bot-collect-incident.mjs --log-root /path/to/ickb-log-root --network testnet --since 30m --until now
+sudo -u ickb-bot-testnet ICKB_BOT_LOG_ROOT=/path/to/ickb-log-root node scripts/ickb-bot-collect-incident.mjs --log-dir /path/to/ickb-log-root/bot/testnet --since 30m --until now
+```
+
+If you do not want systemd status, journal, or unit text in the bundle, add `--no-systemd`. The collector does not include runtime config files or environment dumps because they can contain private keys, credentialed RPC URLs, tokens, passwords, or API keys. Selected source logs and systemd output are bundled as public producer-owned evidence; if a private key or other secret reaches those sources, fix the producer that wrote it before sharing or archiving the bundle.
+
+Inspect `summary.json` first. It includes selected source files, malformed/undated/out-of-window line counts, first/last timestamps, event counts by type, transaction hashes by outcome, skip/failure reasons, launcher exit codes, systemd capture results, package version, git commit, Node version, and the collector script version. `bot.stderr.log` is raw child stderr, so undated stack-trace lines after an in-window timestamped stderr line are kept with that timestamped line; when stderr has no timestamps at all, the collector includes the last 200 non-empty stderr lines and marks that in `summary.json`. For exit code `2`, review the `launcher.child.exited` record, terminal bot events (`bot.decision.skipped`, `bot.transaction.failed`, `bot.iteration.failed`, or records with `terminal:true`), stderr, and journald before deciding whether the restart is safe.
+
+The collector writes the incident directory directly and prints a portable compression command instead of assuming `tar`, `gzip`, or `zstd` are present. On a host with `tar` and gzip, run the printed command or equivalently:
+
+```bash
+tar -czf /opt/ickb-stack-testnet/log/bot/testnet/incidents/<incident-id>.tar.gz -C /opt/ickb-stack-testnet/log/bot/testnet/incidents <incident-id>
+```
+
+Retain incident bundles long enough to cover your operational review and postmortem window, then remove them with the same sensitivity as production logs. A practical default is to keep testnet bundles for 14 days and mainnet bundles for 30 days, matching the rotation examples below unless an active incident review requires longer retention.
+
+### Log Rotation
+
+The launcher keeps the three log files open for the lifetime of the service and does not implement a reopen signal. Use `copytruncate` if you want rotation without restarting the bot. This can lose a small write window during copy/truncate, but it preserves continuous systemd supervision. If you require exact handoff instead, restart the service after rotation and treat the restart as an operational event.
+
+Default-root logrotate example for testnet:
+
+```text
+/opt/ickb-stack-testnet/log/bot/testnet/bot.events.ndjson
+/opt/ickb-stack-testnet/log/bot/testnet/bot.stderr.log
+/opt/ickb-stack-testnet/log/bot/testnet/launches.ndjson {
+  daily
+  rotate 14
+  missingok
+  notifempty
+  compress
+  copytruncate
+  su ickb-bot-testnet ickb-bot-testnet
+}
+```
+
+Default-root logrotate example for mainnet:
+
+```text
+/opt/ickb-stack-mainnet/log/bot/mainnet/bot.events.ndjson
+/opt/ickb-stack-mainnet/log/bot/mainnet/bot.stderr.log
+/opt/ickb-stack-mainnet/log/bot/mainnet/launches.ndjson {
+  daily
+  rotate 30
+  missingok
+  notifempty
+  compress
+  copytruncate
+  su ickb-bot-mainnet ickb-bot-mainnet
+}
+```
 
 ## Notes
 

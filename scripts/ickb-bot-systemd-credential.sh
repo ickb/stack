@@ -34,7 +34,7 @@ if (config.chain !== expectedChain) fail();
 process.stdout.write(JSON.stringify(config));
 })();
 function fail() {
-  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, rpcUrl, sleepIntervalSeconds, and optional maxIterations. Build @ickb/node-utils before running this helper.\n");
+  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, optional rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts. Build @ickb/node-utils before running this helper.\n");
   process.exit(1);
 }
 ' "${repo_root}" "${expected_chain}"
@@ -104,23 +104,32 @@ main() {
   local rpc_url
   local sleep_interval
   local max_iterations
+  local retryable_prompt
+  local max_retryable_attempts
   private_key=$(systemd-ask-password -n "iCKB ${network} bot private key:")
-  rpc_url=$(systemd-ask-password --echo=yes -n "iCKB ${network} RPC URL:")
+  rpc_url=$(systemd-ask-password -n "iCKB ${network} RPC URL [empty for CCC default]:")
   read -r -p "iCKB ${network} bot sleep interval seconds [60]: " sleep_interval
   sleep_interval=${sleep_interval:-60}
   read -r -p "iCKB ${network} bot max iterations [empty for unbounded]: " max_iterations
-  printf '%s\0%s\0%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" "${sleep_interval}" "${max_iterations}" |
+  retryable_prompt="iCKB ${network} bot max retryable attempts [10]: "
+  read -r -p "${retryable_prompt}" max_retryable_attempts
+  printf '%s\0%s\0%s\0%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" "${sleep_interval}" "${max_iterations}" "${max_retryable_attempts:-10}" |
   node -e '
 const input = require("node:fs").readFileSync(0).toString("utf8").split("\0");
-const [chain, privateKey, rpcUrl, sleepIntervalSeconds, maxIterations] = input;
+const [chain, privateKey, rpcUrl, sleepIntervalSeconds, maxIterations, maxRetryableAttempts] = input;
 const config = {
   chain,
   privateKey,
-  rpcUrl,
   sleepIntervalSeconds: Number(sleepIntervalSeconds),
 };
+if (rpcUrl !== "") {
+  config.rpcUrl = rpcUrl;
+}
 if (maxIterations !== "") {
   config.maxIterations = Number(maxIterations);
+}
+if (maxRetryableAttempts !== "") {
+  config.maxRetryableAttempts = Number(maxRetryableAttempts);
 }
 process.stdout.write(JSON.stringify(config));
 ' |
