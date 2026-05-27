@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -228,6 +228,43 @@ test("preflight run accepts configs that omit custom RPC URLs", async () => {
     assert.equal(report.role, "tester");
     assert.equal(report.rpcConfigured, false);
     assert.deepEqual(calls, [{ chain: "testnet", rpcUrl: undefined }]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflight accepts absolute config paths through a symlinked repo root", async () => {
+  const privateKey = `0x${randomBytes(32).toString("hex")}`;
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-preflight-root-"));
+  const realRoot = join(dir, "real");
+  const symlinkRoot = join(dir, "link");
+  try {
+    await mkdir(realRoot);
+    await symlink(realRoot, symlinkRoot, "dir");
+    await writeFile(join(realRoot, "config.json"), JSON.stringify({
+      chain: "testnet",
+      privateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+    }));
+
+    const report = await runPreflight({
+      configPath: join(symlinkRoot, "config.json"),
+      role: "bot",
+      root: symlinkRoot,
+      dependencies: { ...mockDependencies(), checkIgnored: () => true },
+    });
+
+    assert.equal(report.role, "bot");
+    await assert.rejects(
+      () => runPreflight({
+        configPath: join(dir, "outside.json"),
+        role: "bot",
+        root: symlinkRoot,
+        dependencies: { ...mockDependencies(), checkIgnored: () => true },
+      }),
+      /Config path must stay inside the repo/u,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

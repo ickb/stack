@@ -125,12 +125,14 @@ export async function runGenerateConfig({ argv, root = rootDir, dependencies = {
   if (args.help) {
     return { help: usage() };
   }
+  const originalRoot = resolve(root);
+  const resolvedRoot = await (dependencies.realpath ?? realpath)(originalRoot);
 
   const privateKey = generateSecp256k1PrivateKey(dependencies.randomBytes ?? randomBytes);
   const config = buildRuntimeConfig({ ...args, privateKey });
-  const output = outputPath(root, args.out);
-  assertIgnoredPath(root, output.relativePath, dependencies.checkIgnored);
-  await makeSafeParentDir(output.absolutePath, root, dependencies);
+  const output = outputPath(originalRoot, resolvedRoot, args.out);
+  assertIgnoredPath(resolvedRoot, output.relativePath, dependencies.checkIgnored);
+  await makeSafeParentDir(output.absolutePath, resolvedRoot, dependencies);
   await writeStagedConfigFile(output.absolutePath, `${JSON.stringify(config)}\n`, args.force, dependencies);
 
   return {
@@ -212,13 +214,26 @@ function parseRpcUrl(value) {
   return value;
 }
 
-function outputPath(root, out) {
-  const absolutePath = isAbsolute(out) ? out : resolve(root, out);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("Output path must stay inside the repo");
+function outputPath(originalRoot, resolvedRoot, out) {
+  const absolutePath = isAbsolute(out) ? out : resolve(resolvedRoot, out);
+  const relativePath = relative(resolvedRoot, absolutePath);
+  if (isInsideRelativePath(relativePath)) {
+    return { absolutePath, relativePath };
   }
-  return { absolutePath, relativePath };
+  if (isAbsolute(out)) {
+    const originalRelativePath = relative(originalRoot, out);
+    if (isInsideRelativePath(originalRelativePath)) {
+      return {
+        absolutePath: resolve(resolvedRoot, originalRelativePath),
+        relativePath: originalRelativePath,
+      };
+    }
+  }
+  throw new Error("Output path must stay inside the repo");
+}
+
+function isInsideRelativePath(relativePath) {
+  return !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 async function writeStagedConfigFile(path, text, force, dependencies) {

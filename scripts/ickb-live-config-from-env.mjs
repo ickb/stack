@@ -47,6 +47,8 @@ export async function runLiveConfigFromEnv({ argv, env = process.env, root = roo
   if (args.help) {
     return { help: usage() };
   }
+  const originalRoot = resolve(root);
+  const resolvedRoot = await (dependencies.realpath ?? realpath)(originalRoot);
 
   const sleepIntervalSeconds = parseOptionalPositiveInteger(env.ICKB_TESTNET_SLEEP_INTERVAL_SECONDS, "ICKB_TESTNET_SLEEP_INTERVAL_SECONDS") ?? 1;
   const maxIterations = parseOptionalPositiveInteger(env.ICKB_TESTNET_MAX_ITERATIONS, "ICKB_TESTNET_MAX_ITERATIONS") ?? 1;
@@ -55,17 +57,17 @@ export async function runLiveConfigFromEnv({ argv, env = process.env, root = roo
   const outputs = OUTPUTS.map((output) => ({
     ...output,
     privateKey: parsePrivateKey(env[output.envName], output.envName),
-    target: outputPath(root, output.out),
+    target: outputPath(originalRoot, resolvedRoot, output.out),
   }));
   for (const output of outputs) {
-    assertIgnoredPath(root, output.target.relativePath, dependencies.checkIgnored);
+    assertIgnoredPath(resolvedRoot, output.target.relativePath, dependencies.checkIgnored);
   }
   if (!args.force) {
     await assertNoExistingTargets(outputs.map((output) => output.target.absolutePath), dependencies);
   }
 
   for (const output of outputs) {
-    await makeSafeParentDir(output.target.absolutePath, root, dependencies);
+    await makeSafeParentDir(output.target.absolutePath, resolvedRoot, dependencies);
   }
 
   const staged = [];
@@ -279,13 +281,26 @@ function isNotFoundError(error) {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-function outputPath(root, out) {
-  const absolutePath = isAbsolute(out) ? out : resolve(root, out);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("Output path must stay inside the repo");
+function outputPath(originalRoot, resolvedRoot, out) {
+  const absolutePath = isAbsolute(out) ? out : resolve(resolvedRoot, out);
+  const relativePath = relative(resolvedRoot, absolutePath);
+  if (isInsideRelativePath(relativePath)) {
+    return { absolutePath, relativePath };
   }
-  return { absolutePath, relativePath };
+  if (isAbsolute(out)) {
+    const originalRelativePath = relative(originalRoot, out);
+    if (isInsideRelativePath(originalRelativePath)) {
+      return {
+        absolutePath: resolve(resolvedRoot, originalRelativePath),
+        relativePath: originalRelativePath,
+      };
+    }
+  }
+  throw new Error("Output path must stay inside the repo");
+}
+
+function isInsideRelativePath(relativePath) {
+  return !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 async function writeConfigFile(path, text, force, dependencies) {

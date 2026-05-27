@@ -67,8 +67,10 @@ export function ckbReserveForRole(role) {
 }
 
 export async function runPreflight({ configPath, role, root = rootDir, dependencies }) {
-  const config = resolveConfigPath(root, configPath, dependencies?.checkIgnored);
-  await assertReadableConfigPath(root, config.absolutePath, dependencies);
+  const originalRoot = resolve(root);
+  const resolvedRoot = await (dependencies?.realpath ?? realpath)(originalRoot);
+  const config = resolveConfigPath(originalRoot, resolvedRoot, configPath, dependencies?.checkIgnored);
+  await assertReadableConfigPath(resolvedRoot, config.absolutePath, dependencies);
   const configText = await readFile(config.absolutePath, "utf8");
   const { nodeUtils } = dependencies ?? await loadBuiltNodeUtils(root);
   let runtimeConfig;
@@ -275,16 +277,32 @@ function maxBigInt(left, right) {
   return left > right ? left : right;
 }
 
-function resolveConfigPath(root, configPath, checkIgnored = defaultCheckIgnored) {
-  const absolutePath = isAbsolute(configPath) ? configPath : resolve(root, configPath);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("Config path must stay inside the repo");
+function resolveConfigPath(originalRoot, resolvedRoot, configPath, checkIgnored = defaultCheckIgnored) {
+  const absolutePath = isAbsolute(configPath) ? configPath : resolve(resolvedRoot, configPath);
+  const relativePath = relative(resolvedRoot, absolutePath);
+  if (isInsideRelativePath(relativePath)) {
+    if (!checkIgnored(resolvedRoot, relativePath)) {
+      throw new Error(`Refusing to read non-ignored config path: ${relativePath}`);
+    }
+    return { absolutePath, relativePath };
   }
-  if (!checkIgnored(root, relativePath)) {
-    throw new Error(`Refusing to read non-ignored config path: ${relativePath}`);
+  if (isAbsolute(configPath)) {
+    const originalRelativePath = relative(originalRoot, configPath);
+    if (isInsideRelativePath(originalRelativePath)) {
+      if (!checkIgnored(resolvedRoot, originalRelativePath)) {
+        throw new Error(`Refusing to read non-ignored config path: ${originalRelativePath}`);
+      }
+      return {
+        absolutePath: resolve(resolvedRoot, originalRelativePath),
+        relativePath: originalRelativePath,
+      };
+    }
   }
-  return { absolutePath, relativePath };
+  throw new Error("Config path must stay inside the repo");
+}
+
+function isInsideRelativePath(relativePath) {
+  return !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
 
 async function assertReadableConfigPath(root, configPath, dependencies = {}) {

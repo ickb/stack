@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { constants } from "node:fs";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -233,6 +233,49 @@ test("config generator removes staged config when final install fails", async ()
 
     assert.equal(unlinked.length, 1);
     assert.match(unlinked[0], /config\/bot-testnet\.json\.tmp-/u);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("config generator accepts absolute outputs through a symlinked repo root", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-generate-config-root-"));
+  const realRoot = join(dir, "real");
+  const symlinkRoot = join(dir, "link");
+  try {
+    await mkdir(realRoot);
+    await symlink(realRoot, symlinkRoot, "dir");
+
+    const result = await runGenerateConfig({
+      argv: ["--out", join(symlinkRoot, "config", "bot-testnet.json")],
+      root: symlinkRoot,
+      dependencies: {
+        randomBytes: () => Buffer.from("77".repeat(32), "hex"),
+        checkIgnored: (_root, relativePath) => relativePath.startsWith("config/"),
+      },
+    });
+
+    assert.equal(result.outputPath, "config/bot-testnet.json");
+    assert.deepEqual(JSON.parse(await readFile(join(realRoot, "config", "bot-testnet.json"), "utf8")), {
+      chain: "testnet",
+      privateKey: `0x${"77".repeat(32)}`,
+      rpcUrl: "https://testnet.ckb.dev/",
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+      maxRetryableAttempts: 10,
+    });
+
+    await assert.rejects(
+      () => runGenerateConfig({
+        argv: ["--out", join(dir, "outside.json")],
+        root: symlinkRoot,
+        dependencies: {
+          randomBytes: () => Buffer.from("88".repeat(32), "hex"),
+          checkIgnored: () => true,
+        },
+      }),
+      /Output path must stay inside the repo/u,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

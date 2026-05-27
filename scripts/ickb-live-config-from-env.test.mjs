@@ -488,3 +488,39 @@ test("live env config helper refuses symlinked output paths", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("live env config helper accepts absolute outputs through a symlinked repo root", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-config-env-root-"));
+  const realRoot = join(dir, "real");
+  const symlinkRoot = join(dir, "link");
+  try {
+    await mkdir(realRoot);
+    await symlink(realRoot, symlinkRoot, "dir");
+
+    const result = await runLiveConfigFromEnv({
+      argv: [],
+      root: symlinkRoot,
+      env: {
+        ICKB_TESTNET_BOT_PRIVATE_KEY: botPrivateKey,
+        ICKB_TESTNET_TESTER_PRIVATE_KEY: testerPrivateKey,
+      },
+      dependencies: {
+        checkIgnored: (_root, relativePath) => relativePath.startsWith("config/"),
+      },
+    });
+
+    assert.deepEqual(result.written.map((entry) => entry.outputPath), [
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ]);
+    assert.deepEqual(JSON.parse(await readFile(join(realRoot, "config", "bot-testnet.json"), "utf8")), {
+      chain: "testnet",
+      privateKey: botPrivateKey,
+      sleepIntervalSeconds: 1,
+      maxIterations: 1,
+      maxRetryableAttempts: 10,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
