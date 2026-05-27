@@ -390,8 +390,6 @@ export class OrderManager implements ScriptDeps {
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [] as Match["partials"],
-      ckbAllowance: allowance.ckbValue,
-      udtAllowance: allowance.udtValue,
       gain: 0n,
     };
     let advance = {
@@ -450,8 +448,6 @@ export class OrderManager implements ScriptDeps {
               ckbDelta,
               udtDelta,
               partials,
-              ckbAllowance,
-              udtAllowance,
               gain,
             };
           }
