@@ -45,8 +45,8 @@ describe("node utilities", () => {
     expect(parseSleepInterval(1073741, "BOT_CONFIG_FILE")).toBe(1073741000);
   });
 
-  it("rejects missing and sub-second sleep intervals", () => {
-    for (const value of [undefined, Number.NaN, Infinity, 0, 0.5, 1073741.824, 9007199254741]) {
+  it("rejects invalid sleep intervals", () => {
+    for (const value of [undefined, Number.NaN, Infinity, -1, 0, 0.5, 1073741.824, 9007199254741]) {
       expect(() => parseSleepInterval(value, "BOT_CONFIG_FILE")).toThrow(
         "Invalid env BOT_CONFIG_FILE",
       );
