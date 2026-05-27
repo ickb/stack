@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -14,11 +15,22 @@ test("credential helper validation uses the shared runtime parser", () => {
     privateKey,
     rpcUrl: "http://127.0.0.1:8114/",
     sleepIntervalSeconds: 60,
+    maxRetryableAttempts: 10,
   });
 
   const valid = validateConfig("testnet", config);
   assert.equal(valid.status, 0, valid.stderr);
   assert.equal(valid.stdout, config);
+
+  const defaultRpcConfig = JSON.stringify({
+    chain: "testnet",
+    privateKey,
+    sleepIntervalSeconds: 60,
+    maxRetryableAttempts: 10,
+  });
+  const validDefaultRpc = validateConfig("testnet", defaultRpcConfig);
+  assert.equal(validDefaultRpc.status, 0, validDefaultRpc.stderr);
+  assert.equal(validDefaultRpc.stdout, defaultRpcConfig);
 
   const wrongChain = validateConfig("mainnet", config);
   assert.equal(wrongChain.status, 1);
@@ -32,6 +44,19 @@ test("credential helper validation uses the shared runtime parser", () => {
   }));
   assert.equal(invalidKey.status, 1);
   assert.doesNotMatch(invalidKey.stderr, /0x11/u);
+});
+
+test("credential helper does not echo RPC URL input", async () => {
+  const text = await readFile(script, "utf8");
+
+  assert.doesNotMatch(text, /systemd-ask-password --echo=yes/u);
+});
+
+test("credential helper prompts for retryable-attempt budget", async () => {
+  const text = await readFile(script, "utf8");
+
+  assert.match(text, /max retryable attempts/u);
+  assert.match(text, /maxRetryableAttempts/u);
 });
 
 function validateConfig(network, input) {
