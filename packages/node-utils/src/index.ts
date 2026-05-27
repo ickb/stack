@@ -283,7 +283,7 @@ export function parseSleepInterval(
   }
 
   const intervalMs = intervalSeconds * 1000;
-  if (!Number.isSafeInteger(intervalMs) || intervalMs > Math.floor(MAX_TIMER_DELAY_MS / 2)) {
+  if (!Number.isSafeInteger(intervalMs) || intervalMs > MAX_TIMER_DELAY_MS / 2) {
     throw new Error("Invalid env " + envName);
   }
 
@@ -406,8 +406,8 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     typeof record.chain !== "string" ||
     typeof record.privateKey !== "string" ||
     typeof record.sleepIntervalSeconds !== "number" ||
-    record.maxIterations !== undefined && typeof record.maxIterations !== "number" ||
-    record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number"
+    (record.maxIterations !== undefined && typeof record.maxIterations !== "number") ||
+    (record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number")
   ) {
     throw new Error("Invalid env " + envName);
   }
