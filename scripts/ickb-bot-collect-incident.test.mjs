@@ -461,6 +461,33 @@ test("captures systemd metadata into separate files when commands are available"
   }
 });
 
+test("keeps collecting incidents when git metadata lookup fails", async () => {
+  const dir = await tempDir();
+  try {
+    await writeFixtureLogs(dir, {
+      events: [botEvent("2026-05-25T10:00:00.000Z", "bot.run.started")],
+      launches: [],
+      stderr: [],
+    });
+
+    const result = await collectIncident({
+      argv: commonArgs(dir),
+      dependencies: {
+        spawnSync() {
+          throw new Error("git unavailable");
+        },
+      },
+      now: () => new Date("2026-05-25T12:00:00.000Z"),
+      root: rootDir,
+    });
+
+    const version = JSON.parse(await readFile(join(result.incidentDir, "version.json"), "utf8"));
+    assert.equal(version.gitCommit, null);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
 async function tempDir() {
   return mkdtemp(join(tmpdir(), "ickb-bot-incident-"));
 }

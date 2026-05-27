@@ -48,6 +48,19 @@ test("systemd update accepts spaces around service directive separators", async 
   }
 });
 
+test("systemd update reads unit files without trailing newlines", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-bot-systemd-update-"));
+  try {
+    const unitPath = join(dir, "ickb-bot-testnet.service");
+    await writeFile(unitPath, unitText({ network: "testnet", launcher: true }).replace(/\n$/u, ""));
+
+    const result = requireLauncherUnit(unitPath, "testnet");
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
 test("systemd update refuses stale direct-exec units", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ickb-bot-systemd-update-"));
   try {

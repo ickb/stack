@@ -124,6 +124,7 @@ export async function runBotLauncher({
       env,
       stdio: ["inherit", "pipe", "pipe"],
     });
+    const childResultPromise = waitForChild(child);
 
     removeSignalHandlers = forwardSignalsTo(child);
 
@@ -148,7 +149,7 @@ export async function runBotLauncher({
 
     const stdoutCopy = copyBytes(child.stdout, sinks.events, stdout);
     const stderrCopy = copyBytes(child.stderr, sinks.stderr, stderr);
-    const childResult = await waitForChild(child);
+    const childResult = await childResultPromise;
     const copyResult = await settleCopies(stdoutCopy, stderrCopy);
     const elapsedMs = Date.now() - startTime;
 
@@ -176,6 +177,10 @@ export async function runBotLauncher({
 
     if (copyResult !== undefined) {
       stderr.write(`ickb-bot-launcher: ${publicErrorMessage(copyResult)}\n`);
+      return { status: 1 };
+    }
+    if (childResult.error !== undefined) {
+      stderr.write(`ickb-bot-launcher: Failed to spawn child process: ${publicErrorMessage(childResult.error)}\n`);
       return { status: 1 };
     }
     if (childResult.signal !== null) {

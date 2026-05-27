@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { spawnSync } from "node:child_process";
 import { Writable } from "node:stream";
 import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -215,6 +216,39 @@ test("tee failures do not override child exit semantics or file logs", async () 
     assert.equal(await readFile(join(logDir, "bot.stderr.log"), "utf8"), "stderr\n");
     const launches = await readLaunches(logDir);
     assert.equal(launches.at(-1).status, 2);
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+test("reports asynchronous child spawn errors", async () => {
+  const dir = await tempDir();
+  try {
+    let stderr = "";
+    const result = await runBotLauncher({
+      argv: ["--log-root", dir, "--network", "testnet", "--", "missing-binary"],
+      root: rootDir,
+      spawnProcess() {
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.killed = false;
+        child.kill = () => {
+          child.killed = true;
+        };
+        child.stderr = null;
+        child.stdout = null;
+        process.nextTick(() => child.emit("error", new Error("spawn ENOENT")));
+        return child;
+      },
+      stderr: {
+        write(chunk) {
+          stderr += chunk;
+        },
+      },
+    });
+
+    assert.deepEqual(result, { status: 1 });
+    assert.match(stderr, /Failed to spawn child process: spawn ENOENT/u);
   } finally {
     await rm(dir, { force: true, recursive: true });
   }

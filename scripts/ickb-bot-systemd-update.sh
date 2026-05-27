@@ -103,7 +103,7 @@ unit_has_directive() {
   local value
   local in_service=0
 
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n ${line} ]]; do
     line=${line%$'\r'}
     [[ ${line} =~ ^[[:space:]]*($|#|\;) ]] && continue
     if [[ ${line} =~ ^[[:space:]]*\[(.*)\][[:space:]]*$ ]]; then
@@ -154,7 +154,7 @@ unit_launcher_log_root() {
   local exec_start
   local in_service=0
 
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n ${line} ]]; do
     line=${line%$'\r'}
     [[ ${line} =~ ^[[:space:]]*($|#|\;) ]] && continue
     if [[ ${line} =~ ^[[:space:]]*\[(.*)\][[:space:]]*$ ]]; then

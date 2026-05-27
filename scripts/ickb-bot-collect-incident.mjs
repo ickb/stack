@@ -632,13 +632,17 @@ async function readPackage(path) {
 }
 
 function readGitCommit(root, dependencies) {
-  const spawn = dependencies.spawnSync ?? spawnSync;
-  const result = spawn("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 5_000 });
-  if (result.status !== 0) {
+  try {
+    const spawn = dependencies.spawnSync ?? spawnSync;
+    const result = spawn("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 5_000 });
+    if (result.error !== undefined || result.status !== 0) {
+      return null;
+    }
+    const commit = result.stdout.trim();
+    return commit === "" ? null : commit;
+  } catch {
     return null;
   }
-  const commit = result.stdout.trim();
-  return commit === "" ? null : commit;
 }
 
 function captureSystemd(network, since, until, dependencies) {
