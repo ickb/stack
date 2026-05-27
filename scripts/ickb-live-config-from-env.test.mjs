@@ -405,6 +405,55 @@ test("live env config helper removes partial create outputs when pair commit fai
   }
 });
 
+test("live env config helper removes partial temp files when writes fail", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-config-env-"));
+  const dirs = new Set([dir]);
+  const unlinked = [];
+  try {
+    await assert.rejects(
+      () => runLiveConfigFromEnv({
+        argv: [],
+        root: dir,
+        env: {
+          ICKB_TESTNET_BOT_PRIVATE_KEY: botPrivateKey,
+          ICKB_TESTNET_TESTER_PRIVATE_KEY: testerPrivateKey,
+        },
+        dependencies: {
+          checkIgnored: () => true,
+          mkdir: async (path) => {
+            dirs.add(path);
+          },
+          lstat: async (path) => {
+            if (dirs.has(path)) {
+              return { isSymbolicLink: () => false };
+            }
+            const error = new Error("missing");
+            error.code = "ENOENT";
+            throw error;
+          },
+          realpath: async (path) => path,
+          open: async () => ({
+            writeFile: async () => {
+              throw new Error("write failed");
+            },
+            chmod: async () => undefined,
+            close: async () => undefined,
+          }),
+          unlink: async (path) => {
+            unlinked.push(path);
+          },
+        },
+      }),
+      /write failed/u,
+    );
+
+    assert.equal(unlinked.length, 1);
+    assert.match(unlinked[0], /config\/bot-testnet\.json\.tmp-/u);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("live env config helper restores previous configs when forced pair replace fails", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ickb-live-config-env-"));
   const botPath = join(dir, "config", "bot-testnet.json");
@@ -461,6 +510,67 @@ test("live env config helper restores previous configs when forced pair replace 
     assert(renames.some((entry) => entry.from === testerPath && /tester-testnet\.json\.backup-/u.test(entry.to)));
     assert(renames.some((entry) => /bot-testnet\.json\.backup-/u.test(entry.from) && entry.to === botPath));
     assert(renames.some((entry) => /tester-testnet\.json\.backup-/u.test(entry.from) && entry.to === testerPath));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("live env config helper continues restoring backups after one restore fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ickb-live-config-env-"));
+  const botPath = join(dir, "config", "bot-testnet.json");
+  const testerPath = join(dir, "config", "tester-testnet.json");
+  const dirs = new Set([dir, join(dir, "config")]);
+  const files = new Set([botPath, testerPath]);
+  const restoreAttempts = [];
+  try {
+    await assert.rejects(
+      () => runLiveConfigFromEnv({
+        argv: ["--force"],
+        root: dir,
+        env: {
+          ICKB_TESTNET_BOT_PRIVATE_KEY: botPrivateKey,
+          ICKB_TESTNET_TESTER_PRIVATE_KEY: testerPrivateKey,
+        },
+        dependencies: {
+          checkIgnored: () => true,
+          mkdir: async (path) => {
+            dirs.add(path);
+          },
+          lstat: async (path) => {
+            if (dirs.has(path) || files.has(path)) {
+              return { isSymbolicLink: () => false };
+            }
+            const error = new Error("missing");
+            error.code = "ENOENT";
+            throw error;
+          },
+          realpath: async (path) => path,
+          writeFile: async (path) => {
+            files.add(path);
+          },
+          rename: async (from, to) => {
+            if (/\.tmp-/u.test(from) && to === botPath) {
+              throw new Error("install failed");
+            }
+            if (/\.backup-/u.test(from)) {
+              restoreAttempts.push(to);
+              if (to === testerPath) {
+                throw new Error("restore failed");
+              }
+            }
+            files.delete(from);
+            files.add(to);
+          },
+          unlink: async (path) => {
+            files.delete(path);
+          },
+        },
+      }),
+      /install failed/u,
+    );
+
+    assert.deepEqual(restoreAttempts, [testerPath, botPath]);
+    assert(files.has(botPath));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -82,8 +82,8 @@ export async function runLiveConfigFromEnv({ argv, env = process.env, root = roo
         maxRetryableAttempts,
       });
       const tempPath = tempConfigPath(output.target.absolutePath, "tmp", index);
-      await writeConfigFile(tempPath, `${JSON.stringify(config)}\n`, false, dependencies);
       staged.push({ ...output, tempPath });
+      await writeConfigFile(tempPath, `${JSON.stringify(config)}\n`, false, dependencies);
     }
     await commitStagedConfigs(staged, args.force, dependencies);
   } catch (error) {
@@ -169,11 +169,19 @@ async function replaceStagedConfigs(staged, dependencies) {
     }
   } catch (error) {
     for (const backup of backups.reverse()) {
-      if (await pathExists(backup.backupPath, dependencies)) {
-        await (dependencies.rename ?? rename)(backup.backupPath, backup.targetPath);
+      try {
+        if (await pathExists(backup.backupPath, dependencies)) {
+          await (dependencies.rename ?? rename)(backup.backupPath, backup.targetPath);
+        }
+      } catch {
+        // Try every rollback path; the original install error is the actionable failure.
       }
     }
-    await cleanupPaths(installedWithoutBackup, dependencies);
+    try {
+      await cleanupPaths(installedWithoutBackup, dependencies);
+    } catch {
+      // Preserve the original install failure.
+    }
     throw error;
   }
   await cleanupPaths(backups.map((backup) => backup.backupPath), dependencies);
