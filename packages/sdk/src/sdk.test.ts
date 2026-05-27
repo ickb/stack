@@ -1991,6 +1991,7 @@ describe("sendAndWaitForCommit", () => {
   it("surfaces transaction confirmation timeouts with the broadcast hash", async () => {
     const txHash = hash("a3");
     const onSent = vi.fn();
+    const sleep = vi.fn(() => Promise.resolve());
     const onLifecycle = vi.fn<(event: unknown) => void>();
 
     try {
@@ -2008,7 +2009,7 @@ describe("sendAndWaitForCommit", () => {
           maxConfirmationChecks: 1,
           onLifecycle,
           onSent,
-          sleep: () => Promise.resolve(),
+          sleep,
         },
       );
       expect.fail("Expected sendAndWaitForCommit to reject");
@@ -2023,6 +2024,7 @@ describe("sendAndWaitForCommit", () => {
     }
 
     expect(onSent).toHaveBeenCalledWith(txHash);
+    expect(sleep).not.toHaveBeenCalled();
     expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
       { type: "broadcasted", txHash },
       { type: "timeout_after_broadcast", txHash, status: "unknown", checks: 1 },

@@ -253,6 +253,9 @@ export async function sendAndWaitForCommit(
     if (!isPendingStatus(status)) {
       break;
     }
+    if (checks >= maxConfirmationChecks) {
+      break;
+    }
 
     onConfirmationWait?.();
     await sleep(confirmationIntervalMs);
