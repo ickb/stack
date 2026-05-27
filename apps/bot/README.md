@@ -13,10 +13,20 @@ The bot minimizes excess iCKB holdings so more liquidity stays available in CKB 
 The bot reads one strict JSON config file named by `BOT_CONFIG_FILE`:
 
 ```json
-{"chain":"testnet","privateKey":"0x...","sleepIntervalSeconds":60,"maxRetryableAttempts":10}
+{"chain":"testnet","privateKey":"0x...","rpcUrl":"http://127.0.0.1:8114/","sleepIntervalSeconds":60,"maxIterations":1,"maxRetryableAttempts":10}
 ```
 
-The JSON config accepts exactly `chain`, `privateKey`, optional `rpcUrl`, `sleepIntervalSeconds`, optional `maxIterations`, and optional `maxRetryableAttempts`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. Omitting `rpcUrl` lets CCC use its default endpoint. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
+The JSON config accepts exactly `chain`, `privateKey`, optional `rpcUrl`, `sleepIntervalSeconds`, optional `maxIterations`, and optional `maxRetryableAttempts`. Omit `rpcUrl` to let CCC use its default public endpoint for the selected chain. Unknown keys, wrong types, empty/non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
+
+For local testnet live supervision, keep funded identities in external environment variables and rebuild disposable ignored configs when needed:
+
+```bash
+export ICKB_TESTNET_BOT_PRIVATE_KEY='0x...'
+export ICKB_TESTNET_TESTER_PRIVATE_KEY='0x...'
+# Optional: export ICKB_TESTNET_RPC_URL='https://...'
+# Optional: export ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS=10
+pnpm live:config-from-env -- --force
+```
 
 Current network support:
 
@@ -58,6 +68,7 @@ The stable event contract is the bot NDJSON object stream, not a particular file
 Stable event types:
 
 - `bot.run.started`
+- `bot.chain.preflight`
 - `bot.iteration.started`
 - `bot.state.read`
 - `bot.match.evaluated`
@@ -70,13 +81,17 @@ Stable event types:
 - `bot.transaction.failed`
 - `bot.iteration.failed`
 
-No-action iterations emit `bot.decision.skipped` with `reason` and evidence. Build-time skip reasons `no_actions` and `match_value_not_above_fee` include a `decision` transcript. The pre-build safety skip `capital_below_minimum` exits with code `2` and includes zero `actions` plus `state` evidence instead of a `decision` transcript because match, rebalance, fee, and transaction shape were not evaluated. `bot.iteration.failed` includes a redacted `error` summary plus `retryable` and `terminal` booleans from the bot retry policy. Rebalance no-op decisions include policy-owned reasons such as `insufficient_output_slots`, `low_ickb_ckb_reserve_unavailable`, `target_ickb_not_exceeded`, and `no_ready_withdrawal_selection`.
+`bot.chain.preflight` emits public chain identity evidence before signing starts: whether a custom RPC URL was configured, expected chain identity, observed genesis hash/address prefix/tip, and match booleans. It does not print the RPC URL because configured URLs may contain credentials. No-action iterations emit `bot.decision.skipped` with `reason` and evidence. Build-time skip reasons `no_actions`, `match_value_not_above_fee`, and `post_tx_ckb_reserve` include a `decision` transcript. Reserve skips report zero committed `actions` and keep attempted action counts under `decision.skip.attemptedActions` because the transaction was not broadcast. The pre-build safety skip `capital_below_minimum` exits with code `2` and includes zero `actions`, `deficit`, and `state` evidence instead of a `decision` transcript because match, rebalance, fee, and transaction shape were not evaluated. `bot.iteration.failed` includes an `error` summary plus `retryable` and `terminal` booleans from the bot retry policy. Rebalance decisions include normalized `reason`; no-op reasons remain policy-owned strings such as `insufficient_output_slots`, `low_ickb_ckb_reserve_unavailable`, `target_ickb_not_exceeded`, and `no_ready_withdrawal_selection`.
 
-The decision transcript groups evidence under `chainTip`, `balances`, `orders`, `withdrawals`, `poolDeposits`, `match`, `rebalance`, `actions`, `fee`, `transactionShape`, `exchangeRatio`, and `depositCapacity`. Transaction events summarize action counts, fee, fee rate, tx hash, confirmation status, check count, elapsed time, and transaction shape counts.
+The decision transcript groups evidence under `chainTip`, `balances`, `orders`, `withdrawals`, `poolDeposits`, `match`, `rebalance`, `actions`, `fee`, `transactionShape`, `exchangeRatio`, and `depositCapacity`. `balances` includes available, unavailable, total, equivalent, minimum-capital, and spendable CKB evidence. `match.reason` normalizes the matching outcome, while `match.diagnostics` carries public allowance, mining fee, direction counts, candidate counts, positive-gain counts, and rejection counts. `rebalance` carries kind, reason, projected balances, output slots, pool/deposit/withdrawal counts, and policy diagnostics. `fee.feeRate` is included on state and decision events.
 
-JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Retryable iteration failures are logged with `terminal:false` and do not count toward `maxIterations`. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. Omitting `maxIterations` keeps the default infinite loop.
+Transaction events summarize action counts, fee, fee rate, tx hash, phase, outcome, confirmation status, check count, elapsed time, retryable/terminal policy, and transaction shape counts. Error summaries preserve non-secret enumerable error fields. This keeps CKB/CCC send rejection evidence such as `code`, `data`, `outPoint`, `currentFee`, and `leastFee` visible in `bot.transaction.failed` and `bot.iteration.failed`. Non-secret debugging data may be logged when useful, including raw transactions, witnesses, public config fields, noncredentialed RPC identity evidence, scripts, cells, hashes, counts, and summaries.
 
-Structured events should contain public evidence and summaries needed to understand bot behavior. Do not add private keys, seed phrases, mnemonics, or other secrets to log payloads; omit noisy public fields at the call site instead of relying on redaction.
+Observed testnet full-node send rejection signatures for generic stale-state races are: in-pool same-input conflict can return `code:-1111` with `data:"RBFRejected(...)"` and CCC fields `currentFee`/`leastFee`; a post-commit spent input returns `code:-301` with `data:"Resolve(Unknown(OutPoint(...)))"` and CCC field `outPoint`; resending the same tx returns `code:-1107` with `data:"Duplicated(Byte32(...))"` and CCC field `txHash`. CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. Treat these as retry candidates only when the bot discards the transaction and rebuilds from fresh state, not by blindly resending the same transaction.
+
+JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one terminal iteration when that terminal outcome is a skipped decision, committed transaction, non-safety transaction failure, or non-safety iteration failure. Retryable iteration failures do not count toward `maxIterations`; set `maxRetryableAttempts` to stop repeated fresh-state retries with exit code `2` after that many consecutive retryable failures. Safety stops still keep their nonzero behavior: low capital and confirmation timeouts after broadcast exit with code `2`. Omitting `maxIterations` keeps the default infinite loop; omitting `maxRetryableAttempts` leaves retryable attempts unbounded.
+
+Structured events should contain evidence needed to understand bot behavior. The bot must not print its configured private key to events, execution logs, errors, stdout, or stderr. Private keys are for signing only: logger, event, and error helpers must not receive private keys, secret contexts, masking callbacks, redaction parameters, or guard inputs. Tests use a configured canary private key from outside the production path and verify produced output cannot reveal it, even unlabeled or nested in arbitrary text. Secrets, credentialed RPC URLs, tokens, passwords, API keys, and secret-bearing config/env dumps must not be logged or passed to logging, redaction, masking, or guard helpers.
 
 Bot-only log queries, using the production event file or any saved bot stdout NDJSON stream:
 
@@ -84,6 +99,11 @@ Bot-only log queries, using the production event file or any saved bot stdout ND
 LOG_DIR=/opt/ickb-stack-testnet/log/bot/testnet
 jq -c 'select(.app == "bot")' "$LOG_DIR/bot.events.ndjson"
 jq -r 'select(.app == "bot") | .type' "$LOG_DIR/bot.events.ndjson" | sort | uniq -c
+jq -c 'select(.app == "bot" and .type == "bot.chain.preflight") | {timestamp, chain, rpcConfigured, expected, observed, matches}' "$LOG_DIR/bot.events.ndjson"
+jq -c 'select(.app == "bot" and .type == "bot.decision.skipped") | {timestamp, chain, runId, iterationId, reason, actions, deficit, state, skip: .decision.skip}' "$LOG_DIR/bot.events.ndjson"
+jq -c 'select(.app == "bot" and .type == "bot.match.evaluated") | {timestamp, iterationId, reason: .match.reason, orders, diagnostics: .match.diagnostics}' "$LOG_DIR/bot.events.ndjson"
+jq -c 'select(.app == "bot" and .type == "bot.rebalance.evaluated") | {timestamp, iterationId, rebalance, poolDeposits}' "$LOG_DIR/bot.events.ndjson"
+jq -c 'select(.app == "bot" and (.type == "bot.transaction.failed" or .type == "bot.iteration.failed")) | {timestamp, chain, runId, iterationId, type, phase, outcome, retryable, terminal, retryableAttempts, maxRetryableAttempts, retryBudgetExhausted, txHash, status, checks, elapsedMs, error}' "$LOG_DIR/bot.events.ndjson"
 jq -c 'select(.type == "launcher.child.exited") | {timestamp, status, signal, elapsedMs, logRoot, logDir, command}' "$LOG_DIR/launches.ndjson"
 ```
 

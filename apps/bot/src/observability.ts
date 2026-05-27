@@ -1,9 +1,9 @@
 import { type ccc } from "@ckb-ccc/core";
 import {
+  isRetryableCkbStateRaceError,
+  isRetryableRpcTransportError,
   jsonLogReplacer,
-  redactSecretText,
   writeJsonLine,
-  type SecretRedactionContext,
   type SupportedChain,
 } from "@ickb/node-utils";
 import { type SendAndWaitForCommitEvent } from "@ickb/sdk";
@@ -19,6 +19,7 @@ const BOT_EVENT_VERSION = 1;
 
 export type BotEventType =
   | "bot.run.started"
+  | "bot.chain.preflight"
   | "bot.iteration.started"
   | "bot.state.read"
   | "bot.match.evaluated"
@@ -122,7 +123,6 @@ export function transactionSummary(
 
 export function transactionLifecycleEvents(
   event: SendAndWaitForCommitEvent,
-  secrets: SecretRedactionContext = {},
 ): Array<{
   type: "bot.transaction.sent" | "bot.transaction.confirmation" | "bot.transaction.committed" | "bot.transaction.failed";
   fields: Record<string, unknown>;
@@ -131,17 +131,27 @@ export function transactionLifecycleEvents(
     case "broadcasted":
       return [{
         type: "bot.transaction.sent",
-        fields: { txHash: event.txHash, elapsedMs: event.elapsedMs },
+        fields: {
+          txHash: event.txHash,
+          phase: "broadcast",
+          outcome: "broadcasted",
+          elapsedMs: event.elapsedMs,
+        },
       }];
     case "committed":
       return [
         {
           type: "bot.transaction.confirmation",
-          fields: { ...confirmationFields(event, secrets), outcome: "committed" },
+          fields: {
+            ...confirmationFields(event),
+            outcome: "committed",
+            retryable: false,
+            terminal: true,
+          },
         },
         {
           type: "bot.transaction.committed",
-          fields: confirmationFields(event, secrets),
+          fields: { ...confirmationFields(event), outcome: "committed" },
         },
       ];
     case "timeout_after_broadcast":
@@ -150,15 +160,19 @@ export function transactionLifecycleEvents(
         {
           type: "bot.transaction.confirmation",
           fields: {
-            ...confirmationFields(event, secrets),
+            ...confirmationFields(event),
             outcome: event.type,
+            retryable: false,
+            terminal: true,
           },
         },
         {
           type: "bot.transaction.failed",
           fields: {
-            ...confirmationFields(event, secrets),
+            ...confirmationFields(event),
             outcome: event.type,
+            retryable: false,
+            terminal: true,
           },
         },
       ];
@@ -167,27 +181,38 @@ export function transactionLifecycleEvents(
         {
           type: "bot.transaction.confirmation",
           fields: {
-            ...confirmationFields(event, secrets),
+            ...confirmationFields(event),
             outcome: "terminal_rejection",
+            retryable: false,
+            terminal: true,
           },
         },
         {
           type: "bot.transaction.failed",
           fields: {
-            ...confirmationFields(event, secrets),
+            ...confirmationFields(event),
             outcome: "terminal_rejection",
+            retryable: false,
+            terminal: true,
           },
         },
       ];
     case "pre_broadcast_failed":
-      return [{
-        type: "bot.transaction.failed",
-        fields: {
-          phase: "pre_broadcast",
-          elapsedMs: event.elapsedMs,
-          error: errorSummary(event.error, secrets),
-        },
-      }];
+      {
+        const retryable = isRetryableRpcTransportError(event.error) ||
+          isRetryableCkbStateRaceError(event.error);
+        return [{
+          type: "bot.transaction.failed",
+          fields: {
+            phase: "pre_broadcast",
+            outcome: "pre_broadcast_failed",
+            elapsedMs: event.elapsedMs,
+            error: errorSummary(event.error, { includeStack: !retryable }),
+            retryable,
+            terminal: !retryable,
+          },
+        }];
+      }
   }
 }
 
@@ -197,7 +222,9 @@ export function lowCapitalSkipDecision(
   reason: BotDecisionSkipReason;
   actions: BotActions;
   state: BotStateSummary;
+  deficit: bigint;
 } {
+  const deficit = summary.balances.minimumCkbCapital - summary.balances.totalEquivalentCkb;
   return {
     reason: "capital_below_minimum",
     actions: {
@@ -209,20 +236,21 @@ export function lowCapitalSkipDecision(
       withdrawals: 0,
     },
     state: summary,
+    deficit: deficit > 0n ? deficit : 0n,
   };
 }
 
 export function errorSummary(
   error: unknown,
-  secrets: SecretRedactionContext = {},
+  options: { includeStack?: boolean } = {},
 ): Record<string, unknown> | string {
-  return summarizeError(error, new Set<unknown>(), secrets);
+  return summarizeError(error, new Set<unknown>(), options.includeStack ?? true);
 }
 
 function summarizeError(
   error: unknown,
   seen: Set<unknown>,
-  secrets: SecretRedactionContext,
+  includeStack: boolean,
 ): Record<string, unknown> | string {
   if (error instanceof Error) {
     if (seen.has(error)) {
@@ -231,29 +259,26 @@ function summarizeError(
     seen.add(error);
 
     return {
+      ...errorOwnProperties(error),
       name: error.name,
-      message: redactSecretText(error.message, secrets),
-      ...(error.stack === undefined ? {} : { stack: redactSecretText(error.stack, secrets) }),
-      ...("txHash" in error ? { txHash: error.txHash } : {}),
-      ...("status" in error ? { status: error.status } : {}),
-      ...("isTimeout" in error ? { isTimeout: error.isTimeout } : {}),
-      ...("cause" in error ? { cause: summarizeError(error.cause, seen, secrets) } : {}),
+      message: logValue(error.message, seen),
+      ...(includeStack && error.stack !== undefined ? { stack: logValue(error.stack, seen) } : {}),
+      ...("txHash" in error ? { txHash: logValue(error.txHash, seen) } : {}),
+      ...("status" in error ? { status: logValue(error.status, seen) } : {}),
+      ...("isTimeout" in error ? { isTimeout: logValue(error.isTimeout, seen) } : {}),
+      ...("cause" in error ? { cause: summarizeError(error.cause, seen, includeStack) } : {}),
     };
   }
 
   if (typeof error === "object" && error !== null) {
-    try {
-      return {
-        message: "Non-Error object",
-        details: JSON.parse(redactSecretText(JSON.stringify(error, jsonLogReplacer), secrets)) as unknown,
-      };
-    } catch {
-      return { message: "Non-Error object (unserializable)" };
-    }
+    return {
+      message: "Non-Error object",
+      details: logValue(error, seen),
+    };
   }
 
   if (typeof error === "string") {
-    return redactSecretText(error, secrets);
+    return logValue(error, seen) as string;
   }
 
   if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
@@ -263,19 +288,67 @@ function summarizeError(
   return "Empty Error";
 }
 
+const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
+
+function errorOwnProperties(error: Error): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(error)) {
+    if (!ERROR_BUILTIN_KEYS.has(key)) {
+      properties[key] = value;
+    }
+  }
+  // CCC/CKB RPC errors carry retry evidence such as code, data, outPoint,
+  // currentFee, and leastFee as enumerable Error fields.
+  return logValue(properties, new Set<unknown>()) as Record<string, unknown>;
+}
+
 function confirmationFields(event: Extract<
   SendAndWaitForCommitEvent,
   { txHash: ccc.Hex; checks: number }
->, secrets: SecretRedactionContext = {}): Record<string, unknown> {
+>): Record<string, unknown> {
   return {
+    phase: "confirmation",
     txHash: event.txHash,
     status: event.status,
     checks: event.checks,
     elapsedMs: event.elapsedMs,
-    ...("error" in event ? { error: errorSummary(event.error, secrets) } : {}),
+    ...("error" in event ? { error: errorSummary(event.error) } : {}),
   };
 }
 
 function jsonSafeEventFields(fields: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(fields, jsonLogReplacer)) as Record<string, unknown>;
+  return JSON.parse(JSON.stringify(logValue(fields, new Set<unknown>()), jsonLogReplacer)) as Record<string, unknown>;
+}
+
+const UNSUPPORTED_LOG_VALUE = "[Unsupported log value]";
+
+function logValue(value: unknown, seen: Set<unknown>): unknown {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value === "function") {
+    return UNSUPPORTED_LOG_VALUE;
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry) => logValue(entry, seen));
+    }
+    const logged: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      logged[key] = logValue(entry, seen);
+    }
+    return logged;
+  } finally {
+    seen.delete(value);
+  }
 }

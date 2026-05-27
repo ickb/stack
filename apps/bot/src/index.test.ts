@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { type IckbDepositCell } from "@ickb/core";
+import { handleLoopError, logExecution } from "@ickb/node-utils";
 import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
@@ -13,9 +14,12 @@ import {
   completeTerminalIteration,
   isRetryableBotError,
   iterationFailureEventFields,
+  readBotState,
   readBotRuntimeConfig,
+  reachedMaxRetryableAttempts,
 } from "./index.js";
-import { buildTransaction, collectPoolDeposits, postTransactionPlainCkbBalance } from "./runtime.js";
+import { BotEventEmitter, transactionLifecycleEvents } from "./observability.js";
+import { buildTransaction, collectPoolDeposits } from "./runtime.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -85,11 +89,16 @@ function botRuntime(overrides: {
   sdk?: Partial<{
     buildBaseTransaction: IckbSdk["buildBaseTransaction"];
     completeTransaction: IckbSdk["completeTransaction"];
+    getL1AccountState: IckbSdk["getL1AccountState"];
+    assertCurrentTip: IckbSdk["assertCurrentTip"];
   }>;
   primaryLock?: ccc.Script;
+  managers?: Record<string, unknown>;
 } = {}): Record<string, unknown> {
   const client: ccc.Client = {};
-  const signer: ccc.SignerCkbPrivateKey = {};
+  const signer: ccc.SignerCkbPrivateKey = {
+    getAddressObjs: () => Promise.resolve([]),
+  } as never;
 
   return {
     client,
@@ -103,6 +112,7 @@ function botRuntime(overrides: {
         deposit: (txLike: ccc.TransactionLike): Promise<ccc.Transaction> =>
           Promise.resolve(ccc.Transaction.from(txLike)),
       },
+      ...(overrides.managers ?? {}),
     },
     sdk: {
       buildBaseTransaction: async (
@@ -116,6 +126,25 @@ function botRuntime(overrides: {
       ): Promise<ccc.Transaction> => {
         await Promise.resolve();
         return ccc.Transaction.from(txLike);
+      },
+      getL1AccountState: async (): Promise<unknown> => {
+        await Promise.resolve();
+        return {
+          system: {
+            tip: headerLike(),
+            exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+            orderPool: [],
+            feeRate: 1n,
+          },
+          user: { orders: [] },
+          account: {
+            capacityCells: [],
+            receipts: [],
+          },
+        };
+      },
+      assertCurrentTip: async (): Promise<void> => {
+        await Promise.resolve();
       },
       ...overrides.sdk,
     },
@@ -151,6 +180,49 @@ describe("collectPoolDeposits", () => {
   });
 });
 
+describe("readBotState", () => {
+  it("fails closed when pool scans cross the account-state tip", async () => {
+    const tip = headerLike({ number: 10n });
+    const assertCurrentTip = vi.fn(async () => {
+      await Promise.resolve();
+      throw new Error("L1 state scan crossed chain tip; retry with a fresh state");
+    });
+    const runtime = botRuntime({
+      sdk: {
+        getL1AccountState: async (): Promise<unknown> => {
+          await Promise.resolve();
+          return {
+            system: {
+              tip,
+              exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+              orderPool: [],
+              feeRate: 1n,
+            },
+            user: { orders: [] },
+            account: { capacityCells: [], receipts: [] },
+          };
+        },
+        assertCurrentTip,
+      },
+      managers: {
+        logic: {
+          findDeposits: async function* (): AsyncGenerator<IckbDepositCell> {
+            await Promise.resolve();
+            for (const deposit of [] as IckbDepositCell[]) {
+              yield deposit;
+            }
+          },
+        },
+      },
+    });
+
+    await expect(readBotState(runtime as never)).rejects.toThrow(
+      "L1 state scan crossed chain tip; retry with a fresh state",
+    );
+    expect(assertCurrentTip).toHaveBeenCalledWith(runtime.client, tip);
+  });
+});
+
 describe("completeTerminalIteration", () => {
   it("counts only terminal iterations toward bounded runs", () => {
     expect(completeTerminalIteration(0, 1)).toEqual({
@@ -168,11 +240,37 @@ describe("completeTerminalIteration", () => {
   });
 });
 
+describe("reachedMaxRetryableAttempts", () => {
+  it("uses a separate retryable-attempt budget", () => {
+    expect(reachedMaxRetryableAttempts(1, 1)).toBe(true);
+    expect(reachedMaxRetryableAttempts(1, 2)).toBe(false);
+    expect(reachedMaxRetryableAttempts(999, undefined)).toBe(false);
+  });
+});
+
 describe("bot retryable iteration failures", () => {
-  it("treats chain-tip races and fetch transport failures as retryable", () => {
+  it("treats transport and CKB state-race failures as retryable", () => {
     expect(isRetryableBotError(new Error("L1 state scan crossed chain tip; retry with a fresh state"))).toBe(true);
     expect(isRetryableBotError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryableBotError(new Error("fetch failed", { cause: new TypeError("fetch failed") }))).toBe(true);
+    expect(isRetryableBotError(Object.assign(new Error("Client request error PoolRejectedRBF"), {
+      code: -1111,
+      data: "RBFRejected(\"Tx's current fee is 11795, expect it to >= 12326 to replace old txs\")",
+    }))).toBe(true);
+    expect(isRetryableBotError(Object.assign(new Error("Client request error TransactionFailedToResolve"), {
+      code: -301,
+      data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))`,
+    }))).toBe(true);
+    expect(isRetryableBotError({
+      code: -301,
+      data: `Resolve(Dead(OutPoint(0x${"11".repeat(32)}00000000)))`,
+    })).toBe(true);
+    expect(isRetryableBotError(Object.assign(new Error("Client request error PoolRejectedDuplicatedTransaction"), {
+      code: -1107,
+      data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
+    }))).toBe(true);
     expect(isRetryableBotError(new Error("fetch failed"))).toBe(false);
+    expect(isRetryableBotError({ code: -301, data: "Resolve(InvalidHeader(Byte32(0x...)))" })).toBe(false);
     expect(isRetryableBotError(new Error("deterministic build failure"))).toBe(false);
   });
 
@@ -182,12 +280,112 @@ describe("bot retryable iteration failures", () => {
       terminal: false,
       error: { name: "TypeError", message: "fetch failed" },
     });
+    expect(iterationFailureEventFields(new TypeError("fetch failed")).error).not.toHaveProperty("stack");
 
-    expect(iterationFailureEventFields(new Error("deterministic build failure"))).toMatchObject({
+    const stateRaceFailure = iterationFailureEventFields(Object.assign(new Error("Client request error TransactionFailedToResolve"), {
+      code: -301,
+      data: `Resolve(Unknown(OutPoint(0x${"11".repeat(32)}00000000)))`,
+    }));
+    expect(stateRaceFailure).toMatchObject({ retryable: true, terminal: false });
+    expect(stateRaceFailure.error).not.toHaveProperty("stack");
+
+    const exhaustedFailure = iterationFailureEventFields(new TypeError("fetch failed"), {
+      retryableAttempts: 3,
+      maxRetryableAttempts: 3,
+    });
+    expect(exhaustedFailure).toMatchObject({
+      retryable: true,
+      terminal: true,
+      retryableAttempts: 3,
+      maxRetryableAttempts: 3,
+      retryBudgetExhausted: true,
+    });
+    expect(exhaustedFailure.error).not.toHaveProperty("stack");
+
+    expect(iterationFailureEventFields(new TypeError("fetch failed"), {
+      retryableAttempts: 3,
+      maxRetryableAttempts: undefined,
+    })).toMatchObject({
+      retryable: true,
+      terminal: false,
+      retryableAttempts: 3,
+      retryBudgetExhausted: false,
+    });
+
+    const terminalFailure = iterationFailureEventFields(new Error("deterministic build failure"));
+    expect(terminalFailure).toMatchObject({
       retryable: false,
       terminal: true,
       error: { name: "Error", message: "deterministic build failure" },
     });
+    expect(terminalFailure.error).toHaveProperty("stack");
+  });
+});
+
+describe("bot private key output boundary", () => {
+  it("does not leak the configured canary key across representative crash outputs", async () => {
+    const privateKey = `0x${"42".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-bot-private-key-boundary-"));
+    const output: string[] = [];
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      output.push(String(chunk));
+      return true;
+    });
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        sleepIntervalSeconds: 60,
+        maxIterations: 1,
+      }), { mode: 0o600 });
+      const runtimeConfig = await readBotRuntimeConfig({ BOT_CONFIG_FILE: configPath });
+      const emitter = new BotEventEmitter({
+        chain: runtimeConfig.chain,
+        runId: "run-canary-test",
+        write: (event): void => {
+          output.push(JSON.stringify(event));
+        },
+      });
+      emitter.emit(0, "bot.run.started", {
+        runtime: {
+          maxIterations: runtimeConfig.maxIterations,
+          maxRetryableAttempts: runtimeConfig.maxRetryableAttempts,
+          bounded: runtimeConfig.maxIterations !== undefined,
+          sleepIntervalMs: runtimeConfig.sleepIntervalMs,
+          rpcConfigured: runtimeConfig.rpcUrl !== undefined,
+        },
+      });
+      emitter.emit(0, "bot.chain.preflight", {
+        rpcConfigured: runtimeConfig.rpcUrl !== undefined,
+        expected: { chain: "testnet", genesisHash: hash("11"), addressPrefix: "ckt" },
+        observed: {
+          genesisHash: hash("11"),
+          addressPrefix: "ckt",
+          tip: { hash: hash("22"), number: 1n, timestamp: 2n },
+        },
+        matches: { genesisHash: true, addressPrefix: true },
+      });
+      const executionLog: Record<string, unknown> = { startTime: "fixture" };
+      handleLoopError(executionLog, new Error("deterministic crash"));
+      logExecution(executionLog, new Date());
+      emitter.emit(1, "bot.iteration.failed", iterationFailureEventFields(new TypeError("fetch failed")));
+      for (const lifecycle of transactionLifecycleEvents({
+        type: "pre_broadcast_failed",
+        elapsedMs: 1,
+        error: new TypeError("fetch failed"),
+      })) {
+        emitter.emit(1, lifecycle.type, lifecycle.fields);
+      }
+
+      const capturedCrashLog = output.join("\n");
+
+      expect(runtimeConfig.privateKey).toBe(privateKey);
+      expect(capturedCrashLog).not.toContain(privateKey);
+    } finally {
+      stdoutWrite.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -207,12 +405,38 @@ describe("readBotRuntimeConfig", () => {
         rpcUrl: "http://127.0.0.1:8114/",
         sleepIntervalSeconds: 60,
         maxIterations: 1,
+        maxRetryableAttempts: 3,
       }), { mode: 0o600 });
 
       await expect(readBotRuntimeConfig({ BOT_CONFIG_FILE: configPath })).resolves.toEqual({
         chain: "testnet",
         privateKey,
         rpcUrl: "http://127.0.0.1:8114/",
+        sleepIntervalMs: 60000,
+        maxIterations: 1,
+        maxRetryableAttempts: 3,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads JSON config files that omit custom RPC URLs", async () => {
+    const privateKey = `0x${"11".repeat(32)}`;
+    const dir = await mkdtemp(join(tmpdir(), "ickb-bot-config-"));
+    try {
+      const configPath = join(dir, "config.json");
+      await writeFile(configPath, JSON.stringify({
+        chain: "testnet",
+        privateKey,
+        sleepIntervalSeconds: 60,
+        maxIterations: 1,
+      }), { mode: 0o600 });
+
+      await expect(readBotRuntimeConfig({ BOT_CONFIG_FILE: configPath })).resolves.toEqual({
+        chain: "testnet",
+        privateKey,
+        rpcUrl: undefined,
         sleepIntervalMs: 60000,
         maxIterations: 1,
         maxRetryableAttempts: undefined,
@@ -271,11 +495,27 @@ describe("buildTransaction", () => {
       totalCkbBalance: ccc.fixedPointFrom(5000),
     });
 
-    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+    const result = await buildTransaction(runtime as never, state as never);
+
+    expect(result).toMatchObject({
       kind: "skipped",
       reason: "post_tx_ckb_reserve",
-      decision: { skip: { reason: "post_tx_ckb_reserve" } },
+      decision: {
+        balances: {
+          spendableCkb: ccc.fixedPointFrom(4000),
+        },
+        skip: {
+          reason: "post_tx_ckb_reserve",
+          reserve: ccc.fixedPointFrom(1000),
+        },
+      },
     });
+    if (result.kind !== "skipped" || result.decision.skip?.postTxCkbBalance === undefined || result.decision.skip.deficit === undefined) {
+      throw new Error("Expected reserve skip details");
+    }
+    expect(result.decision.skip.deficit).toBe(
+      ccc.fixedPointFrom(1000) - result.decision.skip.postTxCkbBalance,
+    );
   });
 
   it("allows CKB-replenishing transactions even when plain CKB remains below reserve", async () => {
@@ -379,6 +619,35 @@ describe("buildTransaction", () => {
     });
   });
 
+  it("labels built match and deposit-rebalance decisions", async () => {
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 0n,
+      udtDelta: 1n,
+      partials: [{} as never],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+
+    const lock = script("11");
+    const runtime = botRuntime({ primaryLock: lock });
+    const state = botState({
+      accountLocks: [lock],
+      capacityCells: [capacityCell(ccc.fixedPointFrom(2000), lock, "69")],
+      marketOrders: [{}],
+      availableCkbBalance: ccc.fixedPointFrom(2000),
+      availableIckbBalance: 0n,
+      depositCapacity: 100n,
+      totalCkbBalance: ccc.fixedPointFrom(2000),
+    });
+
+    await expect(buildTransaction(runtime as never, state as never)).resolves.toMatchObject({
+      kind: "built",
+      decision: {
+        match: { reason: "matched" },
+        rebalance: { kind: "deposit", reason: "low_ickb_balance" },
+      },
+    });
+  });
+
   it("returns a structured no-action skip with rebalance reason", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
       ckbDelta: 0n,
@@ -413,6 +682,7 @@ describe("buildTransaction", () => {
     const completeTransaction = vi.fn();
     const runtime = botRuntime({ sdk: { completeTransaction } });
     const state = botState({
+      marketOrders: [{}],
       availableCkbBalance: 0n,
       availableIckbBalance: TARGET_ICKB_BALANCE,
     });
@@ -423,6 +693,7 @@ describe("buildTransaction", () => {
       decision: {
         rebalance: { kind: "none", reason: "target_ickb_not_exceeded" },
         match: {
+          reason: "no_positive_gain",
           diagnostics: {
             orderCount: 1,
             directions: {
@@ -508,38 +779,6 @@ describe("buildTransaction", () => {
     expect(completeTransaction).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["base", "complete"]);
     expect(result.tx.cellDeps).toEqual([]);
-  });
-});
-
-describe("postTransactionPlainCkbBalance", () => {
-  it("counts unspent account plain CKB plus account plain outputs", () => {
-    const lock = script("11");
-    const otherLock = script("22");
-    const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "aa");
-    const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "bb");
-    const typed = ccc.Cell.from({
-      outPoint: { txHash: hash("cc"), index: 0n },
-      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
-      outputData: "0x",
-    });
-    const data = ccc.Cell.from({
-      outPoint: { txHash: hash("dd"), index: 0n },
-      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
-      outputData: "0x1234",
-    });
-    const tx = ccc.Transaction.default();
-    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
-    tx.outputs.push(
-      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(300), lock }),
-      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(500), lock, type: script("33") }),
-      ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(700), lock: otherLock }),
-    );
-    tx.outputsData.push("0x", "0x", "0x");
-
-    expect(postTransactionPlainCkbBalance(
-      tx,
-      botState({ accountLocks: [lock], capacityCells: [spent, unspent, typed, data] }) as never,
-    )).toBe(ccc.fixedPointFrom(2300));
   });
 });
 
