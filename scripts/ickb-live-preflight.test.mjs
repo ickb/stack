@@ -68,6 +68,8 @@ test("preflight CLI exposes role-specific CKB reserves", () => {
   assert.equal(ckbReserveForRole("bot").toString(), "100000000000");
   assert.equal(ckbReserveForRole("tester").toString(), "200000000000");
   assert.equal(ckbReserveForRole("tester-watch").toString(), "200000000000");
+  assert.equal(ckbReserveForRole("tester_watch").toString(), "200000000000");
+  assert.throws(() => ckbReserveForRole("tester-"), /Invalid role/u);
 });
 
 test("preflight run reports public evidence for a generated unfunded key", async () => {

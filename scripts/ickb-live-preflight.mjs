@@ -61,6 +61,11 @@ export function redactErrorMessage(error, secrets = {}) {
 }
 
 export function ckbReserveForRole(role) {
+  if (!ROLE_PATTERN.test(role)) {
+    throw new Error(
+      "Invalid role: expected 1-32 lowercase letters, numbers, hyphens, or underscores without trailing separators",
+    );
+  }
   return role === "tester" || role.startsWith("tester-") || role.startsWith("tester_")
     ? TESTER_CKB_RESERVE
     : BOT_CKB_RESERVE;

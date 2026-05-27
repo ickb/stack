@@ -29,6 +29,17 @@ test("live env config helper builds configs with optional RPC URL", () => {
     privateKey: botPrivateKey,
     rpcUrl: undefined,
     sleepIntervalSeconds: 1,
+    maxIterations: undefined,
+    maxRetryableAttempts: undefined,
+  }), {
+    chain: "testnet",
+    privateKey: botPrivateKey,
+    sleepIntervalSeconds: 1,
+  });
+  assert.deepEqual(buildRuntimeConfig({
+    privateKey: botPrivateKey,
+    rpcUrl: undefined,
+    sleepIntervalSeconds: 1,
     maxIterations: 1,
     maxRetryableAttempts: 10,
   }), {

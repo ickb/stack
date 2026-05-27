@@ -120,8 +120,8 @@ export function buildRuntimeConfig({ privateKey, rpcUrl, sleepIntervalSeconds, m
     privateKey,
     ...(rpcUrl === undefined ? {} : { rpcUrl }),
     sleepIntervalSeconds,
-    maxIterations,
-    maxRetryableAttempts,
+    ...(maxIterations === undefined ? {} : { maxIterations }),
+    ...(maxRetryableAttempts === undefined ? {} : { maxRetryableAttempts }),
   };
 }
 
