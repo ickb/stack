@@ -387,22 +387,22 @@ export class OrderManager implements ScriptDeps {
     );
 
     let best = {
-      i: -1,
-      j: -1,
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [] as Match["partials"],
-      ckbAllowance: allowance.ckbValue,
-      udtAllowance: allowance.udtValue,
+      gain: 0n,
+    };
+    let advance = {
+      i: -1,
+      j: -1,
       gain: -1n << 256n,
     };
-    // best.i/best.j are offsets into the current two-entry frontiers; (0, 0)
+    // advance.i/advance.j are offsets into the current two-entry frontiers; (0, 0)
     // means the current frontier head is already optimal, so the search stops.
-    while (best.i !== 0 || best.j !== 0) {
-      ckb2UdtMatches.next(best.i);
-      udt2CkbMatches.next(best.j);
-      best.i = 0;
-      best.j = 0;
+    while (advance.i !== 0 || advance.j !== 0) {
+      ckb2UdtMatches.next(advance.i);
+      udt2CkbMatches.next(advance.j);
+      advance = { i: 0, j: 0, gain: -1n << 256n };
 
       for (const [i, c2u] of ckb2UdtMatches.buffer.entries()) {
         for (const [j, u2c] of udt2CkbMatches.buffer.entries()) {
@@ -431,23 +431,23 @@ export class OrderManager implements ScriptDeps {
             continue;
           }
           diagnostics.candidates.viable += 1;
+          if (gain > advance.gain) {
+            advance = { i, j, gain };
+          }
           if (partials.length > 0) {
             if (gain > 0n) {
               diagnostics.candidates.positiveGain += 1;
             } else {
               diagnostics.candidates.rejected.nonPositiveGain += 1;
+              continue;
             }
           }
 
           if (gain > best.gain) {
             best = {
-              i,
-              j,
               ckbDelta,
               udtDelta,
               partials,
-              ckbAllowance,
-              udtAllowance,
               gain,
             };
           }
