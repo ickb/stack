@@ -7,7 +7,8 @@ import { setTimeout } from "node:timers";
 
 const CKB = 100000000n;
 const SECP256K1_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+// Jitter can double the configured interval; keep the result within Node's timer limit.
+const MAX_SAFE_SLEEP_INTERVAL_MS = 1_073_741_823;
 
 export const STOP_EXIT_CODE = 2;
 
@@ -283,7 +284,7 @@ export function parseSleepInterval(
   }
 
   const intervalMs = intervalSeconds * 1000;
-  if (!Number.isSafeInteger(intervalMs) || intervalMs > MAX_TIMER_DELAY_MS / 2) {
+  if (!Number.isSafeInteger(intervalMs) || intervalMs > MAX_SAFE_SLEEP_INTERVAL_MS) {
     throw new Error("Invalid env " + envName);
   }
 
@@ -339,6 +340,13 @@ export function parseRpcUrl(rpcUrl: string, envName: string): string {
 }
 
 export function parseMaxIterations(
+  value: number | undefined,
+  envName: string,
+): number | undefined {
+  return parsePositiveSafeInteger(value, envName);
+}
+
+function parsePositiveSafeInteger(
   value: number | undefined,
   envName: string,
 ): number | undefined {
@@ -411,8 +419,8 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     privateKey: parsePrivateKey(record.privateKey, envName),
     rpcUrl: record.rpcUrl !== undefined ? parseRpcUrl(record.rpcUrl, envName) : undefined,
     sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
-    maxIterations: parseMaxIterations(record.maxIterations, envName),
-    maxRetryableAttempts: parseMaxIterations(record.maxRetryableAttempts, envName),
+    maxIterations: parsePositiveSafeInteger(record.maxIterations, envName),
+    maxRetryableAttempts: parsePositiveSafeInteger(record.maxRetryableAttempts, envName),
   };
 }
 
