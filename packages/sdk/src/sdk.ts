@@ -250,10 +250,7 @@ export async function sendAndWaitForCommit(
       lastPollingError = error;
     }
     checks += 1;
-    if (!isPendingStatus(status)) {
-      break;
-    }
-    if (checks >= maxConfirmationChecks) {
+    if (!isPendingStatus(status) || checks >= maxConfirmationChecks) {
       break;
     }
 
