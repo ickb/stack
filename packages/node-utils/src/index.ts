@@ -419,7 +419,7 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     privateKey: parsePrivateKey(record.privateKey, envName),
     rpcUrl: record.rpcUrl !== undefined ? parseRpcUrl(record.rpcUrl, envName) : undefined,
     sleepIntervalMs: parseSleepInterval(record.sleepIntervalSeconds, envName),
-    maxIterations: parsePositiveSafeInteger(record.maxIterations, envName),
+    maxIterations: parseMaxIterations(record.maxIterations, envName),
     maxRetryableAttempts: parsePositiveSafeInteger(record.maxRetryableAttempts, envName),
   };
 }
