@@ -1816,7 +1816,6 @@ function exhaustiveSequentialBestMatch(
       if (
         ckbAllowance >= 0n &&
         udtAllowance >= 0n &&
-        (partials.length === 0 || gain > 0n) &&
         gain > bestGain
       ) {
         best = { ckbDelta, udtDelta, partials };
