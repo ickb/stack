@@ -634,9 +634,24 @@ describe("planTesterTransaction", () => {
     )).toBeUndefined();
   });
 
-  it("still blocks below-reserve transactions that drain plain CKB", () => {
+  it("allows below-reserve transactions that preserve plain CKB", () => {
     const lock = script("11");
     const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "06");
+    const tx = ccc.Transaction.default();
+    tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
+    tx.addOutput({ capacity: ccc.fixedPointFrom(1000), lock });
+
+    expect(enforceTesterPlainCkbReserve(
+      tx,
+      testerState({ availableCkbBalance: ccc.fixedPointFrom(1000), capacityCells: [spent] }),
+      [lock],
+      "ickb-to-ckb-limit-order",
+    )).toBeUndefined();
+  });
+
+  it("still blocks below-reserve transactions that drain plain CKB", () => {
+    const lock = script("11");
+    const spent = capacityCell(ccc.fixedPointFrom(1000), lock, "07");
     const tx = ccc.Transaction.default();
     tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
     tx.addOutput({ capacity: ccc.fixedPointFrom(999), lock });

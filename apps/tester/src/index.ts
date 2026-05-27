@@ -398,7 +398,7 @@ export function enforceTesterPlainCkbReserve(
   const preTxCkbBalance = plainCapacityBalance(state.account.capacityCells, accountLockHexes);
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, accountLocks);
   const reserveSkip = testerReserveSkip(postTxCkbBalance);
-  if (reserveSkip === undefined || (!isExplicitCkbReserveScenario(scenario) && postTxCkbBalance > preTxCkbBalance)) {
+  if (reserveSkip === undefined || (!isExplicitCkbReserveScenario(scenario) && postTxCkbBalance >= preTxCkbBalance)) {
     return undefined;
   }
   if (isExplicitCkbReserveScenario(scenario)) {
