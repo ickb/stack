@@ -404,7 +404,7 @@ async function writeOperatorEvent(session, record, dependencies) {
   await appendFileFn(join(session.operatorDir, "events.ndjson"), `${JSON.stringify({
     at: new Date((dependencies.now ?? Date.now)()).toISOString(),
     ...record,
-  })}\n`);
+  }, jsonReplacer)}\n`);
 }
 
 async function appendOperatorStderr(session, text, dependencies) {
@@ -432,7 +432,11 @@ async function sleepMs(ms, dependencies) {
 }
 
 function writeJsonLine(stream, record) {
-  stream.write(`${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
+  stream.write(`${JSON.stringify({ at: new Date().toISOString(), ...record }, jsonReplacer)}\n`);
+}
+
+function jsonReplacer(_key, value) {
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 function minimalProcessEnv(env) {

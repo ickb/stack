@@ -1311,21 +1311,15 @@ function classifyBotResult(
     const failed = lifecycle.record;
     const outcome = stringField(failed, "outcome");
     const phase = stringField(failed, "phase");
-    if (outcome === "timeout_after_broadcast") {
+    if (outcome === "timeout_after_broadcast" || outcome === "post_broadcast_unresolved" || outcome === "terminal_rejection") {
       if (!hasValidTxHash(failed)) {
         return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
       }
-      return { ...base, outcome: "confirmation_timeout", terminal: true, reason: "bot tx confirmation timed out", publicState };
-    }
-    if (outcome === "post_broadcast_unresolved") {
-      if (!hasValidTxHash(failed)) {
-        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
+      if (outcome === "timeout_after_broadcast") {
+        return { ...base, outcome: "confirmation_timeout", terminal: true, reason: "bot tx confirmation timed out", publicState };
       }
-      return { ...base, outcome: "post_broadcast_unresolved", terminal: true, reason: "bot tx remained unresolved after broadcast", publicState };
-    }
-    if (outcome === "terminal_rejection") {
-      if (!hasValidTxHash(failed)) {
-        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
+      if (outcome === "post_broadcast_unresolved") {
+        return { ...base, outcome: "post_broadcast_unresolved", terminal: true, reason: "bot tx remained unresolved after broadcast", publicState };
       }
       return { ...base, outcome: "terminal_chain_rejection", terminal: true, reason: "bot tx reached terminal chain rejection", publicState };
     }
@@ -2069,10 +2063,9 @@ function emptyActions(): ActionCounts {
 function extractTxHashes(records: Record<string, unknown>[]): string[] {
   const hashes = new Set<string>();
   for (const record of records) {
-    addValidTxHash(hashes, record["txHash"]);
-    addValidTxHash(hashes, recordField(record, "error")?.["txHash"]);
-    const skip = recordField(record, "skip");
-    addValidTxHash(hashes, skip?.["txHash"]);
+    addValidTxHash(hashes, stringField(record, "txHash"));
+    addValidTxHash(hashes, stringField(recordField(record, "error"), "txHash"));
+    addValidTxHash(hashes, stringField(recordField(record, "skip"), "txHash"));
   }
   return [...hashes];
 }
