@@ -3,6 +3,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   decideNext,
+  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
   parseArgs,
   runSupervisorLoop,
   summarizeRun,
@@ -11,12 +12,13 @@ import {
 } from "./ickb-supervisor-loop.mjs";
 
 test("supervisor loop parses loop options and supervisor passthrough", () => {
-  assert.equal(parseArgs(["--", "--help"]).help, true);
+  assert.deepEqual(parseArgs(["--", "--help"]).supervisorArgs, ["--help"]);
   assert.deepEqual(parseArgs([
     "--out-root", "logs/live-supervisor/loop-test",
     "--max-runs", "5",
     "--stable-limit", "2",
     "--backoff-seconds", "0",
+    "--child-timeout-seconds", "120",
     "--supervisor-script", "apps/supervisor/dist/custom.js",
     "--",
     "--scenario", "bot-only",
@@ -26,29 +28,27 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
     maxRuns: 5,
     stableLimit: 2,
     backoffSeconds: 0,
+    childTimeoutSeconds: 120,
     supervisorScript: "apps/supervisor/dist/custom.js",
     supervisorArgs: ["--scenario", "bot-only"],
   });
-  assert.deepEqual(parseArgs([
-    "--scenario", "standard-cycle",
-    "--max-cycles", "1",
-  ]), {
-    help: false,
-    maxRuns: 10,
-    stableLimit: 3,
-    backoffSeconds: 30,
-    supervisorScript: "apps/supervisor/dist/index.js",
-    supervisorArgs: ["--scenario", "standard-cycle", "--max-cycles", "1"],
-  });
+  assert.throws(() => parseArgs(["--scenario", "standard-cycle"]), /Unknown argument before --: --scenario/u);
+  assert.deepEqual(parseArgs(["--max-runs", "1", "--", "--scenario", "standard-cycle"]).supervisorArgs, [
+    "--scenario",
+    "standard-cycle",
+  ]);
   assert.throws(() => parseArgs(["--max-runs", "0"]), /Invalid --max-runs/u);
   assert.equal(parseArgs(["--max-runs", String(Number.MAX_SAFE_INTEGER)]).maxRuns, Number.MAX_SAFE_INTEGER);
   assert.throws(() => parseArgs(["--max-runs", "9007199254740992"]), /Invalid --max-runs: expected a safe integer/u);
   assert.throws(() => parseArgs(["--stable-limit", "9007199254740992"]), /Invalid --stable-limit: expected a safe integer/u);
   assert.throws(() => parseArgs(["--backoff-seconds", "9007199254740993"]), /Invalid --backoff-seconds: expected a safe integer/u);
+  assert.throws(() => parseArgs(["--child-timeout-seconds", "0"]), /Invalid --child-timeout-seconds/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.throws(() => parseArgs(["--", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
-  assert.throws(() => parseArgs(["--scenario", "standard-cycle", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
+  assert.throws(() => parseArgs(["--scenario", "standard-cycle", "--out-dir=logs/live-supervisor/x"]), /Unknown argument before --: --scenario/u);
+  assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE);
   assert.match(usage(), /summary/u);
+  assert.match(usage(), /--out-root <dir>/u);
 });
 
 test("supervisor loop summary signatures sort skip reasons", () => {
@@ -62,13 +62,18 @@ test("supervisor loop summary signatures sort skip reasons", () => {
     summarySignature({ ...base, skipReasons: ["b", "a"] }),
     summarySignature({ ...base, skipReasons: ["a", "b"] }),
   );
+  assert.notEqual(
+    summarySignature({ ...base, preflightState: [{ balances: { CKB: { available: "2000" } } }] }),
+    summarySignature({ ...base, preflightState: [{ balances: { CKB: { available: "2001" } } }] }),
+  );
 });
 
 test("supervisor loop summarizes only summary json fields", () => {
   const summary = {
     stopped: "max_cycles",
     aggregateCounts: { bot_no_action_skip: 1, ignored_zero: 0, ignored_string: "1" },
-    txHashesByOutcome: { tester_order_created: ["0xabc"], bad: [1] },
+    txCreatingTxHashCount: 1,
+    txCreatingOutcomeCount: 0,
     artifacts: ["logs/live-supervisor/run/cycle-0001-incident.json"],
     skipReasons: ["fresh-matchable-order", 1],
     publicVsOwnedStateAssumptions: { userOrderCount: 0, marketOrderCount: 1, receiptCount: 2 },
@@ -82,6 +87,7 @@ test("supervisor loop summarizes only summary json fields", () => {
     aggregateCounts: { bot_no_action_skip: 1 },
     outcomes: ["bot_no_action_skip"],
     txCount: 1,
+    hasTxCreatingOutcome: false,
     hasIncident: true,
     skipReasons: ["fresh-matchable-order"],
     publicState: { userOrderCount: 0, marketOrderCount: 1, receiptCount: 2 },
@@ -93,16 +99,38 @@ test("supervisor loop does not treat skip reference hashes as tx-bearing progres
   const run = summarizeRun({
     stopped: "max_cycles",
     aggregateCounts: { tester_fresh_order_skip: 1 },
-    txHashesByOutcome: {
-      tester_fresh_order_skip: ["0x" + "22".repeat(32)],
-    },
+    txCreatingTxHashCount: 0,
+    txCreatingOutcomeCount: 0,
     artifacts: [],
   }, { runIndex: 1, relativeOutDir: "logs/live-supervisor/run", status: 0 });
 
   assert.equal(run.txCount, 0);
+  assert.equal(run.hasTxCreatingOutcome, false);
 });
 
-test("supervisor loop decisions stop on incident, tx, new outcome, and stable no-progress", () => {
+test("supervisor loop stops on tx-creating outcomes even when tx hashes are missing", () => {
+  const run = summarizeRun({
+    stopped: "max_cycles",
+    aggregateCounts: { tester_order_created: 1 },
+    txCreatingTxHashCount: 0,
+    txCreatingOutcomeCount: 1,
+    artifacts: [],
+  }, { runIndex: 1, relativeOutDir: "logs/live-supervisor/run", status: 0 });
+
+  assert.equal(run.txCount, 0);
+  assert.equal(run.hasTxCreatingOutcome, true);
+  assert.equal(decideNext({
+    run,
+    priorOutcomes: new Set(),
+    previousSignature: undefined,
+    stableCount: 0,
+    stableLimit: 3,
+    runIndex: 1,
+    maxRuns: 10,
+  }).reason, "tx_observed");
+});
+
+test("supervisor loop decisions stop on incident, tx, new outcome, max runs, and stable no-progress", () => {
   const priorOutcomes = new Set(["bot_no_action_skip"]);
   const baseRun = {
     status: 0,
@@ -166,29 +194,90 @@ test("supervisor loop decisions stop on incident, tx, new outcome, and stable no
     runIndex: 3,
     maxRuns: 10,
   }).reason, "stable_no_progress");
+  assert.equal(decideNext({
+    run: baseRun,
+    priorOutcomes,
+    previousSignature: "same",
+    stableCount: 2,
+    stableLimit: 3,
+    runIndex: 3,
+    maxRuns: 3,
+  }).reason, "max_runs");
 });
 
 test("supervisor loop runs bounded supervisor commands until stable", async () => {
   const root = "/repo";
+  const originalPrivateKey = process.env.PRIVATE_KEY;
+  process.env.PRIVATE_KEY = "operator-secret";
   const reads = new Map();
   const commands = [];
-  for (let index = 1; index <= 2; index += 1) {
-    reads.set(join(root, "logs/live-supervisor/loop-test", `run-${String(index).padStart(4, "0")}`, "summary.json"), JSON.stringify({
+  try {
+    for (let index = 1; index <= 2; index += 1) {
+      reads.set(join(root, "logs/live-supervisor/loop-test", `run-${String(index).padStart(4, "0")}`, "summary.json"), JSON.stringify({
+          stopped: "max_cycles",
+          aggregateCounts: { bot_no_action_skip: 1 },
+          txCreatingTxHashCount: 0,
+          txCreatingOutcomeCount: 0,
+          artifacts: [],
+          publicVsOwnedStateAssumptions: { marketOrderCount: 0, userOrderCount: 0, receiptCount: 0 },
+      }));
+    }
+    const output = { text: "", write(chunk) { this.text += chunk; } };
+
+    const exitCode = await runSupervisorLoop({
+      argv: [
+        "--out-root", "logs/live-supervisor/loop-test",
+        "--max-runs", "5",
+        "--stable-limit", "2",
+        "--backoff-seconds", "0",
+        "--",
+        "--scenario", "bot-only",
+      ],
+      root,
+      io: { stdout: output, stderr: output },
+      dependencies: {
+        spawnSync: (command, args, options) => {
+          commands.push({ command, args, options });
+          return { status: 0 };
+        },
+        readFile: async (path) => reads.get(path),
+      },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(commands.length, 2);
+    assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "logs/live-supervisor/loop-test/run-0001"]);
+    assert.equal(commands[0].options.timeout, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE * 1000);
+    assert.equal(commands[0].options.env.PRIVATE_KEY, undefined);
+    assert.match(output.text, /decision=continue/u);
+    assert.match(output.text, /loop stopped reason=stable_no_progress runs=2/u);
+  } finally {
+    if (originalPrivateKey === undefined) {
+      delete process.env.PRIVATE_KEY;
+    } else {
+      process.env.PRIVATE_KEY = originalPrivateKey;
+    }
+  }
+});
+
+test("supervisor loop accepts validation session out roots", async () => {
+  const root = "/repo";
+  const reads = new Map([
+    [join(root, "log/validation/dynamic-test/chunks/chunk-0001/run-0001/summary.json"), JSON.stringify({
       stopped: "max_cycles",
       aggregateCounts: { bot_no_action_skip: 1 },
-      txHashesByOutcome: {},
+      txCreatingTxHashCount: 0,
+      txCreatingOutcomeCount: 0,
       artifacts: [],
-      publicVsOwnedStateAssumptions: { marketOrderCount: 0, userOrderCount: 0, receiptCount: 0 },
-    }));
-  }
+    })],
+  ]);
+  const commands = [];
   const output = { text: "", write(chunk) { this.text += chunk; } };
 
   const exitCode = await runSupervisorLoop({
     argv: [
-      "--out-root", "logs/live-supervisor/loop-test",
-      "--max-runs", "5",
-      "--stable-limit", "2",
-      "--backoff-seconds", "0",
+      "--out-root", "log/validation/dynamic-test/chunks/chunk-0001",
+      "--max-runs", "1",
       "--",
       "--scenario", "bot-only",
     ],
@@ -204,10 +293,100 @@ test("supervisor loop runs bounded supervisor commands until stable", async () =
   });
 
   assert.equal(exitCode, 0);
-  assert.equal(commands.length, 2);
-  assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "logs/live-supervisor/loop-test/run-0001"]);
-  assert.match(output.text, /decision=continue/u);
-  assert.match(output.text, /loop stopped reason=stable_no_progress runs=2/u);
+  assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
+  assert.match(output.text, /out=log\/validation\/dynamic-test\/chunks\/chunk-0001/u);
+});
+
+test("supervisor loop rejects validation out roots outside chunk directories", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "log/validation/dynamic-test"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /validation session chunks directory/u);
+});
+
+test("supervisor loop rejects validation chunk root descendants", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "log/validation/dynamic-test/chunks/chunk-0001/extra"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /validation session chunks directory/u);
+});
+
+test("supervisor loop accepts explicit validation roots outside the repo", async () => {
+  const root = "/repo";
+  const reads = new Map([
+    ["/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001/summary.json", JSON.stringify({
+      stopped: "max_cycles",
+      aggregateCounts: { bot_no_action_skip: 1 },
+      txCreatingTxHashCount: 0,
+      txCreatingOutcomeCount: 0,
+      artifacts: [],
+    })],
+  ]);
+  const commands = [];
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+
+  const exitCode = await runSupervisorLoop({
+    argv: [
+      "--out-root", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001",
+      "--max-runs", "1",
+      "--",
+      "--scenario", "bot-only",
+    ],
+    root,
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      spawnSync: (command, args, options) => {
+        commands.push({ command, args, options });
+        return { status: 0 };
+      },
+      readFile: async (path) => reads.get(path),
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
+  assert.match(output.text, /out=\/var\/tmp\/ickb-log\/validation\/dynamic-test\/chunks\/chunk-0001/u);
+});
+
+test("supervisor loop applies child timeout at the outer process boundary", async () => {
+  const root = "/repo";
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const commands = [];
+  const exitCode = await runSupervisorLoop({
+    argv: [
+      "--out-root", "logs/live-supervisor/loop-timeout",
+      "--child-timeout-seconds", "1",
+      "--backoff-seconds", "0",
+    ],
+    root,
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      spawnSync: (command, args, options) => {
+        commands.push({ command, args, options });
+        return { status: null, signal: "SIGTERM", error: Object.assign(new Error("spawnSync timed out"), { code: "ETIMEDOUT" }) };
+      },
+      readFile: async () => {
+        const error = new Error("missing");
+        error.code = "ENOENT";
+        throw error;
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(commands[0].options.timeout, 1000);
+  assert.equal(commands[0].options.killSignal, "SIGTERM");
+  assert.match(output.text, /summary=missing_or_invalid/u);
 });
 
 test("supervisor loop stops for inspection on new tx-bearing summary", async () => {
@@ -222,6 +401,8 @@ test("supervisor loop stops for inspection on new tx-bearing summary", async () 
       readFile: async () => JSON.stringify({
         stopped: "stop_after_tx_count",
         aggregateCounts: { tester_order_created: 1 },
+        txCreatingTxHashCount: 1,
+        txCreatingOutcomeCount: 1,
         txHashesByOutcome: { tester_order_created: ["0x" + "11".repeat(32)] },
         artifacts: [],
       }),
@@ -231,6 +412,33 @@ test("supervisor loop stops for inspection on new tx-bearing summary", async () 
   assert.equal(exitCode, 0);
   assert.match(output.text, /decision=tx_observed/u);
   assert.match(output.text, /tx=1/u);
+});
+
+test("supervisor loop requires summary-owned tx counters", () => {
+  assert.throws(() => summarizeRun({
+    stopped: "max_cycles",
+    aggregateCounts: { tester_order_created: 1 },
+    txHashesByOutcome: { tester_order_created: ["0x" + "11".repeat(32)] },
+    artifacts: [],
+  }, { runIndex: 1, relativeOutDir: "logs/live-supervisor/run", status: 0 }), /txCreatingTxHashCount/u);
+});
+
+test("supervisor loop refuses symlinked output roots", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "logs/live-supervisor/loop-symlink"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      lstat: async (path) => ({ isSymbolicLink: () => path === join("/repo", "logs", "live-supervisor") }),
+      spawnSync: () => {
+        throw new Error("should not spawn supervisor through symlinked output root");
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /Refusing to use loop output root through symlinked path: logs\/live-supervisor/u);
 });
 
 test("supervisor loop reports invalid out-root as a concise CLI error", async () => {
@@ -243,7 +451,7 @@ test("supervisor loop reports invalid out-root as a concise CLI error", async ()
   });
 
   assert.equal(exitCode, 1);
-  assert.match(output.text, /--out-root must be under logs\/live-supervisor/u);
+  assert.match(output.text, /--out-root must be under logs\/live-supervisor or a validation session chunks directory/u);
   assert.doesNotMatch(output.text, /\n\s+at\s/u);
 });
 

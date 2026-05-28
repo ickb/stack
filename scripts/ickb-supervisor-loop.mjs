@@ -1,36 +1,28 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { lstat, readFile } from "node:fs/promises";
+import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { TX_CREATING_OUTCOMES } from "../apps/supervisor/dist/index.js";
+import { parseNonNegativeInteger, parsePositiveInteger, valueAfter } from "./ickb-script-helpers.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const DEFAULT_MAX_RUNS = 10;
 const DEFAULT_STABLE_LIMIT = 3;
 const DEFAULT_BACKOFF_SECONDS = 30;
+const DEFAULT_CHILD_TIMEOUT_SECONDS = 65 * 60;
+export const DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE = DEFAULT_CHILD_TIMEOUT_SECONDS;
 const DEFAULT_SUPERVISOR_SCRIPT = "apps/supervisor/dist/index.js";
 const SUPERVISOR_OUTPUT_ROOT = "logs/live-supervisor";
 export function parseArgs(argv) {
-  if (argv.length === 2 && argv[0] === "--" && (argv[1] === "-h" || argv[1] === "--help")) {
-    return {
-      help: true,
-      maxRuns: DEFAULT_MAX_RUNS,
-      stableLimit: DEFAULT_STABLE_LIMIT,
-      backoffSeconds: DEFAULT_BACKOFF_SECONDS,
-      supervisorScript: DEFAULT_SUPERVISOR_SCRIPT,
-      supervisorArgs: [],
-    };
-  }
   const args = {
     help: false,
     maxRuns: DEFAULT_MAX_RUNS,
     stableLimit: DEFAULT_STABLE_LIMIT,
     backoffSeconds: DEFAULT_BACKOFF_SECONDS,
+    childTimeoutSeconds: DEFAULT_CHILD_TIMEOUT_SECONDS,
     supervisorScript: DEFAULT_SUPERVISOR_SCRIPT,
     supervisorArgs: [],
   };
-  let parsedLoopOption = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--") {
@@ -43,32 +35,27 @@ export function parseArgs(argv) {
     }
     if (arg === "--out-root") {
       args.outRoot = valueAfter(argv, ++index, arg);
-      parsedLoopOption = true;
       continue;
     }
     if (arg === "--max-runs") {
       args.maxRuns = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
-      parsedLoopOption = true;
       continue;
     }
     if (arg === "--stable-limit") {
       args.stableLimit = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
-      parsedLoopOption = true;
       continue;
     }
     if (arg === "--backoff-seconds") {
       args.backoffSeconds = parseNonNegativeInteger(valueAfter(argv, ++index, arg), arg);
-      parsedLoopOption = true;
+      continue;
+    }
+    if (arg === "--child-timeout-seconds") {
+      args.childTimeoutSeconds = parsePositiveInteger(valueAfter(argv, ++index, arg), arg);
       continue;
     }
     if (arg === "--supervisor-script") {
       args.supervisorScript = valueAfter(argv, ++index, arg);
-      parsedLoopOption = true;
       continue;
-    }
-    if (!parsedLoopOption) {
-      args.supervisorArgs = argv.slice(index);
-      break;
     }
     throw new Error(`Unknown argument before --: ${arg}`);
   }
@@ -82,10 +69,11 @@ export function usage() {
   return [
     "Usage: node scripts/ickb-supervisor-loop.mjs [loop-options] -- [supervisor-options]",
     "Loop options:",
-    `  --out-root <ignored-dir>       Default: ${SUPERVISOR_OUTPUT_ROOT}/loop-<time>-<pid>`,
+    `  --out-root <dir>               Default: ${SUPERVISOR_OUTPUT_ROOT}/loop-<time>-<pid>`,
     `  --max-runs <n>                 Default: ${String(DEFAULT_MAX_RUNS)}`,
     `  --stable-limit <n>             Default: ${String(DEFAULT_STABLE_LIMIT)}`,
     `  --backoff-seconds <n>          Default: ${String(DEFAULT_BACKOFF_SECONDS)}`,
+    `  --child-timeout-seconds <n>    Default: ${String(DEFAULT_CHILD_TIMEOUT_SECONDS)}`,
     `  --supervisor-script <path>     Default: ${DEFAULT_SUPERVISOR_SCRIPT}`,
     "  -h, --help",
     "Reads only each child run summary.json.",
@@ -95,8 +83,9 @@ export function usage() {
 
 export function summarizeRun(summary, { runIndex, relativeOutDir, status }) {
   const aggregateCounts = countRecord(summary.aggregateCounts);
-  const txHashesByOutcome = arrayRecord(summary.txHashesByOutcome);
-  const txCount = txCreatingCount(txHashesByOutcome);
+  const txCount = requiredCount(summary.txCreatingTxHashCount, "txCreatingTxHashCount");
+  const txCreatingOutcomeCount = requiredCount(summary.txCreatingOutcomeCount, "txCreatingOutcomeCount");
+  const hasTxCreatingOutcome = txCreatingOutcomeCount > 0;
   const artifacts = stringArray(summary.artifacts);
   return {
     runIndex,
@@ -106,6 +95,7 @@ export function summarizeRun(summary, { runIndex, relativeOutDir, status }) {
     aggregateCounts,
     outcomes: Object.keys(aggregateCounts).filter((key) => aggregateCounts[key] > 0).sort(),
     txCount,
+    hasTxCreatingOutcome,
     hasIncident: artifacts.some((artifact) => artifact.endsWith("incident.json")),
     skipReasons: stringArray(summary.skipReasons),
     publicState: isRecord(summary.publicVsOwnedStateAssumptions) ? summary.publicVsOwnedStateAssumptions : null,
@@ -122,17 +112,17 @@ export function decideNext({ run, priorOutcomes, previousSignature, stableCount,
   if (run.status !== 0) {
     return { action: "stop", reason: "supervisor_nonzero", newOutcomes, stableCount: nextStableCount, exitCode: run.status };
   }
-  if (run.txCount > 0) {
+  if (run.txCount > 0 || run.hasTxCreatingOutcome) {
     return { action: "stop", reason: "tx_observed", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
   }
   if (runIndex > 1 && newOutcomes.length > 0) {
     return { action: "stop", reason: "new_outcome", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
   }
-  if (nextStableCount >= stableLimit) {
-    return { action: "stop", reason: "stable_no_progress", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
-  }
   if (runIndex >= maxRuns) {
     return { action: "stop", reason: "max_runs", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
+  }
+  if (nextStableCount >= stableLimit) {
+    return { action: "stop", reason: "stable_no_progress", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
   }
   return { action: "continue", reason: "continue", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
 }
@@ -142,6 +132,10 @@ export function summarySignature(summary) {
     stopped: typeof summary.stopped === "string" ? summary.stopped : "unknown",
     aggregateCounts: sortedEntries(countRecord(summary.aggregateCounts)),
     skipReasons: stringArray(summary.skipReasons).sort(),
+    testerOrderEvidence: normalizeJson(summary.testerOrderEvidence ?? null),
+    preflightState: normalizeJson(summary.preflightState ?? null),
+    scenarioAttempts: normalizeJson(summary.scenarioAttempts ?? null),
+    coverage: normalizeJson(summary.coverage ?? null),
     publicVsOwnedStateAssumptions: normalizeJson(summary.publicVsOwnedStateAssumptions ?? null),
   });
 }
@@ -169,6 +163,7 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
     supervisorScript = isAbsolute(args.supervisorScript)
       ? args.supervisorScript
       : resolve(root, args.supervisorScript);
+    await assertNoSymlinkedLoopOutputAncestors(root, outRoot.absolutePath, dependencies);
   } catch (error) {
     stderr.write(`${errorMessage(error)}\n${usage()}\n`);
     return 1;
@@ -179,12 +174,13 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
 
   for (let runIndex = 1; runIndex <= args.maxRuns; runIndex += 1) {
     const runOutDir = join(outRoot.absolutePath, `run-${padRun(runIndex)}`);
-    const relativeOutDir = relative(root, runOutDir);
+    const relativeOutDir = displayPath(root, runOutDir);
     const spawnResult = spawnSupervisor({
       root,
       supervisorScript,
       supervisorArgs: args.supervisorArgs,
       relativeOutDir,
+      childTimeoutSeconds: args.childTimeoutSeconds,
       dependencies,
     });
     const status = typeof spawnResult.status === "number" ? spawnResult.status : 1;
@@ -226,7 +222,7 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
   return 0;
 }
 
-function spawnSupervisor({ root, supervisorScript, supervisorArgs, relativeOutDir, dependencies }) {
+function spawnSupervisor({ root, supervisorScript, supervisorArgs, relativeOutDir, childTimeoutSeconds, dependencies }) {
   const spawnSyncFn = dependencies.spawnSync ?? spawnSync;
   return spawnSyncFn(process.execPath, [
     supervisorScript,
@@ -235,7 +231,10 @@ function spawnSupervisor({ root, supervisorScript, supervisorArgs, relativeOutDi
     relativeOutDir,
   ], {
     cwd: root,
+    env: minimalProcessEnv(process.env),
     stdio: "ignore",
+    timeout: childTimeoutSeconds * 1000,
+    killSignal: "SIGTERM",
   });
 }
 
@@ -305,19 +304,39 @@ function formatPublicState(state) {
   return fields.length === 0 ? "-" : fields.join(",");
 }
 
+function minimalProcessEnv(env) {
+  return Object.fromEntries(["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
+    const value = env[key];
+    return value === undefined ? [] : [[key, value]];
+  }));
+}
+
 function resolveLoopOutRoot(root, outRoot) {
   if (outRoot === "") {
     throw new Error("--out-root must not be empty");
   }
   const absolutePath = isAbsolute(outRoot) ? outRoot : resolve(root, outRoot);
-  const relativePath = relative(root, absolutePath);
-  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("--out-root must stay inside the repo");
-  }
-  if (relativePath !== SUPERVISOR_OUTPUT_ROOT && !relativePath.startsWith(`${SUPERVISOR_OUTPUT_ROOT}/`)) {
-    throw new Error(`--out-root must be under ${SUPERVISOR_OUTPUT_ROOT}`);
+  const relativePath = displayPath(root, absolutePath);
+  if (!isAllowedLoopOutRoot(absolutePath, relativePath)) {
+    throw new Error(`--out-root must be under ${SUPERVISOR_OUTPUT_ROOT} or a validation session chunks directory`);
   }
   return { absolutePath, relativePath };
+}
+
+function isAllowedLoopOutRoot(absolutePath, relativePath) {
+  return relativePath === SUPERVISOR_OUTPUT_ROOT ||
+    relativePath.startsWith(`${SUPERVISOR_OUTPUT_ROOT}/`) ||
+    isValidationChunkRoot(absolutePath);
+}
+
+function isValidationChunkRoot(path) {
+  const parts = path.split(/[\\/]+/u);
+  for (let index = 0; index < parts.length - 3; index += 1) {
+    if (parts[index] === "validation" && parts[index + 2] === "chunks" && /^chunk-[0-9]{4}$/u.test(parts[index + 3] ?? "") && index + 4 === parts.length) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function defaultOutRoot(nowMs, pid) {
@@ -337,28 +356,45 @@ function countRecord(value) {
   return counts;
 }
 
-function arrayRecord(value) {
-  if (!isRecord(value)) {
-    return {};
-  }
-  const arrays = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (Array.isArray(item)) {
-      arrays[key] = item.filter((entry) => typeof entry === "string");
-    }
-  }
-  return arrays;
-}
-
-function txCreatingCount(txHashesByOutcome) {
-  return Object.entries(txHashesByOutcome).reduce(
-    (sum, [outcome, hashes]) => sum + (TX_CREATING_OUTCOMES.has(outcome) ? hashes.length : 0),
-    0,
-  );
-}
-
 function sortedEntries(record) {
   return Object.entries(record).sort(([left], [right]) => left.localeCompare(right));
+}
+
+async function assertNoSymlinkedLoopOutputAncestors(root, absolutePath, dependencies) {
+  const lstatFn = dependencies.lstat ?? lstat;
+  const base = isInside(root, absolutePath) ? root : parse(absolutePath).root;
+  const parts = relative(base, absolutePath).split(sep).filter((part) => part !== "");
+  let current = base;
+  for (const part of parts) {
+    current = join(current, part);
+    try {
+      const stats = await lstatFn(current);
+      if (stats.isSymbolicLink()) {
+        throw new Error(`Refusing to use loop output root through symlinked path: ${displayPath(root, current)}`);
+      }
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+}
+
+function isInside(root, path) {
+  const relationship = relative(root, path);
+  return relationship === "" || (!relationship.startsWith("..") && !isAbsolute(relationship));
+}
+
+function displayPath(root, path) {
+  return isInside(root, path) ? relative(root, path) : path;
+}
+
+function requiredCount(value, key) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`summary.json ${key} missing or invalid`);
+  }
+  return value;
 }
 
 function normalizeJson(value) {
@@ -383,38 +419,12 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isNotFoundError(error) {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
 function shellWord(value) {
   return String(value).replace(/\s+/gu, "_");
-}
-
-function valueAfter(argv, index, flag) {
-  const value = argv[index];
-  if (value === undefined || value.startsWith("--")) {
-    throw new Error(`Missing value for ${flag}`);
-  }
-  return value;
-}
-
-function parsePositiveInteger(value, flag) {
-  if (!/^[1-9][0-9]*$/u.test(value)) {
-    throw new Error(`Invalid ${flag}: expected a positive integer`);
-  }
-  const parsed = BigInt(value);
-  if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error(`Invalid ${flag}: expected a safe integer`);
-  }
-  return Number(parsed);
-}
-
-function parseNonNegativeInteger(value, flag) {
-  if (!/^(0|[1-9][0-9]*)$/u.test(value)) {
-    throw new Error(`Invalid ${flag}: expected a non-negative integer`);
-  }
-  const parsed = BigInt(value);
-  if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error(`Invalid ${flag}: expected a safe integer`);
-  }
-  return Number(parsed);
 }
 
 function padRun(index) {
