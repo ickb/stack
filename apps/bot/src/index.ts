@@ -11,6 +11,8 @@ import {
   createPublicClient,
   formatCkb,
   handleLoopError,
+  isRetryableCkbStateRaceError,
+  isRetryableRpcTransportError,
   logExecution,
   randomSleepIntervalMs,
   readRuntimeConfigEnv,
@@ -19,7 +21,6 @@ import {
   sleep,
   STOP_EXIT_CODE,
   type RuntimeConfig,
-  type SecretRedactionContext,
   verifyChainPreflight,
 } from "@ickb/node-utils";
 import {
@@ -41,16 +42,28 @@ import {
 
 async function main(): Promise<void> {
   const runtimeConfig = await readBotRuntimeConfig(process.env);
-  const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations } = runtimeConfig;
-  const secrets = { privateKey, rpcUrl };
+  const { chain, privateKey, rpcUrl, sleepIntervalMs, maxIterations, maxRetryableAttempts } = runtimeConfig;
   const runId = createRunId();
   const events = new BotEventEmitter({ chain, runId });
   events.emit(0, "bot.run.started", {
     maxIterations,
     bounded: maxIterations !== undefined,
+    runtime: {
+      maxIterations,
+      bounded: maxIterations !== undefined,
+      sleepIntervalMs,
+      maxRetryableAttempts,
+      rpcConfigured: rpcUrl !== undefined,
+    },
   });
   const client = createPublicClient(chain, rpcUrl);
-  await verifyChainPreflight(client, chain);
+  const preflight = await verifyChainPreflight(client, chain);
+  events.emit(0, "bot.chain.preflight", {
+    rpcConfigured: rpcUrl !== undefined,
+    expected: preflight.expected,
+    observed: preflight.observed,
+    matches: preflight.matches,
+  });
   const config = getConfig(chain);
   const { managers } = config;
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
@@ -66,14 +79,13 @@ async function main(): Promise<void> {
   };
   let stopAfterLog = false;
   let completedIterations = 0;
+  let retryableAttempts = 0;
   let iterationId = 0;
   for (;;) {
-    await sleep(randomSleepIntervalMs(sleepIntervalMs));
-
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const executionLog: Record<string, any> = {};
+    const executionLog: Record<string, unknown> = {};
     const startTime = new Date();
     let stopAfterIteration = false;
+    let retryableAttempt = false;
     executionLog.startTime = startTime.toLocaleString();
     iterationId += 1;
     events.emit(iterationId, "bot.iteration.started");
@@ -89,6 +101,7 @@ async function main(): Promise<void> {
         poolDeposits: stateDecision.poolDeposits,
         exchangeRatio: stateDecision.exchangeRatio,
         depositCapacity: stateDecision.depositCapacity,
+        fee: stateDecision.fee,
       });
 
       executionLog.balance = {
@@ -137,7 +150,7 @@ async function main(): Promise<void> {
             executionLog.txHash = txHash;
           },
           onLifecycle: (event) => {
-            for (const lifecycle of transactionLifecycleEvents(event, secrets)) {
+            for (const lifecycle of transactionLifecycleEvents(event, isRetryableBotError)) {
               events.emit(iterationId, lifecycle.type, {
                 ...lifecycle.fields,
                 ...(event.type === "broadcasted"
@@ -149,18 +162,41 @@ async function main(): Promise<void> {
         });
       }
     } catch (error) {
-      stopAfterLog = handleLoopError(executionLog, error, secrets);
-      const failure = iterationFailureEventFields(error, secrets);
+      const retryable = isRetryableBotError(error);
+      if (retryable) {
+        retryableAttempt = true;
+        retryableAttempts += 1;
+      }
+      const failure = retryable
+        ? iterationFailureEventFields(error, {
+          retryableAttempts,
+          maxRetryableAttempts,
+        })
+        : iterationFailureEventFields(error);
       events.emit(iterationId, "bot.iteration.failed", failure);
       if (failure.retryable) {
-        logExecution(executionLog, startTime);
-        continue;
+        executionLog.error = failure.error;
+        if (failure.retryBudgetExhausted) {
+          executionLog.error = {
+            message: "Retryable bot error budget exhausted",
+            attempts: retryableAttempts,
+            maxRetryableAttempts,
+            lastError: failure.error,
+          };
+          process.exitCode = STOP_EXIT_CODE;
+          stopAfterLog = true;
+        }
+      } else {
+        stopAfterLog = handleLoopError(executionLog, error);
       }
     }
 
-    const completion = completeTerminalIteration(completedIterations, maxIterations);
-    completedIterations = completion.completedIterations;
-    stopAfterIteration = completion.shouldStop;
+    if (!retryableAttempt) {
+      retryableAttempts = 0;
+      const completion = completeTerminalIteration(completedIterations, maxIterations);
+      completedIterations = completion.completedIterations;
+      stopAfterIteration = completion.shouldStop;
+    }
 
     logExecution(executionLog, startTime);
     if (stopAfterLog) {
@@ -169,6 +205,7 @@ async function main(): Promise<void> {
     if (stopAfterIteration) {
       return;
     }
+    await sleep(randomSleepIntervalMs(sleepIntervalMs));
   }
 }
 
@@ -187,20 +224,62 @@ export function completeTerminalIteration(
   };
 }
 
-export function iterationFailureEventFields(error: unknown, secrets: SecretRedactionContext = {}): {
+export function reachedMaxRetryableAttempts(
+  retryableAttempts: number,
+  maxRetryableAttempts: number | undefined,
+): boolean {
+  return maxRetryableAttempts !== undefined && retryableAttempts >= maxRetryableAttempts;
+}
+
+export function iterationFailureEventFields(error: unknown): {
   error: Record<string, unknown> | string;
   retryable: boolean;
   terminal: boolean;
+  retryableAttempts?: number;
+  maxRetryableAttempts?: number;
+  retryBudgetExhausted?: boolean;
+};
+export function iterationFailureEventFields(
+  error: unknown,
+  retryBudget: { retryableAttempts: number; maxRetryableAttempts: number | undefined },
+): {
+  error: Record<string, unknown> | string;
+  retryable: boolean;
+  terminal: boolean;
+  retryableAttempts: number;
+  maxRetryableAttempts?: number;
+  retryBudgetExhausted: boolean;
+};
+export function iterationFailureEventFields(
+  error: unknown,
+  retryBudget?: { retryableAttempts: number; maxRetryableAttempts: number | undefined },
+): {
+  error: Record<string, unknown> | string;
+  retryable: boolean;
+  terminal: boolean;
+  retryableAttempts?: number;
+  maxRetryableAttempts?: number;
+  retryBudgetExhausted?: boolean;
 } {
   const retryable = isRetryableBotError(error);
+  const retryBudgetExhausted = retryable && retryBudget !== undefined &&
+    reachedMaxRetryableAttempts(
+      retryBudget.retryableAttempts,
+      retryBudget.maxRetryableAttempts,
+    );
   return {
-    error: errorSummary(error, secrets),
+    error: errorSummary(error, { includeStack: !retryable }),
     retryable,
-    terminal: !retryable,
+    terminal: !retryable || retryBudgetExhausted,
+    ...(retryBudget === undefined ? {} : {
+      retryableAttempts: retryBudget.retryableAttempts,
+      ...(retryBudget.maxRetryableAttempts === undefined ? {} : { maxRetryableAttempts: retryBudget.maxRetryableAttempts }),
+      retryBudgetExhausted,
+    }),
   };
 }
 
-async function readBotState(runtime: Runtime): Promise<BotState> {
+export async function readBotState(runtime: Runtime): Promise<BotState> {
   const accountLocks = await signerAccountLocks(runtime.signer, runtime.primaryLock);
   const { system, user, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
@@ -257,10 +336,10 @@ function outPointKey(outPoint: ccc.OutPoint): string {
 const fmtCkb = formatCkb;
 
 export function isRetryableBotError(error: unknown): boolean {
-  return error instanceof Error && (
-    error.message.includes("L1 state scan crossed chain tip") ||
-    (error instanceof TypeError && error.message === "fetch failed")
-  );
+  return (error instanceof Error && (
+    error.message === "L1 state scan crossed chain tip; retry with a fresh state" ||
+    isRetryableRpcTransportError(error)
+  )) || isRetryableCkbStateRaceError(error);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

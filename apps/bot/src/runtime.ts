@@ -13,7 +13,7 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 import { type getConfig, type IckbSdk, type SystemState } from "@ickb/sdk";
-import { type SupportedChain } from "@ickb/node-utils";
+import { accountPlainCkbBalance, postTransactionAccountPlainCkbBalance, type SupportedChain } from "@ickb/node-utils";
 import { collectCompleteScan, defaultFindCellsLimit } from "@ickb/utils";
 import {
   CKB_RESERVE,
@@ -75,6 +75,21 @@ export type BotDecisionSkipReason =
   | BuildTransactionSkipReason
   | "capital_below_minimum";
 
+export type BotMatchReason =
+  | "matched"
+  | "no_market_orders"
+  | "no_matchable_orders"
+  | "insufficient_allowance"
+  | "no_viable_candidates"
+  | "max_partials"
+  | "no_positive_gain";
+
+export type BotRebalanceReason =
+  | RebalanceNoopReason
+  | "low_ickb_balance"
+  | "future_pool_inventory"
+  | "excess_ickb_balance";
+
 export type BuildTransactionResult =
   | {
       kind: "built";
@@ -108,6 +123,7 @@ export interface BotDecisionTranscript {
     totalEquivalentCkb: bigint;
     totalEquivalentIckb: bigint;
     minimumCkbCapital: bigint;
+    spendableCkb: bigint;
   };
   orders: {
     marketCount: number;
@@ -124,6 +140,7 @@ export interface BotDecisionTranscript {
     futureCount: number;
   };
   match: {
+    reason: BotMatchReason;
     partialCount: number;
     ckbDelta: bigint;
     udtDelta: bigint;
@@ -132,7 +149,7 @@ export interface BotDecisionTranscript {
   };
   rebalance: {
     kind: RebalancePlan["kind"];
-    reason?: RebalanceNoopReason;
+    reason: BotRebalanceReason;
     depositQuantity?: number;
     withdrawalRequestCount?: number;
     requiredLiveDepositCount?: number;
@@ -164,6 +181,8 @@ export interface BotDecisionTranscript {
     matchValue?: bigint;
     postTxCkbBalance?: bigint;
     reserve?: bigint;
+    deficit?: bigint;
+    attemptedActions?: BotActions;
   };
 }
 
@@ -176,6 +195,7 @@ export type BotStateSummary = Pick<
   | "poolDeposits"
   | "exchangeRatio"
   | "depositCapacity"
+  | "fee"
 >;
 
 export type { SupportedChain };
@@ -265,6 +285,7 @@ export async function buildTransaction(
     feeRate: state.system.feeRate,
   });
   const fee = tx.estimateFee(state.system.feeRate);
+  const preTxCkbBalance = accountPlainCkbBalance(state.capacityCells, state.accountLocks);
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state);
   decision = buildDecisionTranscript({
     state,
@@ -275,11 +296,29 @@ export async function buildTransaction(
     tx,
   });
   decision = { ...decision, fee: { ...decision.fee, estimated: fee } };
-  const consumesCkbReserve = actions.deposits > 0 || match.ckbDelta < 0n;
-  if (postTxCkbBalance < CKB_RESERVE && consumesCkbReserve) {
-    return skippedResult("post_tx_ckb_reserve", actions, decision, {
+  const preTxDeficit = maxBigInt(0n, CKB_RESERVE - preTxCkbBalance);
+  const postTxDeficit = maxBigInt(0n, CKB_RESERVE - postTxCkbBalance);
+  // The reserve is actual owned plain CKB, not projected CKB availability. Ready
+  // withdrawals and collectable orders can make projected CKB look healthy while
+  // the account still lacks plain cells for state rent and future fees.
+  //
+  // Most actions must not create or worsen a plain-CKB reserve deficit. The one
+  // intentional exception is an iCKB withdrawal request: it spends plain CKB for
+  // DAO withdrawal-cell rent now so the bot can recover CKB in a later completion
+  // transaction. Do not let CKB-spending matches or deposits hide behind that
+  // recovery exception.
+  const spendsReserveForWithdrawalRequest = actions.withdrawalRequests > 0 &&
+    actions.deposits === 0 &&
+    match.ckbDelta >= 0n;
+  if (postTxDeficit > preTxDeficit && !spendsReserveForWithdrawalRequest) {
+    return skippedResult("post_tx_ckb_reserve", emptyActions(), {
+      ...decision,
+      actions: emptyActions(),
+    }, {
+      attemptedActions: actions,
       postTxCkbBalance,
       reserve: CKB_RESERVE,
+      deficit: postTxDeficit,
     });
   }
 
@@ -324,6 +363,7 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       totalEquivalentIckb: convert(true, state.totalCkbBalance, state.system.exchangeRatio) +
         state.availableIckbBalance,
       minimumCkbCapital: state.minCkbBalance,
+      spendableCkb: spendableCkb(state.availableCkbBalance),
     },
     orders: {
       marketCount: state.marketOrders.length,
@@ -344,6 +384,9 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       udtScale: state.system.exchangeRatio.udtScale,
     },
     depositCapacity: state.depositCapacity,
+    fee: {
+      feeRate: state.system.feeRate,
+    },
   };
 }
 
@@ -410,6 +453,7 @@ function buildDecisionTranscript({
   return {
     ...summary,
     match: {
+      reason: matchReason(match, state),
       partialCount: match.partials.length,
       ckbDelta: match.ckbDelta,
       udtDelta: match.udtDelta,
@@ -432,7 +476,7 @@ function rebalanceSummary(
 ): BotDecisionTranscript["rebalance"] {
   return {
     kind: rebalance.kind,
-    ...(rebalance.kind === "none" ? { reason: rebalance.reason } : {}),
+    reason: rebalanceReason(rebalance),
     ...(rebalance.kind === "deposit" ? { depositQuantity: rebalance.quantity } : {}),
     ...(rebalance.kind === "withdraw"
       ? {
@@ -447,6 +491,55 @@ function rebalanceSummary(
   };
 }
 
+function matchReason(
+  match: Pick<Match, "partials" | "diagnostics">,
+  state: BotState,
+): BotMatchReason {
+  if (match.partials.length > 0) {
+    return "matched";
+  }
+  if (state.marketOrders.length === 0) {
+    return "no_market_orders";
+  }
+
+  const diagnostics = match.diagnostics;
+  if (diagnostics === undefined) {
+    return "no_viable_candidates";
+  }
+  if (
+    diagnostics.directions.ckbToUdt.matchableCount === 0 &&
+    diagnostics.directions.udtToCkb.matchableCount === 0
+  ) {
+    return "no_matchable_orders";
+  }
+  if (diagnostics.candidates.viable === 0) {
+    return diagnostics.candidates.rejected.insufficientCkbAllowance > 0 ||
+      diagnostics.candidates.rejected.insufficientUdtAllowance > 0
+      ? "insufficient_allowance"
+      : "no_viable_candidates";
+  }
+  if (diagnostics.candidates.rejected.maxPartials > 0 && diagnostics.candidates.positiveGain === 0) {
+    return "max_partials";
+  }
+  if (diagnostics.candidates.positiveGain === 0) {
+    return "no_positive_gain";
+  }
+  return "no_viable_candidates";
+}
+
+function rebalanceReason(rebalance: RebalancePlan): BotRebalanceReason {
+  switch (rebalance.kind) {
+    case "none":
+      return rebalance.reason;
+    case "deposit":
+      return rebalance.diagnostics === undefined
+        ? "low_ickb_balance"
+        : "future_pool_inventory";
+    case "withdraw":
+      return "excess_ickb_balance";
+  }
+}
+
 export function transactionShape(tx: ccc.Transaction): BotDecisionTranscript["transactionShape"] {
   return {
     inputs: tx.inputs.length,
@@ -458,29 +551,14 @@ export function transactionShape(tx: ccc.Transaction): BotDecisionTranscript["tr
 }
 
 export function postTransactionPlainCkbBalance(tx: ccc.Transaction, state: BotState): bigint {
-  const accountLockHexes = new Set(state.accountLocks.map((lock) => lock.toHex()));
-  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  const unspentCapacity = state.capacityCells.reduce(
-    (total, cell) =>
-      spentOutPoints.has(cell.outPoint.toHex()) ||
-      !isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes)
-        ? total
-        : total + cell.cellOutput.capacity,
-    0n,
-  );
-  const outputCapacity = tx.outputs.reduce(
-    (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
-    0n,
-  );
-
-  return unspentCapacity + outputCapacity;
+  return postTransactionAccountPlainCkbBalance(tx, state.capacityCells, state.accountLocks);
 }
 
 function skippedResult(
   reason: BuildTransactionSkipReason,
   actions: BotActions,
   decision: BotDecisionTranscript,
-  details?: { fee?: bigint; matchValue?: bigint; postTxCkbBalance?: bigint; reserve?: bigint },
+  details?: { fee?: bigint; matchValue?: bigint; postTxCkbBalance?: bigint; reserve?: bigint; deficit?: bigint; attemptedActions?: BotActions },
 ): BuildTransactionResult {
   return {
     kind: "skipped",
@@ -496,6 +574,17 @@ function skippedResult(
   };
 }
 
+function emptyActions(): BotActions {
+  return {
+    collectedOrders: 0,
+    completedDeposits: 0,
+    matchedOrders: 0,
+    deposits: 0,
+    withdrawalRequests: 0,
+    withdrawals: 0,
+  };
+}
+
 function actionTotal(actions: BotActions): number {
   return actions.collectedOrders +
     actions.completedDeposits +
@@ -507,10 +596,6 @@ function actionTotal(actions: BotActions): number {
 
 function spendableCkb(availableCkbBalance: bigint): bigint {
   return maxBigInt(0n, availableCkbBalance - CKB_RESERVE);
-}
-
-function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): boolean {
-  return output.type === undefined && (outputData ?? "0x") === "0x" && accountLockHexes.has(output.lock.toHex());
 }
 
 function maxBigInt(left: bigint, right: bigint): bigint {

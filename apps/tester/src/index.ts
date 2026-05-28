@@ -2,10 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
 import { IckbSdk, getConfig, sendAndWaitForCommit } from "@ickb/sdk";
 import {
+  accountPlainCkbBalance,
   createPublicClient,
   formatCkb,
   handleLoopError,
   logExecution,
+  postTransactionAccountPlainCkbBalance,
   randomSleepIntervalMs,
   readRuntimeConfigEnv,
   reachedMaxIterations,
@@ -260,7 +262,7 @@ async function main(): Promise<void> {
         },
       });
     } catch (e) {
-      stopAfterLog = handleLoopError(executionLog, e, { rpcUrl });
+      stopAfterLog = handleLoopError(executionLog, e);
       if (e instanceof TesterTerminalError) {
         process.exitCode = 1;
         stopAfterLog = true;
@@ -363,18 +365,7 @@ export function postTransactionPlainCkbBalance(
   state: TesterState,
   accountLocks: ccc.Script[],
 ): bigint {
-  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
-  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  const unspentCapacity = plainCapacityBalance(
-    state.account.capacityCells.filter((cell) => !spentOutPoints.has(cell.outPoint.toHex())),
-    accountLockHexes,
-  );
-  const outputCapacity = tx.outputs.reduce(
-    (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
-    0n,
-  );
-
-  return unspentCapacity + outputCapacity;
+  return postTransactionAccountPlainCkbBalance(tx, state.account.capacityCells, accountLocks);
 }
 
 export function testerReserveSkip(postTxCkbBalance: bigint): Record<string, string> | undefined {
@@ -394,8 +385,7 @@ export function enforceTesterPlainCkbReserve(
   accountLocks: ccc.Script[],
   scenario: TesterScenario,
 ): Record<string, string> | undefined {
-  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
-  const preTxCkbBalance = plainCapacityBalance(state.account.capacityCells, accountLockHexes);
+  const preTxCkbBalance = accountPlainCkbBalance(state.account.capacityCells, accountLocks);
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, accountLocks);
   const reserveSkip = testerReserveSkip(postTxCkbBalance);
   if (reserveSkip === undefined || postTxCkbBalance >= preTxCkbBalance) {
@@ -407,13 +397,6 @@ export function enforceTesterPlainCkbReserve(
     );
   }
   return reserveSkip;
-}
-
-function plainCapacityBalance(cells: readonly ccc.Cell[], accountLockHexes: ReadonlySet<string>): bigint {
-  return cells.reduce(
-    (total, cell) => total + (isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes) ? cell.cellOutput.capacity : 0n),
-    0n,
-  );
 }
 
 export function testerExecutionActions(
@@ -911,10 +894,6 @@ function isExplicitCkbReserveScenario(scenario: TesterScenario): boolean {
 
 function isSdkConversionScenario(scenario: TesterScenario): boolean {
   return scenario === "sdk-conversion";
-}
-
-function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: ReadonlySet<string>): boolean {
-  return output.type === undefined && (outputData ?? "0x") === "0x" && accountLockHexes.has(output.lock.toHex());
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
