@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { existsSync } from "node:fs";
 import { appendFile, lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -25,6 +25,7 @@ export const OUTCOME_KINDS = [
   "tester_reserve_skip",
   "tester_deterministic_pre_broadcast_error",
   "bot_no_action_skip",
+  "bot_retryable_error",
   "bot_reserve_skip",
   "bot_match_committed",
   "bot_match_plus_deposit_committed",
@@ -38,17 +39,18 @@ export const OUTCOME_KINDS = [
   "post_broadcast_unresolved",
   "wrong_chain",
   "malformed_evidence",
-  "secret_leak_sentinel",
   "command_timeout",
+  "preflight_retryable_error",
   "nonzero_exit",
   "unmet_coverage_goal",
+  "unsupported_scenario",
   "unknown",
 ] as const;
 
 export type OutcomeKind = typeof OUTCOME_KINDS[number];
 export type Actor = "bot" | "tester";
 export type ScenarioName = "auto" | "standard-cycle" | "tester-only" | "bot-only" | "tester-fresh-skip-two-pass";
-export type TesterScenario = "auto" | "random-order" | "sdk-conversion" | "extra-large-limit-order" | "multi-order-limit-orders" | "two-ckb-to-ickb-limit-orders" | "all-ckb-limit-order" | "ickb-to-ckb-limit-order" | "two-ickb-to-ckb-limit-orders" | "mixed-direction-limit-orders" | "dust-ckb-conversion" | "dust-ickb-conversion";
+export type TesterScenario = "auto" | "random-order" | "sdk-conversion" | "extra-large-limit-order" | "multi-order-limit-orders" | "two-ckb-to-ickb-limit-orders" | "all-ckb-limit-order" | "ickb-to-ckb-limit-order" | "bounded-ickb-to-ckb-limit-order" | "two-ickb-to-ckb-limit-orders" | "mixed-direction-limit-orders" | "dust-ckb-conversion" | "dust-ickb-conversion";
 type TesterDirection = "ckb-to-ickb" | "ickb-to-ckb";
 
 interface ScenarioStep {
@@ -127,10 +129,13 @@ export interface Classification {
     exitStatus: number | null;
     signal: NodeJS.Signals | null;
     timedOut: boolean;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
   };
   actions?: ActionCounts;
   skipReason?: string;
   publicState?: PublicStateAssumption;
+  testerOrder?: TesterOrderEvidence;
 }
 
 interface TesterEvidenceExpectation {
@@ -157,6 +162,38 @@ export interface PublicStateAssumption {
   readyPoolDepositCount?: number;
   nearReadyPoolDepositCount?: number;
   futurePoolDepositCount?: number;
+}
+
+export interface TesterOrderEvidence {
+  requestedTesterScenario?: string;
+  testerScenario?: string;
+  orderCount: number;
+  collectedOrders?: number;
+  cancelledOrders?: number;
+  orders: TesterOrderSummary[];
+}
+
+export interface TesterOrderSummary {
+  direction?: TesterDirection;
+  giveCkb?: string;
+  takeIckb?: string;
+  giveIckb?: string;
+  takeCkb?: string;
+  fee?: string;
+  feeNumerator?: string;
+  feeBase?: string;
+  dust: boolean;
+}
+
+export interface PreflightStateSummary {
+  cycleIndex: number;
+  actor: Actor;
+  step: string;
+  selectedTesterScenario?: TesterScenario;
+  balances?: {
+    CKB?: { available: string };
+    ICKB?: { available: string };
+  };
 }
 
 export interface CoverageLedger {
@@ -267,14 +304,14 @@ const SCENARIOS: ScenarioDefinition[] = [
   {
     name: "tester-fresh-skip-two-pass",
     steps: [
-      { actor: "tester", label: "tester-pass-1", testerScenario: "multi-order-limit-orders" },
+      { actor: "tester", label: "tester-pass-1" },
       { actor: "tester", label: "tester-pass-2" },
     ],
     targetOutcomes: [
       "tester_order_created",
       "tester_fresh_order_skip",
     ],
-    reason: "run the same tester twice so a multi-order first pass can leave a fresh owned order for skip coverage",
+    reason: "run the same tester twice so a fundable first pass can leave a fresh owned order for skip coverage",
   },
 ];
 
@@ -317,7 +354,7 @@ export function usage(): string {
     "  --max-wall-clock-seconds <n>",
     "  --stop-after-tx-count <n>",
     "  --scenario auto|standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass",
-    "  --tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion",
+    "  --tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|bounded-ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion",
     "  --tester-fee <n>                    Default: 1",
     "  --tester-fee-base <n>               Default: 100000",
     "  --target-outcome <outcome>           Repeatable; planner prefers these first",
@@ -424,16 +461,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 export function resolvePlan(args: ParsedArgs, rootDir = repoRoot, dependencies: Dependencies = {}): SupervisorPlan {
   const runId = createRunId();
-  const outDir = insideRepoPath(rootDir, args.outDir ?? `logs/live-supervisor/${runId}`, "Output directory");
-  const relativeOutDir = relative(rootDir, outDir);
+  const outDir = resolveConfiguredPath(rootDir, args.outDir ?? `logs/live-supervisor/${runId}`, "Output directory");
+  const relativeOutDir = displayPath(rootDir, outDir);
   const botConfigPath = args.botConfigPath === undefined
     ? undefined
     : insideRepoPath(rootDir, args.botConfigPath, "Bot config path");
   const testerConfigPath = args.testerConfigPath === undefined
     ? undefined
     : insideRepoPath(rootDir, args.testerConfigPath, "Tester config path");
-  assertSupervisorOutputDirectory(relativeOutDir);
-  if (!isIgnoredPath(rootDir, relativeOutDir, dependencies)) {
+  assertSupervisorOutputDirectory(outDir, relativeOutDir);
+  if (isInside(rootDir, outDir) && !isIgnoredPath(rootDir, relativeOutDir, dependencies)) {
     throw new Error(`Refusing to write non-ignored supervisor output directory: ${relativeOutDir}`);
   }
   if (botConfigPath !== undefined) {
@@ -515,17 +552,11 @@ export function classifyActorResult(
       exitStatus: result.status,
       signal: result.signal,
       timedOut: result.timedOut,
+      stdoutTruncated: result.stdoutTruncated,
+      stderrTruncated: result.stderrTruncated,
     },
   };
 
-  if (containsSecretLeak(result.stdout) || containsSecretLeak(result.stderr)) {
-    return {
-      ...base,
-      outcome: "secret_leak_sentinel",
-      terminal: true,
-      reason: "stdout or stderr contained a secret-shaped field",
-    };
-  }
   if (result.timedOut) {
     return {
       ...base,
@@ -540,6 +571,16 @@ export function classifyActorResult(
       outcome: "nonzero_exit",
       terminal: true,
       reason: `${actor} failed to spawn: ${result.spawnError}`,
+    };
+  }
+  if (result.stdoutTruncated || result.stderrTruncated) {
+    return {
+      ...base,
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: result.stdoutTruncated
+        ? "stdout evidence exceeded supervisor capture limit"
+        : "stderr evidence exceeded supervisor capture limit",
     };
   }
   if (evidence.malformedLines.length > 0) {
@@ -610,7 +651,11 @@ export function chooseScenario(args: Pick<ParsedArgs, "scenario" | "targetOutcom
   const candidates = SCENARIOS
     .filter((scenario) => scenario.targetOutcomes.includes(underCovered))
     .sort((left, right) => left.steps.length - right.steps.length);
-  const scenario = candidates.find((candidate) => !ledger.attempts.some((attempt) => attempt.scenario === candidate.name))
+  const preferred = underCovered === "tester_fresh_order_skip"
+    ? candidates.find((candidate) => candidate.name === "tester-fresh-skip-two-pass")
+    : undefined;
+  const scenario = preferred
+    ?? candidates.find((candidate) => !ledger.attempts.some((attempt) => attempt.scenario === candidate.name))
     ?? candidates[0];
   if (scenario === undefined) {
     return {
@@ -661,6 +706,9 @@ export async function supervise(args: ParsedArgs, plan: SupervisorPlan, dependen
 
 async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencies: Dependencies = {}): Promise<number> {
   const startedAt = now(dependencies);
+  const wallClockDeadline = args.maxWallClockSeconds === undefined
+    ? undefined
+    : startedAt + args.maxWallClockSeconds * 1000;
   if (!args.dryRun && dependencies.skipBuiltRuntimeCheck !== true) {
     assertBuiltRuntime(plan, dependencies);
   }
@@ -668,8 +716,24 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
   const ledger = createCoverageLedger(explicitCoverageGoals(args).length > 0 ? explicitCoverageGoals(args) : DEFAULT_COVERAGE_GOALS);
   const classifications = new Array<Classification>();
   const artifacts = new Array<string>();
+  const preflightState = new Array<PreflightStateSummary>();
   let txCount = 0;
   let latestPublicState: PublicStateAssumption | undefined;
+
+  const stopForExpiredWallClock = async (incidentCycleIndex: number): Promise<number | undefined> => {
+    if (args.maxWallClockSeconds === undefined || now(dependencies) - startedAt < args.maxWallClockSeconds * 1000) {
+      return undefined;
+    }
+    const unmetGoals = unmetExplicitGoals(args, ledger);
+    if (unmetGoals.length > 0) {
+      const incident = await writeUnmetCoverageIncident(plan, incidentCycleIndex, unmetGoals, ledger, artifacts, dependencies, "bounded wall-clock budget");
+      classifications.push(incident.classification);
+      await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, incident.classification.outcome, dependencies);
+      return STOP_EXIT_CODE;
+    }
+    await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, "max_wall_clock_seconds", dependencies);
+    return 0;
+  };
 
   if (args.dryRun) {
     const dryRunResult = await runDryRun(plan, ledger, dependencies);
@@ -677,9 +741,9 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
   }
 
   for (let cycleIndex = 1; cycleIndex <= args.maxCycles; cycleIndex += 1) {
-    if (args.maxWallClockSeconds !== undefined && now(dependencies) - startedAt >= args.maxWallClockSeconds * 1000) {
-      await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, "max_wall_clock_seconds", dependencies);
-      return 0;
+    const cycleWallClockStop = await stopForExpiredWallClock(Math.max(1, cycleIndex - 1));
+    if (cycleWallClockStop !== undefined) {
+      return cycleWallClockStop;
     }
 
     const choice = chooseScenario(args, ledger);
@@ -689,7 +753,7 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
       classifications.push(classification);
       const incident = unsupportedIncident(plan, cycleIndex, choice, ledger, classification);
       await writeJsonArtifact(plan, `cycle-${padCycle(cycleIndex)}-incident.json`, incident, artifacts, dependencies);
-      await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, "unsupported_scenario", dependencies);
+      await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, "unsupported_scenario", dependencies);
       return STOP_EXIT_CODE;
     }
 
@@ -701,20 +765,68 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
       reason: choice.reason,
     }, dependencies);
 
+    const preflightReports = new Map<string, Record<string, unknown>>();
     for (const step of choice.scenario.steps) {
-      const result = await runPreflight(step.actor, plan, cycleIndex, stepLabel(step), dependencies);
-      artifacts.push(...await writeCommandArtifacts(plan, cycleIndex, `${stepLabel(step)}-preflight`, result, dependencies));
-      const classification = classifyActorResult("preflight", result);
+      const wallClockStop = await stopForExpiredWallClock(cycleIndex);
+      if (wallClockStop !== undefined) {
+        return wallClockStop;
+      }
+      const firstTimeoutMs = commandTimeoutMs(plan, wallClockDeadline, dependencies);
+      if (firstTimeoutMs === undefined) {
+        const stop = await stopForExpiredWallClock(cycleIndex);
+        return stop ?? STOP_EXIT_CODE;
+      }
+      const firstResult = await runPreflight(step.actor, plan, cycleIndex, stepLabel(step), dependencies, firstTimeoutMs);
+      const firstClassification = classifyActorResult("preflight", firstResult);
+      const shouldRetryPreflight = firstClassification.outcome === "preflight_retryable_error";
+      if (shouldRetryPreflight) {
+        artifacts.push(...await writeCommandArtifacts(plan, cycleIndex, `${stepLabel(step)}-preflight-attempt-1`, firstResult, dependencies));
+        const retryWallClockStop = await stopForExpiredWallClock(cycleIndex);
+        if (retryWallClockStop !== undefined) {
+          return retryWallClockStop;
+        }
+      }
+      let result = firstResult;
+      if (shouldRetryPreflight) {
+        const retryTimeoutMs = commandTimeoutMs(plan, wallClockDeadline, dependencies);
+        if (retryTimeoutMs === undefined) {
+          const stop = await stopForExpiredWallClock(cycleIndex);
+          return stop ?? STOP_EXIT_CODE;
+        }
+        result = await runPreflight(step.actor, plan, cycleIndex, stepLabel(step), dependencies, retryTimeoutMs);
+      }
+      artifacts.push(...await writeCommandArtifacts(
+        plan,
+        cycleIndex,
+        `${stepLabel(step)}-preflight${shouldRetryPreflight ? "-attempt-2" : ""}`,
+        result,
+        dependencies,
+      ));
+      const classification = shouldRetryPreflight ? classifyActorResult("preflight", result) : firstClassification;
       if (classification.terminal) {
         classifications.push(classification);
         await writeIncident(plan, cycleIndex, step.actor, choice, classification, result, ledger, artifacts, dependencies);
-        await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, classification.outcome, dependencies);
+        await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, classification.outcome, dependencies);
         return STOP_EXIT_CODE;
+      }
+      const report = parsePreflightEvidence(result.stdout).records[0];
+      if (report !== undefined) {
+        preflightReports.set(stepLabel(step), report);
+        preflightState.push(preflightStateSummary(cycleIndex, step, plan, choice.targetOutcomes, report));
       }
     }
 
     for (const step of choice.scenario.steps) {
-      const result = await runActor(step, plan, choice.targetOutcomes, dependencies);
+      const wallClockStop = await stopForExpiredWallClock(cycleIndex);
+      if (wallClockStop !== undefined) {
+        return wallClockStop;
+      }
+      const actorTimeoutMs = commandTimeoutMs(plan, wallClockDeadline, dependencies);
+      if (actorTimeoutMs === undefined) {
+        const stop = await stopForExpiredWallClock(cycleIndex);
+        return stop ?? STOP_EXIT_CODE;
+      }
+      const result = await runActor(step, plan, choice.targetOutcomes, actorTimeoutMs, dependencies);
       artifacts.push(...await writeCommandArtifacts(plan, cycleIndex, stepLabel(step), result, dependencies));
       const classification = classifyActorResult(step.actor, result, step.actor === "tester" ? testerEvidenceExpectation(plan, step) : undefined);
       classifications.push(classification);
@@ -734,11 +846,11 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
 
       if (classification.terminal) {
         const incident = await writeIncident(plan, cycleIndex, step.actor, choice, classification, result, ledger, artifacts, dependencies);
-        await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, incident.classification.outcome, dependencies);
+        await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, incident.classification.outcome, dependencies);
         return classification.outcome === "nonzero_exit" ? 1 : STOP_EXIT_CODE;
       }
       if (args.stopAfterTxCount !== undefined && txCount >= args.stopAfterTxCount) {
-        await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, "stop_after_tx_count", dependencies);
+        await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, "stop_after_tx_count", dependencies);
         return 0;
       }
     }
@@ -746,13 +858,13 @@ async function superviseOnce(args: ParsedArgs, plan: SupervisorPlan, dependencie
 
   const unmetGoals = unmetExplicitGoals(args, ledger);
   if (unmetGoals.length > 0) {
-    const incident = await writeUnmetCoverageIncident(plan, args.maxCycles, unmetGoals, ledger, artifacts, dependencies);
+    const incident = await writeUnmetCoverageIncident(plan, args.maxCycles, unmetGoals, ledger, artifacts, dependencies, "bounded cycle budget");
     classifications.push(incident.classification);
-    await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, incident.classification.outcome, dependencies);
+    await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, incident.classification.outcome, dependencies);
     return STOP_EXIT_CODE;
   }
 
-  await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, "max_cycles", dependencies);
+  await writeSummary(plan, ledger, classifications, artifacts, preflightState, latestPublicState, "max_cycles", dependencies);
   return 0;
 }
 
@@ -792,7 +904,7 @@ async function runDryRun(plan: SupervisorPlan, ledger: CoverageLedger, dependenc
     classifications.push(classification);
     const incident = unsupportedIncident(plan, 1, choice, ledger, classification);
     await writeJsonArtifact(plan, "dry-run-incident.json", incident, artifacts, dependencies);
-    await writeSummary(plan, ledger, classifications, artifacts, undefined, "unsupported_scenario", dependencies);
+    await writeSummary(plan, ledger, classifications, artifacts, [], undefined, "unsupported_scenario", dependencies);
     return STOP_EXIT_CODE;
   }
 
@@ -830,7 +942,7 @@ async function runDryRun(plan: SupervisorPlan, ledger: CoverageLedger, dependenc
     artifacts.push(...await writeCommandArtifacts(plan, 1, `dry-run-${sample.actor}`, sample.result, dependencies));
   }
 
-  await writeSummary(plan, ledger, classifications, artifacts, latestPublicState, "dry_run", dependencies);
+  await writeSummary(plan, ledger, classifications, artifacts, [], latestPublicState, "dry_run", dependencies);
   return 0;
 }
 
@@ -852,14 +964,15 @@ async function prepareOutputDirectory(plan: SupervisorPlan, dependencies: Depend
 
 async function assertNoSymlinkedOutputAncestors(plan: SupervisorPlan, dependencies: Dependencies): Promise<void> {
   const lstatFn = dependencies.lstat ?? lstat;
-  const parts = plan.relativeOutDir.split("/").filter((part) => part !== "");
-  let current = plan.rootDir;
+  const base = isInside(plan.rootDir, plan.outDir) ? plan.rootDir : parse(plan.outDir).root;
+  const parts = relative(base, plan.outDir).split(sep).filter((part) => part !== "");
+  let current = base;
   for (const part of parts) {
     current = join(current, part);
     try {
       const stats = await lstatFn(current);
       if (stats.isSymbolicLink()) {
-        throw new Error(`Refusing to write supervisor artifacts through symlinked path: ${relative(plan.rootDir, current)}`);
+        throw new Error(`Refusing to write supervisor artifacts through symlinked path: ${displayPath(plan.rootDir, current)}`);
       }
     } catch (error) {
       if (isNotFoundError(error)) {
@@ -885,8 +998,7 @@ async function assertRealOutputDirectory(plan: SupervisorPlan, dependencies: Dep
     }
     throw error;
   }
-  const relativeOutDir = relative(realRoot, realOutDir);
-  if (relativeOutDir.startsWith("..") || isAbsolute(relativeOutDir)) {
+  if (isInside(plan.rootDir, plan.outDir) && !isInside(realRoot, realOutDir)) {
     throw new Error("Supervisor output directory must stay inside the repo");
   }
 }
@@ -913,24 +1025,25 @@ function assertBuiltRuntime(plan: SupervisorPlan, dependencies: Dependencies): v
   }
 }
 
-async function runPreflight(actor: Actor, plan: SupervisorPlan, cycleIndex: number, role: string, dependencies: Dependencies): Promise<CommandResult> {
+async function runPreflight(actor: Actor, plan: SupervisorPlan, cycleIndex: number, role: string, dependencies: Dependencies, timeoutMs: number): Promise<CommandResult> {
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
   if (configPath === undefined) {
     throw new Error(`Missing ${actor} config path`);
   }
   await assertNoSymlinkedConfigPath(plan.rootDir, configPath, `${actor} config path`, dependencies);
-  return runCommand({
+  const spec: Parameters<typeof runCommand>[0] = {
     actor: "preflight",
     command: process.execPath,
     args: ["scripts/ickb-live-preflight.mjs", "--config", configPath, "--role", `${role}-${String(cycleIndex)}`],
     cwd: plan.rootDir,
     env: liveActorEnv({ INIT_CWD: plan.rootDir }),
     inheritEnv: false,
-    timeoutMs: plan.commandTimeoutSeconds * 1000,
-  }, dependencies);
+    timeoutMs,
+  };
+  return await runCommand(spec, dependencies);
 }
 
-async function runActor(step: ScenarioStep, plan: SupervisorPlan, targetOutcomes: OutcomeKind[], dependencies: Dependencies): Promise<CommandResult> {
+async function runActor(step: ScenarioStep, plan: SupervisorPlan, targetOutcomes: OutcomeKind[], timeoutMs: number, dependencies: Dependencies): Promise<CommandResult> {
   const actor = step.actor;
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
   if (configPath === undefined) {
@@ -950,20 +1063,39 @@ async function runActor(step: ScenarioStep, plan: SupervisorPlan, targetOutcomes
       ...(actor === "tester" ? testerEnv(plan, targetOutcomes, step) : {}),
     }),
     inheritEnv: false,
-    timeoutMs: plan.commandTimeoutSeconds * 1000,
+    timeoutMs,
   }, dependencies);
 }
 
 function testerEnv(plan: SupervisorPlan, targetOutcomes: OutcomeKind[], step: ScenarioStep): Record<string, string> {
   return {
-    TESTER_SCENARIO: testerScenarioForTargets(plan.testerScenario, plan.testerScenarioExplicit, targetOutcomes, step.testerScenario),
+    TESTER_SCENARIO: testerScenarioForTargets(plan.testerScenario, plan.testerScenarioExplicit, targetOutcomes, step),
     ...(plan.testerFeeExplicit ? { TESTER_FEE: plan.testerFee } : {}),
     ...(plan.testerFeeBaseExplicit ? { TESTER_FEE_BASE: plan.testerFeeBase } : {}),
   };
 }
 
+function commandTimeoutMs(plan: SupervisorPlan, wallClockDeadline: number | undefined, dependencies: Dependencies): number | undefined {
+  const configuredTimeoutMs = plan.commandTimeoutSeconds * 1000;
+  if (wallClockDeadline === undefined) {
+    return configuredTimeoutMs;
+  }
+  const remainingMs = wallClockDeadline - now(dependencies);
+  return remainingMs <= 0 ? undefined : Math.min(configuredTimeoutMs, remainingMs);
+}
+
+function preflightNonzeroOutcome(stderr: string): OutcomeKind {
+  if (stderr.includes("Invalid") && stderr.includes("chain identity")) {
+    return "wrong_chain";
+  }
+  if (stderr.includes("Live preflight retryable failure:")) {
+    return "preflight_retryable_error";
+  }
+  return "nonzero_exit";
+}
+
 function testerEvidenceExpectation(plan: SupervisorPlan, step: ScenarioStep): TesterEvidenceExpectation | undefined {
-  const scenario = testerScenarioForTargets(plan.testerScenario, plan.testerScenarioExplicit, [], step.testerScenario);
+  const scenario = testerScenarioForTargets(plan.testerScenario, plan.testerScenarioExplicit, [], step);
   return scenario !== "auto" ? { scenario } : undefined;
 }
 
@@ -971,11 +1103,12 @@ function testerScenarioForTargets(
   configuredScenario: TesterScenario,
   testerScenarioExplicit: boolean,
   targetOutcomes: OutcomeKind[],
-  stepScenario: TesterScenario | undefined,
+  step: ScenarioStep,
 ): TesterScenario {
   if (testerScenarioExplicit || configuredScenario !== "auto") {
     return configuredScenario;
   }
+  const stepScenario = step.testerScenario;
   if (stepScenario !== undefined) {
     return stepScenario;
   }
@@ -983,6 +1116,39 @@ function testerScenarioForTargets(
     return "sdk-conversion";
   }
   return configuredScenario;
+}
+
+function preflightAvailableBalanceText(preflightReport: Record<string, unknown> | undefined, asset: "CKB" | "ICKB"): string | undefined {
+  const balances = optionalRecordField(preflightReport, "balances");
+  const balance = optionalRecordField(balances, asset);
+  return stringField(balance, "available");
+}
+
+function preflightStateSummary(
+  cycleIndex: number,
+  step: ScenarioStep,
+  plan: SupervisorPlan,
+  targetOutcomes: OutcomeKind[],
+  preflightReport: Record<string, unknown>,
+): PreflightStateSummary {
+  const summary: PreflightStateSummary = {
+    cycleIndex,
+    actor: step.actor,
+    step: stepLabel(step),
+  };
+  const ckbAvailable = preflightAvailableBalanceText(preflightReport, "CKB");
+  const ickbAvailable = preflightAvailableBalanceText(preflightReport, "ICKB");
+  if (ckbAvailable !== undefined || ickbAvailable !== undefined) {
+    summary.balances = {
+      ...(ckbAvailable === undefined ? {} : { CKB: { available: ckbAvailable } }),
+      ...(ickbAvailable === undefined ? {} : { ICKB: { available: ickbAvailable } }),
+    };
+  }
+  if (step.actor === "tester") {
+    const selectedTesterScenario = testerScenarioForTargets(plan.testerScenario, plan.testerScenarioExplicit, targetOutcomes, step);
+    summary.selectedTesterScenario = selectedTesterScenario;
+  }
+  return summary;
 }
 
 function stepLabel(step: ScenarioStep): string {
@@ -1103,9 +1269,9 @@ function classifyPreflightResult(
   if (result.status !== 0) {
     return {
       ...base,
-      outcome: result.stderr.includes("Invalid") && result.stderr.includes("chain identity") ? "wrong_chain" : "nonzero_exit",
+      outcome: preflightNonzeroOutcome(result.stderr),
       terminal: true,
-      reason: boundedText(safeArtifactText(result.stderr), 240) || "preflight command exited nonzero",
+      reason: boundedText(result.stderr, 240) || "preflight command exited nonzero",
     };
   }
   const report = evidence.records[0];
@@ -1115,6 +1281,14 @@ function classifyPreflightResult(
       outcome: "malformed_evidence",
       terminal: true,
       reason: "preflight did not return a JSON report",
+    };
+  }
+  if (report["bounded"] !== true || report["maxIterations"] !== 1) {
+    return {
+      ...base,
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "preflight config is not bounded to one iteration",
     };
   }
   return {
@@ -1132,20 +1306,30 @@ function classifyBotResult(
 ): Classification {
   const botRecords = evidence.records.filter(isBotRecord);
   const publicState = latestPublicState(botRecords);
-  const failed = lastRecordOfType(botRecords, "bot.transaction.failed");
-  if (failed !== undefined) {
+  const lifecycle = lastRecordOfTypes(botRecords, ["bot.transaction.failed", "bot.transaction.committed"]);
+  if (lifecycle?.type === "bot.transaction.failed") {
+    const failed = lifecycle.record;
     const outcome = stringField(failed, "outcome");
     const phase = stringField(failed, "phase");
     if (outcome === "timeout_after_broadcast") {
+      if (!hasValidTxHash(failed)) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
+      }
       return { ...base, outcome: "confirmation_timeout", terminal: true, reason: "bot tx confirmation timed out", publicState };
     }
     if (outcome === "post_broadcast_unresolved") {
+      if (!hasValidTxHash(failed)) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
+      }
       return { ...base, outcome: "post_broadcast_unresolved", terminal: true, reason: "bot tx remained unresolved after broadcast", publicState };
     }
     if (outcome === "terminal_rejection") {
+      if (!hasValidTxHash(failed)) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
+      }
       return { ...base, outcome: "terminal_chain_rejection", terminal: true, reason: "bot tx reached terminal chain rejection", publicState };
     }
-    if (phase === "pre_broadcast") {
+    if (phase === "pre_broadcast" && (failed["retryable"] !== true || failed["terminal"] !== false)) {
       return { ...base, outcome: "unknown", terminal: true, reason: "bot pre-broadcast transaction failure", publicState };
     }
   }
@@ -1163,6 +1347,17 @@ function classifyBotResult(
     };
   }
 
+  const iterationFailure = lastRecordOfType(botRecords, "bot.iteration.failed");
+  if (iterationFailure !== undefined && iterationFailure["retryable"] === true && iterationFailure["terminal"] === true) {
+    return {
+      ...base,
+      outcome: "bot_retryable_error",
+      terminal: true,
+      reason: "bot reported terminal retryable iteration failure",
+      publicState,
+    };
+  }
+
   if (result.status !== 0) {
     return {
       ...base,
@@ -1173,12 +1368,15 @@ function classifyBotResult(
     };
   }
 
-  const committed = lastRecordOfType(botRecords, "bot.transaction.committed");
-  if (committed !== undefined) {
+  if (lifecycle?.type === "bot.transaction.committed") {
+    const committed = lifecycle.record;
     if (!hasValidTxHash(committed)) {
       return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include a valid tx hash", publicState };
     }
-    const actions = latestBotActions(botRecords) ?? emptyActions();
+    const actions = latestBotActions(botRecords, numberField(committed, "iterationId"));
+    if (actions === undefined) {
+      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include matching built action evidence", publicState };
+    }
     return {
       ...base,
       outcome: classifyBotCommittedActions(actions),
@@ -1213,6 +1411,16 @@ function classifyBotResult(
       publicState,
     };
   }
+
+  if (iterationFailure !== undefined && iterationFailure["retryable"] === true && iterationFailure["terminal"] === false) {
+    return {
+      ...base,
+      outcome: "bot_retryable_error",
+      terminal: false,
+      reason: "bot reported retryable iteration failure",
+      publicState,
+    };
+  }
   return { ...base, outcome: "unknown", terminal: true, reason: "bot produced no classifiable terminal evidence", publicState };
 }
 
@@ -1227,8 +1435,9 @@ function classifyTesterResult(
   if (latest !== undefined) {
     const error = latest["error"];
     if (error !== undefined) {
-      if (hasTimeoutError(error)) {
-        return { ...base, outcome: "confirmation_timeout", terminal: true, reason: "tester transaction confirmation timed out" };
+      const transactionFailure = classifyTesterTransactionFailure(error, latest);
+      if (transactionFailure !== undefined) {
+        return { ...base, ...transactionFailure };
       }
       if (isTesterFundingError(error)) {
         return { ...base, outcome: "low_capital_stop", terminal: true, reason: "tester reported insufficient funds" };
@@ -1251,6 +1460,9 @@ function classifyTesterResult(
       if (reason === "fresh-matchable-order") {
         return { ...base, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped fresh matchable order", skipReason: reason };
       }
+      if (reason === "matchable-order-transaction-missing") {
+        return { ...base, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped because matchable order transaction was not readable yet", skipReason: reason };
+      }
       if (reason === "sampled-amount-too-small") {
         return { ...base, outcome: "tester_sampled_too_small_skip", terminal: false, reason: "tester sampled amount too small", skipReason: reason };
       }
@@ -1272,14 +1484,82 @@ function classifyTesterResult(
       if (expectationFailure !== undefined) {
         return { ...base, outcome: "tester_deterministic_pre_broadcast_error", terminal: true, reason: expectationFailure };
       }
+      const testerOrder = testerOrderEvidence(actions);
       const conversionKind = stringField(recordField(actions ?? {}, "conversion"), "kind");
-      if (conversionKind !== undefined) {
-        return { ...base, outcome: "tester_conversion_created", terminal: false, reason: "tester created a direct conversion transaction" };
+      if (testerOrder === undefined && conversionKind === undefined) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence did not include action evidence" };
       }
-      return { ...base, outcome: "tester_order_created", terminal: false, reason: "tester created an order transaction" };
+      if (conversionKind !== undefined) {
+        return {
+          ...base,
+          outcome: "tester_conversion_created",
+          terminal: false,
+          reason: "tester created a direct conversion transaction",
+          ...(testerOrder === undefined ? {} : { testerOrder }),
+        };
+      }
+      return {
+        ...base,
+        outcome: "tester_order_created",
+        terminal: false,
+        reason: "tester created an order transaction",
+        ...(testerOrder === undefined ? {} : { testerOrder }),
+      };
     }
   }
   return { ...base, outcome: "unknown", terminal: true, reason: "tester produced no classifiable terminal evidence" };
+}
+
+function testerOrderEvidence(actions: Record<string, unknown> | undefined): TesterOrderEvidence | undefined {
+  if (actions === undefined) {
+    return undefined;
+  }
+  const orders = testerOrderSummaries(actions);
+  if (orders.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(stringField(actions, "requestedTesterScenario") === undefined ? {} : { requestedTesterScenario: stringField(actions, "requestedTesterScenario") }),
+    ...(stringField(actions, "testerScenario") === undefined ? {} : { testerScenario: stringField(actions, "testerScenario") }),
+    orderCount: numberField(actions, "orderCount") ?? orders.length,
+    ...(numberField(actions, "collectedOrders") === undefined ? {} : { collectedOrders: numberField(actions, "collectedOrders") }),
+    ...(numberField(actions, "cancelledOrders") === undefined ? {} : { cancelledOrders: numberField(actions, "cancelledOrders") }),
+    orders,
+  };
+}
+
+function testerOrderSummaries(actions: Record<string, unknown>): TesterOrderSummary[] {
+  const newOrders = arrayField(actions, "newOrders");
+  if (newOrders !== undefined) {
+    return newOrders.flatMap((order) => {
+      const summary = testerOrderSummary(order);
+      return summary === undefined ? [] : [summary];
+    });
+  }
+  const newOrder = recordField(actions, "newOrder");
+  const summary = testerOrderSummary(newOrder);
+  return summary === undefined ? [] : [summary];
+}
+
+function testerOrderSummary(order: unknown): TesterOrderSummary | undefined {
+  if (!isRecord(order)) {
+    return undefined;
+  }
+  const giveCkb = stringField(order, "giveCkb");
+  const takeIckb = stringField(order, "takeIckb");
+  const giveIckb = stringField(order, "giveIckb");
+  const takeCkb = stringField(order, "takeCkb");
+  return {
+    ...(orderDirection(order) === undefined ? {} : { direction: orderDirection(order) }),
+    ...(giveCkb === undefined ? {} : { giveCkb }),
+    ...(takeIckb === undefined ? {} : { takeIckb }),
+    ...(giveIckb === undefined ? {} : { giveIckb }),
+    ...(takeCkb === undefined ? {} : { takeCkb }),
+    ...(stringField(order, "fee") === undefined ? {} : { fee: stringField(order, "fee") }),
+    ...(stringField(order, "feeNumerator") === undefined ? {} : { feeNumerator: stringField(order, "feeNumerator") }),
+    ...(stringField(order, "feeBase") === undefined ? {} : { feeBase: stringField(order, "feeBase") }),
+    dust: giveCkb === "0.00000001" || giveIckb === "0.00000001",
+  };
 }
 
 function validateTesterEvidenceExpectation(actions: Record<string, unknown> | undefined, expectation: TesterEvidenceExpectation | undefined): string | undefined {
@@ -1398,27 +1678,27 @@ function isSdkConversionTesterScenario(scenario: TesterScenario): boolean {
 }
 
 function isIckbToCkbTesterScenario(scenario: TesterScenario): boolean {
-  return scenario === "ickb-to-ckb-limit-order" || scenario === "two-ickb-to-ckb-limit-orders" || scenario === "dust-ickb-conversion";
+  return scenario === "ickb-to-ckb-limit-order" || scenario === "bounded-ickb-to-ckb-limit-order" || scenario === "two-ickb-to-ckb-limit-orders" || scenario === "dust-ickb-conversion";
 }
 
 function classifyBotCommittedActions(actions: ActionCounts): OutcomeKind {
   if (actions.matchedOrders > 0 && actions.deposits > 0) {
     return "bot_match_plus_deposit_committed";
   }
-  if (actions.matchedOrders > 0) {
-    return "bot_match_committed";
+  if (actions.withdrawalRequests > 0) {
+    return "bot_withdrawal_request_committed";
   }
   if (actions.completedDeposits > 0) {
     return "bot_receipt_completion_committed";
   }
-  if (actions.deposits > 0) {
-    return "bot_deposit_only_committed";
-  }
-  if (actions.withdrawalRequests > 0) {
-    return "bot_withdrawal_request_committed";
-  }
   if (actions.withdrawals > 0) {
     return "bot_withdrawal_completion_committed";
+  }
+  if (actions.matchedOrders > 0) {
+    return "bot_match_committed";
+  }
+  if (actions.deposits > 0) {
+    return "bot_deposit_only_committed";
   }
   return "unknown";
 }
@@ -1426,7 +1706,7 @@ function classifyBotCommittedActions(actions: ActionCounts): OutcomeKind {
 function unsupportedClassification(choice: UnsupportedScenarioChoice): Classification {
   return {
     actor: "preflight",
-    outcome: "unknown",
+    outcome: "unsupported_scenario",
     terminal: true,
     reason: choice.reason,
     txHashes: [],
@@ -1437,6 +1717,8 @@ function unsupportedClassification(choice: UnsupportedScenarioChoice): Classific
       exitStatus: null,
       signal: null,
       timedOut: false,
+      stdoutTruncated: false,
+      stderrTruncated: false,
     },
   };
 }
@@ -1456,12 +1738,13 @@ async function writeUnmetCoverageIncident(
   ledger: CoverageLedger,
   artifacts: string[],
   dependencies: Dependencies,
+  budgetLabel: string,
 ): Promise<IncidentArtifact> {
   const classification: Classification = {
     actor: "preflight",
     outcome: "unmet_coverage_goal",
     terminal: true,
-    reason: `bounded cycle budget ended before observing requested outcomes: ${unmetGoals.join(", ")}`,
+    reason: `${budgetLabel} ended before observing requested outcomes: ${unmetGoals.join(", ")}`,
     txHashes: [],
     evidence: {
       recordsAccepted: 0,
@@ -1470,6 +1753,8 @@ async function writeUnmetCoverageIncident(
       exitStatus: null,
       signal: null,
       timedOut: false,
+      stdoutTruncated: false,
+      stderrTruncated: false,
     },
   };
   const relativePath = await writeJsonArtifact(plan, `cycle-${padCycle(cycleIndex)}-incident.json`, {
@@ -1502,7 +1787,7 @@ async function writeIncident(
     actor,
     scenario: choice.scenario.name,
     targetOutcomes: choice.targetOutcomes,
-    command: redactedCommandShape(plan, result),
+    command: commandShape(plan, result),
     exit: {
       spawnError: result.spawnError,
       status: result.status,
@@ -1514,8 +1799,8 @@ async function writeIncident(
     },
     classification,
     coverage: coverageSummary(ledger),
-    stdoutExcerpt: boundedText(safeArtifactText(result.stdout), 4000),
-    stderrExcerpt: boundedText(safeArtifactText(result.stderr), 4000),
+    stdoutExcerpt: boundedText(result.stdout, 4000),
+    stderrExcerpt: boundedText(result.stderr, 4000),
     artifacts,
     suggestedNextAction: suggestedNextAction(classification),
   }, artifacts, dependencies);
@@ -1545,6 +1830,7 @@ async function writeSummary(
   ledger: CoverageLedger,
   classifications: Classification[],
   artifacts: string[],
+  preflightState: PreflightStateSummary[],
   latestPublicState: PublicStateAssumption | undefined,
   stopReason: string,
   dependencies: Dependencies,
@@ -1555,7 +1841,11 @@ async function writeSummary(
     artifacts,
     aggregateCounts: aggregateClassifications(classifications),
     txHashesByOutcome: txHashesByOutcome(classifications),
+    txCreatingTxHashCount: txCreatingHashCountTotal(classifications),
+    txCreatingOutcomeCount: txCreatingOutcomeCount(classifications),
+    testerOrderEvidence: testerOrderEvidenceByOutcome(classifications),
     skipReasons: classifications.map((item) => item.skipReason).filter((item) => item !== undefined),
+    preflightState,
     scenarioAttempts: ledger.attempts,
     coverage: coverageSummary(ledger),
     publicVsOwnedStateAssumptions: latestPublicState ?? null,
@@ -1570,10 +1860,11 @@ async function writeCommandArtifacts(
   dependencies: Dependencies,
 ): Promise<string[]> {
   const base = `cycle-${padCycle(cycleIndex)}-${label}`;
-  const stdoutPath = await writeTextArtifact(plan, `${base}.stdout.ndjson`, safeArtifactText(result.stdout), dependencies);
-  const stderrPath = await writeTextArtifact(plan, `${base}.stderr.log`, safeArtifactText(result.stderr), dependencies);
+  const stdoutExtension = result.actor === "preflight" ? "json" : "ndjson";
+  const stdoutPath = await writeTextArtifact(plan, `${base}.stdout.${stdoutExtension}`, result.stdout, dependencies);
+  const stderrPath = await writeTextArtifact(plan, `${base}.stderr.log`, result.stderr, dependencies);
   const commandPath = await writeJsonArtifact(plan, `${base}.command.json`, {
-    command: redactedCommandShape(plan, result),
+    command: commandShape(plan, result),
     exit: {
       spawnError: result.spawnError,
       status: result.status,
@@ -1591,7 +1882,7 @@ async function writeTextArtifact(plan: SupervisorPlan, fileName: string, text: s
   const writeFileFn = dependencies.writeFile ?? writeFile;
   const artifactPath = join(plan.outDir, fileName);
   await writeFileFn(artifactPath, text);
-  return relative(plan.rootDir, artifactPath);
+  return displayPath(plan.rootDir, artifactPath);
 }
 
 async function writeJsonArtifact(
@@ -1604,7 +1895,7 @@ async function writeJsonArtifact(
   const writeFileFn = dependencies.writeFile ?? writeFile;
   const artifactPath = join(plan.outDir, fileName);
   await writeFileFn(artifactPath, `${JSON.stringify(value, jsonReplacer, 2)}\n`);
-  const relativePath = relative(plan.rootDir, artifactPath);
+  const relativePath = displayPath(plan.rootDir, artifactPath);
   if (!artifacts.includes(relativePath)) {
     artifacts.push(relativePath);
   }
@@ -1622,7 +1913,7 @@ async function appendSupervisorEvent(plan: SupervisorPlan, fields: Record<string
   }, jsonReplacer)}\n`);
 }
 
-function redactedCommandShape(plan: SupervisorPlan, result: CommandResult): Record<string, unknown> {
+function commandShape(plan: SupervisorPlan, result: CommandResult): Record<string, unknown> {
   return {
     command: result.command === process.execPath ? "node" : result.command,
     args: result.args.map((arg) => arg === plan.botConfigPath
@@ -1655,8 +1946,26 @@ function txHashesByOutcome(classifications: Classification[]): Record<string, st
   return Object.fromEntries(hashes);
 }
 
+function testerOrderEvidenceByOutcome(classifications: Classification[]): Array<TesterOrderEvidence & { outcome: OutcomeKind; txHashes: string[] }> {
+  return classifications.flatMap((classification) => classification.testerOrder === undefined
+    ? []
+    : [{
+        outcome: classification.outcome,
+        txHashes: classification.txHashes,
+        ...classification.testerOrder,
+      }]);
+}
+
 function txCreatingHashCount(classification: Classification): number {
   return TX_CREATING_OUTCOMES.has(classification.outcome) ? classification.txHashes.length : 0;
+}
+
+function txCreatingHashCountTotal(classifications: Classification[]): number {
+  return classifications.reduce((sum, classification) => sum + txCreatingHashCount(classification), 0);
+}
+
+function txCreatingOutcomeCount(classifications: Classification[]): number {
+  return classifications.filter((classification) => TX_CREATING_OUTCOMES.has(classification.outcome)).length;
 }
 
 function coverageSummary(ledger: CoverageLedger): Record<string, unknown> {
@@ -1674,22 +1983,19 @@ function suggestedNextAction(classification: Classification): string {
   if (classification.outcome === "confirmation_timeout" || classification.outcome === "post_broadcast_unresolved") {
     return "confirm the tx hash with a read-only chain query before sending any follow-up work";
   }
-  if (classification.outcome === "secret_leak_sentinel") {
-    return "stop, inspect artifacts for leakage, and rotate any exposed disposable key before relaunch";
-  }
   if (classification.outcome === "low_capital_stop") {
     return "fund the supervised account or provide an alternate ignored config, then rerun a bounded smoke";
   }
   return "inspect the incident bundle and run a review pass for material code changes before extended relaunch";
 }
 
-function latestBotActions(records: Record<string, unknown>[]): ActionCounts | undefined {
+function latestBotActions(records: Record<string, unknown>[], iterationId?: number): ActionCounts | undefined {
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index];
     if (record === undefined) {
       continue;
     }
-    if (stringField(record, "type") === "bot.transaction.built") {
+    if (stringField(record, "type") === "bot.transaction.built" && (iterationId === undefined || numberField(record, "iterationId") === iterationId)) {
       return actionCounts(record["actions"]);
     }
   }
@@ -1763,17 +2069,18 @@ function emptyActions(): ActionCounts {
 function extractTxHashes(records: Record<string, unknown>[]): string[] {
   const hashes = new Set<string>();
   for (const record of records) {
-    const txHash = record["txHash"];
-    if (typeof txHash === "string" && TX_HASH_PATTERN.test(txHash)) {
-      hashes.add(txHash);
-    }
+    addValidTxHash(hashes, record["txHash"]);
+    addValidTxHash(hashes, recordField(record, "error")?.["txHash"]);
     const skip = recordField(record, "skip");
-    const skipTxHash = skip?.["txHash"];
-    if (typeof skipTxHash === "string" && TX_HASH_PATTERN.test(skipTxHash)) {
-      hashes.add(skipTxHash);
-    }
+    addValidTxHash(hashes, skip?.["txHash"]);
   }
   return [...hashes];
+}
+
+function addValidTxHash(hashes: Set<string>, value: unknown): void {
+  if (typeof value === "string" && TX_HASH_PATTERN.test(value)) {
+    hashes.add(value);
+  }
 }
 
 function hasValidTxHash(record: Record<string, unknown>): boolean {
@@ -1781,23 +2088,8 @@ function hasValidTxHash(record: Record<string, unknown>): boolean {
   return typeof txHash === "string" && TX_HASH_PATTERN.test(txHash);
 }
 
-function containsSecretLeak(text: string): boolean {
-  return /["']?(private[-_]?key|mnemonic|seed[-_]?phrase)["']?\s*[:=]/iu.test(text) ||
-    /["']?rpc[-_]?url["']?\s*[:=]\s*["']?https?:\/\/[^\s"']*(?:@|[?&][^\s"']*=)/iu.test(text);
-}
-
-function containsTransactionLeak(text: string): boolean {
-  return /["']?(witnesses|cellDeps|headerDeps|inputs|outputs|outputsData)["']?\s*:\s*\[/iu.test(text);
-}
-
-export function safeArtifactText(text: string): string {
-  if (containsSecretLeak(text)) {
-    return "<redacted: secret-shaped output withheld by supervisor>\n";
-  }
-  if (containsTransactionLeak(text)) {
-    return "<redacted: transaction-shaped output withheld by supervisor>\n";
-  }
-  return text;
+function hasValidTxHashInRecordOrError(record: Record<string, unknown>): boolean {
+  return hasValidTxHash(record) || hasValidTxHash(recordField(record, "error") ?? {});
 }
 
 function minimalProcessEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -1810,15 +2102,28 @@ function minimalProcessEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 function liveActorEnv(extra: Record<string, string>): Record<string, string> {
   return {
     ...minimalProcessEnv(process.env),
+    NODE_OPTIONS: "--disable-warning=DEP0040",
     ...extra,
   };
 }
 
-function hasTimeoutError(value: unknown): boolean {
+function classifyTesterTransactionFailure(value: unknown, record: Record<string, unknown>): Pick<Classification, "outcome" | "terminal" | "reason"> | undefined {
   if (!isRecord(value)) {
-    return false;
+    return undefined;
   }
-  return value["isTimeout"] === true || stringField(value, "name") === "TransactionConfirmationError";
+  if (stringField(value, "name") !== "TransactionConfirmationError") {
+    return undefined;
+  }
+  if (!hasValidTxHashInRecordOrError(record)) {
+    return { outcome: "malformed_evidence", terminal: true, reason: "tester transaction failure evidence did not include a valid tx hash" };
+  }
+  if (value["isTimeout"] === false) {
+    return { outcome: "terminal_chain_rejection", terminal: true, reason: "tester tx reached terminal chain rejection" };
+  }
+  if (value["isTimeout"] === true && "cause" in value) {
+    return { outcome: "post_broadcast_unresolved", terminal: true, reason: "tester tx remained unresolved after broadcast" };
+  }
+  return { outcome: "confirmation_timeout", terminal: true, reason: "tester transaction confirmation timed out" };
 }
 
 function isTesterFundingError(value: unknown): boolean {
@@ -1838,6 +2143,20 @@ function lastRecordOfType(records: Record<string, unknown>[], type: string): Rec
     }
     if (stringField(record, "type") === type) {
       return record;
+    }
+  }
+  return undefined;
+}
+
+function lastRecordOfTypes(records: Record<string, unknown>[], types: readonly string[]): { type: string; record: Record<string, unknown> } | undefined {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (record === undefined) {
+      continue;
+    }
+    const type = stringField(record, "type");
+    if (type !== undefined && types.includes(type)) {
+      return { type, record };
     }
   }
   return undefined;
@@ -1898,6 +2217,7 @@ function parseTesterScenario(value: string): TesterScenario {
     value === "two-ckb-to-ickb-limit-orders" ||
     value === "all-ckb-limit-order" ||
     value === "ickb-to-ckb-limit-order" ||
+    value === "bounded-ickb-to-ckb-limit-order" ||
     value === "two-ickb-to-ckb-limit-orders" ||
     value === "mixed-direction-limit-orders" ||
     value === "dust-ckb-conversion" ||
@@ -1905,7 +2225,7 @@ function parseTesterScenario(value: string): TesterScenario {
   ) {
     return value;
   }
-  throw new Error("Invalid --tester-scenario: expected auto, random-order, sdk-conversion, extra-large-limit-order, multi-order-limit-orders, two-ckb-to-ickb-limit-orders, all-ckb-limit-order, ickb-to-ckb-limit-order, two-ickb-to-ckb-limit-orders, mixed-direction-limit-orders, dust-ckb-conversion, or dust-ickb-conversion");
+  throw new Error("Invalid --tester-scenario: expected auto, random-order, sdk-conversion, extra-large-limit-order, multi-order-limit-orders, two-ckb-to-ickb-limit-orders, all-ckb-limit-order, ickb-to-ckb-limit-order, bounded-ickb-to-ckb-limit-order, two-ickb-to-ckb-limit-orders, mixed-direction-limit-orders, dust-ckb-conversion, or dust-ickb-conversion");
 }
 
 function valueAfter(argv: string[], index: number, option: string): string {
@@ -1934,11 +2254,15 @@ function parseTesterFeeValue(value: string, flag: string): string {
   return value;
 }
 
-function insideRepoPath(rootDir: string, path: string, label: string): string {
+function resolveConfiguredPath(rootDir: string, path: string, label: string): string {
   if (path === "") {
     throw new Error(`${label} must not be empty`);
   }
-  const absolutePath = isAbsolute(path) ? path : resolve(rootDir, path);
+  return isAbsolute(path) ? resolve(path) : resolve(rootDir, path);
+}
+
+function insideRepoPath(rootDir: string, path: string, label: string): string {
+  const absolutePath = resolveConfiguredPath(rootDir, path, label);
   const relativePath = relative(rootDir, absolutePath);
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
     throw new Error(`${label} must stay inside the repo`);
@@ -1946,11 +2270,31 @@ function insideRepoPath(rootDir: string, path: string, label: string): string {
   return absolutePath;
 }
 
-function assertSupervisorOutputDirectory(relativeOutDir: string): void {
-  if (relativeOutDir === "logs/live-supervisor" || relativeOutDir.startsWith(SUPERVISOR_OUTPUT_ROOT)) {
+function assertSupervisorOutputDirectory(outDir: string, relativeOutDir: string): void {
+  if (
+    relativeOutDir === "logs/live-supervisor" ||
+    relativeOutDir.startsWith(SUPERVISOR_OUTPUT_ROOT) ||
+    isValidationRunOutputDirectory(outDir)
+  ) {
     return;
   }
-  throw new Error(`Supervisor output directory must be under ${SUPERVISOR_OUTPUT_ROOT}`);
+  throw new Error(`Supervisor output directory must be under ${SUPERVISOR_OUTPUT_ROOT} or a validation session run directory`);
+}
+
+function isValidationRunOutputDirectory(path: string): boolean {
+  const parts = path.split(/[\\/]+/u);
+  for (let index = 0; index < parts.length - 4; index += 1) {
+    if (
+      parts[index] === "validation" &&
+      parts[index + 2] === "chunks" &&
+      /^chunk-[0-9]{4}$/u.test(parts[index + 3] ?? "") &&
+      /^run-[0-9]{4}$/u.test(parts[index + 4] ?? "") &&
+      index + 5 === parts.length
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function assertIgnoredConfigPath(
@@ -1996,6 +2340,15 @@ function isIgnoredPath(rootDir: string, relativePath: string, dependencies: Depe
     encoding: "utf8",
   });
   return result.status === 0;
+}
+
+function isInside(rootDir: string, path: string): boolean {
+  const relativePath = relative(rootDir, path);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function displayPath(rootDir: string, path: string): string {
+  return isInside(rootDir, path) ? relative(rootDir, path) : path;
 }
 
 export function createBoundedOutputCapture(): BoundedOutputCapture {
