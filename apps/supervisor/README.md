@@ -106,4 +106,4 @@ The dynamic loop writes operator records under the session and passes each chunk
   chunks/chunk-0001/run-0001/cycle-0001-tester.stdout.ndjson
 ```
 
-Production bot-only logs can share the same configured log root but stay under `bot/<network>/`, for example `<log-root>/bot/testnet/bot.events.ndjson`. See `apps/bot/README.md` for the production launcher layout.
+Production bot-only logs can share the same configured log root but stay under `bot/<network>/`, for example `<log-root>/bot/testnet/bot.events.ndjson`. See [apps/bot/README.md](../bot/README.md) for the production launcher layout.
