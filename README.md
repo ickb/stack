@@ -105,9 +105,11 @@ pnpm --filter @ickb/supervisor build
 pnpm live:supervisor
 ```
 
-By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only. It does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only.
 
-`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Check `balances.CKB.available` together with `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`; raw available CKB is not the same as bot-spendable CKB.
+Rebuild disposable live configs from `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY` with `pnpm live:config-from-env -- --force` when they are missing or stale; `ICKB_TESTNET_RPC_URL` is optional. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+
+`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.total`, `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`; raw available CKB is not the same as bot-spendable CKB. For machine-readable JSON without package-manager output, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly.
 
 For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:
 
@@ -129,7 +131,7 @@ Dynamic validation sessions default to ignored `log/validation/dynamic-<time>-<p
 pnpm live:supervisor:dynamic-loop --log-root log --max-chunks 2 -- --target-outcome bot_match_committed
 ```
 
-Session layout is source-separated: `operator/events.ndjson`, `operator/launch.json`, optional `operator/stderr.log`, and `chunks/chunk-0001/run-0001/summary.json` plus the supervisor-owned preflight, bot, tester, and supervisor artifacts.
+Session layout is source-separated: `operator/events.ndjson`, `operator/launch.json`, optional `operator/stderr.log`, and `chunks/chunk-0001/run-0001/summary.json` plus the supervisor-owned preflight, bot, tester, and supervisor artifacts. Production bot-only logs remain separate under the configured production log root, for example `<log-root>/bot/testnet/bot.events.ndjson`.
 
 Explicit repeatable `--target-outcome` requests become bounded coverage contracts: if `--max-cycles` ends before they are observed, the supervisor writes a logical incident for external review. The supervisor treats public testnet iCKB deposits, receipts, and orders as observable stress surface, but only bot/tester-owned state from the supplied configs is treated as spend authority.
 

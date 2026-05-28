@@ -12,6 +12,18 @@ The tester reads one strict JSON config file named by `TESTER_CONFIG_FILE`:
 
 The JSON config accepts exactly `chain`, `privateKey`, optional `rpcUrl`, `sleepIntervalSeconds`, optional `maxIterations`, and optional `maxRetryableAttempts`. Unknown keys, wrong types, non-HTTP(S) RPC URLs, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. Omitting `rpcUrl` lets CCC use its default endpoint. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
 
+Shared live config helpers may include `maxRetryableAttempts` in tester configs, but the tester loop currently uses `maxIterations`; the retryable-attempt budget is bot-owned.
+
+For local testnet live supervision, the shared root helper generates both bot and tester configs, so keep funded identities in external environment variables and rebuild disposable ignored configs when needed:
+
+```bash
+export ICKB_TESTNET_BOT_PRIVATE_KEY='0x...'
+export ICKB_TESTNET_TESTER_PRIVATE_KEY='0x...'
+# Optional: export ICKB_TESTNET_RPC_URL='https://...'
+# Optional: export ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS=10
+pnpm live:config-from-env -- --force
+```
+
 Current network support:
 
 - `"chain":"testnet"`
