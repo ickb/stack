@@ -144,6 +144,7 @@ test("preflight reports CKB reserve and spendable balance separately", async () 
 
     assert.deepEqual(report.balances.CKB, {
       available: "150000000000",
+      projectedAvailable: "190000000000",
       reserve: "100000000000",
       spendable: "50000000000",
       unavailable: "25000000000",
@@ -186,6 +187,7 @@ test("preflight reports tester reserve and spendable balance separately", async 
 
     assert.deepEqual(report.balances.CKB, {
       available: "250000000000",
+      projectedAvailable: "280000000000",
       reserve: "200000000000",
       spendable: "50000000000",
       unavailable: "25000000000",
