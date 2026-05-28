@@ -139,8 +139,21 @@ export async function verifyChainPreflight(
         cause: { name: "TypeError", message: "fetch failed" },
       });
     }
-    throw new Error(`Failed to verify ${chain} RPC chain identity`);
+    throw new Error(`Failed to verify ${chain} RPC chain identity`, {
+      cause: safePreflightFailureCause(error),
+    });
   }
+}
+
+function safePreflightFailureCause(error: unknown): { name: string } | { type: string } {
+  if (error instanceof Error) {
+    return { name: safeErrorName(error.name) };
+  }
+  return { type: error === null ? "null" : typeof error };
+}
+
+function safeErrorName(name: string): string {
+  return /^[A-Za-z][\w.-]{0,63}$/u.test(name) ? name : "Error";
 }
 
 function isPublicChainPreflightFailure(error: unknown, chain: SupportedChain): boolean {
@@ -357,8 +370,8 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
     typeof record.chain !== "string" ||
     typeof record.privateKey !== "string" ||
     typeof record.sleepIntervalSeconds !== "number" ||
-    record.maxIterations !== undefined && typeof record.maxIterations !== "number" ||
-    record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number"
+    (record.maxIterations !== undefined && typeof record.maxIterations !== "number") ||
+    (record.maxRetryableAttempts !== undefined && typeof record.maxRetryableAttempts !== "number")
   ) {
     throw new Error("Invalid env " + envName);
   }

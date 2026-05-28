@@ -406,13 +406,17 @@ describe("node utilities", () => {
       tipTimestamp: 456n,
     });
     client.getHeaderByNumber = (): Promise<ccc.ClientBlockHeader | undefined> => {
-      throw new Error("RPC failed via https://user:pass@testnet.example/path?token=secret");
+      const error = new Error("RPC failed via https://user:pass@testnet.example/path?token=secret");
+      error.name = "RpcPreflightError";
+      throw error;
     };
 
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      "Failed to verify testnet RPC chain identity",
-    );
-    await expect(verifyChainPreflight(client, "testnet")).rejects.not.toThrow(/user|pass|secret|testnet\.example/u);
+    const failure = await verifyChainPreflight(client, "testnet").catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      message: "Failed to verify testnet RPC chain identity",
+      cause: { name: "RpcPreflightError" },
+    });
+    expect(JSON.stringify(failure)).not.toMatch(/user|pass|secret|testnet\.example/u);
   });
 
   it("hides non-Error preflight failures before loop logging starts", async () => {
@@ -432,9 +436,10 @@ describe("node utilities", () => {
       });
     };
 
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      "Failed to verify testnet RPC chain identity",
-    );
+    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
+      message: "Failed to verify testnet RPC chain identity",
+      cause: { type: "object" },
+    });
   });
 
   it("normalizes retryable preflight transport failures", async () => {
