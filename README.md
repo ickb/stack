@@ -105,19 +105,31 @@ pnpm --filter @ickb/supervisor build
 pnpm live:supervisor
 ```
 
-To rebuild the standard ignored testnet configs from environment variables without printing private keys, set `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY`, optionally set `ICKB_TESTNET_RPC_URL`, `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS`, `ICKB_TESTNET_MAX_ITERATIONS`, and `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS`, then run:
+By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only. It does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
 
-```bash
-pnpm live:config-from-env
-```
-
-By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only. It does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Check `balances.CKB.available` together with `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`; raw available CKB is not the same as bot-spendable CKB.
 
 For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:
 
 ```bash
-pnpm live:supervisor:loop -- --scenario standard-cycle --max-cycles 1
+pnpm live:supervisor:loop --max-runs 1 -- --scenario standard-cycle --max-cycles 1
 ```
+
+Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
+
+For continuous live matching, use the dynamic external loop. It reads only tester preflight balance summaries, chooses a fundable tester stimulus (`all-ckb-limit-order` when plain CKB can preserve reserve plus overhead, otherwise `ickb-to-ckb-limit-order` with the smaller live fee when iCKB is available), then runs bounded `scripts/ickb-supervisor-loop.mjs` chunks:
+
+```bash
+pnpm live:supervisor:dynamic-loop
+```
+
+Dynamic validation sessions default to ignored `log/validation/dynamic-<time>-<pid>/` under the checkout. Override the root with `--log-root <path>` or pin a single session with `--session-root <path>`; the session root must be exactly `<log-root>/validation/<session>`, stay under the resolved log root, avoid symlinked parents, and be new for each run. Loop-owned options stay before `--`, while supervisor options stay after it. The dynamic loop derives `--chunk-timeout-seconds` from its delegated supervisor-loop child timeout, chunk run count, and chunk backoff so the outer chunk timeout does not preempt supervisor-owned child cleanup:
+
+```bash
+pnpm live:supervisor:dynamic-loop --log-root log --max-chunks 2 -- --target-outcome bot_match_committed
+```
+
+Session layout is source-separated: `operator/events.ndjson`, `operator/launch.json`, optional `operator/stderr.log`, and `chunks/chunk-0001/run-0001/summary.json` plus the supervisor-owned preflight, bot, tester, and supervisor artifacts.
 
 Explicit repeatable `--target-outcome` requests become bounded coverage contracts: if `--max-cycles` ends before they are observed, the supervisor writes a logical incident for external review. The supervisor treats public testnet iCKB deposits, receipts, and orders as observable stress surface, but only bot/tester-owned state from the supplied configs is treated as spend authority.
 

@@ -20,19 +20,22 @@ Run from the repo root:
 pnpm live:supervisor
 ```
 
-By default this uses `config/bot-testnet.json` and `config/tester-testnet.json`. Configs must be ignored JSON files and should keep `maxIterations: 1`. The supervisor passes config paths to the existing app env names and does not print config contents.
+By default this uses `config/bot-testnet.json` and `config/tester-testnet.json`. Configs must be ignored JSON files with `maxIterations: 1`; the supervisor refuses to launch an actor when preflight reports the config is missing that one-iteration bound. The supervisor passes config paths to the existing app env names and does not print config contents.
 
 ## Artifacts
 
-Default artifacts live under `logs/live-supervisor/<run-id>/`, which is ignored by git. Each run writes:
+Standalone supervisor artifacts live under `logs/live-supervisor/<run-id>/`, which is ignored by git. Each run writes:
 
 - `supervisor.ndjson`: concise supervisor events.
-- `cycle-<n>-<actor>.stdout.ndjson` and `.stderr.log`: bounded app-process evidence for that actor.
-- `cycle-<n>-<actor>.command.json`: redacted command shape and exit status.
+- `cycle-<n>-<actor>.stdout.ndjson` and `.stderr.log`: bounded raw bot/tester app-process evidence for that actor.
+- `cycle-<n>-<actor>-preflight.stdout.json` and `.stderr.log`: bounded public preflight evidence for that actor. Preflight stdout is one pretty JSON report, not NDJSON.
+- `cycle-<n>-<actor>.command.json`: command shape and exit status.
 - `cycle-<n>-incident.json`: written only on unknown, unsafe, unsupported, or unmet explicit coverage outcomes.
-- `summary.json`: aggregate outcomes, coverage ledger, tx hashes by outcome, and public-vs-owned state assumptions.
+- `summary.json`: aggregate outcomes, safe preflight balance and tester-steering summaries, coverage ledger, tx hashes by outcome, and public-vs-owned state assumptions.
 
 The supervisor treats public testnet iCKB deposits, receipts, and orders as observable scenario surface. It does not count public state as bot/tester-owned inventory or as permission to mutate unrelated cells.
+
+Actor artifacts preserve debugging evidence, including public chain/RPC identity evidence and raw transaction-shaped fields such as `inputs`, `outputs`, `cellDeps`, `headerDeps`, `outputsData`, and `witnesses`. Captured bot stdout remains the canonical bot NDJSON stream with `app: "bot"` and `bot.*` event semantics unchanged; validation context belongs in supervisor/operator summaries, not rewritten bot events. Bot, tester, and preflight producers own their configured private keys and must use them only for signing, never logging helpers, redaction helpers, masking callbacks, or guard utilities. If a configured key or other secret reaches supervisor capture, stop and fix that producer instead of masking and continuing.
 
 ## Scenario Coverage
 
@@ -40,7 +43,7 @@ The default planner prefers under-covered safe outcomes over repeating the same 
 
 ```bash
 --scenario auto|standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass
---tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion
+--tester-scenario auto|random-order|sdk-conversion|extra-large-limit-order|multi-order-limit-orders|two-ckb-to-ickb-limit-orders|all-ckb-limit-order|ickb-to-ckb-limit-order|bounded-ickb-to-ckb-limit-order|two-ickb-to-ckb-limit-orders|mixed-direction-limit-orders|dust-ckb-conversion|dust-ickb-conversion
 --tester-fee <n>
 --tester-fee-base <n>
 --target-outcome <outcome>
@@ -48,11 +51,13 @@ The default planner prefers under-covered safe outcomes over repeating the same 
 
 Coverage goals never override stop conditions. If a requested scenario cannot be reached through safe supervisor/test-harness controls, the supervisor writes an incident instead of mutating funded configs in place or forcing tx-bearing paths.
 
-Explicit repeatable `--target-outcome` values are coverage contracts for the bounded run. If `--max-cycles` is reached before observing them, the supervisor writes a logical `unmet_coverage_goal` incident. Default coverage goals still steer the planner, but they are best-effort and do not make a bare one-cycle run fail. `--stop-after-tx-count` remains a successful operator stop even if explicit coverage remains unmet.
+Bot withdrawal-request, receipt-completion, and withdrawal-completion coverage are satisfied by any committed bot transaction whose built action evidence has `withdrawalRequests > 0`, `completedDeposits > 0`, or `withdrawals > 0`, including transactions that also match orders. `bot_match_plus_deposit_committed` remains the more specific combined match-and-deposit outcome.
+
+Explicit repeatable `--target-outcome` values are coverage contracts for the bounded run. If the bounded cycle or wall-clock budget ends before observing them, the supervisor writes a logical `unmet_coverage_goal` incident. Default coverage goals still steer the planner, but they are best-effort and do not make a bare one-cycle run fail. `--stop-after-tx-count` remains a successful operator stop even if explicit coverage remains unmet.
 
 `--tester-scenario` is passed to the tester as `TESTER_SCENARIO`. When it is left as `auto`, `--target-outcome tester_conversion_created` steers the tester to `sdk-conversion`, the SDK conversion-builder selector. Use `ickb-to-ckb-limit-order` for iCKB withdrawal-through-LO coverage. Use `sdk-conversion` when the intended behavior is the SDK conversion builder, including direct conversions that do not create limit orders, `multi-order-limit-orders` for any funded two-order raw limit-order type, `two-ckb-to-ickb-limit-orders`, `two-ickb-to-ckb-limit-orders`, or `mixed-direction-limit-orders` for a specific two-order transaction, and `extra-large-limit-order` to stress non-interface users placing large raw limit orders. An explicit `--tester-scenario` overrides target-outcome steering.
 
-`tester-fresh-skip-two-pass` runs the same tester config twice in one supervisor cycle. Pass 1 uses `multi-order-limit-orders` to create any funded multi-order transaction; pass 2 leaves `TESTER_SCENARIO=auto` and is expected to classify `tester_fresh_order_skip` when the same key still owns a fresh matchable order. Artifacts use `tester-pass-1` and `tester-pass-2` labels so the two passes do not overwrite each other.
+`tester-fresh-skip-two-pass` runs the same tester config twice in one supervisor cycle. Both passes leave `TESTER_SCENARIO=auto` unless `--tester-scenario` is explicit, so the tester selects a currently fundable first-pass order instead of forcing a CKB-heavy multi-order stimulus. Pass 2 is expected to classify `tester_fresh_order_skip` when the same key still owns a fresh matchable order. Artifacts use `tester-pass-1` and `tester-pass-2` labels so the two passes do not overwrite each other.
 
 `--tester-fee` and `--tester-fee-base` are tester-owned raw limit-order fee controls. Defaults stay `1 / 100000` (0.001%). When provided, the supervisor passes them only to the tester as `TESTER_FEE` and `TESTER_FEE_BASE`; `sdk-conversion` keeps using SDK-owned fee defaults for any order remainder.
 
@@ -66,4 +71,27 @@ The KISS watcher script runs one deterministic supervisor invocation per child o
 node scripts/ickb-supervisor-loop.mjs --max-runs 1 --stable-limit 2 --backoff-seconds 0 -- --scenario standard-cycle --max-cycles 1
 ```
 
-Loop-owned options go before `--`; supervisor options go after `--`. If using `pnpm live:supervisor:loop`, keep loop-owned options before the first `--` so they are not passed through to the supervisor. The loop stops on supervisor nonzero exit, incident artifacts listed in `summary.json`, any tx hash, a new outcome after the first run, repeated no-progress signatures, or `--max-runs`.
+Loop-owned options go before `--`; supervisor options go after `--`. If using `pnpm live:supervisor:loop`, keep loop-owned options before the first `--` so they are not passed through to the supervisor. The loop stops on supervisor nonzero exit, incident artifacts listed in `summary.json`, tx-creating outcomes or tx hashes for tx-creating outcomes, a new outcome after the first run, repeated no-progress signatures, or `--max-runs`.
+
+The external loop also has a loop-owned `--child-timeout-seconds` guard for the supervisor child process. Keep it long enough for the whole delegated supervisor run, including actor preflights and actor commands, not just one `--command-timeout-seconds` window. The dynamic loop defaults this guard to the supervisor-loop default so the supervisor keeps ownership of killing funded actor process groups on command timeout.
+
+For continuous tester-bot matching, use `node scripts/ickb-supervisor-dynamic-loop.mjs` or `pnpm live:supervisor:dynamic-loop`. This remains outside `apps/supervisor`: it reads tester preflight balance summaries, chooses a currently fundable tester scenario, and delegates each bounded chunk to `scripts/ickb-supervisor-loop.mjs`. When `--target-outcome tester_fresh_order_skip` is passed through, supervisor auto-planning can choose `tester-fresh-skip-two-pass`; the dynamic loop itself only chooses fundable tester stimuli.
+
+Dynamic loop sessions are live-validation artifacts. They default to ignored `log/validation/dynamic-<time>-<pid>/`; override the root with `--log-root <path>` or pin one run with `--session-root <path>`. The session root must be exactly `<log-root>/validation/<session>`, stay under the resolved log root, avoid symlinked parents, and not already exist. The dynamic loop derives its chunk timeout from the delegated supervisor-loop child timeout, chunk run count, and chunk backoff unless `--chunk-timeout-seconds` is explicitly set high enough, so an outer chunk timeout does not kill the supervisor-loop process before it can enforce its child cleanup boundary.
+
+```bash
+node scripts/ickb-supervisor-dynamic-loop.mjs --log-root log --max-chunks 2 -- --target-outcome bot_match_committed
+```
+
+The dynamic loop writes operator records under the session and passes each chunk root to `scripts/ickb-supervisor-loop.mjs` as loop-owned `--out-root` before `--`:
+
+```text
+<log-root>/validation/dynamic-<time>-<pid>/
+  operator/events.ndjson
+  operator/launch.json
+  operator/stderr.log (only when child stderr is captured)
+  chunks/chunk-0001/run-0001/summary.json
+  chunks/chunk-0001/run-0001/supervisor.ndjson
+  chunks/chunk-0001/run-0001/cycle-0001-bot.stdout.ndjson
+  chunks/chunk-0001/run-0001/cycle-0001-tester.stdout.ndjson
+```
