@@ -311,7 +311,7 @@ function runSupervisorChunk(args, choice, root, dependencies, session, chunkInde
   const testerScenarioArgs = choice.scenario === "auto" ? [] : ["--tester-scenario", choice.scenario];
   return runNode([
     args.supervisorLoopScript,
-    "--out-root", childPath(root, chunkOutRoot),
+    "--out-root", displayPath(root, chunkOutRoot),
     "--max-runs", String(args.chunkMaxRuns),
     "--stable-limit", String(args.stableLimit),
     "--backoff-seconds", String(args.chunkBackoffSeconds),
@@ -495,11 +495,6 @@ function checkIgnored(root, relativePath, dependencies) {
   }
   const result = spawnSync("git", ["-C", root, "check-ignore", "--", relativePath], { encoding: "utf8" });
   return result.status === 0;
-}
-
-function childPath(root, path) {
-  const relativePath = relative(root, path);
-  return relativePath.startsWith("..") || isAbsolute(relativePath) ? path : relativePath;
 }
 
 function displayPath(root, path) {
