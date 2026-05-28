@@ -9,7 +9,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TARGET_ICKB_BALANCE } from "./policy.js";
+import { CKB_RESERVE, TARGET_ICKB_BALANCE } from "./policy.js";
 import {
   completeTerminalIteration,
   isRetryableBotError,
@@ -467,7 +467,7 @@ describe("buildTransaction", () => {
 
   it("skips built transactions that would violate the bot plain CKB reserve", async () => {
     const lock = script("11");
-    const spent = capacityCell(1000n, lock, "77");
+    const spent = capacityCell(CKB_RESERVE + 100n, lock, "77");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
       ckbDelta: -1n,
       udtDelta: 0n,
@@ -476,6 +476,14 @@ describe("buildTransaction", () => {
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const runtime = botRuntime({
       primaryLock: lock,
+      managers: {
+        logic: {
+          deposit: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+            await Promise.resolve();
+            return ccc.Transaction.from(txLike);
+          },
+        },
+      },
       sdk: {
         completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
           await Promise.resolve();
@@ -490,9 +498,9 @@ describe("buildTransaction", () => {
       accountLocks: [lock],
       capacityCells: [spent],
       marketOrders: [{}],
-      availableCkbBalance: ccc.fixedPointFrom(5000),
+      availableCkbBalance: CKB_RESERVE + 100n,
       availableIckbBalance: TARGET_ICKB_BALANCE,
-      totalCkbBalance: ccc.fixedPointFrom(5000),
+      totalCkbBalance: CKB_RESERVE + 100n,
     });
 
     const result = await buildTransaction(runtime as never, state as never);
@@ -502,7 +510,7 @@ describe("buildTransaction", () => {
       reason: "post_tx_ckb_reserve",
       decision: {
         balances: {
-          spendableCkb: ccc.fixedPointFrom(4000),
+          spendableCkb: 100n,
         },
         skip: {
           reason: "post_tx_ckb_reserve",
@@ -520,7 +528,6 @@ describe("buildTransaction", () => {
 
   it("allows CKB-replenishing transactions even when plain CKB remains below reserve", async () => {
     const lock = script("11");
-    const spent = capacityCell(1000n, lock, "78");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
       ckbDelta: 1n,
       udtDelta: 0n,
@@ -533,19 +540,18 @@ describe("buildTransaction", () => {
         completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
           await Promise.resolve();
           const tx = ccc.Transaction.from(txLike);
-          tx.inputs.push(ccc.CellInput.from({ previousOutput: spent.outPoint }));
-          tx.addOutput({ capacity: 1n, lock });
+          tx.addOutput({ capacity: ccc.fixedPointFrom(500), lock });
           return tx;
         },
       },
     });
     const state = botState({
       accountLocks: [lock],
-      capacityCells: [spent],
+      capacityCells: [],
       readyWithdrawals: [{}],
-      availableCkbBalance: 1000n,
+      availableCkbBalance: ccc.fixedPointFrom(2000),
       availableIckbBalance: TARGET_ICKB_BALANCE,
-      totalCkbBalance: 1000n,
+      totalCkbBalance: ccc.fixedPointFrom(2000),
     });
 
     const result = await buildTransaction(runtime as never, state as never);
@@ -553,6 +559,48 @@ describe("buildTransaction", () => {
     expect(result).toMatchObject({
       kind: "built",
       actions: { withdrawals: 1 },
+    });
+    expect(result.decision.skip).toBeUndefined();
+  });
+
+  it("allows withdrawal requests to spend reserve CKB for recovery state rent", async () => {
+    const lock = script("11");
+    const rent = capacityCell(100n, lock, "80");
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue({
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+    });
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+    const runtime = botRuntime({
+      primaryLock: lock,
+      sdk: {
+        completeTransaction: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+          await Promise.resolve();
+          const tx = ccc.Transaction.from(txLike);
+          tx.inputs.push(ccc.CellInput.from({ previousOutput: rent.outPoint }));
+          return tx;
+        },
+      },
+    });
+    const first = readyDeposit("79", 4n, 20n * 60n * 1000n);
+    const protectedAnchor = readyDeposit("7a", 6n, 25n * 60n * 1000n);
+    const third = readyDeposit("7b", 5n, 40n * 60n * 1000n);
+    const state = botState({
+      accountLocks: [lock],
+      capacityCells: [rent],
+      availableCkbBalance: 0n,
+      availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
+      totalCkbBalance: 0n,
+      depositCapacity: 1000n,
+      readyPoolDeposits: [first, protectedAnchor, third],
+    });
+
+    const result = await buildTransaction(runtime as never, state as never);
+
+    expect(result).toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 1 },
     });
     expect(result.decision.skip).toBeUndefined();
   });

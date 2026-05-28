@@ -423,6 +423,17 @@ export async function signerAccountLocks(
   ])];
 }
 
+export function accountPlainCkbBalance(
+  capacityCells: readonly ccc.Cell[],
+  accountLocks: readonly ccc.Script[],
+): bigint {
+  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
+  return capacityCells.reduce(
+    (total, cell) => total + plainCapacity(cell.cellOutput, cell.outputData, accountLockHexes),
+    0n,
+  );
+}
+
 export function postTransactionAccountPlainCkbBalance(
   tx: ccc.Transaction,
   capacityCells: readonly ccc.Cell[],
@@ -432,18 +443,21 @@ export function postTransactionAccountPlainCkbBalance(
   const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
   const unspentCapacity = capacityCells.reduce(
     (total, cell) =>
-      spentOutPoints.has(cell.outPoint.toHex()) ||
-      !isAccountPlainCapacityOutput(cell.cellOutput, cell.outputData, accountLockHexes)
+      spentOutPoints.has(cell.outPoint.toHex())
         ? total
-        : total + cell.cellOutput.capacity,
+        : total + plainCapacity(cell.cellOutput, cell.outputData, accountLockHexes),
     0n,
   );
   const outputCapacity = tx.outputs.reduce(
-    (total, output, index) => total + (isAccountPlainCapacityOutput(output, tx.outputsData[index], accountLockHexes) ? output.capacity : 0n),
+    (total, output, index) => total + plainCapacity(output, tx.outputsData[index], accountLockHexes),
     0n,
   );
 
   return unspentCapacity + outputCapacity;
+}
+
+function plainCapacity(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): bigint {
+  return isAccountPlainCapacityOutput(output, outputData, accountLockHexes) ? output.capacity : 0n;
 }
 
 function isAccountPlainCapacityOutput(output: ccc.CellOutput, outputData: string | undefined, accountLockHexes: Set<string>): boolean {

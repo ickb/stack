@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import * as nodeUtils from "./index.js";
 import {
+  accountPlainCkbBalance,
   assertChainPreflight,
   CHAIN_IDENTITIES,
   createPublicClient,
@@ -258,6 +259,26 @@ describe("node utilities", () => {
       primaryLock,
       otherLock,
     ]);
+  });
+
+  it("counts account plain CKB from owned plain capacity cells only", () => {
+    const lock = script("11");
+    const otherLock = script("22");
+    const unspent = capacityCell(ccc.fixedPointFrom(2000), lock, "bb");
+    const typed = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("cc"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(4000), lock, type: script("33") },
+      outputData: "0x",
+    });
+    const data = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("dd"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(8000), lock },
+      outputData: "0x1234",
+    });
+
+    expect(accountPlainCkbBalance([unspent, typed, data, capacityCell(100n, otherLock, "ee")], [lock])).toBe(
+      ccc.fixedPointFrom(2000),
+    );
   });
 
   it("counts post-transaction account plain CKB from unspent cells and new outputs", () => {

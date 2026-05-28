@@ -125,8 +125,9 @@ test("preflight reports CKB reserve and spendable balance separately", async () 
     }));
 
     const dependencies = mockDependencies({
+      plainCkbBalance: 150000000000n,
       projection: {
-        ckbAvailable: 150000000000n,
+        ckbAvailable: 190000000000n,
         ckbPending: 25000000000n,
         ickbAvailable: 20000000000n,
         readyWithdrawals: [],
@@ -145,9 +146,9 @@ test("preflight reports CKB reserve and spendable balance separately", async () 
       reserve: "100000000000",
       spendable: "50000000000",
       unavailable: "25000000000",
-      total: "175000000000",
+      total: "215000000000",
     });
-    assert.equal(report.capital.totalEquivalentCkb, "195000000000");
+    assert.equal(report.capital.totalEquivalentCkb, "235000000000");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -166,8 +167,9 @@ test("preflight reports tester reserve and spendable balance separately", async 
     }));
 
     const dependencies = mockDependencies({
+      plainCkbBalance: 250000000000n,
       projection: {
-        ckbAvailable: 250000000000n,
+        ckbAvailable: 280000000000n,
         ckbPending: 25000000000n,
         ickbAvailable: 20000000000n,
         readyWithdrawals: [],
@@ -186,7 +188,7 @@ test("preflight reports tester reserve and spendable balance separately", async 
       reserve: "200000000000",
       spendable: "50000000000",
       unavailable: "25000000000",
-      total: "275000000000",
+      total: "305000000000",
     });
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -478,6 +480,7 @@ function mockDependencies(options = {}) {
     }),
     isRetryableRpcTransportError: () => false,
     signerAccountLocks: async (_signer, primaryLock) => [primaryLock],
+    accountPlainCkbBalance: () => options.plainCkbBalance ?? 0n,
     formatCkb: (value) => value.toString(),
   };
   const primaryLock = {
@@ -501,7 +504,7 @@ function mockDependencies(options = {}) {
       getConfig: () => ({}),
       IckbSdk: {
         fromConfig: () => ({
-          getAccountState: async () => ({ receipts: [], withdrawalGroups: [] }),
+          getAccountState: async () => ({ capacityCells: [], receipts: [], withdrawalGroups: [] }),
         }),
       },
       projectAccountAvailability: () => ({

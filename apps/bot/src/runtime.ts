@@ -13,7 +13,7 @@ import {
   type OrderGroup,
 } from "@ickb/order";
 import { type getConfig, type IckbSdk, type SystemState } from "@ickb/sdk";
-import { postTransactionAccountPlainCkbBalance, type SupportedChain } from "@ickb/node-utils";
+import { accountPlainCkbBalance, postTransactionAccountPlainCkbBalance, type SupportedChain } from "@ickb/node-utils";
 import { collectCompleteScan, defaultFindCellsLimit } from "@ickb/utils";
 import {
   CKB_RESERVE,
@@ -285,6 +285,7 @@ export async function buildTransaction(
     feeRate: state.system.feeRate,
   });
   const fee = tx.estimateFee(state.system.feeRate);
+  const preTxCkbBalance = accountPlainCkbBalance(state.capacityCells, state.accountLocks);
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state);
   decision = buildDecisionTranscript({
     state,
@@ -295,8 +296,21 @@ export async function buildTransaction(
     tx,
   });
   decision = { ...decision, fee: { ...decision.fee, estimated: fee } };
-  const worsensCkbReserve = actions.deposits > 0 || match.ckbDelta < 0n;
-  if (postTxCkbBalance < CKB_RESERVE && worsensCkbReserve) {
+  const preTxDeficit = maxBigInt(0n, CKB_RESERVE - preTxCkbBalance);
+  const postTxDeficit = maxBigInt(0n, CKB_RESERVE - postTxCkbBalance);
+  // The reserve is actual owned plain CKB, not projected CKB availability. Ready
+  // withdrawals and collectable orders can make projected CKB look healthy while
+  // the account still lacks plain cells for state rent and future fees.
+  //
+  // Most actions must not create or worsen a plain-CKB reserve deficit. The one
+  // intentional exception is an iCKB withdrawal request: it spends plain CKB for
+  // DAO withdrawal-cell rent now so the bot can recover CKB in a later completion
+  // transaction. Do not let CKB-spending matches or deposits hide behind that
+  // recovery exception.
+  const spendsReserveForWithdrawalRequest = actions.withdrawalRequests > 0 &&
+    actions.deposits === 0 &&
+    match.ckbDelta >= 0n;
+  if (postTxDeficit > preTxDeficit && !spendsReserveForWithdrawalRequest) {
     return skippedResult("post_tx_ckb_reserve", emptyActions(), {
       ...decision,
       actions: emptyActions(),
@@ -304,7 +318,7 @@ export async function buildTransaction(
       attemptedActions: actions,
       postTxCkbBalance,
       reserve: CKB_RESERVE,
-      deficit: CKB_RESERVE - postTxCkbBalance,
+      deficit: postTxDeficit,
     });
   }
 

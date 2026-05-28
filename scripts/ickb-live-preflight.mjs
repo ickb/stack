@@ -147,7 +147,8 @@ export async function buildPreflightReport({
   const depositCapacity = core.convert(false, core.ICKB_DEPOSIT_CAP, exchangeRatio);
   const minimumCkbCapital = (21n * depositCapacity) / 20n;
   const ckbReserve = ckbReserveForRole(role);
-  const spendableCkb = maxBigInt(0n, projection.ckbAvailable - ckbReserve);
+  const plainCkb = nodeUtils.accountPlainCkbBalance(account.capacityCells, accountLocks);
+  const spendableCkb = maxBigInt(0n, plainCkb - ckbReserve);
   const totalEquivalentCkb = totalCkb + core.convert(false, projection.ickbAvailable, exchangeRatio);
   const totalEquivalentIckb = core.convert(true, totalCkb, exchangeRatio) + projection.ickbAvailable;
 
@@ -167,7 +168,7 @@ export async function buildPreflightReport({
     },
     balances: {
       CKB: {
-        available: nodeUtils.formatCkb(projection.ckbAvailable),
+        available: nodeUtils.formatCkb(plainCkb),
         reserve: nodeUtils.formatCkb(ckbReserve),
         spendable: nodeUtils.formatCkb(spendableCkb),
         unavailable: nodeUtils.formatCkb(projection.ckbPending),
