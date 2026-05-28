@@ -17,6 +17,7 @@ import {
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
+  shouldSleepBeforeTesterAttempt,
   testerAttemptedTransactionEvidence,
   testerEstimatedTooSmallSkip,
   testerExecutionActions,
@@ -157,6 +158,13 @@ describe("isUnrepresentableTesterEstimateError", () => {
   it("recognizes fee-adjusted ratio overflow as an unbuildable tester estimate", () => {
     expect(isUnrepresentableTesterEstimateError(new Error("Ratio scale exceeds Uint64"))).toBe(true);
     expect(isUnrepresentableTesterEstimateError(new Error("L1 state scan crossed chain tip; retry with a fresh state"))).toBe(false);
+  });
+});
+
+describe("shouldSleepBeforeTesterAttempt", () => {
+  it("runs the first attempt immediately and sleeps before later attempts", () => {
+    expect(shouldSleepBeforeTesterAttempt(0)).toBe(false);
+    expect(shouldSleepBeforeTesterAttempt(1)).toBe(true);
   });
 });
 
