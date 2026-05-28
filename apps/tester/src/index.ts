@@ -122,13 +122,17 @@ async function main(): Promise<void> {
     accountLocks: await signerAccountLocks(signer, primaryLock),
   };
 
-  let stopAfterLog = false;
+  let startedAttempts = 0;
   let completedIterations = 0;
   for (;;) {
-    await sleep(randomSleepIntervalMs(sleepIntervalMs));
+    if (shouldSleepBeforeTesterAttempt(startedAttempts)) {
+      await sleep(randomSleepIntervalMs(sleepIntervalMs));
+    }
+    startedAttempts += 1;
 
     const executionLog: Record<string, unknown> = {};
     const startTime = new Date();
+    let stopAfterLog = false;
     executionLog.startTime = startTime.toLocaleString();
 
     try {
@@ -279,6 +283,10 @@ async function main(): Promise<void> {
       return;
     }
   }
+}
+
+export function shouldSleepBeforeTesterAttempt(startedAttempts: number): boolean {
+  return startedAttempts > 0;
 }
 
 function logTerminalIteration(

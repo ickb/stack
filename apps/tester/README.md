@@ -41,7 +41,7 @@ export TESTER_CONFIG_FILE="$(pwd)/../../config/tester-testnet.json"
 pnpm run start
 ```
 
-The start script writes one newline-delimited JSON log stream per run. Each loop appends one JSON object to the log file. Balance, amount, and fee values are decimal strings so bigint values do not lose precision. Confirmation timeouts are logged with the broadcast hash and stop the loop with exit code `2` so a wrapper does not immediately send conflicting replacement work.
+The start script writes one newline-delimited JSON log stream per run. Each loop appends one JSON object to the log file. On startup the tester attempts one iteration immediately; the configured sleep applies only between completed iterations. Balance, amount, and fee values are decimal strings so bigint values do not lose precision. Confirmation timeouts are logged with the broadcast hash and stop the loop with exit code `2` so a wrapper does not immediately send conflicting replacement work.
 
 ## Test Scenarios
 
