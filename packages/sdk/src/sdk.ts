@@ -250,7 +250,10 @@ export async function sendAndWaitForCommit(
       lastPollingError = error;
     }
     checks += 1;
-    if (!isPendingStatus(status) || checks >= maxConfirmationChecks) {
+    if (!isPendingStatus(status)) {
+      break;
+    }
+    if (checks >= maxConfirmationChecks) {
       break;
     }
 
@@ -1090,7 +1093,6 @@ export class IckbSdk {
     const account = await this.getAccountState(client, locks, system.tip, {
       limit: options?.accountLimit,
     });
-    await this.assertCurrentTip(client, system.tip);
 
     return { system, user, account };
   }
@@ -1157,8 +1159,6 @@ export class IckbSdk {
       ckbMaturing,
       poolDeposits,
     };
-    await this.assertCurrentTip(client, tip);
-
     return {
       system,
       user: {

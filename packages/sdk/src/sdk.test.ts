@@ -2725,7 +2725,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     });
   });
 
-  it("fails closed when L1 state scanning crosses forward tip progress", async () => {
+  it("uses the sampled L1 tip when scanning crosses forward tip progress", async () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -2750,12 +2750,13 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      "L1 state scan crossed chain tip",
-    );
+    const state = await sdk.getL1State(client, []);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
 
-  it("fails closed when L1 state scanning crosses a reorg", async () => {
+  it("does not refetch the tip to detect reorgs during L1 state scanning", async () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -2768,6 +2769,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       .fn<ccc.Client["getTipHeader"]>()
       .mockResolvedValueOnce(firstTip)
       .mockResolvedValueOnce(secondTip);
+    const getHeaderByNumber = vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip);
     const sdk = new IckbSdk(
       fakeIckbUdt(udt),
       new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
@@ -2777,17 +2779,19 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     );
     const client = {
       getTipHeader,
-      getHeaderByNumber: vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip),
+      getHeaderByNumber,
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      "L1 state scan crossed chain tip",
-    );
+    const state = await sdk.getL1State(client, []);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
+    expect(getHeaderByNumber).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the chain tip is replaced during L1 state scanning", async () => {
+  it("does not refetch the tip when the chain tip is replaced during L1 state scanning", async () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -2812,12 +2816,13 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      "L1 state scan crossed chain tip",
-    );
+    const state = await sdk.getL1State(client, []);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
 
-  it("fails closed when account state scanning crosses forward tip progress", async () => {
+  it("uses the sampled L1 tip when account state scanning crosses forward tip progress", async () => {
     const accountLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2844,12 +2849,13 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1AccountState(client, [accountLock])).rejects.toThrow(
-      "L1 state scan crossed chain tip",
-    );
+    const state = await sdk.getL1AccountState(client, [accountLock]);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
 
-  it("fails closed when account state scanning crosses a reorg", async () => {
+  it("does not refetch the tip to detect reorgs during account state scanning", async () => {
     const accountLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2864,6 +2870,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       .mockResolvedValueOnce(firstTip)
       .mockResolvedValueOnce(firstTip)
       .mockResolvedValueOnce(secondTip);
+    const getHeaderByNumber = vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip);
     const sdk = new IckbSdk(
       fakeIckbUdt(udt),
       new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
@@ -2873,17 +2880,19 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     );
     const client = {
       getTipHeader,
-      getHeaderByNumber: vi.fn<ccc.Client["getHeaderByNumber"]>().mockResolvedValue(replacedFirstTip),
+      getHeaderByNumber,
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1AccountState(client, [accountLock])).rejects.toThrow(
-      "L1 state scan crossed chain tip",
-    );
+    const state = await sdk.getL1AccountState(client, [accountLock]);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
+    expect(getHeaderByNumber).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the chain tip is replaced during account state scanning", async () => {
+  it("does not refetch the tip when the chain tip is replaced during account state scanning", async () => {
     const accountLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2910,7 +2919,21 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1AccountState(client, [accountLock])).rejects.toThrow(
+    const state = await sdk.getL1AccountState(client, [accountLock]);
+
+    expect(state.system.tip).toBe(firstTip);
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps explicit current-tip assertion available for callers that require it", async () => {
+    const { sdk } = testSdk();
+    const sampledTip = headerLike(1n, { hash: hash("01") });
+    const currentTip = headerLike(2n, { hash: hash("02") });
+    const client = {
+      getTipHeader: vi.fn<ccc.Client["getTipHeader"]>().mockResolvedValue(currentTip),
+    } as unknown as ccc.Client;
+
+    await expect(sdk.assertCurrentTip(client, sampledTip)).rejects.toThrow(
       "L1 state scan crossed chain tip",
     );
   });
