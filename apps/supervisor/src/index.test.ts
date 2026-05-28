@@ -13,7 +13,6 @@ import {
   recordScenarioAttempt,
   recordOutcome,
   resolvePlan,
-  safeArtifactText,
   supervise,
   usage,
   type CommandResult,
@@ -62,6 +61,9 @@ describe("supervisor CLI", () => {
     expect(parseArgs(["--tester-scenario", "two-ickb-to-ckb-limit-orders"]).testerScenario).toBe(
       "two-ickb-to-ckb-limit-orders",
     );
+    expect(parseArgs(["--tester-scenario", "bounded-ickb-to-ckb-limit-order"]).testerScenario).toBe(
+      "bounded-ickb-to-ckb-limit-order",
+    );
     expect(parseArgs(["--tester-scenario", "mixed-direction-limit-orders"]).testerScenario).toBe(
       "mixed-direction-limit-orders",
     );
@@ -103,7 +105,7 @@ describe("supervisor CLI", () => {
     const args = parseArgs(["--dry-run", "--out-dir", "not-ignored"]);
 
     expect(() => resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(false) })).toThrow(
-      "Supervisor output directory must be under logs/live-supervisor/",
+      "Supervisor output directory must be under logs/live-supervisor/ or a validation session run directory",
     );
   });
 
@@ -111,7 +113,7 @@ describe("supervisor CLI", () => {
     const args = parseArgs(["--dry-run", "--out-dir", "config/supervisor"]);
 
     expect(() => resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) })).toThrow(
-      "Supervisor output directory must be under logs/live-supervisor/",
+      "Supervisor output directory must be under logs/live-supervisor/ or a validation session run directory",
     );
   });
 
@@ -122,6 +124,50 @@ describe("supervisor CLI", () => {
     expect(plan.relativeOutDir).toBe("logs/live-supervisor/test");
     expect(plan.botConfigPath).toBeUndefined();
     expect(plan.testerConfigPath).toBeUndefined();
+  });
+
+  it("accepts dynamic validation session artifact paths", () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set(["log/validation/dynamic-test/chunks/chunk-0001/run-0001"])) });
+
+    expect(plan.relativeOutDir).toBe("log/validation/dynamic-test/chunks/chunk-0001/run-0001");
+    expect(plan.botConfigPath).toBeUndefined();
+    expect(plan.testerConfigPath).toBeUndefined();
+  });
+
+  it("rejects validation roots outside run artifact directories", () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "log/validation/dynamic-test"]);
+
+    expect(() => resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) })).toThrow(
+      "Supervisor output directory must be under logs/live-supervisor/ or a validation session run directory",
+    );
+  });
+
+  it("rejects validation run artifact directory descendants", () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "log/validation/dynamic-test/chunks/chunk-0001/run-0001/extra"]);
+
+    expect(() => resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) })).toThrow(
+      "Supervisor output directory must be under logs/live-supervisor/ or a validation session run directory",
+    );
+  });
+
+  it("accepts explicit validation session roots outside the repo", () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(false) });
+
+    expect(plan.relativeOutDir).toBe("/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001");
+    expect(plan.outDir).toBe("/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001");
+  });
+
+  it("refuses symlinked explicit validation parents outside the repo", async () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(false) });
+
+    await expect(supervise(args, plan, {
+      lstat: (path) => Promise.resolve({ isSymbolicLink: () => pathToString(path) === "/var/tmp/ickb-log/validation" } as never),
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+    })).rejects.toThrow("Refusing to write supervisor artifacts through symlinked path: /var/tmp/ickb-log/validation");
   });
 
   it("resolves default ignored live config paths", () => {
@@ -206,7 +252,8 @@ describe("supervisor CLI", () => {
       const actor = spawned.find((item) => item.args[0] === "apps/bot/dist/index.js");
       expect(preflight?.env).not.toHaveProperty("PRIVATE_KEY");
       expect(preflight?.env).not.toHaveProperty("COWORKER_BUILD");
-      expect(actor?.env).toMatchObject({ BOT_CONFIG_FILE: "/repo/config/bot-testnet.json", INIT_CWD: "/repo" });
+      expect(preflight?.env).toMatchObject({ INIT_CWD: "/repo", NODE_OPTIONS: "--disable-warning=DEP0040" });
+      expect(actor?.env).toMatchObject({ BOT_CONFIG_FILE: "/repo/config/bot-testnet.json", INIT_CWD: "/repo", NODE_OPTIONS: "--disable-warning=DEP0040" });
       expect(actor?.env).not.toHaveProperty("PRIVATE_KEY");
       expect(actor?.env).not.toHaveProperty("COWORKER_BUILD");
     } finally {
@@ -372,7 +419,7 @@ describe("supervisor CLI", () => {
     expect(bot?.env).not.toHaveProperty("TESTER_FEE_BASE");
   });
 
-  it("runs the same tester twice for fresh-skip multi-order coverage", async () => {
+  it("runs the same tester twice for fresh-skip auto coverage", async () => {
     const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
     const writes = new Map<string, string>();
     let testerRuns = 0;
@@ -397,13 +444,9 @@ describe("supervisor CLI", () => {
           ? {
               startTime: "now",
               actions: {
-                requestedTesterScenario: "multi-order-limit-orders",
-                testerScenario: "mixed-direction-limit-orders",
-                newOrders: [
-                  { giveCkb: "10", takeIckb: "9", fee: "0.1" },
-                  { giveIckb: "20", takeCkb: "18", fee: "0.2" },
-                ],
-                orderCount: 2,
+                requestedTesterScenario: "auto",
+                testerScenario: "bounded-ickb-to-ckb-limit-order",
+                newOrder: { giveIckb: "20", takeCkb: "18", fee: "0.2" },
                 cancelledOrders: 0,
               },
               txHash: txHash("77"),
@@ -424,7 +467,7 @@ describe("supervisor CLI", () => {
     const testerSpawns = spawned.filter((item) => item.args[0] === "apps/tester/dist/index.js");
     expect(exitCode).toBe(0);
     expect(testerSpawns).toHaveLength(2);
-    expect(testerSpawns[0]?.env).toMatchObject({ TESTER_SCENARIO: "multi-order-limit-orders" });
+    expect(testerSpawns[0]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
     expect(testerSpawns[1]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
     expect(writes.has("/repo/logs/live-supervisor/two-pass-test/cycle-0001-tester-pass-1.stdout.ndjson")).toBe(true);
     expect(writes.has("/repo/logs/live-supervisor/two-pass-test/cycle-0001-tester-pass-2.stdout.ndjson")).toBe(true);
@@ -433,6 +476,211 @@ describe("supervisor CLI", () => {
       tester_order_created: 1,
       tester_fresh_order_skip: 1,
     });
+  });
+
+  it("uses tester auto for low-CKB first-pass fresh-skip fundability", async () => {
+    const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    let testerRuns = 0;
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/two-pass-low-ckb-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--target-outcome", "tester_order_created",
+      "--target-outcome", "tester_fresh_order_skip",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[], options: { env?: NodeJS.ProcessEnv }) => {
+        spawned.push({ args: commandArgs, env: options.env });
+        if (isPreflightCommand(commandArgs)) {
+          return commandArgs.includes("tester-pass-1-1")
+            ? fakePreflightChild({ ckbAvailable: "2853.99897309", ickbAvailable: "250838.31219989" })
+            : fakeSuccessfulPreflightChild();
+        }
+        testerRuns += 1;
+        return fakeChild(JSON.stringify(testerRuns === 1
+          ? {
+              startTime: "now",
+              actions: {
+                requestedTesterScenario: "auto",
+                testerScenario: "bounded-ickb-to-ckb-limit-order",
+                newOrder: { giveIckb: "20", takeCkb: "18", fee: "0.2" },
+                cancelledOrders: 0,
+              },
+              txHash: txHash("78"),
+              ElapsedSeconds: 1,
+            }
+          : { skip: { reason: "fresh-matchable-order", txHash: txHash("78") } }));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: () => Promise.resolve(),
+    });
+
+    const testerSpawns = spawned.filter((item) => item.args[0] === "apps/tester/dist/index.js");
+    expect(exitCode).toBe(0);
+    expect(testerSpawns).toHaveLength(2);
+    expect(testerSpawns[0]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+    expect(testerSpawns[1]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+  });
+
+  it("treats tester first-pass fresh-skip reserve misses as classified no-progress", async () => {
+    const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const writes = new Map<string, string>();
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/two-pass-bounded-reserve-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[], options: { env?: NodeJS.ProcessEnv }) => {
+        spawned.push({ args: commandArgs, env: options.env });
+        return isPreflightCommand(commandArgs)
+          ? fakePreflightChild({ ckbAvailable: "2100", ickbAvailable: "250838.31219989" })
+          : fakeChild(JSON.stringify({ skip: { reason: "post-tx-ckb-reserve" } }));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    const testerSpawns = spawned.filter((item) => item.args[0] === "apps/tester/dist/index.js");
+    expect(exitCode).toBe(0);
+    expect(testerSpawns[0]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+    expect([...writes.keys()].some((path) => path.endsWith("incident.json"))).toBe(false);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/two-pass-bounded-reserve-test/summary.json");
+    expect(summary).toMatchObject({ stopped: "max_cycles", skipReasons: ["post-tx-ckb-reserve", "post-tx-ckb-reserve"] });
+    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toEqual({ tester_reserve_skip: 2 });
+  });
+
+  it("uses auto first-pass fresh-skip stimulus when plain CKB is very low", async () => {
+    const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/two-pass-low-reserve-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--target-outcome", "tester_order_created",
+      "--target-outcome", "tester_fresh_order_skip",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[], options: { env?: NodeJS.ProcessEnv }) => {
+        spawned.push({ args: commandArgs, env: options.env });
+        return isPreflightCommand(commandArgs)
+          ? fakePreflightChild({ ckbAvailable: "1999.99999999", ickbAvailable: "250838.31219989" })
+          : fakeChild(JSON.stringify({ skip: { reason: "post-tx-ckb-reserve" } }));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: () => Promise.resolve(),
+    });
+
+    const tester = spawned.find((item) => item.args[0] === "apps/tester/dist/index.js");
+    expect(tester?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+  });
+
+  it("uses auto first-pass fresh-skip stimulus when plain CKB is high", async () => {
+    const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    let testerRuns = 0;
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/two-pass-high-ckb-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--target-outcome", "tester_order_created",
+      "--target-outcome", "tester_fresh_order_skip",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[], options: { env?: NodeJS.ProcessEnv }) => {
+        spawned.push({ args: commandArgs, env: options.env });
+        if (isPreflightCommand(commandArgs)) {
+          return commandArgs.includes("tester-pass-1-1")
+            ? fakePreflightChild({ ckbAvailable: "3000", ickbAvailable: "250838.31219989" })
+            : fakeSuccessfulPreflightChild();
+        }
+        testerRuns += 1;
+        return fakeChild(JSON.stringify(testerRuns === 1
+          ? {
+              startTime: "now",
+              actions: {
+                requestedTesterScenario: "auto",
+                testerScenario: "bounded-ickb-to-ckb-limit-order",
+                newOrder: { giveIckb: "20", takeCkb: "18", fee: "0.2" },
+                cancelledOrders: 0,
+              },
+              txHash: txHash("80"),
+              ElapsedSeconds: 1,
+            }
+          : { skip: { reason: "fresh-matchable-order", txHash: txHash("80") } }));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: () => Promise.resolve(),
+    });
+
+    const testerSpawns = spawned.filter((item) => item.args[0] === "apps/tester/dist/index.js");
+    expect(exitCode).toBe(0);
+    expect(testerSpawns[0]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+    expect(testerSpawns[1]?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+  });
+
+  it("preserves explicit tester scenario during fresh-skip pass selection", async () => {
+    const spawned: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/two-pass-explicit-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--tester-scenario", "multi-order-limit-orders",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[], options: { env?: NodeJS.ProcessEnv }) => {
+        spawned.push({ args: commandArgs, env: options.env });
+        return isPreflightCommand(commandArgs)
+          ? fakePreflightChild({ ckbAvailable: "2853.99897309", ickbAvailable: "250838.31219989" })
+          : fakeChild(JSON.stringify({
+              startTime: "now",
+              actions: {
+                requestedTesterScenario: "auto",
+                testerScenario: "bounded-ickb-to-ckb-limit-order",
+                newOrder: { giveIckb: "20", takeCkb: "18", fee: "0.2" },
+                cancelledOrders: 0,
+              },
+              txHash: txHash("79"),
+              ElapsedSeconds: 1,
+            }));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: () => Promise.resolve(),
+    });
+
+    const tester = spawned.find((item) => item.args[0] === "apps/tester/dist/index.js");
+    expect(tester?.env).toMatchObject({ TESTER_SCENARIO: "multi-order-limit-orders" });
   });
 
   it("refuses live config paths through symlinked parents", async () => {
@@ -585,6 +833,28 @@ describe("classification", () => {
     });
   });
 
+  it("rejects committed tester evidence without action evidence", () => {
+    expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
+      startTime: "now",
+      txHash: txHash("25"),
+      ElapsedSeconds: 1,
+    })))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester committed transaction evidence did not include action evidence",
+    });
+    expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
+      startTime: "now",
+      actions: { cancelledOrders: 0 },
+      txHash: txHash("26"),
+      ElapsedSeconds: 1,
+    })))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester committed transaction evidence did not include action evidence",
+    });
+  });
+
   it("classifies tester SDK order conversions as conversion coverage", () => {
     const result = commandResult("tester", JSON.stringify({
       startTime: "now",
@@ -606,7 +876,8 @@ describe("classification", () => {
       actions: {
         testerScenario: "ickb-to-ckb-limit-order",
         newOrder: { giveIckb: "10", takeCkb: "9", fee: "0.1" },
-        cancelledOrders: 0,
+        collectedOrders: 2,
+        cancelledOrders: 1,
       },
       txHash: txHash("15"),
       ElapsedSeconds: 1,
@@ -615,6 +886,38 @@ describe("classification", () => {
     expect(classifyActorResult("tester", result, { scenario: "ickb-to-ckb-limit-order" })).toMatchObject({
       outcome: "tester_order_created",
       terminal: false,
+      testerOrder: {
+        testerScenario: "ickb-to-ckb-limit-order",
+        orderCount: 1,
+        collectedOrders: 2,
+        cancelledOrders: 1,
+        orders: [{ direction: "ickb-to-ckb", giveIckb: "10", takeCkb: "9", fee: "0.1", dust: false }],
+      },
+    });
+  });
+
+  it("captures dust tester order evidence", () => {
+    const result = commandResult("tester", JSON.stringify({
+      startTime: "now",
+      actions: {
+        requestedTesterScenario: "auto",
+        testerScenario: "dust-ckb-conversion",
+        newOrder: { giveCkb: "0.00000001", takeIckb: "0.00000001", fee: "0", feeNumerator: "1", feeBase: "100000" },
+        cancelledOrders: 1,
+      },
+      txHash: txHash("17"),
+      ElapsedSeconds: 1,
+    }));
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "tester_order_created",
+      testerOrder: {
+        requestedTesterScenario: "auto",
+        testerScenario: "dust-ckb-conversion",
+        orderCount: 1,
+        cancelledOrders: 1,
+        orders: [{ direction: "ckb-to-ickb", giveCkb: "0.00000001", takeIckb: "0.00000001", fee: "0", feeNumerator: "1", feeBase: "100000", dust: true }],
+      },
     });
   });
 
@@ -918,6 +1221,24 @@ describe("classification", () => {
     });
   });
 
+  it("accepts bounded iCKB-to-CKB tester scenario evidence", () => {
+    const result = commandResult("tester", JSON.stringify({
+      startTime: "now",
+      actions: {
+        testerScenario: "bounded-ickb-to-ckb-limit-order",
+        newOrder: { giveIckb: "10", takeCkb: "9", fee: "0.1" },
+        cancelledOrders: 0,
+      },
+      txHash: txHash("18"),
+      ElapsedSeconds: 1,
+    }));
+
+    expect(classifyActorResult("tester", result, { scenario: "bounded-ickb-to-ckb-limit-order" })).toMatchObject({
+      outcome: "tester_order_created",
+      terminal: false,
+    });
+  });
+
   it("requires conversion evidence for explicit SDK conversion scenarios", () => {
     const result = commandResult("tester", JSON.stringify({
       startTime: "now",
@@ -941,6 +1262,13 @@ describe("classification", () => {
     expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
       skip: { reason: "fresh-matchable-order", txHash: txHash("22") },
     }))).outcome).toBe("tester_fresh_order_skip");
+    expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
+      skip: { reason: "matchable-order-transaction-missing", txHash: txHash("23") },
+    })))).toMatchObject({
+      outcome: "tester_fresh_order_skip",
+      terminal: false,
+      skipReason: "matchable-order-transaction-missing",
+    });
     expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
       skip: { reason: "sampled-amount-too-small" },
     }))).outcome).toBe("tester_sampled_too_small_skip");
@@ -993,6 +1321,66 @@ describe("classification", () => {
     });
   });
 
+  it("classifies matched withdrawal requests as withdrawal coverage", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 1, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: txHash("39"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_withdrawal_request_committed",
+      actions: { matchedOrders: 1, deposits: 0, withdrawalRequests: 1 },
+      txHashes: [txHash("39")],
+    });
+  });
+
+  it("classifies matched receipt completions as receipt coverage", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 1, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: txHash("40"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_receipt_completion_committed",
+      actions: { completedDeposits: 1, matchedOrders: 1, deposits: 0 },
+      txHashes: [txHash("40")],
+    });
+  });
+
+  it("classifies matched withdrawal completions as withdrawal completion coverage", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 1 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: txHash("41"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_withdrawal_completion_committed",
+      actions: { matchedOrders: 1, deposits: 0, withdrawals: 1 },
+      txHashes: [txHash("41")],
+    });
+  });
+
+  it("classifies deposit-only commits as deposit coverage", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 0, deposits: 1, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: txHash("42"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_deposit_only_committed",
+      actions: { matchedOrders: 0, deposits: 1 },
+      txHashes: [txHash("42")],
+    });
+  });
+
   it("keeps match diagnostics tied to the matching state-read iteration", () => {
     const stdout = [
       botEvent("bot.state.read", {
@@ -1040,6 +1428,165 @@ describe("classification", () => {
       readyPoolDepositCount: 0,
       nearReadyPoolDepositCount: 0,
       futurePoolDepositCount: 0,
+    });
+    expect(classification).toMatchObject({
+      outcome: "bot_retryable_error",
+      terminal: false,
+      reason: "bot reported retryable iteration failure",
+    });
+  });
+
+  it("classifies bot committed actions from the matching iteration", () => {
+    const stdout = [
+      botEvent("bot.iteration.failed", {
+        iterationId: 0,
+        retryable: false,
+        terminal: true,
+        error: { name: "Error", message: "L1 state scan crossed chain tip; retry with a fresh state" },
+      }),
+      botEvent("bot.transaction.built", {
+        iterationId: 1,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.built", {
+        iterationId: 2,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 0, deposits: 1, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { iterationId: 1, txHash: txHash("37"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_match_committed",
+      actions: { matchedOrders: 1, deposits: 0 },
+    });
+  });
+
+  it("classifies later bot commits over older transaction failures", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        iterationId: 1,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.failed", {
+        iterationId: 1,
+        outcome: "post_broadcast_unresolved",
+        txHash: txHash("43"),
+      }),
+      botEvent("bot.transaction.committed", { iterationId: 1, txHash: txHash("44"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_match_committed",
+      terminal: false,
+      actions: { matchedOrders: 1, deposits: 0 },
+    });
+  });
+
+  it("classifies later bot transaction failures over older commits", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        iterationId: 1,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { iterationId: 1, txHash: txHash("45"), status: "committed" }),
+      botEvent("bot.transaction.failed", {
+        iterationId: 1,
+        outcome: "terminal_rejection",
+        txHash: txHash("46"),
+      }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "terminal_chain_rejection",
+      terminal: true,
+    });
+  });
+
+  it("rejects bot post-broadcast failures without a valid tx hash", () => {
+    const stdout = JSON.stringify(botEvent("bot.transaction.failed", {
+      outcome: "post_broadcast_unresolved",
+      txHash: "not-a-tx-hash",
+    }));
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash",
+    });
+  });
+
+  it("keeps pre-broadcast bot failures classified without tx hash evidence", () => {
+    const stdout = JSON.stringify(botEvent("bot.transaction.failed", {
+      outcome: "validation_failed",
+      phase: "pre_broadcast",
+    }));
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "unknown",
+      terminal: true,
+      reason: "bot pre-broadcast transaction failure",
+    });
+  });
+
+  it("classifies bot skips after earlier terminal iteration failures", () => {
+    const stdout = [
+      botEvent("bot.iteration.failed", {
+        iterationId: 1,
+        retryable: false,
+        terminal: true,
+        error: { name: "Error", message: "L1 state scan crossed chain tip; retry with a fresh state" },
+      }),
+      botEvent("bot.decision.skipped", {
+        iterationId: 2,
+        reason: "no_actions",
+        actions: emptyActions(),
+      }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_no_action_skip",
+      terminal: false,
+      skipReason: "no_actions",
+    });
+  });
+
+  it("classifies bot skips after earlier retryable pre-broadcast failures", () => {
+    const stdout = [
+      botEvent("bot.transaction.failed", {
+        iterationId: 1,
+        phase: "pre_broadcast",
+        outcome: "pre_broadcast_failed",
+        retryable: true,
+        terminal: false,
+        error: { name: "TypeError", message: "fetch failed" },
+      }),
+      botEvent("bot.decision.skipped", {
+        iterationId: 2,
+        reason: "no_actions",
+        actions: emptyActions(),
+      }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "bot_no_action_skip",
+      terminal: false,
+      skipReason: "no_actions",
+    });
+  });
+
+  it("rejects committed bot evidence without matching built action evidence", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        iterationId: 1,
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { iterationId: 2, txHash: txHash("38"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "bot committed transaction evidence did not include matching built action evidence",
     });
   });
 
@@ -1108,6 +1655,42 @@ describe("classification", () => {
     });
   });
 
+  it("treats nonzero bot exits as terminal even with retryable iteration evidence", () => {
+    const result = {
+      ...commandResult("bot", JSON.stringify(botEvent("bot.iteration.failed", {
+        retryable: true,
+        terminal: false,
+        error: { name: "TypeError", message: "fetch failed" },
+      }))),
+      status: 1,
+    };
+
+    expect(classifyActorResult("bot", result)).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+    });
+  });
+
+  it("keeps terminal bot retry-budget exhaustion classified by bot evidence despite exit code 2", () => {
+    const result = {
+      ...commandResult("bot", JSON.stringify(botEvent("bot.iteration.failed", {
+        retryable: true,
+        terminal: true,
+        retryableAttempts: 3,
+        maxRetryableAttempts: 3,
+        retryBudgetExhausted: true,
+        error: { name: "TypeError", message: "fetch failed" },
+      }))),
+      status: 2,
+    };
+
+    expect(classifyActorResult("bot", result)).toMatchObject({
+      outcome: "bot_retryable_error",
+      terminal: true,
+      reason: "bot reported terminal retryable iteration failure",
+    });
+  });
+
   it("reports spawn errors before generic actor exit classification", () => {
     expect(classifyActorResult("preflight", { ...commandResult("preflight", ""), spawnError: "ENOENT", status: null })).toMatchObject({
       outcome: "nonzero_exit",
@@ -1135,6 +1718,7 @@ describe("classification", () => {
           message: "Transaction confirmation timed out",
           txHash: txHash("aa"),
           status: "sent",
+          isTimeout: true,
         },
       })),
       status: 2,
@@ -1143,6 +1727,90 @@ describe("classification", () => {
     expect(classifyActorResult("tester", result)).toMatchObject({
       outcome: "confirmation_timeout",
       terminal: true,
+    });
+  });
+
+  it("classifies serialized tester post-broadcast unresolved failures", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        txHash: txHash("ab"),
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction confirmation timed out",
+          txHash: txHash("ab"),
+          status: "sent",
+          isTimeout: true,
+          cause: { name: "TypeError", message: "fetch failed" },
+        },
+      })),
+      status: 2,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "post_broadcast_unresolved",
+      terminal: true,
+      reason: "tester tx remained unresolved after broadcast",
+    });
+  });
+
+  it("classifies serialized tester terminal chain rejections", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        txHash: txHash("ac"),
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction reached rejected status",
+          txHash: txHash("ac"),
+          status: "rejected",
+          isTimeout: false,
+        },
+      })),
+      status: 1,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "terminal_chain_rejection",
+      terminal: true,
+      reason: "tester tx reached terminal chain rejection",
+    });
+  });
+
+  it("rejects tester transaction failures without valid tx hash evidence", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction confirmation timed out",
+          isTimeout: true,
+        },
+      })),
+      status: 2,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester transaction failure evidence did not include a valid tx hash",
+    });
+  });
+
+  it("extracts nested tester transaction failure tx hash evidence", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction confirmation timed out",
+          txHash: txHash("ad"),
+          isTimeout: true,
+        },
+      })),
+      status: 2,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "confirmation_timeout",
+      terminal: true,
+      txHashes: [txHash("ad")],
     });
   });
 
@@ -1163,69 +1831,123 @@ describe("classification", () => {
     });
   });
 
-  it("safety classifications override ordinary exits", () => {
+  it("safety classifications preserve ordinary command precedence", () => {
     expect(classifyActorResult("bot", commandResult("bot", "{not-json}"))).toMatchObject({
       outcome: "malformed_evidence",
-      terminal: true,
-    });
-    expect(classifyActorResult("bot", commandResult("bot", JSON.stringify({ privateKey: "0xsecret" })))).toMatchObject({
-      outcome: "secret_leak_sentinel",
       terminal: true,
     });
     expect(classifyActorResult("bot", { ...commandResult("bot", ""), timedOut: true })).toMatchObject({
       outcome: "command_timeout",
       terminal: true,
     });
+    expect(classifyActorResult("bot", commandResult("bot", [
+      JSON.stringify(botEvent("bot.decision.skipped", { reason: "no_actions", actions: emptyActions() })),
+      JSON.stringify({ witnesses: ["0xsignature"], inputs: [] }),
+    ].join("\n")))).toMatchObject({
+      outcome: "bot_no_action_skip",
+      terminal: false,
+    });
   });
 
-  it("classifies terminal preflight safety failures before launch", () => {
+  it("classifies terminal preflight command failures before launch", () => {
     expect(classifyActorResult("preflight", { ...commandResult("preflight", ""), timedOut: true })).toMatchObject({
       outcome: "command_timeout",
       terminal: true,
     });
+  });
+
+  it("requires preflight configs to bound actors to one iteration", () => {
     expect(classifyActorResult("preflight", commandResult("preflight", JSON.stringify({
-      privateKey: "0xsecret",
+      chain: "testnet",
+      bounded: false,
     })))).toMatchObject({
-      outcome: "secret_leak_sentinel",
+      outcome: "malformed_evidence",
       terminal: true,
+      reason: "preflight config is not bounded to one iteration",
+    });
+    expect(classifyActorResult("preflight", commandResult("preflight", JSON.stringify({
+      chain: "testnet",
+      bounded: true,
+      maxIterations: 2,
+    })))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "preflight config is not bounded to one iteration",
     });
   });
 
-  it("sanitizes transaction-shaped preflight errors before classification reaches artifacts", () => {
+  it("fails closed when captured command output is truncated", () => {
+    expect(classifyActorResult("bot", {
+      ...commandResult("bot", JSON.stringify(botEvent("bot.decision.skipped", {
+        reason: "no_actions",
+        actions: emptyActions(),
+      }))),
+      stdoutTruncated: true,
+    })).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "stdout evidence exceeded supervisor capture limit",
+      evidence: { stdoutTruncated: true },
+    });
+    expect(classifyActorResult("preflight", {
+      ...commandResult("preflight", JSON.stringify({ chain: "testnet", bounded: true, maxIterations: 1 })),
+      stderrTruncated: true,
+    })).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "stderr evidence exceeded supervisor capture limit",
+      evidence: { stderrTruncated: true },
+    });
+  });
+
+  it("preserves transaction-shaped preflight stderr for artifact capture", () => {
     const classification = classifyActorResult("preflight", {
       ...commandResult("preflight", "{}"),
       status: 1,
       stderr: JSON.stringify({ witnesses: ["0xsignature"], inputs: [] }),
     });
 
-    expect(classification.reason).toBe("<redacted: transaction-shaped output withheld by supervisor>\n");
+    expect(classification).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: JSON.stringify({ witnesses: ["0xsignature"], inputs: [] }),
+    });
   });
 
-  it("withholds secret-shaped raw artifacts", () => {
-    expect(safeArtifactText(JSON.stringify({ privateKey: "0xsecret" }))).toBe(
-      "<redacted: secret-shaped output withheld by supervisor>\n",
-    );
-    expect(safeArtifactText(`PRIVATE_KEY=0x${"11".repeat(32)}`)).toBe(
-      "<redacted: secret-shaped output withheld by supervisor>\n",
-    );
-    expect(safeArtifactText("SEED_PHRASE=alpha beta gamma")).toBe(
-      "<redacted: secret-shaped output withheld by supervisor>\n",
-    );
-    expect(safeArtifactText("RPC_URL=https://user:pass@testnet.example/path?token=secret")).toBe(
-      "<redacted: secret-shaped output withheld by supervisor>\n",
-    );
-    expect(safeArtifactText(JSON.stringify({ witnesses: ["0xsignature"], inputs: [] }))).toBe(
-      "<redacted: transaction-shaped output withheld by supervisor>\n",
-    );
-    expect(safeArtifactText(JSON.stringify({
-      transactionShape: { inputs: 1, outputs: 2, cellDeps: 3, headerDeps: 4, witnesses: 5 },
-    }))).toBe(
-      JSON.stringify({ transactionShape: { inputs: 1, outputs: 2, cellDeps: 3, headerDeps: 4, witnesses: 5 } }),
-    );
-    expect(safeArtifactText(JSON.stringify({ system: { tip: { hash: txHash("aa") } } }))).toBe(
-      JSON.stringify({ system: { tip: { hash: txHash("aa") } } }),
-    );
-    expect(safeArtifactText(JSON.stringify({ app: "bot" }))).toBe(JSON.stringify({ app: "bot" }));
+  it("preserves snake_case CKB transaction fields for artifact capture", () => {
+    const classification = classifyActorResult("preflight", {
+      ...commandResult("preflight", "{}"),
+      status: 1,
+      stderr: JSON.stringify({ cell_deps: [], header_deps: [], outputs_data: ["0x"] }),
+    });
+
+    expect(classification).toMatchObject({
+      outcome: "nonzero_exit",
+      terminal: true,
+      reason: JSON.stringify({ cell_deps: [], header_deps: [], outputs_data: ["0x"] }),
+    });
+  });
+
+  it("classifies retryable preflight transport failures separately", () => {
+    expect(classifyActorResult("preflight", {
+      ...commandResult("preflight", ""),
+      status: 1,
+      stderr: "Live preflight retryable failure: fetch failed\n",
+    })).toMatchObject({
+      outcome: "preflight_retryable_error",
+      terminal: true,
+    });
+  });
+
+  it("classifies preserved wrong-chain preflight evidence", () => {
+    expect(classifyActorResult("preflight", {
+      ...commandResult("preflight", ""),
+      status: 1,
+      stderr: "Live preflight failed: Invalid testnet RPC chain identity: genesis hash expected 0x1 observed 0x2\n",
+    })).toMatchObject({
+      outcome: "wrong_chain",
+      terminal: true,
+    });
   });
 
   it("caps captured command output", () => {
@@ -1294,6 +2016,271 @@ describe("classification", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("bounds in-flight actor commands by the remaining wall-clock budget", async () => {
+    vi.useFakeTimers();
+    try {
+      const writes = new Map<string, string>();
+      const kills: Array<{ pid: number; signal: NodeJS.Signals }> = [];
+      const args = parseArgs([
+        "--out-dir", "logs/live-supervisor/wall-clock-timeout-test",
+        "--scenario", "bot-only",
+        "--target-outcome", "bot_match_committed",
+        "--max-cycles", "1",
+        "--max-wall-clock-seconds", "1",
+        "--command-timeout-seconds", "900",
+      ]);
+      const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+        "logs/live-supervisor/wall-clock-timeout-test",
+        "config/bot-testnet.json",
+        "config/tester-testnet.json",
+      ])) });
+      const child = fakeHangingChild();
+
+      const run = supervise(args, plan, {
+        skipBuiltRuntimeCheck: true,
+        commandKillGraceMs: 10,
+        killProcess: (pid, signal) => {
+          kills.push({ pid, signal });
+          if (signal === "SIGKILL") {
+            queueMicrotask(() => child.emit("close", null, "SIGKILL"));
+          }
+        },
+        spawnCommand: ((_command: string, commandArgs: string[]) => isPreflightCommand(commandArgs) ? fakeSuccessfulPreflightChild() : child) as never,
+        spawnSyncCommand: ignoredChecker(true) as never,
+        lstat: missingStat,
+        stat: missingStat,
+        mkdir: () => Promise.resolve(undefined),
+        realpath: (path) => Promise.resolve(pathToString(path)),
+        appendFile: (path, text) => {
+          const key = pathToString(path);
+          writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+          return Promise.resolve();
+        },
+        writeFile: (path, text) => {
+          writes.set(pathToString(path), textToString(text));
+          return Promise.resolve();
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(1010);
+
+      await expect(run).resolves.toBe(2);
+      expect(kills).toEqual([
+        { pid: -1234, signal: "SIGTERM" },
+        { pid: -1234, signal: "SIGKILL" },
+      ]);
+      const incident = jsonArtifact(writes, "/repo/logs/live-supervisor/wall-clock-timeout-test/cycle-0001-incident.json");
+      expect(recordAt(incident["classification"], "incident classification")).toMatchObject({
+        outcome: "command_timeout",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not spawn actor commands when wall-clock expires at the command boundary", async () => {
+    const writes = new Map<string, string>();
+    const spawned: string[][] = [];
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/wall-clock-boundary-test",
+      "--scenario", "bot-only",
+      "--target-outcome", "bot_match_committed",
+      "--max-cycles", "1",
+      "--max-wall-clock-seconds", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+      "logs/live-supervisor/wall-clock-boundary-test",
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ])) });
+    const clock = [0, 999, 1000, 1000];
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      now: () => clock.shift() ?? 1000,
+      spawnCommand: ((_command: string, commandArgs: string[]) => {
+        spawned.push(commandArgs);
+        return fakeChild("should not run");
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      lstat: missingStat,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      realpath: (path) => Promise.resolve(pathToString(path)),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    expect(spawned).toEqual([]);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/wall-clock-boundary-test/summary.json");
+    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+  });
+
+  it("retries retryable preflight transport failures once before actor execution", async () => {
+    const writes = new Map<string, string>();
+    const spawned: string[][] = [];
+    let preflightRuns = 0;
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/preflight-retry-test",
+      "--scenario", "bot-only",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+      "logs/live-supervisor/preflight-retry-test",
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ])) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[]) => {
+        spawned.push(commandArgs);
+        if (isPreflightCommand(commandArgs)) {
+          preflightRuns += 1;
+          return preflightRuns === 1
+            ? fakeChild("", 1, "Live preflight retryable failure: fetch failed\n")
+            : fakeSuccessfulPreflightChild();
+        }
+        return fakeChild(JSON.stringify(botEvent("bot.decision.skipped", {
+          reason: "no_actions",
+          actions: emptyActions(),
+        })));
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      lstat: missingStat,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      realpath: (path) => Promise.resolve(pathToString(path)),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(spawned.filter((args) => isPreflightCommand(args))).toHaveLength(2);
+    expect(spawned.filter((args) => !isPreflightCommand(args))).toHaveLength(1);
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.stdout.json")).toBe(true);
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.stdout.ndjson")).toBe(false);
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-2.stdout.json")).toBe(true);
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.command.json")).toBe(true);
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-2.command.json")).toBe(true);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/preflight-retry-test/summary.json");
+    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toMatchObject({ bot_no_action_skip: 1 });
+  });
+
+  it("writes retryable-looking preflight output as public producer artifacts", async () => {
+    const writes = new Map<string, string>();
+    const spawned: string[][] = [];
+    const preflightOutput = JSON.stringify({ diagnostic: "public preflight output" });
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/preflight-unsafe-retry-test",
+      "--scenario", "bot-only",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+      "logs/live-supervisor/preflight-unsafe-retry-test",
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ])) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[]) => {
+        spawned.push(commandArgs);
+        return fakeChild(preflightOutput, 1, "Live preflight retryable failure: fetch failed\n");
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      lstat: missingStat,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      realpath: (path) => Promise.resolve(pathToString(path)),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    expect(spawned.filter((args) => isPreflightCommand(args))).toHaveLength(2);
+    expect(spawned.filter((args) => !isPreflightCommand(args))).toHaveLength(0);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/preflight-unsafe-retry-test/summary.json");
+    expect(summary).toMatchObject({ stopped: "preflight_retryable_error" });
+    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toMatchObject({ preflight_retryable_error: 1 });
+    expect(writes.get("/repo/logs/live-supervisor/preflight-unsafe-retry-test/cycle-0001-bot-preflight-attempt-1.stdout.json")).toBe(
+      `${preflightOutput}\n`,
+    );
+    expect(writes.get("/repo/logs/live-supervisor/preflight-unsafe-retry-test/cycle-0001-bot-preflight-attempt-2.stdout.json")).toBe(
+      `${preflightOutput}\n`,
+    );
+  });
+
+  it("does not retry preflight after the wall-clock budget expires", async () => {
+    const writes = new Map<string, string>();
+    const spawned: string[][] = [];
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/preflight-retry-wall-clock-test",
+      "--scenario", "bot-only",
+      "--target-outcome", "bot_match_committed",
+      "--max-cycles", "1",
+      "--max-wall-clock-seconds", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+      "logs/live-supervisor/preflight-retry-wall-clock-test",
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ])) });
+    const clock = [0, 0, 0, 0, 2000];
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      now: () => clock.shift() ?? 2000,
+      spawnCommand: ((_command: string, commandArgs: string[]) => {
+        spawned.push(commandArgs);
+        return fakeChild("", 1, "Live preflight retryable failure: fetch failed\n");
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      lstat: missingStat,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      realpath: (path) => Promise.resolve(pathToString(path)),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    expect(spawned.filter((args) => isPreflightCommand(args))).toHaveLength(1);
+    expect(spawned.filter((args) => !isPreflightCommand(args))).toHaveLength(0);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/preflight-retry-wall-clock-test/summary.json");
+    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+    expect(writes.has("/repo/logs/live-supervisor/preflight-retry-wall-clock-test/cycle-0001-bot-preflight-attempt-1.command.json")).toBe(true);
   });
 
   it("caps actor command timers to Node's maximum delay", async () => {
@@ -1430,6 +2417,17 @@ describe("scenario planning", () => {
     });
   });
 
+  it("auto-plans fresh order skip targets through the two-pass scenario", () => {
+    const ledger = createCoverageLedger(["tester_fresh_order_skip"]);
+    const choice = chooseScenario({ scenario: "auto", targetOutcomes: ["tester_fresh_order_skip"] }, ledger);
+
+    expect(choice).toMatchObject({
+      kind: "scenario",
+      scenario: { name: "tester-fresh-skip-two-pass" },
+      targetOutcomes: ["tester_fresh_order_skip"],
+    });
+  });
+
   it("records unsupported explicit goals as full terminal classifications", async () => {
     const writes = new Map<string, string>();
     const args = parseArgs([
@@ -1456,7 +2454,7 @@ describe("scenario planning", () => {
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(writes, "/repo/logs/live-supervisor/unsupported-test/cycle-0001-incident.json");
     const classification = recordAt(incident["classification"], "incident classification");
-    expect(classification).toMatchObject({ actor: "preflight", outcome: "unknown", terminal: true });
+    expect(classification).toMatchObject({ actor: "preflight", outcome: "unsupported_scenario", terminal: true });
     expect(classification["txHashes"]).toEqual([]);
     expect(recordAt(classification["evidence"], "incident classification evidence")).toMatchObject({
       recordsAccepted: 0,
@@ -1467,7 +2465,7 @@ describe("scenario planning", () => {
       timedOut: false,
     });
     const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/unsupported-test/summary.json");
-    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toMatchObject({ unknown: 1 });
+    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toMatchObject({ unsupported_scenario: 1 });
   });
 
   it("plans remaining target outcomes after earlier targets are covered", () => {
@@ -1539,6 +2537,136 @@ describe("deterministic incident handling", () => {
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.stdout.ndjson");
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.stderr.log");
     expect(summaryArtifacts).toContain("logs/live-supervisor/unmet-coverage-test/cycle-0001-bot.command.json");
+  });
+
+  it("treats unmet explicit target outcomes at max wall-clock as logical incidents", async () => {
+    const writes = new Map<string, string>();
+    const args = parseArgs([
+      "--bot-config", "config/bot-testnet.json",
+      "--tester-config", "config/tester-testnet.json",
+      "--out-dir", "logs/live-supervisor/unmet-wall-clock-test",
+      "--scenario", "bot-only",
+      "--target-outcome", "bot_match_committed",
+      "--max-wall-clock-seconds", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+    const clock = [0, 2000];
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      now: () => clock.shift() ?? 2000,
+      spawnCommand: (() => {
+        throw new Error("actor should not start after wall-clock expiry");
+      }),
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    const incident = jsonArtifact(writes, "/repo/logs/live-supervisor/unmet-wall-clock-test/cycle-0001-incident.json");
+    expect(incident).toMatchObject({ unmetGoals: ["bot_match_committed"] });
+    expect(recordAt(incident["classification"], "incident classification")).toMatchObject({
+      actor: "preflight",
+      outcome: "unmet_coverage_goal",
+      terminal: true,
+      reason: "bounded wall-clock budget ended before observing requested outcomes: bot_match_committed",
+    });
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/unmet-wall-clock-test/summary.json");
+    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+    expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toMatchObject({ unmet_coverage_goal: 1 });
+  });
+
+  it("uses the last attempted cycle for wall-clock unmet coverage incidents", async () => {
+    const writes = new Map<string, string>();
+    const args = parseArgs([
+      "--bot-config", "config/bot-testnet.json",
+      "--tester-config", "config/tester-testnet.json",
+      "--out-dir", "logs/live-supervisor/unmet-wall-clock-after-cycle-test",
+      "--scenario", "bot-only",
+      "--target-outcome", "bot_match_committed",
+      "--max-wall-clock-seconds", "1",
+      "--max-cycles", "2",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+    const clock = [0, 0, 0, 0, 0, 0, 0, 2000];
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      now: () => clock.shift() ?? 2000,
+      spawnCommand: ((_command: string, commandArgs: string[]) => isPreflightCommand(commandArgs) ? fakeSuccessfulPreflightChild() : fakeChild(JSON.stringify(botEvent("bot.decision.skipped", {
+        reason: "no_actions",
+        actions: emptyActions(),
+      })))) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    const incident = jsonArtifact(writes, "/repo/logs/live-supervisor/unmet-wall-clock-after-cycle-test/cycle-0001-incident.json");
+    expect(incident).toMatchObject({ cycleIndex: 1, unmetGoals: ["bot_match_committed"] });
+    expect(writes.has("/repo/logs/live-supervisor/unmet-wall-clock-after-cycle-test/cycle-0002-incident.json")).toBe(false);
+  });
+
+  it("does not start another command after the wall-clock budget expires mid-cycle", async () => {
+    const writes = new Map<string, string>();
+    const spawned: string[][] = [];
+    const args = parseArgs([
+      "--bot-config", "config/bot-testnet.json",
+      "--tester-config", "config/tester-testnet.json",
+      "--out-dir", "logs/live-supervisor/mid-cycle-wall-clock-test",
+      "--scenario", "standard-cycle",
+      "--target-outcome", "bot_match_committed",
+      "--max-wall-clock-seconds", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+    const clock = [0, 0, 0, 0, 0, 2000];
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      now: () => clock.shift() ?? 2000,
+      spawnCommand: ((_command: string, commandArgs: string[]) => {
+        spawned.push(commandArgs);
+        return fakeSuccessfulPreflightChild();
+      }) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(2);
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]).toContain("tester-1");
+    const incident = jsonArtifact(writes, "/repo/logs/live-supervisor/mid-cycle-wall-clock-test/cycle-0001-incident.json");
+    expect(incident).toMatchObject({ cycleIndex: 1, unmetGoals: ["bot_match_committed"] });
   });
 
   it("treats repeated target outcomes as one explicit contract", async () => {
@@ -1616,6 +2744,7 @@ describe("deterministic incident handling", () => {
     expect(exitCode).toBe(2);
     const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/target-ledger-test/summary.json");
     expect(recordAt(summary["coverage"], "coverage")["goals"]).toEqual(["tester_estimated_too_small_skip"]);
+    expect(summary).toMatchObject({ txCreatingTxHashCount: 1, txCreatingOutcomeCount: 1 });
   });
 
   it("keeps successful preflight probes out of aggregate outcome counts", async () => {
@@ -1651,6 +2780,79 @@ describe("deterministic incident handling", () => {
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/preflight-summary-test/summary.json");
     expect(recordAt(summary["aggregateCounts"], "summary aggregate counts")).toEqual({ bot_no_action_skip: 1 });
+  });
+
+  it("summarizes safe preflight balances and selected tester scenario", async () => {
+    const writes = new Map<string, string>();
+    const args = parseArgs([
+      "--out-dir", "logs/live-supervisor/preflight-state-summary-test",
+      "--scenario", "tester-fresh-skip-two-pass",
+      "--target-outcome", "tester_order_created",
+      "--stop-after-tx-count", "1",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: selectiveIgnoredChecker(new Set([
+      "logs/live-supervisor/preflight-state-summary-test",
+      "config/bot-testnet.json",
+      "config/tester-testnet.json",
+    ])) });
+
+    let testerRuns = 0;
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[]) => isPreflightCommand(commandArgs)
+        ? fakePreflightChild({ ckbAvailable: "2853.99897309", ickbAvailable: "250838.31219989" })
+        : fakeChild(JSON.stringify((testerRuns += 1) === 1
+          ? {
+              startTime: "now",
+              actions: {
+                requestedTesterScenario: "multi-order-limit-orders",
+                testerScenario: "two-ickb-to-ckb-limit-orders",
+                newOrders: [
+                  { giveIckb: "10", takeCkb: "9", fee: "0.1" },
+                  { giveIckb: "10", takeCkb: "9", fee: "0.1" },
+                ],
+                orderCount: 2,
+                cancelledOrders: 0,
+              },
+              txHash: txHash("81"),
+              ElapsedSeconds: 1,
+            }
+          : { skip: { reason: "fresh-matchable-order", txHash: txHash("81") } }))) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: () => Promise.resolve(),
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/preflight-state-summary-test/summary.json");
+    expect(summary["preflightState"]).toEqual([
+      {
+        cycleIndex: 1,
+        actor: "tester",
+        step: "tester-pass-1",
+        selectedTesterScenario: "auto",
+        balances: {
+          CKB: { available: "2853.99897309" },
+          ICKB: { available: "250838.31219989" },
+        },
+      },
+      {
+        cycleIndex: 1,
+        actor: "tester",
+        step: "tester-pass-2",
+        selectedTesterScenario: "auto",
+        balances: {
+          CKB: { available: "2853.99897309" },
+          ICKB: { available: "250838.31219989" },
+        },
+      },
+    ]);
   });
 
   it("keeps default coverage goals best-effort at max cycles", async () => {
@@ -1739,7 +2941,21 @@ describe("deterministic incident handling", () => {
 
     expect(exitCode).toBe(0);
     expect([...writes.keys()].some((path) => path.endsWith("incident.json"))).toBe(false);
-    expect(writes.get("/repo/logs/live-supervisor/stop-after-tx-test/summary.json")).toContain("stop_after_tx_count");
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/stop-after-tx-test/summary.json");
+    expect(summary).toMatchObject({
+      stopped: "stop_after_tx_count",
+      txCreatingTxHashCount: 1,
+      txCreatingOutcomeCount: 1,
+      testerOrderEvidence: [
+        {
+          outcome: "tester_order_created",
+          txHashes: [txHash("44")],
+          orderCount: 1,
+          cancelledOrders: 0,
+          orders: [{ direction: "ckb-to-ickb", giveCkb: "10", takeIckb: "9", fee: "0.1", dust: false }],
+        },
+      ],
+    });
   });
 
   it("does not count skip reference hashes toward stop-after-tx-count", async () => {
@@ -1776,7 +2992,7 @@ describe("deterministic incident handling", () => {
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/skip-hash-stop-test/summary.json");
-    expect(summary).toMatchObject({ stopped: "max_cycles" });
+    expect(summary).toMatchObject({ stopped: "max_cycles", txCreatingTxHashCount: 0, txCreatingOutcomeCount: 0 });
     expect(recordAt(summary["txHashesByOutcome"], "summary tx hashes")).toEqual({
       tester_fresh_order_skip: [txHash("44")],
     });
@@ -1841,10 +3057,32 @@ function isPreflightCommand(args: string[]): boolean {
 }
 
 function fakeSuccessfulPreflightChild(): ReturnType<typeof fakeChild> {
-  return fakeChild(JSON.stringify({ chain: "testnet" }));
+  return fakeChild(JSON.stringify({ chain: "testnet", bounded: true, maxIterations: 1 }));
+}
+
+function fakePreflightChild({ ckbAvailable, ickbAvailable }: { ckbAvailable: string; ickbAvailable: string }): ReturnType<typeof fakeChild> {
+  return fakeChild(JSON.stringify({
+    chain: "testnet",
+    bounded: true,
+    maxIterations: 1,
+    balances: {
+      CKB: { available: ckbAvailable },
+      ICKB: { available: ickbAvailable },
+    },
+  }));
 }
 
 function fakeChild(stdout: string, status = 0): EventEmitter & {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  kill: () => boolean;
+};
+function fakeChild(stdout: string, status: number, stderr: string): EventEmitter & {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  kill: () => boolean;
+};
+function fakeChild(stdout: string, status = 0, stderr = ""): EventEmitter & {
   stdout: EventEmitter;
   stderr: EventEmitter;
   kill: () => boolean;
@@ -1859,6 +3097,9 @@ function fakeChild(stdout: string, status = 0): EventEmitter & {
   child.kill = (): boolean => true;
   queueMicrotask(() => {
     child.stdout.emit("data", Buffer.from(`${stdout}\n`));
+    if (stderr !== "") {
+      child.stderr.emit("data", Buffer.from(stderr));
+    }
     child.emit("close", status, null);
   });
   return child;

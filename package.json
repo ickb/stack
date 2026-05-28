@@ -29,6 +29,7 @@
     "live:preflight": "node scripts/ickb-live-preflight.mjs",
     "live:supervisor": "node apps/supervisor/dist/index.js",
     "live:supervisor:loop": "node scripts/ickb-supervisor-loop.mjs",
+    "live:supervisor:dynamic-loop": "node scripts/ickb-supervisor-dynamic-loop.mjs",
     "coworker:ask": "opencode run --pure --agent plan"
   },
   "engines": {
