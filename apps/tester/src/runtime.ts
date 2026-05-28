@@ -52,15 +52,6 @@ export async function readTesterState(runtime: Runtime): Promise<TesterState> {
   };
 }
 
-export async function buildTransaction(
-  runtime: Runtime,
-  state: TesterState,
-  amounts: { ckbValue: bigint; udtValue: bigint },
-  info: Parameters<IckbSdk["request"]>[2],
-): Promise<ccc.Transaction> {
-  return buildRawOrderTransaction(runtime, state, [{ amounts, info }]);
-}
-
 export async function buildRawOrderTransaction(
   runtime: Runtime,
   state: TesterState,

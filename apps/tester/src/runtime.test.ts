@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildRawOrderTransaction,
   buildSdkConversionTransaction,
-  buildTransaction,
   readTesterState,
   type Runtime,
   type TesterState,
@@ -136,7 +135,7 @@ describe("readTesterState", () => {
     expect(state.availableIckbBalance).toBe(11n + 29n + 37n + 17n);
   });
 
-  it("budgets user orders as available because buildTransaction collects them", async () => {
+  it("budgets user orders as available because raw-order transactions collect them", async () => {
     const lock = script("11");
     const userOrder = {
       ckbValue: 23n,
@@ -173,7 +172,7 @@ describe("readTesterState", () => {
   });
 });
 
-describe("buildTransaction", () => {
+describe("buildRawOrderTransaction", () => {
   it("delegates base construction and completion to the SDK", async () => {
     const calls: string[] = [];
     const buildBaseTransaction = buildBaseTransactionMock(calls);
@@ -209,12 +208,9 @@ describe("buildTransaction", () => {
       accountLocks: [],
     };
 
-    await buildTransaction(
-      runtime,
-      state,
-      { ckbValue: 10n, udtValue: 0n },
-      {} as Parameters<Runtime["sdk"]["request"]>[2],
-    );
+    await buildRawOrderTransaction(runtime, state, [
+      { amounts: { ckbValue: 10n, udtValue: 0n }, info: {} as Parameters<Runtime["sdk"]["request"]>[2] },
+    ]);
 
     expect(buildBaseTransaction.mock.calls[0]?.[2]).toEqual({
       orders: state.userOrders,
@@ -229,6 +225,54 @@ describe("buildTransaction", () => {
     expect(calls).toEqual(["base", "request", "complete"]);
   });
 
+  it("builds multiple raw order requests in one base transaction", async () => {
+    const calls: string[] = [];
+    const buildBaseTransaction = buildBaseTransactionMock(calls);
+    const request = requestMock(calls);
+    const completeTransaction = completeTransactionMock(calls);
+    const state: TesterState = {
+      system: { feeRate: 42n } as TesterState["system"],
+      account: emptyAccountState(),
+      userOrders: [],
+      conversionContext: {
+        system: { feeRate: 42n } as TesterState["system"],
+        receipts: [],
+        readyWithdrawals: [],
+        availableOrders: [],
+        ckbAvailable: 0n,
+        ickbAvailable: 0n,
+        estimatedMaturity: 0n,
+      },
+      availableCkbBalance: 0n,
+      availableIckbBalance: 0n,
+    };
+    const runtime: Runtime = {
+      client: {} as ccc.Client,
+      signer: {} as ccc.SignerCkbPrivateKey,
+      sdk: {
+        buildBaseTransaction,
+        completeTransaction,
+        request,
+      } as unknown as Runtime["sdk"],
+      primaryLock: script("11"),
+      accountLocks: [],
+    };
+
+    await buildRawOrderTransaction(runtime, state, [
+      { amounts: { ckbValue: 10n, udtValue: 0n }, info: { id: "first" } as Parameters<Runtime["sdk"]["request"]>[2] },
+      { amounts: { ckbValue: 20n, udtValue: 0n }, info: { id: "second" } as Parameters<Runtime["sdk"]["request"]>[2] },
+    ]);
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls.map((call) => call[3])).toEqual([
+      { ckbValue: 10n, udtValue: 0n },
+      { ckbValue: 20n, udtValue: 0n },
+    ]);
+    expect(calls).toEqual(["base", "request", "request", "complete"]);
+  });
+});
+
+describe("buildSdkConversionTransaction", () => {
   it("delegates SDK conversion planning to the SDK", async () => {
     const calls: string[] = [];
     const buildConversionTransaction = buildConversionTransactionMock(calls);
@@ -276,52 +320,6 @@ describe("buildTransaction", () => {
       feeRate: 42n,
     });
     expect(calls).toEqual(["conversion", "complete"]);
-  });
-
-  it("builds multiple raw order requests in one base transaction", async () => {
-    const calls: string[] = [];
-    const buildBaseTransaction = buildBaseTransactionMock(calls);
-    const request = requestMock(calls);
-    const completeTransaction = completeTransactionMock(calls);
-    const state: TesterState = {
-      system: { feeRate: 42n } as TesterState["system"],
-      account: emptyAccountState(),
-      userOrders: [],
-      conversionContext: {
-        system: { feeRate: 42n } as TesterState["system"],
-        receipts: [],
-        readyWithdrawals: [],
-        availableOrders: [],
-        ckbAvailable: 0n,
-        ickbAvailable: 0n,
-        estimatedMaturity: 0n,
-      },
-      availableCkbBalance: 0n,
-      availableIckbBalance: 0n,
-    };
-    const runtime: Runtime = {
-      client: {} as ccc.Client,
-      signer: {} as ccc.SignerCkbPrivateKey,
-      sdk: {
-        buildBaseTransaction,
-        completeTransaction,
-        request,
-      } as unknown as Runtime["sdk"],
-      primaryLock: script("11"),
-      accountLocks: [],
-    };
-
-    await buildRawOrderTransaction(runtime, state, [
-      { amounts: { ckbValue: 10n, udtValue: 0n }, info: { id: "first" } as Parameters<Runtime["sdk"]["request"]>[2] },
-      { amounts: { ckbValue: 20n, udtValue: 0n }, info: { id: "second" } as Parameters<Runtime["sdk"]["request"]>[2] },
-    ]);
-
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls.map((call) => call[3])).toEqual([
-      { ckbValue: 10n, udtValue: 0n },
-      { ckbValue: 20n, udtValue: 0n },
-    ]);
-    expect(calls).toEqual(["base", "request", "request", "complete"]);
   });
 });
 

@@ -20,7 +20,6 @@ import { pathToFileURL } from "node:url";
 import {
   buildRawOrderTransaction,
   buildSdkConversionTransaction,
-  buildTransaction,
   readTesterState,
   type Runtime,
   type RawOrderRequest,
@@ -755,12 +754,6 @@ function buildPlannedRawOrderTransaction(
   state: TesterState,
   orders: EstimatedRawOrder[],
 ): Promise<ccc.Transaction> {
-  if (orders.length === 1) {
-    const [order] = orders;
-    if (order !== undefined) {
-      return buildTransaction(runtime, state, order.amounts, order.estimate.info);
-    }
-  }
   const rawOrders: RawOrderRequest[] = orders.map((order) => ({
     amounts: order.amounts,
     info: order.estimate.info,
