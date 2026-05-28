@@ -145,6 +145,8 @@ describe("bot observability", () => {
       evidence: {
         toJSON: (): Record<string, string> => ({ ignored: "custom serializer" }),
         circular,
+        observedAt: new Date("2026-01-02T03:04:05.006Z"),
+        invalidAt: new Date(Number.NaN),
       },
     });
 
@@ -152,6 +154,8 @@ describe("bot observability", () => {
       evidence: {
         toJSON: "[Unsupported log value]",
         circular: { label: "root", self: "[Circular]" },
+        observedAt: "2026-01-02T03:04:05.006Z",
+        invalidAt: null,
       },
     });
   });

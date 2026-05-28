@@ -335,6 +335,9 @@ function logValue(value: unknown, seen: Set<unknown>): unknown {
   if (typeof value !== "object" || value === null) {
     return value;
   }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
   if (seen.has(value)) {
     return "[Circular]";
   }

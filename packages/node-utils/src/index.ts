@@ -553,6 +553,9 @@ function toJsonLogValue(
   if (typeof value !== "object" || value === null) {
     return value;
   }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
   if (value instanceof Object && "stack" in value) {
     return errorToLogValue(value, seen);
   }

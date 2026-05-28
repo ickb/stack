@@ -645,16 +645,22 @@ describe("node utilities", () => {
     writeJsonLine({
       type: "bot.decision.skipped",
       amount: 9007199254740993n,
+      observedAt: new Date("2026-01-02T03:04:05.006Z"),
+      invalidAt: new Date(Number.NaN),
     });
 
     expect(stdoutWrite).toHaveBeenCalledTimes(1);
     const parsed = JSON.parse(String(stdoutWrite.mock.calls[0]?.[0])) as {
       type: string;
       amount: string;
+      observedAt: string;
+      invalidAt: null;
     };
     expect(parsed).toEqual({
       type: "bot.decision.skipped",
       amount: "9007199254740993",
+      observedAt: "2026-01-02T03:04:05.006Z",
+      invalidAt: null,
     });
     expect(String(stdoutWrite.mock.calls[0]?.[0])).toMatch(/\n$/u);
 
