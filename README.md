@@ -109,7 +109,7 @@ By default the supervisor uses ignored `config/bot-testnet.json` and `config/tes
 
 Rebuild disposable live configs from `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY` with `pnpm live:config-from-env -- --force` when they are missing or stale; `ICKB_TESTNET_RPC_URL` is optional. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
 
-`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.total`, `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`; raw available CKB is not the same as bot-spendable CKB. For machine-readable JSON without package-manager output, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly.
+`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.total`, and `capital.minimumCkbCapital`; `available` and `spendable` are actual plain-cell values, while `projectedAvailable` and `total` are projected accounting values. For machine-readable JSON without package-manager output, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly.
 
 For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:
 

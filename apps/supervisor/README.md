@@ -30,7 +30,7 @@ To get a public funding address and verify balances without printing config cont
 pnpm live:preflight -- --config config/bot-testnet.json --role bot
 ```
 
-Use `key.recommendedAddress` as the funding address. After funding, rerun the same preflight command and check `balances.CKB.total`, `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`. If you need machine-readable JSON for piping, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly so package-manager output is not mixed into stdout.
+Use `key.recommendedAddress` as the funding address. After funding, rerun the same preflight command and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.total`, and `capital.minimumCkbCapital`. `available` and `spendable` are actual plain-cell values, while `projectedAvailable` and `total` can include projected sources such as ready withdrawals. If you need machine-readable JSON for piping, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly so package-manager output is not mixed into stdout.
 
 ## Artifacts
 

@@ -172,6 +172,7 @@ export async function buildPreflightReport({
     balances: {
       CKB: {
         available: nodeUtils.formatCkb(plainCkb),
+        projectedAvailable: nodeUtils.formatCkb(projection.ckbAvailable),
         reserve: nodeUtils.formatCkb(ckbReserve),
         spendable: nodeUtils.formatCkb(spendableCkb),
         unavailable: nodeUtils.formatCkb(projection.ckbPending),
