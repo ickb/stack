@@ -4,7 +4,7 @@ import { handleLoopError, logExecution } from "@ickb/node-utils";
 import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
 import { defaultFindCellsLimit } from "@ickb/utils";
-import { headerLike } from "@ickb/testkit";
+import { hash, headerLike, script } from "@ickb/testkit";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,18 +24,6 @@ import { buildTransaction, collectPoolDeposits } from "./runtime.js";
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function hash(byte: string): `0x${string}` {
-  return `0x${byte.repeat(32)}`;
-}
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: hash(byte),
-    hashType: "type",
-    args: "0x",
-  });
-}
 
 function readyDeposit(
   byte: string,
@@ -374,7 +362,7 @@ describe("bot private key output boundary", () => {
         type: "pre_broadcast_failed",
         elapsedMs: 1,
         error: new TypeError("fetch failed"),
-      })) {
+      }, isRetryableBotError)) {
         emitter.emit(1, lifecycle.type, lifecycle.fields);
       }
 

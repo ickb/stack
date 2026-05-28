@@ -81,8 +81,9 @@ describe("readTesterScenario", () => {
 });
 
 describe("tester private key output boundary", () => {
-  it("does not leak the configured canary key across representative crash output", async () => {
+  it("does not leak configured canary secrets across representative crash output", async () => {
     const privateKey = `0x${"42".repeat(32)}`;
+    const rpcUrl = "https://user:pass@testnet.example/path?token=secret";
     const dir = await mkdtemp(join(tmpdir(), "ickb-tester-private-key-boundary-"));
     const output: string[] = [];
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
@@ -94,6 +95,7 @@ describe("tester private key output boundary", () => {
       await writeFile(configPath, JSON.stringify({
         chain: "testnet",
         privateKey,
+        rpcUrl,
         sleepIntervalSeconds: 10,
         maxIterations: 1,
       }), { mode: 0o600 });
@@ -108,7 +110,9 @@ describe("tester private key output boundary", () => {
       logExecution(executionLog, new Date());
 
       expect(runtimeConfig.privateKey).toBe(privateKey);
+      expect(runtimeConfig.rpcUrl).toBe(rpcUrl);
       expect(output.join("\n")).not.toContain(privateKey);
+      expect(output.join("\n")).not.toContain(rpcUrl);
     } finally {
       stdoutWrite.mockRestore();
       await rm(dir, { recursive: true, force: true });

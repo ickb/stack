@@ -1,7 +1,5 @@
 import { type ccc } from "@ckb-ccc/core";
 import {
-  isRetryableCkbStateRaceError,
-  isRetryableRpcTransportError,
   jsonLogReplacer,
   writeJsonLine,
   type SupportedChain,
@@ -123,6 +121,7 @@ export function transactionSummary(
 
 export function transactionLifecycleEvents(
   event: SendAndWaitForCommitEvent,
+  isRetryableError: (error: unknown) => boolean = (): boolean => false,
 ): Array<{
   type: "bot.transaction.sent" | "bot.transaction.confirmation" | "bot.transaction.committed" | "bot.transaction.failed";
   fields: Record<string, unknown>;
@@ -199,8 +198,7 @@ export function transactionLifecycleEvents(
       ];
     case "pre_broadcast_failed":
       {
-        const retryable = isRetryableRpcTransportError(event.error) ||
-          isRetryableCkbStateRaceError(event.error);
+        const retryable = isRetryableError(event.error);
         return [{
           type: "bot.transaction.failed",
           fields: {

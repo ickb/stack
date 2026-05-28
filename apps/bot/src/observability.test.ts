@@ -426,12 +426,12 @@ describe("bot observability", () => {
     expect(nested.publicReason).toBe("visible evidence");
   });
 
-  it("marks pre-broadcast transport and CKB state-race failures retryable", () => {
+  it("uses the caller-owned retry classifier for pre-broadcast failures", () => {
     const transportEvents = transactionLifecycleEvents({
       type: "pre_broadcast_failed",
       elapsedMs: 12,
       error: new TypeError("fetch failed"),
-    });
+    }, () => true);
     const rbfEvents = transactionLifecycleEvents({
       type: "pre_broadcast_failed",
       elapsedMs: 12,
@@ -441,7 +441,12 @@ describe("bot observability", () => {
         currentFee: 11795n,
         leastFee: 12326n,
       }),
-    });
+    }, () => true);
+    const terminalEvents = transactionLifecycleEvents({
+      type: "pre_broadcast_failed",
+      elapsedMs: 12,
+      error: new Error("deterministic failure"),
+    }, () => false);
 
     expect(transportEvents).toMatchObject([{
       type: "bot.transaction.failed",
@@ -469,6 +474,16 @@ describe("bot observability", () => {
       },
     }]);
     expect(rbfEvents[0]?.fields.error).not.toHaveProperty("stack");
+    expect(terminalEvents).toMatchObject([{
+      type: "bot.transaction.failed",
+      fields: {
+        phase: "pre_broadcast",
+        outcome: "pre_broadcast_failed",
+        retryable: false,
+        terminal: true,
+      },
+    }]);
+    expect(terminalEvents[0]?.fields.error).toHaveProperty("stack");
   });
 
   it("summarizes thrown objects with JSON-safe debugging details preserved", () => {

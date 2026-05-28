@@ -150,7 +150,7 @@ async function main(): Promise<void> {
             executionLog.txHash = txHash;
           },
           onLifecycle: (event) => {
-            for (const lifecycle of transactionLifecycleEvents(event)) {
+            for (const lifecycle of transactionLifecycleEvents(event, isRetryableBotError)) {
               events.emit(iterationId, lifecycle.type, {
                 ...lifecycle.fields,
                 ...(event.type === "broadcasted"
