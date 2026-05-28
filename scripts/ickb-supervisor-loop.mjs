@@ -305,10 +305,13 @@ function formatPublicState(state) {
 }
 
 function minimalProcessEnv(env) {
-  return Object.fromEntries(["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
-    const value = env[key];
-    return value === undefined ? [] : [[key, value]];
-  }));
+  return {
+    ...Object.fromEntries(["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
+      const value = env[key];
+      return value === undefined ? [] : [[key, value]];
+    })),
+    NODE_OPTIONS: "--disable-warning=DEP0040",
+  };
 }
 
 function resolveLoopOutRoot(root, outRoot) {

@@ -55,6 +55,10 @@ test("dynamic supervisor loop parses options", () => {
     parseArgs(["--chunk-max-runs", "3", "--child-timeout-seconds", "6", "--chunk-backoff-seconds", "4"]).chunkTimeoutSeconds,
     86,
   );
+  assert.throws(
+    () => parseArgs(["--chunk-max-runs", String(Number.MAX_SAFE_INTEGER), "--child-timeout-seconds", String(Number.MAX_SAFE_INTEGER)]),
+    /Invalid derived --chunk-timeout-seconds: expected a safe integer/u,
+  );
   assert.throws(() => parseArgs(["--max-chunks", "0"]), /Invalid --max-chunks/u);
   assert.throws(
     () => parseArgs(["--chunk-max-runs", "3", "--child-timeout-seconds", "6", "--chunk-backoff-seconds", "4", "--chunk-timeout-seconds", "85"]),
@@ -105,6 +109,8 @@ test("dynamic supervisor loop creates a default validation session root", async 
       "--out-root",
       "log/validation/dynamic-1700000000-4321/chunks/chunk-0001",
     ]);
+    assert.equal(commands[0].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
+    assert.equal(commands[1].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
     assert.equal(commands[0].options.env.PRIVATE_KEY, undefined);
     assert.equal(commands[1].options.env.PRIVATE_KEY, undefined);
     assert.match(output.text, /"type":"chunk_finished"/u);

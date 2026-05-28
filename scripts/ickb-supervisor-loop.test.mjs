@@ -248,6 +248,7 @@ test("supervisor loop runs bounded supervisor commands until stable", async () =
     assert.equal(commands.length, 2);
     assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "logs/live-supervisor/loop-test/run-0001"]);
     assert.equal(commands[0].options.timeout, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE * 1000);
+    assert.equal(commands[0].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
     assert.equal(commands[0].options.env.PRIVATE_KEY, undefined);
     assert.match(output.text, /decision=continue/u);
     assert.match(output.text, /loop stopped reason=stable_no_progress runs=2/u);

@@ -24,6 +24,7 @@ const DEFAULT_CHUNK_TIMEOUT_MARGIN_SECONDS = 60;
 const DEFAULT_PREFLIGHT_TIMEOUT_SECONDS = 120;
 const ALL_CKB_MIN_CKB = 3001n;
 const ICKB_STIMULUS_MIN_CKB = 2100n;
+const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
 
 export function parseArgs(argv) {
   const args = {
@@ -124,6 +125,9 @@ export function parseArgs(argv) {
       throw new Error(`Invalid --chunk-timeout-seconds: expected at least ${minimumChunkTimeoutSeconds.toString()} seconds for this chunk shape`);
     }
   } else {
+    if (minimumChunkTimeoutSeconds > MAX_SAFE_INTEGER) {
+      throw new Error("Invalid derived --chunk-timeout-seconds: expected a safe integer; lower --chunk-max-runs, --child-timeout-seconds, or --chunk-backoff-seconds");
+    }
     args.chunkTimeoutSeconds = Number(minimumChunkTimeoutSeconds);
   }
   return args;
@@ -409,7 +413,7 @@ async function writeLaunchArtifact(session, args, root, dependencies) {
       preflightTimeoutSeconds: args.preflightTimeoutSeconds,
       supervisorArgCount: args.supervisorArgs.length,
     },
-  }, null, 2)}\n`);
+  }, jsonReplacer, 2)}\n`);
 }
 
 async function writeOperatorEvent(session, record, dependencies) {
@@ -457,10 +461,13 @@ function jsonReplacer(_key, value) {
 }
 
 function minimalProcessEnv(env) {
-  return Object.fromEntries(["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
-    const value = env[key];
-    return value === undefined ? [] : [[key, value]];
-  }));
+  return {
+    ...Object.fromEntries(["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
+      const value = env[key];
+      return value === undefined ? [] : [[key, value]];
+    })),
+    NODE_OPTIONS: "--disable-warning=DEP0040",
+  };
 }
 
 function resolveConfiguredPath(root, value, flag) {
