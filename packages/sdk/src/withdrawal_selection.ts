@@ -315,7 +315,11 @@ function selectBoundedReadyDepositSubset<T extends { udtValue: bigint }>(
       score: bigint,
     ): void => {
       if (index === half.length) {
-        groups[count]?.push({ mask, total, score });
+        const group = groups[count];
+        if (group === undefined) {
+          throw new Error("Bounded subset search count exceeded group bounds");
+        }
+        group.push({ mask, total, score });
         return;
       }
 
@@ -445,7 +449,15 @@ function findBestAtOrBelow(
     }
   }
 
-  return bestIndex >= 0 ? items[bestIndex]?.selection : undefined;
+  if (bestIndex < 0) {
+    return undefined;
+  }
+
+  const item = items[bestIndex];
+  if (item === undefined) {
+    throw new Error("Bounded subset search best index exceeded selection bounds");
+  }
+  return item.selection;
 }
 
 function isBetterPartialSelection(
