@@ -20,7 +20,17 @@ Run from the repo root:
 pnpm live:supervisor
 ```
 
-By default this uses `config/bot-testnet.json` and `config/tester-testnet.json`. Configs must be ignored JSON files with `maxIterations: 1`; the supervisor refuses to launch an actor when preflight reports the config is missing that one-iteration bound. The supervisor passes config paths to the existing app env names and does not print config contents.
+By default this uses `config/bot-testnet.json` and `config/tester-testnet.json`. Configs must be ignored JSON files with `maxIterations: 1`; the supervisor refuses to launch an actor when preflight reports the config is missing that one-iteration bound.
+
+Treat these files as disposable local output: rebuild them from `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY` with `pnpm live:config-from-env -- --force` when they are missing or stale. `ICKB_TESTNET_RPC_URL` is optional; when omitted, the generated JSON omits `rpcUrl` and CCC chooses its default testnet endpoint. The supervisor passes config paths to the existing app env names and does not print config contents.
+
+To get a public funding address and verify balances without printing config contents, run:
+
+```bash
+pnpm live:preflight -- --config config/bot-testnet.json --role bot
+```
+
+Use `key.recommendedAddress` as the funding address. After funding, rerun the same preflight command and check `balances.CKB.total`, `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, and `capital.minimumCkbCapital`. If you need machine-readable JSON for piping, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly so package-manager output is not mixed into stdout.
 
 ## Artifacts
 
@@ -77,7 +87,7 @@ The external loop also has a loop-owned `--child-timeout-seconds` guard for the 
 
 For continuous tester-bot matching, use `node scripts/ickb-supervisor-dynamic-loop.mjs` or `pnpm live:supervisor:dynamic-loop`. This remains outside `apps/supervisor`: it reads tester preflight balance summaries, chooses a currently fundable tester scenario, and delegates each bounded chunk to `scripts/ickb-supervisor-loop.mjs`. When `--target-outcome tester_fresh_order_skip` is passed through, supervisor auto-planning can choose `tester-fresh-skip-two-pass`; the dynamic loop itself only chooses fundable tester stimuli.
 
-Dynamic loop sessions are live-validation artifacts. They default to ignored `log/validation/dynamic-<time>-<pid>/`; override the root with `--log-root <path>` or pin one run with `--session-root <path>`. The session root must be exactly `<log-root>/validation/<session>`, stay under the resolved log root, avoid symlinked parents, and not already exist. The dynamic loop derives its chunk timeout from the delegated supervisor-loop child timeout, chunk run count, and chunk backoff unless `--chunk-timeout-seconds` is explicitly set high enough, so an outer chunk timeout does not kill the supervisor-loop process before it can enforce its child cleanup boundary.
+Dynamic loop sessions are live-validation artifacts, separate from production bot-only logs. They default to ignored `log/validation/dynamic-<time>-<pid>/`; override the root with `--log-root <path>` or pin one run with `--session-root <path>`. The session root must be exactly `<log-root>/validation/<session>`, stay under the resolved log root, avoid symlinked parents, and not already exist. The dynamic loop derives its chunk timeout from the delegated supervisor-loop child timeout, chunk run count, and chunk backoff unless `--chunk-timeout-seconds` is explicitly set high enough, so an outer chunk timeout does not kill the supervisor-loop process before it can enforce its child cleanup boundary.
 
 ```bash
 node scripts/ickb-supervisor-dynamic-loop.mjs --log-root log --max-chunks 2 -- --target-outcome bot_match_committed
@@ -95,3 +105,5 @@ The dynamic loop writes operator records under the session and passes each chunk
   chunks/chunk-0001/run-0001/cycle-0001-bot.stdout.ndjson
   chunks/chunk-0001/run-0001/cycle-0001-tester.stdout.ndjson
 ```
+
+Production bot-only logs can share the same configured log root but stay under `bot/<network>/`, for example `<log-root>/bot/testnet/bot.events.ndjson`. See [apps/bot/README.md](../bot/README.md) for the production launcher layout.
