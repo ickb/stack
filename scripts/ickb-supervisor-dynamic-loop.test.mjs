@@ -394,6 +394,55 @@ test("dynamic supervisor loop stops on preflight failures", async () => {
   assert.match(output.text, /preflight_failed/u);
 });
 
+test("dynamic supervisor loop reports preflight spawn errors", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: ["--log-root", "log", "--session-root", "log/validation/preflight-spawn-error", "--max-chunks", "1"],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: missingStat,
+      mkdir: async () => undefined,
+      writeFile: async () => undefined,
+      appendFile: async () => undefined,
+      spawnSync: () => ({ status: null, signal: null, stdout: "", stderr: "", error: new Error("spawn ETIMEDOUT") }),
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /preflight command failed: spawn ETIMEDOUT/u);
+});
+
+test("dynamic supervisor loop preserves supervisor chunk spawn errors", async () => {
+  const appended = new Map();
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: ["--log-root", "log", "--session-root", "log/validation/chunk-spawn-error", "--max-chunks", "1"],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: missingStat,
+      mkdir: async () => undefined,
+      writeFile: async () => undefined,
+      appendFile: async (path, text) => appended.set(path, `${appended.get(path) ?? ""}${text}`),
+      spawnSync: (_command, args) => {
+        if (args[0] === "scripts/ickb-live-preflight.mjs") {
+          return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
+        }
+        return { status: null, signal: null, stdout: "", stderr: "", error: new Error("spawn ETIMEDOUT") };
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /Supervisor chunk failed: spawn ETIMEDOUT/u);
+  assert.match(appended.get("/repo/log/validation/chunk-spawn-error/operator/stderr.log"), /Supervisor chunk failed: spawn ETIMEDOUT/u);
+});
+
 test("dynamic supervisor loop preserves malformed preflight stderr", async () => {
   const appended = new Map();
   const output = { text: "", write(chunk) { this.text += chunk; } };

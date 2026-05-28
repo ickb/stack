@@ -248,6 +248,12 @@ export async function runDynamicSupervisorLoop({ argv, root = rootDir, dependenc
       stderr.write(result.stderr);
       await appendOperatorStderr(session, result.stderr, dependencies);
     }
+    const chunkError = spawnErrorMessage(result);
+    if (chunkError !== undefined) {
+      const message = `Supervisor chunk failed: ${chunkError}\n`;
+      stderr.write(message);
+      await appendOperatorStderr(session, message, dependencies);
+    }
     const stopReason = supervisorLoopStopReason(result.stdout ?? "");
     const finishedRecord = {
       type: "chunk_finished",
@@ -287,8 +293,15 @@ function runTesterPreflight(args, root, dependencies) {
     "--role",
     args.preflightRole,
   ], root, dependencies, { timeout: args.preflightTimeoutSeconds * 1000 });
-  if (result.status !== 0) {
-    return { ok: false, status: result.status, signal: result.signal, stderr: result.stderr, reason: "preflight command failed" };
+  if (result.error !== undefined || result.status !== 0) {
+    const spawnError = spawnErrorMessage(result);
+    return {
+      ok: false,
+      status: result.status,
+      signal: result.signal,
+      stderr: result.stderr,
+      reason: spawnError === undefined ? "preflight command failed" : `preflight command failed: ${spawnError}`,
+    };
   }
   let parsed;
   try {
@@ -421,6 +434,10 @@ function runNode(commandArgs, root, dependencies, options) {
     maxBuffer: 1024 * 1024,
     ...options,
   });
+}
+
+function spawnErrorMessage(result) {
+  return result.error === undefined ? undefined : errorMessage(result.error);
 }
 
 async function sleepMs(ms, dependencies) {
