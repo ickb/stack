@@ -48,6 +48,8 @@ See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 
 For iCKB-to-CKB planning, `getPoolDeposits(client, tip, options?)` fetches the public pool deposit snapshot on chain and accepts an optional scan `limit`. The underlying DAO deposit scan requests one sentinel cell beyond that limit and fails closed if the sentinel appears. `getL1State(...)` includes that snapshot in `system.poolDeposits` so UI callers can key previews by the same pool identity and avoid re-fetching for every preview. Callers that need larger bounded state scans can pass `poolDepositLimit` to `getL1State(...)` and `accountLimit` to `getL1AccountState(...)`; both preserve the sentinel fail-closed scan behavior.
 
+`getL1State(...)` and `getL1AccountState(...)` return best-effort state computed from a sampled `system.tip`; they do not perform a final current-tip assertion after all scans complete. Callers should keep the time from state fetch to transaction build low and let transaction validation decide whether referenced cells are still live and the transaction can be accepted.
+
 The returned transaction is not completed, signed, sent, or confirmed. Callers still explicitly call `sdk.completeTransaction(...)` with their signer/client/fee rate before sending.
 
 ## Small iCKB Order Previews

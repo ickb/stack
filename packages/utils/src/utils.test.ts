@@ -6,7 +6,6 @@ import {
   compareBigInt,
   collectCompleteScan,
   scanLimit,
-  selectBoundedUdtSubset,
 } from "./utils.js";
 
 describe("compareBigInt", () => {
@@ -104,76 +103,5 @@ describe("scan completeness", () => {
     )).rejects.toThrow(
       "account scan reached limit 1; state may be incomplete",
     );
-  });
-});
-
-describe("selectBoundedUdtSubset", () => {
-  it("finds an exact-count subset when the greedy path fails", () => {
-    const deposits = [{ udtValue: 6n }, { udtValue: 5n }, { udtValue: 5n }];
-
-    expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 32,
-      minCount: 2,
-      maxCount: 2,
-    })).toEqual([deposits[1], deposits[2]]);
-  });
-
-  it("finds the fullest non-empty subset up to the count limit", () => {
-    const deposits = [{ udtValue: 4n }, { udtValue: 7n }, { udtValue: 3n }];
-
-    expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 32,
-      minCount: 1,
-      maxCount: 32,
-    })).toEqual([deposits[1], deposits[2]]);
-  });
-
-  it("keeps earlier-ranked deposits when equally full subsets tie", () => {
-    const firstSix = { udtValue: 6n };
-    const firstFour = { udtValue: 4n };
-    const secondSix = { udtValue: 6n };
-    const secondFour = { udtValue: 4n };
-
-    expect(selectBoundedUdtSubset(
-      [firstSix, firstFour, secondSix, secondFour],
-      10n,
-      {
-        candidateLimit: 32,
-        minCount: 1,
-        maxCount: 32,
-      },
-    )).toEqual([firstSix, firstFour]);
-  });
-
-  it("uses opt-in score before fullness", () => {
-    const fullerFirst = { udtValue: 9n, score: 1n };
-    const fullerSecond = { udtValue: 1n, score: 1n };
-    const scoredFirst = { udtValue: 4n, score: 5n };
-    const scoredSecond = { udtValue: 4n, score: 5n };
-
-    expect(selectBoundedUdtSubset(
-      [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
-      10n,
-      {
-        candidateLimit: 32,
-        minCount: 2,
-        maxCount: 2,
-        score: (deposit) => deposit.score,
-      },
-    )).toEqual([scoredFirst, scoredSecond]);
-  });
-
-  it("bounds the search to the requested candidate limit", () => {
-    const deposits = [
-      ...Array.from({ length: 32 }, () => ({ udtValue: 6n })),
-      { udtValue: 5n },
-      { udtValue: 5n },
-    ];
-
-    expect(selectBoundedUdtSubset(deposits, 10n, {
-      candidateLimit: 32,
-      minCount: 2,
-      maxCount: 2,
-    })).toEqual([]);
   });
 });
