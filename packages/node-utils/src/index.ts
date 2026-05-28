@@ -222,12 +222,12 @@ export function isRetryableCkbStateRaceError(error: unknown): boolean {
   if (typeof code !== "number" || typeof data !== "string") {
     return false;
   }
-  return code === -1111 && data.includes("RBFRejected(") ||
-    code === -301 && (
+  return (code === -1111 && data.includes("RBFRejected(")) ||
+    (code === -301 && (
       data.includes("Resolve(Unknown(OutPoint(") ||
       data.includes("Resolve(Dead(OutPoint(")
-    ) ||
-    code === -1107 && data.includes("Duplicated(Byte32(");
+    )) ||
+    (code === -1107 && data.includes("Duplicated(Byte32("));
 }
 
 export function parseSleepInterval(
