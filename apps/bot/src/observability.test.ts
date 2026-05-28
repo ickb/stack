@@ -396,6 +396,22 @@ describe("bot observability", () => {
     });
   });
 
+  it("tracks circular references in custom Error properties", () => {
+    const details: Record<string, unknown> = {};
+    const error = Object.assign(new Error("outer public failure"), {
+      details,
+    });
+    error.details.self = error;
+
+    const summary = errorSummary(error, { includeStack: false }) as Record<string, unknown>;
+
+    expect(summary).toEqual({
+      name: "Error",
+      message: "outer public failure",
+      details: { self: "[Circular]" },
+    });
+  });
+
   it("preserves public RPC debugging data in structured object error summaries", () => {
     const rpcUrl = "https://testnet.example/rpc/path";
 

@@ -257,7 +257,7 @@ function summarizeError(
     seen.add(error);
 
     return {
-      ...errorOwnProperties(error),
+      ...errorOwnProperties(error, seen),
       name: error.name,
       message: logValue(error.message, seen),
       ...(includeStack && error.stack !== undefined ? { stack: logValue(error.stack, seen) } : {}),
@@ -288,7 +288,7 @@ function summarizeError(
 
 const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
 
-function errorOwnProperties(error: Error): Record<string, unknown> {
+function errorOwnProperties(error: Error, seen: Set<unknown>): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(error)) {
     if (!ERROR_BUILTIN_KEYS.has(key)) {
@@ -297,7 +297,7 @@ function errorOwnProperties(error: Error): Record<string, unknown> {
   }
   // CCC/CKB RPC errors carry retry evidence such as code, data, outPoint,
   // currentFee, and leastFee as enumerable Error fields.
-  return logValue(properties, new Set<unknown>()) as Record<string, unknown>;
+  return logValue(properties, seen) as Record<string, unknown>;
 }
 
 function confirmationFields(event: Extract<

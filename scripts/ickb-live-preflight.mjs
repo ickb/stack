@@ -56,7 +56,10 @@ export function publicErrorMessage(error) {
 }
 
 export function isPublicChainIdentityError(error) {
-  return error instanceof Error && error.message.includes("Invalid") && error.message.includes("chain identity");
+  return error instanceof Error && (
+    error.message.includes("Missing") && error.message.includes("genesis header") ||
+    error.message.includes("Invalid") && error.message.includes("chain identity")
+  );
 }
 
 export function ckbReserveForRole(role) {

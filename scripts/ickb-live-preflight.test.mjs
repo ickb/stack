@@ -49,6 +49,7 @@ test("preflight CLI keeps public error messages and classifies chain identity er
     isPublicChainIdentityError(new Error("Invalid testnet RPC chain identity: genesis hash expected 0x1 observed 0x2")),
     true,
   );
+  assert.equal(isPublicChainIdentityError(new Error("Missing testnet genesis header")), true);
   assert.equal(isPublicChainIdentityError(new Error("Invalid private key")), false);
 });
 
