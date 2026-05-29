@@ -111,15 +111,15 @@ Rebuild disposable live configs from `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TE
 
 `pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.total`, and `capital.minimumCkbCapital`; `available` and `spendable` are actual plain-cell values, while `projectedAvailable` and `total` are projected accounting values. For machine-readable JSON without package-manager output, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly.
 
-For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it:
+For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it. The loop owns child run directories through `--out-root`, so do not pass supervisor `--out-dir` after `--`:
 
 ```bash
 pnpm live:supervisor:loop --max-runs 1 -- --scenario standard-cycle --max-cycles 1
 ```
 
-Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
+By default the loop prebuilds the local CCC fork plus bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
 
-For continuous live matching, use the dynamic external loop. It reads only tester preflight balance summaries, chooses a fundable tester stimulus (`all-ckb-limit-order` when plain CKB can preserve reserve plus overhead, otherwise `ickb-to-ckb-limit-order` with the smaller live fee when iCKB is available), then runs bounded `scripts/ickb-supervisor-loop.mjs` chunks:
+For continuous live matching, use the dynamic external loop. It reads only tester preflight balance summaries, chooses `all-ckb-limit-order` when `CKB.available >= 3001`, otherwise chooses `ickb-to-ckb-limit-order` with `--tester-fee 1 --tester-fee-base 1000` when `CKB.available >= 2100` and `ICKB.available >= 100`, otherwise leaves the tester scenario as `auto`, then runs bounded `scripts/ickb-supervisor-loop.mjs` chunks:
 
 ```bash
 pnpm live:supervisor:dynamic-loop

@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { existsSync } from "node:fs";
 import { appendFile, lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
-import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -947,18 +947,18 @@ async function runDryRun(plan: SupervisorPlan, ledger: CoverageLedger, dependenc
 }
 
 async function prepareOutputDirectory(plan: SupervisorPlan, dependencies: Dependencies): Promise<void> {
-  const statFn = dependencies.stat ?? stat;
   const mkdirFn = dependencies.mkdir ?? mkdir;
   await assertNoSymlinkedOutputAncestors(plan, dependencies);
+  await mkdirFn(dirname(plan.outDir), { recursive: true });
+  await assertNoSymlinkedOutputAncestors(plan, dependencies);
   try {
-    await statFn(plan.outDir);
-    throw new Error(`Output directory already exists: ${plan.relativeOutDir}`);
+    await mkdirFn(plan.outDir);
   } catch (error) {
-    if (!isNotFoundError(error)) {
-      throw error;
+    if (isAlreadyExistsError(error)) {
+      throw new Error(`Output directory already exists: ${plan.relativeOutDir}`);
     }
+    throw error;
   }
-  await mkdirFn(plan.outDir, { recursive: true });
   await assertRealOutputDirectory(plan, dependencies);
 }
 
@@ -2458,6 +2458,10 @@ function errorMessage(error: unknown): string {
 
 function isNotFoundError(error: unknown): boolean {
   return isRecord(error) && error["code"] === "ENOENT";
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return isRecord(error) && error["code"] === "EEXIST";
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {

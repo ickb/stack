@@ -186,9 +186,58 @@ describe("supervisor CLI", () => {
     const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
 
     await expect(supervise(args, plan, {
-      stat: () => Promise.resolve({} as never),
-      mkdir: () => Promise.resolve(undefined),
+      mkdir: ((path: string) => {
+        if (pathToString(path) === "/repo/logs/live-supervisor/existing") {
+          const error = new Error("exists") as NodeJS.ErrnoException;
+          error.code = "EEXIST";
+          throw error;
+        }
+        return Promise.resolve(undefined);
+      }) as never,
     })).rejects.toThrow("Output directory already exists: logs/live-supervisor/existing");
+  });
+
+  it("creates only parent directories recursively before reserving a fresh output directory", async () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "logs/live-supervisor/fresh"]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+    const mkdirs: Array<{ path: string; recursive?: boolean }> = [];
+
+    await supervise(args, plan, {
+      lstat: missingStat,
+      realpath: (path) => Promise.resolve(pathToString(path)),
+      mkdir: ((path: string, options?: { recursive?: boolean }) => {
+        mkdirs.push({ path: pathToString(path), recursive: options?.recursive });
+        return Promise.resolve(undefined);
+      }) as never,
+      writeFile: () => Promise.resolve(),
+      appendFile: () => Promise.resolve(),
+    });
+
+    expect(mkdirs).toContainEqual({ path: "/repo/logs/live-supervisor", recursive: true });
+    expect(mkdirs).toContainEqual({ path: "/repo/logs/live-supervisor/fresh", recursive: undefined });
+  });
+
+  it("refuses output directories created after ancestor checks", async () => {
+    const args = parseArgs(["--dry-run", "--out-dir", "logs/live-supervisor/raced"]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    await expect(supervise(args, plan, {
+      lstat: missingStat,
+      mkdir: ((path: string) => {
+        if (pathToString(path) === "/repo/logs/live-supervisor/raced") {
+          const error = new Error("exists") as NodeJS.ErrnoException;
+          error.code = "EEXIST";
+          throw error;
+        }
+        return Promise.resolve(undefined);
+      }) as never,
+      writeFile: () => {
+        throw new Error("should not write artifacts after raced output directory");
+      },
+      appendFile: () => {
+        throw new Error("should not write events after raced output directory");
+      },
+    })).rejects.toThrow("Output directory already exists: logs/live-supervisor/raced");
   });
 
   it("refuses symlinked supervisor artifact parents", async () => {
@@ -1272,6 +1321,17 @@ describe("classification", () => {
     expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
       skip: { reason: "sampled-amount-too-small" },
     }))).outcome).toBe("tester_sampled_too_small_skip");
+    expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
+      skip: {
+        reason: "estimated-conversion-too-small",
+        requestedTesterScenario: "auto",
+        attemptedTesterScenarios: ["random-order", "sdk-conversion", "bounded-ickb-to-ckb-limit-order"],
+      },
+    })))).toMatchObject({
+      outcome: "tester_estimated_too_small_skip",
+      terminal: false,
+      skipReason: "estimated-conversion-too-small",
+    });
     expect(classifyActorResult("tester", commandResult("tester", JSON.stringify({
       skip: { reason: "post-tx-ckb-reserve" },
     })))).toMatchObject({

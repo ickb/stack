@@ -73,6 +73,7 @@ test("dynamic supervisor loop parses options", () => {
   assert.deepEqual(parseArgs(["--", "--command-timeout-seconds", "9"]).supervisorArgs, ["--command-timeout-seconds", "9"]);
   assert.match(usage(), /tester-config/u);
   assert.match(usage(), /--log-root/u);
+  assert.match(usage(), /--skip-build/u);
 });
 
 test("dynamic supervisor loop passes child help through visibly", async () => {
@@ -123,6 +124,9 @@ test("dynamic supervisor loop creates a default validation session root", async 
         appendFile: async (path, text) => appended.set(path, (appended.get(path) ?? "") + text),
         spawnSync: (_command, args, options) => {
           commands.push({ args, options });
+          if (isPrebuildCommand(args)) {
+            return { status: 0, signal: null, stdout: "", stderr: "" };
+          }
           if (args[0] === "scripts/ickb-live-preflight.mjs") {
             return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
           }
@@ -134,15 +138,23 @@ test("dynamic supervisor loop creates a default validation session root", async 
     assert.equal(exitCode, 3);
     assert.equal(writes.has("/repo/log/validation/dynamic-1700000000-4321/operator/launch.json"), true);
     assert.equal(appended.has("/repo/log/validation/dynamic-1700000000-4321/operator/events.ndjson"), true);
-    assert.deepEqual(commands[1].args.slice(0, 3), [
+    assert.deepEqual(commands.slice(0, 4).map((item) => item.args), [
+      ["forks:ccc"],
+      ["bot:build"],
+      ["--filter", "@ickb/tester", "build"],
+      ["--filter", "@ickb/supervisor", "build"],
+    ]);
+    assert.deepEqual(commands[5].args.slice(0, 3), [
       "scripts/ickb-supervisor-loop.mjs",
       "--out-root",
       "log/validation/dynamic-1700000000-4321/chunks/chunk-0001",
     ]);
-    assert.equal(commands[0].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
-    assert.equal(commands[1].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
-    assert.equal(commands[0].options.env.PRIVATE_KEY, undefined);
-    assert.equal(commands[1].options.env.PRIVATE_KEY, undefined);
+    assert.equal(commands[5].args.includes("--skip-build"), true);
+    assert.equal(commands[4].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
+    assert.equal(commands[5].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
+    for (const command of commands) {
+      assert.equal(command.options.env.PRIVATE_KEY, undefined);
+    }
     assert.match(output.text, /"type":"chunk_finished"/u);
     assert.match(output.text, /log\/validation\/dynamic-1700000000-4321\/chunks\/chunk-0001/u);
   } finally {
@@ -231,9 +243,13 @@ test("dynamic supervisor loop chooses fundable tester scenarios", () => {
     scenario: "all-ckb-limit-order",
     feeArgs: [],
   });
-  assert.deepEqual(chooseTesterScenario({ ckb: 2100n * ckb, ickb: 1n }), {
+  assert.deepEqual(chooseTesterScenario({ ckb: 2100n * ckb, ickb: 100n * ckb }), {
     scenario: "ickb-to-ckb-limit-order",
     feeArgs: ["--tester-fee", "1", "--tester-fee-base", "1000"],
+  });
+  assert.deepEqual(chooseTesterScenario({ ckb: 2100n * ckb, ickb: 1n }), {
+    scenario: "auto",
+    feeArgs: [],
   });
   assert.deepEqual(chooseTesterScenario({ ckb: 2099n * ckb, ickb: 1n }), {
     scenario: "auto",
@@ -265,10 +281,14 @@ test("dynamic supervisor loop runs selected bounded chunks", async () => {
       appendFile: async () => undefined,
       spawnSync: (_command, args, options) => {
         commands.push({ args, options });
+        if (isPrebuildCommand(args)) {
+          return { status: 0, signal: null, stdout: "", stderr: "" };
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
-          const stdout = commands.length === 1
+          const preflightCount = commands.filter((command) => command.args[0] === "scripts/ickb-live-preflight.mjs").length;
+          const stdout = preflightCount === 1
             ? JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } })
-            : JSON.stringify({ balances: { CKB: { available: "2100" }, ICKB: { available: "1" } } });
+            : JSON.stringify({ balances: { CKB: { available: "2100" }, ICKB: { available: "100" } } });
           return { status: 0, signal: null, stdout, stderr: "" };
         }
         return { status: 0, signal: null, stdout: "loop run=1 status=0 stopped=max_cycles outcomes=- tx=0 new=- stable=1 state=- decision=max_runs out=logs/live-supervisor/test\n", stderr: "" };
@@ -281,14 +301,127 @@ test("dynamic supervisor loop runs selected bounded chunks", async () => {
 
   assert.equal(exitCode, 3);
   assert.equal(sleeps.length, 0);
-  assert.equal(commands.length, 2);
-  assert.equal(commands[1].args.includes("all-ckb-limit-order"), true);
-  assert.deepEqual(commands[1].args.slice(0, 3), ["scripts/ickb-supervisor-loop.mjs", "--out-root", "log/validation/test-session/chunks/chunk-0001"]);
-  const separator = commands[1].args.indexOf("--");
-  assert.equal(commands[1].args.slice(0, separator).includes("--out-root"), true);
-  assert.equal(commands[1].args.slice(separator + 1).includes("--target-outcome"), true);
+  assert.equal(commands.length, 6);
+  assert.deepEqual(commands.slice(0, 4).map((item) => item.args), [
+    ["forks:ccc"],
+    ["bot:build"],
+    ["--filter", "@ickb/tester", "build"],
+    ["--filter", "@ickb/supervisor", "build"],
+  ]);
+  assert.equal(commands[5].args.includes("all-ckb-limit-order"), true);
+  assert.deepEqual(commands[5].args.slice(0, 3), ["scripts/ickb-supervisor-loop.mjs", "--out-root", "log/validation/test-session/chunks/chunk-0001"]);
+  const separator = commands[5].args.indexOf("--");
+  assert.equal(commands[5].args.slice(0, separator).includes("--out-root"), true);
+  assert.equal(commands[5].args.slice(0, separator).includes("--skip-build"), true);
+  assert.equal(commands[5].args.slice(separator + 1).includes("--target-outcome"), true);
   assert.match(output.text, /"type":"selected"/u);
   assert.match(output.text, /testerScenario":"all-ckb-limit-order"/u);
+});
+
+test("dynamic supervisor loop reports prebuild failures before opening sessions", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  let mkdirCalled = false;
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: ["--log-root", "log", "--session-root", "log/validation/prebuild-failure", "--max-chunks", "1"],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: missingStat,
+      mkdir: async () => {
+        mkdirCalled = true;
+      },
+      spawnSync: () => ({
+        status: 1,
+        signal: null,
+        stdout: "privateKey 0x1111\n",
+        stderr: "operator secret 0x2222\n",
+      }),
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(mkdirCalled, false);
+  assert.match(output.text, /loop prebuild_failed/u);
+  assert.doesNotMatch(output.text, /privateKey|0x1111|operator secret|0x2222/u);
+});
+
+test("dynamic supervisor loop refuses sessions created during prebuild", async () => {
+  const commands = [];
+  const mkdirs = [];
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: ["--log-root", "log", "--session-root", "log/validation/raced-session", "--max-chunks", "1"],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: missingStat,
+      mkdir: async (path) => {
+        mkdirs.push(path);
+        if (path === "/repo/log/validation/raced-session") {
+          const error = new Error("exists");
+          error.code = "EEXIST";
+          throw error;
+        }
+      },
+      writeFile: async () => {
+        throw new Error("should not write launch artifact after raced session");
+      },
+      appendFile: async () => {
+        throw new Error("should not write events after raced session");
+      },
+      spawnSync: (_command, args) => {
+        commands.push(args);
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
+        throw new Error("should not spawn preflight or supervisor after raced session");
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.deepEqual(commands, [
+    ["forks:ccc"],
+    ["bot:build"],
+    ["--filter", "@ickb/tester", "build"],
+    ["--filter", "@ickb/supervisor", "build"],
+  ]);
+  assert.deepEqual(mkdirs, ["/repo/log/validation", "/repo/log/validation/raced-session"]);
+  assert.match(output.text, /Validation session root already exists: log\/validation\/raced-session/u);
+});
+
+test("dynamic supervisor loop refuses symlinked session parents created during prebuild", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: ["--log-root", "log", "--session-root", "log/validation/raced-symlink", "--max-chunks", "1"],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: (path) => ({ isSymbolicLink: () => path === "/repo/log/validation" }),
+      mkdir: async () => undefined,
+      writeFile: async () => {
+        throw new Error("should not write launch artifact through raced symlink");
+      },
+      appendFile: async () => {
+        throw new Error("should not write events through raced symlink");
+      },
+      spawnSync: (_command, args) => {
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
+        throw new Error("should not spawn preflight or supervisor through raced symlink");
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /Refusing to use session root through symlinked path: \/repo\/log\/validation/u);
 });
 
 test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reasons", async () => {
@@ -312,6 +445,9 @@ test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reas
       appendFile: async () => undefined,
       spawnSync: (_command, args, options) => {
         commands.push({ args, options });
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
           return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
         }
@@ -321,7 +457,9 @@ test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reas
   });
 
   assert.equal(exitCode, 0);
-  assert.equal(commands.length, 2);
+  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 4);
+  assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-live-preflight.mjs").length, 1);
+  assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").length, 1);
   assert.match(output.text, /"supervisorLoopStopReason":"tx_observed"/u);
 });
 
@@ -346,6 +484,9 @@ test("dynamic supervisor loop preserves supervisor-loop inspection-required stat
       appendFile: async () => undefined,
       spawnSync: (_command, args, options) => {
         commands.push({ args, options });
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
           return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
         }
@@ -355,7 +496,9 @@ test("dynamic supervisor loop preserves supervisor-loop inspection-required stat
   });
 
   assert.equal(exitCode, 3);
-  assert.equal(commands.length, 2);
+  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 4);
+  assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-live-preflight.mjs").length, 1);
+  assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").length, 1);
   assert.match(output.text, /"supervisorLoopStopReason":"max_runs"/u);
 });
 
@@ -381,6 +524,9 @@ test("dynamic supervisor loop leaves supervisor target steering intact for auto 
       appendFile: async () => undefined,
       spawnSync: (_command, args, options) => {
         commands.push({ args, options });
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
           return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "1000" }, ICKB: { available: "0" } } }), stderr: "" };
         }
@@ -389,7 +535,7 @@ test("dynamic supervisor loop leaves supervisor target steering intact for auto 
     },
   });
 
-  const supervisorArgs = commands[1].args;
+  const supervisorArgs = commands.find((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").args;
   const separator = supervisorArgs.indexOf("--");
   const passthrough = supervisorArgs.slice(separator + 1);
   assert.equal(exitCode, 3);
@@ -421,15 +567,18 @@ test("dynamic supervisor loop leaves fresh-order skip target planning to supervi
       appendFile: async () => undefined,
       spawnSync: (_command, args, options) => {
         commands.push({ args, options });
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
-          return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "2100" }, ICKB: { available: "1" } } }), stderr: "" };
+          return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "2100" }, ICKB: { available: "100" } } }), stderr: "" };
         }
         return { status: 0, signal: null, stdout: "loop run=1 status=0 stopped=max_cycles outcomes=tester_fresh_order_skip tx=0 new=- stable=1 state=- decision=max_runs out=logs/live-supervisor/test\n", stderr: "" };
       },
     },
   });
 
-  const supervisorArgs = commands[1].args;
+  const supervisorArgs = commands.find((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").args;
   const separator = supervisorArgs.indexOf("--");
   const passthrough = supervisorArgs.slice(separator + 1);
   assert.equal(exitCode, 3);
@@ -453,7 +602,9 @@ test("dynamic supervisor loop stops on preflight failures", async () => {
       mkdir: async () => undefined,
       writeFile: async () => undefined,
       appendFile: async () => undefined,
-      spawnSync: () => ({ status: 2, signal: null, stdout: "", stderr: "" }),
+      spawnSync: (_command, args) => isPrebuildCommand(args)
+        ? okResult()
+        : { status: 2, signal: null, stdout: "", stderr: "" },
     },
   });
 
@@ -474,7 +625,9 @@ test("dynamic supervisor loop reports preflight spawn errors", async () => {
       mkdir: async () => undefined,
       writeFile: async () => undefined,
       appendFile: async () => undefined,
-      spawnSync: () => ({ status: null, signal: null, stdout: "", stderr: "", error: new Error("spawn ETIMEDOUT") }),
+      spawnSync: (_command, args) => isPrebuildCommand(args)
+        ? okResult()
+        : { status: null, signal: null, stdout: "", stderr: "", error: new Error("spawn ETIMEDOUT") },
     },
   });
 
@@ -497,6 +650,9 @@ test("dynamic supervisor loop preserves supervisor chunk spawn errors", async ()
       writeFile: async () => undefined,
       appendFile: async (path, text) => appended.set(path, `${appended.get(path) ?? ""}${text}`),
       spawnSync: (_command, args) => {
+        if (isPrebuildCommand(args)) {
+          return okResult();
+        }
         if (args[0] === "scripts/ickb-live-preflight.mjs") {
           return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
         }
@@ -524,7 +680,9 @@ test("dynamic supervisor loop preserves malformed preflight stderr", async () =>
       mkdir: async () => undefined,
       writeFile: async () => undefined,
       appendFile: async (path, text) => appended.set(path, `${appended.get(path) ?? ""}${text}`),
-      spawnSync: () => ({ status: 0, signal: null, stdout: "not json", stderr: "preflight diagnostic\n" }),
+      spawnSync: (_command, args) => isPrebuildCommand(args)
+        ? okResult()
+        : { status: 0, signal: null, stdout: "not json", stderr: "preflight diagnostic\n" },
     },
   });
 
@@ -537,4 +695,15 @@ function missingStat() {
   const error = new Error("missing");
   error.code = "ENOENT";
   throw error;
+}
+
+function isPrebuildCommand(args) {
+  return args[0] === "forks:ccc" ||
+    args[0] === "bot:build" ||
+    args.includes("@ickb/tester") ||
+    args.includes("@ickb/supervisor");
+}
+
+function okResult() {
+  return { status: 0, signal: null, stdout: "", stderr: "" };
 }

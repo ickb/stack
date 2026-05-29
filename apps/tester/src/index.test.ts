@@ -21,6 +21,7 @@ import {
   testerAttemptedTransactionEvidence,
   testerEstimatedTooSmallSkip,
   testerExecutionActions,
+  testerNoActionableAutoScenarioSkip,
   resolveTesterScenario,
   testerReserveSkip,
   TesterTerminalError,
@@ -351,26 +352,64 @@ describe("planTesterTransaction", () => {
     });
     const random = vi.spyOn(Math, "random").mockReturnValue(0.999999);
     try {
-      expect(planTesterTransaction(state, 1000n, "random-order")).toEqual({
+      const plan = planTesterTransaction(state, 1000n, "random-order");
+      expect(plan).toMatchObject({
         direction: "ickb-to-ckb",
-        amount: ccc.fixedPointFrom(123),
         ckbAmount: 0n,
-        udtAmount: ccc.fixedPointFrom(123),
         orderCount: 1,
       });
+      expect(plan.amount).toBeGreaterThan(1n << 33n);
+      expect(plan.amount).toBeLessThanOrEqual(ccc.fixedPointFrom(123));
+      expect(plan.udtAmount).toBe(plan.amount);
     } finally {
       random.mockRestore();
     }
   });
 
-  it("does not auto-select unbuildable tiny SDK conversions before other funded auto choices", () => {
+  it("does not auto-select random orders when only dust is available", () => {
     expect(resolveTesterScenario(
       testerState({ availableCkbBalance: ccc.fixedPointFrom(2000) + 1n, availableIckbBalance: 0n }),
       "auto",
       undefined,
       1000n,
       () => 0.99,
-    )).toBe("random-order");
+    )).toBeUndefined();
+  });
+
+  it("treats auto with capital but no actionable scenario as a nonterminal estimate skip", () => {
+    const liveNearReserveState = testerState({
+      availableCkbBalance: 229423868188n,
+      availableIckbBalance: 147394003472899n,
+      exchangeRatio: { ckbScale: 10000000000000000n, udtScale: 11845567055823930n },
+      feeRate: 33222n,
+    });
+
+    expect(resolveTesterScenario(
+      liveNearReserveState,
+      "auto",
+      undefined,
+      11845567055823n,
+      () => 0,
+    )).toBeUndefined();
+    expect(testerNoActionableAutoScenarioSkip()).toEqual({
+      reason: "estimated-conversion-too-small",
+      requestedTesterScenario: "auto",
+      attemptedTesterScenarios: ["random-order", "sdk-conversion", "bounded-ickb-to-ckb-limit-order"],
+    });
+  });
+
+  it("samples random order amounts above the matcher minimum", () => {
+    const state = testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), availableIckbBalance: 0n });
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const plan = planTesterTransaction(state, ccc.fixedPointFrom(1000), "random-order");
+      expect(plan.direction).toBe("ckb-to-ickb");
+      expect(plan.amount).toBeGreaterThan(1n << 33n);
+      expect(plan.amount).toBeLessThanOrEqual(ccc.fixedPointFrom(1000));
+      expect(plan.ckbAmount).toBe(plan.amount);
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it("plans SDK conversions only in a buildable funded direction", () => {
@@ -420,13 +459,13 @@ describe("planTesterTransaction", () => {
 
   it("resolves auto only to scenarios funded by current balances", () => {
     const ckbOnlyState = testerState({ availableCkbBalance: ccc.fixedPointFrom(3000), availableIckbBalance: 0n });
-    expect(resolveTesterScenario(ckbOnlyState, "auto", undefined, 1000n, () => 0)).toBe("random-order");
-    expect(resolveTesterScenario(ckbOnlyState, "auto", undefined, 1000n, () => 0.99)).toBe("sdk-conversion");
+    expect(resolveTesterScenario(ckbOnlyState, "auto", undefined, ccc.fixedPointFrom(1000), () => 0)).toBe("random-order");
+    expect(resolveTesterScenario(ckbOnlyState, "auto", undefined, ccc.fixedPointFrom(1000), () => 0.99)).toBe("sdk-conversion");
 
-    const ickbOnlyState = testerState({ availableCkbBalance: 0n, availableIckbBalance: ccc.fixedPointFrom(10) });
-    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, 1000n, () => 0)).toBe("random-order");
-    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, 1000n, () => 0.5)).toBe("sdk-conversion");
-    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, 1000n, () => 0.99)).toBe("bounded-ickb-to-ckb-limit-order");
+    const ickbOnlyState = testerState({ availableCkbBalance: 0n, availableIckbBalance: ccc.fixedPointFrom(123) });
+    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, ccc.fixedPointFrom(1000), () => 0)).toBe("random-order");
+    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, ccc.fixedPointFrom(1000), () => 0.5)).toBe("sdk-conversion");
+    expect(resolveTesterScenario(ickbOnlyState, "auto", undefined, ccc.fixedPointFrom(1000), () => 0.99)).toBe("bounded-ickb-to-ckb-limit-order");
 
     const mixedMultiOrderState = testerState({
       availableCkbBalance: ccc.fixedPointFrom(650000),
@@ -436,7 +475,7 @@ describe("planTesterTransaction", () => {
       mixedMultiOrderState,
       "auto",
       undefined,
-      1000n,
+      ccc.fixedPointFrom(1000),
       () => sample,
     ));
     expect(autoSamples).not.toContain("all-ckb-limit-order");
@@ -447,13 +486,13 @@ describe("planTesterTransaction", () => {
     expect(autoSamples).not.toContain("dust-ckb-conversion");
     expect(autoSamples).not.toContain("dust-ickb-conversion");
 
-    expect(() => resolveTesterScenario(
+    expect(resolveTesterScenario(
       testerState({ availableCkbBalance: ccc.fixedPointFrom(2000), availableIckbBalance: 0n }),
       "auto",
       undefined,
       1000n,
       () => 0,
-    )).toThrow("Not enough funds for auto tester scenario");
+    )).toBeUndefined();
   });
 
   it("computes post-transaction plain CKB reserve from unspent inputs and account outputs", () => {
@@ -875,14 +914,18 @@ function estimatedOrder(
 function testerState(values: {
   availableCkbBalance: bigint;
   availableIckbBalance?: bigint;
+  exchangeRatio?: TesterState["system"]["exchangeRatio"];
+  feeRate?: bigint;
   capacityCells?: ccc.Cell[];
   userOrders?: never[];
 }): TesterState {
   const availableIckbBalance = values.availableIckbBalance ?? 0n;
+  const exchangeRatio = values.exchangeRatio ?? { ckbScale: 1n, udtScale: 1n };
+  const feeRate = values.feeRate ?? 1000n;
   return {
     system: {
-      exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-      feeRate: 1000n,
+      exchangeRatio,
+      feeRate,
       tip: headerLike({ timestamp: 0n }),
       orderPool: [],
       ckbAvailable: values.availableCkbBalance,
@@ -899,8 +942,8 @@ function testerState(values: {
     userOrders: values.userOrders ?? [],
     conversionContext: {
       system: {
-        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
-        feeRate: 1000n,
+        exchangeRatio,
+        feeRate,
         tip: headerLike({ timestamp: 0n }),
         orderPool: [],
         ckbAvailable: values.availableCkbBalance,
