@@ -541,10 +541,9 @@ export function classifyActorResult(
   const evidence = actor === "preflight"
     ? parsePreflightEvidence(result.stdout)
     : parseJsonEvidence(result.stdout);
-  const txHashes = extractTxHashes(evidence.records);
   const base = {
     actor,
-    txHashes,
+    txHashes: [],
     evidence: {
       recordsAccepted: evidence.records.length,
       ignoredLineCount: evidence.ignoredLines.length,
@@ -556,10 +555,11 @@ export function classifyActorResult(
       stderrTruncated: result.stderrTruncated,
     },
   };
+  const genericBase = { ...base, txHashes: extractTxHashes(evidence.records) ?? [] };
 
   if (result.timedOut) {
     return {
-      ...base,
+      ...genericBase,
       outcome: "command_timeout",
       terminal: true,
       reason: "supervisor command timeout expired",
@@ -567,7 +567,7 @@ export function classifyActorResult(
   }
   if (result.spawnError !== undefined) {
     return {
-      ...base,
+      ...genericBase,
       outcome: "nonzero_exit",
       terminal: true,
       reason: `${actor} failed to spawn: ${result.spawnError}`,
@@ -575,7 +575,7 @@ export function classifyActorResult(
   }
   if (result.stdoutTruncated || result.stderrTruncated) {
     return {
-      ...base,
+      ...genericBase,
       outcome: "malformed_evidence",
       terminal: true,
       reason: result.stdoutTruncated
@@ -585,7 +585,7 @@ export function classifyActorResult(
   }
   if (evidence.malformedLines.length > 0) {
     return {
-      ...base,
+      ...genericBase,
       outcome: "malformed_evidence",
       terminal: true,
       reason: "stdout contained malformed JSON evidence",
@@ -1312,26 +1312,39 @@ function classifyBotResult(
     const outcome = stringField(failed, "outcome");
     const phase = stringField(failed, "phase");
     if (outcome === "timeout_after_broadcast" || outcome === "post_broadcast_unresolved" || outcome === "terminal_rejection") {
+      const txHashes = extractTxHashes([failed]);
+      if (txHashes === undefined) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence contained mismatched tx hashes", publicState };
+      }
       if (!hasValidTxHash(failed)) {
         return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot post-broadcast transaction failure evidence did not include a valid tx hash", publicState };
       }
       if (outcome === "timeout_after_broadcast") {
-        return { ...base, outcome: "confirmation_timeout", terminal: true, reason: "bot tx confirmation timed out", publicState };
+        return { ...base, txHashes, outcome: "confirmation_timeout", terminal: true, reason: "bot tx confirmation timed out", publicState };
       }
       if (outcome === "post_broadcast_unresolved") {
-        return { ...base, outcome: "post_broadcast_unresolved", terminal: true, reason: "bot tx remained unresolved after broadcast", publicState };
+        return { ...base, txHashes, outcome: "post_broadcast_unresolved", terminal: true, reason: "bot tx remained unresolved after broadcast", publicState };
       }
-      return { ...base, outcome: "terminal_chain_rejection", terminal: true, reason: "bot tx reached terminal chain rejection", publicState };
+      return { ...base, txHashes, outcome: "terminal_chain_rejection", terminal: true, reason: "bot tx reached terminal chain rejection", publicState };
     }
     if (phase === "pre_broadcast" && (failed["retryable"] !== true || failed["terminal"] !== false)) {
-      return { ...base, outcome: "unknown", terminal: true, reason: "bot pre-broadcast transaction failure", publicState };
+      const txHashes = extractTxHashes([failed]);
+      if (txHashes === undefined) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot pre-broadcast transaction failure evidence contained mismatched tx hashes", publicState };
+      }
+      return { ...base, txHashes, outcome: "unknown", terminal: true, reason: "bot pre-broadcast transaction failure", publicState };
     }
   }
 
   const skip = lastRecordOfType(botRecords, "bot.decision.skipped");
   if (skip !== undefined && stringField(skip, "reason") === "capital_below_minimum") {
+    const txHashes = extractTxHashes([skip]);
+    if (txHashes === undefined) {
+      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot skip evidence contained mismatched tx hashes", publicState };
+    }
     return {
       ...base,
+      txHashes,
       outcome: "low_capital_stop",
       terminal: true,
       reason: "bot reported capital_below_minimum",
@@ -1364,17 +1377,22 @@ function classifyBotResult(
 
   if (lifecycle?.type === "bot.transaction.committed") {
     const committed = lifecycle.record;
+    const txHashes = extractTxHashes([committed]);
+    if (txHashes === undefined) {
+      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence contained mismatched tx hashes", publicState };
+    }
     if (!hasValidTxHash(committed)) {
       return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include a valid tx hash", publicState };
     }
     const actions = latestBotActions(botRecords, numberField(committed, "iterationId"));
     if (actions === undefined) {
-      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include matching built action evidence", publicState };
+      return { ...base, txHashes, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include matching built action evidence", publicState };
     }
     const outcome = classifyBotCommittedActions(actions);
     if (outcome === "unknown") {
       return {
         ...base,
+        txHashes,
         outcome,
         terminal: true,
         reason: "bot committed transaction evidence did not include classifiable action evidence",
@@ -1384,6 +1402,7 @@ function classifyBotResult(
     }
     return {
       ...base,
+      txHashes,
       outcome,
       terminal: false,
       reason: "bot transaction committed according to app evidence",
@@ -1395,9 +1414,14 @@ function classifyBotResult(
   if (skip !== undefined) {
     const reason = stringField(skip, "reason") ?? "unknown";
     const actions = actionCounts(skip["actions"]);
+    const txHashes = extractTxHashes([skip]);
+    if (txHashes === undefined) {
+      return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot skip evidence contained mismatched tx hashes", publicState };
+    }
     if (reason === "post_tx_ckb_reserve") {
       return {
         ...base,
+        txHashes,
         outcome: "bot_reserve_skip",
         terminal: false,
         reason: "bot skipped to preserve CKB reserve",
@@ -1408,6 +1432,7 @@ function classifyBotResult(
     }
     return {
       ...base,
+      txHashes,
       outcome: "bot_no_action_skip",
       terminal: false,
       reason: `bot skipped: ${reason}`,
@@ -1462,41 +1487,50 @@ function classifyTesterResult(
     const skip = recordField(latest, "skip");
     if (skip !== undefined) {
       const reason = stringField(skip, "reason") ?? "unknown";
+      const txHashes = extractTxHashes([latest]);
+      if (txHashes === undefined) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester skip evidence contained mismatched tx hashes" };
+      }
       if (reason === "fresh-matchable-order") {
-        return { ...base, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped fresh matchable order", skipReason: reason };
+        return { ...base, txHashes, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped fresh matchable order", skipReason: reason };
       }
       if (reason === "matchable-order-transaction-missing") {
-        return { ...base, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped because matchable order transaction was not readable yet", skipReason: reason };
+        return { ...base, txHashes, outcome: "tester_fresh_order_skip", terminal: false, reason: "tester skipped because matchable order transaction was not readable yet", skipReason: reason };
       }
       if (reason === "sampled-amount-too-small") {
-        return { ...base, outcome: "tester_sampled_too_small_skip", terminal: false, reason: "tester sampled amount too small", skipReason: reason };
+        return { ...base, txHashes, outcome: "tester_sampled_too_small_skip", terminal: false, reason: "tester sampled amount too small", skipReason: reason };
       }
       if (reason === "estimated-conversion-too-small") {
-        return { ...base, outcome: "tester_estimated_too_small_skip", terminal: false, reason: "tester estimate converted amount too small", skipReason: reason };
+        return { ...base, txHashes, outcome: "tester_estimated_too_small_skip", terminal: false, reason: "tester estimate converted amount too small", skipReason: reason };
       }
       if (reason === "post-tx-ckb-reserve") {
-        return { ...base, outcome: "tester_reserve_skip", terminal: false, reason: "tester skipped to preserve CKB reserve", skipReason: reason };
+        return { ...base, txHashes, outcome: "tester_reserve_skip", terminal: false, reason: "tester skipped to preserve CKB reserve", skipReason: reason };
       }
-      return { ...base, outcome: "unknown", terminal: true, reason: `tester skip reason is not classified: ${reason}`, skipReason: reason };
+      return { ...base, txHashes, outcome: "unknown", terminal: true, reason: `tester skip reason is not classified: ${reason}`, skipReason: reason };
     }
 
     if ("txHash" in latest) {
+      const txHashes = extractTxHashes([latest]);
+      if (txHashes === undefined) {
+        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence contained mismatched tx hashes" };
+      }
       if (!hasValidTxHash(latest)) {
         return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence did not include a valid tx hash" };
       }
       const actions = recordField(latest, "actions");
       const expectationFailure = validateTesterEvidenceExpectation(actions, expectation);
       if (expectationFailure !== undefined) {
-        return { ...base, outcome: "tester_deterministic_pre_broadcast_error", terminal: true, reason: expectationFailure };
+        return { ...base, txHashes, outcome: "tester_deterministic_pre_broadcast_error", terminal: true, reason: expectationFailure };
       }
       const testerOrder = testerOrderEvidence(actions);
       const conversionKind = stringField(recordField(actions ?? {}, "conversion"), "kind");
       if (testerOrder === undefined && conversionKind === undefined) {
-        return { ...base, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence did not include action evidence" };
+        return { ...base, txHashes, outcome: "malformed_evidence", terminal: true, reason: "tester committed transaction evidence did not include action evidence" };
       }
       if (conversionKind !== undefined) {
         return {
           ...base,
+          txHashes,
           outcome: "tester_conversion_created",
           terminal: false,
           reason: "tester created a direct conversion transaction",
@@ -1505,6 +1539,7 @@ function classifyTesterResult(
       }
       return {
         ...base,
+        txHashes,
         outcome: "tester_order_created",
         terminal: false,
         reason: "tester created an order transaction",
@@ -2071,29 +2106,37 @@ function emptyActions(): ActionCounts {
   };
 }
 
-function extractTxHashes(records: Record<string, unknown>[]): string[] {
+function extractTxHashes(records: Record<string, unknown>[]): string[] | undefined {
   const hashes = new Set<string>();
   for (const record of records) {
-    addValidTxHash(hashes, stringField(record, "txHash"));
-    addValidTxHash(hashes, stringField(recordField(record, "error"), "txHash"));
-    addValidTxHash(hashes, stringField(recordField(record, "skip"), "txHash"));
+    const recordHashes = validTxHashes([
+      stringField(record, "txHash"),
+      stringField(recordField(record, "error"), "txHash"),
+      stringField(recordField(record, "skip"), "txHash"),
+    ]);
+    if (recordHashes.length > 1) {
+      return undefined;
+    }
+    for (const hash of recordHashes) {
+      hashes.add(hash);
+    }
   }
   return [...hashes];
 }
 
-function addValidTxHash(hashes: Set<string>, value: unknown): void {
-  if (typeof value === "string" && TX_HASH_PATTERN.test(value)) {
-    hashes.add(value);
+function validTxHashes(values: unknown[]): string[] {
+  const hashes = new Set<string>();
+  for (const value of values) {
+    if (typeof value === "string" && TX_HASH_PATTERN.test(value)) {
+      hashes.add(value);
+    }
   }
+  return [...hashes];
 }
 
 function hasValidTxHash(record: Record<string, unknown>): boolean {
   const txHash = record["txHash"];
   return typeof txHash === "string" && TX_HASH_PATTERN.test(txHash);
-}
-
-function hasValidTxHashInRecordOrError(record: Record<string, unknown>): boolean {
-  return hasValidTxHash(record) || hasValidTxHash(recordField(record, "error") ?? {});
 }
 
 function minimalProcessEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -2111,23 +2154,27 @@ function liveActorEnv(extra: Record<string, string>): Record<string, string> {
   };
 }
 
-function classifyTesterTransactionFailure(value: unknown, record: Record<string, unknown>): Pick<Classification, "outcome" | "terminal" | "reason"> | undefined {
+function classifyTesterTransactionFailure(value: unknown, record: Record<string, unknown>): Pick<Classification, "outcome" | "terminal" | "reason" | "txHashes"> | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
   if (stringField(value, "name") !== "TransactionConfirmationError") {
     return undefined;
   }
-  if (!hasValidTxHashInRecordOrError(record)) {
-    return { outcome: "malformed_evidence", terminal: true, reason: "tester transaction failure evidence did not include a valid tx hash" };
+  const txHashes = extractTxHashes([record]);
+  if (txHashes === undefined) {
+    return { outcome: "malformed_evidence", terminal: true, reason: "tester transaction failure evidence contained mismatched tx hashes", txHashes: [] };
+  }
+  if (txHashes.length === 0) {
+    return { outcome: "malformed_evidence", terminal: true, reason: "tester transaction failure evidence did not include a valid tx hash", txHashes: [] };
   }
   if (value["isTimeout"] === false) {
-    return { outcome: "terminal_chain_rejection", terminal: true, reason: "tester tx reached terminal chain rejection" };
+    return { outcome: "terminal_chain_rejection", terminal: true, reason: "tester tx reached terminal chain rejection", txHashes };
   }
   if (value["isTimeout"] === true && "cause" in value) {
-    return { outcome: "post_broadcast_unresolved", terminal: true, reason: "tester tx remained unresolved after broadcast" };
+    return { outcome: "post_broadcast_unresolved", terminal: true, reason: "tester tx remained unresolved after broadcast", txHashes };
   }
-  return { outcome: "confirmation_timeout", terminal: true, reason: "tester transaction confirmation timed out" };
+  return { outcome: "confirmation_timeout", terminal: true, reason: "tester transaction confirmation timed out", txHashes };
 }
 
 function isTesterFundingError(value: unknown): boolean {
