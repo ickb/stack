@@ -484,7 +484,7 @@ export function planTesterTransaction(
   feePolicy: TesterFeePolicy = DEFAULT_TESTER_FEE_POLICY,
 ): TesterPlan {
   if (scenario === "multi-order-limit-orders") {
-    return planTesterTransaction(state, depositCapacity, resolveTesterScenario(state, scenario, feePolicy)!, feePolicy);
+    return planTesterTransaction(state, depositCapacity, resolveMultiOrderScenario(state, feePolicy), feePolicy);
   }
   if (scenario === "sdk-conversion") {
     return planSdkConversionTransaction(state, depositCapacity);
@@ -581,6 +581,13 @@ export function resolveTesterScenario(
   if (scenario !== "multi-order-limit-orders") {
     return scenario;
   }
+  return resolveMultiOrderScenario(state, feePolicy);
+}
+
+function resolveMultiOrderScenario(
+  state: Pick<TesterState, "availableCkbBalance" | "availableIckbBalance" | "system">,
+  feePolicy: TesterFeePolicy,
+): TesterScenario {
   const selected = MULTI_ORDER_SCENARIOS.find((candidate) => hasPositiveMultiOrderEstimates(state, candidate, feePolicy));
   if (selected !== undefined) {
     return selected;
