@@ -1381,6 +1381,23 @@ describe("classification", () => {
     });
   });
 
+  it("treats committed bot transactions without classifiable actions as terminal", () => {
+    const stdout = [
+      botEvent("bot.transaction.built", {
+        actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 0, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+      }),
+      botEvent("bot.transaction.committed", { txHash: txHash("47"), status: "committed" }),
+    ].map(JSON.stringify).join("\n");
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "unknown",
+      terminal: true,
+      reason: "bot committed transaction evidence did not include classifiable action evidence",
+      actions: { matchedOrders: 0, deposits: 0, withdrawalRequests: 0, completedDeposits: 0, withdrawals: 0 },
+      txHashes: [txHash("47")],
+    });
+  });
+
   it("keeps match diagnostics tied to the matching state-read iteration", () => {
     const stdout = [
       botEvent("bot.state.read", {
