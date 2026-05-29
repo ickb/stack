@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { appendFile, lstat, mkdir, stat, writeFile } from "node:fs/promises";
-import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseNonNegativeInteger, parsePositiveInteger, valueAfter } from "./ickb-script-helpers.mjs";
 import {
   DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS,
   INSPECTION_REQUIRED_EXIT_CODE,
+  formatPrebuildFailure,
+  prebuildRuntime,
 } from "./ickb-supervisor-loop.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -43,6 +45,7 @@ const DYNAMIC_LOOP_OWNED_FLAGS = [
 ];
 const ALL_CKB_MIN_CKB = 3001n;
 const ICKB_STIMULUS_MIN_CKB = 2100n;
+const ICKB_STIMULUS_MIN_ICKB = 100n;
 const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
 
 export function parseArgs(argv) {
@@ -178,7 +181,7 @@ export function usage() {
     "  -h, --help",
     "  -- [supervisor-options]",
     "Dynamic-loop options must appear before --; supervisor --out-dir is owned by the dynamic loop.",
-    "Reads tester preflight balance summaries, chooses a fundable tester scenario, then runs bounded supervisor-loop chunks.",
+    "Builds local runtime once, reads tester preflight balance summaries, then runs bounded supervisor-loop chunks with --skip-build.",
   ].join("\n");
 }
 
@@ -200,7 +203,7 @@ export function chooseTesterScenario({ ckb, ickb }) {
   if (ckb >= ALL_CKB_MIN_CKB * CKB_UNIT) {
     return { scenario: "all-ckb-limit-order", feeArgs: [] };
   }
-  if (ckb >= ICKB_STIMULUS_MIN_CKB * CKB_UNIT && ickb > 0n) {
+  if (ckb >= ICKB_STIMULUS_MIN_CKB * CKB_UNIT && ickb >= ICKB_STIMULUS_MIN_ICKB * CKB_UNIT) {
     return {
       scenario: "ickb-to-ckb-limit-order",
       feeArgs: ["--tester-fee", "1", "--tester-fee-base", "1000"],
@@ -241,7 +244,20 @@ export async function runDynamicSupervisorLoop({ argv, root = rootDir, dependenc
 
   let session;
   try {
-    session = await prepareValidationSession(args, root, dependencies);
+    session = await resolveValidationSession(args, root, dependencies);
+  } catch (error) {
+    stderr.write(`${errorMessage(error)}\n${usage()}\n`);
+    return 1;
+  }
+
+  const prebuild = prebuildRuntime(root, dependencies);
+  if (prebuild.status !== 0) {
+    stdout.write(formatPrebuildFailure(prebuild) + "\n");
+    return prebuild.status;
+  }
+
+  try {
+    await createValidationSession(session, dependencies);
     await writeLaunchArtifact(session, args, root, dependencies);
     await writeOperatorEvent(session, {
       type: "session_started",
@@ -390,6 +406,7 @@ function runSupervisorChunk(args, choice, root, dependencies, session, chunkInde
     "--stable-limit", String(args.stableLimit),
     "--backoff-seconds", String(args.chunkBackoffSeconds),
     "--child-timeout-seconds", String(args.childTimeoutSeconds),
+    "--skip-build",
     "--",
     ...testerScenarioArgs,
     "--max-cycles", "1",
@@ -399,7 +416,7 @@ function runSupervisorChunk(args, choice, root, dependencies, session, chunkInde
   ], root, dependencies, { timeout: args.chunkTimeoutSeconds * 1000 });
 }
 
-async function prepareValidationSession(args, root, dependencies) {
+async function resolveValidationSession(args, root, dependencies) {
   const now = dependencies.now ?? Date.now;
   const pid = dependencies.pid ?? process.pid;
   const logRoot = resolveConfiguredPath(root, args.logRoot ?? DEFAULT_LOG_ROOT, "--log-root");
@@ -427,12 +444,8 @@ async function prepareValidationSession(args, root, dependencies) {
       throw error;
     }
   }
-
-  const mkdirFn = dependencies.mkdir ?? mkdir;
   const operatorDir = join(sessionRoot, "operator");
   const chunksDir = join(sessionRoot, "chunks");
-  await mkdirFn(operatorDir, { recursive: true });
-  await mkdirFn(chunksDir, { recursive: true });
   return {
     logRoot,
     sessionRoot,
@@ -441,6 +454,22 @@ async function prepareValidationSession(args, root, dependencies) {
     displayLogRoot: displayPath(root, logRoot),
     displaySessionRoot: displayPath(root, sessionRoot),
   };
+}
+
+async function createValidationSession(session, dependencies) {
+  const mkdirFn = dependencies.mkdir ?? mkdir;
+  await mkdirFn(dirname(session.sessionRoot), { recursive: true });
+  await assertNoSymlinkedPath(session.sessionRoot, "session root", dependencies);
+  try {
+    await mkdirFn(session.sessionRoot);
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      throw new Error(`Validation session root already exists: ${session.displaySessionRoot}`);
+    }
+    throw error;
+  }
+  await mkdirFn(session.operatorDir);
+  await mkdirFn(session.chunksDir);
 }
 
 async function writeLaunchArtifact(session, args, root, dependencies) {
@@ -593,6 +622,10 @@ function errorMessage(error) {
 
 function isNotFoundError(error) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function isAlreadyExistsError(error) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }
 
 function padChunk(index) {

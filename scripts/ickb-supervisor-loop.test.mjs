@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   decideNext,
   DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
+  DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE,
   INSPECTION_REQUIRED_EXIT_CODE,
   parseArgs,
   runSupervisorLoop,
@@ -21,11 +22,13 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
     "--stable-limit", "2",
     "--backoff-seconds", "0",
     "--child-timeout-seconds", "120",
+    "--skip-build",
     "--supervisor-script", "apps/supervisor/dist/custom.js",
     "--",
     "--scenario", "bot-only",
   ]), {
     help: false,
+    skipBuild: true,
     outRoot: "logs/live-supervisor/loop-test",
     maxRuns: 5,
     stableLimit: 2,
@@ -48,6 +51,7 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.throws(() => parseArgs(["--", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.throws(() => parseArgs(["--", "--max-runs", "1", "--scenario", "standard-cycle"]), /Do not pass loop option --max-runs after --/u);
+  assert.throws(() => parseArgs(["--", "--skip-build"]), /Do not pass loop option --skip-build after --/u);
   assert.throws(() => parseArgs(["--", "--stable-limit=2"]), /Do not pass loop option --stable-limit after --/u);
   assert.throws(() => parseArgs(["--scenario", "standard-cycle", "--out-dir=logs/live-supervisor/x"]), /Unknown argument before --: --scenario/u);
   assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE);
@@ -266,6 +270,7 @@ test("supervisor loop runs bounded supervisor commands until stable", async () =
         "--max-runs", "5",
         "--stable-limit", "2",
         "--backoff-seconds", "0",
+        "--skip-build",
         "--",
         "--scenario", "bot-only",
       ],
@@ -297,6 +302,112 @@ test("supervisor loop runs bounded supervisor commands until stable", async () =
   }
 });
 
+test("supervisor loop prebuilds runtime before launching supervisor", async () => {
+  const root = "/repo";
+  const originalPrivateKey = process.env.PRIVATE_KEY;
+  process.env.PRIVATE_KEY = "operator-secret";
+  const commands = [];
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  try {
+    const exitCode = await runSupervisorLoop({
+      argv: [
+        "--out-root", "logs/live-supervisor/loop-prebuild",
+        "--max-runs", "1",
+        "--backoff-seconds", "0",
+        "--",
+        "--scenario", "bot-only",
+      ],
+      root,
+      io: { stdout: output, stderr: output },
+      dependencies: {
+        spawnSync: (command, args, options) => {
+          commands.push({ command, args, options });
+          return { status: 0 };
+        },
+        readFile: async () => JSON.stringify({
+          stopped: "max_cycles",
+          aggregateCounts: { bot_no_action_skip: 1 },
+          txCreatingTxHashCount: 0,
+          txCreatingOutcomeCount: 0,
+          artifacts: [],
+        }),
+      },
+    });
+
+    assert.equal(exitCode, INSPECTION_REQUIRED_EXIT_CODE);
+    assert.deepEqual(commands.map((item) => [item.command, ...item.args]), [
+      ["pnpm", "forks:ccc"],
+      ["pnpm", "bot:build"],
+      ["pnpm", "--filter", "@ickb/tester", "build"],
+      ["pnpm", "--filter", "@ickb/supervisor", "build"],
+      [process.execPath, "/repo/apps/supervisor/dist/index.js", "--scenario", "bot-only", "--out-dir", "logs/live-supervisor/loop-prebuild/run-0001"],
+    ]);
+    for (const command of commands) {
+      assert.equal(command.options.env.PRIVATE_KEY, undefined);
+    }
+    for (const command of commands.slice(0, 4)) {
+      assert.equal(command.options.stdio, "ignore");
+      assert.equal(command.options.timeout, DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE * 1000);
+      assert.equal(command.options.killSignal, "SIGTERM");
+    }
+  } finally {
+    if (originalPrivateKey === undefined) {
+      delete process.env.PRIVATE_KEY;
+    } else {
+      process.env.PRIVATE_KEY = originalPrivateKey;
+    }
+  }
+});
+
+test("supervisor loop reports prebuild failures without child output", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "logs/live-supervisor/loop-prebuild-fail"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      spawnSync: () => ({
+        status: 1,
+        stdout: "privateKey 0x1111\n",
+        stderr: "operator secret 0x2222\n",
+      }),
+      readFile: async () => {
+        throw new Error("should not read summary after prebuild failure");
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /loop prebuild_failed/u);
+  assert.match(output.text, /target=ccc/u);
+  assert.match(output.text, /command=pnpm_forks:ccc/u);
+  assert.doesNotMatch(output.text, /privateKey|0x1111|operator secret|0x2222/u);
+});
+
+test("supervisor loop reports timed out prebuild failures", async () => {
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "logs/live-supervisor/loop-prebuild-timeout"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      spawnSync: () => ({
+        status: null,
+        signal: "SIGTERM",
+        error: Object.assign(new Error("spawn ETIMEDOUT"), { code: "ETIMEDOUT" }),
+      }),
+      readFile: async () => {
+        throw new Error("should not read summary after prebuild timeout");
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(output.text, /loop prebuild_failed/u);
+  assert.match(output.text, /signal=SIGTERM/u);
+  assert.match(output.text, /child_error=ETIMEDOUT/u);
+});
+
 test("supervisor loop accepts validation session out roots", async () => {
   const root = "/repo";
   const reads = new Map([
@@ -315,6 +426,7 @@ test("supervisor loop accepts validation session out roots", async () => {
     argv: [
       "--out-root", "log/validation/dynamic-test/chunks/chunk-0001",
       "--max-runs", "1",
+      "--skip-build",
       "--",
       "--scenario", "bot-only",
     ],
@@ -376,6 +488,7 @@ test("supervisor loop accepts explicit validation roots outside the repo", async
     argv: [
       "--out-root", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001",
       "--max-runs", "1",
+      "--skip-build",
       "--",
       "--scenario", "bot-only",
     ],
@@ -404,6 +517,7 @@ test("supervisor loop applies child timeout at the outer process boundary", asyn
       "--out-root", "logs/live-supervisor/loop-timeout",
       "--child-timeout-seconds", "1",
       "--backoff-seconds", "0",
+      "--skip-build",
     ],
     root,
     io: { stdout: output, stderr: output },
@@ -424,13 +538,45 @@ test("supervisor loop applies child timeout at the outer process boundary", asyn
   assert.equal(commands[0].options.timeout, 1000);
   assert.equal(commands[0].options.killSignal, "SIGTERM");
   assert.match(output.text, /summary=missing_or_invalid/u);
+  assert.match(output.text, /child_error=ETIMEDOUT/u);
+  assert.match(output.text, /signal=SIGTERM/u);
+});
+
+test("supervisor loop does not print arbitrary child output on missing summary", async () => {
+  const commands = [];
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runSupervisorLoop({
+    argv: ["--out-root", "logs/live-supervisor/loop-private-child-output", "--backoff-seconds", "0", "--skip-build"],
+    root: "/repo",
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      spawnSync: (command, args, options) => {
+        commands.push({ command, args, options });
+        return {
+          status: 1,
+          stdout: "privateKey 0x1111\n",
+          stderr: "Live supervisor failed: Missing built bot app: apps/bot/dist/index.js\noperator secret 0x2222\n",
+        };
+      },
+      readFile: async () => {
+        const error = new Error("missing");
+        error.code = "ENOENT";
+        throw error;
+      },
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(commands[0].options.stdio, "ignore");
+  assert.match(output.text, /summary=missing_or_invalid/u);
+  assert.doesNotMatch(output.text, /privateKey|0x1111|Missing built bot app|operator secret|0x2222/u);
 });
 
 test("supervisor loop stops for inspection on new tx-bearing summary", async () => {
   const root = "/repo";
   const output = { text: "", write(chunk) { this.text += chunk; } };
   const exitCode = await runSupervisorLoop({
-    argv: ["--out-root", "logs/live-supervisor/loop-tx", "--backoff-seconds", "0"],
+    argv: ["--out-root", "logs/live-supervisor/loop-tx", "--backoff-seconds", "0", "--skip-build"],
     root,
     io: { stdout: output, stderr: output },
     dependencies: {
@@ -495,7 +641,7 @@ test("supervisor loop reports invalid out-root as a concise CLI error", async ()
 test("supervisor loop hides invalid summary JSON contents", async () => {
   const output = { text: "", write(chunk) { this.text += chunk; } };
   const exitCode = await runSupervisorLoop({
-    argv: ["--out-root", "logs/live-supervisor/loop-invalid", "--backoff-seconds", "0"],
+    argv: ["--out-root", "logs/live-supervisor/loop-invalid", "--backoff-seconds", "0", "--skip-build"],
     root: "/repo",
     io: { stdout: output, stderr: output },
     dependencies: {

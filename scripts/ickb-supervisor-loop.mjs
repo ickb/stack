@@ -11,13 +11,22 @@ const DEFAULT_STABLE_LIMIT = 3;
 const DEFAULT_BACKOFF_SECONDS = 30;
 const DEFAULT_CHILD_TIMEOUT_SECONDS = 65 * 60;
 export const DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE = DEFAULT_CHILD_TIMEOUT_SECONDS;
+const DEFAULT_PREBUILD_TIMEOUT_SECONDS = DEFAULT_CHILD_TIMEOUT_SECONDS;
+export const DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE = DEFAULT_PREBUILD_TIMEOUT_SECONDS;
 const DEFAULT_SUPERVISOR_SCRIPT = "apps/supervisor/dist/index.js";
 const SUPERVISOR_OUTPUT_ROOT = "logs/live-supervisor";
 export const INSPECTION_REQUIRED_EXIT_CODE = 3;
-const LOOP_OWNED_FLAGS = ["--out-root", "--max-runs", "--stable-limit", "--backoff-seconds", "--child-timeout-seconds", "--supervisor-script"];
+const LOOP_OWNED_FLAGS = ["--out-root", "--max-runs", "--stable-limit", "--backoff-seconds", "--child-timeout-seconds", "--supervisor-script", "--skip-build"];
+const PREBUILD_COMMANDS = [
+  { target: "ccc", command: "pnpm", args: ["forks:ccc"] },
+  { target: "bot", command: "pnpm", args: ["bot:build"] },
+  { target: "tester", command: "pnpm", args: ["--filter", "@ickb/tester", "build"] },
+  { target: "supervisor", command: "pnpm", args: ["--filter", "@ickb/supervisor", "build"] },
+];
 export function parseArgs(argv) {
   const args = {
     help: false,
+    skipBuild: false,
     maxRuns: DEFAULT_MAX_RUNS,
     stableLimit: DEFAULT_STABLE_LIMIT,
     backoffSeconds: DEFAULT_BACKOFF_SECONDS,
@@ -33,6 +42,10 @@ export function parseArgs(argv) {
     }
     if (arg === "-h" || arg === "--help") {
       args.help = true;
+      continue;
+    }
+    if (arg === "--skip-build") {
+      args.skipBuild = true;
       continue;
     }
     if (arg === "--out-root") {
@@ -81,8 +94,9 @@ export function usage() {
     `  --backoff-seconds <n>          Default: ${String(DEFAULT_BACKOFF_SECONDS)}`,
     `  --child-timeout-seconds <n>    Default: ${String(DEFAULT_CHILD_TIMEOUT_SECONDS)}`,
     `  --supervisor-script <path>     Default: ${DEFAULT_SUPERVISOR_SCRIPT}`,
+    "  --skip-build                   Do not rebuild local runtime packages before launching the supervisor",
     "  -h, --help",
-    "Reads only each child run summary.json.",
+    "Builds local CCC/bot/tester/supervisor runtime, then reads only each child run summary.json.",
     "Loop options must appear before --; supervisor --out-dir is owned by the loop.",
   ].join("\n");
 }
@@ -197,6 +211,14 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
   let previousSignature;
   let stableCount = 0;
 
+  if (!args.skipBuild) {
+    const prebuild = prebuildRuntime(root, dependencies);
+    if (prebuild.status !== 0) {
+      stdout.write(formatPrebuildFailure(prebuild) + "\n");
+      return prebuild.status;
+    }
+  }
+
   for (let runIndex = 1; runIndex <= args.maxRuns; runIndex += 1) {
     const runOutDir = join(outRoot.absolutePath, `run-${padRun(runIndex)}`);
     const relativeOutDir = displayPath(root, runOutDir);
@@ -214,7 +236,7 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
       const summary = await readSummary(join(runOutDir, "summary.json"), dependencies);
       run = summarizeRun(summary, { runIndex, relativeOutDir, status });
     } catch (error) {
-      stdout.write(formatMissingSummaryLine({ runIndex, relativeOutDir, status, error }) + "\n");
+      stdout.write(formatMissingSummaryLine({ runIndex, relativeOutDir, status, error, spawnResult }) + "\n");
       return status === 0 ? 1 : status;
     }
 
@@ -276,6 +298,24 @@ function spawnSupervisorHelp({ root, supervisorScript, supervisorArgs, dependenc
   });
 }
 
+export function prebuildRuntime(root, dependencies) {
+  const spawnSyncFn = dependencies.spawnSync ?? spawnSync;
+  for (const step of PREBUILD_COMMANDS) {
+    const result = spawnSyncFn(step.command, step.args, {
+      cwd: root,
+      env: minimalProcessEnv(process.env),
+      stdio: "ignore",
+      timeout: DEFAULT_PREBUILD_TIMEOUT_SECONDS * 1000,
+      killSignal: "SIGTERM",
+    });
+    const status = typeof result.status === "number" ? result.status : 1;
+    if (status !== 0) {
+      return { ...step, status, signal: result.signal, error: result.error };
+    }
+  }
+  return { status: 0 };
+}
+
 function hasHelpFlag(args) {
   return args.some((arg) => arg === "-h" || arg === "--help");
 }
@@ -329,14 +369,41 @@ function formatRunLine(run, decision) {
   ].join(" ");
 }
 
-function formatMissingSummaryLine({ runIndex, relativeOutDir, status, error }) {
-  return [
+function formatMissingSummaryLine({ runIndex, relativeOutDir, status, error, spawnResult }) {
+  const fields = [
     `loop run=${String(runIndex)}`,
     `status=${String(status)}`,
     "summary=missing_or_invalid",
     `error=${shellWord(errorMessage(error))}`,
-    `out=${relativeOutDir}`,
-  ].join(" ");
+  ];
+  const childError = spawnResult?.error === undefined ? undefined : childSpawnError(spawnResult.error);
+  if (childError !== undefined) {
+    fields.push(`child_error=${shellWord(childError)}`);
+  }
+  if (typeof spawnResult?.signal === "string" && spawnResult.signal.length > 0) {
+    fields.push(`signal=${shellWord(spawnResult.signal)}`);
+  }
+  fields.push(`out=${relativeOutDir}`);
+  return fields.join(" ");
+}
+
+export function formatPrebuildFailure(prebuild) {
+  const fields = [
+    "loop prebuild_failed",
+    `target=${shellWord(prebuild.target ?? "unknown")}`,
+    `status=${String(prebuild.status)}`,
+  ];
+  if (prebuild.command !== undefined) {
+    fields.push(`command=${shellWord([prebuild.command, ...(prebuild.args ?? [])].join(" "))}`);
+  }
+  if (typeof prebuild.signal === "string" && prebuild.signal.length > 0) {
+    fields.push(`signal=${shellWord(prebuild.signal)}`);
+  }
+  const childError = prebuild.error === undefined ? undefined : childSpawnError(prebuild.error);
+  if (childError !== undefined) {
+    fields.push(`child_error=${shellWord(childError)}`);
+  }
+  return fields.join(" ");
 }
 
 function formatCounts(counts) {
@@ -489,6 +556,13 @@ function padRun(index) {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error ?? "Unknown error");
+}
+
+function childSpawnError(error) {
+  if (error instanceof Error && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return errorMessage(error);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
