@@ -13,6 +13,8 @@ const DEFAULT_CHILD_TIMEOUT_SECONDS = 65 * 60;
 export const DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE = DEFAULT_CHILD_TIMEOUT_SECONDS;
 const DEFAULT_SUPERVISOR_SCRIPT = "apps/supervisor/dist/index.js";
 const SUPERVISOR_OUTPUT_ROOT = "logs/live-supervisor";
+export const INSPECTION_REQUIRED_EXIT_CODE = 3;
+const LOOP_OWNED_FLAGS = ["--out-root", "--max-runs", "--stable-limit", "--backoff-seconds", "--child-timeout-seconds", "--supervisor-script"];
 export function parseArgs(argv) {
   const args = {
     help: false,
@@ -59,6 +61,10 @@ export function parseArgs(argv) {
     }
     throw new Error(`Unknown argument before --: ${arg}`);
   }
+  const misplacedLoopFlag = firstMatchingFlag(args.supervisorArgs, LOOP_OWNED_FLAGS);
+  if (misplacedLoopFlag !== undefined) {
+    throw new Error(`Do not pass loop option ${misplacedLoopFlag} after --; put loop options before --`);
+  }
   if (args.supervisorArgs.some((arg) => arg === "--out-dir" || arg.startsWith("--out-dir="))) {
     throw new Error("Do not pass supervisor --out-dir; use loop --out-root instead");
   }
@@ -77,7 +83,7 @@ export function usage() {
     `  --supervisor-script <path>     Default: ${DEFAULT_SUPERVISOR_SCRIPT}`,
     "  -h, --help",
     "Reads only each child run summary.json.",
-    "Supervisor --out-dir is owned by the loop and must not be passed after --.",
+    "Loop options must appear before --; supervisor --out-dir is owned by the loop.",
   ].join("\n");
 }
 
@@ -119,10 +125,10 @@ export function decideNext({ run, priorOutcomes, previousSignature, stableCount,
     return { action: "stop", reason: "new_outcome", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
   }
   if (runIndex >= maxRuns) {
-    return { action: "stop", reason: "max_runs", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
+    return { action: "stop", reason: "max_runs", newOutcomes, stableCount: nextStableCount, exitCode: INSPECTION_REQUIRED_EXIT_CODE };
   }
   if (nextStableCount >= stableLimit) {
-    return { action: "stop", reason: "stable_no_progress", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
+    return { action: "stop", reason: "stable_no_progress", newOutcomes, stableCount: nextStableCount, exitCode: INSPECTION_REQUIRED_EXIT_CODE };
   }
   return { action: "continue", reason: "continue", newOutcomes, stableCount: nextStableCount, exitCode: 0 };
 }
@@ -153,6 +159,25 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
   if (args.help) {
     stdout.write(`${usage()}\n`);
     return 0;
+  }
+
+  if (hasHelpFlag(args.supervisorArgs)) {
+    const supervisorScript = isAbsolute(args.supervisorScript)
+      ? args.supervisorScript
+      : resolve(root, args.supervisorScript);
+    const spawnResult = spawnSupervisorHelp({
+      root,
+      supervisorScript,
+      supervisorArgs: args.supervisorArgs,
+      dependencies,
+    });
+    if (spawnResult.stdout) {
+      stdout.write(spawnResult.stdout);
+    }
+    if (spawnResult.stderr) {
+      stderr.write(spawnResult.stderr);
+    }
+    return typeof spawnResult.status === "number" ? spawnResult.status : 1;
   }
 
   const now = dependencies.now ?? Date.now;
@@ -236,6 +261,34 @@ function spawnSupervisor({ root, supervisorScript, supervisorArgs, relativeOutDi
     timeout: childTimeoutSeconds * 1000,
     killSignal: "SIGTERM",
   });
+}
+
+function spawnSupervisorHelp({ root, supervisorScript, supervisorArgs, dependencies }) {
+  const spawnSyncFn = dependencies.spawnSync ?? spawnSync;
+  return spawnSyncFn(process.execPath, [
+    supervisorScript,
+    ...supervisorArgs,
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    env: minimalProcessEnv(process.env),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function hasHelpFlag(args) {
+  return args.some((arg) => arg === "-h" || arg === "--help");
+}
+
+function firstMatchingFlag(args, flags) {
+  for (const arg of args) {
+    for (const flag of flags) {
+      if (arg === flag || arg.startsWith(`${flag}=`)) {
+        return flag;
+      }
+    }
+  }
+  return undefined;
 }
 
 async function readSummary(path, dependencies) {

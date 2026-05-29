@@ -1496,6 +1496,7 @@ describe("classification", () => {
       outcome: "bot_match_committed",
       terminal: false,
       actions: { matchedOrders: 1, deposits: 0 },
+      txHashes: [txHash("44")],
     });
   });
 
@@ -1516,6 +1517,7 @@ describe("classification", () => {
     expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
       outcome: "terminal_chain_rejection",
       terminal: true,
+      txHashes: [txHash("46")],
     });
   });
 
@@ -1726,6 +1728,87 @@ describe("classification", () => {
     });
   });
 
+  it("preserves accepted tx hashes in generic early classifications", () => {
+    expect(classifyActorResult("tester", {
+      ...commandResult("tester", JSON.stringify({ txHash: txHash("50") })),
+      timedOut: true,
+    })).toMatchObject({
+      outcome: "command_timeout",
+      txHashes: [txHash("50")],
+    });
+    expect(classifyActorResult("bot", {
+      ...commandResult("bot", JSON.stringify(botEvent("bot.transaction.committed", { txHash: txHash("51") }))),
+      spawnError: "ENOENT",
+      status: null,
+    })).toMatchObject({
+      outcome: "nonzero_exit",
+      txHashes: [txHash("51")],
+    });
+    expect(classifyActorResult("bot", {
+      ...commandResult("bot", JSON.stringify(botEvent("bot.transaction.committed", { txHash: txHash("52") }))),
+      stdoutTruncated: true,
+    })).toMatchObject({
+      outcome: "malformed_evidence",
+      txHashes: [txHash("52")],
+    });
+    expect(classifyActorResult("tester", commandResult("tester", [
+      JSON.stringify({ txHash: txHash("53") }),
+      "{not-json}",
+    ].join("\n")))).toMatchObject({
+      outcome: "malformed_evidence",
+      txHashes: [txHash("53")],
+    });
+  });
+
+  it("preserves accepted preflight tx hashes in generic early classifications", () => {
+    expect(classifyActorResult("preflight", {
+      ...commandResult("preflight", JSON.stringify({ txHash: txHash("54"), bounded: true, maxIterations: 1 }, null, 2)),
+      timedOut: true,
+    })).toMatchObject({
+      outcome: "command_timeout",
+      txHashes: [txHash("54")],
+    });
+  });
+
+  it("does not preserve conflicted tx hashes in generic early classifications", () => {
+    expect(classifyActorResult("tester", {
+      ...commandResult("tester", JSON.stringify({ txHash: txHash("56"), error: { txHash: txHash("57") } })),
+      timedOut: true,
+    })).toMatchObject({
+      outcome: "command_timeout",
+      txHashes: [],
+    });
+  });
+
+  it("rejects bot post-broadcast failures with mismatched tx hash evidence", () => {
+    const stdout = JSON.stringify(botEvent("bot.transaction.failed", {
+      outcome: "post_broadcast_unresolved",
+      txHash: txHash("58"),
+      error: { txHash: txHash("59") },
+    }));
+
+    expect(classifyActorResult("bot", commandResult("bot", stdout))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "bot post-broadcast transaction failure evidence contained mismatched tx hashes",
+      txHashes: [],
+    });
+  });
+
+  it("rejects tester skips with mismatched tx hash evidence", () => {
+    const stdout = JSON.stringify({
+      txHash: txHash("5a"),
+      skip: { reason: "fresh-matchable-order", txHash: txHash("5b") },
+    });
+
+    expect(classifyActorResult("tester", commandResult("tester", stdout))).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester skip evidence contained mismatched tx hashes",
+      txHashes: [],
+    });
+  });
+
   it("keeps tester confirmation timeouts classified by safety evidence despite exit code 2", () => {
     const result = {
       ...commandResult("tester", JSON.stringify({
@@ -1744,6 +1827,49 @@ describe("classification", () => {
     expect(classifyActorResult("tester", result)).toMatchObject({
       outcome: "confirmation_timeout",
       terminal: true,
+    });
+  });
+
+  it("counts matching top-level and nested tester transaction failure tx hashes once", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        txHash: txHash("ae"),
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction confirmation timed out",
+          txHash: txHash("ae"),
+          isTimeout: true,
+        },
+      })),
+      status: 2,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "confirmation_timeout",
+      terminal: true,
+      txHashes: [txHash("ae")],
+    });
+  });
+
+  it("rejects mismatched top-level and nested tester transaction failure tx hashes", () => {
+    const result = {
+      ...commandResult("tester", JSON.stringify({
+        txHash: txHash("ae"),
+        error: {
+          name: "TransactionConfirmationError",
+          message: "Transaction confirmation timed out",
+          txHash: txHash("af"),
+          isTimeout: true,
+        },
+      })),
+      status: 2,
+    };
+
+    expect(classifyActorResult("tester", result)).toMatchObject({
+      outcome: "malformed_evidence",
+      terminal: true,
+      reason: "tester transaction failure evidence contained mismatched tx hashes",
+      txHashes: [],
     });
   });
 
@@ -3012,6 +3138,55 @@ describe("deterministic incident handling", () => {
     expect(summary).toMatchObject({ stopped: "max_cycles", txCreatingTxHashCount: 0, txCreatingOutcomeCount: 0 });
     expect(recordAt(summary["txHashesByOutcome"], "summary tx hashes")).toEqual({
       tester_fresh_order_skip: [txHash("44")],
+    });
+  });
+
+  it("counts matching top-level and nested transaction hashes once in summaries", async () => {
+    const writes = new Map<string, string>();
+    const args = parseArgs([
+      "--bot-config", "config/bot-testnet.json",
+      "--tester-config", "config/tester-testnet.json",
+      "--out-dir", "logs/live-supervisor/dedup-tx-hash-summary-test",
+      "--scenario", "bot-only",
+      "--stop-after-tx-count", "1",
+      "--max-cycles", "1",
+    ]);
+    const plan = resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) });
+
+    const exitCode = await supervise(args, plan, {
+      skipBuiltRuntimeCheck: true,
+      spawnCommand: ((_command: string, commandArgs: string[]) => isPreflightCommand(commandArgs) ? fakeSuccessfulPreflightChild() : fakeChild([
+        JSON.stringify(botEvent("bot.transaction.built", {
+          actions: { collectedOrders: 0, completedDeposits: 0, matchedOrders: 1, deposits: 0, withdrawalRequests: 0, withdrawals: 0 },
+        })),
+        JSON.stringify(botEvent("bot.transaction.committed", {
+          txHash: txHash("5c"),
+          error: { txHash: txHash("5c") },
+        })),
+      ].join("\n"))) as never,
+      spawnSyncCommand: ignoredChecker(true) as never,
+      stat: missingStat,
+      mkdir: () => Promise.resolve(undefined),
+      appendFile: (path, text) => {
+        const key = pathToString(path);
+        writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
+        return Promise.resolve();
+      },
+      writeFile: (path, text) => {
+        writes.set(pathToString(path), textToString(text));
+        return Promise.resolve();
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    const summary = jsonArtifact(writes, "/repo/logs/live-supervisor/dedup-tx-hash-summary-test/summary.json");
+    expect(summary).toMatchObject({
+      stopped: "stop_after_tx_count",
+      txCreatingTxHashCount: 1,
+      txCreatingOutcomeCount: 1,
+    });
+    expect(recordAt(summary["txHashesByOutcome"], "summary tx hashes")).toEqual({
+      bot_match_committed: [txHash("5c")],
     });
   });
 
