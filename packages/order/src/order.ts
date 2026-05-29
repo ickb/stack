@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   BufferedGenerator,
-  collectCompleteScan,
+  collectPagedScan,
   compareBigInt,
-  defaultFindCellsLimit,
+  defaultCellPageSize,
   type ExchangeRatio,
   type ScriptDeps,
   type ValueComponents,
@@ -552,24 +552,24 @@ export class OrderManager implements ScriptDeps {
    *
    * @param client – Client to interact with the blockchain.
    * @param options.onChain – Defaults to true. When false, use cached cell queries.
-   * @param options.limit – Maximum cells to scan per findCells batch. Defaults to `defaultFindCellsLimit` (400).
+   * @param options.pageSize – Cell query page size. Defaults to `defaultCellPageSize` (400).
    * @yields OrderGroup instances combining master, order, and origin cells.
    */
   async *findOrders(
     client: ccc.Client,
     options?: {
       onChain?: boolean;
-      limit?: number;
+      pageSize?: number;
       onSkippedGroup?: (reason: OrderGroupSkipReason) => void;
     },
   ): AsyncGenerator<OrderGroup> {
     const onChain = options?.onChain ?? true;
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
 
     // Fetch simple orders & master cells in parallel
     const [simpleOrders, allMasters] = await Promise.all([
-      this.findSimpleOrders(client, onChain, limit),
-      this.findAllMasters(client, onChain, limit),
+      this.findSimpleOrders(client, onChain, pageSize),
+      this.findAllMasters(client, onChain, pageSize),
     ]);
 
     // Prepare a map of masterCellKey → { master, orders[] }
@@ -622,13 +622,13 @@ export class OrderManager implements ScriptDeps {
    *
    * @param client – The client used to interact with the blockchain.
    * @param onChain - When true, use live RPC queries; otherwise, use cached results.
-   * @param limit – Maximum cells to scan per findCells batch.
+   * @param pageSize – Cell query page size.
    * @returns Promise that resolves to an array of {@link OrderCell}.
    */
   private async findSimpleOrders(
     client: ccc.Client,
     onChain: boolean,
-    limit: number,
+    pageSize: number,
   ): Promise<OrderCell[]> {
     const findCellsArgs = [
       {
@@ -644,11 +644,11 @@ export class OrderManager implements ScriptDeps {
     ] as const;
 
     const orders: OrderCell[] = [];
-    for (const cell of await collectCompleteScan(
-      (scanLimit) => onChain
-        ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-        : client.findCells(...findCellsArgs, scanLimit),
-      { limit, label: "order cell" },
+    for (const cell of await collectPagedScan(
+      (requestPageSize) => onChain
+        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
+        : client.findCells(...findCellsArgs, requestPageSize),
+      { pageSize },
     )) {
       const order = OrderCell.tryFrom(cell);
       if (!order || !this.isOrder(cell)) {
@@ -669,13 +669,13 @@ export class OrderManager implements ScriptDeps {
    *
    * @param client – The client used to interact with the blockchain.
    * @param onChain - When true, use live RPC queries; otherwise, use cached results.
-   * @param limit – Maximum cells to scan per findCells batch.
+   * @param pageSize – Cell query page size.
    * @returns Promise that resolves to an array of {@link MasterCell}.
    */
   private async findAllMasters(
     client: ccc.Client,
     onChain: boolean,
-    limit: number,
+    pageSize: number,
   ): Promise<MasterCell[]> {
     const findCellsArgs = [
       {
@@ -688,11 +688,11 @@ export class OrderManager implements ScriptDeps {
     ] as const;
 
     const masters: MasterCell[] = [];
-    for (const cell of await collectCompleteScan(
-      (scanLimit) => onChain
-        ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-        : client.findCells(...findCellsArgs, scanLimit),
-      { limit, label: "master cell" },
+    for (const cell of await collectPagedScan(
+      (requestPageSize) => onChain
+        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
+        : client.findCells(...findCellsArgs, requestPageSize),
+      { pageSize },
     )) {
       if (!this.isMaster(cell)) {
         // Skip cells that do not satisfy master criteria

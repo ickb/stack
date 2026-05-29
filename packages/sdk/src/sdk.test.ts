@@ -23,7 +23,7 @@ import {
 } from "@ickb/core";
 import { OrderManager } from "@ickb/order";
 import { headerLike as testHeaderLike, hash, script } from "@ickb/testkit";
-import { defaultFindCellsLimit } from "@ickb/utils";
+import { defaultCellPageSize } from "@ickb/utils";
 import {
   completeIckbTransaction,
   estimateMaturityFeeThreshold,
@@ -2330,83 +2330,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     expect(state.system.ckbMaturing).toEqual([]);
   });
 
-  it("allows bot capacity scanning to exactly reach the limit", async () => {
-    const botLock = script("11");
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const order = script("55");
-    const udt = script("66");
-    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      new LogicManager(logic, [], new DaoManager(dao, [])),
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
-    const plainCell = ccc.Cell.from({
-      outPoint: { txHash: hash("04"), index: 0n },
-      cellOutput: { capacity: 1n, lock: botLock },
-      outputData: "0x",
-    });
-    const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: {
-        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
-      }) {
-        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
-          yield* repeat(defaultFindCellsLimit, plainCell);
-        }
-        await Promise.resolve();
-      },
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getL1State(client, [])).resolves.toBeDefined();
-  });
-
-  it("fails closed when bot capacity scanning exceeds the limit", async () => {
-    const botLock = script("11");
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const order = script("55");
-    const udt = script("66");
-    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      new LogicManager(logic, [], new DaoManager(dao, [])),
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
-    const plainCell = ccc.Cell.from({
-      outPoint: { txHash: hash("04"), index: 0n },
-      cellOutput: { capacity: 1n, lock: botLock },
-      outputData: "0x",
-    });
-    const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: {
-        filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
-      }) {
-        if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
-          yield* repeat(defaultFindCellsLimit + 1, plainCell);
-        }
-        await Promise.resolve();
-      },
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      `bot capacity scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
-  });
-
-  it("does not start bot withdrawal scanning when bot capacity scanning fails", async () => {
+  it("uses one page size for bot capacity and withdrawal scans", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2416,6 +2340,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
     const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
       .mockImplementation(() => none());
+    const pageSize = defaultCellPageSize + 100;
     const sdk = new IckbSdk(
       fakeIckbUdt(udt),
       ownedOwnerManager,
@@ -2428,23 +2353,24 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       cellOutput: { capacity: 1n, lock: botLock },
       outputData: "0x",
     });
+    let requestedPageSize = 0;
     const client = {
       getTipHeader: () => Promise.resolve(headerLike(1n)),
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: async function* (query: {
         filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
-      }) {
+      }, _order: unknown, pageSize: number) {
         if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
-          yield* repeat(defaultFindCellsLimit + 1, plainCell);
+          requestedPageSize = pageSize;
+          yield* repeat(pageSize + 1, plainCell);
         }
         await Promise.resolve();
       },
     } as unknown as ccc.Client;
 
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      `bot capacity scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
-    expect(findWithdrawalGroups).not.toHaveBeenCalled();
+    await expect(sdk.getL1State(client, [], { cellPageSize: pageSize })).resolves.toBeDefined();
+    expect(requestedPageSize).toBe(pageSize);
+    expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({ pageSize });
   });
 
   it("propagates bot withdrawal scan failures after bot capacity scanning succeeds", async () => {
@@ -2476,90 +2402,7 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     await expect(sdk.getL1State(client, [])).rejects.toThrow("withdrawal failed");
   });
 
-  it("allows direct deposit scanning to exactly reach the limit", async () => {
-    const botLock = script("11");
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const order = script("55");
-    const udt = script("66");
-    const logicManager = new LogicManager(logic, [], new DaoManager(dao, []));
-    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
-    const deposit = {
-      cell: ccc.Cell.from({
-        outPoint: { txHash: hash("03"), index: 0n },
-        cellOutput: { capacity: 1n, lock: logic, type: dao },
-        outputData: DaoManager.depositData(),
-      }),
-      isReady: false,
-      ckbValue: 1n,
-      udtValue: 1n,
-      maturity: { toUnix: () => 1n },
-    } as unknown as IckbDepositCell;
-    vi.spyOn(logicManager, "findDeposits").mockImplementation(() =>
-      repeat(defaultFindCellsLimit, deposit)
-    );
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
-    const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: () => none(),
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getL1State(client, [])).resolves.toBeDefined();
-  });
-
-  it("fails closed when direct deposit scanning exceeds the limit", async () => {
-    const botLock = script("11");
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const order = script("55");
-    const udt = script("66");
-    const daoManager = new DaoManager(dao, []);
-    const logicManager = new LogicManager(logic, [], daoManager);
-    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
-    const deposit = ccc.Cell.from({
-      outPoint: { txHash: hash("03"), index: 0n },
-      cellOutput: {
-        capacity: ccc.fixedPointFrom(100082),
-        lock: logic,
-        type: dao,
-      },
-      outputData: DaoManager.depositData(),
-    });
-    const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: async function* (query: { filter?: { outputData?: ccc.Hex } }) {
-        if (query.filter?.outputData === DaoManager.depositData()) {
-          yield* repeat(defaultFindCellsLimit + 1, deposit);
-        }
-        await Promise.resolve();
-      },
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(
-      `DAO deposit cell scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
-  });
-
-  it("passes the logical limit to direct deposit scanning", async () => {
+  it("passes the default page size to direct deposit scanning", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2586,28 +2429,32 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     await sdk.getL1State(client, []);
 
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
-      limit: defaultFindCellsLimit,
+      pageSize: defaultCellPageSize,
     });
   });
 
-  it("passes a custom logical limit to pool deposit scanning", async () => {
+  it("passes a custom page size to pool deposit scanning", async () => {
     const { sdk, logicManager } = testSdk();
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
     const client = {
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
-    const poolLimit = defaultFindCellsLimit + 100;
+    const cellPageSize = defaultCellPageSize + 100;
+    const minLockUp = ccc.Epoch.from([0n, 1n, 16n]);
+    const maxLockUp = ccc.Epoch.from([0n, 4n, 16n]);
 
-    await sdk.getPoolDeposits(client, tip, { limit: poolLimit });
+    await sdk.getPoolDeposits(client, tip, { cellPageSize, minLockUp, maxLockUp });
 
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
       tip,
-      limit: poolLimit,
+      pageSize: cellPageSize,
+      minLockUp,
+      maxLockUp,
     });
   });
 
-  it("passes a custom pool deposit scan limit through L1 state loading", async () => {
+  it("passes custom pool deposit scan options through L1 state loading", async () => {
     const { sdk, logicManager } = testSdk();
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
     const client = {
@@ -2615,18 +2462,25 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: () => none(),
     } as unknown as ccc.Client;
-    const poolDepositLimit = defaultFindCellsLimit + 100;
+    const cellPageSize = defaultCellPageSize + 100;
+    const minLockUp = ccc.Epoch.from([0n, 1n, 16n]);
+    const maxLockUp = ccc.Epoch.from([0n, 4n, 16n]);
 
-    await sdk.getL1State(client, [], { poolDepositLimit });
+    await sdk.getL1State(client, [], {
+      cellPageSize,
+      poolDeposits: { minLockUp, maxLockUp },
+    });
 
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
       tip,
-      limit: poolDepositLimit,
+      pageSize: cellPageSize,
+      minLockUp,
+      maxLockUp,
     });
   });
 
-  it("passes a custom available capacity scan limit through L1 state loading", async () => {
+  it("passes one custom page size through L1 state loading", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -2637,8 +2491,9 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, []));
     const orderManager = new OrderManager(order, [], udt);
     vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
+    const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
+      .mockImplementation(() => none());
+    const findOrders = vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
     const sdk = new IckbSdk(
       fakeIckbUdt(udt),
       ownedOwnerManager,
@@ -2651,77 +2506,34 @@ describe("IckbSdk.getL1State snapshot detection", () => {
       cellOutput: { capacity: 1n, lock: botLock },
       outputData: "0x",
     });
-    const availableCapacityLimit = defaultFindCellsLimit + 1;
+    const cellPageSize = defaultCellPageSize + 1;
+    const sampledTip = headerLike(1n);
+    const capacityLimits: number[] = [];
     const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
+      getTipHeader: () => Promise.resolve(sampledTip),
       getFeeRate: () => Promise.resolve(1n),
       findCellsOnChain: async function* (query: {
         filter?: { outputDataLenRange?: unknown; scriptLenRange?: unknown };
-      }) {
+      }, _order: unknown, pageSize: number) {
         if (query.filter?.scriptLenRange && query.filter.outputDataLenRange) {
-          yield* repeat(availableCapacityLimit, plainCell);
+          capacityLimits.push(pageSize);
+          yield* repeat(cellPageSize, plainCell);
         }
         await Promise.resolve();
       },
     } as unknown as ccc.Client;
 
-    await expect(
-      sdk.getL1State(client, [], { availableCapacityLimit }),
-    ).resolves.toBeDefined();
-  });
+    await expect(sdk.getL1State(client, [], { cellPageSize })).resolves.toBeDefined();
 
-  it("passes a custom pending withdrawal scan limit through L1 state loading", async () => {
-    const { sdk, logicManager, ownedOwnerManager, orderManager } = testSdk();
-    vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
-    const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
-      .mockImplementation(() => none());
-    vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
-    const client = {
-      getTipHeader: () => Promise.resolve(tip),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: () => none(),
-    } as unknown as ccc.Client;
-    const pendingWithdrawalLimit = defaultFindCellsLimit + 100;
-
-    await sdk.getL1State(client, [], { pendingWithdrawalLimit });
-
+    expect(capacityLimits).toEqual([cellPageSize]);
     expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
       onChain: true,
-      tip,
-      limit: pendingWithdrawalLimit,
+      tip: sampledTip,
+      pageSize: cellPageSize,
     });
-  });
-
-  it("passes a custom order scan limit through L1 state loading", async () => {
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const order = script("55");
-    const udt = script("66");
-    const orderManager = new OrderManager(order, [], udt);
-    const findOrders = vi.spyOn(orderManager, "findOrders").mockImplementation(async function* () {
-      await Promise.resolve();
-      yield* [] as OrderGroup[];
-    });
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
-      new LogicManager(logic, [], new DaoManager(dao, [])),
-      orderManager,
-      [],
-    );
-    const client = {
-      getTipHeader: () => Promise.resolve(headerLike(1n)),
-      getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: () => none(),
-    } as unknown as ccc.Client;
-    const orderLimit = defaultFindCellsLimit + 100;
-
-    await sdk.getL1State(client, [], { orderLimit });
-
     expect(findOrders.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
-      limit: orderLimit,
+      pageSize: cellPageSize,
     });
   });
 
@@ -2938,27 +2750,37 @@ describe("IckbSdk.getL1State snapshot detection", () => {
     );
   });
 
-  it("passes a custom account scan limit through L1 account state loading", async () => {
+  it("passes one custom page size through L1 account state loading", async () => {
     const { sdk, logicManager, ownedOwnerManager, orderManager } = testSdk();
     const accountLock = script("77");
     vi.spyOn(logicManager, "findDeposits").mockImplementation(() => none());
-    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const findReceipts = vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
+      .mockImplementation(() => none());
     vi.spyOn(orderManager, "findOrders").mockImplementation(() => none());
     const cell = ccc.Cell.from({
       outPoint: { txHash: hash("93"), index: 0n },
       cellOutput: { capacity: 5n, lock: accountLock },
       outputData: "0x",
     });
+    const cellPageSize = 1;
+    let requestedPageSize = 0;
     const client = {
       getTipHeader: () => Promise.resolve(tip),
       getFeeRate: () => Promise.resolve(1n),
-      findCellsOnChain: () => repeat(2, cell),
+      findCellsOnChain: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
+        yield* repeat(2, cell);
+        await Promise.resolve();
+      },
     } as unknown as ccc.Client;
 
-    await expect(
-      sdk.getL1AccountState(client, [accountLock], { accountLimit: 1 }),
-    ).rejects.toThrow("account scan reached limit 1");
+    const state = await sdk.getL1AccountState(client, [accountLock], { cellPageSize });
+
+    expect(requestedPageSize).toBe(cellPageSize);
+    expect(findReceipts.mock.calls[0]?.[2]).toMatchObject({ pageSize: cellPageSize });
+    expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({ pageSize: cellPageSize });
+    expect(state.account.capacityCells).toEqual([cell, cell]);
   });
 });
 
@@ -3015,79 +2837,33 @@ describe("IckbSdk.getAccountState", () => {
     expect(ickbUdt.infoFrom).toHaveBeenCalledWith(client, [udtCell]);
   });
 
-  it("allows account cell scanning to exactly reach the limit", async () => {
-    const accountLock = script("11");
-    const udt = script("66");
-    const daoManager = new DaoManager(script("33"), []);
-    const logicManager = new LogicManager(script("22"), [], daoManager);
-    const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], daoManager);
-    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(script("55"), [], udt),
-      [],
-    );
-    const cell = ccc.Cell.from({
-      outPoint: { txHash: hash("92"), index: 0n },
-      cellOutput: { capacity: 5n, lock: accountLock },
-      outputData: "0x",
-    });
-    const client = {
-      findCellsOnChain: () => repeat(defaultFindCellsLimit, cell),
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getAccountState(client, [accountLock], tip)).resolves.toBeDefined();
-  });
-
-  it("uses a custom account cell scan limit", async () => {
+  it("uses a custom account cell scan page size", async () => {
     const { sdk, logicManager, ownedOwnerManager } = testSdk();
     const accountLock = script("11");
-    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const findReceipts = vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    const findWithdrawalGroups = vi.spyOn(ownedOwnerManager, "findWithdrawalGroups")
+      .mockImplementation(() => none());
     const cell = ccc.Cell.from({
       outPoint: { txHash: hash("92"), index: 0n },
       cellOutput: { capacity: 5n, lock: accountLock },
       outputData: "0x",
     });
+    const cellPageSize = 1;
+    let requestedPageSize = 0;
     const client = {
-      findCellsOnChain: () => repeat(2, cell),
+      findCellsOnChain: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
+        yield* repeat(2, cell);
+        await Promise.resolve();
+      },
     } as unknown as ccc.Client;
 
-    await expect(
-      sdk.getAccountState(client, [accountLock], tip, { limit: 1 }),
-    ).rejects.toThrow("account scan reached limit 1");
-  });
+    const state = await sdk.getAccountState(client, [accountLock], tip, { cellPageSize });
 
-  it("fails closed when account cell scanning exceeds the limit", async () => {
-    const accountLock = script("11");
-    const udt = script("66");
-    const daoManager = new DaoManager(script("33"), []);
-    const logicManager = new LogicManager(script("22"), [], daoManager);
-    const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], daoManager);
-    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(script("55"), [], udt),
-      [],
-    );
-    const cell = ccc.Cell.from({
-      outPoint: { txHash: hash("92"), index: 0n },
-      cellOutput: { capacity: 5n, lock: accountLock },
-      outputData: "0x",
-    });
-    const client = {
-      findCellsOnChain: () => repeat(defaultFindCellsLimit + 1, cell),
-    } as unknown as ccc.Client;
-
-    await expect(sdk.getAccountState(client, [accountLock], tip)).rejects.toThrow(
-      `account scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
+    expect(requestedPageSize).toBe(cellPageSize);
+    expect(findReceipts.mock.calls[0]?.[2]).toMatchObject({ pageSize: cellPageSize });
+    expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({ pageSize: cellPageSize });
+    expect(state.capacityCells).toEqual([cell, cell]);
   });
 });
 

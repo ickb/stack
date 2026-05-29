@@ -3,13 +3,12 @@ import { type IckbDepositCell } from "@ickb/core";
 import { handleLoopError, logExecution } from "@ickb/node-utils";
 import { OrderManager } from "@ickb/order";
 import { type IckbSdk } from "@ickb/sdk";
-import { defaultFindCellsLimit } from "@ickb/utils";
 import { hash, headerLike, script } from "@ickb/testkit";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE, TARGET_ICKB_BALANCE } from "./policy.js";
+import { CKB_RESERVE, POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP, TARGET_ICKB_BALANCE } from "./policy.js";
 import {
   completeTerminalIteration,
   isRetryableBotError,
@@ -19,7 +18,7 @@ import {
   reachedMaxRetryableAttempts,
 } from "./index.js";
 import { BotEventEmitter, transactionLifecycleEvents } from "./observability.js";
-import { buildTransaction, collectPoolDeposits } from "./runtime.js";
+import { buildTransaction } from "./runtime.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,6 +28,7 @@ function readyDeposit(
   byte: string,
   udtValue: bigint,
   maturityUnix: bigint,
+  options: { isReady?: boolean } = {},
 ): IckbDepositCell {
   return {
     cell: ccc.Cell.from({
@@ -39,6 +39,7 @@ function readyDeposit(
       },
       outputData: "0x",
     }),
+    isReady: options.isReady ?? true,
     udtValue,
     maturity: {
       toUnix: (): bigint => maturityUnix,
@@ -123,11 +124,18 @@ function botRuntime(overrides: {
             exchangeRatio: { ckbScale: 1n, udtScale: 1n },
             orderPool: [],
             feeRate: 1n,
+            poolDeposits: { deposits: [], readyDeposits: [], id: "empty" },
+            ckbAvailable: 0n,
+            ckbMaturing: [],
           },
           user: { orders: [] },
           account: {
             capacityCells: [],
+            nativeUdtCells: [],
+            nativeUdtCapacity: 0n,
+            nativeUdtBalance: 0n,
             receipts: [],
+            withdrawalGroups: [],
           },
         };
       },
@@ -140,74 +148,107 @@ function botRuntime(overrides: {
   };
 }
 
-describe("collectPoolDeposits", () => {
-  it("fails closed when the public pool scan reaches the sentinel limit", async () => {
-    async function* deposits(): AsyncGenerator<IckbDepositCell> {
-      await Promise.resolve();
-      for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
-        yield readyDeposit("33", 1n, BigInt(index));
-      }
-    }
-
-    const findDeposits = vi.fn(() => deposits());
-
-    await expect(
-      collectPoolDeposits(
-        {} as ccc.Client,
-        { findDeposits } as never,
-        {} as ccc.ClientBlockHeader,
-      ),
-    ).rejects.toThrow(
-      `iCKB pool deposit scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
-
-    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
-      onChain: true,
-      limit: defaultFindCellsLimit + 1,
-    });
-  });
-});
-
 describe("readBotState", () => {
-  it("fails closed when pool scans cross the account-state tip", async () => {
-    const tip = headerLike({ number: 10n });
-    const assertCurrentTip = vi.fn(async () => {
-      await Promise.resolve();
-      throw new Error("L1 state scan crossed chain tip; retry with a fresh state");
+  it("partitions SDK pool deposits without a second pool scan", async () => {
+    const tip = headerLike({
+      number: 10n,
+      epoch: [0n, 0n, 1n],
+      timestamp: "0x0",
     });
+    const readyWindowEnd = POOL_MAX_LOCK_UP.add(tip.epoch).toUnix(tip);
+    const ready = readyDeposit("33", 1n, 1n, { isReady: true });
+    const tooEarly = readyDeposit("34", 2n, readyWindowEnd - 1n, { isReady: false });
+    const nearReady = readyDeposit("35", 3n, readyWindowEnd + 1n, { isReady: false });
+    const future = readyDeposit("36", 4n, readyWindowEnd + 60n * 60n * 1000n, { isReady: false });
+    const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
+    getL1AccountState.mockResolvedValue({
+      system: {
+        tip,
+        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+        orderPool: [],
+        feeRate: 1n,
+        poolDeposits: {
+          deposits: [ready, tooEarly, nearReady, future],
+          readyDeposits: [ready],
+          id: "pool",
+        },
+        ckbAvailable: 0n,
+        ckbMaturing: [],
+      },
+      user: { orders: [] },
+      account: {
+        capacityCells: [],
+        nativeUdtCells: [],
+        nativeUdtCapacity: 0n,
+        nativeUdtBalance: 0n,
+        receipts: [],
+        withdrawalGroups: [],
+      },
+    });
+    const assertCurrentTip = vi.fn<IckbSdk["assertCurrentTip"]>();
+    const findDeposits = vi.fn(async function* (): AsyncGenerator<IckbDepositCell> {
+      await Promise.resolve();
+      yield* [] as IckbDepositCell[];
+    });
+    const runtime = botRuntime({
+      sdk: {
+        getL1AccountState,
+        assertCurrentTip,
+      },
+      managers: {
+        logic: {
+          findDeposits,
+        },
+      },
+    });
+
+    const state = await readBotState(runtime as never);
+
+    expect(getL1AccountState).toHaveBeenCalledTimes(1);
+    expect(getL1AccountState.mock.calls[0]?.[2]).toMatchObject({
+      poolDeposits: {
+        minLockUp: POOL_MIN_LOCK_UP,
+        maxLockUp: POOL_MAX_LOCK_UP,
+      },
+    });
+    expect(findDeposits).not.toHaveBeenCalled();
+    expect(assertCurrentTip).not.toHaveBeenCalled();
+    expect(state.readyPoolDeposits).toEqual([ready]);
+    expect(state.nearReadyPoolDeposits).toEqual([nearReady]);
+    expect(state.futurePoolDeposits).toEqual([future]);
+  });
+
+  it("fails closed when L1 account state omits the pool deposit snapshot", async () => {
     const runtime = botRuntime({
       sdk: {
         getL1AccountState: async (): Promise<unknown> => {
           await Promise.resolve();
           return {
             system: {
-              tip,
+              tip: headerLike(),
               exchangeRatio: { ckbScale: 1n, udtScale: 1n },
               orderPool: [],
               feeRate: 1n,
+              ckbAvailable: 0n,
+              ckbMaturing: [],
             },
             user: { orders: [] },
-            account: { capacityCells: [], receipts: [] },
+            account: {
+              capacityCells: [],
+              nativeUdtCells: [],
+              nativeUdtCapacity: 0n,
+              nativeUdtBalance: 0n,
+              receipts: [],
+              withdrawalGroups: [],
+            },
           };
-        },
-        assertCurrentTip,
-      },
-      managers: {
-        logic: {
-          findDeposits: async function* (): AsyncGenerator<IckbDepositCell> {
-            await Promise.resolve();
-            for (const deposit of [] as IckbDepositCell[]) {
-              yield deposit;
-            }
-          },
         },
       },
     });
 
     await expect(readBotState(runtime as never)).rejects.toThrow(
-      "L1 state scan crossed chain tip; retry with a fresh state",
+      "L1 account state is missing pool deposit snapshot",
     );
-    expect(assertCurrentTip).toHaveBeenCalledWith(runtime.client, tip);
   });
 });
 

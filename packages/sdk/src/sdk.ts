@@ -2,10 +2,10 @@ import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoOutputLimitError } from "@ickb/dao";
 import {
   collect,
-  collectCompleteScan,
+  collectPagedScan,
   binarySearch,
   compareBigInt,
-  defaultFindCellsLimit,
+  defaultCellPageSize,
   isPlainCapacityCell,
   unique,
   type ValueComponents,
@@ -48,6 +48,15 @@ export interface PoolDepositState {
   deposits: IckbDepositCell[];
   readyDeposits: IckbDepositCell[];
   id: string;
+}
+
+export interface PoolDepositRangeOptions {
+  minLockUp?: ccc.Epoch;
+  maxLockUp?: ccc.Epoch;
+}
+
+export interface GetPoolDepositsOptions extends PoolDepositRangeOptions {
+  cellPageSize?: number;
 }
 
 export interface ConversionTransactionContext {
@@ -162,14 +171,8 @@ export type SendAndWaitForCommitEvent =
     };
 
 export interface GetL1StateOptions {
-  availableCapacityLimit?: number;
-  pendingWithdrawalLimit?: number;
-  orderLimit?: number;
-  poolDepositLimit?: number;
-}
-
-export interface GetL1AccountStateOptions extends GetL1StateOptions {
-  accountLimit?: number;
+  cellPageSize?: number;
+  poolDeposits?: PoolDepositRangeOptions;
 }
 
 export interface IckbToCkbOrderEstimate {
@@ -722,12 +725,15 @@ export class IckbSdk {
   async getPoolDeposits(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
-    options?: { limit?: number },
+    options?: GetPoolDepositsOptions,
   ): Promise<PoolDepositState> {
+    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
     const deposits = await collect(this.ickbLogic.findDeposits(client, {
       onChain: true,
       tip,
-      limit: options?.limit ?? defaultFindCellsLimit,
+      pageSize: cellPageSize,
+      minLockUp: options?.minLockUp,
+      maxLockUp: options?.maxLockUp,
     }));
     const readyDeposits = sortDepositsByMaturity(
       deposits.filter((deposit) => deposit.isReady),
@@ -1052,15 +1058,17 @@ export class IckbSdk {
     client: ccc.Client,
     locks: ccc.Script[],
     tip: ccc.ClientBlockHeader,
-    options?: { limit?: number },
+    options?: { cellPageSize?: number },
   ): Promise<AccountState> {
+    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
     const [cells, receipts, withdrawalGroups] = await Promise.all([
-      this.findAccountCells(client, locks, options),
-      collect(this.ickbLogic.findReceipts(client, locks, { onChain: true })),
+      this.findAccountCells(client, locks, { pageSize: cellPageSize }),
+      collect(this.ickbLogic.findReceipts(client, locks, { onChain: true, pageSize: cellPageSize })),
       collect(
         this.ownedOwner.findWithdrawalGroups(client, locks, {
           onChain: true,
           tip,
+          pageSize: cellPageSize,
         }),
       ),
     ]);
@@ -1083,7 +1091,7 @@ export class IckbSdk {
   async getL1AccountState(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1AccountStateOptions,
+    options?: GetL1StateOptions,
   ): Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
@@ -1091,7 +1099,7 @@ export class IckbSdk {
   }> {
     const { system, user } = await this.getL1State(client, locks, options);
     const account = await this.getAccountState(client, locks, system.tip, {
-      limit: options?.accountLimit,
+      cellPageSize: options?.cellPageSize,
     });
 
     return { system, user, account };
@@ -1102,7 +1110,7 @@ export class IckbSdk {
    *
    * The method performs the following:
    * - Obtains the current block tip and calculates the exchange ratio.
-   * - Fetches available CKB and the maturing CKB based on bot capacities and direct deposit scans.
+   * - Fetches available CKB and the maturing CKB based on bot capacities and the pool deposit scan.
    * - Filters orders into user-owned and system orders based on the provided locks.
    * - Estimates user-owned orders maturity.
    *
@@ -1119,17 +1127,18 @@ export class IckbSdk {
   ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
+    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
 
     // Parallel fetching of system components.
     const [poolDeposits, orders, feeRate] = await Promise.all([
-      this.getPoolDeposits(client, tip, { limit: options?.poolDepositLimit }),
+      this.getPoolDeposits(client, tip, { ...options?.poolDeposits, cellPageSize }),
       collect(this.order.findOrders(client, {
         onChain: true,
-        limit: options?.orderLimit ?? defaultFindCellsLimit,
+        pageSize: cellPageSize,
       })),
       client.getFeeRate(),
     ]);
-    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits, options);
+    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits, { cellPageSize });
 
     const midInfo = new Info(exchangeRatio, exchangeRatio, 1);
     const userOrders: OrderGroup[] = [];
@@ -1174,7 +1183,7 @@ export class IckbSdk {
    * - Fetches bot withdrawal requests and bot plain-capacity balances.
    * - Aggregates available CKB balances from bot capacities.
    * - Calculates maturing CKB values (with their expected maturity timestamps)
-   *   via direct deposit cell lookups.
+   *   from the already loaded pool deposits.
    * - Sorts and cumulatively sums the maturing values for later lookup.
    *
    * @param client - The blockchain client used for fetching data.
@@ -1188,25 +1197,24 @@ export class IckbSdk {
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
     poolDeposits: PoolDepositState,
-    options?: GetL1StateOptions,
+    options: { cellPageSize: number },
   ): Promise<{
     ckbAvailable: ccc.FixedPoint;
     ckbMaturing: CkbCumulative[];
   }> {
-    const botCapacityLimit = options?.availableCapacityLimit ?? defaultFindCellsLimit;
-    const botWithdrawalLimit = options?.pendingWithdrawalLimit ?? defaultFindCellsLimit;
+    const cellPageSize = options.cellPageSize;
     const withdrawalOptions = {
       onChain: true,
       tip,
-      limit: botWithdrawalLimit,
+      pageSize: cellPageSize,
     };
     // Map to track each bot's available CKB (minus a reserved amount for internal operations).
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     const reserved = -ccc.fixedPointFrom("2000");
     for (const lock of unique(this.bots)) {
       const key = lock.toHex();
-      for (const cell of await collectCompleteScan(
-        (scanLimit) => client.findCellsOnChain(
+      for (const cell of await collectPagedScan(
+        (pageSize) => client.findCellsOnChain(
           {
             script: lock,
             scriptType: "lock",
@@ -1218,9 +1226,9 @@ export class IckbSdk {
             withData: true,
           },
           "asc",
-          scanLimit,
+          pageSize,
         ),
-        { limit: botCapacityLimit, label: "bot capacity", context: lock },
+        { pageSize: cellPageSize },
       )) {
         if (isPlainCapacityCell(cell)) {
           const ckb =
@@ -1296,13 +1304,13 @@ export class IckbSdk {
   private async findAccountCells(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: { limit?: number },
+    options?: { pageSize?: number },
   ): Promise<ccc.Cell[]> {
     const cells: ccc.Cell[] = [];
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
     for (const lock of unique(locks)) {
-      cells.push(...await collectCompleteScan(
-        (scanLimit) => client.findCellsOnChain(
+      cells.push(...await collectPagedScan(
+        (pageSize) => client.findCellsOnChain(
           {
             script: lock,
             scriptType: "lock",
@@ -1310,9 +1318,9 @@ export class IckbSdk {
             withData: true,
           },
           "asc",
-          scanLimit,
+          pageSize,
         ),
-        { limit, label: "account", context: lock },
+        { pageSize },
       ));
     }
     return cells;

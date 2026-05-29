@@ -25,11 +25,15 @@ import {
 } from "@ickb/node-utils";
 import {
   buildTransaction,
-  collectPoolDeposits,
   summarizeBotState,
   type BotState,
   type Runtime,
 } from "./runtime.js";
+import {
+  partitionBotPoolDeposits,
+  POOL_MAX_LOCK_UP,
+  POOL_MIN_LOCK_UP,
+} from "./policy.js";
 import {
   BotEventEmitter,
   createRunId,
@@ -284,13 +288,20 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
   const { system, user, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     accountLocks,
+    {
+      poolDeposits: {
+        minLockUp: POOL_MIN_LOCK_UP,
+        maxLockUp: POOL_MAX_LOCK_UP,
+      },
+    },
   );
-  const poolDeposits = await collectPoolDeposits(
-    runtime.client,
-    runtime.managers.logic,
+  if (!system.poolDeposits) {
+    throw new Error("L1 account state is missing pool deposit snapshot");
+  }
+  const poolDeposits = partitionBotPoolDeposits(
+    system.poolDeposits.deposits,
     system.tip,
   );
-  await runtime.sdk.assertCurrentTip(runtime.client, system.tip);
 
   const projection = projectAccountAvailability(account, user.orders, {
     collectedOrdersAvailable: true,

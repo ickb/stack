@@ -14,9 +14,9 @@ Callers own the final completion pipeline:
 
 Withdrawal requests built from public pool ready deposits may include `requiredLiveDeposits`. `@ickb/sdk` adds those cells as live `cell_dep` checks so a transaction fails if a protected pool anchor disappears before inclusion.
 
-## Scan Completeness Boundary
+## Scan Page Size Boundary
 
-Stack cell scans that feed account state, pool state, order books, or maturity estimates request one sentinel entry beyond the configured logical limit and fail closed if the sentinel appears. Callers should treat these errors as incomplete state, not as zero balance or unavailable liquidity.
+Stack cell scans that feed account state, pool state, order books, or maturity estimates use a per-request page size. SDK state APIs expose it as `cellPageSize`; lower-level scan wrappers expose it as `pageSize` and pass it to CCC as `limit`.
 
 ## User Lock Assumption
 

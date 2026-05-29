@@ -14,10 +14,8 @@ import {
 } from "@ickb/order";
 import { type getConfig, type IckbSdk, type SystemState } from "@ickb/sdk";
 import { accountPlainCkbBalance, postTransactionAccountPlainCkbBalance, type SupportedChain } from "@ickb/node-utils";
-import { collectCompleteScan, defaultFindCellsLimit } from "@ickb/utils";
 import {
   CKB_RESERVE,
-  partitionPoolDeposits,
   planRebalance,
   type RebalanceNoopReason,
   type RebalancePlan,
@@ -25,8 +23,6 @@ import {
 
 const MATCH_STEP_DIVISOR = 100n;
 const MAX_OUTPUTS_BEFORE_CHANGE = 58;
-const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
-const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 
 export interface Runtime {
   chain: SupportedChain;
@@ -388,32 +384,6 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       feeRate: state.system.feeRate,
     },
   };
-}
-
-export async function collectPoolDeposits(
-  client: ccc.Client,
-  logic: Runtime["managers"]["logic"],
-  tip: ccc.ClientBlockHeader,
-): Promise<{
-  ready: IckbDepositCell[];
-  nearReady: IckbDepositCell[];
-  future: IckbDepositCell[];
-}> {
-  const deposits = await collectCompleteScan(
-    (scanLimit) =>
-      logic.findDeposits(client, {
-        onChain: true,
-        tip,
-        minLockUp: POOL_MIN_LOCK_UP,
-        maxLockUp: POOL_MAX_LOCK_UP,
-        limit: scanLimit,
-      }),
-    { limit: defaultFindCellsLimit, label: "iCKB pool deposit" },
-  );
-
-  const readyWindowEnd = POOL_MAX_LOCK_UP.add(tip.epoch).toUnix(tip);
-
-  return partitionPoolDeposits(deposits, tip, readyWindowEnd);
 }
 
 function isMatchOnly(actions: {

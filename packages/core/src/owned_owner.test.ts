@@ -29,7 +29,7 @@ describe("OwnedOwnerManager.findWithdrawalGroups", () => {
     expect(ownerCell.getOwned().index).toBe(0n);
   });
 
-  it("fails closed when owner scanning exceeds the limit", async () => {
+  it("passes the cell page size to owner scanning", async () => {
     const ownerLock = script("11");
     const ownedOwnerScript = script("22");
     const daoScript = script("33");
@@ -57,20 +57,24 @@ describe("OwnedOwnerManager.findWithdrawalGroups", () => {
       },
       outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
     });
-    let requestedLimit = 0;
+    let requestedPageSize = 0;
     const client = {
-      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
-        requestedLimit = limit;
+      findCells: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
         await Promise.resolve();
         yield firstOwner;
         yield secondOwner;
       },
+      getCell: async () => {
+        await Promise.resolve();
+        return undefined;
+      },
     } as unknown as ccc.Client;
 
-    await expect(
-      collect(manager.findWithdrawalGroups(client, [ownerLock], { tip, limit: 1 })),
-    ).rejects.toThrow("owner cell scan reached limit 1; state may be incomplete");
-    expect(requestedLimit).toBe(2);
+    const groups = await collect(manager.findWithdrawalGroups(client, [ownerLock], { tip, pageSize: 1 }));
+
+    expect(requestedPageSize).toBe(1);
+    expect(groups).toEqual([]);
   });
 
   it("skips owners whose referenced withdrawal is not locked by Owned Owner", async () => {

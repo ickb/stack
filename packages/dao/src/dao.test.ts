@@ -201,7 +201,7 @@ describe("DaoManager cell decoding ownership", () => {
 });
 
 describe("DaoManager.findDeposits", () => {
-  it("fails closed when deposit scanning exceeds the limit", async () => {
+  it("passes the cell page size to deposit scanning", async () => {
     const manager = new DaoManager(script("11"), []);
     const lock = script("22");
     const firstDeposit = ccc.Cell.from({
@@ -222,20 +222,27 @@ describe("DaoManager.findDeposits", () => {
       },
       outputData: DaoManager.depositData(),
     });
-    let requestedLimit = 0;
+    let requestedPageSize = 0;
     const client = {
-      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
-        requestedLimit = limit;
+      findCells: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
         await Promise.resolve();
         yield firstDeposit;
         yield secondDeposit;
       },
+      getTransactionWithHeader: async () => {
+        await Promise.resolve();
+        return { header: headerLike(1n) };
+      },
     } as unknown as ccc.Client;
 
-    await expect(
-      collect(manager.findDeposits(client, [lock], { tip: headerLike(3n), limit: 1 })),
-    ).rejects.toThrow("DAO deposit cell scan reached limit 1; state may be incomplete");
-    expect(requestedLimit).toBe(2);
+    const deposits = await collect(manager.findDeposits(client, [lock], { tip: headerLike(3n), pageSize: 1 }));
+
+    expect(requestedPageSize).toBe(1);
+    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
+      firstDeposit.outPoint.txHash,
+      secondDeposit.outPoint.txHash,
+    ]);
   });
 
   it("decodes deposits concurrently and yields scan order", async () => {
@@ -346,10 +353,54 @@ describe("DaoManager.findDeposits", () => {
     expect(transactionCalls).toBe(1);
     expect(deposits).toHaveLength(2);
   });
+
+  it("reuses deposit transaction header requests across lock scans", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const firstLock = script("22");
+    const secondLock = script("33");
+    const txHash = byte32FromByte("44");
+    const firstDeposit = ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: firstLock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    const secondDeposit = ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: secondLock,
+        type: manager.script,
+      },
+      outputData: DaoManager.depositData(),
+    });
+    let transactionCalls = 0;
+    const client = {
+      findCells: async function* (query: { script: ccc.Script }) {
+        await Promise.resolve();
+        yield query.script.eq(firstLock) ? firstDeposit : secondDeposit;
+      },
+      getTransactionWithHeader: async () => {
+        transactionCalls += 1;
+        await Promise.resolve();
+        return { header: headerLike(1n) };
+      },
+    } as unknown as ccc.Client;
+
+    const deposits = await collect(manager.findDeposits(client, [firstLock, secondLock], {
+      tip: headerLike(3n),
+    }));
+
+    expect(transactionCalls).toBe(1);
+    expect(deposits.map((deposit) => deposit.cell.outPoint.index)).toEqual([0n, 1n]);
+  });
 });
 
 describe("DaoManager.findWithdrawalRequests", () => {
-  it("fails closed when withdrawal request scanning exceeds the limit", async () => {
+  it("passes the cell page size to withdrawal request scanning", async () => {
     const manager = new DaoManager(script("11"), []);
     const lock = script("22");
     const firstWithdrawal = ccc.Cell.from({
@@ -370,20 +421,31 @@ describe("DaoManager.findWithdrawalRequests", () => {
       },
       outputData: ccc.mol.Uint64LE.encode(1n),
     });
-    let requestedLimit = 0;
+    let requestedPageSize = 0;
     const client = {
-      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
-        requestedLimit = limit;
+      findCells: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
         await Promise.resolve();
         yield firstWithdrawal;
         yield secondWithdrawal;
       },
+      getHeaderByNumber: async () => {
+        await Promise.resolve();
+        return headerLike(1n);
+      },
+      getTransactionWithHeader: async () => {
+        await Promise.resolve();
+        return { header: headerLike(2n) };
+      },
     } as unknown as ccc.Client;
 
-    await expect(
-      collect(manager.findWithdrawalRequests(client, [lock], { tip: headerLike(3n), limit: 1 })),
-    ).rejects.toThrow("DAO withdrawal request cell scan reached limit 1; state may be incomplete");
-    expect(requestedLimit).toBe(2);
+    const withdrawals = await collect(manager.findWithdrawalRequests(client, [lock], { tip: headerLike(3n), pageSize: 1 }));
+
+    expect(requestedPageSize).toBe(1);
+    expect(withdrawals.map((withdrawal) => withdrawal.cell.outPoint.txHash)).toEqual([
+      firstWithdrawal.outPoint.txHash,
+      secondWithdrawal.outPoint.txHash,
+    ]);
   });
 
   it("decodes withdrawals concurrently and yields scan order", async () => {
@@ -505,6 +567,57 @@ describe("DaoManager.findWithdrawalRequests", () => {
     expect(headerCalls).toBe(1);
     expect(transactionCalls).toBe(1);
     expect(withdrawals).toHaveLength(2);
+  });
+
+  it("reuses withdrawal transaction and deposit header requests across lock scans", async () => {
+    const manager = new DaoManager(script("11"), []);
+    const firstLock = script("22");
+    const secondLock = script("33");
+    const txHash = byte32FromByte("55");
+    const firstWithdrawal = ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: firstLock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    const secondWithdrawal = ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: secondLock,
+        type: manager.script,
+      },
+      outputData: ccc.mol.Uint64LE.encode(1n),
+    });
+    let headerCalls = 0;
+    let transactionCalls = 0;
+    const client = {
+      findCells: async function* (query: { script: ccc.Script }) {
+        await Promise.resolve();
+        yield query.script.eq(firstLock) ? firstWithdrawal : secondWithdrawal;
+      },
+      getHeaderByNumber: async () => {
+        headerCalls += 1;
+        await Promise.resolve();
+        return headerLike(1n);
+      },
+      getTransactionWithHeader: async () => {
+        transactionCalls += 1;
+        await Promise.resolve();
+        return { header: headerLike(2n) };
+      },
+    } as unknown as ccc.Client;
+
+    const withdrawals = await collect(manager.findWithdrawalRequests(client, [firstLock, secondLock], {
+      tip: headerLike(3n),
+    }));
+
+    expect(headerCalls).toBe(1);
+    expect(transactionCalls).toBe(1);
+    expect(withdrawals.map((withdrawal) => withdrawal.cell.outPoint.index)).toEqual([0n, 1n]);
   });
 });
 

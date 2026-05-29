@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ccc } from "@ckb-ccc/core";
 import {
   BufferedGenerator,
-  assertCompleteScan,
   compareBigInt,
-  collectCompleteScan,
-  scanLimit,
+  collectPagedScan,
 } from "./utils.js";
 
 describe("compareBigInt", () => {
@@ -36,72 +33,19 @@ describe("BufferedGenerator", () => {
   });
 });
 
-describe("scan completeness", () => {
-  it("derives the sentinel scan limit", () => {
-    expect(scanLimit(400)).toBe(401);
-  });
+describe("scan collection", () => {
+  it("passes the cell page size through and collects all yielded items", async () => {
+    const seenPageSizes: number[] = [];
 
-  it("allows scans up to the logical limit", () => {
-    expect(() => {
-      assertCompleteScan(400, 400, "account");
-    }).not.toThrow();
-  });
-
-  it("fails closed after the logical limit", () => {
-    expect(() => {
-      assertCompleteScan(401, 400, "account");
-    }).toThrow(
-      "account scan reached limit 400; state may be incomplete",
-    );
-  });
-
-  it("includes script context in scan errors", () => {
-    const lock = ccc.Script.from({
-      codeHash: `0x${"11".repeat(32)}`,
-      hashType: "type",
-      args: "0x",
-    });
-
-    expect(() => {
-      assertCompleteScan(401, 400, "account", lock);
-    }).toThrow(
-      `account scan reached limit 400 for ${lock.toHex()}; state may be incomplete`,
-    );
-  });
-
-  it("includes string context in scan errors", () => {
-    expect(() => {
-      assertCompleteScan(401, 400, "account", " for wallet");
-    }).toThrow(
-      "account scan reached limit 400 for wallet; state may be incomplete",
-    );
-  });
-
-  it("collects scans with a sentinel limit", async () => {
-    const seenLimits: number[] = [];
-
-    await expect(collectCompleteScan(
-      async function* (limit: number) {
-        seenLimits.push(limit);
+    await expect(collectPagedScan(
+      async function* (pageSize: number) {
+        seenPageSizes.push(pageSize);
         yield 1;
         yield 2;
         await Promise.resolve();
       },
-      { limit: 2, label: "account" },
+      { pageSize: 2 },
     )).resolves.toEqual([1, 2]);
-    expect(seenLimits).toEqual([3]);
-  });
-
-  it("fails closed when collected sentinel scans exceed the logical limit", async () => {
-    await expect(collectCompleteScan(
-      async function* () {
-        yield 1;
-        yield 2;
-        await Promise.resolve();
-      },
-      { limit: 1, label: "account" },
-    )).rejects.toThrow(
-      "account scan reached limit 1; state may be incomplete",
-    );
+    expect(seenPageSizes).toEqual([2]);
   });
 });

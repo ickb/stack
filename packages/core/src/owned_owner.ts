@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  collectCompleteScan,
-  defaultFindCellsLimit,
+  collectPagedScan,
+  defaultCellPageSize,
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
@@ -212,8 +212,8 @@ export class OwnedOwnerManager implements ScriptDeps {
    *
    * @param client
    *   A CKB client instance providing:
-   *   - `findCells(query, order, limit)` for cached searches
-   *   - `findCellsOnChain(query, order, limit)` for on-chain searches
+   *   - `findCells(query, order, pageSize)` for cached searches
+   *   - `findCellsOnChain(query, order, pageSize)` for on-chain searches
    *   - `getTipHeader()` to fetch the latest block header
    *
    * @param locks
@@ -228,9 +228,8 @@ export class OwnedOwnerManager implements ScriptDeps {
    *   - `onChain?: boolean`
    *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
    *       Default: `false`.
-   *   - `limit?: number`
-   *       Maximum number of cells to fetch per lock script.
-   *       Defaults to `defaultFindCellsLimit` (400).
+   *   - `pageSize?: number`
+   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
    *
    * @yields
    *   {@link WithdrawalGroup} objects, each containing:
@@ -255,11 +254,11 @@ export class OwnedOwnerManager implements ScriptDeps {
     options?: {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
-      limit?: number;
+      pageSize?: number;
     },
   ): AsyncGenerator<WithdrawalGroup> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
     for (const lock of unique(locks)) {
       const findCellsArgs = [
         {
@@ -274,11 +273,11 @@ export class OwnedOwnerManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const ownerCandidates = (await collectCompleteScan(
-        (scanLimit) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-          : client.findCells(...findCellsArgs, scanLimit),
-        { limit, label: "owner cell" },
+      const ownerCandidates = (await collectPagedScan(
+        (pageSize) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, pageSize)
+          : client.findCells(...findCellsArgs, pageSize),
+        { pageSize },
       ))
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
         .map((cell) => new OwnerCell(cell));

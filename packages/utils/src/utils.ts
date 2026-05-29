@@ -1,53 +1,27 @@
 import { ccc } from "@ckb-ccc/core";
 
 /**
- * The default upper limit on the number of cells to return when querying the chain.
+ * The default page size used when querying cells from the chain.
  *
- * This limit is aligned with Nervos CKB's pull request #4576
+ * This page size is aligned with Nervos CKB's pull request #4576
  * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
  *
  * @remarks
- * When searching for cells, callers may override this limit
- * by passing a custom `limit` in their options. If no override is provided,
- * this constant controls how many cells will be fetched in a single batch.
+ * When searching for cells, callers may override this page size by passing a
+ * custom `pageSize` in their options. This does not cap total results.
  */
-export const defaultFindCellsLimit = 400;
+export const defaultCellPageSize = 400;
 
-export function scanLimit(limit: number): number {
-  return limit + 1;
-}
-
-export function assertCompleteScan(
-  scanned: number,
-  limit: number,
-  label: string,
-  context?: ccc.Script | string,
-): void {
-  if (scanned <= limit) {
-    return;
-  }
-
-  const suffix = typeof context === "string"
-    ? context
-    : context
-      ? ` for ${context.toHex()}`
-      : "";
-  throw new Error(`${label} scan reached limit ${String(limit)}${suffix}; state may be incomplete`);
-}
-
-export async function collectCompleteScan<T>(
-  scan: (limit: number) => AsyncIterable<T>,
+export async function collectPagedScan<T>(
+  scan: (pageSize: number) => AsyncIterable<T>,
   options: {
-    limit: number;
-    label: string;
-    context?: ccc.Script | string;
+    pageSize: number;
   },
 ): Promise<T[]> {
   const results: T[] = [];
-  for await (const item of scan(scanLimit(options.limit))) {
+  for await (const item of scan(options.pageSize)) {
     results.push(item);
   }
-  assertCompleteScan(results.length, options.limit, options.label, options.context);
   return results;
 }
 

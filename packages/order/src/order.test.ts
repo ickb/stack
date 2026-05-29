@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
-import { defaultFindCellsLimit } from "@ickb/utils";
+import { defaultCellPageSize } from "@ickb/utils";
 import { describe, expect, it } from "vitest";
 import { OrderCell } from "./cells.js";
 import { Info, OrderData, Ratio, Relative } from "./entities.js";
@@ -781,7 +781,7 @@ describe("OrderCell.resolve", () => {
 });
 
 describe("OrderManager.findOrders", () => {
-  it("fails closed when order scanning reaches the limit", async () => {
+  it("passes the default page size to order scanning", async () => {
     const orderScript = ccc.Script.from({
       codeHash: byte32FromByte("11"),
       hashType: "type",
@@ -793,36 +793,23 @@ describe("OrderManager.findOrders", () => {
       args: "0x",
     });
     const manager = new OrderManager(orderScript, [], udtScript);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(100),
-      udtValue: 0n,
-      info: directionalInfo(),
-      master: {
-        type: "absolute",
-        value: { txHash: byte32FromByte("33"), index: 1n },
-      },
-      lock: orderScript,
-      outPoint: { txHash: byte32FromByte("34"), index: 0n },
-    });
+    let requestedPageSize = 0;
     const client = {
-      findCellsOnChain: async function* (query: { scriptType: string }) {
+      findCellsOnChain: async function* (query: { scriptType: string }, _order: unknown, pageSize: number) {
         await Promise.resolve();
         if (query.scriptType !== "lock") {
           return;
         }
-
-        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
-          yield order.cell;
-        }
+        requestedPageSize = pageSize;
+        yield* [] as ccc.Cell[];
       },
     } as unknown as ccc.Client;
 
-    await expect(collectOrders(manager, client)).rejects.toThrow(
-      `order cell scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
+    await expect(collectOrders(manager, client)).resolves.toEqual([]);
+    expect(requestedPageSize).toBe(defaultCellPageSize);
   });
 
-  it("fails closed when master scanning reaches the limit", async () => {
+  it("passes the default page size to master scanning", async () => {
     const orderScript = ccc.Script.from({
       codeHash: byte32FromByte("11"),
       hashType: "type",
@@ -833,40 +820,24 @@ describe("OrderManager.findOrders", () => {
       hashType: "type",
       args: "0x",
     });
-    const ownerLock = ccc.Script.from({
-      codeHash: byte32FromByte("44"),
-      hashType: "type",
-      args: "0x",
-    });
     const manager = new OrderManager(orderScript, [], udtScript);
-    const masterCell = ccc.Cell.from({
-      outPoint: { txHash: byte32FromByte("35"), index: 1n },
-      cellOutput: {
-        capacity: ccc.fixedPointFrom(61),
-        lock: ownerLock,
-        type: orderScript,
-      },
-      outputData: "0x",
-    });
+    let requestedPageSize = 0;
     const client = {
-      findCellsOnChain: async function* (query: { scriptType: string }) {
+      findCellsOnChain: async function* (query: { scriptType: string }, _order: unknown, pageSize: number) {
         await Promise.resolve();
         if (query.scriptType !== "type") {
           return;
         }
-
-        for (let index = 0; index <= defaultFindCellsLimit; index += 1) {
-          yield masterCell;
-        }
+        requestedPageSize = pageSize;
+        yield* [] as ccc.Cell[];
       },
     } as unknown as ccc.Client;
 
-    await expect(collectOrders(manager, client)).rejects.toThrow(
-      `master cell scan reached limit ${String(defaultFindCellsLimit)}`,
-    );
+    await expect(collectOrders(manager, client)).resolves.toEqual([]);
+    expect(requestedPageSize).toBe(defaultCellPageSize);
   });
 
-  it("accepts exact-limit order and master scans", async () => {
+  it("accepts exact page-size order and master scans", async () => {
     const orderScript = ccc.Script.from({
       codeHash: byte32FromByte("11"),
       hashType: "type",
@@ -920,7 +891,7 @@ describe("OrderManager.findOrders", () => {
       findCellsOnChain: async function* (query: { scriptType: string }) {
         await Promise.resolve();
         if (query.scriptType === "lock") {
-          for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+          for (let index = 0; index < defaultCellPageSize; index += 1) {
             yield index === 0 ? order.cell : ccc.Cell.from({
               outPoint: { txHash: byte32FromByte("38"), index: BigInt(index) },
               cellOutput: {
@@ -934,7 +905,7 @@ describe("OrderManager.findOrders", () => {
           return;
         }
 
-        for (let index = 0; index < defaultFindCellsLimit; index += 1) {
+        for (let index = 0; index < defaultCellPageSize; index += 1) {
           yield index === 0 ? masterCell : ccc.Cell.from({
             outPoint: { txHash: byte32FromByte("39"), index: BigInt(index) },
             cellOutput: {
