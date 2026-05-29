@@ -1371,9 +1371,20 @@ function classifyBotResult(
     if (actions === undefined) {
       return { ...base, outcome: "malformed_evidence", terminal: true, reason: "bot committed transaction evidence did not include matching built action evidence", publicState };
     }
+    const outcome = classifyBotCommittedActions(actions);
+    if (outcome === "unknown") {
+      return {
+        ...base,
+        outcome,
+        terminal: true,
+        reason: "bot committed transaction evidence did not include classifiable action evidence",
+        actions,
+        publicState,
+      };
+    }
     return {
       ...base,
-      outcome: classifyBotCommittedActions(actions),
+      outcome,
       terminal: false,
       reason: "bot transaction committed according to app evidence",
       actions,
