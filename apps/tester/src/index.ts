@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
-import { IckbSdk, getConfig, sendAndWaitForCommit } from "@ickb/sdk";
+import { IckbSdk, estimateMaturityFeeThreshold, getConfig, sendAndWaitForCommit } from "@ickb/sdk";
 import {
   accountPlainCkbBalance,
   createPublicClient,
@@ -177,7 +177,20 @@ async function main(): Promise<void> {
       executionLog.ratio = state.system.exchangeRatio;
 
       const effectiveTesterScenario = resolveTesterScenario(state, testerScenario, feePolicy, depositCapacity);
-      const plan = planTesterTransaction(state, depositCapacity, effectiveTesterScenario);
+      if (effectiveTesterScenario === undefined) {
+        if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
+          executionLog.error =
+            "Not enough funds to continue testing, shutting down...";
+          logExecution(executionLog, startTime);
+          return;
+        }
+        executionLog.skip = testerNoActionableAutoScenarioSkip();
+        if (logTerminalIteration(executionLog, startTime, ++completedIterations, maxIterations)) {
+          return;
+        }
+        continue;
+      }
+      const plan = planTesterTransaction(state, depositCapacity, effectiveTesterScenario, feePolicy);
       const rawOrders = plannedRawOrders(plan, effectiveTesterScenario);
 
       if (rawOrders.length === 0) {
@@ -442,6 +455,14 @@ export function testerEstimatedTooSmallSkip(
   };
 }
 
+export function testerNoActionableAutoScenarioSkip(): Record<string, unknown> {
+  return {
+    reason: "estimated-conversion-too-small",
+    requestedTesterScenario: "auto",
+    attemptedTesterScenarios: [...AUTO_TESTER_SCENARIOS],
+  };
+}
+
 export function testerAttemptedTransactionEvidence(
   requestedScenario: TesterScenarioSelection,
   effectiveScenario: TesterScenario,
@@ -460,9 +481,14 @@ export function planTesterTransaction(
   state: Pick<TesterState, "availableCkbBalance" | "availableIckbBalance" | "system">,
   depositCapacity: bigint,
   scenario: TesterScenario,
+  feePolicy: TesterFeePolicy = DEFAULT_TESTER_FEE_POLICY,
 ): TesterPlan {
   if (scenario === "multi-order-limit-orders") {
-    return planTesterTransaction(state, depositCapacity, resolveTesterScenario(state, scenario));
+    const selected = resolveTesterScenario(state, scenario, feePolicy);
+    if (selected === undefined) {
+      throw new TesterTerminalError("Not enough funds for multi-order limit orders scenario");
+    }
+    return planTesterTransaction(state, depositCapacity, selected, feePolicy);
   }
   if (scenario === "sdk-conversion") {
     return planSdkConversionTransaction(state, depositCapacity);
@@ -539,33 +565,7 @@ export function planTesterTransaction(
   }
 
   const spendableCkbBalance = max(0n, state.availableCkbBalance - CKB_RESERVE);
-  const ickbEquivalentBalance = convert(
-    true,
-    spendableCkbBalance,
-    state.system.exchangeRatio,
-  );
-  const totalIckbBalance = ickbEquivalentBalance + state.availableIckbBalance;
-  const isCkb2Udt = sampleRatio(totalIckbBalance) <= ickbEquivalentBalance;
-  const ckbAmount = isCkb2Udt
-    ? min(
-        isSdkConversionScenario(scenario) ? depositCapacity : sampleRatio(depositCapacity),
-        spendableCkbBalance,
-      )
-    : 0n;
-  const udtAmount = isCkb2Udt
-    ? 0n
-    : min(
-        isSdkConversionScenario(scenario) ? ICKB_DEPOSIT_CAP : sampleRatio(ICKB_DEPOSIT_CAP),
-        state.availableIckbBalance,
-      );
-
-  return {
-    direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-    amount: isCkb2Udt ? ckbAmount : udtAmount,
-    ckbAmount,
-    udtAmount,
-    orderCount: 1,
-  };
+  return planRandomOrderTransaction(state, depositCapacity, feePolicy, spendableCkbBalance);
 }
 
 export function resolveTesterScenario(
@@ -574,11 +574,11 @@ export function resolveTesterScenario(
   feePolicy: TesterFeePolicy = DEFAULT_TESTER_FEE_POLICY,
   depositCapacity = 0n,
   random: () => number = Math.random,
-): TesterScenario {
+): TesterScenario | undefined {
   if (scenario === "auto") {
     const fundedScenarios = fundedTesterScenarios(state, depositCapacity, feePolicy, AUTO_TESTER_SCENARIOS);
     if (fundedScenarios.length === 0) {
-      throw new TesterTerminalError("Not enough funds for auto tester scenario");
+      return undefined;
     }
     return randomTesterScenario(random, fundedScenarios);
   }
@@ -600,7 +600,7 @@ function fundedTesterScenarios(
 ): TesterScenario[] {
   return candidates.filter((scenario) => {
     if (scenario === "random-order") {
-      return hasPositiveRandomOrderEstimate(state, depositCapacity, feePolicy);
+      return hasActionableRandomOrderEstimate(state, depositCapacity, feePolicy);
     }
     if (scenario === "sdk-conversion") {
       return hasBuildableSdkConversionEstimate(state, depositCapacity);
@@ -678,25 +678,91 @@ function buildableSdkConversionPlan(
   return isBuildableSdkConversionOrder(plan, order, estimate, state.system, depositCapacity) ? plan : undefined;
 }
 
-function hasPositiveRandomOrderEstimate(
+function hasActionableRandomOrderEstimate(
   state: Pick<TesterState, "availableCkbBalance" | "availableIckbBalance" | "system">,
   depositCapacity: bigint,
   feePolicy: TesterFeePolicy,
 ): boolean {
   const spendableCkbBalance = max(0n, state.availableCkbBalance - CKB_RESERVE);
-  const orders: PlannedRawOrder[] = [];
-  if (spendableCkbBalance > 0n) {
-    const amount = min(depositCapacity, spendableCkbBalance);
-    orders.push({ direction: "ckb-to-ickb", amounts: { ckbValue: amount, udtValue: 0n }, amount });
+  return minimumActionableRandomOrderAmount(
+    "ckb-to-ickb",
+    min(depositCapacity, spendableCkbBalance),
+    state.system,
+    feePolicy,
+  ) !== undefined || minimumActionableRandomOrderAmount(
+    "ickb-to-ckb",
+    min(ICKB_DEPOSIT_CAP, state.availableIckbBalance),
+    state.system,
+    feePolicy,
+  ) !== undefined;
+}
+
+function planRandomOrderTransaction(
+  state: Pick<TesterState, "availableCkbBalance" | "availableIckbBalance" | "system">,
+  depositCapacity: bigint,
+  feePolicy: TesterFeePolicy,
+  spendableCkbBalance: bigint,
+): TesterPlan {
+  const ckbMax = min(depositCapacity, spendableCkbBalance);
+  const udtMax = min(ICKB_DEPOSIT_CAP, state.availableIckbBalance);
+  const ckbMin = minimumActionableRandomOrderAmount("ckb-to-ickb", ckbMax, state.system, feePolicy);
+  const udtMin = minimumActionableRandomOrderAmount("ickb-to-ckb", udtMax, state.system, feePolicy);
+  const ckbWeight = ckbMin === undefined ? 0n : convert(true, ckbMax, state.system.exchangeRatio);
+  const udtWeight = udtMin === undefined ? 0n : udtMax;
+  const isCkb2Udt = ckbWeight > 0n && (udtWeight === 0n || sampleRatio(ckbWeight + udtWeight) < ckbWeight);
+  if (isCkb2Udt && ckbMin !== undefined) {
+    const ckbAmount = sampleAmount(ckbMin, ckbMax);
+    return { direction: "ckb-to-ickb", amount: ckbAmount, ckbAmount, udtAmount: 0n, orderCount: 1 };
   }
-  if (state.availableIckbBalance > 0n) {
-    const amount = min(ICKB_DEPOSIT_CAP, state.availableIckbBalance);
-    orders.push({ direction: "ickb-to-ckb", amounts: { ckbValue: 0n, udtValue: amount }, amount });
+  if (udtMin !== undefined) {
+    const udtAmount = sampleAmount(udtMin, udtMax);
+    return { direction: "ickb-to-ckb", amount: udtAmount, ckbAmount: 0n, udtAmount, orderCount: 1 };
   }
-  return orders.some((order) => {
-    const estimate = estimateRawOrder(order, state.system, feePolicy);
-    return estimate !== undefined && estimate.convertedAmount > 0n;
-  });
+  return { direction: "ckb-to-ickb", amount: 0n, ckbAmount: 0n, udtAmount: 0n, orderCount: 1 };
+}
+
+function minimumActionableRandomOrderAmount(
+  direction: TesterDirection,
+  maxAmount: bigint,
+  system: TesterState["system"],
+  feePolicy: TesterFeePolicy,
+): bigint | undefined {
+  if (maxAmount <= 0n || !isActionableRandomOrderAmount(direction, maxAmount, system, feePolicy)) {
+    return undefined;
+  }
+  let low = 1n;
+  let high = maxAmount;
+  while (low < high) {
+    const mid = (low + high) / 2n;
+    if (isActionableRandomOrderAmount(direction, mid, system, feePolicy)) {
+      high = mid;
+    } else {
+      low = mid + 1n;
+    }
+  }
+  return low;
+}
+
+function isActionableRandomOrderAmount(
+  direction: TesterDirection,
+  amount: bigint,
+  system: TesterState["system"],
+  feePolicy: TesterFeePolicy,
+): boolean {
+  const order: PlannedRawOrder = { direction, amounts: planAmounts(direction, amount), amount };
+  const estimate = estimateRawOrder(order, system, feePolicy);
+  return estimate !== undefined &&
+    estimate.convertedAmount >= minimumMatcherOutput(direction, estimate.info) &&
+    estimate.ckbFee >= estimateMaturityFeeThreshold(system);
+}
+
+function minimumMatcherOutput(direction: TesterDirection, info: ReturnType<typeof IckbSdk.estimate>["info"]): bigint {
+  const minimumCkb = info.getCkbMinMatch();
+  if (direction === "ckb-to-ickb") {
+    const { ckbScale, udtScale } = info.ckbToUdt;
+    return (minimumCkb * udtScale + ckbScale - 1n) / ckbScale;
+  }
+  return minimumCkb;
 }
 
 function hasPositiveMultiOrderEstimates(
@@ -862,6 +928,10 @@ function sampleRatio(amount: bigint): bigint {
   }
 
   return (amount * randomScaled()) / RANDOM_SCALE;
+}
+
+function sampleAmount(minimum: bigint, maximum: bigint): bigint {
+  return minimum + sampleRatio(maximum - minimum + 1n);
 }
 
 function randomScaled(): bigint {
