@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import {
-  collectCompleteScan,
-  defaultFindCellsLimit,
+  collectPagedScan,
+  defaultCellPageSize,
   type ScriptDeps,
   unique,
 } from "@ickb/utils";
@@ -175,8 +175,8 @@ export class LogicManager implements ScriptDeps {
    *
    * @param client
    *   A CKB client instance providing:
-   *   - `findCells(query, order, limit)` for cached searches
-   *   - `findCellsOnChain(query, order, limit)` for direct on-chain searches
+   *   - `findCells(query, order, pageSize)` for cached searches
+   *   - `findCellsOnChain(query, order, pageSize)` for direct on-chain searches
    *
    * @param locks
    *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
@@ -186,8 +186,8 @@ export class LogicManager implements ScriptDeps {
    *   Optional parameters to control query behavior:
    *   - `onChain?: boolean`
    *       If `true`, uses `findCellsOnChain`. Otherwise, uses `findCells`. Default: `false`.
-   *   - `limit?: number`
-   *       Maximum number of cells to fetch per lock script. Defaults to `defaultFindCellsLimit` (400).
+   *   - `pageSize?: number`
+   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
    *
    * @yields
    *   {@link ReceiptCell} objects for each valid receipt cell found.
@@ -211,12 +211,16 @@ export class LogicManager implements ScriptDeps {
        */
       onChain?: boolean;
       /**
-       * Batch size per lock script. Defaults to {@link defaultFindCellsLimit}.
+       * Cell query page size per lock script. Defaults to {@link defaultCellPageSize}.
        */
-      limit?: number;
+      pageSize?: number;
     },
   ): AsyncGenerator<ReceiptCell> {
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
+    const transactionCache = new Map<
+      ccc.Hex,
+      Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
+    >();
     for (const lock of unique(locks)) {
       const findCellsArgs = [
         {
@@ -231,15 +235,15 @@ export class LogicManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const receiptCandidates = (await collectCompleteScan(
-        (scanLimit) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-          : client.findCells(...findCellsArgs, scanLimit),
-        { limit, label: "receipt cell" },
+      const receiptCandidates = (await collectPagedScan(
+        (pageSize) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, pageSize)
+          : client.findCells(...findCellsArgs, pageSize),
+        { pageSize },
       )).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 
       const receipts = await Promise.all(
-        receiptCandidates.map((cell) => receiptCellFrom({ client, cell })),
+        receiptCandidates.map((cell) => receiptCellFrom({ client, cell, transactionCache })),
       );
       for (const receipt of receipts) {
         yield receipt;
@@ -270,8 +274,8 @@ export class LogicManager implements ScriptDeps {
    *       Minimum lock-up period in epochs. Defaults to manager’s configured minimum (~10 min).
    *   - `maxLockUp?: ccc.Epoch`
    *       Maximum lock-up period in epochs. Defaults to manager’s configured maximum (~3 days).
-   *   - `limit?: number`
-   *       Maximum cells per batch when querying. Defaults to `defaultFindCellsLimit` (400).
+   *   - `pageSize?: number`
+   *       Cell query page size. Defaults to `defaultCellPageSize` (400).
    *
    * @returns
    *   An async generator yielding `IckbDepositCell` objects, each representing
@@ -291,18 +295,16 @@ export class LogicManager implements ScriptDeps {
       onChain?: boolean;
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
-      limit?: number;
+      pageSize?: number;
     },
   ): AsyncGenerator<IckbDepositCell> {
     const tip = options?.tip
       ? ccc.ClientBlockHeader.from(options.tip)
       : await client.getTipHeader();
-    options = { ...options, tip };
-
     for await (const deposit of this.daoManager.findDeposits(
       client,
       [this.script],
-      options,
+      { ...options, tip },
     )) {
       if (!this.isDeposit(deposit.cell)) {
         continue;

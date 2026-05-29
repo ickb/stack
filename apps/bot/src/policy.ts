@@ -11,6 +11,8 @@ export const CKB_RESERVE = 1000n * CKB;
 export const MIN_ICKB_BALANCE = 2000n * CKB;
 export const TARGET_ICKB_BALANCE = ICKB_DEPOSIT_CAP + 20000n * CKB;
 export const NEAR_READY_LOOKAHEAD_MS = 60n * 60n * 1000n;
+export const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
+export const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 
 const OUTPUTS_PER_REBALANCE_ACTION = 2;
 const MAX_WITHDRAWAL_REQUESTS = 30;
@@ -98,6 +100,17 @@ export function partitionPoolDeposits(
   future.sort(compareDepositsByMaturity(tip));
 
   return { ready, nearReady, future };
+}
+
+export function partitionBotPoolDeposits(
+  deposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+): ReturnType<typeof partitionPoolDeposits> {
+  return partitionPoolDeposits(
+    deposits,
+    tip,
+    POOL_MAX_LOCK_UP.add(tip.epoch).toUnix(tip),
+  );
 }
 
 export function planRebalance(options: {

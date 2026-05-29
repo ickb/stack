@@ -34,6 +34,14 @@ export interface ReceiptCell extends ValueComponents {
   header: TransactionHeader;
 }
 
+type TransactionWithHeader = Awaited<
+  ReturnType<ccc.Client["getTransactionWithHeader"]>
+>;
+
+type ReceiptCellFromCache = {
+  transactionCache?: Map<ccc.Hex, Promise<TransactionWithHeader>>;
+};
+
 /**
  * Creates a ReceiptCell instance from the provided options.
  * @param options - Options for creating a ReceiptCell.
@@ -42,14 +50,14 @@ export interface ReceiptCell extends ValueComponents {
  */
 export async function receiptCellFrom(
   options:
-    | {
+    | ({
         cell: ccc.Cell;
         client: ccc.Client;
-      }
-    | {
+      } & ReceiptCellFromCache)
+    | ({
         outpoint: ccc.OutPoint;
         client: ccc.Client;
-      },
+      } & ReceiptCellFromCache),
 ): Promise<ReceiptCell> {
   const cell =
     "cell" in options
@@ -60,8 +68,12 @@ export async function receiptCellFrom(
   }
 
   const txHash = cell.outPoint.txHash;
-  const txWithHeader =
-    await options.client.getTransactionWithHeader(txHash);
+  let txWithHeaderPromise = options.transactionCache?.get(txHash);
+  if (!txWithHeaderPromise) {
+    txWithHeaderPromise = options.client.getTransactionWithHeader(txHash);
+    options.transactionCache?.set(txHash, txWithHeaderPromise);
+  }
+  const txWithHeader = await txWithHeaderPromise;
   if (!txWithHeader?.header) {
     throw new Error("Header not found for txHash");
   }

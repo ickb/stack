@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, script } from "@ickb/testkit";
+import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DaoManager } from "@ickb/dao";
 import { collect } from "@ickb/utils";
@@ -262,7 +262,7 @@ describe("LogicManager.deposit", () => {
     ]);
   });
 
-  it("fails closed when receipt scanning exceeds the limit", async () => {
+  it("passes the cell page size to receipt scanning", async () => {
     const logic = script("11");
     const wantedLock = script("22");
     const receiptData = ReceiptData.from({
@@ -287,20 +287,74 @@ describe("LogicManager.deposit", () => {
       },
       outputData: receiptData,
     });
-    let requestedLimit = 0;
+    let requestedPageSize = 0;
     const client = {
-      findCells: async function* (_query: unknown, _order: unknown, limit: number) {
-        requestedLimit = limit;
+      findCells: async function* (_query: unknown, _order: unknown, pageSize: number) {
+        requestedPageSize = pageSize;
         await Promise.resolve();
         yield firstReceipt;
         yield secondReceipt;
       },
+      getTransactionWithHeader: async () => {
+        await Promise.resolve();
+        return { header: headerLike() };
+      },
     } as unknown as ccc.Client;
     const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
 
-    await expect(
-      collect(manager.findReceipts(client, [wantedLock], { limit: 1 })),
-    ).rejects.toThrow("receipt cell scan reached limit 1; state may be incomplete");
-    expect(requestedLimit).toBe(2);
+    const receipts = await collect(manager.findReceipts(client, [wantedLock], { pageSize: 1 }));
+
+    expect(requestedPageSize).toBe(1);
+    expect(receipts.map((receipt) => receipt.cell.outPoint.txHash)).toEqual([
+      firstReceipt.outPoint.txHash,
+      secondReceipt.outPoint.txHash,
+    ]);
+  });
+
+  it("reuses receipt transaction header requests across lock scans", async () => {
+    const logic = script("11");
+    const firstLock = script("22");
+    const secondLock = script("33");
+    const txHash = byte32FromByte("44");
+    const receiptData = ReceiptData.from({
+      depositQuantity: 1,
+      depositAmount: ccc.fixedPointFrom(100000),
+    }).toBytes();
+    const firstReceipt = ccc.Cell.from({
+      outPoint: { txHash, index: 0n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: firstLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    const secondReceipt = ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(100082),
+        lock: secondLock,
+        type: logic,
+      },
+      outputData: receiptData,
+    });
+    let transactionCalls = 0;
+    const client = {
+      findCells: async function* (query: { script: ccc.Script }) {
+        await Promise.resolve();
+        yield query.script.eq(firstLock) ? firstReceipt : secondReceipt;
+      },
+      getTransactionWithHeader: async () => {
+        transactionCalls += 1;
+        await Promise.resolve();
+        return { header: headerLike() };
+      },
+    } as unknown as ccc.Client;
+    const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
+
+    const receipts = await collect(manager.findReceipts(client, [firstLock, secondLock]));
+
+    expect(transactionCalls).toBe(1);
+    expect(receipts.map((receipt) => receipt.cell.outPoint.index)).toEqual([0n, 1n]);
   });
 });

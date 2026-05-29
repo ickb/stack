@@ -1,7 +1,7 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import {
-  collectCompleteScan,
-  defaultFindCellsLimit,
+  collectPagedScan,
+  defaultCellPageSize,
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
@@ -311,8 +311,8 @@ export class DaoManager implements ScriptDeps {
    *
    * @param client
    *   A CKB client instance that implements:
-   *   - `findCells(query, order, limit)`     — cached searches
-   *   - `findCellsOnChain(query, order, limit)` — direct on-chain searches
+   *   - `findCells(query, order, pageSize)`     — cached searches
+   *   - `findCellsOnChain(query, order, pageSize)` — direct on-chain searches
    *
    * @param locks
    *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
@@ -332,8 +332,8 @@ export class DaoManager implements ScriptDeps {
    *   - `maxLockUp?: ccc.Epoch`
    *       Maximum lock-up period allowed (in epochs).
    *       Defaults to the manager’s configured maximum (≈3 days).
-   *   - `limit?: number`
-   *       Batch size per lock script. Defaults to `defaultFindCellsLimit` (400).
+   *   - `pageSize?: number`
+   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
    *
    * @yields
    *   {@link DaoDepositCell} objects representing deposit cells.
@@ -357,12 +357,13 @@ export class DaoManager implements ScriptDeps {
       onChain?: boolean;
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
-      limit?: number;
+      pageSize?: number;
     },
   ): AsyncGenerator<DaoDepositCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
 
+    const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     for (const lock of unique(locks)) {
       const findCellsArgs = [
         {
@@ -379,18 +380,18 @@ export class DaoManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const depositCandidates = (await collectCompleteScan(
-        (scanLimit) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-          : client.findCells(...findCellsArgs, scanLimit),
-        { limit, label: "DAO deposit cell" },
+      const depositCandidates = (await collectPagedScan(
+        (pageSize) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, pageSize)
+          : client.findCells(...findCellsArgs, pageSize),
+        { pageSize },
       )).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
 
-      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const deposits = await Promise.all(
         depositCandidates.map((cell) =>
           this.depositCellFrom(cell, client, {
-            ...options,
+            minLockUp: options?.minLockUp,
+            maxLockUp: options?.maxLockUp,
             tip,
             transactionCache,
           }),
@@ -408,8 +409,8 @@ export class DaoManager implements ScriptDeps {
    *
    * @param client
    *   A CKB client instance that implements:
-   *   - `findCells(query, order, limit)`     — cached searches
-   *   - `findCellsOnChain(query, order, limit)` — direct on-chain searches
+   *   - `findCells(query, order, pageSize)`     — cached searches
+   *   - `findCellsOnChain(query, order, pageSize)` — direct on-chain searches
    *
    * @param locks
    *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
@@ -423,8 +424,8 @@ export class DaoManager implements ScriptDeps {
    *   - `onChain?: boolean`
    *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
    *       Default: `false`.
-   *   - `limit?: number`
-   *       Batch size per lock script. Defaults to `defaultFindCellsLimit` (400).
+   *   - `pageSize?: number`
+   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
    *
    * @yields
    *   {@link DaoWithdrawalRequestCell} objects representing withdrawal request cells.
@@ -444,12 +445,14 @@ export class DaoManager implements ScriptDeps {
     options?: {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
-      limit?: number;
+      pageSize?: number;
     },
   ): AsyncGenerator<DaoWithdrawalRequestCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const limit = options?.limit ?? defaultFindCellsLimit;
+    const pageSize = options?.pageSize ?? defaultCellPageSize;
 
+    const headerCache: DaoCellFromCache["headerCache"] = new Map();
+    const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     for (const lock of unique(locks)) {
       const findCellsArgs = [
         {
@@ -464,19 +467,16 @@ export class DaoManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const withdrawalCandidates = (await collectCompleteScan(
-        (scanLimit) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, scanLimit)
-          : client.findCells(...findCellsArgs, scanLimit),
-        { limit, label: "DAO withdrawal request cell" },
+      const withdrawalCandidates = (await collectPagedScan(
+        (pageSize) => options?.onChain
+          ? client.findCellsOnChain(...findCellsArgs, pageSize)
+          : client.findCells(...findCellsArgs, pageSize),
+        { pageSize },
       )).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
 
-      const headerCache: DaoCellFromCache["headerCache"] = new Map();
-      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const withdrawals = await Promise.all(
         withdrawalCandidates.map((cell) =>
           this.withdrawalRequestCellFrom(cell, client, {
-            ...options,
             tip,
             headerCache,
             transactionCache,

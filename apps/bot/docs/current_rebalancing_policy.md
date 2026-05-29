@@ -25,7 +25,7 @@ The runtime reads system and account state through `@ickb/sdk`, then derives the
 - `depositCapacity`: CKB required for one standard 100,000 iCKB deposit at the live exchange ratio.
 - `minCkbBalance`: shutdown threshold set to `21 / 20 * depositCapacity`.
 
-The public pool scan reads one sentinel entry beyond the default cell limit and fails closed if that sentinel appears, because rebalance decisions require a complete pool slice.
+The public pool scan uses the SDK L1 state snapshot and the default CCC cell-query page size unless callers pass `cellPageSize`. Rebalance decisions use the collected pool deposits from that snapshot.
 
 `nearReadyPoolDeposits` only ranks ready-window withdrawal choices. Fresh deposits are scored against `futurePoolDeposits`, not against the near-ready hour.
 
