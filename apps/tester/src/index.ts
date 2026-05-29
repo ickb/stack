@@ -484,11 +484,7 @@ export function planTesterTransaction(
   feePolicy: TesterFeePolicy = DEFAULT_TESTER_FEE_POLICY,
 ): TesterPlan {
   if (scenario === "multi-order-limit-orders") {
-    const selected = resolveTesterScenario(state, scenario, feePolicy);
-    if (selected === undefined) {
-      throw new TesterTerminalError("Not enough funds for multi-order limit orders scenario");
-    }
-    return planTesterTransaction(state, depositCapacity, selected, feePolicy);
+    return planTesterTransaction(state, depositCapacity, resolveTesterScenario(state, scenario, feePolicy)!, feePolicy);
   }
   if (scenario === "sdk-conversion") {
     return planSdkConversionTransaction(state, depositCapacity);
