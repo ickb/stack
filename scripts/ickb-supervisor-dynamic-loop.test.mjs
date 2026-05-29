@@ -50,6 +50,8 @@ test("dynamic supervisor loop parses options", () => {
     "--target-outcome",
     "bot_match_committed",
   ]);
+  assert.deepEqual(parseArgs(["--", "--help"]).supervisorArgs, ["--help"]);
+  assert.deepEqual(parseArgs(["--", "-h"]).supervisorArgs, ["-h"]);
   assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS);
   assert.equal(
     parseArgs(["--chunk-max-runs", "3", "--child-timeout-seconds", "6", "--chunk-backoff-seconds", "4"]).chunkTimeoutSeconds,
@@ -66,8 +68,36 @@ test("dynamic supervisor loop parses options", () => {
   );
   assert.throws(() => parseArgs(["--unknown"]), /Unknown argument/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "log/validation/bad"]), /Do not pass supervisor --out-dir/u);
+  assert.throws(() => parseArgs(["--", "--max-chunks", "1"]), /Do not pass dynamic-loop option --max-chunks after --/u);
+  assert.throws(() => parseArgs(["--", "--stable-limit=2"]), /Do not pass dynamic-loop option --stable-limit after --/u);
+  assert.deepEqual(parseArgs(["--", "--command-timeout-seconds", "9"]).supervisorArgs, ["--command-timeout-seconds", "9"]);
   assert.match(usage(), /tester-config/u);
   assert.match(usage(), /--log-root/u);
+});
+
+test("dynamic supervisor loop passes child help through visibly", async () => {
+  for (const helpFlag of ["--help", "-h"]) {
+    const output = { text: "", write(chunk) { this.text += chunk; } };
+    const commands = [];
+    const exitCode = await runDynamicSupervisorLoop({
+      root: "/repo",
+      argv: ["--", helpFlag],
+      io: { stdout: output, stderr: output },
+      dependencies: {
+        checkIgnored: () => {
+          throw new Error("should not prepare a validation session for child help");
+        },
+        spawnSync: (_command, args) => {
+          commands.push(args);
+          return { status: 0, signal: null, stdout: `child help ${helpFlag}\n`, stderr: "" };
+        },
+      },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.deepEqual(commands[0], ["/repo/scripts/ickb-supervisor-loop.mjs", "--", helpFlag]);
+    assert.equal(output.text.includes(`child help ${helpFlag}`), true);
+  }
 });
 
 test("dynamic supervisor loop creates a default validation session root", async () => {
@@ -101,7 +131,7 @@ test("dynamic supervisor loop creates a default validation session root", async 
       },
     });
 
-    assert.equal(exitCode, 0);
+    assert.equal(exitCode, 3);
     assert.equal(writes.has("/repo/log/validation/dynamic-1700000000-4321/operator/launch.json"), true);
     assert.equal(appended.has("/repo/log/validation/dynamic-1700000000-4321/operator/events.ndjson"), true);
     assert.deepEqual(commands[1].args.slice(0, 3), [
@@ -249,19 +279,16 @@ test("dynamic supervisor loop runs selected bounded chunks", async () => {
     },
   });
 
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 3);
   assert.equal(sleeps.length, 0);
-  assert.equal(commands.length, 4);
+  assert.equal(commands.length, 2);
   assert.equal(commands[1].args.includes("all-ckb-limit-order"), true);
-  assert.equal(commands[3].args.includes("ickb-to-ckb-limit-order"), true);
   assert.deepEqual(commands[1].args.slice(0, 3), ["scripts/ickb-supervisor-loop.mjs", "--out-root", "log/validation/test-session/chunks/chunk-0001"]);
   const separator = commands[1].args.indexOf("--");
   assert.equal(commands[1].args.slice(0, separator).includes("--out-root"), true);
   assert.equal(commands[1].args.slice(separator + 1).includes("--target-outcome"), true);
-  assert.deepEqual(commands[3].args.slice(-4), ["--tester-fee", "1", "--tester-fee-base", "1000"]);
   assert.match(output.text, /"type":"selected"/u);
   assert.match(output.text, /testerScenario":"all-ckb-limit-order"/u);
-  assert.match(output.text, /testerScenario":"ickb-to-ckb-limit-order"/u);
 });
 
 test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reasons", async () => {
@@ -298,6 +325,40 @@ test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reas
   assert.match(output.text, /"supervisorLoopStopReason":"tx_observed"/u);
 });
 
+test("dynamic supervisor loop preserves supervisor-loop inspection-required status", async () => {
+  const commands = [];
+  const output = { text: "", write(chunk) { this.text += chunk; } };
+  const exitCode = await runDynamicSupervisorLoop({
+    root: "/repo",
+    argv: [
+      "--log-root", "log",
+      "--session-root", "log/validation/inspection-status-session",
+      "--max-chunks", "3",
+      "--between-chunks-seconds", "0",
+    ],
+    io: { stdout: output, stderr: output },
+    dependencies: {
+      checkIgnored: () => true,
+      stat: missingStat,
+      lstat: missingStat,
+      mkdir: async () => undefined,
+      writeFile: async () => undefined,
+      appendFile: async () => undefined,
+      spawnSync: (_command, args, options) => {
+        commands.push({ args, options });
+        if (args[0] === "scripts/ickb-live-preflight.mjs") {
+          return { status: 0, signal: null, stdout: JSON.stringify({ balances: { CKB: { available: "3200" }, ICKB: { available: "0" } } }), stderr: "" };
+        }
+        return { status: 3, signal: null, stdout: "loop run=1 status=0 stopped=max_cycles outcomes=- tx=0 new=- stable=1 state=- decision=max_runs out=log/validation/inspection-status-session/chunks/chunk-0001\nloop stopped reason=max_runs runs=1 out=log/validation/inspection-status-session/chunks/chunk-0001\n", stderr: "" };
+      },
+    },
+  });
+
+  assert.equal(exitCode, 3);
+  assert.equal(commands.length, 2);
+  assert.match(output.text, /"supervisorLoopStopReason":"max_runs"/u);
+});
+
 test("dynamic supervisor loop leaves supervisor target steering intact for auto tester choice", async () => {
   const commands = [];
   const output = { text: "", write(chunk) { this.text += chunk; } };
@@ -331,7 +392,7 @@ test("dynamic supervisor loop leaves supervisor target steering intact for auto 
   const supervisorArgs = commands[1].args;
   const separator = supervisorArgs.indexOf("--");
   const passthrough = supervisorArgs.slice(separator + 1);
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 3);
   assert.equal(passthrough.includes("--tester-scenario"), false);
   assert.equal(passthrough.includes("auto"), false);
   assert.equal(passthrough.includes("--target-outcome"), true);
@@ -371,7 +432,7 @@ test("dynamic supervisor loop leaves fresh-order skip target planning to supervi
   const supervisorArgs = commands[1].args;
   const separator = supervisorArgs.indexOf("--");
   const passthrough = supervisorArgs.slice(separator + 1);
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 3);
   assert.equal(passthrough.includes("--scenario"), false);
   assert.equal(passthrough.includes("--tester-scenario"), true);
   assert.equal(passthrough.includes("ickb-to-ckb-limit-order"), true);

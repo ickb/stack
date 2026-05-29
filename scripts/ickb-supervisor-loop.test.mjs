@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   decideNext,
   DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
+  INSPECTION_REQUIRED_EXIT_CODE,
   parseArgs,
   runSupervisorLoop,
   summarizeRun,
@@ -13,6 +14,7 @@ import {
 
 test("supervisor loop parses loop options and supervisor passthrough", () => {
   assert.deepEqual(parseArgs(["--", "--help"]).supervisorArgs, ["--help"]);
+  assert.deepEqual(parseArgs(["--", "-h"]).supervisorArgs, ["-h"]);
   assert.deepEqual(parseArgs([
     "--out-root", "logs/live-supervisor/loop-test",
     "--max-runs", "5",
@@ -45,10 +47,39 @@ test("supervisor loop parses loop options and supervisor passthrough", () => {
   assert.throws(() => parseArgs(["--child-timeout-seconds", "0"]), /Invalid --child-timeout-seconds/u);
   assert.throws(() => parseArgs(["--", "--out-dir", "logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
   assert.throws(() => parseArgs(["--", "--out-dir=logs/live-supervisor/x"]), /Do not pass supervisor --out-dir/u);
+  assert.throws(() => parseArgs(["--", "--max-runs", "1", "--scenario", "standard-cycle"]), /Do not pass loop option --max-runs after --/u);
+  assert.throws(() => parseArgs(["--", "--stable-limit=2"]), /Do not pass loop option --stable-limit after --/u);
   assert.throws(() => parseArgs(["--scenario", "standard-cycle", "--out-dir=logs/live-supervisor/x"]), /Unknown argument before --: --scenario/u);
   assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE);
   assert.match(usage(), /summary/u);
   assert.match(usage(), /--out-root <dir>/u);
+});
+
+test("supervisor loop passes child help through visibly", async () => {
+  for (const helpFlag of ["--help", "-h"]) {
+    const output = { text: "", write(chunk) { this.text += chunk; } };
+    const commands = [];
+    const exitCode = await runSupervisorLoop({
+      argv: ["--", helpFlag],
+      root: "/repo",
+      io: { stdout: output, stderr: output },
+      dependencies: {
+        spawnSync: (_command, args, options) => {
+          commands.push({ args, options });
+          options.stdio[1].write(`child help ${helpFlag}\n`);
+          return { status: 0 };
+        },
+        readFile: async () => {
+          throw new Error("should not read summary for child help");
+        },
+      },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.deepEqual(commands[0].args, ["/repo/apps/supervisor/dist/index.js", helpFlag]);
+    assert.deepEqual(commands[0].options.stdio.slice(0, 1), ["ignore"]);
+    assert.equal(output.text.includes(`child help ${helpFlag}`), true);
+  }
 });
 
 test("supervisor loop summary signatures sort skip reasons", () => {
@@ -185,7 +216,7 @@ test("supervisor loop decisions stop on incident, tx, new outcome, max runs, and
     runIndex: 2,
     maxRuns: 10,
   }).reason, "new_outcome");
-  assert.equal(decideNext({
+  const stableDecision = decideNext({
     run: baseRun,
     priorOutcomes,
     previousSignature: "same",
@@ -193,8 +224,10 @@ test("supervisor loop decisions stop on incident, tx, new outcome, max runs, and
     stableLimit: 3,
     runIndex: 3,
     maxRuns: 10,
-  }).reason, "stable_no_progress");
-  assert.equal(decideNext({
+  });
+  assert.equal(stableDecision.reason, "stable_no_progress");
+  assert.equal(stableDecision.exitCode, INSPECTION_REQUIRED_EXIT_CODE);
+  const maxRunsDecision = decideNext({
     run: baseRun,
     priorOutcomes,
     previousSignature: "same",
@@ -202,7 +235,9 @@ test("supervisor loop decisions stop on incident, tx, new outcome, max runs, and
     stableLimit: 3,
     runIndex: 3,
     maxRuns: 3,
-  }).reason, "max_runs");
+  });
+  assert.equal(maxRunsDecision.reason, "max_runs");
+  assert.equal(maxRunsDecision.exitCode, INSPECTION_REQUIRED_EXIT_CODE);
 });
 
 test("supervisor loop runs bounded supervisor commands until stable", async () => {
@@ -244,7 +279,7 @@ test("supervisor loop runs bounded supervisor commands until stable", async () =
       },
     });
 
-    assert.equal(exitCode, 0);
+    assert.equal(exitCode, INSPECTION_REQUIRED_EXIT_CODE);
     assert.equal(commands.length, 2);
     assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "logs/live-supervisor/loop-test/run-0001"]);
     assert.equal(commands[0].options.timeout, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE * 1000);
@@ -293,7 +328,7 @@ test("supervisor loop accepts validation session out roots", async () => {
     },
   });
 
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, INSPECTION_REQUIRED_EXIT_CODE);
   assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
   assert.match(output.text, /out=log\/validation\/dynamic-test\/chunks\/chunk-0001/u);
 });
@@ -354,7 +389,7 @@ test("supervisor loop accepts explicit validation roots outside the repo", async
     },
   });
 
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, INSPECTION_REQUIRED_EXIT_CODE);
   assert.deepEqual(commands[0].args.slice(-4), ["--scenario", "bot-only", "--out-dir", "/var/tmp/ickb-log/validation/dynamic-test/chunks/chunk-0001/run-0001"]);
   assert.match(output.text, /out=\/var\/tmp\/ickb-log\/validation\/dynamic-test\/chunks\/chunk-0001/u);
 });

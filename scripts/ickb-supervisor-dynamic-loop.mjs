@@ -5,7 +5,10 @@ import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseNonNegativeInteger, parsePositiveInteger, valueAfter } from "./ickb-script-helpers.mjs";
-import { DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS } from "./ickb-supervisor-loop.mjs";
+import {
+  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS,
+  INSPECTION_REQUIRED_EXIT_CODE,
+} from "./ickb-supervisor-loop.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const CKB_UNIT = 100000000n;
@@ -22,6 +25,22 @@ export const DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE = DEFAULT_CHILD_TIMEOUT_SECONDS
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 240;
 const DEFAULT_CHUNK_TIMEOUT_MARGIN_SECONDS = 60;
 const DEFAULT_PREFLIGHT_TIMEOUT_SECONDS = 120;
+const DYNAMIC_LOOP_OWNED_FLAGS = [
+  "--tester-config",
+  "--preflight-role",
+  "--preflight-script",
+  "--supervisor-loop-script",
+  "--log-root",
+  "--session-root",
+  "--max-chunks",
+  "--chunk-max-runs",
+  "--stable-limit",
+  "--chunk-backoff-seconds",
+  "--between-chunks-seconds",
+  "--child-timeout-seconds",
+  "--chunk-timeout-seconds",
+  "--preflight-timeout-seconds",
+];
 const ALL_CKB_MIN_CKB = 3001n;
 const ICKB_STIMULUS_MIN_CKB = 2100n;
 const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
@@ -116,6 +135,10 @@ export function parseArgs(argv) {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
+  const misplacedDynamicLoopFlag = firstMatchingFlag(args.supervisorArgs, DYNAMIC_LOOP_OWNED_FLAGS);
+  if (misplacedDynamicLoopFlag !== undefined) {
+    throw new Error(`Do not pass dynamic-loop option ${misplacedDynamicLoopFlag} after --; put dynamic-loop options before --`);
+  }
   if (args.supervisorArgs.some((arg) => arg === "--out-dir" || arg.startsWith("--out-dir="))) {
     throw new Error("Do not pass supervisor --out-dir; dynamic-loop owns the session chunk roots");
   }
@@ -154,6 +177,7 @@ export function usage() {
     "  --session-root <path>                 Default: <log-root>/validation/dynamic-<time>-<pid>",
     "  -h, --help",
     "  -- [supervisor-options]",
+    "Dynamic-loop options must appear before --; supervisor --out-dir is owned by the dynamic loop.",
     "Reads tester preflight balance summaries, chooses a fundable tester scenario, then runs bounded supervisor-loop chunks.",
   ].join("\n");
 }
@@ -198,6 +222,21 @@ export async function runDynamicSupervisorLoop({ argv, root = rootDir, dependenc
   if (args.help) {
     stdout.write(`${usage()}\n`);
     return 0;
+  }
+
+  if (hasHelpFlag(args.supervisorArgs)) {
+    const result = runNode([
+      isAbsolute(args.supervisorLoopScript) ? args.supervisorLoopScript : resolve(root, args.supervisorLoopScript),
+      "--",
+      ...args.supervisorArgs,
+    ], root, dependencies, { timeout: args.chunkTimeoutSeconds * 1000 });
+    if (result.stdout) {
+      stdout.write(result.stdout);
+    }
+    if (result.stderr) {
+      stderr.write(result.stderr);
+    }
+    return typeof result.status === "number" ? result.status : 1;
   }
 
   let session;
@@ -275,6 +314,9 @@ export async function runDynamicSupervisorLoop({ argv, root = rootDir, dependenc
     if (stopReason === "tx_observed" || stopReason === "new_outcome") {
       return 0;
     }
+    if (stopReason === "max_runs" || stopReason === "stable_no_progress") {
+      return INSPECTION_REQUIRED_EXIT_CODE;
+    }
 
     if ((args.maxChunks === undefined || chunkIndex < args.maxChunks) && args.betweenChunksSeconds > 0) {
       await sleepMs(args.betweenChunksSeconds * 1000, dependencies);
@@ -286,7 +328,22 @@ export async function runDynamicSupervisorLoop({ argv, root = rootDir, dependenc
 
 function supervisorLoopStopReason(stdout) {
   const reasons = [...stdout.matchAll(/^loop stopped reason=([^\s]+)/gmu)].map((match) => match[1]);
-  return reasons.at(-1);
+  return reasons.at(-1) ?? [...stdout.matchAll(/^loop run=\d+ .*\bdecision=([^\s]+)/gmu)].map((match) => match[1]).at(-1);
+}
+
+function firstMatchingFlag(args, flags) {
+  for (const arg of args) {
+    for (const flag of flags) {
+      if (arg === flag || arg.startsWith(`${flag}=`)) {
+        return flag;
+      }
+    }
+  }
+  return undefined;
+}
+
+function hasHelpFlag(args) {
+  return args.some((arg) => arg === "-h" || arg === "--help");
 }
 
 function runTesterPreflight(args, root, dependencies) {
