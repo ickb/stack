@@ -66,8 +66,7 @@ test("supervisor loop passes child help through visibly", async () => {
       dependencies: {
         spawnSync: (_command, args, options) => {
           commands.push({ args, options });
-          options.stdio[1].write(`child help ${helpFlag}\n`);
-          return { status: 0 };
+          return { status: 0, stdout: `child help ${helpFlag}\n`, stderr: "child warning\n" };
         },
         readFile: async () => {
           throw new Error("should not read summary for child help");
@@ -77,8 +76,10 @@ test("supervisor loop passes child help through visibly", async () => {
 
     assert.equal(exitCode, 0);
     assert.deepEqual(commands[0].args, ["/repo/apps/supervisor/dist/index.js", helpFlag]);
-    assert.deepEqual(commands[0].options.stdio.slice(0, 1), ["ignore"]);
+    assert.deepEqual(commands[0].options.stdio, ["ignore", "pipe", "pipe"]);
+    assert.equal(commands[0].options.encoding, "utf8");
     assert.equal(output.text.includes(`child help ${helpFlag}`), true);
+    assert.equal(output.text.includes("child warning"), true);
   }
 });
 

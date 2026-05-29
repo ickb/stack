@@ -169,10 +169,14 @@ export async function runSupervisorLoop({ argv, root = rootDir, dependencies = {
       root,
       supervisorScript,
       supervisorArgs: args.supervisorArgs,
-      stdout,
-      stderr,
       dependencies,
     });
+    if (spawnResult.stdout) {
+      stdout.write(spawnResult.stdout);
+    }
+    if (spawnResult.stderr) {
+      stderr.write(spawnResult.stderr);
+    }
     return typeof spawnResult.status === "number" ? spawnResult.status : 1;
   }
 
@@ -259,15 +263,16 @@ function spawnSupervisor({ root, supervisorScript, supervisorArgs, relativeOutDi
   });
 }
 
-function spawnSupervisorHelp({ root, supervisorScript, supervisorArgs, stdout, stderr, dependencies }) {
+function spawnSupervisorHelp({ root, supervisorScript, supervisorArgs, dependencies }) {
   const spawnSyncFn = dependencies.spawnSync ?? spawnSync;
   return spawnSyncFn(process.execPath, [
     supervisorScript,
     ...supervisorArgs,
   ], {
     cwd: root,
+    encoding: "utf8",
     env: minimalProcessEnv(process.env),
-    stdio: ["ignore", stdout, stderr],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
