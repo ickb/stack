@@ -1,7 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 
 /**
- * Boundary-checked codec for little-endian 32-bit signed integers.
+ * Codec for little-endian 32-bit signed integers.
+ *
+ * @remarks
+ * The encoder rejects numeric values outside the signed 32-bit range before
+ * writing bytes. Decoding reads a signed little-endian integer from the bytes
+ * after CCC byte normalization.
+ *
+ * @public
  */
 export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   byteLength: 4,

@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     include: ["{test,tests}/*.{ts,tsx}"],
     coverage: {
-      include: ["src/**/*.{ts,tsx}"],
+      include: ["src/**/*.ts"],
     },
   },
 });

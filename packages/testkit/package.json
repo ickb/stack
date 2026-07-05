@@ -4,6 +4,11 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -11,12 +16,9 @@
     }
   },
   "scripts": {
-    "build": "tsc",
     "test": "vitest",
     "test:ci": "vitest run",
-    "lint": "eslint ./src",
-    "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules"
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 packages/testkit/src packages/testkit/test"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:"
