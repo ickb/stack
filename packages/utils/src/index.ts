@@ -1,3 +1,24 @@
-export * from "./codec.js";
-export * from "./heap.js";
-export * from "./utils.js";
+/**
+ * Shared utility codecs, collection helpers, and value shapes used by iCKB Stack packages.
+ *
+ * @packageDocumentation
+ */
+
+export { CheckedInt32LE } from "./codec.ts";
+export {
+  BufferedGenerator,
+  asyncBinarySearch,
+  binarySearch,
+  collect,
+  collectPagedScan,
+  compareBigInt,
+  defaultCellPageSize,
+  isPlainCapacityCell,
+  unique,
+} from "./utils.ts";
+export type {
+  ExchangeRatio,
+  ScriptDeps,
+  TransactionHeader,
+  ValueComponents,
+} from "./utils.ts";

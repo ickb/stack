@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 
 /**
  * The default page size used when querying cells from the chain.
@@ -9,9 +9,19 @@ import { ccc } from "@ckb-ccc/core";
  * @remarks
  * When searching for cells, callers may override this page size by passing a
  * custom `pageSize` in their options. This does not cap total results.
+ *
+ * @public
  */
 export const defaultCellPageSize = 400;
 
+/**
+ * Collects every item yielded by a paged async scan.
+ *
+ * @remarks `pageSize` is passed to the supplied scan factory as an RPC/indexer
+ * page size. It is not a total result cap.
+ *
+ * @public
+ */
 export async function collectPagedScan<T>(
   scan: (pageSize: number) => AsyncIterable<T>,
   options: {
@@ -26,90 +36,80 @@ export async function collectPagedScan<T>(
 }
 
 /**
- * Represents a transaction header that includes a block header and an optional transaction hash.
+ * Local transaction inclusion metadata.
+ *
+ * @public
  */
 export interface TransactionHeader {
   /**
-   * The block header associated with the transaction, represented as `ccc.ClientBlockHeader`.
+   * The block header used for inclusion-dependent calculations.
    */
   header: ccc.ClientBlockHeader;
 
   /**
-   * An optional transaction hash associated with the transaction, represented as `ccc.Hex`.
-   * This property may be undefined if the transaction hash is not applicable.
+   * The transaction hash when the caller has resolved it for the header.
    */
   txHash?: ccc.Hex;
 }
 
 /**
- * Represents the components of a value, including CKB and UDT amounts.
+ * CKB and UDT amounts carried by a cell, order, or planned value.
+ *
+ * @public
  */
 export interface ValueComponents {
-  /** The CKB amount as a `ccc.FixedPoint`. */
+  /** CKB-side amount as a `ccc.FixedPoint`. */
   ckbValue: ccc.FixedPoint;
 
-  /** The UDT amount as a `ccc.FixedPoint`. */
+  /** UDT-side amount as a `ccc.FixedPoint`. */
   udtValue: ccc.FixedPoint;
 }
 
 /**
- * Represents the exchange ratio between CKB and a UDT.
- * This interface is usually used in conjunction with `ValueComponents` to understand the values of entities.
+ * Integer scale pair for comparing or converting CKB-side and UDT-side values.
  *
- * For example, if `v` implements `ValueComponents` and `r` is an `ExchangeRatio`:
- * - The absolute value of `v` is calculated as:
- *   `v.ckbValue * r.ckbScale + v.udtValue * r.udtScale`
- * - The equivalent CKB value of `v` is calculated as:
- *   `v.ckbValue + (v.udtValue * r.udtScale + r.ckbScale - 1n) / r.ckbScale`
- * - The equivalent UDT value of `v` is calculated as:
- *   `v.udtValue + (v.ckbValue * r.ckbScale + r.udtScale - 1n) / r.udtScale`
+ * @remarks
+ * CKB-to-UDT conversions multiply by `ckbScale` and divide by `udtScale`.
+ * UDT-to-CKB conversions swap the scales. Callers choose the rounding policy.
+ *
+ * @public
  */
 export interface ExchangeRatio {
-  /** The CKB scale as a `ccc.Num`. */
+  /** Numerator scale for CKB-side values. */
   ckbScale: ccc.Num;
 
-  /** The UDT scale as a `ccc.Num`. */
+  /** Numerator scale for UDT-side values. */
   udtScale: ccc.Num;
 }
 
 /**
- * Interface representing the full configuration needed for interacting with a Script
+ * Script plus cell dependencies needed to build transactions that use it.
+ *
+ * @public
  */
 export interface ScriptDeps {
   /**
-   * The script for which additional information is being provided.
-   * @type {ccc.Script}
+   * The lock or type script.
    */
   script: ccc.Script;
 
   /**
-   * An array of cell dependencies associated with the script.
-   * @type {ccc.CellDep[]}
+   * Cell dependencies required to resolve the script code.
    */
   cellDeps: ccc.CellDep[];
 }
 
 /**
- * True when a cell is plain spendable CKB capacity with no type script and no data payload.
+ * True when a cell has no type script and no data payload.
+ *
+ * @remarks
+ * This is a structural filter for plain capacity cells. Spendability still
+ * depends on the lock script, live cell state, and transaction context.
+ *
+ * @public
  */
 export function isPlainCapacityCell(cell: ccc.Cell): boolean {
   return cell.cellOutput.type === undefined && cell.outputData === "0x";
-}
-
-/**
- * Shuffles in-place an array using the Durstenfeld shuffle algorithm.
- * @link https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
- *
- * @param array - The array to shuffle.
- * @returns The same array containing the shuffled elements.
- */
-export function shuffle<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    [array[i], array[j]] = [array[j]!, array[i]!];
-  }
-  return array;
 }
 
 /**
@@ -121,18 +121,17 @@ export function shuffle<T>(array: T[]): T[] {
  *
  * The function `f` is only called for indices in the range [0, n).
  *
- * @param n - The upper bound of the search range (exclusive).
+ * @param n - The non-negative integer upper bound of the search range (exclusive).
  * @param f - A function that takes an index `i` and returns a boolean value.
  * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
  *
- * @credits go standard library authors, this implementation is just a translation:
- * https://go.dev/src/sort/search.go
+ * @remarks Adapted from Go's standard library search implementation:
+ * {@link https://go.dev/src/sort/search.go}
  *
  * @example
- * // Example usage:
- * const isGreaterThanFive = (i: number) => i > 5;
- * const index = binarySearch(10, isGreaterThanFive); // Returns 6
+ * `binarySearch(10, (i) => i > 5)` returns `6`.
  *
+ * @public
  */
 export function binarySearch(n: number, f: (i: number) => boolean): number {
   // Define f(-1) == false and f(n) == true.
@@ -160,12 +159,14 @@ export function binarySearch(n: number, f: (i: number) => boolean): number {
  *
  * The function `f` is only called for indices in the range [0, n).
  *
- * @param n - The upper bound of the search range (exclusive).
+ * @param n - The non-negative integer upper bound of the search range (exclusive).
  * @param f - An async function that takes an index `i` and returns a boolean value.
  * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
  *
- * @credits go standard library authors, this implementation is just a translation of that code:
- * https://go.dev/src/sort/search.go *
+ * @remarks Adapted from Go's standard library search implementation:
+ * {@link https://go.dev/src/sort/search.go}
+ *
+ * @public
  */
 export async function asyncBinarySearch(
   n: number,
@@ -193,9 +194,11 @@ export async function asyncBinarySearch(
  * This function takes an `AsyncIterable<T>` as input and returns a promise that resolves
  * to an array containing all the elements yielded by the iterable.
  *
- * @template T - The type of elements in the input iterable.
- * @param {AsyncIterable<T>} inputs - The asynchronous iterable to convert into an array.
- * @returns {Promise<T[]>} A promise that resolves to an array of elements.
+ * @typeParam T - The type of elements in the input iterable.
+ * @param inputs - The asynchronous iterable to convert into an array.
+ * @returns A promise that resolves to an array of elements.
+ *
+ * @public
  */
 export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   const res = [];
@@ -205,6 +208,13 @@ export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   return res;
 }
 
+/**
+ * Compares two bigint values using sort-compatible ordering.
+ *
+ * @returns `-1` when `left` is smaller, `1` when `left` is larger, and `0` when equal.
+ *
+ * @public
+ */
 export function compareBigInt(left: bigint, right: bigint): number {
   if (left < right) {
     return -1;
@@ -219,22 +229,31 @@ export function compareBigInt(left: bigint, right: bigint): number {
 
 /**
  * A buffered generator that tries to maintain a fixed-size buffer of values.
+ *
+ * @public
  */
 export class BufferedGenerator<T> {
+  /** Current buffered window of values. */
   public buffer: T[] = [];
 
+  /** Wrapped generator that supplies future values. */
+  public generator: Generator<T, void, void>;
+
+  /** Target maximum number of buffered values. */
+  public maxSize: number;
+
   /**
-   * Creates an instance of Buffered.
+   * Creates a `BufferedGenerator` and fills the initial buffer.
+   *
    * @param generator - The generator to buffer values from.
-   * @param maxSize - The maximum size of the buffer.
+   * @param maxSize - The non-negative integer target maximum buffer size.
    */
-  constructor(
-    public generator: Generator<T, void, void>,
-    public maxSize: number,
-  ) {
+  constructor(generator: Generator<T, void, void>, maxSize: number) {
+    this.generator = generator;
+    this.maxSize = maxSize;
     while (this.buffer.length < this.maxSize) {
       const { value, done } = this.generator.next();
-      if (done) {
+      if (done === true) {
         break;
       }
       this.buffer.push(value);
@@ -242,60 +261,22 @@ export class BufferedGenerator<T> {
   }
 
   /**
-   * Advances the buffer by the specified number of steps.
-   * @param n - The number of steps to advance the buffer.
+   * Advances the buffer by discarding buffered values and reading replacements.
+   *
+   * @remarks
+   * The buffer can shrink below `maxSize` once the wrapped generator is exhausted.
+   *
+   * @param n - The non-negative integer number of buffered positions to advance.
    */
   public next(n: number): void {
     for (let i = 0; i < n; i++) {
       this.buffer.shift();
       const { value, done } = this.generator.next();
-      if (!done) {
+      if (done !== true) {
         this.buffer.push(value);
       }
     }
   }
-}
-
-/**
- * Returns the sum of a list of values.
- *
- * This function adds together an initial value with a variable number of additional values.
- * The operation is performed in a pairwise reduction manner to improve performance by reducing
- * the number of allocations, while achieving on numbers better numerical stability than naive summation.
- * It supports numbers (the main target) and bigints.
- *
- * @param res - The initial value used as the starting point for the sum.
- * @param rest - A variable number of additional values to be added.
- * @returns The sum of all provided values.
- *
- * @example
- * // Example usage with numbers:
- * const result = sum(1, 5, 3, 9, 2); // Returns 20
- *
- * @example
- * // Example usage with bigints:
- * const resultBigInt = sum(1n, 5n, 3n, 9n, 2n); // Returns 20n
- */
-export function sum(res: number, ...rest: number[]): number;
-export function sum(res: bigint, ...rest: bigint[]): bigint;
-export function sum<T>(res: T, ...rest: T[]): T {
-  const elements = [res, ...rest] as number[];
-  let n = elements.length;
-
-  // Perform pairwise reduction until a single value remains.
-  while (n > 1) {
-    const half = n >> 1;
-    const isOdd = n % 2;
-    // If there is an odd element, elements[half] is already in the correct place.
-    for (let i = 0; i < half; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      elements[i]! += elements[n - i - 1]!;
-    }
-    n = half + isOdd;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return elements[0]! as T;
 }
 
 /**
@@ -308,10 +289,10 @@ export function sum<T>(res: T, ...rest: T[]): T {
  * @param items - An iterable collection of items of type T.
  * @returns A generator that yields items from the iterable, ensuring that each item's
  *          hex representation (via toHex()) is unique.
+ *
+ * @public
  */
-export function* unique<T extends ccc.Entity>(
-  items: Iterable<T>,
-): Generator<T> {
+export function* unique<T extends ccc.Entity>(items: Iterable<T>): Generator<T> {
   const set = new Set<string>();
   for (const i of items) {
     const key = i.toHex();

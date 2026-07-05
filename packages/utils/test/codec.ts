@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { CheckedInt32LE } from "./codec.js";
+import { CheckedInt32LE } from "../src/codec.ts";
 
 describe("CheckedInt32LE", () => {
+  it("rejects values outside signed int32 bounds", () => {
+    expect(() => CheckedInt32LE.encode(2147483648)).toThrow(
+      "NumLike out of int32 bounds",
+    );
+    expect(() => CheckedInt32LE.encode(-2147483649)).toThrow(
+      "NumLike out of int32 bounds",
+    );
+  });
+
   it("decodes from the provided byte view offset", () => {
     const backing = new Uint8Array(8);
     backing.set([0xaa, 0xbb, 0xcc, 0xdd], 0);

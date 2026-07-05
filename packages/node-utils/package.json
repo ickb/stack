@@ -21,6 +21,9 @@
   },
   "sideEffects": false,
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "main": "dist/index.js",
   "types": "src/index.ts",
   "exports": {
@@ -32,10 +35,9 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "tsc",
-    "lint": "eslint ./src",
-    "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules"
+    "build": "rm -fr dist && tsgo -p tsconfig.build.json && node ../../scripts/tooling/build/rewrite-dts-imports.ts dist",
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 packages/node-utils/src packages/node-utils/test",
+    "clean": "rm -fr dist"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
