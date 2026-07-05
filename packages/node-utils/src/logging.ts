@@ -64,7 +64,7 @@ export function jsonLogReplacer(_: string, value: JsonLogValue | bigint): JsonLo
 }
 
 function errorToLog(error: unknown): JsonLogValue {
-  return toJsonLogValue(error, new WeakSet());
+  return toJsonLogValue(error ?? "Empty Error", new WeakSet());
 }
 
 /**
@@ -87,7 +87,7 @@ export function toJsonLogValue(value: unknown, seen: WeakSet<object>): JsonLogVa
   } else if (typeof value === "function") {
     logValue = UNSAFE_LOG_VALUE;
   } else if (isJsonLogPrimitive(value)) {
-    logValue = value ?? "Empty Error";
+    logValue = value;
   } else if (value instanceof Date) {
     logValue = dateLogValue(value);
   } else if (isErrorLike(value)) {

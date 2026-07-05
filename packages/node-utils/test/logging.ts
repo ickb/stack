@@ -214,6 +214,17 @@ describe("JSON line logging", () => {
     stdoutWrite.mockRestore();
   });
 
+  it("preserves nullish values in non-error JSON logs", () => {
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    writeJsonLine({ nullable: null, missing: undefined, values: [null, undefined] });
+
+    const parsed = jsonRecord(String(stdoutWrite.mock.calls[0]?.[0]));
+    expect(parsed).toEqual({ nullable: null, values: [null, null] });
+    expect(Object.hasOwn(parsed, "missing")).toBe(false);
+    stdoutWrite.mockRestore();
+  });
+
   it("preserves CKB debugging metadata", () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const txHash = byte32FromByte("55");
