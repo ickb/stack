@@ -100,18 +100,20 @@ describe("getConfig defaults", () => {
     const malformedConfig = {
       udt: {
         script: script("11"),
-        codeOutPoint: undefined,
+        codeOutPoint: outPoint("22"),
         cellDeps: [dep],
       },
       logic: {
-        script: script("22"),
+        script: script("33"),
         codeOutPoint: outPoint("33"),
         cellDeps: [dep],
       },
-      ownedOwner: { script: script("44"), cellDeps: [dep] },
-      order: { script: script("55"), cellDeps: [dep] },
-      dao: { script: script("66"), cellDeps: [dep] },
-    } as unknown as Parameters<typeof getConfig>[0];
+      ownedOwner: { script: script("55"), cellDeps: [dep] },
+      order: { script: script("66"), cellDeps: [dep] },
+      dao: { script: script("77"), cellDeps: [dep] },
+    };
+
+    Reflect.deleteProperty(malformedConfig.udt, "codeOutPoint");
 
     expect(() => getConfig(malformedConfig)).toThrow(
       "custom config missing xUDT code outPoint",

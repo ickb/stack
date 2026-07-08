@@ -11,11 +11,11 @@ export {
   IckbSdkBase,
   IckbSdkConversion,
   IckbSdkL1,
+  TransactionConfirmationError,
   estimateMaturityFeeThreshold,
   projectAccountAvailability,
   projectConversionTransactionContext,
   sendAndWaitForCommit,
-  TransactionConfirmationError,
 } from "./sdk.ts";
 export type {
   AccountAvailabilityProjection,

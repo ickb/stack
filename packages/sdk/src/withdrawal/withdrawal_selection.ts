@@ -199,14 +199,11 @@ function selectionKey<T>(
   items: readonly T[],
   indexByItem: ReadonlyMap<T, number>,
 ): string {
-  return items
-    .map((item) => {
-      const index = indexByItem.get(item);
-      if (index === undefined) {
-        throw new Error("Selection item index is missing");
-      }
-      return String(index);
-    })
-    .toSorted((left, right) => left.localeCompare(right))
-    .join(",");
+  return (
+    items
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selections are built from the indexed readyDeposits array.
+      .map((item) => String(indexByItem.get(item)!))
+      .toSorted((left, right) => left.localeCompare(right))
+      .join(",")
+  );
 }

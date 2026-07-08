@@ -107,19 +107,13 @@ function firstCkbMaturityAtOrAbove(
   ckbNeeded: bigint,
 ): bigint | undefined {
   const index = binarySearch(ckbMaturing.length, (n) => {
-    const entry = ckbMaturing[n];
-    if (entry === undefined) {
-      throw new Error(`CKB maturity entry ${String(n)} is missing`);
-    }
-    return entry.ckbCumulative >= ckbNeeded;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- binarySearch probes 0 <= n < ckbMaturing.length.
+    return ckbMaturing[n]!.ckbCumulative >= ckbNeeded;
   });
   if (index >= ckbMaturing.length) {
     return undefined;
   }
 
-  const entry = ckbMaturing[index];
-  if (entry === undefined) {
-    throw new Error(`CKB maturity entry ${String(index)} is missing`);
-  }
-  return entry.maturity;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- index is checked against ckbMaturing.length above.
+  return ckbMaturing[index]!.maturity;
 }
