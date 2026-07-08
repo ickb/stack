@@ -15,6 +15,7 @@ export {
   projectAccountAvailability,
   projectConversionTransactionContext,
   sendAndWaitForCommit,
+  TransactionConfirmationError,
 } from "./sdk.ts";
 export type {
   AccountAvailabilityProjection,

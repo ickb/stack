@@ -1,5 +1,10 @@
 import type { ccc } from "@ckb-ccc/core";
 
+/**
+ * Error thrown after a sent transaction times out or reaches a terminal failure.
+ *
+ * @public
+ */
 export class TransactionConfirmationError extends Error {
   public readonly txHash: ccc.Hex;
   public readonly status: string | undefined;

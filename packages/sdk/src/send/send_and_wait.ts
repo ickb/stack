@@ -117,6 +117,7 @@ export async function sendAndWaitForCommit(
   }: SendAndWaitForCommitOptions = {},
 ): Promise<ccc.Hex> {
   const startedAt = Date.now();
+  const requestor = transactionStatusRequestor(client);
   const txHash = await sendTransactionWithLifecycle(signer, tx, onLifecycle, startedAt);
   onSent?.(txHash);
   notifyLifecycle(onLifecycle, {
@@ -124,7 +125,7 @@ export async function sendAndWaitForCommit(
     txHash,
     elapsedMs: Date.now() - startedAt,
   });
-  const poll = await waitForTransactionStatus(client, txHash, {
+  const poll = await waitForTransactionStatus(client, requestor, txHash, {
     maxConfirmationChecks,
     confirmationIntervalMs,
     onConfirmationWait,
@@ -165,6 +166,7 @@ async function sendTransactionWithLifecycle(
 
 async function waitForTransactionStatus(
   client: ccc.Client,
+  requestor: JsonRpcRequestor,
   txHash: ccc.Hex,
   options: Required<
     Pick<
@@ -174,7 +176,6 @@ async function waitForTransactionStatus(
   > &
     Pick<SendAndWaitForCommitOptions, "onConfirmationWait">,
 ): Promise<TransactionConfirmationPoll> {
-  const requestor = transactionStatusRequestor(client);
   let status: string | undefined = "sent";
   let reason: string | undefined;
   let lastPollingError: unknown;

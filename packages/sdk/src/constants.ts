@@ -5,13 +5,13 @@ import { OrderManager } from "@ickb/order";
 import { unique, type ScriptDeps } from "@ickb/utils";
 
 /**
- * Script deps plus an optional code out point for scripts used as direct code deps.
+ * Script deps plus the direct code out point for scripts used as direct code deps.
  *
  * @public
  */
 export interface CodeScriptDeps extends ScriptDeps {
-  /** Optional direct code out point for deployments that reference code by cell dep. */
-  codeOutPoint: ccc.OutPointLike | undefined;
+  /** Direct code out point for deployments that reference code by cell dep. */
+  codeOutPoint: ccc.OutPointLike;
 }
 
 /**
@@ -20,9 +20,9 @@ export interface CodeScriptDeps extends ScriptDeps {
  * @public
  */
 export interface IckbDeploymentConfig {
-  /** xUDT type script deps and optional code out point. */
+  /** xUDT type script deps and direct code out point. */
   udt: CodeScriptDeps;
-  /** iCKB logic script deps and optional code out point. */
+  /** iCKB logic script deps and direct code out point. */
   logic: CodeScriptDeps;
   /** Owned-owner lock script deps. */
   ownedOwner: ScriptDeps;

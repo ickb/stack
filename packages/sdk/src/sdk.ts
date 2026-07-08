@@ -50,6 +50,7 @@ export type {
   SendAndWaitForCommitEvent,
   SendAndWaitForCommitOptions,
 } from "./send/send_and_wait.ts";
+export { TransactionConfirmationError } from "./send/send_and_wait_error.ts";
 
 /**
  * SDK for managing iCKB operations.

@@ -97,22 +97,24 @@ describe("getConfig defaults", () => {
       depType: "depGroup",
     });
 
-    expect(() =>
-      getConfig({
-        udt: {
-          script: script("11"),
-          codeOutPoint: undefined,
-          cellDeps: [dep],
-        },
-        logic: {
-          script: script("22"),
-          codeOutPoint: outPoint("33"),
-          cellDeps: [dep],
-        },
-        ownedOwner: { script: script("44"), cellDeps: [dep] },
-        order: { script: script("55"), cellDeps: [dep] },
-        dao: { script: script("66"), cellDeps: [dep] },
-      }),
-    ).toThrow("custom config missing xUDT code outPoint");
+    const malformedConfig = {
+      udt: {
+        script: script("11"),
+        codeOutPoint: undefined,
+        cellDeps: [dep],
+      },
+      logic: {
+        script: script("22"),
+        codeOutPoint: outPoint("33"),
+        cellDeps: [dep],
+      },
+      ownedOwner: { script: script("44"), cellDeps: [dep] },
+      order: { script: script("55"), cellDeps: [dep] },
+      dao: { script: script("66"), cellDeps: [dep] },
+    } as unknown as Parameters<typeof getConfig>[0];
+
+    expect(() => getConfig(malformedConfig)).toThrow(
+      "custom config missing xUDT code outPoint",
+    );
   });
 });

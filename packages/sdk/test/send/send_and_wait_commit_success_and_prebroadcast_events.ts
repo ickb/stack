@@ -3,7 +3,7 @@ import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendAndWaitForCommit, type SendAndWaitForCommitEvent } from "../../src/sdk.ts";
 import { signerWithSendTransaction } from "../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import { baseClient, hash } from "../transaction/base/support/sdk_core_support.ts";
+import { hash } from "../transaction/base/support/sdk_core_support.ts";
 import {
   ClearableCache,
   noopAsync,
@@ -69,7 +69,7 @@ describe(`${SEND_AND_WAIT_SUITE} failure events`, () => {
     await expect(
       sendAndWaitForCommit(
         {
-          client: baseClient,
+          client: new TransactionStatusStubClient(vi.fn()),
           signer: signerWithSendTransaction(vi.fn().mockRejectedValue(error)),
         },
         ccc.Transaction.default(),
@@ -84,34 +84,38 @@ describe(`${SEND_AND_WAIT_SUITE} failure events`, () => {
 });
 
 describe(`${SEND_AND_WAIT_SUITE} polling responses`, () => {
-  it("requires a JSON-RPC requestor after broadcast", async () => {
+  it("requires a JSON-RPC requestor before broadcast", async () => {
     const txHash = hash("a9");
+    const sendTransaction = vi.fn().mockResolvedValue(txHash);
 
     await expect(
       sendAndWaitForCommit(
         {
           client: new NoRequestorStubClient(),
-          signer: signerWithSendTransaction(vi.fn().mockResolvedValue(txHash)),
+          signer: signerWithSendTransaction(sendTransaction),
         },
         ccc.Transaction.default(),
       ),
     ).rejects.toThrow("sendAndWaitForCommit requires a JSON-RPC client requestor");
+    expect(sendTransaction).not.toHaveBeenCalled();
   });
 
   it("requires the JSON-RPC requestor to expose a request function", async () => {
     const txHash = hash("ad");
     const client = new StubClient();
+    const sendTransaction = vi.fn().mockResolvedValue(txHash);
     Object.defineProperty(client, "requestor", { value: {} });
 
     await expect(
       sendAndWaitForCommit(
         {
           client,
-          signer: signerWithSendTransaction(vi.fn().mockResolvedValue(txHash)),
+          signer: signerWithSendTransaction(sendTransaction),
         },
         ccc.Transaction.default(),
       ),
     ).rejects.toThrow("sendAndWaitForCommit requires a JSON-RPC client requestor");
+    expect(sendTransaction).not.toHaveBeenCalled();
   });
 
   it("treats malformed transaction status responses as pending", async () => {
