@@ -51,8 +51,7 @@ describe(SEND_AND_WAIT_SUITE, () => {
       status: "sent",
       isTimeout: true,
     });
-    expect(caught).not.toHaveProperty("cause", pollingError);
-    expect(caught).toMatchObject({ cause: { message: "Error" } });
+    expect(caught).toHaveProperty("cause", pollingError);
     expect(onLifecycle.mock.calls.map(([event]) => event)).toMatchObject([
       { type: "broadcasted", txHash },
       {
@@ -60,7 +59,7 @@ describe(SEND_AND_WAIT_SUITE, () => {
         txHash,
         status: "sent",
         checks: 1,
-        error: "Error",
+        error: pollingError,
       },
     ]);
   });
