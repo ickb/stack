@@ -62,7 +62,7 @@ export type SendAndWaitForCommitEvent =
       status: string | undefined;
       checks: number;
       elapsedMs: number;
-      error?: unknown;
+      error?: string;
     }
   | {
       type: "terminal_rejection";
@@ -227,7 +227,9 @@ function confirmationFailure(
     notifyLifecycle(onLifecycle, unresolvedBroadcastEvent(txHash, poll, startedAt));
     return new TransactionConfirmationError(
       "Transaction confirmation timed out",
-      poll.lastPollingError === undefined ? undefined : { cause: poll.lastPollingError },
+      poll.lastPollingError === undefined
+        ? undefined
+        : { cause: pollingErrorCause(poll.lastPollingError) },
       txHash,
       poll.status,
       true,
@@ -268,8 +270,21 @@ function unresolvedBroadcastEvent(
     status: poll.status,
     checks: poll.checks,
     elapsedMs: Date.now() - startedAt,
-    ...(poll.lastPollingError === undefined ? {} : { error: poll.lastPollingError }),
+    ...(poll.lastPollingError === undefined
+      ? {}
+      : { error: pollingErrorSummary(poll.lastPollingError) }),
   };
+}
+
+function pollingErrorCause(error: unknown): Error {
+  return new Error(pollingErrorSummary(error));
+}
+
+function pollingErrorSummary(error: unknown): string {
+  if (error instanceof Error && error.name.length > 0) {
+    return error.name;
+  }
+  return error === null ? "null" : typeof error;
 }
 
 function terminalStatusMessage(status: string, reason: string | undefined): string {
