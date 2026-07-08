@@ -19,7 +19,7 @@ const relativeTimeUnits: readonly RelativeTimeUnit[] = ["ms", "s", "m", "h", "d"
 
 export function usage(): string {
   return [
-    "Usage: node --experimental-default-type=module scripts/bot/collect-incident.ts [--log-root PATH] [--log-dir PATH] --since <iso|relative> --until <iso|relative>",
+    "Usage: node scripts/bot/collect-incident.ts [--log-root PATH] [--log-dir PATH] --since <iso|relative> --until <iso|relative>",
     "Relative times use the current time, for example --since 2h --until now.",
   ].join("\n");
 }
@@ -133,11 +133,11 @@ function parseRelativeOffsetMs(value: string): number | null {
   if (amountText === "" || !isAsciiDigits(amountText)) {
     return null;
   }
-  const amount = Number(amountText);
-  if (!Number.isSafeInteger(amount)) {
+  const amount = BigInt(amountText);
+  if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
     return null;
   }
-  return amount * relativeTimeMultipliers[unit];
+  return Number(amount) * relativeTimeMultipliers[unit];
 }
 
 function stripOptionalAgo(value: string): string {

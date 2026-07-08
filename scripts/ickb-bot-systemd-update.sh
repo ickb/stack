@@ -90,7 +90,7 @@ require_launcher_unit() {
   local log_root="${deploy_dir}/log"
   if ! service_has_bot_environment "${unit_text}" "${credential_name}" ||
      ! service_has_line "${unit_text}" "LoadCredentialEncrypted=${credential_name}:${credential}" ||
-     ! service_has_line "${unit_text}" "ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee" ||
+     ! service_has_line "${unit_text}" "ExecStart=/usr/bin/node scripts/bot/launcher.ts --no-child-tee" ||
      ! service_has_line "${unit_text}" "RestartPreventExitStatus=2" ||
      ! service_has_line "${unit_text}" "LimitCORE=0" ||
      ! service_has_line "${unit_text}" "RestartSec=60" ||

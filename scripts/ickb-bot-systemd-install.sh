@@ -150,7 +150,7 @@ Group=${user}
 WorkingDirectory=${deploy_dir}
 Environment=BOT_CONFIG_FILE=%d/${credential_name}${launcher_quota_environment}
 LoadCredentialEncrypted=${credential_name}:${credential}
-ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee
+ExecStart=/usr/bin/node scripts/bot/launcher.ts --no-child-tee
 Restart=on-failure
 RestartSec=60
 RestartPreventExitStatus=2

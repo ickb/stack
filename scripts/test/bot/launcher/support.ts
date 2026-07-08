@@ -37,7 +37,6 @@ export {
 export const rootDir = fileURLToPath(new URL("../../../..", import.meta.url));
 export const { join, resolve } = path;
 export const launcher = join(rootDir, "scripts", "bot", "launcher.ts");
-export const moduleDefaultFlag = "--experimental-default-type=module";
 export const canaryPrivateKey = `0x${"42".repeat(32)}`;
 export const logRootOption = "--log-root";
 export const logStorageQuotaOption = "--log-storage-quota-bytes";
@@ -120,7 +119,6 @@ export function runLauncher(
   return spawnSync(
     process.execPath,
     [
-      moduleDefaultFlag,
       launcher,
       logRootOption,
       logRoot,
@@ -148,7 +146,6 @@ export function runLauncherBuffer(
   return spawnSync(
     process.execPath,
     [
-      moduleDefaultFlag,
       launcher,
       logRootOption,
       logRoot,

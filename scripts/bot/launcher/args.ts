@@ -1,7 +1,7 @@
 import type { ParsedLauncherArgs } from "./runtime/types.ts";
 
 export function usage(): string {
-  return `Usage: node --experimental-default-type=module scripts/bot/launcher.ts [--log-root PATH] [--log-dir PATH] [--log-storage-quota-bytes N] [--no-child-tee] [-- <command> [args...]]\n`;
+  return `Usage: node scripts/bot/launcher.ts [--log-root PATH] [--log-dir PATH] [--log-storage-quota-bytes N] [--no-child-tee] [-- <command> [args...]]\n`;
 }
 
 export function parseArgs(argv: readonly string[]): ParsedLauncherArgs {

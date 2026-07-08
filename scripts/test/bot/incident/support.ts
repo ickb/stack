@@ -83,7 +83,6 @@ export interface ReferencedArtifactFixture {
 export const { join, resolve } = path;
 export const rootDir = fileURLToPath(new URL("../../../..", import.meta.url));
 export const collector = join(rootDir, "scripts", "bot", "collect-incident.ts");
-export const moduleDefaultFlag = "--experimental-default-type=module";
 export const canaryPrivateKey = `0x${"42".repeat(32)}`;
 export const logRootOption = "--log-root";
 export const logDirOption = "--log-dir";

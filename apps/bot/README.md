@@ -40,7 +40,7 @@ pnpm live:config-from-env -- --force
 The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json` for supervisor/tester runs, plus unbounded `config/bot-live-testnet.json` for a production-like long-running bot. Bounded configs default to `maxRetryableAttempts: 10`; the live config omits `maxRetryableAttempts` unless `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is set intentionally. Use the live config with the source-owned launcher when the goal is continuous matching:
 
 ```bash
-BOT_CONFIG_FILE=config/bot-live-testnet.json node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee
+BOT_CONFIG_FILE=config/bot-live-testnet.json node scripts/bot/launcher.ts --no-child-tee
 ```
 
 Current network support:
@@ -129,7 +129,7 @@ jq -c 'select(.type == "launcher.child.exited") | {timestamp, status, signal, el
 For unattended Ubuntu 24.04 deployments, run testnet and mainnet as separate systemd services with separate users, deploy directories, encrypted JSON credentials, and bot-only logs. The generated units run the bot from source, not `dist`:
 
 ```text
-/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee
+/usr/bin/node scripts/bot/launcher.ts --no-child-tee
 ```
 
 `apps/bot` is the CLI workspace for the private `packages/bot` runtime. Production runs Stack source and resolves CCC from installed package dependencies.
@@ -254,9 +254,9 @@ The log root resolves the same way as the launcher: explicit `--log-root`, then 
 Examples from the deployed checkout:
 
 ```bash
-sudo -u ickb-bot-testnet node --experimental-default-type=module scripts/bot/collect-incident.ts --since 2h --until now
-sudo -u ickb-bot-mainnet node --experimental-default-type=module scripts/bot/collect-incident.ts --since 2026-05-25T10:00:00Z --until 2026-05-25T11:00:00Z
-sudo -u ickb-bot-testnet node --experimental-default-type=module scripts/bot/collect-incident.ts --log-root log --since 30m --until now
+sudo -u ickb-bot-testnet node scripts/bot/collect-incident.ts --since 2h --until now
+sudo -u ickb-bot-mainnet node scripts/bot/collect-incident.ts --since 2026-05-25T10:00:00Z --until 2026-05-25T11:00:00Z
+sudo -u ickb-bot-testnet node scripts/bot/collect-incident.ts --log-root log --since 30m --until now
 ```
 
 The collector does not include runtime config files, environment dumps, systemd output, or raw unit text because they can contain private keys, credentialed RPC URLs, tokens, passwords, or API keys. Selected source logs are bundled as public producer-owned evidence; if a private key or other secret reaches those sources, fix the producer that wrote it before sharing or archiving the bundle.

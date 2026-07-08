@@ -21,7 +21,6 @@ import {
   logDirOption,
   logRootOption,
   mode,
-  moduleDefaultFlag,
   openPath,
   parseArgs,
   parseTimeBound,
@@ -321,7 +320,7 @@ void test("produced bundles do not contain configured canary secrets", async () 
 
     const result = spawnSync(
       process.execPath,
-      [moduleDefaultFlag, collector, ...commonArgs(dir)],
+      [collector, ...commonArgs(dir)],
       {
         cwd: rootDir,
         encoding: "utf8",

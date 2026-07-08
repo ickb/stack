@@ -25,7 +25,7 @@ void test("systemd install units run the source bot through the file-log launche
 
   assert.match(
     text,
-    /ExecStart=\/usr\/bin\/node --experimental-default-type=module scripts\/bot\/launcher\.ts --no-child-tee/u,
+    /ExecStart=\/usr\/bin\/node scripts\/bot\/launcher\.ts --no-child-tee/u,
   );
   assert.doesNotMatch(text, /ExecStart=\/usr\/bin\/node apps\/bot\/src\/index\.ts/u);
   assert.match(text, /Environment=BOT_CONFIG_FILE=%d\/\$\{credential_name\}/u);
@@ -90,7 +90,7 @@ void test("systemd install script keeps generated units on the checkout-local lo
   assert.match(text, /log_root_path="\$\{deploy_dir\}\/log"/u);
   assert.match(
     text,
-    /ExecStart=\/usr\/bin\/node --experimental-default-type=module scripts\/bot\/launcher\.ts --no-child-tee/u,
+    /ExecStart=\/usr\/bin\/node scripts\/bot\/launcher\.ts --no-child-tee/u,
   );
   assert.doesNotMatch(text, /--network \$\{network\}/u);
   assert.doesNotMatch(text, /ICKB_BOT_LOG_ROOT/u);

@@ -390,9 +390,9 @@ function unitText({
   const launcherLogRoot = logRoot === undefined ? "" : `--log-root ${logRoot} `;
   let execStart = `ExecStart=/usr/bin/node apps/bot/src/index.ts`;
   if (launcher && staleLauncherChild) {
-    execStart = `ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts ${launcherLogRoot}-- /usr/bin/node apps/bot/src/index.ts`;
+    execStart = `ExecStart=/usr/bin/node scripts/bot/launcher.ts ${launcherLogRoot}-- /usr/bin/node apps/bot/src/index.ts`;
   } else if (launcher) {
-    execStart = `ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts ${launcherLogRoot}--no-child-tee`;
+    execStart = `ExecStart=/usr/bin/node scripts/bot/launcher.ts ${launcherLogRoot}--no-child-tee`;
   }
   const workingDirectory = `/opt/ickb-${network}`;
   const writablePath = readWritePath ?? logRoot ?? `${workingDirectory}/log`;
@@ -401,13 +401,13 @@ function unitText({
     .join(" ");
 
   const comments = commentedSpoof
-    ? `# ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts -- /usr/bin/node apps/bot/src/index.ts
+    ? `# ExecStart=/usr/bin/node scripts/bot/launcher.ts -- /usr/bin/node apps/bot/src/index.ts
 # ReadWritePaths=${workingDirectory}/log
 `
     : "";
   const inactive = inactiveSectionSpoof
     ? `[Unit]
-ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts -- /usr/bin/node apps/bot/src/index.ts
+ExecStart=/usr/bin/node scripts/bot/launcher.ts -- /usr/bin/node apps/bot/src/index.ts
 ReadWritePaths=${workingDirectory}/log
 [Install]
 WantedBy=multi-user.target

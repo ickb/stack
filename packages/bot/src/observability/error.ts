@@ -119,11 +119,10 @@ function errorOwnProperties(error: Error, seen: Set<unknown>): Record<string, un
 
 function errorExtraFields(error: Error, seen: Set<unknown>): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
-  const entries = Object.entries(error);
+  const values = error as Record<string, unknown>;
   for (const key of ERROR_EXTRA_KEYS) {
-    const entry = entries.find(([entryKey]) => entryKey === key);
-    if (entry !== undefined) {
-      fields[key] = logValue(entry[1], seen);
+    if (key in error) {
+      fields[key] = logValue(values[key], seen);
     }
   }
   return fields;
