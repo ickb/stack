@@ -4,7 +4,17 @@ export function errorOf(error: unknown): Error {
   }
 
   const message = errorMessage(error);
-  return new Error(message, { cause: error });
+  return new Error(message, { cause: errorCause(error) });
+}
+
+function errorCause(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    return "name" in error && typeof error.name === "string" && error.name.length > 0
+      ? error.name
+      : "Object";
+  }
+
+  return error === null ? "null" : typeof error;
 }
 
 function errorMessage(error: unknown): string {
