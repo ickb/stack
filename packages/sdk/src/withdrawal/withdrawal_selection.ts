@@ -200,7 +200,13 @@ function selectionKey<T>(
   indexByItem: ReadonlyMap<T, number>,
 ): string {
   return items
-    .map((item) => String(indexByItem.get(item)))
+    .map((item) => {
+      const index = indexByItem.get(item);
+      if (index === undefined) {
+        throw new Error("Selection item index is missing");
+      }
+      return String(index);
+    })
     .toSorted((left, right) => left.localeCompare(right))
     .join(",");
 }

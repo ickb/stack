@@ -86,9 +86,10 @@ export function selectByMasks<T>(items: readonly T[], mask: number): T[] {
   for (let i = 0; i < items.length; i += 1) {
     if ((mask & (1 << i)) !== 0) {
       const item = items[i];
-      if (item !== undefined) {
-        selected.push(item);
+      if (item === undefined) {
+        throw new Error(`Selection item ${String(i)} is missing`);
       }
+      selected.push(item);
     }
   }
   return selected;

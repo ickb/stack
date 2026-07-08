@@ -79,10 +79,11 @@ describe("withdrawal best-fit concrete selection support", () => {
     const b = { id: "b", udtValue: 5n, score: 2n };
     const c = { id: "c", udtValue: 5n, score: 2n };
     const deposits = [a, b, c];
-    const sparseDeposits = [a, undefined, c];
 
     expect(selectByMasks(deposits, 0b101)).toEqual([a, c]);
-    expect(selectByMasks(sparseDeposits, 0b111)).toEqual([a, c]);
+    expect(() => selectByMasks([a, undefined, c], 0b111)).toThrow(
+      "Selection item 1 is missing",
+    );
     expect(pickBetterSelection(deposits, [b], [a], (deposit) => deposit.score)).toEqual([
       b,
     ]);
