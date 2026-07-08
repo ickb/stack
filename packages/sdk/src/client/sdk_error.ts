@@ -22,18 +22,21 @@ function errorMessage(error: unknown): string {
   }
 
   try {
-    return JSON.stringify(error, stringifyBigInt);
+    return JSON.stringify(error, stringifyErrorValue);
   } catch {
     return String(error);
   }
 }
 
-type JsonReplacerInput =
-  string | number | boolean | bigint | null | Record<string, unknown> | unknown[];
+function stringifyErrorValue(
+  this: Record<string, unknown> | unknown[],
+  key: string,
+  value: unknown,
+): unknown {
+  const original = Array.isArray(this) ? this[Number(key)] : this[key];
+  if (original instanceof Date) {
+    return Number.isNaN(original.getTime()) ? null : original.toISOString();
+  }
 
-function stringifyBigInt(
-  _key: string,
-  value: JsonReplacerInput,
-): Exclude<JsonReplacerInput, bigint> | string {
   return typeof value === "bigint" ? value.toString() : value;
 }
