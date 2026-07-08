@@ -20,9 +20,19 @@ export async function applyStorageQuota(
       break;
     }
     for (const item of group.items) {
-      await safeRm(item.path, { force: true, recursive: item.kind === "directory" });
+      await pruneManagedRunItem(item);
     }
     total -= group.size;
+  }
+}
+
+async function pruneManagedRunItem(
+  item: ManagedRunGroup["items"][number],
+): Promise<void> {
+  try {
+    await safeRm(item.path, { force: true, recursive: item.kind === "directory" });
+  } catch {
+    // Quota pruning is best-effort; failed cleanup must not block launcher startup.
   }
 }
 

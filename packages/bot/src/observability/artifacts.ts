@@ -130,7 +130,6 @@ async function writeContentAddressedArtifact(
   let handle: FileHandle | undefined;
   let tempCreated = false;
   let linkingFinalPath = false;
-  let writeSucceeded = false;
   try {
     handle = await fsPromises.open(tempPath, writeNewArtifactFlags, 0o600);
     tempCreated = true;
@@ -140,32 +139,25 @@ async function writeContentAddressedArtifact(
     handle = undefined;
     linkingFinalPath = true;
     await fsPromises.link(tempPath, path);
-    writeSucceeded = true;
   } catch (error) {
     if (linkingFinalPath && isErrno(error, "EEXIST")) {
       await verifyExistingArtifact(path, hash);
-      writeSucceeded = true;
     } else {
       throw error;
     }
   } finally {
     await closeArtifactHandle(handle);
     if (tempCreated) {
-      await removeTemporaryArtifact(tempPath, writeSucceeded);
+      await removeTemporaryArtifact(tempPath);
     }
   }
 }
 
-async function removeTemporaryArtifact(
-  tempPath: string,
-  writeSucceeded: boolean,
-): Promise<void> {
+async function removeTemporaryArtifact(tempPath: string): Promise<void> {
   try {
     await fsPromises.rm(tempPath, { force: true });
-  } catch (error) {
-    if (writeSucceeded) {
-      throw error;
-    }
+  } catch {
+    // Temp cleanup is best-effort; write or verification errors remain authoritative.
   }
 }
 

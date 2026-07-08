@@ -1,11 +1,6 @@
 import { processSourceLines } from "../io/filesystem.ts";
 import { stderrUndatedLineLimit } from "../model/constants.ts";
-import {
-  isAsciiDigits,
-  isRecord,
-  scanAsciiDigits,
-  stripLineEnding,
-} from "../model/text.ts";
+import { isRecord, stripLineEnding } from "../model/text.ts";
 import type {
   FilteredSource,
   IncidentSummary,
@@ -25,6 +20,9 @@ import {
   timestampInWindow,
   updateSourceStatsTimestamps,
 } from "./summary.ts";
+
+const ISO_TIMESTAMP_TEXT =
+  /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})/u;
 
 export async function filterJsonSource({
   dependencies,
@@ -153,76 +151,10 @@ function parseRecordTimestamp(timestamp: unknown): Date | null {
 }
 
 function parseTextTimestamp(line: string): Date | null {
-  for (let index = 0; index < line.length; index += 1) {
-    const timestamp = timestampTextAt(line, index);
-    if (timestamp === null) {
-      continue;
-    }
-    const parsed = new Date(timestamp);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-  return null;
-}
-
-function timestampTextAt(line: string, start: number): string | null {
-  if (!hasIsoTimestampBase(line, start)) {
+  const match = ISO_TIMESTAMP_TEXT.exec(line);
+  if (match === null) {
     return null;
   }
-  const fractionEnd = timestampFractionEnd(line, start + 19);
-  if (fractionEnd === null) {
-    return null;
-  }
-  const zoneLength = timestampZoneLength(line, fractionEnd);
-  return zoneLength === 0 ? null : line.slice(start, fractionEnd + zoneLength);
-}
-
-function hasIsoTimestampBase(line: string, start: number): boolean {
-  if (start + 19 > line.length) {
-    return false;
-  }
-  const delimiters: ReadonlyArray<readonly [number, string]> = [
-    [4, "-"],
-    [7, "-"],
-    [10, "T"],
-    [13, ":"],
-    [16, ":"],
-  ];
-  const digitRanges: ReadonlyArray<readonly [number, number]> = [
-    [0, 4],
-    [5, 7],
-    [8, 10],
-    [11, 13],
-    [14, 16],
-    [17, 19],
-  ];
-  return (
-    delimiters.every(([offset, delimiter]) => line[start + offset] === delimiter) &&
-    digitRanges.every(([from, until]) =>
-      isAsciiDigits(line.slice(start + from, start + until)),
-    )
-  );
-}
-
-function timestampFractionEnd(line: string, start: number): number | null {
-  if (line[start] !== ".") {
-    return start;
-  }
-  const end = scanAsciiDigits(line, start + 1, 9);
-  return end === start + 1 ? null : end;
-}
-
-function timestampZoneLength(line: string, start: number): number {
-  if (line[start] === "Z") {
-    return 1;
-  }
-  if (line[start] !== "+" && line[start] !== "-") {
-    return 0;
-  }
-  return isAsciiDigits(line.slice(start + 1, start + 3)) &&
-    line[start + 3] === ":" &&
-    isAsciiDigits(line.slice(start + 4, start + 6))
-    ? 6
-    : 0;
+  const parsed = new Date(match[0]);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

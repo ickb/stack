@@ -108,9 +108,8 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       .spyOn(fsPromises, "rm")
       .mockRejectedValueOnce(new Error("cleanup failed"));
     try {
-      await expect(
-        writeArtifact(artifactRoot, artifactKind, artifactPayload),
-      ).rejects.toThrow(/cleanup failed/u);
+      await expect(writeArtifact(artifactRoot, artifactKind, artifactPayload)).resolves
+        .toMatchObject({ kind: artifactKind });
     } finally {
       rmSpy.mockRestore();
       await rm(artifactRoot, { force: true, recursive: true });
