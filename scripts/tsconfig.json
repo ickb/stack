@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["bot/**/*.ts", "test/bot/**/*.ts", "run-node-tests.ts"]
+}

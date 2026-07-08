@@ -42,6 +42,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@24.12.2)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.2
       '@typescript/native-preview':
         specifier: latest
         version: 7.0.0-dev.20260704.1
@@ -78,22 +81,19 @@ importers:
       '@ckb-ccc/core':
         specifier: 'catalog:'
         version: 1.14.0(typescript@5.9.3)(zod@3.25.76)
-      '@ickb/core':
+      '@ickb/bot':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/bot
       '@ickb/node-utils':
         specifier: workspace:*
         version: link:../../packages/node-utils
-      '@ickb/order':
-        specifier: workspace:*
-        version: link:../../packages/order
       '@ickb/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@ickb/utils':
-        specifier: workspace:*
-        version: link:../../packages/utils
     devDependencies:
+      '@ickb/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.2
@@ -211,6 +211,31 @@ importers:
       '@ickb/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.2
+
+  packages/bot:
+    dependencies:
+      '@ckb-ccc/core':
+        specifier: 'catalog:'
+        version: 1.14.0(typescript@5.9.3)(zod@3.25.76)
+      '@ickb/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ickb/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
+      '@ickb/order':
+        specifier: workspace:*
+        version: link:../order
+      '@ickb/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@ickb/testkit':
+        specifier: workspace:*
+        version: link:../testkit
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.2

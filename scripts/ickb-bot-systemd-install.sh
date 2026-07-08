@@ -2,8 +2,18 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: %s [testnet|mainnet|all]\n' "${0##*/}" >&2
-  printf 'Set ICKB_BOT_LOG_ROOT to bake an explicit launcher --log-root into generated units. Relative paths resolve from each deploy directory.\n' >&2
+  printf 'Usage: %s <testnet|mainnet>\n' "${0##*/}" >&2
+  printf 'Run from the checkout to use as that service deployment. Generated units keep production bot logs under <checkout>/log.\n' >&2
+  printf 'Set ICKB_BOT_LOG_STORAGE_QUOTA_BYTES to enable best-effort pruning of inactive per-run bot logs and artifacts.\n' >&2
+}
+
+require_node_22_19() {
+  local node_bin=$1
+  local context=$2
+  "${node_bin}" -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' || {
+    printf 'Node.js >=22.19.0 is required %s. Found: %s\n' "${context}" "$("${node_bin}" --version)" >&2
+    exit 1
+  }
 }
 
 require_root() {
@@ -15,49 +25,30 @@ require_root() {
 
 require_runtime() {
   if [[ ! -x /usr/bin/node ]]; then
-    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22 there or adjust the unit after install.\n' >&2
+    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22.19.0 there or adjust the unit after install.\n' >&2
     exit 1
   fi
-  /usr/bin/node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' || {
-    printf 'Node.js >=22 is required at /usr/bin/node. Found: %s\n' "$(/usr/bin/node --version)" >&2
-    exit 1
-  }
+  require_node_22_19 /usr/bin/node "at /usr/bin/node"
   command -v node >/dev/null || {
-    printf 'node is required. Install Node.js >=22 before installing units.\n' >&2
+    printf 'node is required. Install Node.js >=22.19.0 before installing units.\n' >&2
     exit 1
   }
+  require_node_22_19 "$(command -v node)" "on PATH"
   command -v pnpm >/dev/null || {
     printf 'pnpm is required for deploy updates.\n' >&2
     exit 1
   }
 }
 
-resolve_log_root_path() {
-  local deploy_dir=$1
-  local configured_log_root=$2
-
-  node -e '
-const path = require("node:path");
-const deployDir = process.argv[1];
-const configuredLogRoot = process.argv[2];
-const resolved = path.isAbsolute(configuredLogRoot)
-  ? path.resolve(configuredLogRoot)
-  : path.resolve(deployDir, configuredLogRoot);
-process.stdout.write(resolved);
-' "${deploy_dir}" "${configured_log_root}"
-}
-
-require_systemd_safe_path_arg() {
-  local value=$1
+require_systemd_safe_positive_integer() {
+  local name=$1
+  local value=$2
 
   node -e '
 const value = process.argv[1] ?? "";
-const disallowed = new Set([String.fromCharCode(34), String.fromCharCode(39), "\\", "$", "%", ";", String.fromCharCode(96)]);
-if (value === "" || [...value].some((char) => char.charCodeAt(0) <= 32 || disallowed.has(char))) {
-  process.exit(1);
-}
+process.exit(/^[1-9][0-9]*$/.test(value) && BigInt(value) <= BigInt(Number.MAX_SAFE_INTEGER) ? 0 : 1);
 ' "${value}" || {
-    printf 'ICKB_BOT_LOG_ROOT must be a non-empty systemd-safe path without whitespace, quotes, backslashes, semicolons, $, or %%.\n' >&2
+    printf '%s must be a positive safe integer.\n' "${name}" >&2
     exit 1
   }
 }
@@ -118,20 +109,19 @@ function fail(message) {
 
 install_network() {
   local network=$1
+  local deploy_dir=$2
   local user="ickb-bot-${network}"
-  local deploy_dir="/opt/ickb-stack-${network}"
   local credential_name="ickb-bot-${network}-config.json"
   local credential="/etc/ickb/credentials/ickb-bot-${network}-config.cred"
   local service="ickb-bot-${network}.service"
   local unit_path="/etc/systemd/system/${service}"
-  local configured_log_root=${ICKB_BOT_LOG_ROOT:-}
-  local launcher_log_root_args=
+  local configured_log_quota=${ICKB_BOT_LOG_STORAGE_QUOTA_BYTES:-}
+  local launcher_quota_environment=
   local log_root_path="${deploy_dir}/log"
 
-  if [[ -n ${configured_log_root} ]]; then
-    require_systemd_safe_path_arg "${configured_log_root}"
-    log_root_path=$(resolve_log_root_path "${deploy_dir}" "${configured_log_root}")
-    launcher_log_root_args="--log-root ${log_root_path} "
+  if [[ -n ${configured_log_quota} ]]; then
+    require_systemd_safe_positive_integer ICKB_BOT_LOG_STORAGE_QUOTA_BYTES "${configured_log_quota}"
+    launcher_quota_environment=" ICKB_BOT_LOG_STORAGE_QUOTA_BYTES=${configured_log_quota}"
   fi
 
   if ! id -u "${user}" >/dev/null 2>&1; then
@@ -144,8 +134,7 @@ install_network() {
 
   safe_install_directory "${deploy_dir}" 755 "${user_id}" "${group_id}"
   safe_install_directory "${log_root_path}" 755 0 0
-  safe_install_directory "${log_root_path}/bot" 755 0 0
-  safe_install_directory "${log_root_path}/bot/${network}" 700 "${user_id}" "${group_id}"
+  safe_install_directory "${log_root_path}/bot" 700 "${user_id}" "${group_id}"
   install -d -m 700 /etc/ickb/credentials
 
   cat >"${unit_path}" <<UNIT
@@ -159,11 +148,11 @@ Type=simple
 User=${user}
 Group=${user}
 WorkingDirectory=${deploy_dir}
-Environment=BOT_CONFIG_FILE=%d/${credential_name}
+Environment=BOT_CONFIG_FILE=%d/${credential_name}${launcher_quota_environment}
 LoadCredentialEncrypted=${credential_name}:${credential}
-ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs ${launcher_log_root_args}--network ${network} -- /usr/bin/node apps/bot/dist/index.js
+ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee
 Restart=on-failure
-RestartSec=10
+RestartSec=60
 RestartPreventExitStatus=2
 LimitCORE=0
 NoNewPrivileges=true
@@ -178,21 +167,20 @@ WantedBy=multi-user.target
 UNIT
 
   chmod 644 "${unit_path}"
-  printf 'Installed %s for user %s in %s with logs under %s/bot/%s\n' "${service}" "${user}" "${deploy_dir}" "${log_root_path}" "${network}"
+  printf 'Installed %s for user %s in %s with logs under %s/bot\n' "${service}" "${user}" "${deploy_dir}" "${log_root_path}"
 }
 
 main() {
   require_root
   require_runtime
 
-  local target=${1:-all}
+  local deploy_dir
+  deploy_dir=$(pwd -P)
+
+  local target=${1:-}
   case "${target}" in
     testnet|mainnet)
-      install_network "${target}"
-      ;;
-    all)
-      install_network testnet
-      install_network mainnet
+      install_network "${target}" "${deploy_dir}"
       ;;
     -h|--help)
       usage
@@ -205,7 +193,7 @@ main() {
   esac
 
   systemctl daemon-reload
-  printf 'Next: create credentials, deploy the repo to /opt/ickb-stack-<network>, build apps/bot, then enable the services.\n'
+  printf 'Next: create credentials, install dependencies, type-check source, then enable the services.\n'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

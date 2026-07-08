@@ -5,6 +5,15 @@ usage() {
   printf 'Usage: %s <testnet|mainnet>\n' "${0##*/}" >&2
 }
 
+require_node_22_19() {
+  local node_bin=$1
+  local context=$2
+  "${node_bin}" -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' || {
+    printf 'Node.js >=22.19.0 is required %s. Found: %s\n' "${context}" "$("${node_bin}" --version)" >&2
+    exit 1
+  }
+}
+
 require_root() {
   if [[ ${EUID} -ne 0 ]]; then
     printf 'Run this script as root, for example with sudo.\n' >&2
@@ -14,13 +23,10 @@ require_root() {
 
 require_runtime() {
   if [[ ! -x /usr/bin/node ]]; then
-    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22 there or adjust the unit before updating.\n' >&2
+    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22.19.0 there or adjust the unit before updating.\n' >&2
     exit 1
   fi
-  /usr/bin/node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' || {
-    printf 'Node.js >=22 is required at /usr/bin/node. Found: %s\n' "$(/usr/bin/node --version)" >&2
-    exit 1
-  }
+  require_node_22_19 /usr/bin/node "at /usr/bin/node"
   command -v pnpm >/dev/null || {
     printf 'pnpm is required before updating.\n' >&2
     exit 1
@@ -70,6 +76,7 @@ require_clean_worktree() {
 require_launcher_unit() {
   local unit_path=$1
   local network=$2
+  local deploy_dir=$3
 
   if [[ ! -r ${unit_path} ]]; then
     printf 'Service unit %s is missing or unreadable. Run scripts/ickb-bot-systemd-install.sh %s first.\n' "${unit_path}" "${network}" >&2
@@ -80,25 +87,23 @@ require_launcher_unit() {
   unit_text=$(<"${unit_path}")
   local credential_name="ickb-bot-${network}-config.json"
   local credential="/etc/ickb/credentials/ickb-bot-${network}-config.cred"
-  local log_root
-  if ! log_root=$(unit_launcher_log_root "${unit_text}" "${network}"); then
-    printf 'Service unit %s is not wired for production launcher file logging and core-dump hardening. Run scripts/ickb-bot-systemd-install.sh %s before updating.\n' "${unit_path}" "${network}" >&2
-    exit 1
-  fi
-  if ! unit_has_directive "${unit_text}" "Environment" "BOT_CONFIG_FILE=%d/${credential_name}" ||
-     ! unit_has_directive "${unit_text}" "LoadCredentialEncrypted" "${credential_name}:${credential}" ||
-      ! unit_has_directive "${unit_text}" "RestartPreventExitStatus" "2" ||
-      ! unit_has_directive "${unit_text}" "LimitCORE" "0" ||
-      ! unit_has_directive "${unit_text}" "ReadWritePaths" "${log_root}"; then
+  local log_root="${deploy_dir}/log"
+  if ! service_has_bot_environment "${unit_text}" "${credential_name}" ||
+     ! service_has_line "${unit_text}" "LoadCredentialEncrypted=${credential_name}:${credential}" ||
+     ! service_has_line "${unit_text}" "ExecStart=/usr/bin/node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee" ||
+     ! service_has_line "${unit_text}" "RestartPreventExitStatus=2" ||
+     ! service_has_line "${unit_text}" "LimitCORE=0" ||
+     ! service_has_line "${unit_text}" "RestartSec=60" ||
+     ! service_has_line "${unit_text}" "ReadWritePaths=${log_root}"; then
     printf 'Service unit %s is not wired for production launcher file logging and core-dump hardening. Run scripts/ickb-bot-systemd-install.sh %s before updating.\n' "${unit_path}" "${network}" >&2
     exit 1
   fi
 }
 
-unit_has_directive() {
-  local unit_text=$1
-  local key=$2
-  local expected=$3
+unit_working_directory() {
+  local unit_path=$1
+  local unit_text
+  unit_text=$(<"${unit_path}")
   local line
   local value
   local in_service=0
@@ -111,77 +116,30 @@ unit_has_directive() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if value=$(unit_directive_value "${line}" "${key}") && unit_value_matches "${key}" "${value}" "${expected}"; then
+    if [[ ${line} == WorkingDirectory=* ]]; then
+      value=${line#WorkingDirectory=}
+      printf '%s\n' "${value}"
       return 0
     fi
   done <<<"${unit_text}"
   return 1
 }
 
-unit_directive_value() {
-  local line=$1
-  local expected_key=$2
-  if [[ ${line} != *=* ]]; then
-    return 1
-  fi
-
-  local key=${line%%=*}
-  local value=${line#*=}
-  key=$(trim_unit_field "${key}")
-  value=$(trim_unit_field "${value}")
-  if [[ ${key} != "${expected_key}" ]]; then
-    return 1
-  fi
-  printf '%s\n' "${value}"
-}
-
-trim_unit_field() {
-  local value=$1
-  value="${value#"${value%%[![:space:]]*}"}"
-  value="${value%"${value##*[![:space:]]}"}"
-  printf '%s\n' "${value}"
-}
-
-unit_value_matches() {
-  local key=$1
-  local value=$2
-  local expected=$3
-
-  [[ ${value} == "${expected}" ]] && return 0
-  case "${key}" in
-    Environment|ReadWritePaths) unit_value_contains_token "${value}" "${expected}" ;;
-    *) return 1 ;;
-  esac
-}
-
-unit_value_contains_token() {
-  local value=$1
-  local expected=$2
-  local token
-  local quoted
-  local -a tokens
-
-  read -r -a tokens <<<"${value}"
-  for token in "${tokens[@]}"; do
-    if [[ ${token} == '"'*'"' && ${#token} -ge 2 ]]; then
-      quoted=${token#'"'}
-      token=${quoted%'"'}
-    fi
-    [[ ${token} == "${expected}" ]] && return 0
-  done
-  return 1
-}
-
-unit_launcher_log_root() {
-  local unit_text=$1
+require_unit_working_directory() {
+  local unit_path=$1
   local network=$2
-  local default_log_root="/opt/ickb-stack-${network}/log"
-  local prefix="ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs "
-  local suffix="--network ${network} -- /usr/bin/node apps/bot/dist/index.js"
-  local with_log_root_prefix="${prefix}--log-root "
-  local suffix_with_separator=" ${suffix}"
+  local deploy_dir
+  if ! deploy_dir=$(unit_working_directory "${unit_path}") || [[ -z ${deploy_dir} || ${deploy_dir} != /* ]]; then
+    printf 'Service unit %s has no absolute WorkingDirectory. Run scripts/ickb-bot-systemd-install.sh %s from the deploy checkout before updating.\n' "${unit_path}" "${network}" >&2
+    exit 1
+  fi
+  printf '%s\n' "${deploy_dir}"
+}
+
+service_has_line() {
+  local unit_text=$1
+  local expected=$2
   local line
-  local exec_start
   local in_service=0
 
   while IFS= read -r line || [[ -n ${line} ]]; do
@@ -192,22 +150,34 @@ unit_launcher_log_root() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if ! exec_start=$(unit_directive_value "${line}" "ExecStart"); then
-      continue
-    fi
-    if [[ ${exec_start} == "${prefix#ExecStart=}${suffix}" ]]; then
-      printf '%s\n' "${default_log_root}"
+    if [[ ${line} == "${expected}" ]]; then
       return 0
     fi
-    if [[ ${exec_start} == "${with_log_root_prefix#ExecStart=}"*"${suffix_with_separator}" ]]; then
-      local rest=${exec_start#"${with_log_root_prefix#ExecStart=}"}
-      local log_root_length=$(( ${#rest} - ${#suffix_with_separator} ))
-      local log_root=${rest:0:log_root_length}
-      if [[ -n ${log_root} && ${log_root} == /* && ${log_root} != *[[:space:]]* ]]; then
-        printf '%s\n' "${log_root}"
-        return 0
-      fi
-      return 1
+  done <<<"${unit_text}"
+  return 1
+}
+
+service_has_bot_environment() {
+  local unit_text=$1
+  local credential_name=$2
+  local line
+  local in_service=0
+  local quota
+
+  while IFS= read -r line || [[ -n ${line} ]]; do
+    line=${line%$'\r'}
+    [[ ${line} =~ ^[[:space:]]*($|#|\;) ]] && continue
+    if [[ ${line} =~ ^[[:space:]]*\[(.*)\][[:space:]]*$ ]]; then
+      [[ ${BASH_REMATCH[1]} == Service ]] && in_service=1 || in_service=0
+      continue
+    fi
+    [[ ${in_service} -eq 1 ]] || continue
+    if [[ ${line} == "Environment=BOT_CONFIG_FILE=%d/${credential_name}" ]]; then
+      return 0
+    fi
+    if [[ ${line} == "Environment=BOT_CONFIG_FILE=%d/${credential_name} ICKB_BOT_LOG_STORAGE_QUOTA_BYTES="* ]]; then
+      quota=${line#"Environment=BOT_CONFIG_FILE=%d/${credential_name} ICKB_BOT_LOG_STORAGE_QUOTA_BYTES="}
+      [[ ${quota} =~ ^[1-9][0-9]*$ ]] && return 0
     fi
   done <<<"${unit_text}"
   return 1
@@ -231,21 +201,22 @@ main() {
   esac
 
   local user="ickb-bot-${network}"
-  local deploy_dir="/opt/ickb-stack-${network}"
   local service="ickb-bot-${network}.service"
   local unit_path="/etc/systemd/system/${service}"
+  local deploy_dir
   local pnpm_bin
   pnpm_bin=$(command -v pnpm)
   local user_home
 
   user_home=$(service_user_home "${user}")
+  deploy_dir=$(require_unit_working_directory "${unit_path}" "${network}")
+  require_launcher_unit "${unit_path}" "${network}" "${deploy_dir}"
   run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" rev-parse --is-inside-work-tree >/dev/null
   require_clean_worktree "${user}" "${user_home}" "${deploy_dir}"
-  require_launcher_unit "${unit_path}" "${network}"
 
   run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" pull --ff-only
   run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:install
-  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:build
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:check
   systemctl restart "${service}"
   systemctl --no-pager --full status "${service}"
 }

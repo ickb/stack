@@ -5,6 +5,15 @@ usage() {
   printf 'Usage: %s <testnet|mainnet> [--force]\n' "${0##*/}" >&2
 }
 
+require_node_22_19() {
+  local node_bin=$1
+  local context=$2
+  "${node_bin}" -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' || {
+    printf 'Node.js >=22.19.0 is required %s. Found: %s\n' "${context}" "$("${node_bin}" --version)" >&2
+    exit 1
+  }
+}
+
 require_root() {
   if [[ ${EUID} -ne 0 ]]; then
     printf 'Run this script as root, for example with sudo.\n' >&2
@@ -24,7 +33,7 @@ const expectedChain = process.argv[2];
 const text = readFileSync(0, "utf8");
 let config;
 try {
-  const { parseRuntimeConfig } = await import(pathToFileURL(`${repoRoot}/packages/node-utils/dist/index.js`).href);
+  const { parseRuntimeConfig } = await import(pathToFileURL(`${repoRoot}/packages/node-utils/src/index.ts`).href);
   parseRuntimeConfig(text, "BOT_CONFIG_FILE");
   config = JSON.parse(text);
 } catch {
@@ -34,7 +43,7 @@ if (config.chain !== expectedChain) fail();
 process.stdout.write(JSON.stringify(config));
 })();
 function fail() {
-  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, optional rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts. Build @ickb/node-utils before running this helper.\n");
+  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, optional rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts.\n");
   process.exit(1);
 }
 ' "${repo_root}" "${expected_chain}"
@@ -75,14 +84,15 @@ main() {
     exit 1
   }
   command -v node >/dev/null || {
-    printf 'node is required to validate the config before encrypting.\n' >&2
+    printf 'node >=22.19.0 is required to validate the config before encrypting.\n' >&2
     exit 1
   }
+  require_node_22_19 "$(command -v node)" "to validate TypeScript source configs"
   if [[ ! -e /var/lib/systemd/credential.secret ]]; then
     systemd-creds setup
   fi
-  if [[ ! -r "${repo_root}/packages/node-utils/dist/index.js" ]]; then
-    printf 'Build @ickb/node-utils before creating credentials, for example with pnpm bot:build.\n' >&2
+  if [[ ! -r "${repo_root}/packages/node-utils/src/index.ts" ]]; then
+    printf 'Missing @ickb/node-utils source in %s.\n' "${repo_root}" >&2
     exit 1
   fi
 
@@ -111,9 +121,9 @@ main() {
   read -r -p "iCKB ${network} bot sleep interval seconds [60]: " sleep_interval
   sleep_interval=${sleep_interval:-60}
   read -r -p "iCKB ${network} bot max iterations [empty for unbounded]: " max_iterations
-  retryable_prompt="iCKB ${network} bot max retryable attempts [10]: "
+  retryable_prompt="iCKB ${network} bot max retryable attempts [empty for unbounded]: "
   read -r -p "${retryable_prompt}" max_retryable_attempts
-  printf '%s\0%s\0%s\0%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" "${sleep_interval}" "${max_iterations}" "${max_retryable_attempts:-10}" |
+  printf '%s\0%s\0%s\0%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" "${sleep_interval}" "${max_iterations}" "${max_retryable_attempts}" |
   node -e '
 const input = require("node:fs").readFileSync(0).toString("utf8").split("\0");
 const [chain, privateKey, rpcUrl, sleepIntervalSeconds, maxIterations, maxRetryableAttempts] = input;
