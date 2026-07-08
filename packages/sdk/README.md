@@ -36,9 +36,9 @@ See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 
 ## Ready Withdrawal Selection
 
-`selectReadyWithdrawalDeposits(...)` exposes the stack's pool-friendly ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, an optional near-ready refill window, the current tip, and amount/count limits. Setting `minCount` and `maxCount` to the same value requests an exact number of deposits. `preserveSingletons` defaults to `true`, so singleton bucket anchors are protected unless the caller explicitly permits selecting them. The selector prefers crowded-bucket extras before singleton anchors, returns the chosen deposits, and also returns `requiredLiveDeposits` for protected anchors that should be added as live `cell_dep` checks when building the withdrawal request.
+`selectReadyWithdrawalDeposits(...)` exposes the stack's ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, the current tip, amount/count limits, and optional ring filters. Setting `minCount` and `maxCount` to the same value requests an exact number of deposits. The selector compares bounded best-fit and greedy candidates, returns the chosen deposits, and also returns `requiredLiveDeposits` supplied by the caller for live `cell_dep` checks when building the withdrawal request.
 
-`selectReadyWithdrawalCleanupDeposit(...)` is the narrow cleanup helper used by the bot for over-standard crowded-bucket extras. It returns at most one extra plus the protected anchor that must remain live. Bot thresholds such as target balances, singleton unlock policy, and whether a cleanup is worth doing remain app policy in `apps/bot`.
+Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDepositFor(...)` operate on the full live pool snapshot. Normal bot and interface direct withdrawals use ring surplus only; bot reserve recovery is app policy and may relax that rule after surplus recovery fails.
 
 `IckbSdk.buildBaseTransaction(...)` accepts `withdrawalRequest.requiredLiveDeposits` and adds those cells as live cell deps. This is an inclusion-time liveness check for public pool anchors, not a reservation of those cells after the transaction commits.
 
@@ -55,6 +55,8 @@ The returned transaction is not completed, signed, sent, or confirmed. Callers s
 ## Small iCKB Order Previews
 
 `IckbSdk.estimate(...)` returns order `info` even when the normal fee threshold is too small to produce a maturity estimate. Callers that intentionally build tiny iCKB-to-CKB orders can pass an explicit fee/feeBase discount to `estimate(...)`; the resulting order uses the existing order wire format. The limit-order contract can fully complete an order whose remaining match is below the configured minimum, so tiny dust orders do not need a special minimum-match encoding. This is how the interface presents small-balance conversions that may be worthwhile for recovering locked xUDT cell capacity.
+
+SDK estimates use `OrderManager.convert(...)` as the quote boundary. The displayed `convertedAmount` and returned order `info` are paired: the `info` preserves the rounded-up full-fill quote for the same amounts. If that quote cannot be represented in the order script's Uint64 ratio fields, SDK planners treat the order as too small or unbuildable rather than producing weaker terms.
 
 ## Send Confirmation
 

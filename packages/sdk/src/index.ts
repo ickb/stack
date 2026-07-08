@@ -1,12 +1,58 @@
-export * from "./sdk.js";
-export * from "./constants.js";
+/**
+ * Public SDK for planning, building, completing, and sending iCKB transactions.
+ *
+ * @packageDocumentation
+ */
+
+export { getConfig } from "./constants.ts";
+export type { CodeScriptDeps, IckbDeploymentConfig } from "./constants.ts";
 export {
-  selectReadyWithdrawalCleanupDeposit,
-  selectReadyWithdrawalDeposits,
-} from "./withdrawal_selection.js";
+  IckbSdk,
+  IckbSdkBase,
+  IckbSdkConversion,
+  IckbSdkL1,
+  estimateMaturityFeeThreshold,
+  projectAccountAvailability,
+  projectConversionTransactionContext,
+  sendAndWaitForCommit,
+  TransactionConfirmationError,
+} from "./sdk.ts";
 export type {
-  ReadyWithdrawalCleanupSelection,
-  ReadyWithdrawalCleanupSelectionOptions,
+  AccountAvailabilityProjection,
+  AccountState,
+  BuildBaseTransactionOptions,
+  CkbCumulative,
+  CompleteIckbTransactionOptions,
+  ConversionDirection,
+  ConversionMetadata,
+  ConversionNotice,
+  ConversionOrderEstimate,
+  ConversionTransactionContext,
+  ConversionTransactionContextProjection,
+  ConversionTransactionFailureReason,
+  ConversionTransactionOptions,
+  ConversionTransactionResult,
+  GetL1StateOptions,
+  GetPoolDepositsOptions,
+  IckbToCkbOrderEstimate,
+  MaturityOrderInput,
+  PoolDepositRangeOptions,
+  PoolDepositState,
+  SendAndWaitForCommitEvent,
+  SendAndWaitForCommitOptions,
+  SystemState,
+} from "./sdk.ts";
+export {
+  ringRequiredLiveDepositFor,
+  ringSegmentAnchor,
+  ringSegments,
+  ringSurplusDepositFilter,
+  ringTargetSegmentIndex,
+  selectReadyWithdrawalDeposits,
+} from "./withdrawal/withdrawal_selection.ts";
+export type {
   ReadyWithdrawalSelection,
   ReadyWithdrawalSelectionOptions,
-} from "./withdrawal_selection.js";
+  RingSegment,
+  WithdrawalDepositCandidate,
+} from "./withdrawal/withdrawal_selection.ts";
