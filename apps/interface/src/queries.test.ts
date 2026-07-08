@@ -13,11 +13,11 @@ function script(codeHashByte: string): ccc.Script {
   });
 }
 
-function cell(capacity: bigint, lock: ccc.Script): ccc.Cell {
+function cell(capacity: bigint, lock: ccc.Script, outputData = "0x"): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte("aa"), index: 0n },
     cellOutput: { capacity, lock },
-    outputData: "0x",
+    outputData,
   });
 }
 
@@ -78,6 +78,9 @@ describe("getL1State", () => {
     const lock = script("11");
     const tip = { timestamp: 10n } as ccc.ClientBlockHeader;
     const nativeCapacity = ccc.fixedPointFrom(50);
+    const capacityCell = cell(nativeCapacity, lock);
+    const nativeUdtCell = cell(7n, lock, ccc.hexFrom(ccc.numLeToBytes(11n, 16)));
+    nativeUdtCell.outPoint.txHash = byte32FromByte("bb");
     const receipt = { ckbValue: 13n, udtValue: 17n };
     const readyWithdrawal = {
       ckbValue: 19n,
@@ -116,8 +119,8 @@ describe("getL1State", () => {
             },
             user: { orders: [availableOrder, pendingOrder] },
             account: {
-              capacityCells: [cell(nativeCapacity, lock)],
-              nativeUdtCells: [],
+              capacityCells: [capacityCell],
+              nativeUdtCells: [nativeUdtCell],
               nativeUdtCapacity: 7n,
               nativeUdtBalance: 11n,
               receipts: [receipt],
@@ -145,8 +148,8 @@ describe("getL1State", () => {
       "ratio=1/1",
       "pool=0;;;deposits=",
       `balances=${String(nativeCapacity + 142n)}/248`,
-      `capacityCells=${cell(nativeCapacity, lock).outPoint.toHex()}`,
-      "nativeUdtCells=",
+      `capacityCells=${capacityCell.outPoint.toHex()}`,
+      `nativeUdtCells=${nativeUdtCell.outPoint.toHex()}`,
       "maturity=60",
       "receipts=13/17@missing-outpoint",
       "readyWithdrawals=19/0@missing-outpoint@missing-outpoint",

@@ -68,6 +68,8 @@ describe("readTesterState", () => {
   it("includes receipts and ready withdrawals in the actionable state", async () => {
     const plainLock = script("11");
     const plainCell = cell(5n, plainLock);
+    const nativeUdtCell = cell(7n, plainLock, ccc.hexFrom(ccc.numLeToBytes(11n, 16)));
+    nativeUdtCell.outPoint.txHash = byte32FromByte("bb");
     const userOrder = {
       ckbValue: 23n,
       udtValue: 29n,
@@ -93,7 +95,7 @@ describe("readTesterState", () => {
     };
     const account = {
       capacityCells: [plainCell],
-      nativeUdtCells: [],
+      nativeUdtCells: [nativeUdtCell],
       nativeUdtCapacity: 7n,
       nativeUdtBalance: 11n,
       receipts: [receipt],

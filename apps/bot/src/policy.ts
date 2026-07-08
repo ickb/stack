@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "@ickb/core";
 import {
-  selectReadyWithdrawalCleanupDeposit,
   selectReadyWithdrawalDeposits,
-} from "@ickb/sdk";
+  selectReadyWithdrawalCleanupDeposit,
+} from "./withdrawal_selection.ts";
 import { compareBigInt } from "@ickb/utils";
 
 export const CKB = ccc.fixedPointFrom(1);
