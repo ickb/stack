@@ -44,64 +44,17 @@ Packages:
 - `packages/testkit`: Private test helpers and fixtures for workspace tests.
 - `packages/utils`: Shared low-level utilities such as complete-scan enforcement, binary search, collection helpers, and bounded subset selection.
 
-## Local CCC Workflow
+## Dependencies
 
-The shared CCC baseline lives in `forks/ccc/pin/` and materializes into `forks/ccc/repo/`.
-
-Prerequisites: `git` and `jq`.
-
-From a plain checkout:
-
-```bash
-git clone git@github.com:ickb/stack.git && cd stack
-pnpm forks:bootstrap
-pnpm install
-pnpm forks:ccc
-pnpm check
-```
+CCC packages are normal package dependencies resolved through `pnpm-workspace.yaml` catalog entries and `pnpm-lock.yaml`. From a plain checkout, run `pnpm install`; no local CCC fork, build step, or workspace alias is required.
 
 `pnpm check` is the validation gate. It always runs with `CI=true`.
 
-`pnpm forks:ccc` computes the local CCC build surface from the stack's direct `@ckb-ccc/*` dependencies and their current CCC dependency closure, so it avoids rebuilding unrelated packages like `ckb-ccc`, `@ckb-ccc/connector`, `@ckb-ccc/connector-react`, and `@ckb-ccc/lumos-patches`.
-
-To inspect that current CCC surface without building anything:
-
-```bash
-pnpm forks:ccc:plan
-```
-
-For machine-readable inspection, use `pnpm -s forks:ccc --json`.
-
-For active CCC work, keep built output fresh with:
-
-```bash
-pnpm forks:ccc --watch
-```
-
-Watch mode keeps the ESM `dist/` output fresh for the closure's `tsc` packages, including `@ckb-ccc/spore`, and prebuilds `@ckb-ccc/did-ckb` plus `@ckb-ccc/type-id` once so `@ckb-ccc/shell` and `@ckb-ccc/ccc` keep resolving against built output. If you change either `tsdown` package, rerun `pnpm forks:ccc`.
-
-For quick consumer-context sanity checks after rebuilding CCC:
-
-```bash
-pnpm forks:ccc:smoke
-```
-
-That smoke path verifies the current direct Stack import surface through real consumers: `@ckb-ccc/core` from `@ickb/utils`, `@ckb-ccc/udt` from `@ickb/core`, and `@ckb-ccc/ccc` from `apps/interface`.
-
-If you add a new direct `@ckb-ccc/*` dependency to any stack package, add the matching root override in `pnpm-workspace.yaml`. `pnpm check:ccc-overrides` enforces this.
-
-If you need to update or save the shared CCC baseline, use `forks/phroi_forker/repo/` directly. `forks/ccc/pin/manifest` is the source of truth for the shared upstream refs.
-
 ## Live Testnet Supervisor
 
-Build the local CCC fork, shared packages, live apps, and supervisor, provide ignored bounded configs, then run the supervisor from the repo root:
+Provide ignored bounded configs, then run the supervisor from the repo root:
 
 ```bash
-pnpm forks:ccc
-pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/node-utils build
-pnpm --filter ./apps/bot build
-pnpm --filter ./apps/tester build
-pnpm --filter @ickb/supervisor build
 pnpm live:supervisor
 ```
 
@@ -117,7 +70,7 @@ For repeated bounded invocations, keep loop-owned options before `--` and superv
 pnpm live:supervisor:loop --max-runs 1 -- --scenario standard-cycle --max-cycles 1
 ```
 
-By default the loop prebuilds the local CCC fork plus bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
+By default the loop prebuilds bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
 
 For continuous live matching, use the dynamic external loop. It reads only tester preflight balance summaries, chooses `all-ckb-limit-order` when `CKB.available >= 3001`, otherwise chooses `ickb-to-ckb-limit-order` with `--tester-fee 1 --tester-fee-base 1000` when `CKB.available >= 2100` and `ICKB.available >= 100`, otherwise leaves the tester scenario as `auto`, then runs bounded `scripts/ickb-supervisor-loop.mjs` chunks:
 

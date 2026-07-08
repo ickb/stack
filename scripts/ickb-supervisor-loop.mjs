@@ -18,7 +18,6 @@ const SUPERVISOR_OUTPUT_ROOT = "logs/live-supervisor";
 export const INSPECTION_REQUIRED_EXIT_CODE = 3;
 const LOOP_OWNED_FLAGS = ["--out-root", "--max-runs", "--stable-limit", "--backoff-seconds", "--child-timeout-seconds", "--supervisor-script", "--skip-build"];
 const PREBUILD_COMMANDS = [
-  { target: "ccc", command: "pnpm", args: ["forks:ccc"] },
   { target: "bot", command: "pnpm", args: ["bot:build"] },
   { target: "tester", command: "pnpm", args: ["--filter", "@ickb/tester", "build"] },
   { target: "supervisor", command: "pnpm", args: ["--filter", "@ickb/supervisor", "build"] },
@@ -96,7 +95,7 @@ export function usage() {
     `  --supervisor-script <path>     Default: ${DEFAULT_SUPERVISOR_SCRIPT}`,
     "  --skip-build                   Do not rebuild local runtime packages before launching the supervisor",
     "  -h, --help",
-    "Builds local CCC/bot/tester/supervisor runtime, then reads only each child run summary.json.",
+    "Builds local bot/tester/supervisor runtime, then reads only each child run summary.json.",
     "Loop options must appear before --; supervisor --out-dir is owned by the loop.",
   ].join("\n");
 }

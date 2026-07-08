@@ -11,16 +11,32 @@ import {
   ickbDepositCellFrom,
   type ReceiptCell,
   receiptCellFrom,
-} from "./cells.js";
-import { ReceiptData } from "./entities.js";
+} from "./cells.ts";
+import { ReceiptData } from "./entities.ts";
+import { IckbUdt } from "./udt.ts";
 
 const maxDepositQuantity = 63;
+const receiptDataPrefixByteLength = 12;
+// Receipts must carry enough capacity for phase 2 when the wallet has no other
+// CKB: one iCKB xUDT cell, one plain capacity cell, and the fee reserve.
+const phase2TxFeeReserve = ccc.One;
 
 /**
  * Manages logic related to deposits and receipts in the blockchain.
  * Implements the ScriptDeps interface.
+ *
+ * @public
  */
 export class LogicManager implements ScriptDeps {
+  /** The iCKB Logic script used as receipt type and DAO deposit lock. */
+  public readonly script: ccc.Script;
+
+  /** Cell dependencies required to execute the iCKB Logic script. */
+  public readonly cellDeps: ccc.CellDep[];
+
+  /** DAO helper used for deposit and withdrawal cell construction. */
+  public readonly daoManager: DaoManager;
+
   /**
    * Creates an instance of LogicManager.
    *
@@ -28,11 +44,11 @@ export class LogicManager implements ScriptDeps {
    * @param cellDeps - The cell dependencies for the manager.
    * @param daoManager - The DAO manager for handling deposits and receipts.
    */
-  constructor(
-    public readonly script: ccc.Script,
-    public readonly cellDeps: ccc.CellDep[],
-    public readonly daoManager: DaoManager,
-  ) {}
+  constructor(script: ccc.Script, cellDeps: ccc.CellDep[], daoManager: DaoManager) {
+    this.script = script;
+    this.cellDeps = cellDeps;
+    this.daoManager = daoManager;
+  }
 
   /**
    * Checks if the specified cell is an iCKB receipt.
@@ -40,8 +56,11 @@ export class LogicManager implements ScriptDeps {
    * @param cell - The cell to check.
    * @returns True if the cell is a receipt, otherwise false.
    */
-  isReceipt(cell: ccc.Cell): boolean {
-    return Boolean(cell.cellOutput.type?.eq(this.script));
+  public isReceipt(cell: ccc.Cell): boolean {
+    return (
+      cell.cellOutput.type?.eq(this.script) === true &&
+      ccc.bytesFrom(cell.outputData).length >= receiptDataPrefixByteLength
+    );
   }
 
   /**
@@ -50,10 +69,8 @@ export class LogicManager implements ScriptDeps {
    * @param cell - The cell to check.
    * @returns True if the cell is a deposit, otherwise false.
    */
-  isDeposit(cell: ccc.Cell): boolean {
-    return (
-      this.daoManager.isDeposit(cell) && cell.cellOutput.lock.eq(this.script)
-    );
+  public isDeposit(cell: ccc.Cell): boolean {
+    return this.daoManager.isDeposit(cell) && cell.cellOutput.lock.eq(this.script);
   }
 
   /**
@@ -67,24 +84,24 @@ export class LogicManager implements ScriptDeps {
    * @remarks Caller must ensure UDT cellDeps are added to the transaction
    * (e.g., via ickbUdt.addCellDeps(tx)).
    */
-  async deposit(
-    txLike: ccc.TransactionLike,
-    depositQuantity: number,
-    depositCapacity: ccc.FixedPoint,
-    lock: ccc.Script,
-    client: ccc.Client,
+  public async deposit(
+    ...[txLike, depositQuantity, depositCapacity, lock, client]: [
+      txLike: ccc.TransactionLike,
+      depositQuantity: number,
+      depositCapacity: ccc.FixedPoint,
+      lock: ccc.Script,
+      client: ccc.Client,
+    ]
   ): Promise<ccc.Transaction> {
     let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {
       return tx;
     }
     if (!Number.isSafeInteger(depositQuantity)) {
-      throw new Error("iCKB deposit quantity must be a safe integer");
+      throw new TypeError("iCKB deposit quantity must be a safe integer");
     }
     if (depositQuantity > maxDepositQuantity) {
-      throw new Error(
-        `iCKB deposit quantity maximum is ${String(maxDepositQuantity)}`,
-      );
+      throw new Error(`iCKB deposit quantity maximum is ${String(maxDepositQuantity)}`);
     }
 
     const depositCell = ccc.Cell.from({
@@ -115,16 +132,14 @@ export class LogicManager implements ScriptDeps {
 
     tx.addCellDeps(this.cellDeps);
 
-    const capacities = Array.from(
-      { length: depositQuantity },
-      () => depositCapacity,
-    );
+    const capacities = Array.from({ length: depositQuantity }, () => depositCapacity);
     tx = await this.daoManager.deposit(tx, capacities, this.script, client);
 
     // Receipts track the deposit's free capacity, not the full DAO cell capacity.
     tx.addOutput(
       {
-        lock: lock,
+        capacity: receiptPhase2Capacity(lock),
+        lock,
         type: this.script,
       },
       ReceiptData.encode({ depositQuantity, depositAmount }),
@@ -135,15 +150,16 @@ export class LogicManager implements ScriptDeps {
   }
 
   /**
-   * Completes a deposit transaction by transforming the receipts into iCKB UDTs.
+   * Adds receipt inputs and required header deps for iCKB deposit completion.
    *
    * @param txLike - The transaction to add the receipts to.
    * @param receipts - The receipts to add to the transaction.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction
-   * (e.g., via ickbUdt.addCellDeps(tx)).
+   * @remarks This prepares the phase-2 inputs. UDT cell deps and xUDT balance
+   * completion remain caller-owned, for example through `ickbUdt.addCellDeps(tx)`
+   * and `ickbUdt.completeBy(...)`.
    */
-  completeDeposit(
+  public completeDeposit(
     txLike: ccc.TransactionLike,
     receipts: ReceiptCell[],
   ): ccc.Transaction {
@@ -152,15 +168,18 @@ export class LogicManager implements ScriptDeps {
       return tx;
     }
 
-    tx.addCellDeps(this.cellDeps);
-
+    this.assertReceiptInputsUnspent(tx, receipts);
+    const headerHashes: ccc.Hex[] = [];
     for (const r of receipts) {
+      this.assertReceiptForCompletion(r);
       const hash = r.header.header.hash;
-      if (!tx.headerDeps.some((h) => h === hash)) {
-        tx.headerDeps.push(hash);
+      if (!headerHashes.includes(hash) && !tx.headerDeps.includes(hash)) {
+        headerHashes.push(hash);
       }
     }
 
+    tx.addCellDeps(this.cellDeps);
+    tx.headerDeps.push(...headerHashes);
     for (const { cell } of receipts) {
       tx.addInput(cell);
     }
@@ -173,24 +192,10 @@ export class LogicManager implements ScriptDeps {
    * Receipt cells are identified by `this.script` (the receipt type script)
    * and must also pass `this.isReceipt(cell)`.
    *
-   * @param client
-   *   A CKB client instance providing:
-   *   - `findCells(query, order, pageSize)` for cached searches
-   *   - `findCellsOnChain(query, order, pageSize)` for direct on-chain searches
-   *
-   * @param locks
-   *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
-   *   one of these scripts will be considered.
-   *
-   * @param options
-   *   Optional parameters to control query behavior:
-   *   - `onChain?: boolean`
-   *       If `true`, uses `findCellsOnChain`. Otherwise, uses `findCells`. Default: `false`.
-   *   - `pageSize?: number`
-   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
-   *
-   * @yields
-   *   {@link ReceiptCell} objects for each valid receipt cell found.
+   * @param client - CKB client used for cached and direct on-chain searches.
+   * @param locks - Lock scripts whose exact matching receipt cells will be considered.
+   * @param options - Query options. `onChain` defaults to false and `pageSize` defaults to `defaultCellPageSize`.
+   * @returns An async generator yielding {@link ReceiptCell} objects for each valid receipt cell found.
    *
    * @remarks
    * - Deduplicates `locks` via `unique(locks)`.
@@ -199,15 +204,15 @@ export class LogicManager implements ScriptDeps {
    * - Skips any cell that:
    *     1. Fails `this.isReceipt(cell)`
    *     2. Has a non-matching lock script
-   * - Converts each raw cell via `receiptCellFrom({ client, cell })` before yielding.
+   * - Converts each raw cell with a transaction cache shared across this scan batch.
    */
-  async *findReceipts(
+  public async *findReceipts(
     client: ccc.Client,
     locks: ccc.Script[],
     options?: {
       /**
        * If true, fetch cells directly from the chain RPC. Otherwise, use cached results.
-       * @default false
+       * Defaults to false.
        */
       onChain?: boolean;
       /**
@@ -235,15 +240,20 @@ export class LogicManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const receiptCandidates = (await collectPagedScan(
-        (pageSize) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, pageSize)
-          : client.findCells(...findCellsArgs, pageSize),
-        { pageSize },
-      )).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
+      const receiptCandidates = (
+        await collectPagedScan(
+          (scanPageSize) =>
+            options?.onChain === true
+              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
+              : client.findCells(...findCellsArgs, scanPageSize),
+          { pageSize },
+        )
+      ).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 
       const receipts = await Promise.all(
-        receiptCandidates.map((cell) => receiptCellFrom({ client, cell, transactionCache })),
+        receiptCandidates.map(async (cell) =>
+          receiptCellFrom({ client, cell, transactionCache }),
+        ),
       );
       for (const receipt of receipts) {
         yield receipt;
@@ -257,25 +267,9 @@ export class LogicManager implements ScriptDeps {
    * Wraps DAO deposit detection for the iCKB token by delegating
    * to `this.daoManager.findDeposits` and converting results.
    *
-   * @param client
-   *   A CKB RPC client instance implementing:
-   *   - `getTipHeader()` to fetch the latest block header
-   *   - `findCells` / `findCellsOnChain` for cell queries
-   *
-   * @param options
-   *   Optional parameters to control the search:
-   *   - `tip?: ClientBlockHeader`
-   *       Block header to use as reference for epoch/lock calculations.
-   *       If omitted, `client.getTipHeader()` is called to obtain the latest header.
-   *   - `onChain?: boolean`
-   *       When `true`, forces direct on-chain queries via `findCellsOnChain`.
-   *       Otherwise, uses cached results via `findCells`. Default: `false`.
-   *   - `minLockUp?: ccc.Epoch`
-   *       Minimum lock-up period in epochs. Defaults to manager’s configured minimum (~10 min).
-   *   - `maxLockUp?: ccc.Epoch`
-   *       Maximum lock-up period in epochs. Defaults to manager’s configured maximum (~3 days).
-   *   - `pageSize?: number`
-   *       Cell query page size. Defaults to `defaultCellPageSize` (400).
+   * @param client - CKB client used for tip/header reads and cell queries.
+   * @param options - Search options. `tip` controls epoch calculations, `onChain` uses direct RPC queries, and `pageSize` defaults to `defaultCellPageSize`.
+   * `minLockUp` and `maxLockUp` override the DAO helper windows.
    *
    * @returns
    *   An async generator yielding `IckbDepositCell` objects, each representing
@@ -288,7 +282,7 @@ export class LogicManager implements ScriptDeps {
    *   raw DAO deposit cells locked under `this.script`.
    * - Converts each validated DAO deposit into an `IckbDepositCell` via `ickbDepositCellFrom`.
    */
-  async *findDeposits(
+  public async *findDeposits(
     client: ccc.Client,
     options?: {
       tip?: ccc.ClientBlockHeader;
@@ -298,18 +292,61 @@ export class LogicManager implements ScriptDeps {
       pageSize?: number;
     },
   ): AsyncGenerator<IckbDepositCell> {
-    const tip = options?.tip
-      ? ccc.ClientBlockHeader.from(options.tip)
-      : await client.getTipHeader();
-    for await (const deposit of this.daoManager.findDeposits(
-      client,
-      [this.script],
-      { ...options, tip },
-    )) {
+    const tip =
+      options?.tip === undefined
+        ? await client.getTipHeader()
+        : ccc.ClientBlockHeader.from(options.tip);
+    for await (const deposit of this.daoManager.findDeposits(client, [this.script], {
+      ...options,
+      tip,
+    })) {
       if (!this.isDeposit(deposit.cell)) {
         continue;
       }
-      yield ickbDepositCellFrom(deposit);
+      yield ickbDepositCellFrom(deposit, this.script);
     }
   }
+
+  private assertReceiptForCompletion(receipt: ReceiptCell): void {
+    const outPoint = receipt.cell.outPoint.toHex();
+    if (!this.isReceipt(receipt.cell)) {
+      throw new Error(`Receipt ${outPoint} is not an iCKB receipt for this logic script`);
+    }
+    if (receipt.header.txHash !== receipt.cell.outPoint.txHash) {
+      throw new Error(
+        `Receipt ${outPoint} header txHash ${String(receipt.header.txHash)} does not match cell txHash ${receipt.cell.outPoint.txHash}`,
+      );
+    }
+  }
+
+  private assertReceiptInputsUnspent(tx: ccc.Transaction, receipts: ReceiptCell[]): void {
+    const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+    const selected = new Set<string>();
+    for (const receipt of receipts) {
+      const outPoint = receipt.cell.outPoint.toHex();
+      if (selected.has(outPoint)) {
+        throw new Error(`Receipt ${outPoint} is duplicated`);
+      }
+      selected.add(outPoint);
+      if (spent.has(outPoint)) {
+        throw new Error(`Receipt ${outPoint} is already being spent`);
+      }
+    }
+  }
+}
+
+/**
+ * Returns the CKB needed for the two phase-2 outputs created by one receipt.
+ *
+ * @remarks The value is sized with the actual user lock because lock args affect
+ * occupied capacity. It includes one plain output, one xUDT output, and the
+ * phase-2 fee reserve.
+ *
+ * @public
+ */
+export function receiptPhase2Capacity(lock: ccc.Script): ccc.FixedPoint {
+  // Capacity is measured with the actual user lock. Lock args are wallet-specific
+  // and can make both phase-2 outputs larger than protocol-only examples.
+  const plainCellCapacity = BigInt(8 + lock.occupiedSize) * ccc.One;
+  return plainCellCapacity + IckbUdt.minimumXudtCellCapacity(lock) + phase2TxFeeReserve;
 }

@@ -4,10 +4,10 @@ The supervisor is a deterministic operator app for funded testnet validation. It
 
 ## Run
 
-Build the local CCC fork, shared packages, live apps, and supervisor first:
+From a plain checkout, install dependencies and build shared packages, live apps, and supervisor first:
 
 ```bash
-pnpm forks:ccc
+pnpm install
 pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core --filter @ickb/order --filter @ickb/sdk --filter @ickb/node-utils build
 pnpm --filter ./apps/bot build
 pnpm --filter ./apps/tester build
@@ -83,7 +83,7 @@ node scripts/ickb-supervisor-loop.mjs --max-runs 1 --stable-limit 2 --backoff-se
 
 Loop-owned options go before `--`; supervisor options go after `--`. If using `pnpm live:supervisor:loop`, keep loop-owned options before the first `--` so they are not passed through to the supervisor. The loop owns child run directories through `--out-root`, so do not pass supervisor `--out-dir` after `--`. The loop stops on supervisor nonzero exit, incident artifacts listed in `summary.json`, tx-creating outcomes or tx hashes for tx-creating outcomes, a new outcome after the first run, repeated no-progress signatures, or `--max-runs`. `-- --help` and `-- -h` are child help passthroughs: the delegated help is printed and the wrapper exits with the child status.
 
-By default the loop prebuilds the local CCC fork plus bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. The external loop also has a loop-owned `--child-timeout-seconds` guard for the supervisor child process. Keep it long enough for the whole delegated supervisor run, including actor preflights and actor commands, not just one `--command-timeout-seconds` window. The dynamic loop defaults this guard to the supervisor-loop default so the supervisor keeps ownership of killing funded actor process groups on command timeout.
+By default the loop prebuilds bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. The external loop also has a loop-owned `--child-timeout-seconds` guard for the supervisor child process. Keep it long enough for the whole delegated supervisor run, including actor preflights and actor commands, not just one `--command-timeout-seconds` window. The dynamic loop defaults this guard to the supervisor-loop default so the supervisor keeps ownership of killing funded actor process groups on command timeout.
 
 For continuous tester-bot matching, use `node scripts/ickb-supervisor-dynamic-loop.mjs` or `pnpm live:supervisor:dynamic-loop`. This remains outside `apps/supervisor`: it reads tester preflight balance summaries, chooses `all-ckb-limit-order` when `CKB.available >= 3001`, otherwise chooses `ickb-to-ckb-limit-order` with `--tester-fee 1 --tester-fee-base 1000` when `CKB.available >= 2100` and `ICKB.available >= 100`, otherwise leaves tester selection as `auto`, and delegates each bounded chunk to `scripts/ickb-supervisor-loop.mjs`. When `--target-outcome tester_fresh_order_skip` is passed through, supervisor auto-planning can choose `tester-fresh-skip-two-pass`; the dynamic loop itself only chooses fundable tester stimuli. The dynamic loop also treats `-- --help` and `-- -h` as child help passthroughs and exits with the delegated status.
 

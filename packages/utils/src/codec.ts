@@ -14,6 +14,9 @@ export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   byteLength: 4,
   encode: (numLike) => {
     const num = Number(numLike);
+    if (!Number.isInteger(num)) {
+      throw new TypeError("NumLike must be a finite integer");
+    }
     if (num < -2147483648 || num > 2147483647) {
       throw new Error("NumLike out of int32 bounds");
     }

@@ -1005,8 +1005,6 @@ async function assertRealOutputDirectory(plan: SupervisorPlan, dependencies: Dep
 
 function assertBuiltRuntime(plan: SupervisorPlan, dependencies: Dependencies): void {
   const required = [
-    ["CCC core", join(plan.rootDir, "forks/ccc/repo/packages/core/dist/index.js")],
-    ["CCC UDT", join(plan.rootDir, "forks/ccc/repo/packages/udt/dist/index.js")],
     ["utils package", join(plan.rootDir, "packages/utils/dist/index.js")],
     ["DAO package", join(plan.rootDir, "packages/dao/dist/index.js")],
     ["core package", join(plan.rootDir, "packages/core/dist/index.js")],

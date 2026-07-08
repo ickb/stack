@@ -28,6 +28,10 @@ export async function collectPagedScan<T>(
     pageSize: number;
   },
 ): Promise<T[]> {
+  if (!Number.isSafeInteger(options.pageSize) || options.pageSize <= 0) {
+    throw new Error("pageSize must be a positive safe integer");
+  }
+
   const results: T[] = [];
   for await (const item of scan(options.pageSize)) {
     results.push(item);

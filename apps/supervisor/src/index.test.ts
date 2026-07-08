@@ -793,7 +793,7 @@ describe("supervisor CLI", () => {
     let createdOutputDirectory = false;
 
     await expect(supervise(args, plan, {
-      existsSync: (path) => !pathToString(path).endsWith("forks/ccc/repo/packages/udt/dist/index.js"),
+      existsSync: (path) => !pathToString(path).endsWith("packages/sdk/dist/index.js"),
       spawnCommand: (() => {
         spawned = true;
         return fakeChild("");
@@ -803,7 +803,7 @@ describe("supervisor CLI", () => {
         createdOutputDirectory = true;
         return Promise.resolve(undefined);
       },
-    })).rejects.toThrow("Missing built CCC UDT: forks/ccc/repo/packages/udt/dist/index.js");
+    })).rejects.toThrow("Missing built SDK package: packages/sdk/dist/index.js");
     expect(spawned).toBe(false);
     expect(createdOutputDirectory).toBe(false);
   });

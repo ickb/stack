@@ -138,20 +138,19 @@ test("dynamic supervisor loop creates a default validation session root", async 
     assert.equal(exitCode, 3);
     assert.equal(writes.has("/repo/log/validation/dynamic-1700000000-4321/operator/launch.json"), true);
     assert.equal(appended.has("/repo/log/validation/dynamic-1700000000-4321/operator/events.ndjson"), true);
-    assert.deepEqual(commands.slice(0, 4).map((item) => item.args), [
-      ["forks:ccc"],
+    assert.deepEqual(commands.slice(0, 3).map((item) => item.args), [
       ["bot:build"],
       ["--filter", "@ickb/tester", "build"],
       ["--filter", "@ickb/supervisor", "build"],
     ]);
-    assert.deepEqual(commands[5].args.slice(0, 3), [
+    assert.deepEqual(commands[4].args.slice(0, 3), [
       "scripts/ickb-supervisor-loop.mjs",
       "--out-root",
       "log/validation/dynamic-1700000000-4321/chunks/chunk-0001",
     ]);
-    assert.equal(commands[5].args.includes("--skip-build"), true);
+    assert.equal(commands[4].args.includes("--skip-build"), true);
+    assert.equal(commands[3].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
     assert.equal(commands[4].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
-    assert.equal(commands[5].options.env.NODE_OPTIONS, "--disable-warning=DEP0040");
     for (const command of commands) {
       assert.equal(command.options.env.PRIVATE_KEY, undefined);
     }
@@ -301,19 +300,18 @@ test("dynamic supervisor loop runs selected bounded chunks", async () => {
 
   assert.equal(exitCode, 3);
   assert.equal(sleeps.length, 0);
-  assert.equal(commands.length, 6);
-  assert.deepEqual(commands.slice(0, 4).map((item) => item.args), [
-    ["forks:ccc"],
+  assert.equal(commands.length, 5);
+  assert.deepEqual(commands.slice(0, 3).map((item) => item.args), [
     ["bot:build"],
     ["--filter", "@ickb/tester", "build"],
     ["--filter", "@ickb/supervisor", "build"],
   ]);
-  assert.equal(commands[5].args.includes("all-ckb-limit-order"), true);
-  assert.deepEqual(commands[5].args.slice(0, 3), ["scripts/ickb-supervisor-loop.mjs", "--out-root", "log/validation/test-session/chunks/chunk-0001"]);
-  const separator = commands[5].args.indexOf("--");
-  assert.equal(commands[5].args.slice(0, separator).includes("--out-root"), true);
-  assert.equal(commands[5].args.slice(0, separator).includes("--skip-build"), true);
-  assert.equal(commands[5].args.slice(separator + 1).includes("--target-outcome"), true);
+  assert.equal(commands[4].args.includes("all-ckb-limit-order"), true);
+  assert.deepEqual(commands[4].args.slice(0, 3), ["scripts/ickb-supervisor-loop.mjs", "--out-root", "log/validation/test-session/chunks/chunk-0001"]);
+  const separator = commands[4].args.indexOf("--");
+  assert.equal(commands[4].args.slice(0, separator).includes("--out-root"), true);
+  assert.equal(commands[4].args.slice(0, separator).includes("--skip-build"), true);
+  assert.equal(commands[4].args.slice(separator + 1).includes("--target-outcome"), true);
   assert.match(output.text, /"type":"selected"/u);
   assert.match(output.text, /testerScenario":"all-ckb-limit-order"/u);
 });
@@ -385,7 +383,6 @@ test("dynamic supervisor loop refuses sessions created during prebuild", async (
 
   assert.equal(exitCode, 1);
   assert.deepEqual(commands, [
-    ["forks:ccc"],
     ["bot:build"],
     ["--filter", "@ickb/tester", "build"],
     ["--filter", "@ickb/supervisor", "build"],
@@ -457,7 +454,7 @@ test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reas
   });
 
   assert.equal(exitCode, 0);
-  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 4);
+  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 3);
   assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-live-preflight.mjs").length, 1);
   assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").length, 1);
   assert.match(output.text, /"supervisorLoopStopReason":"tx_observed"/u);
@@ -496,7 +493,7 @@ test("dynamic supervisor loop preserves supervisor-loop inspection-required stat
   });
 
   assert.equal(exitCode, 3);
-  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 4);
+  assert.equal(commands.filter((command) => isPrebuildCommand(command.args)).length, 3);
   assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-live-preflight.mjs").length, 1);
   assert.equal(commands.filter((command) => command.args[0] === "scripts/ickb-supervisor-loop.mjs").length, 1);
   assert.match(output.text, /"supervisorLoopStopReason":"max_runs"/u);
@@ -698,8 +695,7 @@ function missingStat() {
 }
 
 function isPrebuildCommand(args) {
-  return args[0] === "forks:ccc" ||
-    args[0] === "bot:build" ||
+  return args[0] === "bot:build" ||
     args.includes("@ickb/tester") ||
     args.includes("@ickb/supervisor");
 }

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
   binarySearch,
@@ -65,6 +65,19 @@ describe("scan collection", () => {
       ),
     ).resolves.toEqual([1, 2]);
     expect(seenPageSizes).toEqual([2]);
+  });
+
+  it("rejects invalid page sizes before creating the scan", async () => {
+    const scan = vi.fn((): AsyncIterable<number> => {
+      throw new Error("scan factory should not be called");
+    });
+
+    for (const pageSize of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(collectPagedScan(scan, { pageSize })).rejects.toThrow(
+        "pageSize must be a positive safe integer",
+      );
+    }
+    expect(scan).not.toHaveBeenCalled();
   });
 
   it("collects async iterable values", async () => {

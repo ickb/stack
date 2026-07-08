@@ -25,8 +25,12 @@ graph TD;
 If a caller will send the returned transaction, it still must:
 
 1. Complete the transaction before send.
-2. Prefer the shared stack path in `@ickb/sdk`: `sdk.completeTransaction(...)` or `completeIckbTransaction(...)`.
+2. Prefer the shared stack path in `@ickb/sdk`: `sdk.completeTransaction(...)`.
 3. Only use lower-level manual completion when the caller intentionally owns UDT completion, CCC-native fee/capacity completion, and the DAO output-limit check itself.
+
+## Receipt Capacity
+
+`LogicManager.deposit(...)` sizes receipt cells for the next required phase transition. A receipt is created with `minXudtCell(actualLock) + minPlainCell(actualLock) + 1 CKB`, so a wallet that spent all other CKB can still complete the receipt into iCKB xUDT plus a plain capacity cell.
 
 ## Epoch Semantic Versioning
 

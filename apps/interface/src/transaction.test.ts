@@ -230,10 +230,6 @@ describe("buildTransactionPreview", () => {
         calls.push("fee");
         return Promise.resolve([0, false]);
       });
-    const daoLimit = vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockImplementation(() => {
-      calls.push("dao-limit");
-      return Promise.resolve(false);
-    });
     const completeTransaction = vi
       .fn<WalletConfig["sdk"]["completeTransaction"]>()
       .mockImplementation(async (txLike) => {
@@ -254,7 +250,6 @@ describe("buildTransactionPreview", () => {
 
     expect(completeTransaction).toHaveBeenCalledTimes(1);
     expect(completeFeeBy).not.toHaveBeenCalled();
-    expect(daoLimit).not.toHaveBeenCalled();
     expect(calls).toEqual(["sdk-complete"]);
   });
 

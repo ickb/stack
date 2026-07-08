@@ -194,7 +194,7 @@ export class TransactionConfirmationError extends Error {
   }
 }
 
-type IckbUdtCompleter = Pick<IckbUdt, "completeBy" | "infoFrom" | "isUdt">;
+type IckbUdtCompleter = Pick<IckbUdt, "completeBy" | "isUdt">;
 
 /**
  * Completes a stack-built partial transaction with the iCKB post-processing
@@ -1073,16 +1073,19 @@ export class IckbSdk {
       ),
     ]);
     const nativeUdtCells = cells.filter((cell) => this.ickbUdt.isUdt(cell));
-    const nativeUdtInfo = await this.ickbUdt.infoFrom(
-      client,
-      nativeUdtCells,
+    const nativeUdt = nativeUdtCells.reduce(
+      (acc, cell) => ({
+        capacity: acc.capacity + cell.cellOutput.capacity,
+        balance: acc.balance + ccc.udtBalanceFrom(cell.outputData),
+      }),
+      { capacity: 0n, balance: 0n },
     );
 
     return {
       capacityCells: cells.filter(isPlainCapacityCell),
       nativeUdtCells,
-      nativeUdtCapacity: nativeUdtInfo.capacity,
-      nativeUdtBalance: nativeUdtInfo.balance,
+      nativeUdtCapacity: nativeUdt.capacity,
+      nativeUdtBalance: nativeUdt.balance,
       receipts,
       withdrawalGroups,
     };

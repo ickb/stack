@@ -1,9 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
-import { type TransactionHeader, type ValueComponents } from "@ickb/utils";
-import { OwnerData, ReceiptData } from "./entities.js";
-import { ickbValue } from "./udt.js";
 import type { DaoDepositCell, DaoWithdrawalRequestCell } from "@ickb/dao";
+import type { TransactionHeader, ValueComponents } from "@ickb/utils";
+import { OwnerData, ReceiptData } from "./entities.ts";
+import { ickbValue } from "./udt.ts";
 
+// Symbol marker keeps the runtime tag off the public shape except by this module.
+const isIckbDepositSymbol = Symbol("isIckbDeposit");
+
+/**
+ * Represents a DAO deposit cell with its iCKB value computed from the deposit header.
+ *
+ * @public
+ */
 export interface IckbDepositCell extends DaoDepositCell {
   /**
    * A symbol property indicating that this cell is a Ickb Deposit Cell.
@@ -12,10 +20,22 @@ export interface IckbDepositCell extends DaoDepositCell {
   [isIckbDepositSymbol]: true;
 }
 
-// Symbol to represent the isIckbDeposit property of Ickb Deposit Cells
-const isIckbDepositSymbol = Symbol("isIckbDeposit");
+/**
+ * Converts a DAO deposit cell into an iCKB deposit cell.
+ *
+ * @public
+ */
+export function ickbDepositCellFrom(
+  daoCell: DaoDepositCell,
+  logicScript: ccc.ScriptLike,
+): IckbDepositCell {
+  const expectedLock = ccc.Script.from(logicScript);
+  if (!daoCell.cell.cellOutput.lock.eq(expectedLock)) {
+    throw new Error(
+      `DAO deposit ${daoCell.cell.outPoint.toHex()} lock does not match iCKB logic script`,
+    );
+  }
 
-export function ickbDepositCellFrom(daoCell: DaoDepositCell): IckbDepositCell {
   return {
     ...daoCell,
     udtValue: ickbValue(daoCell.cell.capacityFree, daoCell.headers[0].header),
@@ -25,6 +45,8 @@ export function ickbDepositCellFrom(daoCell: DaoDepositCell): IckbDepositCell {
 
 /**
  * Represents a receipt cell containing the receipt for iCKB Deposits.
+ *
+ * @public
  */
 export interface ReceiptCell extends ValueComponents {
   /** The cell associated with the receipt. */
@@ -34,19 +56,17 @@ export interface ReceiptCell extends ValueComponents {
   header: TransactionHeader;
 }
 
-type TransactionWithHeader = Awaited<
-  ReturnType<ccc.Client["getTransactionWithHeader"]>
->;
+type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
 
-type ReceiptCellFromCache = {
+interface ReceiptCellFromCache {
+  /** Reuses transaction-with-header reads across receipt conversions in one scan. */
   transactionCache?: Map<ccc.Hex, Promise<TransactionWithHeader>>;
-};
+}
 
 /**
- * Creates a ReceiptCell instance from the provided options.
- * @param options - Options for creating a ReceiptCell.
- * @returns A promise that resolves to a ReceiptCell instance.
- * @throws ReceiptCellError if the cell is not found.
+ * Loads and decodes an iCKB receipt cell from a cell or out point.
+ *
+ * @remarks `transactionCache` is scoped to one coherent read batch; it does not refresh transaction headers.
  */
 export async function receiptCellFrom(
   options:
@@ -59,31 +79,48 @@ export async function receiptCellFrom(
         client: ccc.Client;
       } & ReceiptCellFromCache),
 ): Promise<ReceiptCell> {
-  const cell =
-    "cell" in options
-      ? options.cell
-      : await options.client.getCell(options.outpoint);
-  if (!cell) {
-    throw new Error("Cell not found");
+  let cell: ccc.Cell;
+  if ("cell" in options) {
+    cell = options.cell;
+  } else {
+    let loadedCell: ccc.Cell | undefined;
+    try {
+      loadedCell = await options.client.getCell(options.outpoint);
+    } catch (error) {
+      throw new Error(`Failed to load cell for out point ${options.outpoint.toHex()}`, {
+        cause: error,
+      });
+    }
+    if (loadedCell === undefined) {
+      throw new Error(`Cell not found for out point ${options.outpoint.toHex()}`);
+    }
+    cell = loadedCell;
   }
 
   const txHash = cell.outPoint.txHash;
   let txWithHeaderPromise = options.transactionCache?.get(txHash);
-  if (!txWithHeaderPromise) {
-    txWithHeaderPromise = options.client.getTransactionWithHeader(txHash);
+  if (txWithHeaderPromise === undefined) {
+    txWithHeaderPromise = getReceiptTransactionWithHeader(options.client, cell.outPoint);
     options.transactionCache?.set(txHash, txWithHeaderPromise);
   }
   const txWithHeader = await txWithHeaderPromise;
-  if (!txWithHeader?.header) {
-    throw new Error("Header not found for txHash");
+  if (txWithHeader?.header === undefined) {
+    throw new Error(`Header not found for txHash ${txHash} at ${cell.outPoint.toHex()}`);
   }
   const header: TransactionHeader = {
     header: txWithHeader.header,
     txHash,
   };
-  const { depositQuantity, depositAmount } = ReceiptData.decodePrefix(
-    cell.outputData,
-  );
+  let receipt: ReturnType<typeof ReceiptData.decodePrefix>;
+  try {
+    receipt = ReceiptData.decodePrefix(cell.outputData);
+  } catch (error) {
+    throw new Error(
+      `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: ${cell.outputData}`,
+      { cause: error },
+    );
+  }
+  const { depositQuantity, depositAmount } = receipt;
 
   return {
     cell,
@@ -93,77 +130,106 @@ export async function receiptCellFrom(
   };
 }
 
+async function getReceiptTransactionWithHeader(
+  client: ccc.Client,
+  outPoint: ccc.OutPoint,
+): Promise<TransactionWithHeader> {
+  try {
+    return await client.getTransactionWithHeader(outPoint.txHash);
+  } catch (error) {
+    throw new Error(
+      `Failed to load transaction header for txHash ${outPoint.txHash} at ${outPoint.toHex()}`,
+      { cause: error },
+    );
+  }
+}
+
 /**
- * Represents a WithdrawalGroup
+ * Pairs an owned DAO withdrawal request with the owner marker cell that points to it.
  *
- * @property owned - The DAO withdrawal request cell associated with the group.
- * @property owner - The owner cell associated with the group.
+ * @public
  */
 export class WithdrawalGroup implements ValueComponents {
-  constructor(
-    public owned: DaoWithdrawalRequestCell,
-    public owner: OwnerCell,
-  ) {}
+  /** The decoded DAO withdrawal request controlled by this owner marker. */
+  public owned: DaoWithdrawalRequestCell;
+
+  /** The owner marker cell that references the owned withdrawal request. */
+  public owner: OwnerCell;
+
+  /** Creates a withdrawal group from a decoded request and its owner marker. */
+  constructor(owned: DaoWithdrawalRequestCell, owner: OwnerCell) {
+    this.owned = owned;
+    this.owner = owner;
+  }
 
   /**
-   * Gets the CKB value of the group.
-   *
-   * @returns The total CKB amount as a `ccc.FixedPoint`, which is the sum of the CKB values of the owned cell and the owner cell.
+   * Returns the total CKB capacity in the owned withdrawal and owner marker cells.
    */
-  get ckbValue(): ccc.FixedPoint {
+  public get ckbValue(): ccc.FixedPoint {
     return this.owned.ckbValue + this.owner.cell.cellOutput.capacity;
   }
 
   /**
-   * Gets the UDT value of the group.
-   *
-   * @returns The iCKB amount represented by the owned withdrawal request.
+   * Returns the iCKB amount represented by the owned withdrawal request.
    */
-  get udtValue(): ccc.FixedPoint {
+  public get udtValue(): ccc.FixedPoint {
     return ickbValue(this.owned.cell.capacityFree, this.owned.headers[0].header);
   }
 }
 
 /**
- * Represents a cell that contains ownership information.
+ * Wraps an owner marker cell that references an owned withdrawal request.
+ *
+ * @public
  */
 export class OwnerCell implements ValueComponents {
-  /**
-   * Creates an instance of OwnerCell.
-   *
-   * @param cell - The cell associated with the owner.
-   */
-  constructor(public cell: ccc.Cell) {}
+  /** The live owner marker cell whose output data points to the owned request. */
+  public cell: ccc.Cell;
 
   /**
-   * Gets the CKB value of the cell.
-   *
-   * @returns The CKB amount as a `ccc.FixedPoint` taken from the cell's capacity.
+   * Owner marker cells carry no UDT value.
    */
-  get ckbValue(): ccc.FixedPoint {
+  public readonly udtValue = 0n;
+
+  /**
+   * Creates an owner marker wrapper for a live cell.
+   */
+  constructor(cell: ccc.Cell) {
+    this.cell = cell;
+  }
+
+  /**
+   * Returns the CKB capacity held by the owner marker cell.
+   */
+  public get ckbValue(): ccc.FixedPoint {
     return this.cell.cellOutput.capacity;
   }
 
   /**
-   * Gets the UDT value of the cell.
+   * Returns the owned withdrawal request out point referenced by this owner marker.
    *
-   * For an OwnerCell, the UDT amount is always zero.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint` (0n).
+   * @remarks
+   * Owner data stores a signed output-index distance. The owned cell is resolved
+   * on the same transaction hash as the owner marker cell.
    */
-  readonly udtValue = 0n;
-
-  /**
-   * Retrieves the out point of the owned cell based on the owner's distance.
-   *
-   * Decodes the prefix of the cell's output data to determine the distance from the owner
-   * and then calculates the new index for the out point.
-   *
-   * @returns The out point of the owned cell as a `ccc.OutPoint`.
-   */
-  getOwned(): ccc.OutPoint {
+  public getOwned(): ccc.OutPoint {
     const { txHash, index } = this.cell.outPoint;
-    const { ownedDistance } = OwnerData.decodePrefix(this.cell.outputData);
-    return new ccc.OutPoint(txHash, index + ownedDistance);
+    let ownerData: ReturnType<typeof OwnerData.decodePrefix>;
+    try {
+      ownerData = OwnerData.decodePrefix(this.cell.outputData);
+    } catch (error) {
+      throw new Error(
+        `Invalid owner marker payload at ${this.cell.outPoint.toHex()}: ${this.cell.outputData}`,
+        { cause: error },
+      );
+    }
+    const { ownedDistance } = ownerData;
+    const ownedIndex = index + ownedDistance;
+    if (ownedIndex < 0n) {
+      throw new Error(
+        `Owner marker ${this.cell.outPoint.toHex()} points before output 0 with distance ${String(ownedDistance)}`,
+      );
+    }
+    return new ccc.OutPoint(txHash, ownedIndex);
   }
 }

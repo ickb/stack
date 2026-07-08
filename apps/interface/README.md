@@ -16,13 +16,13 @@ git clone https://github.com/ickb/stack.git
 cd stack
 ```
 
-3. Install dependencies and materialize the local CCC workspace:
+3. Install dependencies:
 
 ```bash
-pnpm forks:bootstrap
 pnpm install
-pnpm forks:ccc
 ```
+
+CCC packages are normal package dependencies resolved through the workspace catalog and lockfile; no local CCC fork, build step, or workspace alias is required.
 
 4. Start the interface dev server from the repo root:
 

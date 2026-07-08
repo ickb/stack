@@ -1,11 +1,24 @@
+/**
+ * Core iCKB cells, scripts, and UDT completion helpers.
+ *
+ * @packageDocumentation
+ */
+
 export {
   OwnerCell,
-  receiptCellFrom,
   WithdrawalGroup,
+  ickbDepositCellFrom,
   type IckbDepositCell,
   type ReceiptCell,
-} from "./cells.js";
-export * from "./entities.js";
-export * from "./logic.js";
-export * from "./owned_owner.js";
-export * from "./udt.js";
+} from "./cells.ts";
+export {
+  OwnerBase,
+  OwnerData,
+  ReceiptBase,
+  ReceiptData,
+  type OwnerDataLike,
+  type ReceiptDataLike,
+} from "./entities.ts";
+export { LogicManager, receiptPhase2Capacity } from "./logic.ts";
+export { OwnedOwnerManager } from "./owned_owner.ts";
+export { ICKB_DEPOSIT_CAP, IckbUdt, convert, ickbExchangeRatio } from "./udt.ts";

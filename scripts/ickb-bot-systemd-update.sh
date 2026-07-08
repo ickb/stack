@@ -245,7 +245,6 @@ main() {
 
   run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" pull --ff-only
   run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:install
-  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:ccc
   run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:build
   systemctl restart "${service}"
   systemctl --no-pager --full status "${service}"
