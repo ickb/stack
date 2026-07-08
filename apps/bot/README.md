@@ -160,11 +160,11 @@ sudo -u ickb-bot-testnet git clone <repo-url> /opt/ickb-stack-testnet
 sudo -u ickb-bot-mainnet git clone <repo-url> /opt/ickb-stack-mainnet
 sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:install
 sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:install
-sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:ccc
-sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:ccc
 sudo -u ickb-bot-testnet pnpm -C /opt/ickb-stack-testnet bot:build
 sudo -u ickb-bot-mainnet pnpm -C /opt/ickb-stack-mainnet bot:build
 ```
+
+The install step resolves CCC through normal package dependencies from the lockfile; no separate CCC fork build is required.
 
 If `/opt/ickb-stack-testnet` or `/opt/ickb-stack-mainnet` already exists from the install script, clone into a temporary path and move the checkout into place, or initialize the existing directory with your normal deployment tooling. The update script expects each deploy directory to be a clean git checkout.
 

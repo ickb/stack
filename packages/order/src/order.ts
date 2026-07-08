@@ -1,118 +1,80 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  BufferedGenerator,
-  collectPagedScan,
-  compareBigInt,
   defaultCellPageSize,
   type ExchangeRatio,
   type ScriptDeps,
   type ValueComponents,
 } from "@ickb/utils";
-import { Info, OrderData, Ratio, Relative, type InfoLike } from "./entities.js";
-import { MasterCell, OrderCell, OrderGroup } from "./cells.js";
+import {
+  findAllMasters,
+  findSimpleOrders,
+  isMasterCell,
+  isOrderCell,
+  resolveOrderGroup,
+  type OrderGroupSkipReason,
+} from "./io/order_scan.ts";
+import { addOrderMatch, meltOrderGroups, mintOrder } from "./io/order_transaction.ts";
+import { ceilDiv, quotePreservingRatio } from "./matching/order_conversion.ts";
+import {
+  OrderMatcher,
+  bestMatch,
+  orderMatchers,
+  sequentialMatches,
+  type Match,
+} from "./matching/order_matching.ts";
+import type { OrderCell, OrderGroup } from "./model/cells.ts";
+import { Info, type InfoLike } from "./model/info.ts";
+import { Ratio } from "./model/ratio.ts";
+
+export type { OrderGroupSkipReason } from "./io/order_scan.ts";
+export { OrderConversionRepresentabilityError } from "./matching/order_conversion.ts";
+export { OrderMatcher } from "./matching/order_matching.ts";
+export type {
+  Match,
+  MatchDiagnostics,
+  MatchDirectionDiagnostics,
+} from "./matching/order_matching.ts";
 
 /**
- * Utilities for managing UDT orders on Nervos L1 such as minting, matching, and melting.
+ * Builds and scans iCKB Stack order cells for one order script deployment.
+ *
+ * @public
  */
 export class OrderManager implements ScriptDeps {
-  /**
-   * Creates an instance of OrderManager.
-   *
-   * @param script - The order script.
-   * @param cellDeps - The cell dependencies for the order.
-   * @param udtScript - The UDT (User Defined Token) type script.
-   */
-  constructor(
-    public readonly script: ccc.Script,
-    public readonly cellDeps: ccc.CellDep[],
-    public readonly udtScript: ccc.Script,
-  ) {}
+  /** Order lock script this manager scans and builds for. */
+  public readonly script: ccc.Script;
+  /** Cell deps required to execute the order script. */
+  public readonly cellDeps: ccc.CellDep[];
+  /** UDT type script accepted by this order market. */
+  public readonly udtScript: ccc.Script;
 
   /**
-   * Checks if the given cell is an order.
-   *
-   * A cell is considered an order if its lock script matches the order script of the manager and its type script
-   * equates to the UDT handler's script.
-   *
-   * @param cell - The cell to check.
-   * @returns True if the cell is an order; otherwise, false.
+   * Creates an order manager for one order script, its cell deps, and UDT type.
    */
-  isOrder(cell: ccc.Cell): boolean {
-    return (
-      cell.cellOutput.lock.eq(this.script) &&
-      Boolean(cell.cellOutput.type?.eq(this.udtScript))
-    );
+  constructor(script: ccc.Script, cellDeps: ccc.CellDep[], udtScript: ccc.Script) {
+    this.script = script;
+    this.cellDeps = cellDeps;
+    this.udtScript = udtScript;
+  }
+
+  /** Returns true when the cell is an order cell for this manager's scripts. */
+  public isOrder(cell: ccc.Cell): boolean {
+    return isOrderCell(cell, this.script, this.udtScript);
+  }
+
+  /** Returns true when the cell is a master cell for this manager's order script. */
+  public isMaster(cell: ccc.Cell): boolean {
+    return isMasterCell(cell, this.script);
   }
 
   /**
-   * Checks if the given cell is a master cell.
+   * Computes the output-side amount, CKB fee, and order info for a new order.
    *
-   * A cell is recognized as a master cell if its type script matches the order script.
-   *
-   * @param cell - The cell to check.
-   * @returns True if the cell is a master cell; otherwise, false.
+   * @remarks
+   * The returned `Info` preserves the quoted amount after fee adjustment so the
+   * minted order records the executable limit price.
    */
-  isMaster(cell: ccc.Cell): boolean {
-    return Boolean(cell.cellOutput.type?.eq(this.script));
-  }
-
-  /**
-   * Previews the conversion between CKB and UDT.
-   *
-   * This method calculates a conversion preview using an exchange ratio midpoint.
-   *
-   * Optionally, a fee may be applied that influences the effective conversion rate,
-   * resulting in additional fees or gains. The fee is applied by adjusting the ratio using the
-   * provided fee and feeBase. In practice, the fee is incorporated by multiplying the numerator by
-   * (feeBase - fee) and the denominator by feeBase.
-   *
-   * Effectively the computed fee scales the converted amount by (feeBase - fee) / feeBase, for example:
-   * -  (100000 - 1000) / 100000 = 0.99 (1% fee).
-   * -  (100000 - 300) / 100000 = 0.997 (0.3% fee).
-   * -  (100000 - 1) / 100000 = 0.99999 (0.001% fee).
-   *
-   * This computation ensures that the fee is applied as a fixed percentage using the same
-   * integer arithmetic as the midpoint conversion ratio, with control over rounding adjustments.
-   *
-   * @param isCkb2Udt - Indicates if the conversion is from CKB to UDT:
-   *                    - If true, converts CKB to UDT.
-   *                    - Otherwise, converts UDT to CKB.
-   * @param midpoint - The exchange ratio used as the midpoint for conversion.
-   *                   It should contain both CKB and UDT scaling factors.
-   * @param amounts - An object of ValueComponents containing the CKB and UDT amounts.
-   * @param options - Optional conversion parameters.
-   * @param options.fee - The fee (as a ccc.Num) to apply during conversion. It represents the fee portion
-   *                      in integer terms (e.g., fee basis-points) and defaults to 0n (i.e., no fee).
-   *                      Internally, the fee is applied as a scaling factor: (feeBase – fee) / feeBase.
-   * @param options.feeBase - The base reference (as a ccc.Num) used for fee calculation.
-   *                          Defaults to 100000n if not provided. The feeBase defines the scaling factor
-   *                          in which fee is applied, ensuring fee is always a fixed percentage.
-   * @param options.ckbMinMatchLog - Optional minimum logarithmic matching threshold for CKB.
-   *                                 This is used for further internal validation or matching criteria.
-   *                                 Defaults to 33 (~86 CKB) if not provided.
-   *
-   * @returns An object with the following properties:
-   * - convertedAmount: The converted amount as a ccc.FixedPoint in the target unit.
-   * - ckbFee: The fee (or gain) in CKB, computed as a ccc.FixedPoint.
-   * - info: Additional conversion information as Info, to be used in OrderManager.mint.
-   *
-   * @example
-   * // Example usage previewing the conversion from CKB to iCKB UDT:
-   * const result = OrderManager.convert(
-   *   true, // CKB to UDT
-   *   ickbExchangeRatio(tipHeader),
-   *   {
-   *     ckbValue: ccc.FixedPointFrom("1000"), // 1000 CKB
-   *     udtValue: 0n,
-   *   },
-   *   {
-   *     feeBase: 100000n,
-   *     fee: 1n, // (100000 - 1) / 100000 = 0.99999 (i.e., a 0.001% fee is deducted).
-   *     ckbMinMatchLog: 33
-   *   }
-   * );
-   */
-  static convert(
+  public static convert(
     isCkb2Udt: boolean,
     midpoint: ExchangeRatio,
     amounts: ValueComponents,
@@ -122,164 +84,63 @@ export class OrderManager implements ScriptDeps {
       ckbMinMatchLog?: number;
     },
   ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-    // Set fee and feeBase with fallback default values.
     const fee = options?.fee ?? 0n;
     const feeBase = options?.feeBase ?? 100000n;
-
-    // Create a Ratio instance from the midpoint ratio.
     const base = Ratio.from(midpoint);
-
-    // Apply the fee adjustment to the ratio.
-    const adjusted = base.applyFee(isCkb2Udt, fee, feeBase);
-
-    // Select the input amount based on the conversion direction.
     const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
-
-    // Perform the conversion using the adjusted ratio.
-    const convertedAmount = adjusted.convert(isCkb2Udt, amount, true);
+    const { aScale, bScale } = base.feeAdjustedScales(isCkb2Udt, fee, feeBase);
+    const convertedAmount = ceilDiv(amount * aScale, bScale);
     let ckbFee = 0n;
 
-    // Calculate fee (or gain) based on the original midpoint rate.
     if (amount > 0n && fee !== 0n) {
       ckbFee = isCkb2Udt
         ? amount - base.convert(false, convertedAmount, false)
         : base.convert(false, amount, false) - convertedAmount;
     }
 
-    // Generate additional conversion info for further processing.
-    const info = Info.create(isCkb2Udt, adjusted, options?.ckbMinMatchLog);
-
+    const info = Info.create(
+      isCkb2Udt,
+      quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
+      options?.ckbMinMatchLog,
+    );
     return { convertedAmount, ckbFee, info };
   }
 
   /**
-   * Mints a new order cell and appends it to the transaction.
+   * Adds a new order cell and its master cell to a partial transaction.
    *
-   * The method performs the following:
-   * - Creates order data using the provided amounts and order information.
-   * - Adds required cell dependencies to the transaction.
-   * - Appends the order cell to the outputs with the UDT data and adjusts the CKB capacity.
-   * - Appends a corresponding master cell immediately after the order cell.
-   *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
-   *
-   * @param txLike - The transaction to which the order will be added.
-   * @param lock - The lock script for the master cell.
-   * @param info - The information related to the order, usually calculated using OrderManager.convert.
-   * @param amounts - The amounts for the order, including:
-   *    @param amounts.ckbValue - The amount of CKB to allocate for the order (note: more CKB than expressed might be used).
-   *    @param amounts.udtValue - The amount of UDT to allocate for the order.
-   *
-   * @returns void
+   * @remarks
+   * The order output is locked by the order script and typed by the configured
+   * UDT. The following master output is typed by the order script and locked by
+   * the caller-provided lock.
    */
-  mint(
+  public mint(
     txLike: ccc.TransactionLike,
     lock: ccc.Script,
     info: InfoLike,
     amounts: ValueComponents,
   ): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    const { ckbValue, udtValue } = amounts;
-    const data = OrderData.from({
-      udtValue,
-      master: {
-        type: "relative",
-        value: Relative.create(1n), // master is appended right after its order
-      },
-      info,
-    });
-
-    tx.addCellDeps(this.cellDeps);
-
-    // Append order cell to Outputs
-    const outputCount = tx.addOutput(
-      {
-        lock: this.script,
-        type: this.udtScript,
-      },
-      data.toBytes(),
-    );
-    const orderOutput = tx.outputs[outputCount - 1];
-    if (orderOutput === undefined) {
-      throw new Error("Failed to append order output");
-    }
-    orderOutput.capacity += ckbValue;
-
-    // Append master cell to Outputs right after its order
-    tx.addOutput({
+    return mintOrder(this, {
+      tx: ccc.Transaction.from(txLike),
       lock,
-      type: this.script,
+      info: Info.from(info),
+      amounts,
     });
-    return tx;
   }
 
   /**
-   * Adds the match to the Transaction.
+   * Adds inputs and partial outputs for a chosen match.
    *
-   * Iterates over the partial matches (if any) and for each:
-   * - Adds the original order as an input.
-   * - Creates an updated output with adjusted CKB capacity and UDT data.
-   *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
-   *
-   * @param txLike - The transaction to which the matches will be added.
-   * @param match - The match object containing partial matches.
+   * @throws Error if the match repeats the same order out point.
    */
-  addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    const partials = match.partials;
-    if (partials.length === 0) {
-      return tx;
-    }
-    if (!hasUniquePartialOrderOutPoints(partials)) {
-      throw new Error("Match contains duplicate order cells");
-    }
-
-    tx.addCellDeps(this.cellDeps);
-
-    for (const { order, ckbOut, udtOut } of partials) {
-      tx.addInput(order.cell);
-      tx.addOutput(
-        {
-          lock: this.script,
-          type: this.udtScript,
-          capacity: ckbOut,
-        },
-        OrderData.from({
-          udtValue: udtOut,
-          master: {
-            type: "absolute",
-            value: order.getMaster(),
-          },
-          info: order.data.info,
-        }).toBytes(),
-      );
-    }
-    return tx;
+  public addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transaction {
+    return addOrderMatch(this, ccc.Transaction.from(txLike), match);
   }
 
   /**
-   * Matches the order with the specified parameters.
-   *
-   * Uses an OrderMatcher (if available) to compute the match based on a provided allowance.
-   * If no matcher is available, returns a match with zero deltas and no partials.
-   *
-   * @param order - The order cell to match against.
-   * @param isCkb2Udt - If true the match is in the CKB-to-UDT direction; otherwise UDT-to-CKB.
-   * @param allowance - The matching allowance as a fixed point number.
-   *
-   * @throws Will throw an error if the order is incompatible.
-   *
-   * @returns A Match object containing:
-   *    • ckbDelta: net change in CKB value,
-   *    • udtDelta: net change in UDT value,
-   *    • partials: a list of partial matches.
+   * Matches one order against an allowance in the requested direction.
    */
-  match(
-    order: OrderCell,
-    isCkb2Udt: boolean,
-    allowance: ccc.FixedPoint,
-  ): Match {
+  public match(order: OrderCell, isCkb2Udt: boolean, allowance: ccc.FixedPoint): Match {
     return (
       OrderMatcher.from(order, isCkb2Udt, 0n)?.match(allowance) ?? {
         ckbDelta: 0n,
@@ -290,272 +151,59 @@ export class OrderManager implements ScriptDeps {
   }
 
   /**
-   * Finds the best match for a given set of orders based on the current exchange rate.
-   *
-   * Evaluates pairs of matches (CKB-to-UDT and UDT-to-CKB) to determine the optimal combined match.
-   * The best match is chosen based on remaining allowances and overall gain.
-   *
-   * @param orderPool - The list of order cells to consider for matching.
-   * @param allowance - The allowance for CKB and UDT as a ValueComponents object.
-   * @param exchangeRate - The current exchange rate between CKB and UDT, including scaling factors.
-   * @param options - Optional parameters for matching:
-   *    @param options.feeRate - Fee rate for the transaction (defaults to 1000n if not provided).
-   *    @param options.ckbAllowanceStep - The step value for CKB allowance (defaults to 1000 CKB as fixed point).
-   *    @param options.maxPartials - Maximum matched partial outputs to keep in the result.
-   *
-   * @returns A Match object containing the best combination of deltas, partial matches, and search diagnostics.
+   * Finds the best executable match for the supplied order pool and allowances.
    */
-  static bestMatch(
+  public static bestMatch(
     orderPool: OrderCell[],
     allowance: ValueComponents,
     exchangeRate: ExchangeRatio,
     options?: {
-      feeRate?: ccc.Num; // Fee rate for the transaction
+      feeRate?: ccc.Num;
       ckbAllowanceStep?: ccc.FixedPoint;
       maxPartials?: number;
     },
   ): Match {
-    const orderSize = maxOrderOccupiedSize(orderPool);
-    if (!orderSize) {
-      return {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      };
-    }
-
-    const { ckbScale, udtScale } = exchangeRate;
-    if (ckbScale <= 0n || udtScale <= 0n) {
-      throw new Error("Exchange rate scales must be positive");
-    }
-
-    // ckbAllowanceStep should be 1000 CKB if not provided
-    const ckbAllowanceStep =
-      options?.ckbAllowanceStep ?? ccc.fixedPointFrom("1000");
-    if (ckbAllowanceStep <= 0n) {
-      throw new Error("CKB allowance step must be positive");
-    }
-
-    // Get fee rate or base fee rate if not provided
-    const feeRate = options?.feeRate ?? 1000n;
-    const ckbMiningFee = (ccc.numFrom(36 + orderSize) * feeRate + 999n) / 1000n;
-
-    const maxPartials = options?.maxPartials;
-    const udtAllowanceStep =
-      (ckbAllowanceStep * ckbScale + udtScale - 1n) / udtScale;
-    const ckbToUdtMatchers = orderMatchers(orderPool, true, ckbMiningFee);
-    const udtToCkbMatchers = orderMatchers(orderPool, false, ckbMiningFee);
-    const diagnostics: MatchDiagnostics = {
-      orderCount: orderPool.length,
-      allowance,
-      ckbAllowanceStep,
-      udtAllowanceStep,
-      ckbMiningFee,
-      ...(maxPartials === undefined ? {} : { maxPartials }),
-      directions: {
-        ckbToUdt: summarizeMatchers(ckbToUdtMatchers),
-        udtToCkb: summarizeMatchers(udtToCkbMatchers),
-      },
-      candidates: {
-        total: 0,
-        viable: 0,
-        positiveGain: 0,
-        rejected: {
-          maxPartials: 0,
-          duplicateOrder: 0,
-          insufficientCkbAllowance: 0,
-          insufficientUdtAllowance: 0,
-          nonPositiveGain: 0,
-        },
-        bestGain: 0n,
-      },
-    };
-
-    const ckb2UdtMatches = new BufferedGenerator(
-      sequentialMatches(
-        ckbToUdtMatchers,
-        ckbAllowanceStep,
-      ),
-      2,
-    );
-    const udt2CkbMatches = new BufferedGenerator(
-      sequentialMatches(
-        udtToCkbMatchers,
-        udtAllowanceStep,
-      ),
-      2,
-    );
-
-    let best = {
-      ckbDelta: 0n,
-      udtDelta: 0n,
-      partials: [] as Match["partials"],
-      gain: 0n,
-    };
-    let advance = {
-      i: -1,
-      j: -1,
-      gain: -1n << 256n,
-    };
-    // advance.i/advance.j are offsets into the current two-entry frontiers; (0, 0)
-    // means the current frontier head is already optimal, so the search stops.
-    while (advance.i !== 0 || advance.j !== 0) {
-      ckb2UdtMatches.next(advance.i);
-      udt2CkbMatches.next(advance.j);
-      advance = { i: 0, j: 0, gain: -1n << 256n };
-
-      for (const [i, c2u] of ckb2UdtMatches.buffer.entries()) {
-        for (const [j, u2c] of udt2CkbMatches.buffer.entries()) {
-          const ckbDelta = c2u.ckbDelta + u2c.ckbDelta;
-          const udtDelta = c2u.udtDelta + u2c.udtDelta;
-          const partials = c2u.partials.concat(u2c.partials);
-          diagnostics.candidates.total += 1;
-          if (maxPartials !== undefined && partials.length > maxPartials) {
-            diagnostics.candidates.rejected.maxPartials += 1;
-            continue;
-          }
-          if (!hasUniquePartialOrderOutPoints(partials)) {
-            diagnostics.candidates.rejected.duplicateOrder += 1;
-            continue;
-          }
-          const ckbFee = ckbMiningFee * BigInt(partials.length);
-          const ckbAllowance = allowance.ckbValue + ckbDelta - ckbFee;
-          const udtAllowance = allowance.udtValue + udtDelta;
-          const gain = (ckbDelta - ckbFee) * ckbScale + udtDelta * udtScale;
-          if (ckbAllowance < 0n) {
-            diagnostics.candidates.rejected.insufficientCkbAllowance += 1;
-          } else if (udtAllowance < 0n) {
-            diagnostics.candidates.rejected.insufficientUdtAllowance += 1;
-          }
-          if (ckbAllowance < 0n || udtAllowance < 0n) {
-            continue;
-          }
-          diagnostics.candidates.viable += 1;
-          if (gain > advance.gain) {
-            advance = { i, j, gain };
-          }
-          if (partials.length > 0) {
-            if (gain > 0n) {
-              diagnostics.candidates.positiveGain += 1;
-            } else {
-              diagnostics.candidates.rejected.nonPositiveGain += 1;
-              continue;
-            }
-          }
-
-          if (gain > best.gain) {
-            best = {
-              ckbDelta,
-              udtDelta,
-              partials,
-              gain,
-            };
-          }
-        }
-      }
-    }
-
-    const { ckbDelta, udtDelta, partials } = best;
-    diagnostics.candidates.bestGain = best.gain;
-    return {
-      ckbDelta,
-      udtDelta,
-      partials,
-      diagnostics,
-    };
+    return bestMatch(orderPool, allowance, exchangeRate, options);
   }
 
   /**
-   * Returns a generator that sequentially yields match objects for a given order pool.
-   *
-   * For each order, it uses an OrderMatcher (if available) to compute a match for increasing allowances,
-   * and yields the cumulative matched result.
-   *
-   * The matching for each order is performed in a sequential manner:
-   *  1. An array of matchers is created from the order pool, filtering out any undefined ones and sorting
-   *     them in decreasing order by real match ratio (best gain per unit first).
-   *  2. A cumulative empty Match object is initialized and immediately yielded as the first match.
-   *  3. For each matcher, the algorithm performs a fair distribution of the matcher's `bMaxMatch` into
-   *     partial matches. The distribution follows these rules:
-   *       - Each partial match has at least N elements (where N is determined by dividing bMaxMatch by allowanceStep).
-   *       - The number of partial matches is maximized.
-   *       - The distribution is as fair as possible (i.e., partial match sizes differ by at most one sats).
-   *  4. The algorithm yields the cumulative match after processing each partial match; if a certain allowance is too low
-   *     and does not produce any partial matches, the matcher is skipped.
-   *
-   * @param orderPool - The list of order cells to match.
-   * @param isCkb2Udt - A flag indicating the matching direction. If true, matching is done from CKB to UDT; otherwise, from UDT to CKB.
-   * @param allowanceStep - The step increment for the allowance represented as a fixed point number.
-   * @param ckbMiningFee - The CKB mining fee represented as a fixed point value.
-   *
-   * @yields A Match object representing the cumulative match up to the current matcher.
+   * Yields sequential matches for one direction using a fixed allowance step.
    */
-  static *sequentialMatcher(
+  public static *sequentialMatcher(
     orderPool: OrderCell[],
     isCkb2Udt: boolean,
     allowanceStep: ccc.FixedPoint,
     ckbMiningFee: ccc.FixedPoint,
   ): Generator<Match, void, void> {
-    yield* sequentialMatches(orderMatchers(orderPool, isCkb2Udt, ckbMiningFee), allowanceStep);
+    yield* sequentialMatches(
+      orderMatchers(orderPool, isCkb2Udt, ckbMiningFee),
+      allowanceStep,
+    );
   }
 
   /**
-   * Melts the specified order groups.
+   * Adds order groups and their master cells as melt inputs.
    *
-   * For each order group, if the option is to only process fulfilled orders, it filters accordingly.
-   * Then, for every valid group, the master and order cells are added as inputs in the transaction.
-   *
-   * @param txLike - The transaction to which the groups will be added.
-   * @param groups - The array of OrderGroup instances to melt.
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction (e.g., via CCC Udt balance completion).
-   *
-   * @param options - Optional parameters:
-   *    @param options.isFulfilledOnly - If true, only groups with fulfilled orders will be melted.
-   *
-   * @returns void
+   * @param options - Set `isFulfilledOnly` to skip groups whose current order is still matchable.
    */
-  melt(
+  public melt(
     txLike: ccc.TransactionLike,
     groups: OrderGroup[],
-    options?: {
-      isFulfilledOnly?: boolean;
-    },
+    options?: { isFulfilledOnly?: boolean },
   ): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    const isFulfilledOnly = options?.isFulfilledOnly ?? false;
-    if (isFulfilledOnly) {
-      groups = groups.filter((g) => g.order.isFulfilled());
-    }
-    if (groups.length === 0) {
-      return tx;
-    }
-    tx.addCellDeps(this.cellDeps);
-
-    for (const group of groups) {
-      tx.addInput(group.order.cell);
-      tx.addInput(group.master.cell);
-    }
-    return tx;
+    return meltOrderGroups(this, ccc.Transaction.from(txLike), groups, options);
   }
 
   /**
-   * Finds orders associated with this OrderManager instance.
+   * Finds valid order groups by scanning order cells and master cells.
    *
-   * This async generator performs:
-   *   1. Fetch simple orders (lock-script cells matching order & UDT handler).
-   *   2. Fetch master cells (type-script cells matching order).
-   *   3. Group each simple order under its master cell; initiate origin lookup once.
-   *   4. For each group with orders and a resolved origin:
-   *      - Resolve the best order via `origin.resolve(orders)`.
-   *      - Construct an `OrderGroup` via `OrderGroup.tryFrom(...)`.
-   *      - Yield the valid `OrderGroup`.
-   *
-   * @param client – Client to interact with the blockchain.
-   * @param options.onChain – Defaults to true. When false, use cached cell queries.
-   * @param options.pageSize – Cell query page size. Defaults to `defaultCellPageSize` (400).
-   * @yields OrderGroup instances combining master, order, and origin cells.
+   * @remarks
+   * `pageSize` is the per-scan RPC/indexer page size, not a total cap. The
+   * origin order lookup reads the client cache first, then fetches and records
+   * the transaction response when needed. `onSkippedGroup` reports unresolved or
+   * invalid groups without aborting the scan.
    */
-  async *findOrders(
+  public async *findOrders(
     client: ccc.Client,
     options?: {
       onChain?: boolean;
@@ -565,682 +213,44 @@ export class OrderManager implements ScriptDeps {
   ): AsyncGenerator<OrderGroup> {
     const onChain = options?.onChain ?? true;
     const pageSize = options?.pageSize ?? defaultCellPageSize;
-
-    // Fetch simple orders & master cells in parallel
     const [simpleOrders, allMasters] = await Promise.all([
-      this.findSimpleOrders(client, onChain, pageSize),
-      this.findAllMasters(client, onChain, pageSize),
+      findSimpleOrders({
+        client,
+        script: this.script,
+        udtScript: this.udtScript,
+        onChain,
+        pageSize,
+      }),
+      findAllMasters(client, this.script, onChain, pageSize),
     ]);
-
-    // Prepare a map of masterCellKey → { master, orders[] }
     const rawGroups = new Map(
       allMasters.map((master) => [
         master.cell.outPoint.toHex(),
-        {
-          master,
-          orders: [] as OrderCell[],
-        },
+        { master, orders: new Array<OrderCell>() },
       ]),
     );
 
-    // Group simple orders by their master cell
     for (const order of simpleOrders) {
-      const master = order.getMaster();
-      const key = master.toHex();
-      const rawGroup = rawGroups.get(key);
-
-      if (!rawGroup) {
-        // No matching master cell found
+      const rawGroup = rawGroups.get(order.getMaster().toHex());
+      if (rawGroup === undefined) {
         options?.onSkippedGroup?.("missing-master");
         continue;
       }
-
       rawGroup.orders.push(order);
     }
 
-    // For each populated group, await origin, resolve the best order, and yield OrderGroup
     for (const { master, orders } of rawGroups.values()) {
       if (orders.length === 0) {
         continue;
       }
-
-      const orderGroup = await this.resolveOrderGroup(client, master, orders);
+      const orderGroup = await resolveOrderGroup(client, master, orders, (cell) =>
+        this.isOrder(cell),
+      );
       if (!orderGroup.ok) {
         options?.onSkippedGroup?.(orderGroup.reason);
         continue;
       }
-
       yield orderGroup.group;
     }
-  }
-
-  /**
-   * Finds simple orders on the blockchain.
-   *
-   * Queries cells whose lock script equals the order script and whose type script
-   * matches the UDT type script, returning only valid {@link OrderCell} instances.
-   *
-   * @param client – The client used to interact with the blockchain.
-   * @param onChain - When true, use live RPC queries; otherwise, use cached results.
-   * @param pageSize – Cell query page size.
-   * @returns Promise that resolves to an array of {@link OrderCell}.
-   */
-  private async findSimpleOrders(
-    client: ccc.Client,
-    onChain: boolean,
-    pageSize: number,
-  ): Promise<OrderCell[]> {
-    const findCellsArgs = [
-      {
-        script: this.script,
-        scriptType: "lock",
-        filter: {
-          script: this.udtScript,
-        },
-        scriptSearchMode: "exact",
-        withData: true,
-      },
-      "asc",
-    ] as const;
-
-    const orders: OrderCell[] = [];
-    for (const cell of await collectPagedScan(
-      (requestPageSize) => onChain
-        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
-        : client.findCells(...findCellsArgs, requestPageSize),
-      { pageSize },
-    )) {
-      const order = OrderCell.tryFrom(cell);
-      if (!order || !this.isOrder(cell)) {
-        // Skip non-order cells or failed conversions
-        continue;
-      }
-      orders.push(order);
-    }
-
-    return orders;
-  }
-
-  /**
-   * Finds all master cells on the blockchain.
-   *
-   * Searches for cells whose type script exactly matches the order script,
-   * then wraps them as {@link MasterCell} instances.
-   *
-   * @param client – The client used to interact with the blockchain.
-   * @param onChain - When true, use live RPC queries; otherwise, use cached results.
-   * @param pageSize – Cell query page size.
-   * @returns Promise that resolves to an array of {@link MasterCell}.
-   */
-  private async findAllMasters(
-    client: ccc.Client,
-    onChain: boolean,
-    pageSize: number,
-  ): Promise<MasterCell[]> {
-    const findCellsArgs = [
-      {
-        script: this.script,
-        scriptType: "type",
-        scriptSearchMode: "exact",
-        withData: true,
-      },
-      "asc",
-    ] as const;
-
-    const masters: MasterCell[] = [];
-    for (const cell of await collectPagedScan(
-      (requestPageSize) => onChain
-        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
-        : client.findCells(...findCellsArgs, requestPageSize),
-      { pageSize },
-    )) {
-      if (!this.isMaster(cell)) {
-        // Skip cells that do not satisfy master criteria
-        continue;
-      }
-      masters.push(new MasterCell(cell));
-    }
-
-    return masters;
-  }
-
-  /**
-   * Finds the mint origin order associated with a given master out point.
-   *
-   * The origin is historical transaction output data, not live cell state: it
-   * may already be spent by later matches while still anchoring the order group.
-   *
-   * @param client - The client used to interact with the blockchain.
-   * @param master - The master cell anchoring the order group.
-   * @param orders - Candidate live descendant orders for this master.
-   *
-   * @returns A promise that resolves to the validated group or a skip reason.
-   */
-  private async resolveOrderGroup(
-    client: ccc.Client,
-    master: MasterCell,
-    orders: OrderCell[],
-  ): Promise<ResolveOrderGroupResult> {
-    const origin = await this.findOrigin(client, master.cell.outPoint);
-    if (!origin.ok) {
-      return origin;
-    }
-
-    const order = origin.origin.resolve(orders);
-    if (!order) {
-      return {
-        ok: false,
-        reason: orders.some((candidate) => origin.origin.isValid(candidate))
-          ? "ambiguous-order"
-          : "missing-order",
-      };
-    }
-
-    const group = OrderGroup.tryFrom(master, order, origin.origin);
-    if (!group) {
-      return { ok: false, reason: "invalid-group" };
-    }
-
-    return { ok: true, group };
-  }
-
-  private async findOrigin(
-    client: ccc.Client,
-    master: ccc.OutPoint,
-  ): Promise<FindOriginResult> {
-    const { txHash, index: mIndex } = master;
-    let res = await client.cache.getTransactionResponse(txHash);
-    if (!res) {
-      res = await client.getTransaction(txHash);
-      if (res) {
-        await client.cache.recordTransactionResponses(res);
-      }
-    }
-    if (!res) {
-      return { ok: false, reason: "missing-origin" };
-    }
-
-    let origin: OrderCell | undefined;
-    for (let index = 0n; index < BigInt(res.transaction.outputs.length); index++) {
-      if (index === mIndex) {
-        continue;
-      }
-
-      const output = res.transaction.getOutput(index);
-      if (!output) {
-        continue;
-      }
-      const cell = ccc.Cell.from({
-        cellOutput: output.cellOutput,
-        outputData: output.outputData,
-        outPoint: { txHash, index },
-      });
-      const order = OrderCell.tryFrom(cell);
-      if (
-        order &&
-        this.isOrder(cell) &&
-        order.data.isMint() &&
-        order.getMaster().eq(master)
-      ) {
-        if (origin) {
-          return { ok: false, reason: "ambiguous-origin" };
-        }
-        origin = order;
-      }
-    }
-    return origin
-      ? { ok: true, origin }
-      : { ok: false, reason: "missing-origin" };
-  }
-}
-
-type FindOriginResult =
-  | { ok: true; origin: OrderCell }
-  | { ok: false; reason: "missing-origin" | "ambiguous-origin" };
-
-export type OrderGroupSkipReason =
-  | "missing-master"
-  | "missing-origin"
-  | "ambiguous-origin"
-  | "missing-order"
-  | "ambiguous-order"
-  | "invalid-group";
-
-type ResolveOrderGroupResult =
-  | { ok: true; group: OrderGroup }
-  | {
-      ok: false;
-      reason: Exclude<OrderGroupSkipReason, "missing-master">;
-    };
-
-function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boolean {
-  const outPoints = new Set<string>();
-  for (const partial of partials) {
-    const key = partial.order.cell.outPoint.toHex();
-    if (outPoints.has(key)) {
-      return false;
-    }
-    outPoints.add(key);
-  }
-
-  return true;
-}
-
-function maxOrderOccupiedSize(orderPool: OrderCell[]): number {
-  let maxSize = 0;
-  for (const order of orderPool) {
-    maxSize = Math.max(maxSize, order.cell.occupiedSize);
-  }
-  return maxSize;
-}
-
-function orderMatchers(
-  orderPool: OrderCell[],
-  isCkb2Udt: boolean,
-  ckbMiningFee: ccc.FixedPoint,
-): OrderMatcher[] {
-  return orderPool
-    .map((o) => OrderMatcher.from(o, isCkb2Udt, ckbMiningFee))
-    .filter((m) => m !== undefined)
-    .sort((a, b) => OrderMatcher.compareRealRatioDesc(a, b));
-}
-
-function* sequentialMatches(
-  matchers: OrderMatcher[],
-  allowanceStep: ccc.FixedPoint,
-): Generator<Match, void, void> {
-  // Initialize an accumulator for the cumulative match.
-  let acc: Match = {
-    ckbDelta: 0n,
-    udtDelta: 0n,
-    partials: [],
-  };
-
-  let curr = acc;
-  yield curr;
-
-  // Process each matcher in sequence.
-  for (const matcher of matchers) {
-    const maxMatch = matcher.bMaxMatch;
-    // Distribute maxMatch into partial matches according to a fair distribution policy:
-    //  - Each partial match is of at least of allowanceStep size.
-    //  - The number of partial matches is maximized.
-    //  - The distribution is as fair as possible (i.e., partial match sizes differ by at most 1 sats).
-    //
-    // Here, N is defined as ceil(maxMatch / allowanceStep).
-    const N = (maxMatch + allowanceStep - 1n) / allowanceStep;
-
-    // Determine the base quota (q) and remainder (r) for fair distribution.
-    // q = base units per partial match.
-    // r = the number of partial matches that will receive one extra unit.
-    const q = maxMatch / N;
-    const r = maxMatch % N;
-
-    let allowance = 0n;
-    for (let i = 0n; i < N; i++) {
-      // For the first r partial matches, assign an extra unit (q + 1); for the rest, assign q.
-      allowance += i < r ? q + 1n : q;
-
-      // Compute the match using the current allowance.
-      const m = matcher.match(allowance);
-      // If the current allowance is too low to yield any partial matches,
-      // try the next allowance for the same matcher.
-      if (m.partials.length === 0) {
-        continue;
-      }
-      // Update the cumulative match by aggregating the deltas and partials.
-      curr = {
-        ckbDelta: acc.ckbDelta + m.ckbDelta,
-        udtDelta: acc.udtDelta + m.udtDelta,
-        partials: acc.partials.concat(m.partials),
-      };
-      // Yield the newly updated cumulative match.
-      yield curr;
-    }
-    // Update the accumulator with the current cumulative match for the next matcher.
-    acc = curr;
-  }
-}
-
-function summarizeMatchers(
-  matchers: OrderMatcher[],
-): MatchDirectionDiagnostics {
-  const matchableCount = matchers.length;
-  let minAllowance: ccc.FixedPoint | undefined;
-  let maxMatch: ccc.FixedPoint | undefined;
-  for (const matcher of matchers) {
-    minAllowance = minAllowance === undefined || compareBigInt(matcher.bMinMatch, minAllowance) < 0
-      ? matcher.bMinMatch
-      : minAllowance;
-    maxMatch = maxMatch === undefined || compareBigInt(matcher.bMaxMatch, maxMatch) > 0
-      ? matcher.bMaxMatch
-      : maxMatch;
-  }
-
-  return {
-    matchableCount,
-    ...(minAllowance === undefined ? {} : { minAllowance }),
-    ...(maxMatch === undefined ? {} : { maxMatch }),
-  };
-}
-
-/**
- * Represents a partial match result for an order.
- */
-export interface Match {
-  /**
-   * The change in CKB for the matches from the matcher perspective.
-   */
-  ckbDelta: bigint;
-
-  /**
-   * The change in UDT for the matches from the matcher perspective.
-   */
-  udtDelta: bigint;
-
-  /**
-   * An array of match details.
-   *
-   * Each match includes the order cell involved in the match,
-   * the output amount of CKB, and the output amount of UDT.
-   */
-  partials: {
-    /**
-     * The order cell involved in the match.
-     */
-    order: OrderCell;
-
-    /**
-     * The output amount of CKB.
-     */
-    ckbOut: ccc.FixedPoint;
-
-    /**
-     * The output amount of UDT.
-     */
-    udtOut: ccc.FixedPoint;
-  }[];
-
-  /** Aggregate match-search diagnostics. It excludes order cells, scripts, and out points. */
-  diagnostics?: MatchDiagnostics;
-}
-
-export interface MatchDiagnostics {
-  orderCount: number;
-  allowance: ValueComponents;
-  ckbAllowanceStep: ccc.FixedPoint;
-  udtAllowanceStep: ccc.FixedPoint;
-  ckbMiningFee: ccc.FixedPoint;
-  maxPartials?: number;
-  directions: {
-    ckbToUdt: MatchDirectionDiagnostics;
-    udtToCkb: MatchDirectionDiagnostics;
-  };
-  candidates: {
-    total: number;
-    viable: number;
-    positiveGain: number;
-    rejected: {
-      maxPartials: number;
-      duplicateOrder: number;
-      insufficientCkbAllowance: number;
-      insufficientUdtAllowance: number;
-      nonPositiveGain: number;
-    };
-    bestGain: bigint;
-  };
-}
-
-export interface MatchDirectionDiagnostics {
-  matchableCount: number;
-  minAllowance?: ccc.FixedPoint;
-  maxMatch?: ccc.FixedPoint;
-}
-
-/**
- * OrderMatcher is responsible for computing match results for an order.
- *
- * It encapsulates all parameters and logic required to match an order based on a given allowance.
- */
-export class OrderMatcher {
-  /**
-   * @param order - The order cell to match.
-   * @param isCkb2Udt - Indicates whether the matching direction is from CKB to UDT (true) or vice versa.
-   * @param aScale - Scaling factor for the primary asset (CKB when isCkb2Udt is true, otherwise UDT).
-   * @param bScale - Scaling factor for the secondary asset (UDT when isCkb2Udt is true, otherwise CKB).
-   * @param aIn - The input amount for asset A.
-   * @param bIn - The input amount for asset B.
-   * @param aMin - The minimum allowable output for asset A (e.g., minimum CKB after fee deduction).
-   * @param bMinMatch - The minimum matching amount for asset B.
-   * @param bMaxMatch - The maximum amount of asset B that can be matched.
-   * @param bMaxOut - The maximum output amount for asset B.
-   * @param realRatioNumerator - Numerator of the exact effective ratio used for sorting.
-   * @param realRatioDenominator - Denominator of the exact effective ratio used for sorting.
-   */
-  constructor(
-    public readonly order: OrderCell,
-    public readonly isCkb2Udt: boolean,
-    public readonly aScale: ccc.Num,
-    public readonly bScale: ccc.Num,
-    public readonly aIn: ccc.FixedPoint,
-    public readonly bIn: ccc.FixedPoint,
-    public readonly aMin: ccc.FixedPoint,
-    public readonly bMinMatch: ccc.FixedPoint,
-    public readonly bMaxMatch: ccc.FixedPoint,
-    public readonly bMaxOut: ccc.FixedPoint,
-    public readonly realRatioNumerator: ccc.FixedPoint,
-    public readonly realRatioDenominator: ccc.FixedPoint,
-  ) {}
-
-  static compareRealRatioDesc(left: OrderMatcher, right: OrderMatcher): number {
-    return compareBigInt(
-      right.realRatioNumerator * left.realRatioDenominator,
-      left.realRatioNumerator * right.realRatioDenominator,
-    );
-  }
-
-  /**
-   * Factory method to create an OrderMatcher instance from an order.
-   *
-   * The method determines necessary matching parameters based on the matching direction
-   * (CKB-to-UDT versus UDT-to-CKB) and calculates the maximum and minimum amounts
-   * allowed for a valid match. It returns undefined if the parameters are invalid.
-   *
-   * @param order - The order cell to match.
-   * @param isCkb2Udt - Indicates matching direction (true for CKB-to-UDT; false for UDT-to-CKB).
-   * @param ckbMiningFee - The CKB mining fee as a fixed point, applied to the appropriate asset.
-   *
-   * @returns An instance of OrderMatcher if matching is possible; otherwise, undefined.
-   */
-  static from(
-    order: OrderCell,
-    isCkb2Udt: boolean,
-    ckbMiningFee: ccc.FixedPoint,
-  ): OrderMatcher | undefined {
-    if (isCkb2Udt ? !order.isCkb2UdtMatchable() : !order.isUdt2CkbMatchable()) {
-      return;
-    }
-
-    let aScale: ccc.Num;
-    let bScale: ccc.Num;
-    let aIn: ccc.FixedPoint;
-    let bIn: ccc.FixedPoint;
-    let aMin: ccc.FixedPoint;
-    let bMinMatch: ccc.FixedPoint;
-    let aMiningFee: ccc.FixedPoint;
-    let bMiningFee: ccc.FixedPoint;
-
-    if (isCkb2Udt) {
-      // When converting CKB to UDT, extract scaling factors accordingly.
-      ({ ckbScale: aScale, udtScale: bScale } = order.data.info.ckbToUdt);
-      [aIn, bIn] = [order.ckbValue, order.udtValue];
-      // Calculate the minimal match for UDT based on the order info.
-      bMinMatch =
-        (order.data.info.getCkbMinMatch() * bScale + aScale - 1n) / aScale;
-      // aMin is determined by subtracting unoccupied capacity from the total capacity.
-      aMin = order.cell.cellOutput.capacity - order.ckbUnoccupied;
-      aMiningFee = ckbMiningFee;
-      bMiningFee = 0n;
-    } else {
-      // When converting UDT to CKB, swap the scale factors.
-      ({ ckbScale: bScale, udtScale: aScale } = order.data.info.udtToCkb);
-      [bIn, aIn] = [order.ckbValue, order.udtValue];
-      bMinMatch = order.data.info.getCkbMinMatch();
-      aMin = 0n;
-      aMiningFee = 0n;
-      bMiningFee = ckbMiningFee;
-    }
-
-    // Validate that there is sufficient input beyond the minimum required.
-    if (aIn <= aMin + aMiningFee || aScale <= 0n || bScale <= 0n) {
-      return;
-    }
-
-    // Calculate the maximum possible output for asset B, ensuring a non-decreasing property.
-    const bMaxOut = OrderMatcher.nonDecreasing(aScale, bScale, aIn, bIn, aMin);
-    const bMaxMatch = bMaxOut - bIn;
-    if (bMinMatch > bMaxMatch) {
-      bMinMatch = bMaxMatch;
-    }
-
-    const realRatioNumerator = aIn - aMin - aMiningFee;
-    const realRatioDenominator = bMaxMatch + bMiningFee;
-
-    if (realRatioNumerator <= 0n || realRatioDenominator <= 0n) {
-      return;
-    }
-
-    return new OrderMatcher(
-      order,
-      isCkb2Udt,
-      aScale,
-      bScale,
-      aIn,
-      bIn,
-      aMin,
-      bMinMatch,
-      bMaxMatch,
-      bMaxOut,
-      realRatioNumerator,
-      realRatioDenominator,
-    );
-  }
-
-  /**
-   * Computes a match result for the provided allowance on asset B.
-   *
-   * If the provided allowance is too low to fulfill even a partial match, an empty match is returned.
-   * If the allowance meets or exceeds the maximum matchable amount, a complete match is returned.
-   *
-   * @param bAllowance - The allowance available for matching asset B.
-   *
-   * @returns A Match object containing delta values and the match details.
-   */
-  match(bAllowance: ccc.FixedPoint): Match {
-    // Check if allowance is too low to even fulfill partially.
-    if (bAllowance < this.bMinMatch) {
-      return {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      };
-    }
-
-    // Check if allowance is sufficient for a complete match.
-    if (bAllowance >= this.bMaxMatch) {
-      return this.create(this.aMin, this.bMaxOut);
-    }
-
-    // For partial matches, calculate output values.
-    const bOut = this.bIn + bAllowance;
-    const aOut = OrderMatcher.nonDecreasing(
-      this.bScale,
-      this.aScale,
-      this.bIn,
-      this.aIn,
-      bOut,
-    );
-
-    if (
-      !this.isCkb2Udt &&
-      this.aIn * this.aScale < aOut * this.aScale + this.bMinMatch * this.bScale
-    ) {
-      return {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      };
-    }
-
-    return this.create(aOut, bOut);
-  }
-
-  /**
-   * Creates a Match result given the output amounts.
-   *
-   * Depending on the matching direction, it calculates the deltas:
-   * - For CKB-to-UDT: the change in CKB is aIn - aOut and in UDT is bIn - bOut.
-   * - For UDT-to-CKB: the change in CKB is bIn - bOut and in UDT is aIn - aOut.
-   *
-   * @param aOut - The computed output amount for asset A.
-   * @param bOut - The computed output amount for asset B.
-   *
-   * @returns A Match object representing the result.
-   */
-  create(aOut: ccc.FixedPoint, bOut: ccc.FixedPoint): Match {
-    return this.isCkb2Udt
-      ? {
-          ckbDelta: this.aIn - aOut,
-          udtDelta: this.bIn - bOut,
-          partials: [
-            {
-              order: this.order,
-              ckbOut: aOut,
-              udtOut: bOut,
-            },
-          ],
-        }
-      : {
-          ckbDelta: this.bIn - bOut,
-          udtDelta: this.aIn - aOut,
-          partials: [
-            {
-              order: this.order,
-              ckbOut: bOut,
-              udtOut: aOut,
-            },
-          ],
-        };
-  }
-
-  /**
-   * Applies the limit order rule on non-decreasing value to calculate bOut.
-   *
-   * The formula finds the minimum bOut such that:
-   *   aScale * aIn + bScale * bIn <= aScale * aOut + bScale * bOut
-   *
-   * Rearranging, we get:
-   *   bOut = (aScale * (aIn - aOut) + bScale * bIn) / bScale
-   *
-   * Since integer division truncates, rounding is applied to guarantee an upper value:
-   *
-   *   bOut = (aScale * (aIn - aOut) + bScale * (bIn + 1) - 1) / bScale
-   *
-   * @param aScale - The scaling factor for asset A.
-   * @param bScale - The scaling factor for asset B.
-   * @param aIn - The input amount for asset A.
-   * @param bIn - The input amount for asset B.
-   * @param aOut - The output amount for asset A.
-   *
-   * @returns The computed output amount for asset B ensuring the non-decreasing property.
-   */
-  static nonDecreasing(
-    aScale: ccc.Num,
-    bScale: ccc.Num,
-    aIn: ccc.FixedPoint,
-    bIn: ccc.FixedPoint,
-    aOut: ccc.FixedPoint,
-  ): ccc.FixedPoint {
-    return (aScale * (aIn - aOut) + bScale * (bIn + 1n) - 1n) / bScale;
   }
 }

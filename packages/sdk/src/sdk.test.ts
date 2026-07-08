@@ -53,12 +53,10 @@ const tip = headerLike(0n);
 
 function fakeIckbUdt(udt = script("66")): {
   isUdt: (cell: ccc.Cell) => boolean;
-  infoFrom: () => Promise<never>;
   completeBy: (txLike: ccc.TransactionLike) => Promise<ccc.Transaction>;
 } {
   return {
     isUdt: (cell: ccc.Cell): boolean => cell.cellOutput.type?.eq(udt) ?? false,
-    infoFrom: () => Promise.resolve({ capacity: 0n, balance: 0n, count: 0 } as never),
     completeBy: async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
       await Promise.resolve();
       return ccc.Transaction.from(txLike);
@@ -736,8 +734,6 @@ describe("IckbSdk.buildBaseTransaction", () => {
   });
 
   it("combines real manager transaction effects", async () => {
-    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
-
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -1794,7 +1790,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
 });
 
 describe("completeIckbTransaction", () => {
-  it("runs UDT, fee, DAO-limit in order", async () => {
+  it("runs UDT completion before fee completion", async () => {
     const calls: string[] = [];
     const signer = {} as ccc.Signer;
     const client = {} as ccc.Client;
@@ -1809,10 +1805,6 @@ describe("completeIckbTransaction", () => {
       calls.push("fee");
       return Promise.resolve([0, false]);
     });
-    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockImplementation(() => {
-      calls.push("dao-limit");
-      return Promise.resolve(false);
-    });
 
     const completed = await completeIckbTransaction(tx, ickbUdt, {
       signer,
@@ -1821,7 +1813,7 @@ describe("completeIckbTransaction", () => {
     });
 
     expect(completed).toBeInstanceOf(ccc.Transaction);
-    expect(calls).toEqual(["udt", "fee", "dao-limit"]);
+    expect(calls).toEqual(["udt", "fee"]);
   });
 
   it("uses the provided fee rate", async () => {
@@ -1830,7 +1822,6 @@ describe("completeIckbTransaction", () => {
     const completeFeeBy = vi
       .spyOn(ccc.Transaction.prototype, "completeFeeBy")
       .mockResolvedValue([0, false]);
-    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
 
     await completeIckbTransaction(ccc.Transaction.default(), fakeIckbUdt(), {
       signer,
@@ -2793,7 +2784,7 @@ describe("IckbSdk.getAccountState", () => {
     const udtCell = ccc.Cell.from({
       outPoint: { txHash: hash("90"), index: 0n },
       cellOutput: { capacity: 7n, lock: accountLock, type: udt },
-      outputData: "0x01",
+      outputData: ccc.numLeToBytes(11n, 16),
     });
     const capacityCell = ccc.Cell.from({
       outPoint: { txHash: hash("91"), index: 0n },
@@ -2804,11 +2795,6 @@ describe("IckbSdk.getAccountState", () => {
     const logicManager = new LogicManager(script("22"), [], daoManager);
     const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], daoManager);
     const ickbUdt = fakeIckbUdt(udt);
-    vi.spyOn(ickbUdt, "infoFrom").mockResolvedValue({
-      capacity: 7n,
-      balance: 11n,
-      count: 1,
-    } as never);
     vi.spyOn(logicManager, "findReceipts").mockImplementation(() => once(receipt));
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => once(withdrawal));
     const sdk = new IckbSdk(
@@ -2830,11 +2816,10 @@ describe("IckbSdk.getAccountState", () => {
 
     expect(state.capacityCells).toEqual([capacityCell]);
     expect(state.nativeUdtCells).toEqual([udtCell]);
-    expect(state.nativeUdtCapacity).toBe(7n);
+    expect(state.nativeUdtCapacity).toBe(udtCell.cellOutput.capacity);
     expect(state.nativeUdtBalance).toBe(11n);
     expect(state.receipts).toEqual([receipt]);
     expect(state.withdrawalGroups).toEqual([withdrawal]);
-    expect(ickbUdt.infoFrom).toHaveBeenCalledWith(client, [udtCell]);
   });
 
   it("uses a custom account cell scan page size", async () => {
@@ -2893,7 +2878,7 @@ function depositCell(
   });
   return {
     cell,
-    headers: [{ header: depositHeader }, { header: tipHeader }],
+    headers: [{ header: depositHeader, txHash: cell.outPoint.txHash }, { header: tipHeader }],
     interests: 0n,
     maturity: ccc.Epoch.from([1n, 0n, 1n]),
     isReady: options?.isReady ?? false,
@@ -2993,7 +2978,7 @@ function readyWithdrawalGroup(options: {
   });
   const owner = new OwnerCell(
     ccc.Cell.from({
-      outPoint: { txHash: hash("76"), index: 0n },
+      outPoint: { txHash: ownedCell.outPoint.txHash, index: 1n },
       cellOutput: {
         capacity: ccc.fixedPointFrom(61),
         lock: options.ownerLock,
@@ -3006,7 +2991,7 @@ function readyWithdrawalGroup(options: {
     cell: ownedCell,
     headers: [
       { header: options.depositHeader },
-      { header: options.withdrawalHeader },
+      { header: options.withdrawalHeader, txHash: ownedCell.outPoint.txHash },
     ],
     interests: 0n,
     maturity: ccc.Epoch.from([1n, 0n, 1n]),

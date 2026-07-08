@@ -1,27 +1,6 @@
 packages:
   - packages/*
   - apps/*
-  # Local CCC workspace when materialized via `pnpm forks:bootstrap`.
-  - forks/ccc/repo/packages/ccc
-  - forks/ccc/repo/packages/ckb-ccc
-  - forks/ccc/repo/packages/connector
-  - forks/ccc/repo/packages/connector-react
-  - forks/ccc/repo/packages/core
-  - forks/ccc/repo/packages/did-ckb
-  - forks/ccc/repo/packages/eip6963
-  - forks/ccc/repo/packages/joy-id
-  - forks/ccc/repo/packages/lumos-patches
-  - forks/ccc/repo/packages/nip07
-  - forks/ccc/repo/packages/okx
-  - forks/ccc/repo/packages/rei
-  - forks/ccc/repo/packages/shell
-  - forks/ccc/repo/packages/spore
-  - forks/ccc/repo/packages/ssri
-  - forks/ccc/repo/packages/type-id
-  - forks/ccc/repo/packages/udt
-  - forks/ccc/repo/packages/uni-sat
-  - forks/ccc/repo/packages/utxo-global
-  - forks/ccc/repo/packages/xverse
 
 auditConfig:
   ignoreCves:
@@ -38,19 +17,11 @@ overrides:
   "vite@<=6.4.2": 6.4.3
   "vitest@<4.1.0": 4.1.8
   "ws@>=8.0.0 <8.21.0": 8.21.0
-  # Keep published manifests on `catalog:` while forcing the materialized
-  # local CCC workspace to satisfy direct stack dependencies during installs.
-  # Update this list alongside any new direct `@ckb-ccc/*` dependency.
-  "@ckb-ccc/ccc": workspace:*
-  "@ckb-ccc/core": workspace:*
-  "@ckb-ccc/udt": workspace:*
 
 catalog:
-  # Catalog tracks published fallback versions; forks/config.json only owns the
-  # local clone refs that pnpm forks:bootstrap materializes under forks/ccc/repo.
-  "@ckb-ccc/ccc": ^1.1.21
-  "@ckb-ccc/core": ^1.12.2
-  "@ckb-ccc/udt": ^0.1.24
+  "@ckb-ccc/ccc": 1.2.0
+  "@ckb-ccc/core": 1.14.0
+  "@ckb-ccc/udt": 0.2.0
   "@types/node": ^24.8.1
 
 minimumReleaseAge: 1440

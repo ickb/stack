@@ -1,5 +1,0 @@
---- vitest.config.mts
-CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=944a4a3ae09aceaa620bd0783e575d8519671a30ea7db8e975d6cff49d8156d2
-    projects: packages,
-CONFLICT ours=1 base=1 theirs=1 resolution=1 sha=ac0f08d951dbb8bc8f2fe686d0a5ab8e6d8bb47b2e6bc0ce8d565fa4e44d5b5a
-      include: packages,

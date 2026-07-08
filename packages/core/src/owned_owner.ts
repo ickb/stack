@@ -1,158 +1,122 @@
 import { ccc } from "@ckb-ccc/core";
+import { assertDaoOutputLimit, type DaoCellFromCache, type DaoManager } from "@ickb/dao";
 import {
   collectPagedScan,
   defaultCellPageSize,
   unique,
   type ScriptDeps,
 } from "@ickb/utils";
-import {
-  assertDaoOutputLimit,
-  DaoManager,
-  type DaoCellFromCache,
-} from "@ickb/dao";
-import { OwnerData } from "./entities.js";
-import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.js";
+import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.ts";
+import { OwnerData } from "./entities.ts";
 
 /**
- * Manages ownership and withdrawal operations for owned cells.
- * Implements the ScriptDeps interface.
+ * Builds and finds Owned Owner withdrawal groups for an iCKB deployment.
+ *
+ * @public
  */
 export class OwnedOwnerManager implements ScriptDeps {
-  /**
-   * Creates an instance of OwnedOwnerManager.
-   *
-   * @param script - The script associated with the OwnedOwner script.
-   * @param cellDeps - The cell dependencies for the OwnedOwner script.
-   * @param daoManager - The DAO manager for handling withdrawal requests.
-   */
-  constructor(
-    public readonly script: ccc.Script,
-    public readonly cellDeps: ccc.CellDep[],
-    public readonly daoManager: DaoManager,
-  ) {}
+  /** The Owned Owner script used as owner marker type and withdrawal request lock. */
+  public readonly script: ccc.Script;
+
+  /** Cell dependencies required to execute the Owned Owner script. */
+  public readonly cellDeps: ccc.CellDep[];
+
+  /** DAO helper used to build and decode the underlying withdrawal requests. */
+  public readonly daoManager: DaoManager;
 
   /**
-   * Checks if the specified cell is an owner cell.
-   *
-   * @param cell - The cell to check against.
-   * @returns True if the cell is an owner cell, otherwise false.
+   * Creates an Owned Owner manager for the script and DAO manager that belong to one deployment.
    */
-  isOwner(cell: ccc.Cell): boolean {
+  constructor(script: ccc.Script, cellDeps: ccc.CellDep[], daoManager: DaoManager) {
+    this.script = script;
+    this.cellDeps = cellDeps;
+    this.daoManager = daoManager;
+  }
+
+  /**
+   * Returns true when the cell is an owner marker for this manager's script.
+   */
+  public isOwner(cell: ccc.Cell): boolean {
+    if (cell.cellOutput.type?.eq(this.script) !== true || cell.outputData.length < 10) {
+      return false;
+    }
+    try {
+      new OwnerCell(cell).getOwned();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns true when the cell is a DAO withdrawal request locked by this manager's script.
+   */
+  public isOwned(cell: ccc.Cell): boolean {
     return (
-      Boolean(cell.cellOutput.type?.eq(this.script)) &&
-      cell.outputData.length >= 10
+      this.daoManager.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(this.script)
     );
   }
 
   /**
-   * Checks if the specified cell is an owned cell and is a withdrawal request.
+   * Adds DAO withdrawal request outputs and owner marker outputs for the selected deposits.
    *
-   * @param cell - The cell to check against.
-   * @returns True if the cell is owned cell, otherwise false.
+   * @param options - Withdrawal options. `isReadyOnly` skips deposits that are not ready. `requiredLiveDeposits` adds live deposit anchors as cell deps while requested deposits are spent.
+   * @returns The updated partial transaction.
+   *
+   * @remarks Required live deposits are not spent; they anchor the withdrawal
+   * request as live cell deps. Duplicate anchors, duplicate deposits, and anchors
+   * that are also being spent throw. Anchor readiness is not required here.
+   * Caller must ensure UDT cellDeps are added to the transaction, for example
+   * via `ickbUdt.addCellDeps(tx)`.
    */
-  isOwned(cell: ccc.Cell): boolean {
-    return (
-      this.daoManager.isWithdrawalRequest(cell) &&
-      cell.cellOutput.lock.eq(this.script)
-    );
-  }
-
-  /**
-   * Requests a withdrawal for the specified deposits.
-   *
-   * @param txLike - The transaction to add the withdrawal request to.
-   * @param deposits - The deposits to withdraw.
-   * @param lock - The lock script for the output.
-   * @param options - Optional parameters for the withdrawal request.
-   * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
-   * @param options.requiredLiveDeposits - Live deposit anchors that must remain resolvable while requested deposits are spent.
-   * @returns void
-   *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction
-   * (e.g., via ickbUdt.addCellDeps(tx)).
-   */
-  async requestWithdrawal(
-    txLike: ccc.TransactionLike,
-    deposits: IckbDepositCell[],
-    lock: ccc.Script,
-    client: ccc.Client,
-    options?: {
-      isReadyOnly?: boolean;
-      requiredLiveDeposits?: IckbDepositCell[];
-    },
+  public async requestWithdrawal(
+    ...[txLike, deposits, lock, client, options]: [
+      txLike: ccc.TransactionLike | ccc.Transaction,
+      deposits: IckbDepositCell[],
+      lock: ccc.Script,
+      client: ccc.Client,
+      options?: {
+        isReadyOnly?: boolean;
+        requiredLiveDeposits?: IckbDepositCell[];
+      },
+    ]
   ): Promise<ccc.Transaction> {
     let tx = ccc.Transaction.from(txLike);
-    const isReadyOnly = options?.isReadyOnly ?? false;
-    if (isReadyOnly) {
-      deposits = deposits.filter((d) => d.isReady);
-    }
-    if (deposits.length === 0) {
+    const selectedDeposits =
+      options?.isReadyOnly === true
+        ? deposits.filter((deposit) => deposit.isReady)
+        : deposits;
+    if (selectedDeposits.length === 0) {
       return tx;
     }
-    const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-    const requestedDepositOutPoints = new Set<string>();
-    for (const deposit of deposits) {
-      const outPoint = deposit.cell.outPoint.toHex();
-      if (requestedDepositOutPoints.has(outPoint)) {
-        throw new Error("Withdrawal deposit is duplicated");
-      }
-      requestedDepositOutPoints.add(outPoint);
-      if (spentOutPoints.has(outPoint)) {
-        throw new Error("Withdrawal deposit is already being spent");
-      }
-      spentOutPoints.add(outPoint);
-    }
-
+    const spentOutPoints = withdrawalSpentOutPoints(tx, selectedDeposits);
     const requiredLiveDeposits = options?.requiredLiveDeposits ?? [];
-    const requiredAnchorOutPoints = new Set<string>();
-    for (const deposit of requiredLiveDeposits) {
-      if (!deposit.isReady) {
-        throw new Error("Withdrawal live deposit anchor is not ready");
-      }
-      const outPoint = deposit.cell.outPoint.toHex();
-      if (requiredAnchorOutPoints.has(outPoint)) {
-        throw new Error("Withdrawal live deposit anchor is duplicated");
-      }
-      requiredAnchorOutPoints.add(outPoint);
-      if (spentOutPoints.has(outPoint)) {
-        throw new Error("Withdrawal live deposit anchor is also being spent");
-      }
-    }
-    const daoOptions = { isReadyOnly: false }; // non isReady deposits already filtered
+    assertRequiredLiveDepositsUnspent(requiredLiveDeposits, spentOutPoints);
+    // Readiness filtering, when requested, happened above; preserve the selected deposits here.
+    const daoOptions = { isReadyOnly: false };
 
     const withdrawalOutputStart = tx.outputs.length;
     tx = await this.daoManager.requestWithdrawal(
       tx,
-      deposits,
+      selectedDeposits,
       this.script,
       client,
       daoOptions,
     );
-    if (tx.outputs.length < withdrawalOutputStart + deposits.length) {
-      throw new Error("DAO withdrawal request did not add expected outputs");
-    }
+    const withdrawalOutputs = withdrawalRequestOutputs(
+      tx,
+      withdrawalOutputStart,
+      selectedDeposits.length,
+    );
     tx.addCellDeps(this.cellDeps);
-
-    for (let index = 0; index < deposits.length; index += 1) {
-      const withdrawalOutput = tx.outputs[withdrawalOutputStart + index];
-      if (
-        !withdrawalOutput?.lock.eq(this.script) ||
-        withdrawalOutput.type?.eq(this.daoManager.script) !== true
-      ) {
-        throw new Error("DAO withdrawal request output order changed");
-      }
-
-      const ownerOutputIndex = tx.outputs.length;
-      tx.addOutput(
-        {
-          lock: lock,
-          type: this.script,
-        },
-        OwnerData.encode({
-          ownedDistance: BigInt(withdrawalOutputStart + index) - BigInt(ownerOutputIndex),
-        }),
-      );
-    }
+    addWithdrawalOwnerOutputs({
+      tx,
+      withdrawalOutputs,
+      withdrawalOutputStart,
+      lock,
+      ownerScript: this.script,
+      daoScript: this.daoManager.script,
+    });
 
     for (const deposit of requiredLiveDeposits) {
       tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
@@ -163,19 +127,15 @@ export class OwnedOwnerManager implements ScriptDeps {
   }
 
   /**
-   * Completes the withdrawals of the specified withdrawal groups.
+   * Adds owned withdrawal requests and their owner markers as inputs.
    *
-   * @param txLike - The transaction to add the withdrawals to.
-   * @param withdrawalGroups - The withdrawal groups to process.
-   * @param options - Optional parameters for the withdrawal process.
-   * @param options.isReadyOnly - Whether to only process ready withdrawal groups (default: false).
-   * @returns void
+   * @returns The updated partial transaction.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction
-   * (e.g., via ickbUdt.addCellDeps(tx)).
+   * @remarks Set `isReadyOnly` to spend only ready requests. Caller must ensure
+   * UDT cellDeps are added to the transaction (e.g., via ickbUdt.addCellDeps(tx)).
    */
-  async withdraw(
-    txLike: ccc.TransactionLike,
+  public async withdraw(
+    txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalGroups: WithdrawalGroup[],
     client: ccc.Client,
     options?: {
@@ -183,21 +143,24 @@ export class OwnedOwnerManager implements ScriptDeps {
     },
   ): Promise<ccc.Transaction> {
     let tx = ccc.Transaction.from(txLike);
-    const isReadyOnly = options?.isReadyOnly ?? false;
-    if (isReadyOnly) {
-      withdrawalGroups = withdrawalGroups.filter((g) => g.owned.isReady);
-    }
-    if (withdrawalGroups.length === 0) {
+    const selectedWithdrawalGroups =
+      options?.isReadyOnly === true
+        ? withdrawalGroups.filter((group) => group.owned.isReady)
+        : withdrawalGroups;
+    if (selectedWithdrawalGroups.length === 0) {
       return tx;
+    }
+    for (const group of selectedWithdrawalGroups) {
+      assertWithdrawalGroupLinked(group);
     }
 
     tx.addCellDeps(this.cellDeps);
 
-    const requests = withdrawalGroups.map((g) => g.owned);
+    const requests = selectedWithdrawalGroups.map((group) => group.owned);
     tx = await this.daoManager.withdraw(tx, requests, client);
 
-    for (const { owner } of withdrawalGroups) {
-      tx.addInput(owner.cell);
+    for (const { owner } of selectedWithdrawalGroups) {
+      tx.addInput(cellInputLikeFrom(owner.cell));
     }
 
     // assertDaoOutputLimit already called inside daoManager.withdraw;
@@ -206,49 +169,12 @@ export class OwnedOwnerManager implements ScriptDeps {
   }
 
   /**
-   * Async generator that finds and yields withdrawal groups for the specified lock scripts.
+   * Finds owner marker cells for the given locks and yields valid owned withdrawal groups.
    *
-   * A "withdrawal group" pairs an owner cell with its corresponding DAO withdrawal cell.
-   *
-   * @param client
-   *   A CKB client instance providing:
-   *   - `findCells(query, order, pageSize)` for cached searches
-   *   - `findCellsOnChain(query, order, pageSize)` for on-chain searches
-   *   - `getTipHeader()` to fetch the latest block header
-   *
-   * @param locks
-   *   An array of lock scripts. Only owner cells whose `cellOutput.lock` exactly
-   *   matches one of these scripts will be considered.
-   *
-   * @param options
-   *   Optional parameters to refine the search:
-   *   - `tip?: ClientBlockHeader`
-   *       Reference block header for epoch and block-number lookups.
-   *       Defaults to `await client.getTipHeader()`.
-   *   - `onChain?: boolean`
-   *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
-   *       Default: `false`.
-   *   - `pageSize?: number`
-   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
-   *
-   * @yields
-   *   {@link WithdrawalGroup} objects, each containing:
-   *   - the owner cell (`OwnerCell`)
-   *   - the corresponding DAO withdrawal request cell
-   *
-   * @remarks
-   * - Deduplicates `locks` via `unique(locks)`.
-   * - Applies an RPC filter with:
-   *     • `script: this.script` (DAO type script)
-   * - Skips any cell that:
-   *     1. Fails `this.isOwner(cell)`
-   *     2. Has a non-matching lock script
-   * - For each owner cell:
-   *     1. Construct an `OwnerCell` instance.
-   *     2. Fetch the referenced cell and skip it unless it is an Owned Owner withdrawal request.
-   *     3. Decode the validated withdrawal request and yield a `WithdrawalGroup`.
+   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
+   * @remarks Header and transaction caches are scoped to one lock scan batch so related DAO cell conversions share the same reads.
    */
-  async *findWithdrawalGroups(
+  public async *findWithdrawalGroups(
     client: ccc.Client,
     locks: ccc.Script[],
     options?: {
@@ -273,41 +199,167 @@ export class OwnedOwnerManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const ownerCandidates = (await collectPagedScan(
-        (pageSize) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, pageSize)
-          : client.findCells(...findCellsArgs, pageSize),
-        { pageSize },
-      ))
+      const ownerCandidates = (
+        await collectPagedScan(
+          (scanPageSize) =>
+            options?.onChain === true
+              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
+              : client.findCells(...findCellsArgs, scanPageSize),
+          { pageSize },
+        )
+      )
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
         .map((cell) => new OwnerCell(cell));
 
       const ownedCells = await Promise.all(
-        ownerCandidates.map((owner) => client.getCell(owner.getOwned())),
+        ownerCandidates.map(async (owner) => client.getCell(owner.getOwned())),
       );
 
       const headerCache: DaoCellFromCache["headerCache"] = new Map();
       const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const withdrawalGroups = await Promise.all(
-        ownerCandidates.map(async (owner, index) => {
-          const ownedCell = ownedCells[index];
-          if (!ownedCell || !this.isOwned(ownedCell)) {
-            return;
-          }
-          const owned = await this.daoManager.withdrawalRequestCellFrom(
-            ownedCell,
-            client,
-            { tip, headerCache, transactionCache },
-          );
-          return new WithdrawalGroup(owned, owner);
-        }),
+        ownerCandidates.map(
+          async (owner, index): Promise<WithdrawalGroup | undefined> => {
+            const ownedCell = ownedCells[index];
+            if (ownedCell === undefined || !this.isOwned(ownedCell)) {
+              return undefined;
+            }
+            const owned = await this.daoManager.withdrawalRequestCellFrom(
+              ownedCell,
+              client,
+              {
+                tip,
+                headerCache,
+                transactionCache,
+              },
+            );
+            return new WithdrawalGroup(owned, owner);
+          },
+        ),
       );
 
       for (const group of withdrawalGroups) {
-        if (group) {
+        if (group !== undefined) {
           yield group;
         }
       }
     }
   }
+}
+
+function withdrawalSpentOutPoints(
+  tx: ccc.Transaction,
+  deposits: IckbDepositCell[],
+): Set<string> {
+  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  const requestedDepositOutPoints = new Set<string>();
+  for (const deposit of deposits) {
+    const outPoint = deposit.cell.outPoint.toHex();
+    if (requestedDepositOutPoints.has(outPoint)) {
+      throw new Error("Withdrawal deposit is duplicated");
+    }
+    requestedDepositOutPoints.add(outPoint);
+    if (spentOutPoints.has(outPoint)) {
+      throw new Error("Withdrawal deposit is already being spent");
+    }
+    spentOutPoints.add(outPoint);
+  }
+  return spentOutPoints;
+}
+
+function assertRequiredLiveDepositsUnspent(
+  requiredLiveDeposits: IckbDepositCell[],
+  spentOutPoints: Set<string>,
+): void {
+  const requiredAnchorOutPoints = new Set<string>();
+  for (const deposit of requiredLiveDeposits) {
+    const outPoint = deposit.cell.outPoint.toHex();
+    if (requiredAnchorOutPoints.has(outPoint)) {
+      throw new Error("Withdrawal live deposit anchor is duplicated");
+    }
+    requiredAnchorOutPoints.add(outPoint);
+    if (spentOutPoints.has(outPoint)) {
+      throw new Error("Withdrawal live deposit anchor is also being spent");
+    }
+  }
+}
+
+function withdrawalRequestOutputs(
+  tx: ccc.Transaction,
+  withdrawalOutputStart: number,
+  depositCount: number,
+): ccc.CellOutput[] {
+  const outputs = tx.outputs.slice(
+    withdrawalOutputStart,
+    withdrawalOutputStart + depositCount,
+  );
+  if (outputs.length !== depositCount) {
+    throw new Error("DAO withdrawal request did not add expected outputs");
+  }
+  return outputs;
+}
+
+interface AddWithdrawalOwnerOutputsOptions {
+  tx: ccc.Transaction;
+  withdrawalOutputs: ccc.CellOutput[];
+  withdrawalOutputStart: number;
+  lock: ccc.Script;
+  ownerScript: ccc.Script;
+  daoScript: ccc.Script;
+}
+
+function addWithdrawalOwnerOutputs({
+  tx,
+  withdrawalOutputs,
+  withdrawalOutputStart,
+  lock,
+  ownerScript,
+  daoScript,
+}: AddWithdrawalOwnerOutputsOptions): void {
+  for (const [index, withdrawalOutput] of withdrawalOutputs.entries()) {
+    assertWithdrawalRequestOutput(withdrawalOutput, ownerScript, daoScript);
+    const ownerOutputIndex = tx.outputs.length;
+    tx.addOutput(
+      { lock, type: ownerScript },
+      OwnerData.encode({
+        // ownedDistance is negative because owner markers are appended after their withdrawal outputs.
+        ownedDistance: BigInt(withdrawalOutputStart + index) - BigInt(ownerOutputIndex),
+      }),
+    );
+  }
+}
+
+function assertWithdrawalRequestOutput(
+  withdrawalOutput: ccc.CellOutput,
+  ownerScript: ccc.Script,
+  daoScript: ccc.Script,
+): void {
+  if (
+    !withdrawalOutput.lock.eq(ownerScript) ||
+    withdrawalOutput.type?.eq(daoScript) !== true
+  ) {
+    throw new Error("DAO withdrawal request output order changed");
+  }
+}
+
+function assertWithdrawalGroupLinked(group: WithdrawalGroup): void {
+  const ownedOutPoint = group.owned.cell.outPoint;
+  const linkedOutPoint = group.owner.getOwned();
+  if (!linkedOutPoint.eq(ownedOutPoint)) {
+    throw new Error(
+      `Withdrawal owner ${group.owner.cell.outPoint.toHex()} points to ${linkedOutPoint.toHex()} but group owned cell is ${ownedOutPoint.toHex()}`,
+    );
+  }
+}
+
+function cellInputLikeFrom(cell: ccc.Cell): ccc.CellInputLike {
+  return {
+    outPoint: cell.outPoint,
+    cellOutput: {
+      capacity: cell.cellOutput.capacity,
+      lock: cell.cellOutput.lock,
+      ...(cell.cellOutput.type === undefined ? {} : { type: cell.cellOutput.type }),
+    },
+    outputData: cell.outputData,
+  };
 }

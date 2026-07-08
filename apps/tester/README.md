@@ -31,7 +31,7 @@ Current network support:
 
 ## Run
 
-From a plain checkout, follow the root [Local CCC Workflow](../../README.md#local-ccc-workflow) first so `forks/ccc/repo` is materialized. If you are working against patched local CCC packages, rerun `pnpm forks:ccc` or keep `pnpm forks:ccc --watch` running. The app build commands below then build the runtime workspace package closure they import.
+From a plain checkout, run `pnpm install`; CCC packages are normal package dependencies resolved through the workspace catalog and lockfile. The app build commands below then build the runtime workspace package closure they import.
 
 ```bash
 pnpm install

@@ -22,8 +22,18 @@ graph TD;
 If a caller will send the returned transaction, it still must:
 
 1. Complete the transaction before send.
-2. Prefer the shared stack path in `@ickb/sdk`: `sdk.completeTransaction(...)` or `completeIckbTransaction(...)`.
+2. Prefer the shared stack path in `@ickb/sdk`: `sdk.completeTransaction(...)`.
 3. Only use lower-level manual completion when the caller intentionally owns UDT completion, CCC-native fee/capacity completion, and the DAO output-limit check itself.
+
+## Match Direction
+
+Order directions are from the on-chain order owner's perspective. A `ckb-to-udt` order means the owner gives CKB and wants UDT, so the matcher spends UDT and receives CKB. A `udt-to-ckb` order means the owner gives UDT and wants CKB, so the matcher spends CKB and receives UDT.
+
+`OrderManager.convert(...)` is the quote boundary. It computes the rounded-up output amount from the midpoint ratio and fee, then encodes `Info` so a full fill preserves that quote under the matcher integer arithmetic while fitting the order script's Uint64 ratio fields. If no Uint64 ratio can preserve the quote, conversion fails instead of silently weakening the order. Mint orders with the same amounts used for the successful quote.
+
+Matching steps must be sized in the asset the matcher spends, not in the order owner's direction label. For an exchange rate like `1 BTC = 100000 USD`, a value step of `1000 USD` corresponds to `1000 USD` when the matcher spends USD, and `0.01 BTC` when the matcher spends BTC. Swapping those units either skips usable small matches or explodes the search into meaningless dust steps.
+
+Candidate viability is netted across both directions. A CKB-to-UDT match can increase the matcher's CKB allowance for a UDT-to-CKB match in the same transaction, and a UDT-to-CKB match can increase UDT allowance for a CKB-to-UDT match. Below-step probes must account for those cross-side proceeds while still reserving CKB fees.
 
 ## Limit Order Confusion Boundary
 

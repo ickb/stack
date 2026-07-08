@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { lstat, readFile, realpath } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultCheckIgnored } from "./ickb-live-config-git.mjs";
@@ -258,15 +259,16 @@ async function loadBuiltNodeUtils(root) {
 
 async function loadBuiltStack(root) {
   try {
+    const requireFromCore = createRequire(resolve(root, "packages/core/package.json"));
     const [sdk, core, cccModule] = await Promise.all([
       import(pathToFileURL(join(root, "packages/sdk/dist/index.js")).href),
       import(pathToFileURL(join(root, "packages/core/dist/index.js")).href),
-      import(pathToFileURL(join(root, "forks/ccc/repo/packages/core/dist/index.js")).href),
+      import(pathToFileURL(requireFromCore.resolve("@ckb-ccc/core")).href),
     ]);
     return { sdk, core, ccc: cccModule.ccc };
   } catch (cause) {
     throw new Error(
-      "Build required packages before running preflight, for example: pnpm --filter @ickb/node-utils --filter @ickb/sdk --filter @ickb/core build",
+      "Install dependencies and build required packages before running preflight, for example: pnpm --filter @ickb/node-utils --filter @ickb/sdk --filter @ickb/core build",
       { cause },
     );
   }

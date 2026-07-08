@@ -376,7 +376,7 @@ describe("planTesterTransaction", () => {
     )).toBeUndefined();
   });
 
-  it("treats auto with capital but no actionable scenario as a nonterminal estimate skip", () => {
+  it("auto-selects random orders when near-reserve capital can fund actionable iCKB stimulus", () => {
     const liveNearReserveState = testerState({
       availableCkbBalance: 229423868188n,
       availableIckbBalance: 147394003472899n,
@@ -390,7 +390,10 @@ describe("planTesterTransaction", () => {
       undefined,
       11845567055823n,
       () => 0,
-    )).toBeUndefined();
+    )).toBe("random-order");
+  });
+
+  it("formats auto with no actionable scenario as a nonterminal estimate skip", () => {
     expect(testerNoActionableAutoScenarioSkip()).toEqual({
       reason: "estimated-conversion-too-small",
       requestedTesterScenario: "auto",

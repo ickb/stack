@@ -62,7 +62,6 @@ describe("getConfig", () => {
       0,
       false,
     ]);
-    vi.spyOn(ccc, "isDaoOutputLimitExceeded").mockResolvedValue(false);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
     const completed = await sdk.completeTransaction(tx, {

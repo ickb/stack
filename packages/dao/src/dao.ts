@@ -10,102 +10,92 @@ import {
   type DaoCellFromCache,
   type DaoDepositCell,
   type DaoWithdrawalRequestCell,
-} from "./cells.js";
+} from "./cells.ts";
+import { assertDaoOutputLimit } from "./dao_output_limit.ts";
+import { cellInputLikeFrom, cellOutputLikeFrom } from "./transaction_shape.ts";
 
-type DaoCellFromOptions = {
+/**
+ * Options shared by DAO cell decoding and manager helpers.
+ *
+ * @public
+ */
+export type DaoCellFromOptions = {
+  /** Tip header used as the readiness freshness anchor. */
   tip: ccc.ClientBlockHeader;
+
+  /** Optional lower bound for deposit renewal readiness. */
   minLockUp?: ccc.Epoch;
+
+  /** Optional upper bound for deposit renewal readiness. */
   maxLockUp?: ccc.Epoch;
 } & DaoCellFromCache;
 
-export class DaoOutputLimitError extends Error {
-  constructor(outputCount: number) {
-    super(
-      `NervosDAO transaction has ${String(outputCount)} output cells, exceeding the limit of 64`,
-    );
-    this.name = "DaoOutputLimitError";
-  }
-}
-
-export async function assertDaoOutputLimit(
-  txLike: ccc.TransactionLike,
-  client: ccc.Client,
-): Promise<void> {
-  const tx = ccc.Transaction.from(txLike);
-  if (await ccc.isDaoOutputLimitExceeded(tx, client)) {
-    throw new DaoOutputLimitError(tx.outputs.length);
-  }
-}
-
 /**
- * Manage NervosDAO functionalities.
+ * Builds and finds Nervos DAO deposit and withdrawal transactions.
+ *
+ * @public
  */
 export class DaoManager implements ScriptDeps {
-  /**
-   * Creates an instance of the DaoManager class.
-   *
-   * @param script - The script associated with the NervosDAO.
-   * @param cellDeps - An array of cell dependencies for the NervosDAO.
-   */
-  constructor(
-    public readonly script: ccc.Script,
-    public readonly cellDeps: ccc.CellDep[],
-  ) {}
+  /** The deployed Nervos DAO type script managed by this instance. */
+  public readonly script: ccc.Script;
+
+  /** Cell dependencies required to execute the DAO script. */
+  public readonly cellDeps: ccc.CellDep[];
 
   /**
-   * Checks if a given cell is a deposit.
-   *
-   * @param cell - The cell to check.
-   * @returns True if the cell is a deposit, otherwise false.
+   * Creates a DAO manager for one deployed DAO script and its cell deps.
    */
-  isDeposit(cell: ccc.CellAny): boolean {
+  constructor(script: ccc.Script, cellDeps: ccc.CellDep[]) {
+    this.script = script;
+    this.cellDeps = cellDeps;
+  }
+
+  /**
+   * Returns true when the cell is a DAO deposit for this manager's script.
+   */
+  public isDeposit(cell: ccc.CellAny): boolean {
     const {
       cellOutput: { type },
       outputData,
     } = cell;
 
-    return (
-      outputData === DaoManager.depositData() && type?.eq(this.script) === true
-    );
+    return outputData === DaoManager.depositData() && type?.eq(this.script) === true;
   }
 
   /**
-   * Checks if a given cell is a withdrawal request.
+   * Returns true when the cell uses this DAO script and is not deposit-shaped.
    *
-   * @param cell - The cell to check.
-   * @returns True if the cell is a withdrawal request, otherwise false.
+   * @remarks
+   * This structural check does not decode or validate the withdrawal request's
+   * deposit block number payload.
    */
-  isWithdrawalRequest(cell: ccc.Cell): boolean {
+  public isWithdrawalRequest(cell: ccc.Cell): boolean {
     const {
       cellOutput: { type },
       outputData,
     } = cell;
 
-    return (
-      outputData !== DaoManager.depositData() && type?.eq(this.script) === true
-    );
+    return outputData !== DaoManager.depositData() && type?.eq(this.script) === true;
   }
 
   /**
-   * Returns the deposit data.
-   *
-   * @returns The deposit data as a hexadecimal string.
+   * Returns the canonical DAO deposit data payload.
    */
-  static depositData(): ccc.Hex {
+  public static depositData(): ccc.Hex {
     return "0x0000000000000000";
   }
 
-  async depositCellFrom(
+  /**
+   * Loads and decodes a DAO deposit cell from a cell or out point.
+   *
+   * @remarks Cache maps in `options` are reused only for this caller-provided conversion batch.
+   */
+  public async depositCellFrom(
     cellLike: ccc.Cell | ccc.OutPoint,
     client: ccc.Client,
     options: DaoCellFromOptions,
   ): Promise<DaoDepositCell> {
-    const cell = cellLike instanceof ccc.OutPoint
-      ? await client.getCell(cellLike)
-      : cellLike;
-    if (!cell) {
-      throw new Error("Cell not found");
-    }
+    const cell = await cellFromLike(cellLike, client);
     if (!this.isDeposit(cell)) {
       throw new Error("Not a deposit");
     }
@@ -113,17 +103,17 @@ export class DaoManager implements ScriptDeps {
     return daoCellFrom(cell, { ...options, client, isDeposit: true });
   }
 
-  async withdrawalRequestCellFrom(
+  /**
+   * Loads and decodes a DAO withdrawal request cell from a cell or out point.
+   *
+   * @remarks Cache maps in `options` are reused only for this caller-provided conversion batch.
+   */
+  public async withdrawalRequestCellFrom(
     cellLike: ccc.Cell | ccc.OutPoint,
     client: ccc.Client,
     options: DaoCellFromOptions,
   ): Promise<DaoWithdrawalRequestCell> {
-    const cell = cellLike instanceof ccc.OutPoint
-      ? await client.getCell(cellLike)
-      : cellLike;
-    if (!cell) {
-      throw new Error("Cell not found");
-    }
+    const cell = await cellFromLike(cellLike, client);
     if (!this.isWithdrawalRequest(cell)) {
       throw new Error("Not a withdrawal request");
     }
@@ -132,16 +122,12 @@ export class DaoManager implements ScriptDeps {
   }
 
   /**
-   * Adds a deposit to a transaction.
+   * Adds DAO deposit outputs with the given capacities and lock script.
    *
-   * @param txLike - The transaction to which the deposit will be added.
-   * @param capacities - An array of capacities of the deposits to create.
-   * @param lock - The lock script for the outputs.
-   * @param client - The CKB client for DAO output limit validation.
-   * @returns The updated transaction.
+   * @returns The updated partial transaction.
    */
-  async deposit(
-    txLike: ccc.TransactionLike,
+  public async deposit(
+    txLike: ccc.TransactionLike | ccc.Transaction,
     capacities: ccc.FixedPoint[],
     lock: ccc.Script,
     client: ccc.Client,
@@ -169,33 +155,29 @@ export class DaoManager implements ScriptDeps {
   }
 
   /**
-   * Requests withdrawal from NervosDAO deposits.
+   * Adds DAO withdrawal request inputs and outputs for the selected deposits.
    *
-   * @param txLike - The transaction to which the withdrawal request will be added.
-   * @param deposits - An array of deposits to request the withdrawal from.
-   * @param lock - The lock script for the withdrawal request cells.
-   * @param options - Optional parameters for the withdrawal request.
-   * @param options.isReadyOnly - Whether to only process ready deposits (default: false).
-   * @returns void
+   * @param options - Set `isReadyOnly` to only process ready deposits.
+   * @returns The updated partial transaction.
    * @throws Error if the transaction has different input and output lengths.
    * @throws Error if the withdrawal request lock args have a different size from the deposit.
-   * @throws Error if the transaction or header of deposit is not found.
+   * @throws DaoOutputLimitError if the resulting transaction exceeds DAO output limits.
    */
-  async requestWithdrawal(
-    txLike: ccc.TransactionLike,
-    deposits: DaoDepositCell[],
-    lock: ccc.Script,
-    client: ccc.Client,
-    options?: {
-      isReadyOnly?: boolean;
-    },
+  public async requestWithdrawal(
+    ...[txLike, deposits, lock, client, options]: [
+      txLike: ccc.TransactionLike | ccc.Transaction,
+      deposits: DaoDepositCell[],
+      lock: ccc.Script,
+      client: ccc.Client,
+      options?: {
+        isReadyOnly?: boolean;
+      },
+    ]
   ): Promise<ccc.Transaction> {
     const tx = ccc.Transaction.from(txLike);
-    const isReadyOnly = options?.isReadyOnly ?? false;
-    if (isReadyOnly) {
-      deposits = deposits.filter((d) => d.isReady);
-    }
-    if (deposits.length === 0) {
+    const selectedDeposits =
+      options?.isReadyOnly === true ? deposits.filter((d) => d.isReady) : deposits;
+    if (selectedDeposits.length === 0) {
       return tx;
     }
 
@@ -205,22 +187,26 @@ export class DaoManager implements ScriptDeps {
     ) {
       throw new Error("Transaction has different inputs and outputs lengths");
     }
+    assertUniqueUnspentInputs(
+      tx,
+      selectedDeposits.map((deposit) => deposit.cell.outPoint),
+      "DAO deposit",
+    );
 
-    for (const deposit of deposits) {
+    for (const deposit of selectedDeposits) {
       const { cell, headers } = deposit;
+      this.assertDepositReadyForWithdrawalRequest(deposit);
       if (cell.cellOutput.lock.args.length !== lock.args.length) {
-        throw new Error(
-          "Withdrawal request lock args has different size from deposit",
-        );
+        throw new Error("Withdrawal request lock args has different size from deposit");
       }
 
       tx.addCellDeps(this.cellDeps);
       const depositHeader = headers[0];
       const depositHash = depositHeader.header.hash;
-      if (!tx.headerDeps.some((h) => h === depositHash)) {
+      if (!tx.headerDeps.includes(depositHash)) {
         tx.headerDeps.push(depositHash);
       }
-      tx.addInput(cell);
+      tx.addInput(cellInputLikeFrom(cell));
       tx.addOutput(
         {
           capacity: cell.cellOutput.capacity,
@@ -236,17 +222,15 @@ export class DaoManager implements ScriptDeps {
   }
 
   /**
-   * Withdraws funds from the NervosDAO based on the provided mature withdrawal requests.
+   * Adds DAO withdrawal request inputs with required header deps and witness input types.
    *
-   * @param txLike - The transaction to which the withdrawal will be added.
-   * @param withdrawalRequests - An array of withdrawal requests to process.
-   * @param options - Optional parameters for the withdrawal process.
-   * @param options.isReadyOnly - Whether to only process ready withdrawal requests (default: false).
-   * @returns void
-   * @throws Error if the withdrawal request is not valid.
+   * @param options - Set `isReadyOnly` to skip requests that are not ready yet.
+   * @returns The updated partial transaction.
+   * @throws Error if a withdrawal request witness input type is already in use.
+   * @throws DaoOutputLimitError if the resulting transaction exceeds DAO output limits.
    */
-  async withdraw(
-    txLike: ccc.TransactionLike,
+  public async withdraw(
+    txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalRequests: DaoWithdrawalRequestCell[],
     client: ccc.Client,
     options?: {
@@ -254,17 +238,23 @@ export class DaoManager implements ScriptDeps {
     },
   ): Promise<ccc.Transaction> {
     const tx = ccc.Transaction.from(txLike);
-    const isReadyOnly = options?.isReadyOnly ?? false;
-    if (isReadyOnly) {
-      withdrawalRequests = withdrawalRequests.filter((d) => d.isReady);
-    }
-    if (withdrawalRequests.length === 0) {
+    const selectedWithdrawalRequests =
+      options?.isReadyOnly === true
+        ? withdrawalRequests.filter((d) => d.isReady)
+        : withdrawalRequests;
+    if (selectedWithdrawalRequests.length === 0) {
       return tx;
     }
 
     tx.addCellDeps(this.cellDeps);
+    assertUniqueUnspentInputs(
+      tx,
+      selectedWithdrawalRequests.map((request) => request.cell.outPoint),
+      "DAO withdrawal request",
+    );
 
-    for (const withdrawalRequest of withdrawalRequests) {
+    for (const withdrawalRequest of selectedWithdrawalRequests) {
+      this.assertWithdrawalRequestReadyForWithdrawal(withdrawalRequest);
       const {
         cell: { outPoint, cellOutput, outputData },
         headers,
@@ -272,19 +262,17 @@ export class DaoManager implements ScriptDeps {
       } = withdrawalRequest;
       for (const th of headers) {
         const hash = th.header.hash;
-        if (!tx.headerDeps.some((h) => h === hash)) {
+        if (!tx.headerDeps.includes(hash)) {
           tx.headerDeps.push(hash);
         }
       }
       const depositHeader = headers[0];
-      const headerIndex = tx.headerDeps.findIndex(
-        (h) => h === depositHeader.header.hash,
-      );
+      const headerIndex = tx.headerDeps.indexOf(depositHeader.header.hash);
 
       const inputIndex =
         tx.addInput({
           outPoint,
-          cellOutput,
+          cellOutput: cellOutputLikeFrom(cellOutput),
           outputData,
           since: {
             relative: "absolute",
@@ -293,9 +281,8 @@ export class DaoManager implements ScriptDeps {
           },
         }) - 1;
 
-      const witness =
-        tx.getWitnessArgsAt(inputIndex) ?? ccc.WitnessArgs.from({});
-      if (witness.inputType) {
+      const witness = tx.getWitnessArgsAt(inputIndex) ?? ccc.WitnessArgs.from({});
+      if ((witness.inputType ?? "") !== "") {
         throw new Error("Witnesses of withdrawal request already in use");
       }
       witness.inputType = ccc.hexFrom(ccc.numLeToBytes(headerIndex, 8));
@@ -307,49 +294,13 @@ export class DaoManager implements ScriptDeps {
   }
 
   /**
-   * Async generator that finds and yields DAO deposit cells for the specified lock scripts.
+   * Finds DAO deposit cells for the given locks.
    *
-   * @param client
-   *   A CKB client instance that implements:
-   *   - `findCells(query, order, pageSize)`     — cached searches
-   *   - `findCellsOnChain(query, order, pageSize)` — direct on-chain searches
-   *
-   * @param locks
-   *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
-   *   one of these scripts will be considered.
-   *
-   * @param options
-   *   Optional parameters to refine the search:
-   *   - `tip?: ClientBlockHeader`
-   *       Reference block header for epoch and block-number lookups.
-   *       Defaults to `await client.getTipHeader()`.
-   *   - `onChain?: boolean`
-   *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
-   *       Default: `false`.
-   *   - `minLockUp?: ccc.Epoch`
-   *       Minimum lock-up period required (in epochs).
-   *       Defaults to the manager’s configured minimum (≈10 minutes).
-   *   - `maxLockUp?: ccc.Epoch`
-   *       Maximum lock-up period allowed (in epochs).
-   *       Defaults to the manager’s configured maximum (≈3 days).
-   *   - `pageSize?: number`
-   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
-   *
-   * @yields
-   *   {@link DaoDepositCell} objects representing deposit cells.
-   *
-   * @remarks
-   * - Deduplicates `locks` via `unique(locks)`.
-   * - Applies an RPC filter with:
-   *     • `script: this.script` (DAO type script)
-   *     • `outputData: DaoManager.depositData()` (deposit flag)
-   *     • `outputDataSearchMode: "exact"`
-   * - Skips any cell that:
-   *     1. Fails `this.isDeposit(cell)`
-   *     2. Has a non-matching lock script
-   * - Each yielded `DaoDepositCell` is constructed via `depositCellFrom(...)`.
+   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
+   * `minLockUp` and `maxLockUp` override deposit readiness windows.
+   * @remarks The transaction cache is shared across the scan so deposit conversions reuse transaction-header reads.
    */
-  async *findDeposits(
+  public async *findDeposits(
     client: ccc.Client,
     locks: ccc.Script[],
     options?: {
@@ -380,20 +331,23 @@ export class DaoManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const depositCandidates = (await collectPagedScan(
-        (pageSize) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, pageSize)
-          : client.findCells(...findCellsArgs, pageSize),
-        { pageSize },
-      )).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
+      const depositCandidates = (
+        await collectPagedScan(
+          (scanPageSize) =>
+            options?.onChain === true
+              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
+              : client.findCells(...findCellsArgs, scanPageSize),
+          { pageSize },
+        )
+      ).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
 
       const deposits = await Promise.all(
-        depositCandidates.map((cell) =>
+        depositCandidates.map(async (cell) =>
           this.depositCellFrom(cell, client, {
-            minLockUp: options?.minLockUp,
-            maxLockUp: options?.maxLockUp,
             tip,
             transactionCache,
+            ...(options?.minLockUp === undefined ? {} : { minLockUp: options.minLockUp }),
+            ...(options?.maxLockUp === undefined ? {} : { maxLockUp: options.maxLockUp }),
           }),
         ),
       );
@@ -404,42 +358,12 @@ export class DaoManager implements ScriptDeps {
   }
 
   /**
-   * Async generator that finds and yields DAO withdrawal‐request cells
-   * for the specified lock scripts.
+   * Finds DAO withdrawal request cells for the given locks.
    *
-   * @param client
-   *   A CKB client instance that implements:
-   *   - `findCells(query, order, pageSize)`     — cached searches
-   *   - `findCellsOnChain(query, order, pageSize)` — direct on-chain searches
-   *
-   * @param locks
-   *   An array of lock scripts. Only cells whose `cellOutput.lock` exactly matches
-   *   one of these scripts will be considered.
-   *
-   * @param options
-   *   Optional parameters to refine the search:
-   *   - `tip?: ClientBlockHeader`
-   *       Reference block header for epoch and block-number lookups.
-   *       Defaults to `await client.getTipHeader()`.
-   *   - `onChain?: boolean`
-   *       If `true`, uses `findCellsOnChain`; otherwise, uses `findCells`.
-   *       Default: `false`.
-   *   - `pageSize?: number`
-   *       Cell query page size per lock script. Defaults to `defaultCellPageSize` (400).
-   *
-   * @yields
-   *   {@link DaoWithdrawalRequestCell} objects representing withdrawal request cells.
-   *
-   * @remarks
-   * - Deduplicates `locks` via `unique(locks)`.
-   * - Applies an RPC filter with:
-   *     • `script: this.script` (DAO type script)
-   * - Skips any cell that:
-   *     1. Fails `this.isWithdrawalRequest(cell)`
-   *     2. Has a non-matching lock script
-   * - Each yielded `DaoWithdrawalRequestCell` is constructed via `withdrawalRequestCellFrom(...)`.
+   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
+   * @remarks Header and transaction caches are shared across the scan so withdrawal conversions reuse DAO reads.
    */
-  async *findWithdrawalRequests(
+  public async *findWithdrawalRequests(
     client: ccc.Client,
     locks: ccc.Script[],
     options?: {
@@ -467,15 +391,18 @@ export class DaoManager implements ScriptDeps {
         "asc",
       ] as const;
 
-      const withdrawalCandidates = (await collectPagedScan(
-        (pageSize) => options?.onChain
-          ? client.findCellsOnChain(...findCellsArgs, pageSize)
-          : client.findCells(...findCellsArgs, pageSize),
-        { pageSize },
-      )).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
+      const withdrawalCandidates = (
+        await collectPagedScan(
+          (scanPageSize) =>
+            options?.onChain === true
+              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
+              : client.findCells(...findCellsArgs, scanPageSize),
+          { pageSize },
+        )
+      ).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
 
       const withdrawals = await Promise.all(
-        withdrawalCandidates.map((cell) =>
+        withdrawalCandidates.map(async (cell) =>
           this.withdrawalRequestCellFrom(cell, client, {
             tip,
             headerCache,
@@ -488,4 +415,88 @@ export class DaoManager implements ScriptDeps {
       }
     }
   }
+
+  private assertDepositReadyForWithdrawalRequest(deposit: DaoDepositCell): void {
+    const outPoint = deposit.cell.outPoint.toHex();
+    if (!this.isDeposit(deposit.cell)) {
+      throw new Error(`DAO deposit ${outPoint} does not match this DAO script`);
+    }
+    const depositTxHash = deposit.headers[0].txHash;
+    if (depositTxHash !== deposit.cell.outPoint.txHash) {
+      throw new Error(
+        `DAO deposit ${outPoint} header txHash ${String(depositTxHash)} does not match cell txHash ${deposit.cell.outPoint.txHash}`,
+      );
+    }
+  }
+
+  private assertWithdrawalRequestReadyForWithdrawal(
+    withdrawalRequest: DaoWithdrawalRequestCell,
+  ): void {
+    const outPoint = withdrawalRequest.cell.outPoint.toHex();
+    if (!this.isWithdrawalRequest(withdrawalRequest.cell)) {
+      throw new Error(
+        `DAO withdrawal request ${outPoint} does not match this DAO script`,
+      );
+    }
+    const requestTxHash = withdrawalRequest.headers[1].txHash;
+    if (requestTxHash !== withdrawalRequest.cell.outPoint.txHash) {
+      throw new Error(
+        `DAO withdrawal request ${outPoint} header txHash ${String(requestTxHash)} does not match cell txHash ${withdrawalRequest.cell.outPoint.txHash}`,
+      );
+    }
+    let depositBlockNumber: ccc.Num;
+    try {
+      depositBlockNumber = mol.Uint64LE.decode(withdrawalRequest.cell.outputData);
+    } catch (error) {
+      throw new Error(
+        `Invalid DAO withdrawal request payload at ${outPoint}: ${withdrawalRequest.cell.outputData}`,
+        { cause: error },
+      );
+    }
+    if (depositBlockNumber !== withdrawalRequest.headers[0].header.number) {
+      throw new Error(
+        `DAO withdrawal request ${outPoint} deposit block ${String(depositBlockNumber)} does not match header block ${String(withdrawalRequest.headers[0].header.number)}`,
+      );
+    }
+  }
+}
+
+function assertUniqueUnspentInputs(
+  tx: ccc.Transaction,
+  outPoints: ccc.OutPoint[],
+  label: string,
+): void {
+  const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  const selected = new Set<string>();
+  for (const outPoint of outPoints) {
+    const key = outPoint.toHex();
+    if (selected.has(key)) {
+      throw new Error(`${label} ${key} is duplicated`);
+    }
+    selected.add(key);
+    if (spent.has(key)) {
+      throw new Error(`${label} ${key} is already being spent`);
+    }
+  }
+}
+
+async function cellFromLike(
+  cellLike: ccc.Cell | ccc.OutPoint,
+  client: ccc.Client,
+): Promise<ccc.Cell> {
+  if (!(cellLike instanceof ccc.OutPoint)) {
+    return cellLike;
+  }
+  let cell: ccc.Cell | undefined;
+  try {
+    cell = await client.getCell(cellLike);
+  } catch (error) {
+    throw new Error(`Failed to load cell for out point ${cellLike.toHex()}`, {
+      cause: error,
+    });
+  }
+  if (cell === undefined) {
+    throw new Error(`Cell not found for out point ${cellLike.toHex()}`);
+  }
+  return cell;
 }

@@ -336,7 +336,6 @@ test("supervisor loop prebuilds runtime before launching supervisor", async () =
 
     assert.equal(exitCode, INSPECTION_REQUIRED_EXIT_CODE);
     assert.deepEqual(commands.map((item) => [item.command, ...item.args]), [
-      ["pnpm", "forks:ccc"],
       ["pnpm", "bot:build"],
       ["pnpm", "--filter", "@ickb/tester", "build"],
       ["pnpm", "--filter", "@ickb/supervisor", "build"],
@@ -345,7 +344,7 @@ test("supervisor loop prebuilds runtime before launching supervisor", async () =
     for (const command of commands) {
       assert.equal(command.options.env.PRIVATE_KEY, undefined);
     }
-    for (const command of commands.slice(0, 4)) {
+    for (const command of commands.slice(0, 3)) {
       assert.equal(command.options.stdio, "ignore");
       assert.equal(command.options.timeout, DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE * 1000);
       assert.equal(command.options.killSignal, "SIGTERM");
@@ -379,8 +378,8 @@ test("supervisor loop reports prebuild failures without child output", async () 
 
   assert.equal(exitCode, 1);
   assert.match(output.text, /loop prebuild_failed/u);
-  assert.match(output.text, /target=ccc/u);
-  assert.match(output.text, /command=pnpm_forks:ccc/u);
+  assert.match(output.text, /target=bot/u);
+  assert.match(output.text, /command=pnpm_bot:build/u);
   assert.doesNotMatch(output.text, /privateKey|0x1111|operator secret|0x2222/u);
 });
 
