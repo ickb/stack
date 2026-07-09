@@ -40,8 +40,10 @@ export function findBestAtOrBelow(
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- mid is inside the current binary-search bounds.
-    const item = items[mid]!;
+    const item = items[mid];
+    if (item === undefined) {
+      throw new Error(`Prepared selection ${String(mid)} is missing`);
+    }
 
     if (item.total <= limit) {
       best = item.selection;
@@ -85,8 +87,11 @@ export function selectByMasks<T>(items: readonly T[], mask: number): T[] {
   const selected: T[] = [];
   for (let i = 0; i < items.length; i += 1) {
     if ((mask & (1 << i)) !== 0) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- masks are generated from the same dense item array.
-      selected.push(items[i]!);
+      const item = items[i];
+      if (item === undefined) {
+        throw new Error(`Selection mask referenced missing item at index ${String(i)}`);
+      }
+      selected.push(item);
     }
   }
   return selected;

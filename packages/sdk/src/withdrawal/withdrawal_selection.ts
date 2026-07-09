@@ -201,8 +201,13 @@ function selectionKey<T>(
 ): string {
   return (
     items
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selections are built from the indexed readyDeposits array.
-      .map((item) => String(indexByItem.get(item)!))
+      .map((item) => {
+        const index = indexByItem.get(item);
+        if (index === undefined) {
+          throw new Error("Selection item is missing from the ready deposit index");
+        }
+        return String(index);
+      })
       .toSorted((left, right) => left.localeCompare(right))
       .join(",")
   );

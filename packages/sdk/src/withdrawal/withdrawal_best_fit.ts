@@ -122,14 +122,19 @@ function enumeratePartialSelections<T extends { udtValue: bigint }>(
     ]
   ): void => {
     if (index === items.length) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- count ranges from 0 to items.length.
-      groups[count]!.push({ mask, total, score });
+      const group = groups[count];
+      if (group === undefined) {
+        throw new Error(`Partial selection group ${String(count)} is missing`);
+      }
+      group.push({ mask, total, score });
       return;
     }
 
     search(index + 1, mask, count, total, score);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- index is checked against items.length above.
-    const item = items[index]!;
+    const item = items[index];
+    if (item === undefined) {
+      throw new Error(`Withdrawal item ${String(index)} is missing`);
+    }
     search(
       index + 1,
       mask | (1 << index),

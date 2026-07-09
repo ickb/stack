@@ -48,8 +48,11 @@ export function ringSegments<T extends WithdrawalDepositCandidate = IckbDepositC
   }));
 
   for (const deposit of poolDeposits) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringSegmentIndex returns 0 <= index < segmentCount.
-    const segment = segments[ringSegmentIndex(deposit.maturity, segmentCount)]!;
+    const segmentIndex = ringSegmentIndex(deposit.maturity, segmentCount);
+    const segment = segments[segmentIndex];
+    if (segment === undefined) {
+      throw new Error(`Missing withdrawal ring segment at index ${String(segmentIndex)}`);
+    }
     segment.deposits.push(deposit);
     segment.udtValue += deposit.udtValue;
   }
