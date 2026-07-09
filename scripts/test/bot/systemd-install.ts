@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import type { Stats } from "node:fs";
 import {
   chmod as fsChmod,
@@ -15,46 +14,68 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const { join } = path;
-const rootDir = fileURLToPath(new URL("../../..", import.meta.url));
-const installScript = join(rootDir, "scripts", "ickb-bot-systemd-install.sh");
-const bashPath = "/usr/bin/bash";
+import { botServiceUnitText } from "../../bot/systemd-install.ts";
+import {
+  parsePositiveSafeInteger,
+  requireNode22_19,
+  safeInstallDirectory,
+} from "../../bot/systemd-support.ts";
 
-void test("systemd install units run the source bot through the file-log launcher", async () => {
-  const text = await readInstallScript();
+const rootDir = fileURLToPath(new URL("../../..", import.meta.url));
+const installWrapper = joinPath(rootDir, "scripts", "ickb-bot-systemd-install.sh");
+const installEntrypoint = joinPath(rootDir, "scripts", "bot", "systemd-install.ts");
+
+void test("systemd install wrapper delegates to the Node-owned entrypoint", async () => {
+  const text = await readText(installWrapper);
+
+  assert.match(text, /bot\/systemd-install\.ts/u);
+  assert.doesNotMatch(text, /require_systemd_safe_positive_integer/u);
+});
+
+void test("systemd install units run the source bot through the file-log launcher", () => {
+  const text = botServiceUnitText({
+    deployDir: "/srv/ickb-stack",
+    logStorageQuotaBytes: 1000,
+    network: "testnet",
+  });
 
   assert.match(
     text,
     /ExecStart=\/usr\/bin\/node scripts\/bot\/launcher\.ts --no-child-tee/u,
   );
   assert.doesNotMatch(text, /ExecStart=\/usr\/bin\/node apps\/bot\/src\/index\.ts/u);
-  assert.match(text, /Environment=BOT_CONFIG_FILE=%d\/\$\{credential_name\}/u);
-  assert.match(text, /LoadCredentialEncrypted=\$\{credential_name\}:\$\{credential\}/u);
+  assert.match(
+    text,
+    /Environment=BOT_CONFIG_FILE=%d\/ickb-bot-testnet-config\.json ICKB_BOT_LOG_STORAGE_QUOTA_BYTES=1000/u,
+  );
+  assert.match(
+    text,
+    /LoadCredentialEncrypted=ickb-bot-testnet-config\.json:\/etc\/ickb\/credentials\/ickb-bot-testnet-config\.cred/u,
+  );
   assert.match(text, /RestartSec=60/u);
   assert.match(text, /RestartPreventExitStatus=2/u);
   assert.match(text, /LimitCORE=0/u);
   assert.match(text, /ProtectSystem=strict/u);
-  assert.match(text, /ReadWritePaths=\$\{log_root_path\}/u);
+  assert.match(text, /ReadWritePaths=\/srv\/ickb-stack\/log/u);
 });
 
 void test("systemd install script requires Node 22.19 for source units", async () => {
-  const text = await readInstallScript();
+  const text = await readText(installEntrypoint);
 
-  assert.match(text, /Node\.js >=22\.19\.0/u);
-  assert.match(text, /minor >= 19/u);
+  assert.match(text, /requireNode22_19/u);
   assert.doesNotMatch(text, /Node\.js >=22 is required/u);
 });
 
 void test("systemd install node version helper rejects early Node 22", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "ickb-node-version-"));
+  const dir = await mkdtemp(joinPath(tmpdir(), "ickb-node-version-"));
   try {
-    const fakeNode = join(dir, "node");
+    const fakeNode = joinPath(dir, "node");
     await writeText(
       fakeNode,
       `#!/usr/bin/env bash
 version=\${FAKE_NODE_VERSION:?}
 if [[ \${1:-} == --version ]]; then
-  printf 'v%s\\n' "\${version}"
+  printf 'v%s\n' "\${version}"
   exit 0
 fi
 IFS=. read -r major minor _ <<<"\${version}"
@@ -66,28 +87,34 @@ exit 1
     );
     await chmodPath(fakeNode, 0o755);
 
-    assert.equal(requireNodeVersion(fakeNode, "22.18.0").status, 1);
-    assert.equal(requireNodeVersion(fakeNode, "22.19.0").status, 0);
-    assert.equal(requireNodeVersion(fakeNode, "23.0.0").status, 0);
+    assert.throws(() => {
+      requireNodeVersion(fakeNode, "22.18.0");
+    }, /v22\.18\.0/u);
+    assert.doesNotThrow(() => {
+      requireNodeVersion(fakeNode, "22.19.0");
+    });
+    assert.doesNotThrow(() => {
+      requireNodeVersion(fakeNode, "23.0.0");
+    });
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
 });
 
-void test("systemd install script uses the invoking checkout as deployment root", async () => {
-  const text = await readInstallScript();
+void test("systemd install units use the invoking checkout as deployment root", () => {
+  const text = botServiceUnitText({ deployDir: "/srv/deploy", network: "mainnet" });
 
-  assert.match(text, /deploy_dir=\$\(pwd -P\)/u);
-  assert.match(text, /log_root_path="\$\{deploy_dir\}\/log"/u);
+  assert.match(text, /WorkingDirectory=\/srv\/deploy/u);
+  assert.match(text, /ReadWritePaths=\/srv\/deploy\/log/u);
   assert.doesNotMatch(text, /\/opt\/ickb-stack-/u);
   assert.doesNotMatch(text, /\/var\/log/u);
   assert.doesNotMatch(text, /logs\/live-supervisor/u);
 });
 
-void test("systemd install script keeps generated units on the checkout-local log root", async () => {
-  const text = await readInstallScript();
+void test("systemd install script keeps generated units on the checkout-local log root", () => {
+  const text = botServiceUnitText({ deployDir: "/srv/deploy", network: "testnet" });
 
-  assert.match(text, /log_root_path="\$\{deploy_dir\}\/log"/u);
+  assert.match(text, /ReadWritePaths=\/srv\/deploy\/log/u);
   assert.match(
     text,
     /ExecStart=\/usr\/bin\/node scripts\/bot\/launcher\.ts --no-child-tee/u,
@@ -98,44 +125,57 @@ void test("systemd install script keeps generated units on the checkout-local lo
 });
 
 void test("systemd install script validates optional log storage quota", () => {
-  assert.equal(
-    validatePositiveInteger("ICKB_BOT_LOG_STORAGE_QUOTA_BYTES", "1000").status,
-    0,
-  );
+  assert.equal(parsePositiveSafeInteger("ICKB_BOT_LOG_STORAGE_QUOTA_BYTES", "1000"), 1000);
   for (const value of ["", "0", "abc", "9007199254740993"]) {
-    const invalid = validatePositiveInteger("ICKB_BOT_LOG_STORAGE_QUOTA_BYTES", value);
-    assert.equal(invalid.status, 1, value);
-    assert.match(invalid.stderr, /positive safe integer/u);
+    assert.throws(
+      () => parsePositiveSafeInteger("ICKB_BOT_LOG_STORAGE_QUOTA_BYTES", value),
+      /positive safe integer/u,
+      value,
+    );
   }
 });
 
 void test("systemd install script creates log dirs without following symlinks", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "ickb-bot-systemd-install-"));
+  const dir = await mkdtemp(joinPath(tmpdir(), "ickb-bot-systemd-install-"));
   try {
-    const uid = String(process.getuid?.() ?? 0);
-    const gid = String(process.getgid?.() ?? 0);
-    const createdPath = join(dir, "log", "bot");
-    const created = safeInstallDirectory(createdPath, "700", uid, gid);
-    assert.equal(created.status, 0, created.stderr);
+    const uid = process.getuid?.() ?? 0;
+    const gid = process.getgid?.() ?? 0;
+    const createdPath = joinPath(dir, "log", "bot");
+    safeInstallDirectory(createdPath, 0o700, uid, gid);
     assert.equal(await pathMode(createdPath), 0o700);
 
-    const linkPath = join(dir, "link");
+    const linkPath = joinPath(dir, "link");
     await linkSymbolic(dir, linkPath, "dir");
-    const refused = safeInstallDirectory(join(linkPath, "bot"), "755", uid, gid);
-    assert.equal(refused.status, 1);
-    assert.match(refused.stderr, /Refusing symlinked directory path/u);
+    assert.throws(
+      () => {
+        safeInstallDirectory(joinPath(linkPath, "bot"), 0o755, uid, gid);
+      },
+      /Refusing symlinked directory path/u,
+    );
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
 });
 
-async function readInstallScript(): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test reads the fixed systemd install helper script under the repository root.
-  return fsReadFile(installScript, "utf8");
+function requireNodeVersion(nodePath: string, version: string): void {
+  const previousVersion = process.env["FAKE_NODE_VERSION"];
+  process.env["FAKE_NODE_VERSION"] = version;
+  try {
+    requireNode22_19(nodePath, "test");
+  } finally {
+    if (previousVersion === undefined) {
+      delete process.env["FAKE_NODE_VERSION"];
+    } else {
+      process.env["FAKE_NODE_VERSION"] = previousVersion;
+    }
+  }
+}
+
+async function readText(filePath: string): Promise<string> {
+  return fsReadFile(filePath, "utf8");
 }
 
 async function chmodPath(filePath: string, mode: number): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test modifies files inside its own temporary fixture directory.
   await fsChmod(filePath, mode);
 }
 
@@ -144,12 +184,10 @@ async function linkSymbolic(
   linkPath: string,
   type: "dir" | "file" | "junction",
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Symlink tests intentionally create links inside their temp directory.
   await fsSymlink(target, linkPath, type);
 }
 
 async function statPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test stats paths inside its own temporary fixture directory.
   return fsStat(filePath);
 }
 
@@ -158,58 +196,9 @@ async function pathMode(filePath: string): Promise<number> {
 }
 
 async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test writes files inside its own temporary fixture directory.
   await fsWriteFile(filePath, data);
 }
 
-function validatePositiveInteger(name: string, value: string): SpawnSyncReturns<string> {
-  return spawnSync(
-    bashPath,
-    [
-      "-c",
-      'source "$1"; require_systemd_safe_positive_integer "$2" "$3"',
-      "bash",
-      installScript,
-      name,
-      value,
-    ],
-    {
-      cwd: rootDir,
-      encoding: "utf8",
-    },
-  );
-}
-
-function requireNodeVersion(nodePath: string, version: string): SpawnSyncReturns<string> {
-  return spawnSync(
-    bashPath,
-    ["-c", 'source "$1"; require_node_22_19 "$2" test', "bash", installScript, nodePath],
-    {
-      cwd: rootDir,
-      encoding: "utf8",
-      env: { ...process.env, FAKE_NODE_VERSION: version },
-    },
-  );
-}
-
-function safeInstallDirectory(
-  directory: string,
-  mode: string,
-  uid: string,
-  gid: string,
-): SpawnSyncReturns<string> {
-  return spawnSync(
-    bashPath,
-    [
-      "-c",
-      'source "$1"; safe_install_directory "$2" "$3" "$4" "$5"',
-      "bash",
-      installScript,
-      directory,
-      mode,
-      uid,
-      gid,
-    ],
-    { cwd: rootDir, encoding: "utf8" },
-  );
+function joinPath(...segments: string[]): string {
+  return path.join(...segments);
 }
