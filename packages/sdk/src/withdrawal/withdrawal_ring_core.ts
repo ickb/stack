@@ -48,10 +48,10 @@ export function ringSegments<T extends WithdrawalDepositCandidate = IckbDepositC
   }));
 
   for (const deposit of poolDeposits) {
-    const index = ringSegmentIndex(deposit.maturity, segmentCount);
-    const segment = segments[index];
+    const segmentIndex = ringSegmentIndex(deposit.maturity, segmentCount);
+    const segment = segments[segmentIndex];
     if (segment === undefined) {
-      throw new Error(`Ring segment ${String(index)} is missing`);
+      throw new Error(`Missing withdrawal ring segment at index ${String(segmentIndex)}`);
     }
     segment.deposits.push(deposit);
     segment.udtValue += deposit.udtValue;

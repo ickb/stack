@@ -9,11 +9,6 @@ import { byte32FromByte } from "./bytes.ts";
 
 export { byte32FromByte } from "./bytes.ts";
 
-/** Creates a 32-byte hash fixture by repeating one byte. */
-export function hash(hexByte: string): `0x${string}` {
-  return byte32FromByte(hexByte);
-}
-
 type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
   (...args: never[]) => unknown

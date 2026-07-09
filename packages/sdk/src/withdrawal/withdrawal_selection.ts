@@ -199,14 +199,16 @@ function selectionKey<T>(
   items: readonly T[],
   indexByItem: ReadonlyMap<T, number>,
 ): string {
-  return items
-    .map((item) => {
-      const index = indexByItem.get(item);
-      if (index === undefined) {
-        throw new Error("Selection item index is missing");
-      }
-      return String(index);
-    })
-    .toSorted((left, right) => left.localeCompare(right))
-    .join(",");
+  return (
+    items
+      .map((item) => {
+        const index = indexByItem.get(item);
+        if (index === undefined) {
+          throw new Error("Selection item is missing from the ready deposit index");
+        }
+        return String(index);
+      })
+      .toSorted((left, right) => left.localeCompare(right))
+      .join(",")
+  );
 }

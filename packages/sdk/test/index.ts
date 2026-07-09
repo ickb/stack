@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { errorOf } from "../src/client/sdk_error.ts";
 import * as sdk from "../src/index.ts";
 import {
   nativeUdtCell,
@@ -27,5 +28,22 @@ describe("sdk package barrel", () => {
       ickbNative: 7n,
       ickbAvailable: 7n,
     });
+  });
+
+  it("preserves transparent error causes and JSON-safe messages", () => {
+    const message = "plain failure";
+    const thrown = {
+      amount: 42n,
+      validDate: new Date("2026-01-02T03:04:05.000Z"),
+      invalidDate: new Date(NaN),
+    };
+    const error = errorOf(thrown);
+
+    expect(errorOf(message).message).toBe(message);
+    expect(errorOf(message).cause).toBe(message);
+    expect(error.message).toBe(
+      '{"amount":"42","validDate":"2026-01-02T03:04:05.000Z","invalidDate":null}',
+    );
+    expect(error.cause).toBe(thrown);
   });
 });

@@ -26,19 +26,20 @@ Current stack flows assume user-owned cells are protected by locks whose signatu
 
 Apps:
 
-- `apps/bot`: Node order-fulfillment and rebalance bot for matching profitable orders, collecting owned orders, completing receipts and withdrawals, and rebalancing pool exposure.
+- `apps/bot`: Private Node CLI adapter for the bot runtime package.
 - `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
 - `apps/sampler`: Mainnet sampling utility that writes historical iCKB exchange-rate CSV output.
 - `apps/supervisor`: Deterministic live testnet supervisor for bounded bot/tester stress cycles, ignored artifacts, and incident bundles.
 - `apps/tester`: Node simulator that creates random conversion orders to exercise the order and conversion flows.
 
-The Node app packages (`@ickb/bot`, `@ickb/sampler`, and `@ickb/tester`) publish their built entrypoints for distribution, but the supported reusable API surface lives in the packages below. `@ickb/interface` is a deployable browser app package and does not expose a library entrypoint.
+The Node app packages (`@ickb/sampler` and `@ickb/tester`) publish their built entrypoints for distribution, while `apps/bot` runs source through its private `@ickb/bot-cli` package. `@ickb/interface` is a deployable browser app package and does not expose a library entrypoint.
 
 Packages:
 
 - `packages/core`: iCKB protocol primitives, cells, UDT conversion helpers, and low-level transaction builders.
 - `packages/dao`: Nervos DAO cell classification, readiness, deposit, request, and withdrawal helpers.
 - `packages/node-utils`: Private Node app utilities for env parsing, RPC client setup, signer locks, sleeps, and JSON logs.
+- `packages/bot`: Private bot runtime, policy, observability, and transaction planning package.
 - `packages/order`: UDT limit-order entities, grouping, matching, minting, melting, and deployed-script confusion mitigation.
 - `packages/sdk`: Stack-level SDK that composes core, DAO, and order packages into account state, conversion planning, completion, sending, and confirmation helpers.
 - `packages/testkit`: Private test helpers and fixtures for workspace tests.

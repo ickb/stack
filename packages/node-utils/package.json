@@ -24,20 +24,18 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "main": "dist/index.js",
+  "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "import": "./dist/index.js"
+      "import": "./src/index.ts"
     }
   },
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "rm -fr dist && tsgo -p tsconfig.build.json && node ../../scripts/tooling/build/rewrite-dts-imports.ts dist",
-    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 packages/node-utils/src packages/node-utils/test",
-    "clean": "rm -fr dist"
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 packages/node-utils/src packages/node-utils/test"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",

@@ -16,9 +16,7 @@ import type {
  *
  * @public
  */
-export class IckbSdkBase {
-  protected constructor() {}
-
+export abstract class IckbSdkBase {
   /**
    * Completes iCKB/xUDT inputs and transaction fees for a partial transaction.
    *

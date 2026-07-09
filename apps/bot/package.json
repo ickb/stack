@@ -1,5 +1,5 @@
 {
-  "name": "@ickb/bot",
+  "name": "@ickb/bot-cli",
   "version": "1001.0.0",
   "description": "CCC-native iCKB order fulfillment and rebalance bot",
   "keywords": [
@@ -18,43 +18,26 @@
   "bugs": {
     "url": "https://github.com/ickb/stack/issues"
   },
-  "sideEffects": false,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
   },
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "pnpm clean && tsc -p tsconfig.build.json",
-    "lint": "eslint ./src",
-    "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules",
-    "start": "[ -n \"$BOT_CONFIG_FILE\" ] || { echo 'BOT_CONFIG_FILE not set' >&2; exit 1; }; bash -o pipefail -c 'node dist/index.js | tee \"log_$(date +%F_%H-%M-%S).json\"'",
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 apps/bot/src apps/bot/test",
+    "start": "[ -n \"$BOT_CONFIG_FILE\" ] || { echo 'BOT_CONFIG_FILE not set' >&2; exit 1; }; bash -o pipefail -c 'node src/index.ts | tee \"log_$(date +%F_%H-%M-%S).json\"'",
     "start:loop": "while true; do pnpm start; status=$?; [ \"$status\" -ne 0 ] || exit 0; [ \"$status\" -ne 2 ] || exit 2; sleep 10; done"
   },
-  "files": [
-    "docs",
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "devDependencies": {
+    "@ickb/testkit": "workspace:*",
     "@types/node": "catalog:"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/core": "workspace:*",
+    "@ickb/bot": "workspace:*",
     "@ickb/node-utils": "workspace:*",
-    "@ickb/order": "workspace:*",
-    "@ickb/sdk": "workspace:*",
-    "@ickb/utils": "workspace:*"
+    "@ickb/sdk": "workspace:*"
   }
 }
