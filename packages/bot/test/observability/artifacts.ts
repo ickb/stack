@@ -50,12 +50,15 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     const artifactRoot = await mkdtemp(path.join(tmpdir(), artifactTempPrefix));
     try {
       const ref = await writeArtifact(artifactRoot, artifactKind, {
-        ring: { rows: [[{ totalPoolUdt: 1n }]] },
+        ring: {
+          summary: { z: 2, a: 1 },
+          rows: [[{ totalPoolUdt: 1n, nested: { z: 2, a: 1 } }]],
+        },
       });
       const hash = ref.hash.slice("sha256:".length);
 
       await expect(readArtifactFile(artifactFilePath(artifactRoot, hash))).resolves.toBe(
-        '{"kind":"bot.ringSegments","ring":{"rows":[[{"totalPoolUdt":"1"}]]},"version":1}\n',
+        '{"kind":"bot.ringSegments","ring":{"rows":[[{"nested":{"a":1,"z":2},"totalPoolUdt":"1"}]],"summary":{"a":1,"z":2}},"version":1}\n',
       );
     } finally {
       await rm(artifactRoot, { force: true, recursive: true });

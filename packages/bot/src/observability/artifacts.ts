@@ -85,29 +85,21 @@ function publicRingSegment({
 
 function canonicalJson(value: unknown): string {
   const logged = logValue(value, new Set<unknown>());
-  return JSON.stringify(logged, sortedJsonKeys(logged));
+  return JSON.stringify(sortJsonValue(logged));
 }
 
-function sortedJsonKeys(value: unknown): string[] {
-  const keys = new Set<string>();
-  collectJsonKeys(value, keys);
-  return [...keys].toSorted((left, right) => left.localeCompare(right));
-}
-
-function collectJsonKeys(value: unknown, keys: Set<string>): void {
+function sortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
-    for (const entry of value) {
-      collectJsonKeys(entry, keys);
-    }
-    return;
+    return value.map(sortJsonValue);
   }
   if (typeof value !== "object" || value === null) {
-    return;
+    return value;
   }
-  for (const [key, entry] of Object.entries(value)) {
-    keys.add(key);
-    collectJsonKeys(entry, keys);
-  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, sortJsonValue(entry)]),
+  );
 }
 
 function artifactKindDirectory(kind: string): string {
