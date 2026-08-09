@@ -11,10 +11,6 @@ import { IckbUdt } from "../../../src/udt.ts";
 
 export const LOGIC_MANAGER_DEPOSIT_SUITE = "LogicManager.deposit";
 
-export function testClient(): ccc.Client {
-  return new StubClient();
-}
-
 export function noCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
   return cellsOf([]);
 }

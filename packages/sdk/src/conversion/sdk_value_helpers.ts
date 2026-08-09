@@ -84,6 +84,16 @@ export function poolDepositCkb(
   return { ready, maturing };
 }
 
+export function readyPoolDeposits(
+  poolDeposits: PoolDepositState,
+  tip: ccc.ClientBlockHeader,
+): IckbDepositCell[] {
+  return sortDepositsByMaturity(
+    poolDeposits.deposits.filter((deposit) => deposit.isReady),
+    tip,
+  );
+}
+
 export function addBotCkb(
   botCkb: Map<string, ccc.FixedPoint>,
   key: string,
@@ -139,14 +149,10 @@ export function sortDepositsByMaturity(
   );
 }
 
-export function normalizeCountLimit(limit: number): number {
-  return Number.isSafeInteger(limit) && limit > 0 ? limit : 0;
-}
-
-export function sumUdtValue(deposits: readonly IckbDepositCell[]): bigint {
+export function sumUdtValue(values: ReadonlyArray<{ udtValue: bigint }>): bigint {
   let total = 0n;
-  for (const deposit of deposits) {
-    total += deposit.udtValue;
+  for (const value of values) {
+    total += value.udtValue;
   }
   return total;
 }

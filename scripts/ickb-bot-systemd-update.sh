@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+readonly RELEASES_TO_KEEP=3
+readonly DEFAULT_READINESS_TIMEOUT_SECONDS=120
+readonly MAX_READINESS_TIMEOUT_SECONDS=600
+
 usage() {
-  printf 'Usage: %s <testnet|mainnet>\n' "${0##*/}" >&2
+  printf 'Usage: %s <testnet|mainnet> <revision>\n' "${0##*/}" >&2
+  printf 'Revision must name a commit, tag, or branch available from the deployed checkout origin.\n' >&2
+}
+
+deployment_root() {
+  printf '/opt/ickb-stack-%s\n' "$1"
+}
+
+require_node_22_19() {
+  local node_bin=$1
+  local context=$2
+  "${node_bin}" -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' || {
+    printf 'Node.js >=22.19.0 is required %s. Found: %s\n' "${context}" "$("${node_bin}" --version)" >&2
+    exit 1
+  }
 }
 
 require_root() {
@@ -14,13 +32,10 @@ require_root() {
 
 require_runtime() {
   if [[ ! -x /usr/bin/node ]]; then
-    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22 there or adjust the unit before updating.\n' >&2
+    printf '/usr/bin/node is required because generated units use that path. Install Node.js >=22.19.0 there before updating.\n' >&2
     exit 1
   fi
-  /usr/bin/node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' || {
-    printf 'Node.js >=22 is required at /usr/bin/node. Found: %s\n' "$(/usr/bin/node --version)" >&2
-    exit 1
-  }
+  require_node_22_19 /usr/bin/node "at /usr/bin/node"
   command -v pnpm >/dev/null || {
     printf 'pnpm is required before updating.\n' >&2
     exit 1
@@ -29,6 +44,37 @@ require_runtime() {
     printf 'git is required before updating.\n' >&2
     exit 1
   }
+  command -v flock >/dev/null || {
+    printf 'flock is required before updating.\n' >&2
+    exit 1
+  }
+}
+
+require_positive_integer() {
+  local name=$1
+  local value=$2
+  [[ ${value} =~ ^[1-9][0-9]*$ ]] || {
+    printf '%s must be a positive integer.\n' "${name}" >&2
+    exit 1
+  }
+}
+
+require_readiness_timeout() {
+  local value=$1
+  require_positive_integer ICKB_BOT_UPDATE_READINESS_TIMEOUT_SECONDS "${value}"
+  if (( value > MAX_READINESS_TIMEOUT_SECONDS )); then
+    printf 'ICKB_BOT_UPDATE_READINESS_TIMEOUT_SECONDS must not exceed %s.\n' "${MAX_READINESS_TIMEOUT_SECONDS}" >&2
+    exit 1
+  fi
+}
+
+require_safe_revision() {
+  local revision=$1
+  if [[ ! ${revision} =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ||
+        ${revision} == *..* || ${revision} == */ || ${revision} == *//* ]]; then
+    printf 'Revision contains unsupported characters or path components.\n' >&2
+    exit 1
+  fi
 }
 
 service_user_home() {
@@ -37,7 +83,7 @@ service_user_home() {
   local user_home
 
   passwd_entry=$(getent passwd "${user}") || {
-    printf 'User %s does not exist. Run bot:install first.\n' "${user}" >&2
+    printf 'User %s does not exist. Run the systemd installer first.\n' "${user}" >&2
     exit 1
   }
   IFS=: read -r _ _ _ _ _ user_home _ <<<"${passwd_entry}"
@@ -52,47 +98,36 @@ run_as_service_user() {
   local user=$1
   local user_home=$2
   shift 2
-
   runuser -u "${user}" -- env HOME="${user_home}" USER="${user}" LOGNAME="${user}" SHELL=/bin/bash "$@"
 }
 
-require_clean_worktree() {
-  local user=$1
-  local user_home=$2
-  local deploy_dir=$3
+unit_directive_value() {
+  local line=$1
+  local expected_key=$2
+  [[ ${line} == *=* ]] || return 1
 
-  if [[ -n $(run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" status --porcelain) ]]; then
-    printf 'Deploy checkout %s has local changes or untracked files; refusing to update.\n' "${deploy_dir}" >&2
-    exit 1
-  fi
+  local key=${line%%=*}
+  local value=${line#*=}
+  key="${key#"${key%%[![:space:]]*}"}"
+  key="${key%"${key##*[![:space:]]}"}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  [[ ${key} == "${expected_key}" ]] || return 1
+  printf '%s\n' "${value}"
 }
 
-require_launcher_unit() {
-  local unit_path=$1
-  local network=$2
-
-  if [[ ! -r ${unit_path} ]]; then
-    printf 'Service unit %s is missing or unreadable. Run scripts/ickb-bot-systemd-install.sh %s first.\n' "${unit_path}" "${network}" >&2
-    exit 1
-  fi
-
-  local unit_text
-  unit_text=$(<"${unit_path}")
-  local credential_name="ickb-bot-${network}-config.json"
-  local credential="/etc/ickb/credentials/ickb-bot-${network}-config.cred"
-  local log_root
-  if ! log_root=$(unit_launcher_log_root "${unit_text}" "${network}"); then
-    printf 'Service unit %s is not wired for production launcher file logging and core-dump hardening. Run scripts/ickb-bot-systemd-install.sh %s before updating.\n' "${unit_path}" "${network}" >&2
-    exit 1
-  fi
-  if ! unit_has_directive "${unit_text}" "Environment" "BOT_CONFIG_FILE=%d/${credential_name}" ||
-     ! unit_has_directive "${unit_text}" "LoadCredentialEncrypted" "${credential_name}:${credential}" ||
-      ! unit_has_directive "${unit_text}" "RestartPreventExitStatus" "2" ||
-      ! unit_has_directive "${unit_text}" "LimitCORE" "0" ||
-      ! unit_has_directive "${unit_text}" "ReadWritePaths" "${log_root}"; then
-    printf 'Service unit %s is not wired for production launcher file logging and core-dump hardening. Run scripts/ickb-bot-systemd-install.sh %s before updating.\n' "${unit_path}" "${network}" >&2
-    exit 1
-  fi
+unit_value_contains_token() {
+  local value=$1
+  local expected=$2
+  local token
+  local -a tokens
+  read -r -a tokens <<<"${value}"
+  for token in "${tokens[@]}"; do
+    token=${token#\"}
+    token=${token%\"}
+    [[ ${token} == "${expected}" ]] && return 0
+  done
+  return 1
 }
 
 unit_has_directive() {
@@ -102,6 +137,8 @@ unit_has_directive() {
   local line
   local value
   local in_service=0
+  local found=0
+  local matched=0
 
   while IFS= read -r line || [[ -n ${line} ]]; do
     line=${line%$'\r'}
@@ -111,77 +148,25 @@ unit_has_directive() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if value=$(unit_directive_value "${line}" "${key}") && unit_value_matches "${key}" "${value}" "${expected}"; then
-      return 0
+    if value=$(unit_directive_value "${line}" "${key}"); then
+      found=$((found + 1))
+      if [[ ${value} == "${expected}" ]]; then
+        matched=$((matched + 1))
+      elif [[ ${key} == Environment ]] && unit_value_contains_token "${value}" "${expected}"; then
+        matched=$((matched + 1))
+      fi
     fi
   done <<<"${unit_text}"
-  return 1
+  [[ ${found} -eq 1 && ${matched} -eq 1 ]]
 }
 
-unit_directive_value() {
-  local line=$1
-  local expected_key=$2
-  if [[ ${line} != *=* ]]; then
-    return 1
-  fi
-
-  local key=${line%%=*}
-  local value=${line#*=}
-  key=$(trim_unit_field "${key}")
-  value=$(trim_unit_field "${value}")
-  if [[ ${key} != "${expected_key}" ]]; then
-    return 1
-  fi
-  printf '%s\n' "${value}"
-}
-
-trim_unit_field() {
-  local value=$1
-  value="${value#"${value%%[![:space:]]*}"}"
-  value="${value%"${value##*[![:space:]]}"}"
-  printf '%s\n' "${value}"
-}
-
-unit_value_matches() {
-  local key=$1
-  local value=$2
-  local expected=$3
-
-  [[ ${value} == "${expected}" ]] && return 0
-  case "${key}" in
-    Environment|ReadWritePaths) unit_value_contains_token "${value}" "${expected}" ;;
-    *) return 1 ;;
-  esac
-}
-
-unit_value_contains_token() {
-  local value=$1
-  local expected=$2
-  local token
-  local quoted
-  local -a tokens
-
-  read -r -a tokens <<<"${value}"
-  for token in "${tokens[@]}"; do
-    if [[ ${token} == '"'*'"' && ${#token} -ge 2 ]]; then
-      quoted=${token#'"'}
-      token=${quoted%'"'}
-    fi
-    [[ ${token} == "${expected}" ]] && return 0
-  done
-  return 1
-}
-
-unit_launcher_log_root() {
+unit_has_environment_name() {
   local unit_text=$1
-  local network=$2
-  local default_log_root="/opt/ickb-stack-${network}/log"
-  local prefix="ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs "
-  local suffix="--network ${network} -- /usr/bin/node apps/bot/dist/index.js"
-  local with_log_root_prefix="${prefix}--log-root "
-  local suffix_with_separator=" ${suffix}"
+  local name=$2
   local line
-  local exec_start
+  local value
+  local token
+  local -a tokens
   local in_service=0
 
   while IFS= read -r line || [[ -n ${line} ]]; do
@@ -192,25 +177,378 @@ unit_launcher_log_root() {
       continue
     fi
     [[ ${in_service} -eq 1 ]] || continue
-    if ! exec_start=$(unit_directive_value "${line}" "ExecStart"); then
-      continue
-    fi
-    if [[ ${exec_start} == "${prefix#ExecStart=}${suffix}" ]]; then
-      printf '%s\n' "${default_log_root}"
-      return 0
-    fi
-    if [[ ${exec_start} == "${with_log_root_prefix#ExecStart=}"*"${suffix_with_separator}" ]]; then
-      local rest=${exec_start#"${with_log_root_prefix#ExecStart=}"}
-      local log_root_length=$(( ${#rest} - ${#suffix_with_separator} ))
-      local log_root=${rest:0:log_root_length}
-      if [[ -n ${log_root} && ${log_root} == /* && ${log_root} != *[[:space:]]* ]]; then
-        printf '%s\n' "${log_root}"
-        return 0
-      fi
-      return 1
-    fi
+    value=$(unit_directive_value "${line}" Environment) || continue
+    read -r -a tokens <<<"${value}"
+    for token in "${tokens[@]}"; do
+      token=${token#\"}
+      token=${token%\"}
+      [[ ${token} == "${name}" || ${token} == "${name}="* ]] && return 0
+    done
   done <<<"${unit_text}"
   return 1
+}
+
+require_launcher_unit() {
+  local unit_path=$1
+  local network=$2
+  local deploy_dir=$3
+  local current_path="${deploy_dir}/current"
+  local log_root="${deploy_dir}/log"
+  local credential_name="ickb-bot-${network}-config.json"
+  local credential="/etc/ickb/credentials/ickb-bot-${network}-config.cred"
+
+  if [[ ! -r ${unit_path} ]]; then
+    printf 'Service unit %s is missing or unreadable. Run the systemd installer first.\n' "${unit_path}" >&2
+    exit 1
+  fi
+  local unit_text
+  unit_text=$(<"${unit_path}")
+  if unit_has_environment_name "${unit_text}" ICKB_BOT_LOG_ROOT ||
+     ! unit_has_directive "${unit_text}" WorkingDirectory "${current_path}" ||
+     ! unit_has_directive "${unit_text}" Environment "BOT_CONFIG_FILE=%d/${credential_name}" ||
+     ! unit_has_directive "${unit_text}" LoadCredentialEncrypted "${credential_name}:${credential}" ||
+     ! unit_has_directive "${unit_text}" ExecStart "/usr/bin/node scripts/bot/launcher.ts --log-root ${log_root} --no-child-tee" ||
+     ! unit_has_directive "${unit_text}" RestartPreventExitStatus 2 ||
+     ! unit_has_directive "${unit_text}" RestartSec 60 ||
+     ! unit_has_directive "${unit_text}" LimitCORE 0 ||
+     ! unit_has_directive "${unit_text}" NoNewPrivileges true ||
+     ! unit_has_directive "${unit_text}" PrivateTmp true ||
+     ! unit_has_directive "${unit_text}" ProtectProc invisible ||
+     ! unit_has_directive "${unit_text}" ProtectSystem strict ||
+     ! unit_has_directive "${unit_text}" ReadWritePaths "${log_root}" ||
+     ! unit_has_directive "${unit_text}" ProtectHome true; then
+    printf 'Service unit %s does not match the safe release layout. Run the systemd installer before updating.\n' "${unit_path}" >&2
+    exit 1
+  fi
+}
+
+require_deployment_layout() {
+  local deploy_dir=$1
+  node - "${deploy_dir}" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = process.argv[2];
+const releases = path.join(root, "releases");
+const current = path.join(root, "current");
+const log = path.join(root, "log");
+for (const candidate of [root, releases, log, path.join(log, "bot")]) {
+  assertRealDirectory(candidate);
+}
+const currentStat = fs.lstatSync(current);
+if (!currentStat.isSymbolicLink()) fail(`${current} must be a symbolic link`);
+const target = fs.readlinkSync(current);
+if (!/^releases\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(target)) {
+  fail(`${current} must point directly to a named release`);
+}
+const release = path.join(root, target);
+assertRealDirectory(release);
+assertRealDirectory(path.join(release, ".git"));
+if (fs.realpathSync(current) !== fs.realpathSync(release)) fail(`${current} has an invalid target`);
+process.stdout.write(`${fs.realpathSync(release)}\n`);
+
+function assertRealDirectory(candidate) {
+  const parsed = path.parse(candidate);
+  let part = parsed.root;
+  for (const name of path.relative(parsed.root, candidate).split(path.sep).filter(Boolean)) {
+    part = path.join(part, name);
+    const stat = fs.lstatSync(part);
+    if (stat.isSymbolicLink()) fail(`Refusing symlinked directory path: ${part}`);
+    if (!stat.isDirectory()) fail(`Directory path is not a directory: ${part}`);
+  }
+}
+function fail(message) {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+}
+NODE
+}
+
+require_clean_release() {
+  local user=$1
+  local user_home=$2
+  local release=$3
+  if [[ -n $(run_as_service_user "${user}" "${user_home}" git -c safe.directory="${release}" -C "${release}" status --porcelain --untracked-files=all) ]]; then
+    printf 'Release %s is not a clean checkout.\n' "${release}" >&2
+    return 1
+  fi
+  run_as_service_user "${user}" "${user_home}" git -c safe.directory="${release}" -C "${release}" diff --check
+}
+
+prepare_release() {
+  local user=$1
+  local user_home=$2
+  local source_release=$3
+  local releases_dir=$4
+  local revision=$5
+  local pnpm_bin=$6
+  local staging=$7
+
+  run_as_service_user "${user}" "${user_home}" mkdir "${staging}"
+  run_as_service_user "${user}" "${user_home}" cp -R "${source_release}/.git" "${staging}/.git"
+  run_as_service_user "${user}" "${user_home}" git -C "${staging}" reset --hard HEAD
+  run_as_service_user "${user}" "${user_home}" git -C "${staging}" clean -ffd
+  run_as_service_user "${user}" "${user_home}" git -C "${staging}" fetch --force --prune origin "${revision}"
+  run_as_service_user "${user}" "${user_home}" git -C "${staging}" checkout --detach --force FETCH_HEAD
+  run_as_service_user "${user}" "${user_home}" git -C "${staging}" clean -ffd
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${staging}" bot:install
+  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${staging}" bot:check
+  require_clean_release "${user}" "${user_home}" "${staging}"
+
+  local commit
+  commit=$(run_as_service_user "${user}" "${user_home}" git -C "${staging}" rev-parse --verify HEAD)
+  [[ ${commit} =~ ^[0-9a-f]{40,64}$ ]] || {
+    printf 'Target revision did not resolve to a full commit ID.\n' >&2
+    return 1
+  }
+  local release_id
+  release_id="$(date -u +%Y%m%dT%H%M%S%N)-${commit:0:12}"
+  local release="${releases_dir}/${release_id}"
+  [[ ! -e ${release} && ! -L ${release} ]] || {
+    printf 'Release path collision: %s\n' "${release}" >&2
+    return 1
+  }
+  mv "${staging}" "${release}"
+  chown -R root:root "${release}"
+  chmod -R a-w "${release}"
+  prepared_release=${release}
+}
+
+launch_evidence() {
+  local mode=$1
+  local launches=$2
+  local expected_release=${3:-}
+  local expected_log_root=${4:-}
+  local previous_run_id=${5:-}
+  local expected_network=${6:-}
+  node - "${mode}" "${launches}" "${expected_release}" "${expected_log_root}" "${previous_run_id}" "${expected_network}" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const [mode, launches, expectedRelease, expectedLogRoot, previousRunId, expectedNetwork] = process.argv.slice(2);
+const launch = latestLaunchRecord(launches);
+if (launch === undefined || launch.version !== 3 || typeof launch.runId !== "string" || launch.runId === "") {
+  process.exit(1);
+}
+if (mode === "latest-run-id") {
+  process.stdout.write(`${launch.runId}\n`);
+  process.exit(0);
+}
+if (mode !== "ready" ||
+    canonicalPath(launch.repoRoot) !== canonicalPath(expectedRelease) ||
+    canonicalPath(launch.logRoot) !== canonicalPath(expectedLogRoot) ||
+    launch.teeChildOutput !== false || (previousRunId !== "" && launch.runId === previousRunId)) {
+  process.exit(1);
+}
+const botRoot = path.join(expectedLogRoot, "bot");
+const eventFile = launch?.logFiles?.events;
+if (typeof eventFile !== "string" || !contained(botRoot, eventFile)) process.exit(1);
+let events;
+try {
+  const stat = fs.lstatSync(eventFile);
+  if (!stat.isFile() || stat.isSymbolicLink()) process.exit(1);
+  events = fs.readFileSync(eventFile, "utf8").split("\n");
+} catch {
+  process.exit(1);
+}
+for (const eventLine of events) {
+  let event;
+  try { event = JSON.parse(eventLine); } catch { continue; }
+  if (canonicalPreflight(event, launch.runId, expectedNetwork)) process.exit(0);
+}
+process.exit(1);
+
+function latestLaunchRecord(filePath) {
+  const maxTailBytes = 1024 * 1024;
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size === 0) return undefined;
+    const start = Math.max(0, stat.size - maxTailBytes);
+    const length = stat.size - start;
+    const buffer = Buffer.alloc(length);
+    const descriptor = fs.openSync(filePath, "r");
+    let bytesRead = 0;
+    try {
+      while (bytesRead < length) {
+        const count = fs.readSync(descriptor, buffer, bytesRead, length - bytesRead, start + bytesRead);
+        if (count === 0) break;
+        bytesRead += count;
+      }
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    let text = buffer.subarray(0, bytesRead).toString("utf8");
+    if (start > 0) {
+      const firstNewline = text.indexOf("\n");
+      if (firstNewline === -1) return undefined;
+      text = text.slice(firstNewline + 1);
+    }
+    let latest;
+    for (const line of text.split("\n")) {
+      let record;
+      try { record = JSON.parse(line); } catch { continue; }
+      if (record?.type === "launcher.started") latest = record;
+    }
+    return latest;
+  } catch {
+    return undefined;
+  }
+}
+function contained(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative !== "" && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+function canonicalPath(value) {
+  if (typeof value !== "string" || value === "") return undefined;
+  try { return fs.realpathSync(value); } catch { return undefined; }
+}
+function canonicalPreflight(event, runId, expectedNetwork) {
+  return event?.version === 1 && event?.app === "bot" && event?.type === "bot.chain.preflight" &&
+    event?.chain === expectedNetwork && event?.runId === runId &&
+    event?.iterationId === 0 && typeof event?.timestamp === "string" && isIsoTimestamp(event.timestamp) &&
+    event?.expected?.chain === expectedNetwork &&
+    typeof event?.expected?.genesisHash === "string" && event.expected.genesisHash !== "" &&
+    typeof event?.expected?.addressPrefix === "string" && event.expected.addressPrefix !== "" &&
+    event?.observed?.genesisHash === event.expected.genesisHash &&
+    event?.observed?.addressPrefix === event.expected.addressPrefix &&
+    event?.matches?.genesisHash === true && event?.matches?.addressPrefix === true;
+}
+function isIsoTimestamp(value) {
+  const timestamp = new Date(value);
+  return !Number.isNaN(timestamp.getTime()) && timestamp.toISOString() === value;
+}
+NODE
+}
+
+latest_launch_run_id() {
+  launch_evidence latest-run-id "$1"
+}
+
+readiness_probe() {
+  launch_evidence ready "$1" "$2" "$3" "${5:-}" "$4"
+}
+
+wait_for_readiness() {
+  local service=$1
+  local launches=$2
+  local expected_release=$3
+  local log_root=$4
+  local network=$5
+  local previous_run_id=$6
+  local timeout_seconds=$7
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while (( SECONDS < deadline )); do
+    if systemctl is-active --quiet "${service}" &&
+       readiness_probe "${launches}" "${expected_release}" "${log_root}" "${network}" "${previous_run_id}"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+atomic_switch() {
+  local deploy_dir=$1
+  local target=$2
+  local pending="${deploy_dir}/current.new"
+  [[ ${target} =~ ^releases/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 1
+  [[ -d ${deploy_dir}/${target} && ! -L ${deploy_dir}/${target} ]] || return 1
+  rm -f "${pending}"
+  ln -s "${target}" "${pending}"
+  mv -Tf "${pending}" "${deploy_dir}/current"
+}
+
+activate_release() {
+  local service=$1
+  local deploy_dir=$2
+  local new_release=$3
+  local previous_target=$4
+  local previous_release=$5
+  local log_root=$6
+  local network=$7
+  local timeout_seconds=$8
+  local launches="${log_root}/bot/launches.ndjson"
+  local new_target="releases/${new_release##*/}"
+
+  candidate_removable=1
+  if ! systemctl stop "${service}"; then
+    systemctl start "${service}" || true
+    printf 'Service stop failed before the release switch; the previous current target was retained.\n' >&2
+    return 1
+  fi
+  local previous_run_id
+  if ! previous_run_id=$(latest_launch_run_id "${launches}"); then
+    systemctl start "${service}" || true
+    printf 'Cannot identify the stopped launcher run; the previous current target was retained.\n' >&2
+    return 1
+  fi
+  if ! atomic_switch "${deploy_dir}" "${new_target}"; then
+    if ! systemctl start "${service}" ||
+       ! wait_for_readiness "${service}" "${launches}" "${previous_release}" "${log_root}" "${network}" "${previous_run_id}" "${timeout_seconds}"; then
+      printf 'Atomic release switch failed and previous-release readiness could not be restored.\n' >&2
+      return 1
+    fi
+    printf 'Atomic release switch failed; the previous current target was retained.\n' >&2
+    return 1
+  fi
+  candidate_removable=0
+  if systemctl start "${service}" &&
+      wait_for_readiness "${service}" "${launches}" "${new_release}" "${log_root}" "${network}" "" "${timeout_seconds}"; then
+    return 0
+  fi
+
+  printf 'New release did not become ready; restoring the previous release.\n' >&2
+  if ! systemctl stop "${service}"; then
+    printf 'Candidate stop failed; current remains on the candidate and its release was retained for operator recovery.\n' >&2
+    return 1
+  fi
+  local rollback_previous_run_id
+  rollback_previous_run_id=$(latest_launch_run_id "${launches}") || rollback_previous_run_id=${previous_run_id}
+  if ! atomic_switch "${deploy_dir}" "${previous_target}"; then
+    printf 'Rollback switch failed; service remains stopped for operator recovery.\n' >&2
+    return 1
+  fi
+  if ! systemctl restart "${service}" ||
+     ! wait_for_readiness "${service}" "${launches}" "${previous_release}" "${log_root}" "${network}" "${rollback_previous_run_id}" "${timeout_seconds}"; then
+    printf 'Rollback release did not become ready; immediate operator intervention is required.\n' >&2
+    return 1
+  fi
+  candidate_removable=1
+  printf 'Rollback release is ready; update failed without changing the active release.\n' >&2
+  return 1
+}
+
+prune_releases() {
+  local releases_dir=$1
+  local active_target=$2
+  local rollback_target=$3
+  local active=${active_target#releases/}
+  local rollback=${rollback_target#releases/}
+  local -a candidates=()
+  local release
+  for release in "${releases_dir}"/*; do
+    [[ -d ${release} && ! -L ${release} ]] || continue
+    candidates+=("${release##*/}")
+  done
+  mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | sort -r)
+
+  local kept=0
+  [[ -d ${releases_dir}/${active} && ! -L ${releases_dir}/${active} ]] && kept=$((kept + 1))
+  if [[ ${rollback} != "${active}" && -d ${releases_dir}/${rollback} && ! -L ${releases_dir}/${rollback} ]]; then
+    kept=$((kept + 1))
+  fi
+  local name
+  for name in "${candidates[@]}"; do
+    if [[ ${name} == "${active}" || ${name} == "${rollback}" ]]; then
+      continue
+    fi
+    if (( kept < RELEASES_TO_KEEP )); then
+      kept=$((kept + 1))
+      continue
+    fi
+    rm -rf -- "${releases_dir:?}/${name}"
+  done
 }
 
 main() {
@@ -218,6 +556,7 @@ main() {
   require_runtime
 
   local network=${1:-}
+  local revision=${2:-}
   case "${network}" in
     testnet|mainnet) ;;
     -h|--help)
@@ -229,25 +568,77 @@ main() {
       exit 1
       ;;
   esac
+  [[ -n ${revision} && $# -eq 2 ]] || {
+    usage
+    exit 1
+  }
+  require_safe_revision "${revision}"
 
+  local timeout_seconds=${ICKB_BOT_UPDATE_READINESS_TIMEOUT_SECONDS:-${DEFAULT_READINESS_TIMEOUT_SECONDS}}
+  require_readiness_timeout "${timeout_seconds}"
+
+  local lock_path="/run/lock/ickb-bot-${network}-update.lock"
+  local lock_fd
+  exec {lock_fd}>"${lock_path}"
+  if ! flock -n "${lock_fd}"; then
+    printf 'Another %s deployment operation holds %s.\n' "${network}" "${lock_path}" >&2
+    exit 1
+  fi
+
+  local deploy_dir
+  deploy_dir=$(deployment_root "${network}")
+  local releases_dir="${deploy_dir}/releases"
+  local log_root="${deploy_dir}/log"
   local user="ickb-bot-${network}"
-  local deploy_dir="/opt/ickb-stack-${network}"
   local service="ickb-bot-${network}.service"
   local unit_path="/etc/systemd/system/${service}"
+  local user_home
+  user_home=$(service_user_home "${user}")
+  require_launcher_unit "${unit_path}" "${network}" "${deploy_dir}"
+  local previous_release
+  previous_release=$(require_deployment_layout "${deploy_dir}")
+  local previous_target
+  previous_target=$(readlink "${deploy_dir}/current")
+  require_clean_release "${user}" "${user_home}" "${previous_release}"
+  systemctl is-active --quiet "${service}" || {
+    printf 'Service %s must be active before an update so rollback readiness can be proved.\n' "${service}" >&2
+    exit 1
+  }
+
+  local staging="${releases_dir}/.staging-${BASHPID}"
+  [[ ! -e ${staging} && ! -L ${staging} ]] || {
+    printf 'Staging path already exists: %s\n' "${staging}" >&2
+    exit 1
+  }
+  trap 'if [[ -n ${staging:-} && ( -e ${staging} || -L ${staging} ) ]]; then rm -rf -- "${staging}"; fi' EXIT
   local pnpm_bin
   pnpm_bin=$(command -v pnpm)
-  local user_home
+  local new_release
+  prepared_release=
+  prepare_release "${user}" "${user_home}" "${previous_release}" "${releases_dir}" "${revision}" "${pnpm_bin}" "${staging}"
+  new_release=${prepared_release}
+  staging=
 
-  user_home=$(service_user_home "${user}")
-  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" rev-parse --is-inside-work-tree >/dev/null
-  require_clean_worktree "${user}" "${user_home}" "${deploy_dir}"
-  require_launcher_unit "${unit_path}" "${network}"
+  local previous_commit
+  local new_commit
+  previous_commit=$(git -C "${previous_release}" rev-parse --verify HEAD)
+  new_commit=$(git -C "${new_release}" rev-parse --verify HEAD)
+  if [[ ${previous_commit} == "${new_commit}" ]]; then
+    rm -rf -- "${new_release}"
+    printf 'Revision %s is already active for %s; no switch was needed.\n' "${new_commit}" "${network}"
+    exit 0
+  fi
 
-  run_as_service_user "${user}" "${user_home}" git -C "${deploy_dir}" pull --ff-only
-  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:install
-  run_as_service_user "${user}" "${user_home}" "${pnpm_bin}" -C "${deploy_dir}" bot:build
-  systemctl restart "${service}"
-  systemctl --no-pager --full status "${service}"
+  candidate_removable=0
+  if ! activate_release "${service}" "${deploy_dir}" "${new_release}" "${previous_target}" "${previous_release}" "${log_root}" "${network}" "${timeout_seconds}"; then
+    if (( candidate_removable == 1 )) && [[ $(readlink "${deploy_dir}/current") == "${previous_target}" ]]; then
+      rm -rf -- "${new_release}"
+    fi
+    exit 1
+  fi
+
+  prune_releases "${releases_dir}" "releases/${new_release##*/}" "${previous_target}"
+  printf 'Activated %s for %s; readiness was proved from new launcher and bot preflight evidence.\n' "${new_commit}" "${network}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

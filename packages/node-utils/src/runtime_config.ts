@@ -3,6 +3,7 @@ import process from "node:process";
 import { setTimeout } from "node:timers";
 import type { SupportedChain } from "./chain.ts";
 
+const { isAbsolute, resolve: resolvePath } = path;
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -30,8 +31,8 @@ export interface RuntimeConfig {
   /** Secp256k1 private key used only for signing. */
   privateKey: `0x${string}`;
 
-  /** Optional RPC URL override for the selected public chain. */
-  rpcUrl?: string;
+  /** Exclusive RPC URL for the selected public chain. */
+  rpcUrl: string;
 
   /** Loop sleep interval in milliseconds, parsed from `sleepIntervalSeconds`. */
   sleepIntervalMs: number;
@@ -93,9 +94,9 @@ export async function sleep(ms: number): Promise<void> {
 }
 
 async function readFileEnv(fileEnvValue: string, fileEnvName: string): Promise<string> {
-  const secretPath = path.isAbsolute(fileEnvValue)
+  const secretPath = isAbsolute(fileEnvValue)
     ? fileEnvValue
-    : path.resolve(process.env["INIT_CWD"] ?? process.cwd(), fileEnvValue);
+    : resolvePath(process.env["INIT_CWD"] ?? process.cwd(), fileEnvValue);
   let fileSecret: string;
   try {
     const fileSystem = await import("node:fs/promises");
@@ -114,7 +115,7 @@ export function parseRuntimeConfig(configText: string, envName: string): Runtime
   assertKnownRuntimeConfigKeys(record, envName);
   const chain = parseSupportedChain(record[CHAIN_KEY], envName);
   const privateKey = parseRequiredString(record[PRIVATE_KEY_KEY], envName);
-  const rpcUrl = parseOptionalRpcUrl(record[RPC_URL_KEY], envName);
+  const rpcUrl = parseRpcUrl(parseRequiredString(record[RPC_URL_KEY], envName), envName);
   const sleepIntervalSeconds = parseRequiredNumber(
     record[SLEEP_INTERVAL_SECONDS_KEY],
     envName,
@@ -167,16 +168,6 @@ function parseSupportedChain(value: unknown, envName: string): SupportedChain {
     throw invalidEnvError(envName);
   }
   return value;
-}
-
-function parseOptionalRpcUrl(rpcUrl: unknown, envName: string): string | undefined {
-  if (rpcUrl === undefined) {
-    return undefined;
-  }
-  if (typeof rpcUrl !== "string") {
-    throw invalidEnvError(envName);
-  }
-  return parseRpcUrl(rpcUrl, envName);
 }
 
 function parseOptionalNumber(value: unknown, envName: string): number | undefined {
@@ -270,6 +261,9 @@ function parseRpcUrl(rpcUrl: string, envName: string): string {
     throw invalidEnvError(envName);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw invalidEnvError(envName);
+  }
+  if (url.username !== "" || url.password !== "") {
     throw invalidEnvError(envName);
   }
   return rpcUrl;

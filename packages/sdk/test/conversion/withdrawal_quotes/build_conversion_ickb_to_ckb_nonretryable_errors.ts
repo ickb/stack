@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  baseClient,
   conversionContext,
   hash,
 } from "../../transaction/base/support/sdk_core_support.ts";
@@ -25,9 +24,9 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const { sdk, ownedOwnerManager, lock } = testSdk();
     const extra = projectionReadyDeposit(1n, 0n);
     const protectedAnchor = projectionReadyDeposit(2n, 1n);
-    vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockRejectedValue(
-      new Error(WITHDRAWAL_FAILED),
-    );
+    vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(() => {
+      throw new Error(WITHDRAWAL_FAILED);
+    });
 
     const tx = ccc.Transaction.default();
     tx.inputs.push(
@@ -39,7 +38,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     tx.outputsData.push("0x");
 
     await expect(
-      sdk.buildConversionTransaction(tx, baseClient, {
+      sdk.buildConversionTransaction(tx, {
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,
@@ -48,7 +47,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
             poolDeposits: {
               deposits: [extra, protectedAnchor],
-              readyDeposits: [extra, protectedAnchor],
               id: "pool",
             },
           },

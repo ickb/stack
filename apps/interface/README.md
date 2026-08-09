@@ -22,15 +22,15 @@ cd stack
 pnpm install
 ```
 
-CCC packages are normal package dependencies resolved through the workspace catalog and lockfile; no local CCC fork, build step, or workspace alias is required.
-
 4. Start the interface dev server from the repo root:
 
 ```bash
 pnpm --filter ./apps/interface dev
 ```
 
-That script builds the workspace `@ickb/*` package `dist/` outputs first because the interface resolves those packages to their built CCC-compatible entrypoints during local development.
+The interface resolves workspace `@ickb/*` packages to source during local development. CCC is resolved from installed package dependencies.
+
+The app-owned mainnet and testnet clients use `https://mainnet.ckb.dev/` and `https://testnet.ckb.dev/` respectively, with no fallback endpoints.
 
 5. Build the interface when you want a production bundle:
 
@@ -38,13 +38,17 @@ That script builds the workspace `@ickb/*` package `dist/` outputs first because
 pnpm --filter ./apps/interface build
 ```
 
-Like `dev`, the build script refreshes those workspace package `dist/` outputs first so a clean checkout does not rely on stale generated files.
+Like `dev`, the build uses workspace package source directly and does not require Stack package `dist` output.
 
-The interface now uses CCC-native wallet connection and transaction completion. Protocol-specific conversion planning and partial transaction construction come from `@ickb/sdk`; the app maps domain results to UI copy, calls `sdk.completeTransaction(...)`, and then sends.
+Production deployment is intentionally deferred. The repository does not publish this bundle until the Interface is declared production-ready and a root workflow is added with an explicit deployment target.
+
+The interface uses CCC-native wallet connection and transaction submission. Protocol-specific conversion planning and partial transaction construction come from `@ickb/sdk`; the app shows whether signing will collect funds, convert directly, create a standing order, or split the request between a direct conversion and a remainder order. When the user acts, the interface locks that amount and direction, refreshes the exact wallet state, and rebuilds the preview before asking the wallet to sign. After broadcast it displays the transaction hash and waits for commitment without a user-visible timeout. An uncertain polling error keeps the same transaction available for confirmation retry without another signature or broadcast. If the wallet view remounts, that public hash remains available in memory for the same account; it is not persisted across page reloads or shared with another account. A terminal chain rejection displays its hash and returns the unchanged form for editing and rebuilding.
+
+Form quotes use the same `OrderManager.convert(...)` quote path as SDK planning: the shown output is rounded in the user's favor and the order `info` preserves that full-fill quote when the user signs.
 
 ## Small iCKB Balances
 
-For iCKB-to-CKB requests below the normal order preview threshold, the interface automatically builds a discounted dust order instead of adding another confirmation step. The preview shows the tiny iCKB input, approximate CKB output, and matcher incentive inline before the normal wallet signature. This path is useful when the user mainly wants to recover CKB capacity locked in an iCKB xUDT cell; the user accepts or rejects the exact terms by signing or cancelling the transaction.
+For iCKB-to-CKB requests below the normal order preview threshold, the interface can build a discounted dust order when the SDK finds terms that still cover the matcher incentive threshold. The preview shows the tiny iCKB input, approximate CKB output, and matcher incentive inline before the normal wallet signature. If no actionable dust terms exist, the SDK reports the request as too small instead of creating an unmatchable order. This path is useful when the user mainly wants to recover CKB capacity locked in an iCKB xUDT cell; the user accepts or rejects the exact terms by signing or cancelling the transaction.
 
 ## Licensing
 

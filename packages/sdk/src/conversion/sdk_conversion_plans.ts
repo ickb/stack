@@ -18,13 +18,12 @@ import {
 import {
   ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
-  selectExactReadyWithdrawalDepositCandidates,
+  selectReadyWithdrawalDepositCandidatesForCounts,
 } from "../withdrawal/withdrawal_selection.ts";
 import {
   directWithdrawalSurplus,
   maturityBucket,
-  normalizeCountLimit,
-  sortDepositsByMaturity,
+  readyPoolDeposits,
   sumDirectWithdrawalSurplus,
   sumUdtValue,
 } from "./sdk_value_helpers.ts";
@@ -34,9 +33,7 @@ export function ckbToIckbConversionPlans(options: ConversionTransactionOptions):
   plans: CkbToIckbConversionPlan[];
 } {
   const { amount, context } = options;
-  const maxDirectDeposits = normalizeCountLimit(
-    options.limits?.maxDirectDeposits ?? MAX_DIRECT_DEPOSITS,
-  );
+  const maxDirectDeposits = options.limits?.maxDirectDeposits ?? MAX_DIRECT_DEPOSITS;
   const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
@@ -66,31 +63,31 @@ export function ickbToCkbConversionPlans(
   plans: IckbToCkbConversionPlan[];
 } {
   const { amount, context } = options;
-  const maxWithdrawalRequests = normalizeCountLimit(
-    options.limits?.maxWithdrawalRequests ?? MAX_WITHDRAWAL_REQUESTS,
-  );
-  const readyDeposits = sortDepositsByMaturity(
-    poolDeposits.deposits.filter((deposit) => deposit.isReady),
-    context.system.tip,
-  );
+  const maxWithdrawalRequests =
+    options.limits?.maxWithdrawalRequests ?? MAX_WITHDRAWAL_REQUESTS;
+  const readyDeposits = readyPoolDeposits(poolDeposits, context.system.tip);
   const ringSurplus = ringSurplusDepositFilter(poolDeposits.deposits);
   const ringRequiredLiveDeposit = ringRequiredLiveDepositFor(poolDeposits.deposits);
+  const maxCount = Math.min(readyDeposits.length, maxWithdrawalRequests);
+  const positiveCounts = Array.from({ length: maxCount }, (_, index) => maxCount - index);
+  const selectionsByCount = new Map(
+    selectReadyWithdrawalDepositCandidatesForCounts({
+      readyDeposits,
+      tip: context.system.tip,
+      maxAmount: amount,
+      counts: positiveCounts,
+      canSelectDeposit: ringSurplus,
+      requiredLiveDepositFor: ringRequiredLiveDeposit,
+      score: (deposit) => directWithdrawalSurplus(deposit, context.system.exchangeRatio),
+      maturityBucket: (deposit) =>
+        maturityBucket(deposit.maturity.toUnix(context.system.tip)),
+    }),
+  );
+  selectionsByCount.set(0, [{ deposits: [], requiredLiveDeposits: [] }]);
   const plans: IckbToCkbConversionPlan[] = [];
   let lastFailure: ConversionTransactionFailureReason | undefined;
 
-  for (
-    let count = Math.min(readyDeposits.length, maxWithdrawalRequests);
-    count >= 0;
-    count -= 1
-  ) {
-    const selections = selectionsForWithdrawalCount({
-      options,
-      readyDeposits,
-      count,
-      amount,
-      canSelectDeposit: ringSurplus,
-      requiredLiveDepositFor: ringRequiredLiveDeposit,
-    });
+  for (const [count, selections] of selectionsByCount) {
     if (count > 0 && selections.length === 0) {
       lastFailure = "not-enough-ready-deposits";
       continue;
@@ -187,37 +184,6 @@ function ickbToCkbConversionPlan(
     requiredLiveDeposits,
     selectedDeposits,
   };
-}
-
-function selectionsForWithdrawalCount({
-  options,
-  readyDeposits,
-  count,
-  amount,
-  canSelectDeposit,
-  requiredLiveDepositFor,
-}: {
-  options: ConversionTransactionOptions;
-  readyDeposits: IckbDepositCell[];
-  count: number;
-  amount: bigint;
-  canSelectDeposit: (deposit: IckbDepositCell) => boolean;
-  requiredLiveDepositFor: (deposit: IckbDepositCell) => IckbDepositCell | undefined;
-}): Array<{ deposits: IckbDepositCell[]; requiredLiveDeposits: IckbDepositCell[] }> {
-  return count === 0
-    ? [{ deposits: [], requiredLiveDeposits: [] }]
-    : selectExactReadyWithdrawalDepositCandidates({
-        readyDeposits,
-        tip: options.context.system.tip,
-        maxAmount: amount,
-        count,
-        canSelectDeposit,
-        requiredLiveDepositFor,
-        score: (deposit) =>
-          directWithdrawalSurplus(deposit, options.context.system.exchangeRatio),
-        maturityBucket: (deposit) =>
-          maturityBucket(deposit.maturity.toUnix(options.context.system.tip)),
-      });
 }
 
 function orderForIckbRemainder(

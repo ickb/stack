@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import {
-  collectPagedScan,
+  collectCellsPaged,
   defaultCellPageSize,
   type ScriptDeps,
   unique,
@@ -84,15 +84,14 @@ export class LogicManager implements ScriptDeps {
    * @remarks Caller must ensure UDT cellDeps are added to the transaction
    * (e.g., via ickbUdt.addCellDeps(tx)).
    */
-  public async deposit(
-    ...[txLike, depositQuantity, depositCapacity, lock, client]: [
+  public deposit(
+    ...[txLike, depositQuantity, depositCapacity, lock]: [
       txLike: ccc.TransactionLike,
       depositQuantity: number,
       depositCapacity: ccc.FixedPoint,
       lock: ccc.Script,
-      client: ccc.Client,
     ]
-  ): Promise<ccc.Transaction> {
+  ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {
       return tx;
@@ -133,7 +132,7 @@ export class LogicManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
 
     const capacities = Array.from({ length: depositQuantity }, () => depositCapacity);
-    tx = await this.daoManager.deposit(tx, capacities, this.script, client);
+    tx = this.daoManager.deposit(tx, capacities, this.script);
 
     // Receipts track the deposit's free capacity, not the full DAO cell capacity.
     tx.addOutput(
@@ -145,7 +144,7 @@ export class LogicManager implements ScriptDeps {
       ReceiptData.encode({ depositQuantity, depositAmount }),
     );
 
-    await assertDaoOutputLimit(tx, client);
+    assertDaoOutputLimit(tx, this.daoManager.script);
     return tx;
   }
 
@@ -241,13 +240,10 @@ export class LogicManager implements ScriptDeps {
       ] as const;
 
       const receiptCandidates = (
-        await collectPagedScan(
-          (scanPageSize) =>
-            options?.onChain === true
-              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
-              : client.findCells(...findCellsArgs, scanPageSize),
-          { pageSize },
-        )
+        await collectCellsPaged(client, ...findCellsArgs, {
+          onChain: options?.onChain === true,
+          pageSize,
+        })
       ).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 
       const receipts = await Promise.all(

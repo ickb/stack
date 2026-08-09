@@ -119,7 +119,7 @@ describe("IckbSdk.maturity order pool pressure", () => {
       udtValue: 50n,
       isDualRatio: false,
       isMatchable: true,
-    }).order;
+    });
 
     expect(
       IckbSdk.maturity(
@@ -141,8 +141,8 @@ describe("IckbSdk.maturity order pool pressure", () => {
       udtValue: 25n,
       isDualRatio: false,
       isMatchable: true,
-    }).order;
-    pressure.data.info = Info.create(false, { ckbScale: 2n, udtScale: 1n });
+    });
+    pressure.order.data.info = Info.create(false, { ckbScale: 2n, udtScale: 1n });
 
     expect(
       IckbSdk.maturity(
@@ -180,8 +180,8 @@ describe("IckbSdk.maturity order pressure", () => {
       udtValue: 200n,
       isDualRatio: false,
       isMatchable: true,
-    }).order;
-    pressure.data.info = Info.create(false, ratio);
+    });
+    pressure.order.data.info = Info.create(false, ratio);
 
     expect(
       IckbSdk.maturity(
@@ -203,8 +203,8 @@ describe("IckbSdk.maturity order pressure", () => {
       udtValue: 50n,
       isDualRatio: false,
       isMatchable: true,
-    }).order;
-    pressure.data.info = Info.create(false, { ckbScale: 1n, udtScale: 2n });
+    });
+    pressure.order.data.info = Info.create(false, { ckbScale: 1n, udtScale: 2n });
 
     expect(
       IckbSdk.maturity(

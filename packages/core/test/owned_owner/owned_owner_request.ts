@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoManager, type DaoWithdrawalRequestCell } from "@ickb/dao";
+import {
+  DAO_OUTPUT_LIMIT,
+  DaoManager,
+  DaoOutputLimitError,
+  type DaoWithdrawalRequestCell,
+} from "@ickb/dao";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCell, WithdrawalGroup } from "../../src/cells.ts";
 import { OwnerData } from "../../src/entities.ts";
@@ -25,10 +30,11 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
   registerWithdrawalInputTests();
   registerMalformedDaoManagerTests();
   registerWithdrawalRequestSelectionTests();
+  registerOutputBoundaryTests();
 });
 
 function registerOwnerDistanceTests(): void {
-  it("encodes owner distances from the actual withdrawal output indexes", async () => {
+  it("encodes owner distances from the actual withdrawal output indexes", () => {
     const ownedOwnerScript = script("22");
     const daoScript = script("33");
     const ownerLock = script("44");
@@ -46,12 +52,7 @@ function registerOwnerDistanceTests(): void {
     baseTx.addInput({ previousOutput: { txHash: byte32FromByte("77"), index: 0n } });
     baseTx.addOutput({ capacity: 1n, lock: ownerLock }, "0x");
 
-    const tx = await manager.requestWithdrawal(
-      baseTx,
-      deposits,
-      ownerLock,
-      clientForDepositHeader(depositHeader),
-    );
+    const tx = manager.requestWithdrawal(baseTx, deposits, ownerLock);
 
     expect(tx.outputsData.slice(3)).toEqual([
       ccc.hexFrom(OwnerData.encode({ ownedDistance: -2n })),
@@ -87,15 +88,14 @@ function registerOwnerDistanceTests(): void {
 }
 
 function registerLiveDepositAnchorTests(): void {
-  it("adds required live deposit anchors as cell deps", async () => {
-    const { manager, ownerLock, depositHeader, requestedDeposit, requiredLiveDeposit } =
+  it("adds required live deposit anchors as cell deps", () => {
+    const { manager, ownerLock, requestedDeposit, requiredLiveDeposit } =
       requestWithdrawalFixture();
 
-    const tx = await manager.requestWithdrawal(
+    const tx = manager.requestWithdrawal(
       ccc.Transaction.default(),
       [requestedDeposit],
       ownerLock,
-      clientForDepositHeader(depositHeader),
       { requiredLiveDeposits: [requiredLiveDeposit] },
     );
 
@@ -106,7 +106,7 @@ function registerLiveDepositAnchorTests(): void {
 }
 
 function registerWithdrawalDepositValidationTests(): void {
-  it("leaves transactions unchanged when no withdrawal groups are selected", async () => {
+  it("leaves transactions unchanged when no withdrawal groups are selected", () => {
     const { manager, depositHeader } = requestWithdrawalFixture();
     const baseTx = ccc.Transaction.default();
     const notReadyGroup = withdrawalGroupFixture({
@@ -116,14 +116,12 @@ function registerWithdrawalDepositValidationTests(): void {
       depositHeader,
     });
 
-    await expect(
-      manager.withdraw(baseTx, [notReadyGroup], clientForDepositHeader(depositHeader), {
+    expect(
+      manager.withdraw(baseTx, [notReadyGroup], {
         isReadyOnly: true,
       }),
-    ).resolves.toEqual(baseTx);
-    await expect(
-      manager.withdraw(baseTx, [], clientForDepositHeader(depositHeader)),
-    ).resolves.toEqual(baseTx);
+    ).toEqual(baseTx);
+    expect(manager.withdraw(baseTx, [])).toEqual(baseTx);
   });
 }
 
@@ -166,11 +164,9 @@ function registerSelectedWithdrawalInputTest(): void {
       { tip: depositHeader },
     );
 
-    const tx = await manager.withdraw(
-      ccc.Transaction.default(),
-      [new WithdrawalGroup(owned, owner)],
-      clientForDepositHeader(depositHeader),
-    );
+    const tx = manager.withdraw(ccc.Transaction.default(), [
+      new WithdrawalGroup(owned, owner),
+    ]);
 
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toContain(
       owner.cell.outPoint.toHex(),
@@ -202,11 +198,9 @@ function registerTypelessOwnerInputTest(): void {
       { tip: depositHeader },
     );
 
-    const tx = await manager.withdraw(
-      ccc.Transaction.default(),
-      [new WithdrawalGroup(owned, owner)],
-      clientForDepositHeader(depositHeader),
-    );
+    const tx = manager.withdraw(ccc.Transaction.default(), [
+      new WithdrawalGroup(owned, owner),
+    ]);
 
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toContain(
       owner.cell.outPoint.toHex(),
@@ -238,20 +232,16 @@ function registerMismatchedOwnerInputTest(): void {
       { tip: depositHeader },
     );
 
-    await expect(
-      manager.withdraw(
-        ccc.Transaction.default(),
-        [new WithdrawalGroup(owned, owner)],
-        clientForDepositHeader(depositHeader),
-      ),
-    ).rejects.toThrow(
+    expect(() =>
+      manager.withdraw(ccc.Transaction.default(), [new WithdrawalGroup(owned, owner)]),
+    ).toThrow(
       `Withdrawal owner ${owner.cell.outPoint.toHex()} points to ${owner.getOwned().toHex()} but group owned cell is ${owned.cell.outPoint.toHex()}`,
     );
   });
 }
 
 function registerMalformedDaoManagerTests(): void {
-  it("rejects DAO withdrawal managers that do not add request outputs", async () => {
+  it("rejects DAO withdrawal managers that do not add request outputs", () => {
     const ownerLock = script("44");
     const depositHeader = headerLike({ number: 1n });
     const requestedDeposit = depositCell("55", script("22"), script("33"), depositHeader);
@@ -261,17 +251,12 @@ function registerMalformedDaoManagerTests(): void {
       new NoRequestOutputDaoManager(script("33")),
     );
 
-    await expect(
-      manager.requestWithdrawal(
-        ccc.Transaction.default(),
-        [requestedDeposit],
-        ownerLock,
-        clientForDepositHeader(depositHeader),
-      ),
-    ).rejects.toThrow("DAO withdrawal request did not add expected outputs");
+    expect(() =>
+      manager.requestWithdrawal(ccc.Transaction.default(), [requestedDeposit], ownerLock),
+    ).toThrow("DAO withdrawal request did not add expected outputs");
   });
 
-  it("rejects DAO withdrawal managers that add malformed request outputs", async () => {
+  it("rejects DAO withdrawal managers that add malformed request outputs", () => {
     const ownerLock = script("44");
     const depositHeader = headerLike({ number: 1n });
     const ownerScript = script("22");
@@ -283,55 +268,62 @@ function registerMalformedDaoManagerTests(): void {
       new MalformedRequestOutputDaoManager(daoScript),
     );
 
-    await expect(
-      manager.requestWithdrawal(
-        ccc.Transaction.default(),
-        [requestedDeposit],
-        ownerLock,
-        clientForDepositHeader(depositHeader),
-      ),
-    ).rejects.toThrow("DAO withdrawal request output order changed");
+    expect(() =>
+      manager.requestWithdrawal(ccc.Transaction.default(), [requestedDeposit], ownerLock),
+    ).toThrow("DAO withdrawal request output order changed");
   });
 }
 
 function registerWithdrawalRequestSelectionTests(): void {
-  it("filters not-ready deposits when requesting ready withdrawals only", async () => {
-    const { manager, ownerLock, depositHeader, requestedDeposit } =
-      requestWithdrawalFixture();
+  it("filters not-ready deposits when requesting ready withdrawals only", () => {
+    const { manager, ownerLock, requestedDeposit } = requestWithdrawalFixture();
     const notReadyDeposit = { ...requestedDeposit, isReady: false };
-    const tx = await manager.requestWithdrawal(
+    const tx = manager.requestWithdrawal(
       ccc.Transaction.default(),
       [notReadyDeposit],
       ownerLock,
-      clientForDepositHeader(depositHeader),
       { isReadyOnly: true },
     );
 
     expect(tx.outputs).toEqual([]);
   });
 
-  it("rejects duplicated or already spent withdrawal deposits", async () => {
-    const { manager, ownerLock, depositHeader, requestedDeposit } =
-      requestWithdrawalFixture();
+  it("rejects duplicated or already spent withdrawal deposits", () => {
+    const { manager, ownerLock, requestedDeposit } = requestWithdrawalFixture();
     const spentTx = ccc.Transaction.default();
     spentTx.addInput(requestedDeposit.cell);
 
-    await expect(
+    expect(() =>
       manager.requestWithdrawal(
         ccc.Transaction.default(),
         [requestedDeposit, requestedDeposit],
         ownerLock,
-        clientForDepositHeader(depositHeader),
       ),
-    ).rejects.toThrow("Withdrawal deposit is duplicated");
-    await expect(
-      manager.requestWithdrawal(
-        spentTx,
-        [requestedDeposit],
-        ownerLock,
-        clientForDepositHeader(depositHeader),
-      ),
-    ).rejects.toThrow("Withdrawal deposit is already being spent");
+    ).toThrow("Withdrawal deposit is duplicated");
+    expect(() =>
+      manager.requestWithdrawal(spentTx, [requestedDeposit], ownerLock),
+    ).toThrow("Withdrawal deposit is already being spent");
+  });
+}
+
+function registerOutputBoundaryTests(): void {
+  it("rejects output 65 after appending withdrawal owner markers", () => {
+    const { manager, ownerLock, requestedDeposit } = requestWithdrawalFixture();
+    const tx = ccc.Transaction.default();
+    for (let index = 1; index < DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addInput(
+        ccc.Cell.from({
+          outPoint: { txHash: byte32FromByte("dd"), index: BigInt(index) },
+          cellOutput: { capacity: 1n, lock: ownerLock },
+          outputData: "0x",
+        }),
+      );
+      tx.addOutput({ capacity: 1n, lock: ownerLock }, "0x");
+    }
+
+    expect(() => manager.requestWithdrawal(tx, [requestedDeposit], ownerLock)).toThrow(
+      DaoOutputLimitError,
+    );
   });
 }
 
@@ -378,10 +370,7 @@ class NoRequestOutputDaoManager extends DaoManager {
     super(daoScript, []);
   }
 
-  public override async requestWithdrawal(
-    txLike: ccc.TransactionLike,
-  ): Promise<ccc.Transaction> {
-    await Promise.resolve();
+  public override requestWithdrawal(txLike: ccc.TransactionLike): ccc.Transaction {
     return ccc.Transaction.from(txLike);
   }
 }
@@ -391,10 +380,7 @@ class MalformedRequestOutputDaoManager extends DaoManager {
     super(daoScript, []);
   }
 
-  public override async requestWithdrawal(
-    txLike: ccc.TransactionLike,
-  ): Promise<ccc.Transaction> {
-    await Promise.resolve();
+  public override requestWithdrawal(txLike: ccc.TransactionLike): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
     tx.addOutput({ capacity: 1n, lock: script("99"), type: this.script }, "0x");
     return tx;
@@ -402,11 +388,10 @@ class MalformedRequestOutputDaoManager extends DaoManager {
 }
 
 class FastWithdrawDaoManager extends DaoManager {
-  public override async withdraw(
+  public override withdraw(
     txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalRequests: DaoWithdrawalRequestCell[],
-  ): Promise<ccc.Transaction> {
-    await Promise.resolve();
+  ): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
     for (const withdrawalRequest of withdrawalRequests) {
       tx.addInput(withdrawalRequest.cell);

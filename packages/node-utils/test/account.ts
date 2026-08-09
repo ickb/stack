@@ -58,6 +58,27 @@ describe("account locks and balances", () => {
       postTransactionAccountPlainCkbBalance(tx, [spent, unspent, typed, data], [lock]),
     ).toBe(ccc.fixedPointFrom(2300));
   });
+
+  it("rejects malformed transaction outputs without matching output data", () => {
+    const { lock, unspent } = accountCellFixture();
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(300), lock }));
+
+    expect(() => postTransactionAccountPlainCkbBalance(tx, [unspent], [lock])).toThrow(
+      "Malformed transaction: outputs count 1 differs from outputsData count 0",
+    );
+  });
+
+  it("rejects output data holes even when output data count matches", () => {
+    const { lock, unspent } = accountCellFixture();
+    const tx = ccc.Transaction.default();
+    tx.outputs.push(ccc.CellOutput.from({ capacity: ccc.fixedPointFrom(300), lock }));
+    tx.outputsData.length = tx.outputs.length;
+
+    expect(() => postTransactionAccountPlainCkbBalance(tx, [unspent], [lock])).toThrow(
+      "Malformed transaction: missing output data",
+    );
+  });
 });
 
 function accountCellFixture(): {

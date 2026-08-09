@@ -1,0 +1,2 @@
+export const buttonClass =
+  "text-s flex min-h-12 w-full cursor-pointer items-center justify-center rounded border-2 border-ickb-action px-4 text-center leading-relaxed font-bold tracking-wider text-ickb-action uppercase transition-colors duration-150 hover:bg-ickb-action/10 active:bg-ickb-action/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50";

@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -30,16 +27,14 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
       .mockImplementation(
-        async (
-          ...[txLike, deposits, , , requestOptions]: [
+        (
+          ...[txLike, deposits, , requestOptions]: [
             txLike: ccc.TransactionLike,
             deposits: unknown,
             lock: unknown,
-            client: unknown,
             requestOptions: unknown,
           ]
         ) => {
-          await Promise.resolve();
           expect(deposits).toEqual([directDeposit]);
           expect(requestOptions).toEqual({
             requiredLiveDeposits: [ringAnchor],
@@ -60,28 +55,23 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const amount = ICKB_DEPOSIT_CAP + 100000n;
 
-    const result = await sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      baseClient,
-      {
-        direction: ICKB_TO_CKB,
-        amount,
-        lock,
-        context: conversionContext({
-          system: {
-            exchangeRatio,
-            ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
-            poolDeposits: {
-              deposits: [directDeposit, ringAnchor],
-              readyDeposits: [directDeposit, ringAnchor],
-              id: "pool",
-            },
+    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      direction: ICKB_TO_CKB,
+      amount,
+      lock,
+      context: conversionContext({
+        system: {
+          exchangeRatio,
+          ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
+          poolDeposits: {
+            deposits: [directDeposit, ringAnchor],
+            id: "pool",
           },
-          ckbAvailable: 0n,
-          ickbAvailable: amount,
-        }),
-      },
-    );
+        },
+        ckbAvailable: 0n,
+        ickbAvailable: amount,
+      }),
+    });
 
     expect(result).toMatchObject({
       ok: true,

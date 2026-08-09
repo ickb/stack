@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -29,10 +26,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 1n);
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
+      .mockImplementation((txLike) => ccc.Transaction.from(txLike));
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike, _lock, _info, amounts) => {
@@ -45,29 +39,24 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const amount = ICKB_DEPOSIT_CAP;
 
-    const result = await sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      baseClient,
-      {
-        direction: ICKB_TO_CKB,
-        amount,
-        lock,
-        context: conversionContext({
-          system: {
-            exchangeRatio,
-            ckbAvailable: ccc.fixedPointFrom("3102.81677146"),
-            feeRate: 33222n,
-            poolDeposits: {
-              deposits: [directDeposit, ringAnchor],
-              readyDeposits: [directDeposit, ringAnchor],
-              id: "pool",
-            },
+    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      direction: ICKB_TO_CKB,
+      amount,
+      lock,
+      context: conversionContext({
+        system: {
+          exchangeRatio,
+          ckbAvailable: ccc.fixedPointFrom("3102.81677146"),
+          feeRate: 33222n,
+          poolDeposits: {
+            deposits: [directDeposit, ringAnchor],
+            id: "pool",
           },
-          ckbAvailable: 0n,
-          ickbAvailable: amount,
-        }),
-      },
-    );
+        },
+        ckbAvailable: 0n,
+        ickbAvailable: amount,
+      }),
+    });
 
     expect(result).toMatchObject({
       ok: true,

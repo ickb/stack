@@ -13,7 +13,6 @@ import {
   receiptPhase2Capacity,
   script,
   StubClient,
-  testClient,
 } from "./support/logic_support.ts";
 
 afterEach(() => {
@@ -29,18 +28,17 @@ describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {
 });
 
 function registerDepositEncodingTests(): void {
-  it("encodes receipt amounts from deposit free capacity", async () => {
+  it("encodes receipt amounts from deposit free capacity", () => {
     const logic = script("11");
     const dao = script("22");
     const user = script("33");
     const manager = new LogicManager(logic, [], new DaoManager(dao, []));
 
-    const tx = await manager.deposit(
+    const tx = manager.deposit(
       ccc.Transaction.default(),
       2,
       ccc.fixedPointFrom(100082),
       user,
-      testClient(),
     );
 
     expect(tx.outputs).toHaveLength(3);
@@ -57,30 +55,27 @@ function registerDepositEncodingTests(): void {
     expect(receiptOutput.capacity).toBe(receiptPhase2Capacity(user));
   });
 
-  it("leaves the transaction unchanged for non-positive deposit quantities", async () => {
+  it("leaves the transaction unchanged for non-positive deposit quantities", () => {
     const manager = new LogicManager(script("11"), [], new DaoManager(script("22"), []));
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: 1n, lock: script("33") }, "0x");
 
-    await expect(
-      manager.deposit(tx, 0, ccc.fixedPointFrom(100082), script("33"), testClient()),
-    ).resolves.toEqual(tx);
+    expect(manager.deposit(tx, 0, ccc.fixedPointFrom(100082), script("33"))).toEqual(tx);
   });
 }
 
 function registerReceiptSizingTests(): void {
-  it("sizes receipt capacity from the actual user lock", async () => {
+  it("sizes receipt capacity from the actual user lock", () => {
     const logic = script("11");
     const dao = script("22");
     const user = script("33", `0x${"44".repeat(20)}`);
     const manager = new LogicManager(logic, [], new DaoManager(dao, []));
 
-    const tx = await manager.deposit(
+    const tx = manager.deposit(
       ccc.Transaction.default(),
       1,
       ccc.fixedPointFrom(100082),
       user,
-      testClient(),
     );
 
     expect(tx.outputs[1]?.capacity).toBe(receiptPhase2Capacity(user));

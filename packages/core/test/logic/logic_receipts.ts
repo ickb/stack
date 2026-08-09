@@ -21,10 +21,27 @@ describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {
   });
 
   registerReceiptFilteringTests();
+  registerReceiptWireFormatTests();
   registerReceiptConcurrencyTests();
   registerReceiptPageSizeTests();
   registerReceiptHeaderCacheTests();
 });
+
+function registerReceiptWireFormatTests(): void {
+  it("matches the deployed receipt data wire format", () => {
+    const encoded = ReceiptData.from({
+      depositQuantity: 0x0102_0304,
+      depositAmount: 0x0102_0304_0506_0708n,
+    }).toBytes();
+
+    expect(encoded).toHaveLength(12);
+    expect(ccc.hexFrom(encoded)).toBe("0x040302010807060504030201");
+
+    const decoded = ReceiptData.decodePrefix("0x040302010807060504030201aabbcc");
+    expect(decoded.depositQuantity).toBe(0x0102_0304n);
+    expect(decoded.depositAmount).toBe(0x0102_0304_0506_0708n);
+  });
+}
 
 function registerReceiptFilteringTests(): void {
   it("filters receipts by exact lock and type while deduplicating locks", async () => {

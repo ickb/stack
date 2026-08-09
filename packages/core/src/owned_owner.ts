@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, type DaoCellFromCache, type DaoManager } from "@ickb/dao";
 import {
-  collectPagedScan,
+  collectCellsPaged,
   defaultCellPageSize,
   unique,
   type ScriptDeps,
@@ -69,18 +69,17 @@ export class OwnedOwnerManager implements ScriptDeps {
    * Caller must ensure UDT cellDeps are added to the transaction, for example
    * via `ickbUdt.addCellDeps(tx)`.
    */
-  public async requestWithdrawal(
-    ...[txLike, deposits, lock, client, options]: [
+  public requestWithdrawal(
+    ...[txLike, deposits, lock, options]: [
       txLike: ccc.TransactionLike | ccc.Transaction,
       deposits: IckbDepositCell[],
       lock: ccc.Script,
-      client: ccc.Client,
       options?: {
         isReadyOnly?: boolean;
         requiredLiveDeposits?: IckbDepositCell[];
       },
     ]
-  ): Promise<ccc.Transaction> {
+  ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     const selectedDeposits =
       options?.isReadyOnly === true
@@ -96,13 +95,7 @@ export class OwnedOwnerManager implements ScriptDeps {
     const daoOptions = { isReadyOnly: false };
 
     const withdrawalOutputStart = tx.outputs.length;
-    tx = await this.daoManager.requestWithdrawal(
-      tx,
-      selectedDeposits,
-      this.script,
-      client,
-      daoOptions,
-    );
+    tx = this.daoManager.requestWithdrawal(tx, selectedDeposits, this.script, daoOptions);
     const withdrawalOutputs = withdrawalRequestOutputs(
       tx,
       withdrawalOutputStart,
@@ -122,7 +115,7 @@ export class OwnedOwnerManager implements ScriptDeps {
       tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
     }
 
-    await assertDaoOutputLimit(tx, client);
+    assertDaoOutputLimit(tx, this.daoManager.script);
     return tx;
   }
 
@@ -134,14 +127,13 @@ export class OwnedOwnerManager implements ScriptDeps {
    * @remarks Set `isReadyOnly` to spend only ready requests. Caller must ensure
    * UDT cellDeps are added to the transaction (e.g., via ickbUdt.addCellDeps(tx)).
    */
-  public async withdraw(
+  public withdraw(
     txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalGroups: WithdrawalGroup[],
-    client: ccc.Client,
     options?: {
       isReadyOnly?: boolean;
     },
-  ): Promise<ccc.Transaction> {
+  ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     const selectedWithdrawalGroups =
       options?.isReadyOnly === true
@@ -157,14 +149,12 @@ export class OwnedOwnerManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
 
     const requests = selectedWithdrawalGroups.map((group) => group.owned);
-    tx = await this.daoManager.withdraw(tx, requests, client);
+    tx = this.daoManager.withdraw(tx, requests);
 
     for (const { owner } of selectedWithdrawalGroups) {
       tx.addInput(cellInputLikeFrom(owner.cell));
     }
 
-    // assertDaoOutputLimit already called inside daoManager.withdraw;
-    // only owner inputs (not outputs) are added after, so no re-check needed.
     return tx;
   }
 
@@ -172,7 +162,7 @@ export class OwnedOwnerManager implements ScriptDeps {
    * Finds owner marker cells for the given locks and yields valid owned withdrawal groups.
    *
    * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
-   * @remarks Header and transaction caches are scoped to one lock scan batch so related DAO cell conversions share the same reads.
+   * @remarks Header and transaction caches span all requested locks so related DAO cell conversions share the same reads.
    */
   public async *findWithdrawalGroups(
     client: ccc.Client,
@@ -185,6 +175,8 @@ export class OwnedOwnerManager implements ScriptDeps {
   ): AsyncGenerator<WithdrawalGroup> {
     const tip = options?.tip ?? (await client.getTipHeader());
     const pageSize = options?.pageSize ?? defaultCellPageSize;
+    const headerCache: DaoCellFromCache["headerCache"] = new Map();
+    const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     for (const lock of unique(locks)) {
       const findCellsArgs = [
         {
@@ -200,13 +192,10 @@ export class OwnedOwnerManager implements ScriptDeps {
       ] as const;
 
       const ownerCandidates = (
-        await collectPagedScan(
-          (scanPageSize) =>
-            options?.onChain === true
-              ? client.findCellsOnChain(...findCellsArgs, scanPageSize)
-              : client.findCells(...findCellsArgs, scanPageSize),
-          { pageSize },
-        )
+        await collectCellsPaged(client, ...findCellsArgs, {
+          onChain: options?.onChain === true,
+          pageSize,
+        })
       )
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
         .map((cell) => new OwnerCell(cell));
@@ -215,8 +204,6 @@ export class OwnedOwnerManager implements ScriptDeps {
         ownerCandidates.map(async (owner) => client.getCell(owner.getOwned())),
       );
 
-      const headerCache: DaoCellFromCache["headerCache"] = new Map();
-      const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
       const withdrawalGroups = await Promise.all(
         ownerCandidates.map(
           async (owner, index): Promise<WithdrawalGroup | undefined> => {

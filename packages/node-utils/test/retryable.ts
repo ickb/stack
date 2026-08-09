@@ -22,6 +22,13 @@ describe("retryable error classifiers", () => {
         new Error(FETCH_FAILED_MESSAGE, { cause: new TypeError(FETCH_FAILED_MESSAGE) }),
       ),
     ).toBe(true);
+    expect(
+      importedIsRetryableRpcTransportError(
+        new Error("Failed to load transaction header for txHash 0x11 at 0x1100000000", {
+          cause: new TypeError(FETCH_FAILED_MESSAGE),
+        }),
+      ),
+    ).toBe(true);
     expect(importedIsRetryableRpcTransportError(new Error(FETCH_FAILED_MESSAGE))).toBe(
       false,
     );

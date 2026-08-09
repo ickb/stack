@@ -24,6 +24,7 @@ describe(FIND_WITHDRAWAL_GROUPS_SUITE, () => {
   registerReferencedCellConcurrencyTests();
   registerWithdrawalDecodeConcurrencyTests();
   registerHeaderDeduplicationTests();
+  registerCrossLockCacheTests();
 });
 
 function registerReferencedCellConcurrencyTests(): void {
@@ -210,6 +211,74 @@ function registerHeaderDeduplicationTests(): void {
 
     const groups = await collect(
       manager.findWithdrawalGroups(client, [ownerLock], { tip }),
+    );
+
+    expect(groups).toHaveLength(2);
+    expect(headerCalls).toBe(1);
+    expect(transactionCalls).toBe(1);
+  });
+}
+
+function registerCrossLockCacheTests(): void {
+  it("reuses withdrawal header lookups across requested locks", async () => {
+    const firstLock = script("11");
+    const secondLock = script("12");
+    const ownedOwnerScript = script("22");
+    const daoScript = script("33");
+    const tip = headerLike();
+    const firstOwner = ownerMarkerCell("88", 1n, firstLock, ownedOwnerScript);
+    const secondOwner = ownerMarkerCell("88", 3n, secondLock, ownedOwnerScript);
+    const firstOwned = ownedWithdrawalCell({
+      txHashByte: "88",
+      index: 0n,
+      ownedOwnerScript,
+      daoScript,
+      depositHeaderNumber: 1n,
+    });
+    const secondOwned = ownedWithdrawalCell({
+      txHashByte: "88",
+      index: 2n,
+      ownedOwnerScript,
+      daoScript,
+      depositHeaderNumber: 1n,
+    });
+    const referencedCells = new Map([
+      [firstOwned.outPoint.toHex(), firstOwned],
+      [secondOwned.outPoint.toHex(), secondOwned],
+    ]);
+    const manager = new OwnedOwnerManager(
+      ownedOwnerScript,
+      [],
+      new DaoManager(daoScript, []),
+    );
+    let headerCalls = 0;
+    let transactionCalls = 0;
+    const client = new StubClient({
+      async *findCells(query): ReturnType<ccc.Client["findCells"]> {
+        await Promise.resolve();
+        const lock = ccc.Script.from(query.script);
+        yield lock.eq(firstLock) ? firstOwner : secondOwner;
+      },
+      getCell: async (outPoint): ReturnType<ccc.Client["getCell"]> => {
+        await Promise.resolve();
+        return referencedCells.get(ccc.OutPoint.from(outPoint).toHex());
+      },
+      getHeaderByNumber: async (): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+        headerCalls += 1;
+        await Promise.resolve();
+        return headerLike({ number: 1n });
+      },
+      getTransactionWithHeader: async (): ReturnType<
+        ccc.Client["getTransactionWithHeader"]
+      > => {
+        transactionCalls += 1;
+        await Promise.resolve();
+        return transactionWithHeader(headerLike({ number: 2n }));
+      },
+    });
+
+    const groups = await collect(
+      manager.findWithdrawalGroups(client, [firstLock, secondLock], { tip }),
     );
 
     expect(groups).toHaveLength(2);

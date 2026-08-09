@@ -4,7 +4,6 @@ import {
   botWithdrawalCkb,
   cumulativeCkbMaturing,
   mergeBotCkb,
-  normalizeCountLimit,
   poolDepositCkb,
   poolDepositsKey,
   positiveMapValueSum,
@@ -75,7 +74,6 @@ describe("sdk projection value helpers", () => {
       poolDepositCkb(
         {
           deposits: [readyDeposit, pendingDeposit],
-          readyDeposits: [readyDeposit],
           id: "p",
         },
         baseTip,
@@ -91,9 +89,6 @@ describe("sdk projection value helpers", () => {
     ]);
     expect(sumDirectWithdrawalSurplus([readyDeposit], ratio)).toBe(45n);
     expect(sumUdtValue([readyDeposit, pendingDeposit])).toBe(12n);
-    expect(normalizeCountLimit(2)).toBe(2);
-    expect(normalizeCountLimit(0)).toBe(0);
-    expect(normalizeCountLimit(0.5)).toBe(0);
   });
 });
 

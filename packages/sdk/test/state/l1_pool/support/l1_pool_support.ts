@@ -5,7 +5,7 @@ import { script } from "@ickb/testkit";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 
-export const L1_STATE_SUITE = "IckbSdk.getL1State snapshot detection";
+export const L1_STATE_SUITE = "IckbSdk.getL1State";
 
 export function directDepositPageSizeFixture(): {
   logicManager: LogicManager;

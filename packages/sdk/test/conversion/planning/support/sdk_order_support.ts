@@ -1,6 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
-import { Info, MasterCell, OrderCell, OrderData, OrderGroup } from "@ickb/order";
-import { script } from "@ickb/testkit";
+import {
+  Info,
+  MasterCell,
+  OrderCell,
+  OrderData,
+  OrderGroup,
+  type OrderManager,
+} from "@ickb/order";
+import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {
@@ -73,7 +80,12 @@ export function makeOrderGroup(options: {
   isCkb2Udt?: boolean;
   orderCapacity?: bigint;
   udtValue?: bigint;
-}): { group: OrderGroup; orderCell: ccc.Cell; masterCell: ccc.Cell } {
+}): {
+  group: OrderGroup;
+  masterCell: ccc.Cell;
+  orderCell: ccc.Cell;
+  originCell: ccc.Cell;
+} {
   const masterOutPoint = ccc.OutPoint.from({
     txHash: hash(options.txHashByte),
     index: 1n,
@@ -104,12 +116,59 @@ export function makeOrderGroup(options: {
     outputData: "0x",
   });
   const order = OrderCell.mustFrom(orderCell);
+  const originCell = ccc.Cell.from({
+    outPoint: { txHash: masterOutPoint.txHash, index: 0n },
+    cellOutput: orderCell.cellOutput,
+    outputData: OrderData.from({
+      udtValue: options.udtValue ?? 0n,
+      master: {
+        type: "relative",
+        value: { distance: 1n, padding: new Uint8Array(32) },
+      },
+      info: order.data.info,
+    }).toBytes(),
+  });
+  const origin = OrderCell.mustFrom(originCell);
 
   return {
-    group: new OrderGroup(new MasterCell(masterCell), order, order),
+    group: new OrderGroup(new MasterCell(masterCell), order, origin),
     orderCell,
     masterCell,
+    originCell,
   };
+}
+
+export async function resolveOrderGroupFixture(
+  orderManager: OrderManager,
+  cells: { masterCell: ccc.Cell; orderCell: ccc.Cell; originCell: ccc.Cell },
+): Promise<OrderGroup> {
+  const originTransaction = ccc.Transaction.default();
+  for (const cell of [cells.originCell, cells.masterCell]) {
+    originTransaction.outputs.push(cell.cellOutput);
+    originTransaction.outputsData.push(cell.outputData);
+  }
+  const client = new StubClient({
+    async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
+      yield query.scriptType === "lock" ? cells.orderCell : cells.masterCell;
+      await Promise.resolve();
+    },
+    getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
+      await Promise.resolve();
+      return txHash === cells.masterCell.outPoint.txHash
+        ? committedTransactionResponse(originTransaction)
+        : undefined;
+    },
+  });
+  const groups: OrderGroup[] = [];
+  for await (const group of orderManager.findOrders(client)) {
+    groups.push(group);
+  }
+  if (groups.length !== 1 || groups[0] === undefined) {
+    throw new Error(
+      `Expected one resolved order group, received ${groups.length.toString()}`,
+    );
+  }
+  return groups[0];
 }
 
 export const placeholderOrder = projectionOrderGroup({

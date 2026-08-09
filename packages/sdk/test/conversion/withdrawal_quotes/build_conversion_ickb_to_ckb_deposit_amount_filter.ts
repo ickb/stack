@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -31,14 +28,13 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike, deposits) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, deposits) => {
         expect(deposits).toEqual([fitting]);
         return ccc.Transaction.from(txLike);
       });
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -47,7 +43,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
             poolDeposits: {
               deposits: [oversized, fitting],
-              readyDeposits: [oversized, fitting],
               id: "pool",
             },
           },

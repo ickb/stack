@@ -1,7 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { DaoManager } from "@ickb/dao";
 import { describe, expect, it } from "vitest";
-import { convert, ickbExchangeRatio, IckbUdt, ickbValue } from "../../src/udt.ts";
+import {
+  convert,
+  ickbAccountingRatio,
+  ickbExchangeRatio,
+  IckbUdt,
+  ickbValue,
+} from "../../src/udt.ts";
 import {
   byte32FromByte,
   clientWithHeader,
@@ -312,16 +318,35 @@ function testIckbUdt(): { ickbUdt: IckbUdt; logic: ccc.Script; type: ccc.Script 
   };
 }
 
+describe("IckbUdt.typeScriptFrom", () => {
+  it("builds xUDT owner-mode args from the iCKB logic script hash", () => {
+    const rawXudt = script("55");
+    const logic = script("33");
+
+    const type = IckbUdt.typeScriptFrom(rawXudt, logic);
+
+    expect(type.codeHash).toBe(rawXudt.codeHash);
+    expect(type.hashType).toBe(rawXudt.hashType);
+    expect(type.args).toBe(
+      "0xe53fd3c784cec05e3188b42f221ff28505169c9048ebb8b5f3e2d96a4fd9d26b00000080",
+    );
+    expect(ccc.bytesFrom(type.args)).toHaveLength(36);
+  });
+});
+
 describe("iCKB conversion", () => {
   it("converts from iCKB to CKB using explicit ratios and header ratios", () => {
     const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
 
     expect(convert(false, 6n, { ckbScale: 2n, udtScale: 3n })).toBe(9n);
-    expect(convert(true, ccc.fixedPointFrom(1000), header, false)).toBe(
+    expect(convert(true, ccc.fixedPointFrom(1000), ickbAccountingRatio(header))).toBe(
       ccc.fixedPointFrom(1000),
     );
-    expect(ickbExchangeRatio(header).udtScale).toBeGreaterThan(header.dao.ar);
-    expect(ickbExchangeRatio(header, false).udtScale).toBe(header.dao.ar);
+    expect(ickbExchangeRatio(header).udtScale).toBe(
+      header.dao.ar +
+        (ccc.fixedPointFrom(82) * 10000000000000000n) / ccc.fixedPointFrom(100000),
+    );
+    expect(ickbAccountingRatio(header).udtScale).toBe(header.dao.ar);
   });
 
   it("rejects non-positive exchange ratio scales", () => {

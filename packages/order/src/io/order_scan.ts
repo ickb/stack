@@ -1,6 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { collectPagedScan } from "@ickb/utils";
-import { MasterCell, OrderCell, OrderGroup } from "../model/cells.ts";
+import { collectCellsPaged } from "@ickb/utils";
+import {
+  attestResolvedOrderGroup,
+  MasterCell,
+  OrderCell,
+  OrderGroup,
+} from "../model/cells.ts";
 import { cellOutputLike } from "./order_io.ts";
 
 /**
@@ -70,13 +75,10 @@ export async function findSimpleOrders({
     "asc",
   ] as const;
   const orders: OrderCell[] = [];
-  for (const cell of await collectPagedScan(
-    (requestPageSize) =>
-      onChain
-        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
-        : client.findCells(...findCellsArgs, requestPageSize),
-    { pageSize },
-  )) {
+  for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
+    onChain,
+    pageSize,
+  })) {
     const order = OrderCell.tryFrom(cell);
     if (order !== undefined && isOrderCell(cell, script, udtScript)) {
       orders.push(order);
@@ -103,13 +105,10 @@ export async function findAllMasters(
     "asc",
   ] as const;
   const masters: MasterCell[] = [];
-  for (const cell of await collectPagedScan(
-    (requestPageSize) =>
-      onChain
-        ? client.findCellsOnChain(...findCellsArgs, requestPageSize)
-        : client.findCells(...findCellsArgs, requestPageSize),
-    { pageSize },
-  )) {
+  for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
+    onChain,
+    pageSize,
+  })) {
     if (isMasterCell(cell, script)) {
       masters.push(new MasterCell(cell));
     }
@@ -143,7 +142,7 @@ export async function resolveOrderGroup(
   const group = OrderGroup.tryFrom(master, order, origin.origin);
   return group === undefined
     ? { ok: false, reason: "invalid-group" }
-    : { ok: true, group };
+    : { ok: true, group: attestResolvedOrderGroup(group) };
 }
 
 /** Checks the order-cell lock/type shape for one order deployment. */

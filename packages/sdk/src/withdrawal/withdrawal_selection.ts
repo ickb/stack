@@ -1,17 +1,18 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "@ickb/core";
 import { compareBigInt } from "@ickb/utils";
+import { MAX_WITHDRAWAL_REQUESTS } from "../client/sdk_types.ts";
 import {
-  DEFAULT_MAX_WITHDRAWAL_REQUESTS,
+  BEST_FIT_SEARCH_CANDIDATES,
+  prepareReadyDepositExactCountSelector,
   selectReadyDeposits,
+  selectReadyDepositsForExactCounts,
 } from "./withdrawal_best_fit.ts";
 import { depositKey } from "./withdrawal_ring.ts";
 import type {
   ExactReadyWithdrawalSelectionOptions,
   ReadyWithdrawalSelection,
   ReadyWithdrawalSelectionOptions,
-  ScoredExactReadyWithdrawalSelectionOptions,
-  ScoredReadyWithdrawalSelectionOptions,
   WithdrawalDepositCandidate,
 } from "./withdrawal_selection_types.ts";
 
@@ -39,109 +40,14 @@ export function selectReadyWithdrawalDeposits<
   T extends WithdrawalDepositCandidate = IckbDepositCell,
 >(options: ReadyWithdrawalSelectionOptions<T>): ReadyWithdrawalSelection<T> {
   assertReadyWithdrawalDeposits(options.readyDeposits);
-  return selectReadyWithdrawalDepositsWithScore(options);
-}
-
-/**
- * Returns distinct exact-count ready withdrawal selections across maturity buckets.
- */
-export function selectExactReadyWithdrawalDepositCandidates<
-  T extends WithdrawalDepositCandidate = IckbDepositCell,
->(
-  options: ExactReadyWithdrawalSelectionOptions<T> & {
-    score: (deposit: T) => bigint;
-    maturityBucket: (deposit: T) => bigint;
-  },
-): Array<ReadyWithdrawalSelection<T>> {
-  assertReadyWithdrawalDeposits(options.readyDeposits);
-  const selections: Array<ReadyWithdrawalSelection<T>> = [];
-  const seen = new Set<string>();
-  const indexByDeposit = new Map(
-    options.readyDeposits.map((deposit, index): [T, number] => [deposit, index]),
-  );
-  const addSelection = (selection: ReadyWithdrawalSelection<T> | undefined): void => {
-    if (selection === undefined) {
-      return;
-    }
-
-    const key = selectionKey(selection.deposits, indexByDeposit);
-    if (seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    selections.push(selection);
-  };
-
-  for (const bucket of uniqueBuckets(options.readyDeposits, options.maturityBucket)) {
-    const readyDeposits = options.readyDeposits.filter(
-      (deposit) => options.maturityBucket(deposit) <= bucket,
-    );
-    const baseOptions = {
-      readyDeposits,
-      tip: options.tip,
-      maxAmount: options.maxAmount,
-      count: options.count,
-      ...(options.canSelectDeposit === undefined
-        ? {}
-        : { canSelectDeposit: options.canSelectDeposit }),
-      ...(options.requiredLiveDepositFor === undefined
-        ? {}
-        : { requiredLiveDepositFor: options.requiredLiveDepositFor }),
-    };
-    addSelection(
-      selectReadyWithdrawalCandidateWithScore({
-        ...baseOptions,
-        score: options.score,
-      }),
-    );
-    addSelection(selectReadyWithdrawalCandidateWithScore(baseOptions));
-  }
-
-  return selections;
-}
-
-export function assertReadyWithdrawalDeposits(
-  deposits: readonly WithdrawalDepositCandidate[],
-): void {
-  const seen = new Set<string>();
-  for (const deposit of deposits) {
-    const outPoint = depositKey(deposit);
-    if (!deposit.isReady) {
-      throw new Error(`Withdrawal deposit ${outPoint} is not ready`);
-    }
-    if (seen.has(outPoint)) {
-      throw new Error(`Withdrawal deposit ${outPoint} is duplicated`);
-    }
-    seen.add(outPoint);
-  }
-}
-
-function selectReadyWithdrawalCandidateWithScore<T extends WithdrawalDepositCandidate>(
-  options: ScoredExactReadyWithdrawalSelectionOptions<T>,
-): ReadyWithdrawalSelection<T> | undefined {
-  const { count, ...selectionOptions } = options;
-  const selection = selectReadyWithdrawalDepositsWithScore({
-    ...selectionOptions,
-    minCount: count,
-    maxCount: count,
-  });
-
-  return selection.deposits.length === count ? selection : undefined;
-}
-
-function selectReadyWithdrawalDepositsWithScore<T extends WithdrawalDepositCandidate>(
-  options: ScoredReadyWithdrawalSelectionOptions<T>,
-): ReadyWithdrawalSelection<T> {
   const {
     tip,
     maxAmount,
     readyDeposits,
     minCount = 1,
-    maxCount = DEFAULT_MAX_WITHDRAWAL_REQUESTS,
+    maxCount = MAX_WITHDRAWAL_REQUESTS,
     canSelectDeposit = (): boolean => true,
     requiredLiveDepositFor,
-    score,
   } = options;
   const requiredCount = Math.max(1, minCount);
   if (
@@ -158,10 +64,110 @@ function selectReadyWithdrawalDepositsWithScore<T extends WithdrawalDepositCandi
     selectReadyDeposits(candidates, maxAmount, {
       maxCount,
       minCount: requiredCount,
-      ...(score === undefined ? {} : { score }),
     }),
     requiredLiveDepositFor,
   );
+}
+
+export function selectReadyWithdrawalDepositCandidatesForCounts<
+  T extends WithdrawalDepositCandidate = IckbDepositCell,
+>(
+  options: Omit<ExactReadyWithdrawalSelectionOptions<T>, "count"> & {
+    counts: readonly number[];
+    score: (deposit: T) => bigint;
+    maturityBucket: (deposit: T) => bigint;
+  },
+): ReadonlyMap<number, Array<ReadyWithdrawalSelection<T>>> {
+  assertReadyWithdrawalDeposits(options.readyDeposits);
+  const counts = [...new Set(options.counts)];
+  const selectionsByCount = new Map<number, Array<ReadyWithdrawalSelection<T>>>(
+    counts.map((count): [number, Array<ReadyWithdrawalSelection<T>>] => [count, []]),
+  );
+  const seenByCount = new Map<number, Set<string>>(
+    counts.map((count): [number, Set<string>] => [count, new Set()]),
+  );
+  const indexByDeposit = new Map(
+    options.readyDeposits.map((deposit, index): [T, number] => [deposit, index]),
+  );
+  const canSelectDeposit = options.canSelectDeposit ?? ((): boolean => true);
+  let selectScoredCounts:
+    ((deposits: readonly T[]) => ReadonlyMap<number, T[]>) | undefined;
+  let selectUnscoredCounts = selectScoredCounts;
+  const addSelections = (depositsByCount: ReadonlyMap<number, T[]>): void => {
+    for (const [count, selections] of selectionsByCount) {
+      const deposits = depositsByCount.get(count);
+      if (deposits?.length !== count) {
+        continue;
+      }
+
+      const key = selectionKey(deposits, indexByDeposit);
+      const seen = seenByCount.get(count);
+      if (seen === undefined || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      selections.push(
+        selectionWithRequiredLiveDeposits(deposits, options.requiredLiveDepositFor),
+      );
+    }
+  };
+
+  for (const bucket of uniqueBuckets(options.readyDeposits, options.maturityBucket)) {
+    const candidates = sortByMaturity(
+      options.readyDeposits.filter(
+        (deposit) => options.maturityBucket(deposit) <= bucket,
+      ),
+      options.tip,
+    ).filter(canSelectDeposit);
+    if (
+      selectScoredCounts === undefined &&
+      candidates.length >= BEST_FIT_SEARCH_CANDIDATES
+    ) {
+      selectScoredCounts = prepareReadyDepositExactCountSelector(
+        candidates,
+        options.maxAmount,
+        options.counts,
+        options.score,
+      );
+      selectUnscoredCounts = prepareReadyDepositExactCountSelector(
+        candidates,
+        options.maxAmount,
+        options.counts,
+      );
+    }
+    const scoredByCount =
+      selectScoredCounts?.(candidates) ??
+      selectReadyDepositsForExactCounts(
+        candidates,
+        options.maxAmount,
+        options.counts,
+        options.score,
+      );
+    const unscoredByCount =
+      selectUnscoredCounts?.(candidates) ??
+      selectReadyDepositsForExactCounts(candidates, options.maxAmount, options.counts);
+    addSelections(scoredByCount);
+    addSelections(unscoredByCount);
+  }
+
+  return selectionsByCount;
+}
+
+export function assertReadyWithdrawalDeposits(
+  deposits: readonly WithdrawalDepositCandidate[],
+): void {
+  const seen = new Set<string>();
+  for (const deposit of deposits) {
+    const outPoint = depositKey(deposit);
+    if (!deposit.isReady) {
+      throw new Error(`Withdrawal deposit ${outPoint} is not ready`);
+    }
+    if (seen.has(outPoint)) {
+      throw new Error(`Withdrawal deposit ${outPoint} is duplicated`);
+    }
+    seen.add(outPoint);
+  }
 }
 
 function selectionWithRequiredLiveDeposits<T extends WithdrawalDepositCandidate>(
@@ -199,14 +205,11 @@ function selectionKey<T>(
   items: readonly T[],
   indexByItem: ReadonlyMap<T, number>,
 ): string {
-  return items
-    .map((item) => {
-      const index = indexByItem.get(item);
-      if (index === undefined) {
-        throw new Error("Selection item index is missing");
-      }
-      return String(index);
-    })
-    .toSorted((left, right) => left.localeCompare(right))
-    .join(",");
+  return (
+    items
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selections are built from the indexed readyDeposits array.
+      .map((item) => String(indexByItem.get(item)!))
+      .toSorted((left, right) => left.localeCompare(right))
+      .join(",")
+  );
 }

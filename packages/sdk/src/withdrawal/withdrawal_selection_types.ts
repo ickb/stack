@@ -65,20 +65,8 @@ export interface ReadyWithdrawalSelectionOptions<
   requiredLiveDepositFor?: (deposit: T) => T | undefined;
 }
 
-export type ScoredReadyWithdrawalSelectionOptions<
-  T extends WithdrawalDepositCandidate = IckbDepositCell,
-> = ReadyWithdrawalSelectionOptions<T> & {
-  score?: (deposit: T) => bigint;
-};
-
 export type ExactReadyWithdrawalSelectionOptions<
   T extends WithdrawalDepositCandidate = IckbDepositCell,
 > = Omit<ReadyWithdrawalSelectionOptions<T>, "minCount" | "maxCount"> & {
   count: number;
-};
-
-export type ScoredExactReadyWithdrawalSelectionOptions<
-  T extends WithdrawalDepositCandidate = IckbDepositCell,
-> = ExactReadyWithdrawalSelectionOptions<T> & {
-  score?: (deposit: T) => bigint;
 };

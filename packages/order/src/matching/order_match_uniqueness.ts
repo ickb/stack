@@ -3,7 +3,7 @@ import type { Match } from "./match_types.ts";
 export function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boolean {
   const outPoints = new Set<string>();
   for (const partial of partials) {
-    const key = partial.order.cell.outPoint.toHex();
+    const key = partial.group.order.cell.outPoint.toHex();
     if (outPoints.has(key)) {
       return false;
     }
@@ -14,5 +14,5 @@ export function hasUniquePartialOrderOutPoints(partials: Match["partials"]): boo
 }
 
 export function partialOutPointKeys(partials: Match["partials"]): Set<string> {
-  return new Set(partials.map((partial) => partial.order.cell.outPoint.toHex()));
+  return new Set(partials.map((partial) => partial.group.order.cell.outPoint.toHex()));
 }

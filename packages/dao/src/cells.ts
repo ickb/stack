@@ -1,12 +1,16 @@
-import { ccc, mol } from "@ckb-ccc/core";
-import type { TransactionHeader, ValueComponents } from "@ickb/utils";
+import { ccc } from "@ckb-ccc/core";
+import {
+  CheckedUint64LE,
+  type TransactionHeader,
+  type ValueComponents,
+} from "@ickb/utils";
 
 /**
- * Common decoded state for a DAO deposit or withdrawal request cell.
+ * Represents a live Nervos DAO deposit cell.
  *
  * @public
  */
-export interface DaoCellBase extends ValueComponents {
+export interface DaoDepositCell extends ValueComponents {
   /** The DAO cell. */
   cell: ccc.Cell;
 
@@ -33,14 +37,7 @@ export interface DaoCellBase extends ValueComponents {
    * are ready when their maturity is at or before the tip epoch.
    */
   isReady: boolean;
-}
 
-/**
- * Represents a live Nervos DAO deposit cell.
- *
- * @public
- */
-export interface DaoDepositCell extends DaoCellBase {
   /** Discriminates this decoded DAO cell as a deposit. */
   readonly isDeposit: true;
 }
@@ -50,10 +47,10 @@ export interface DaoDepositCell extends DaoCellBase {
  *
  * @public
  */
-export interface DaoWithdrawalRequestCell extends DaoCellBase {
+export type DaoWithdrawalRequestCell = Omit<DaoDepositCell, "isDeposit"> & {
   /** Discriminates this decoded DAO cell as a withdrawal request. */
   readonly isDeposit: false;
-}
+};
 
 /**
  * The default minimum lock-up period represented as an Epoch.
@@ -80,11 +77,8 @@ const defaultMaxLockUp = ccc.Epoch.from([18n, 0n, 1n]); // 3 days
 /**
  * Result shape returned by `ccc.Client.getTransactionWithHeader`.
  *
- * @public
  */
-export type TransactionWithHeader = Awaited<
-  ReturnType<ccc.Client["getTransactionWithHeader"]>
->;
+type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
 
 /**
  * Batch-scoped caches for DAO cell conversion reads.
@@ -95,7 +89,10 @@ export interface DaoCellFromCache {
   /** Reuses block-header reads by block number across DAO cell conversions in one batch. */
   headerCache?: Map<ccc.Num, Promise<ccc.ClientBlockHeader | undefined>>;
   /** Reuses transaction-with-header reads by transaction hash across DAO cell conversions in one batch. */
-  transactionCache?: Map<ccc.Hex, Promise<TransactionWithHeader>>;
+  transactionCache?: Map<
+    ccc.Hex,
+    Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
+  >;
 }
 
 type DaoCell = DaoDepositCell | DaoWithdrawalRequestCell;
@@ -173,7 +170,7 @@ export async function daoCellFrom(
     isReady: readiness.isReady,
     ckbValue,
     udtValue,
-  } satisfies DaoCellBase;
+  } satisfies Omit<DaoDepositCell, "isDeposit">;
 
   return options.isDeposit
     ? { ...common, isDeposit: true }
@@ -207,7 +204,7 @@ async function withdrawalRequestHeaders(
   const txHash = cell.outPoint.txHash;
   let depositBlockNumber: ccc.Num;
   try {
-    depositBlockNumber = mol.Uint64LE.decode(cell.outputData);
+    depositBlockNumber = CheckedUint64LE.decode(cell.outputData);
   } catch (error) {
     throw new Error(
       `Invalid DAO withdrawal request payload at ${cell.outPoint.toHex()}: ${cell.outputData}`,

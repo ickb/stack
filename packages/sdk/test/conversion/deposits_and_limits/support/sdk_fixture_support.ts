@@ -127,12 +127,6 @@ export function signerWithLock(lock: ccc.Script): ccc.Signer {
   return new TestSigner(undefined, lock);
 }
 
-export function signerWithSendTransaction(
-  sendTransaction: ccc.Signer["sendTransaction"],
-): ccc.Signer {
-  return new TestSigner(sendTransaction);
-}
-
 class TestSigner extends ccc.SignerCkbScriptReadonly {
   public override sendTransaction: ccc.Signer["sendTransaction"];
 
@@ -159,13 +153,10 @@ export function mockPassthroughMint(orderManager: OrderManager): void {
 export function mockUnitDeposit(
   logicManager: LogicManager,
 ): MockInstance<LogicManager["deposit"]> {
-  return vi
-    .spyOn(logicManager, "deposit")
-    .mockImplementation(async (txLike, quantity) => {
-      await Promise.resolve();
-      expect(quantity).toBe(1);
-      return passthroughTransaction(txLike);
-    });
+  return vi.spyOn(logicManager, "deposit").mockImplementation((txLike, quantity) => {
+    expect(quantity).toBe(1);
+    return passthroughTransaction(txLike);
+  });
 }
 
 export async function expectCkbToIckbDirectRetryBuild(
@@ -173,7 +164,7 @@ export async function expectCkbToIckbDirectRetryBuild(
   lock: ccc.Script,
 ): Promise<void> {
   await expect(
-    sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+    sdk.buildConversionTransaction(ccc.Transaction.default(), {
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n,
       lock,
@@ -196,7 +187,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
   exchangeRatio: ReturnType<typeof Ratio.from>;
 }): Promise<void> {
   await expect(
-    options.sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+    options.sdk.buildConversionTransaction(ccc.Transaction.default(), {
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       lock: options.lock,
@@ -206,7 +197,6 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
           ckbAvailable: 10n,
           poolDeposits: {
             deposits: options.deposits,
-            readyDeposits: options.deposits,
             id: "pool",
           },
         },
@@ -227,8 +217,7 @@ export function mockWithdrawalWithRemainderOrder(
 ): WithdrawalRemainderOrderMocks {
   const requestWithdrawal = vi
     .spyOn(fixture.ownedOwnerManager, "requestWithdrawal")
-    .mockImplementation(async (txLike, deposits) => {
-      await Promise.resolve();
+    .mockImplementation((txLike, deposits) => {
       expect(deposits).toEqual(expectedDeposits);
       return passthroughTransaction(txLike);
     });

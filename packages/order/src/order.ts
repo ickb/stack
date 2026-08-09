@@ -16,11 +16,10 @@ import {
 import { addOrderMatch, meltOrderGroups, mintOrder } from "./io/order_transaction.ts";
 import { ceilDiv, quotePreservingRatio } from "./matching/order_conversion.ts";
 import {
-  OrderMatcher,
   bestMatch,
-  orderMatchers,
-  sequentialMatches,
+  type BestMatchOptions,
   type Match,
+  type MatchSearchResult,
 } from "./matching/order_matching.ts";
 import type { OrderCell, OrderGroup } from "./model/cells.ts";
 import { Info, type InfoLike } from "./model/info.ts";
@@ -28,11 +27,14 @@ import { Ratio } from "./model/ratio.ts";
 
 export type { OrderGroupSkipReason } from "./io/order_scan.ts";
 export { OrderConversionRepresentabilityError } from "./matching/order_conversion.ts";
-export { OrderMatcher } from "./matching/order_matching.ts";
 export type {
+  BestMatchOptions,
   Match,
   MatchDiagnostics,
   MatchDirectionDiagnostics,
+  MatchSearchMode,
+  MatchSearchPhase,
+  MatchSearchResult,
 } from "./matching/order_matching.ts";
 
 /**
@@ -138,47 +140,21 @@ export class OrderManager implements ScriptDeps {
   }
 
   /**
-   * Matches one order against an allowance in the requested direction.
-   */
-  public match(order: OrderCell, isCkb2Udt: boolean, allowance: ccc.FixedPoint): Match {
-    return (
-      OrderMatcher.from(order, isCkb2Udt, 0n)?.match(allowance) ?? {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }
-    );
-  }
-
-  /**
-   * Finds the best executable match for the supplied order pool and allowances.
+   * Finds a bounded best executable match for validated, resolved order groups.
+   *
+   * @remarks
+   * Groups preserve the genuine mint origin used by the resolver's confusion
+   * heuristic. Raw `OrderCell`s are intentionally not accepted for matching.
+   * A complete result proves the atomic optimum; an incomplete result carries
+   * the best exactly evaluated candidate without claiming global optimality.
    */
   public static bestMatch(
-    orderPool: OrderCell[],
+    orderPool: OrderGroup[],
     allowance: ValueComponents,
     exchangeRate: ExchangeRatio,
-    options?: {
-      feeRate?: ccc.Num;
-      ckbAllowanceStep?: ccc.FixedPoint;
-      maxPartials?: number;
-    },
-  ): Match {
+    options?: BestMatchOptions,
+  ): MatchSearchResult {
     return bestMatch(orderPool, allowance, exchangeRate, options);
-  }
-
-  /**
-   * Yields sequential matches for one direction using a fixed allowance step.
-   */
-  public static *sequentialMatcher(
-    orderPool: OrderCell[],
-    isCkb2Udt: boolean,
-    allowanceStep: ccc.FixedPoint,
-    ckbMiningFee: ccc.FixedPoint,
-  ): Generator<Match, void, void> {
-    yield* sequentialMatches(
-      orderMatchers(orderPool, isCkb2Udt, ckbMiningFee),
-      allowanceStep,
-    );
   }
 
   /**

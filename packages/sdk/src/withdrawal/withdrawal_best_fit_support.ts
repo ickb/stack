@@ -85,11 +85,8 @@ export function selectByMasks<T>(items: readonly T[], mask: number): T[] {
   const selected: T[] = [];
   for (let i = 0; i < items.length; i += 1) {
     if ((mask & (1 << i)) !== 0) {
-      const item = items[i];
-      if (item === undefined) {
-        throw new Error(`Selection item ${String(i)} is missing`);
-      }
-      selected.push(item);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- masks are generated from the same dense item array.
+      selected.push(items[i]!);
     }
   }
   return selected;

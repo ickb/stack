@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { ickbExchangeRatio } from "@ickb/core";
-import { Info, Ratio, type OrderCell, type OrderGroup } from "@ickb/order";
+import { Info, Ratio, type OrderGroup } from "@ickb/order";
 import {
   collect,
-  collectPagedScan,
+  collectCellsPaged,
   defaultCellPageSize,
   isPlainCapacityCell,
   unique,
@@ -16,11 +16,9 @@ import {
   poolDepositCkb,
   poolDepositsKey,
   positiveMapValueSum,
-  sortDepositsByMaturity,
 } from "../conversion/sdk_value_helpers.ts";
 import { orderGroupWithMaturity } from "../estimate/sdk_maturity_order_group.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
-import { sdkManagers } from "./sdk_state_store.ts";
 import type {
   AccountState,
   CkbCumulative,
@@ -34,7 +32,6 @@ import type {
 /**
  * SDK layer that scans public and account L1 state.
  *
- * @public
  */
 export class IckbSdkL1 extends IckbSdkConversion {
   /** Scans public iCKB pool deposits and evaluates readiness against the sampled tip. */
@@ -43,10 +40,9 @@ export class IckbSdkL1 extends IckbSdkConversion {
     tip: ccc.ClientBlockHeader,
     options?: GetPoolDepositsOptions,
   ): Promise<PoolDepositState> {
-    const { ickbLogic } = sdkManagers(this);
     const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
     const deposits = await collect(
-      ickbLogic.findDeposits(client, {
+      this.ickbLogic.findDeposits(client, {
         onChain: true,
         tip,
         pageSize: cellPageSize,
@@ -54,12 +50,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
         ...(options?.maxLockUp === undefined ? {} : { maxLockUp: options.maxLockUp }),
       }),
     );
-    const readyDeposits = sortDepositsByMaturity(
-      deposits.filter((deposit) => deposit.isReady),
-      tip,
-    );
-
-    return { deposits, readyDeposits, id: poolDepositsKey(deposits, tip) };
+    return { deposits, id: poolDepositsKey(deposits, tip) };
   }
 
   /**
@@ -71,22 +62,26 @@ export class IckbSdkL1 extends IckbSdkConversion {
     tip: ccc.ClientBlockHeader,
     options?: { cellPageSize?: number },
   ): Promise<AccountState> {
-    const { ickbLogic, ownedOwner, ickbUdt } = sdkManagers(this);
     const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
-    const [cells, receipts, withdrawalGroups] = await Promise.all([
-      this.findAccountCells(client, locks, { pageSize: cellPageSize }),
-      collect(
-        ickbLogic.findReceipts(client, locks, { onChain: true, pageSize: cellPageSize }),
-      ),
-      collect(
-        ownedOwner.findWithdrawalGroups(client, locks, {
-          onChain: true,
-          tip,
-          pageSize: cellPageSize,
-        }),
-      ),
-    ]);
-    const nativeUdtCells = cells.filter((cell) => ickbUdt.isUdt(cell));
+    const [capacityCells, nativeUdtCells, receipts, withdrawalGroups] = await Promise.all(
+      [
+        this.findAccountCapacityCells(client, locks, { pageSize: cellPageSize }),
+        this.findAccountNativeUdtCells(client, locks, { pageSize: cellPageSize }),
+        collect(
+          this.ickbLogic.findReceipts(client, locks, {
+            onChain: true,
+            pageSize: cellPageSize,
+          }),
+        ),
+        collect(
+          this.ownedOwner.findWithdrawalGroups(client, locks, {
+            onChain: true,
+            tip,
+            pageSize: cellPageSize,
+          }),
+        ),
+      ],
+    );
     const nativeUdt = nativeUdtCells.reduce(
       (acc, cell) => ({
         capacity: acc.capacity + cell.cellOutput.capacity,
@@ -96,7 +91,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
     );
 
     return {
-      capacityCells: cells.filter(isPlainCapacityCell),
+      capacityCells,
       nativeUdtCells,
       nativeUdtCapacity: nativeUdt.capacity,
       nativeUdtBalance: nativeUdt.balance,
@@ -135,14 +130,13 @@ export class IckbSdkL1 extends IckbSdkConversion {
     locks: ccc.Script[],
     options?: GetL1StateOptions,
   ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
-    const { order } = sdkManagers(this);
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
     const [poolDeposits, orders, feeRate] = await Promise.all([
       this.getPoolDeposits(client, tip, { ...options?.poolDeposits, cellPageSize }),
-      collect(order.findOrders(client, { onChain: true, pageSize: cellPageSize })),
-      client.getFeeRate(),
+      collect(this.order.findOrders(client, { onChain: true, pageSize: cellPageSize })),
+      getFeeRate(client),
     ]);
     const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits, {
       cellPageSize,
@@ -169,13 +163,15 @@ export class IckbSdkL1 extends IckbSdkConversion {
     poolDeposits: PoolDepositState,
     options: { cellPageSize: number },
   ): Promise<{ ckbAvailable: ccc.FixedPoint; ckbMaturing: CkbCumulative[] }> {
-    const botCkb = await this.getBotCkbBalances(client, {
-      cellPageSize: options.cellPageSize,
-      tip,
-    });
-    const withdrawalCkb = await this.getBotWithdrawalCkb(client, tip, {
-      cellPageSize: options.cellPageSize,
-    });
+    const [botCkb, withdrawalCkb] = await Promise.all([
+      this.getBotCkbBalances(client, {
+        cellPageSize: options.cellPageSize,
+        tip,
+      }),
+      this.getBotWithdrawalCkb(client, tip, {
+        cellPageSize: options.cellPageSize,
+      }),
+    ]);
     const poolCkb = poolDepositCkb(poolDeposits, tip);
 
     return {
@@ -192,10 +188,9 @@ export class IckbSdkL1 extends IckbSdkConversion {
     client: ccc.Client,
     options: { cellPageSize: number; tip: ccc.ClientBlockHeader },
   ): Promise<Map<string, ccc.FixedPoint>> {
-    const { bots } = sdkManagers(this);
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
-    for (const lock of unique(bots)) {
-      const cells = await this.findBotCapacityCells(client, lock, options);
+    for (const lock of unique(this.bots)) {
+      const cells = await this.findPlainCapacityCells(client, lock, options.cellPageSize);
       for (const cell of cells) {
         addBotCkb(bot2Ckb, lock.toHex(), cell.cellOutput.capacity);
       }
@@ -203,27 +198,26 @@ export class IckbSdkL1 extends IckbSdkConversion {
     return bot2Ckb;
   }
 
-  private async findBotCapacityCells(
+  private async findPlainCapacityCells(
     client: ccc.Client,
     lock: ccc.Script,
-    options: { cellPageSize: number },
+    pageSize: number,
   ): Promise<ccc.Cell[]> {
-    const cells = await collectPagedScan(
-      (pageSize) =>
-        client.findCellsOnChain(
-          {
-            script: lock,
-            scriptType: "lock",
-            filter: { scriptLenRange: [0n, 1n], outputDataLenRange: [0n, 1n] },
-            scriptSearchMode: "exact",
-            withData: true,
-          },
-          "asc",
-          pageSize,
-        ),
-      { pageSize: options.cellPageSize },
+    const cells = await collectCellsPaged(
+      client,
+      {
+        script: lock,
+        scriptType: "lock",
+        filter: { scriptLenRange: [0n, 1n], outputDataLenRange: [0n, 1n] },
+        scriptSearchMode: "exact",
+        withData: true,
+      },
+      "asc",
+      { onChain: true, pageSize },
     );
-    return cells.filter(isPlainCapacityCell);
+    return cells.filter(
+      (cell) => cell.cellOutput.lock.eq(lock) && isPlainCapacityCell(cell),
+    );
   }
 
   private async getBotWithdrawalCkb(
@@ -231,9 +225,8 @@ export class IckbSdkL1 extends IckbSdkConversion {
     tip: ccc.ClientBlockHeader,
     options: { cellPageSize: number },
   ): Promise<{ ready: Map<string, ccc.FixedPoint>; maturing: MaturingCkb[] }> {
-    const { bots, ownedOwner } = sdkManagers(this);
     const withdrawals = await collect(
-      ownedOwner.findWithdrawalGroups(client, bots, {
+      this.ownedOwner.findWithdrawalGroups(client, this.bots, {
         onChain: true,
         tip,
         pageSize: options.cellPageSize,
@@ -242,7 +235,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
     return botWithdrawalCkb(withdrawals, tip);
   }
 
-  private async findAccountCells(
+  private async findAccountCapacityCells(
     client: ccc.Client,
     locks: ccc.Script[],
     options: { pageSize: number },
@@ -250,7 +243,42 @@ export class IckbSdkL1 extends IckbSdkConversion {
     const cells: ccc.Cell[] = [];
     const { pageSize } = options;
     for (const lock of unique(locks)) {
-      cells.push(...(await accountCellsForLock(client, lock, pageSize)));
+      cells.push(...(await this.findPlainCapacityCells(client, lock, pageSize)));
+    }
+    return cells;
+  }
+
+  private async findAccountNativeUdtCells(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options: { pageSize: number },
+  ): Promise<ccc.Cell[]> {
+    const cells: ccc.Cell[] = [];
+    const scriptSize = BigInt(this.ickbUdt.script.occupiedSize);
+    for (const lock of unique(locks)) {
+      const found = await collectCellsPaged(
+        client,
+        {
+          script: lock,
+          scriptType: "lock",
+          filter: {
+            script: this.ickbUdt.script,
+            scriptLenRange: [scriptSize, scriptSize + 1n],
+          },
+          scriptSearchMode: "exact",
+          withData: true,
+        },
+        "asc",
+        { onChain: true, pageSize: options.pageSize },
+      );
+      cells.push(
+        ...found.filter(
+          (cell) =>
+            cell.cellOutput.lock.eq(lock) &&
+            cell.cellOutput.type?.eq(this.ickbUdt.script) === true &&
+            this.ickbUdt.isUdt(cell),
+        ),
+      );
     }
     return cells;
   }
@@ -260,10 +288,10 @@ function partitionOrders(
   orders: readonly OrderGroup[],
   locks: readonly ccc.Script[],
   exchangeRatio: Ratio,
-): { systemOrders: OrderCell[]; userOrders: OrderGroup[] } {
+): { systemOrders: OrderGroup[]; userOrders: OrderGroup[] } {
   const midInfo = new Info(exchangeRatio, exchangeRatio, 1);
   const userOrders: OrderGroup[] = [];
-  const systemOrders: OrderCell[] = [];
+  const systemOrders: OrderGroup[] = [];
   for (const group of orders) {
     if (group.isOwner(...locks)) {
       userOrders.push(group);
@@ -275,24 +303,16 @@ function partitionOrders(
       (order.isCkb2UdtMatchable() && info.ckb2UdtCompare(midInfo) < 0) ||
       (order.isUdt2CkbMatchable() && info.udt2CkbCompare(midInfo) < 0)
     ) {
-      systemOrders.push(order);
+      systemOrders.push(group);
     }
   }
   return { systemOrders, userOrders };
 }
 
-async function accountCellsForLock(
-  client: ccc.Client,
-  lock: ccc.Script,
-  pageSize: number,
-): Promise<ccc.Cell[]> {
-  return collectPagedScan(
-    (requestPageSize) =>
-      client.findCellsOnChain(
-        { script: lock, scriptType: "lock", scriptSearchMode: "exact", withData: true },
-        "asc",
-        requestPageSize,
-      ),
-    { pageSize },
-  );
+async function getFeeRate(client: ccc.Client): Promise<ccc.Num> {
+  const feeRate = await client.getFeeRate();
+  if (feeRate < 0n) {
+    throw new Error("Client fee rate must be non-negative");
+  }
+  return feeRate;
 }

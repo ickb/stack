@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { udt } from "@ckb-ccc/udt";
 import type { DaoManager } from "@ickb/dao";
-import type { ExchangeRatio } from "@ickb/utils";
+import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "@ickb/utils";
 import { ReceiptData } from "./entities.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
@@ -9,6 +9,7 @@ const udtDataSize = 16;
 const AR_0: ccc.Num = 10000000000000000n; // Base scale for CKB
 const depositUsedCapacity = ccc.fixedPointFrom(82); // 82n CKB
 const depositCapacityDelta = (depositUsedCapacity * AR_0) / ccc.fixedPointFrom(100000);
+const xudtOwnerMode = 0x80000000n;
 
 /**
  * Soft per-deposit iCKB value cap used before applying the excess discount.
@@ -84,7 +85,9 @@ export class IckbUdt extends udt.Udt {
     return new ccc.Script(
       codeHash,
       hashType,
-      ccc.hexFrom([ickbLogic.hash(), "00000080"].join("")),
+      ccc.hexFrom(
+        ccc.bytesConcat(ickbLogic.hash(), CheckedUint32LE.encode(xudtOwnerMode)),
+      ),
     );
   }
 
@@ -231,7 +234,7 @@ export class IckbUdt extends udt.Udt {
   ): Promise<IckbInputContribution> {
     if (this.isUdt(cell)) {
       return {
-        balance: ccc.udtBalanceFrom(cell.outputData),
+        balance: decodeUdtBalance(cell.outputData),
         isXudt: true,
       };
     }
@@ -279,7 +282,7 @@ export class IckbUdt extends udt.Udt {
 
   private requiredBalanceFromOutputs(tx: ccc.Transaction): ccc.Num {
     return Array.from(tx.outputCells).reduce((required, cell) => {
-      return this.isUdt(cell) ? required + ccc.udtBalanceFrom(cell.outputData) : required;
+      return this.isUdt(cell) ? required + decodeUdtBalance(cell.outputData) : required;
     }, ccc.Zero);
   }
 }
@@ -365,8 +368,12 @@ function addUdtChangeOutput(
   if (balance <= ccc.Zero) {
     return;
   }
-  const balanceData = ccc.numLeToBytes(balance, 16);
+  const balanceData = CheckedUint128LE.encode(balance);
   tx.addOutput({ lock, type }, balanceData);
+}
+
+function decodeUdtBalance(data: ccc.BytesLike): ccc.Num {
+  return CheckedUint128LE.decode(ccc.bytesFrom(data).slice(0, udtDataSize));
 }
 
 function addCodeDep(tx: ccc.Transaction, outPoint: ccc.OutPoint): void {
@@ -387,7 +394,7 @@ export function ickbValue(
   ckbUnoccupiedCapacity: ccc.FixedPoint,
   header: ccc.ClientBlockHeader,
 ): ccc.FixedPoint {
-  let ickbAmount = convert(true, ckbUnoccupiedCapacity, header, false);
+  let ickbAmount = convert(true, ckbUnoccupiedCapacity, ickbAccountingRatio(header));
   if (ICKB_DEPOSIT_CAP < ickbAmount) {
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
     ickbAmount -= (ickbAmount - ICKB_DEPOSIT_CAP) / 10n;
@@ -397,15 +404,11 @@ export function ickbValue(
 }
 
 /**
- * Converts between CKB and iCKB based on the provided ratio.
+ * Converts between CKB and iCKB based on an explicit ratio.
  *
  * @param isCkb2Udt - A boolean indicating the direction of conversion (CKB to iCKB or vice versa).
  * @param amount - The amount to convert.
- * @param rate - The ratio information for conversion, which can be either:
- *   - An object containing `ckbScale` and `udtScale`.
- *   - A `ccc.ClientBlockHeader` for header information.
- * @param accountDepositCapacity - A boolean indicating whether to account for deposit capacity
- *  when using ccc.ClientBlockHeader (default: true).
+ * @param ratio - The CKB and iCKB scales to use.
  * @returns The converted amount in the target unit as a `ccc.FixedPoint`.
  *
  * @public
@@ -413,10 +416,8 @@ export function ickbValue(
 export function convert(
   isCkb2Udt: boolean,
   amount: ccc.FixedPoint,
-  rate: ExchangeRatio | ccc.ClientBlockHeader,
-  accountDepositCapacity = true,
+  ratio: ExchangeRatio,
 ): ccc.FixedPoint {
-  const ratio = "dao" in rate ? ickbExchangeRatio(rate, accountDepositCapacity) : rate;
   if (ratio.ckbScale <= 0n || ratio.udtScale <= 0n) {
     throw new Error("Exchange ratio scales must be positive");
   }
@@ -426,21 +427,31 @@ export function convert(
 }
 
 /**
- * Calculates the iCKB exchange ratio based on the block header and deposit capacity.
+ * Calculates the free-capacity accounting ratio at a block header.
  *
- * @param header - The block header used for calculating the exchange ratio.
- * @param accountDepositCapacity - A boolean indicating whether to account for the deposit capacity in the calculation.
+ * @param header - The block header whose DAO accumulated rate is used.
  * @returns An object containing the CKB and UDT scales.
  *
  * @public
  */
-export function ickbExchangeRatio(
-  header: ccc.ClientBlockHeader,
-  accountDepositCapacity = true,
-): ExchangeRatio {
-  const AR_m = header.dao.ar;
+export function ickbAccountingRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
   return {
     ckbScale: AR_0,
-    udtScale: accountDepositCapacity ? AR_m + depositCapacityDelta : AR_m,
+    udtScale: header.dao.ar,
+  };
+}
+
+/**
+ * Calculates the gross iCKB exchange ratio for a recoverable standard deposit.
+ *
+ * @remarks Includes the standard deposit's 82 CKB occupied capacity spread
+ * over the 100,000 iCKB reference amount.
+ *
+ * @public
+ */
+export function ickbExchangeRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
+  return {
+    ckbScale: AR_0,
+    udtScale: header.dao.ar + depositCapacityDelta,
   };
 }

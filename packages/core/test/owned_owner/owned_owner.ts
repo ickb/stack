@@ -23,6 +23,14 @@ describe(FIND_WITHDRAWAL_GROUPS_SUITE, () => {
 });
 
 function registerOwnerDecodingTests(): void {
+  it("matches the deployed owner data wire format", () => {
+    const encoded = OwnerData.from({ ownedDistance: -5n }).toBytes();
+
+    expect(encoded).toHaveLength(4);
+    expect(ccc.hexFrom(encoded)).toBe("0xfbffffff");
+    expect(OwnerData.decodePrefix("0xfbffffffaabbcc").ownedDistance).toBe(-5n);
+  });
+
   it("decodes owner relative distances from prefixed data", () => {
     const ownerCell = new OwnerCell(
       ccc.Cell.from({

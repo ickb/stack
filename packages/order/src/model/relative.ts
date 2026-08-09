@@ -2,6 +2,9 @@ import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedInt32LE } from "@ickb/utils";
 import { isValidEntity } from "./entity_validity.ts";
 
+const minInt32 = -(1n << 31n);
+const maxInt32 = (1n << 31n) - 1n;
+
 /**
  * Wire shape for a relative master pointer.
  *
@@ -19,19 +22,36 @@ const RelativeCodec = mol.struct({
   distance: CheckedInt32LE,
 });
 
-/**
- * CCC entity base for serializing and decoding relative master pointers.
- *
- * @public
- */
-export const RelativeBase = ccc.Entity.Base<RelativeLike, Relative>();
+const RelativeBase = ccc.Entity.Base<RelativeLike, Relative>();
 
 /**
  * Relative pointer from an order output to its master output.
  *
  * @public
  */
-export class Relative extends RelativeBase {
+export interface Relative {
+  /** Standard zero padding. */
+  padding: ccc.Bytes;
+  /** Signed output-index distance to the master output. */
+  distance: ccc.Num;
+  /** Creates a copy of this relative pointer. */
+  clone(): Relative;
+  /** Returns whether another value has the same padding and distance. */
+  eq(other: RelativeLike): boolean;
+  /** Returns the CKB hash of the serialized relative pointer. */
+  hash(): ccc.Hex;
+  /** Returns whether padding is canonical and distance fits Int32. */
+  isValid(): boolean;
+  /** Serializes the relative pointer to bytes. */
+  toBytes(): ccc.Bytes;
+  /** Serializes the relative pointer to full-width hexadecimal. */
+  toHex(): ccc.Hex;
+  /** Throws unless padding is canonical and distance fits Int32. */
+  validate(): void;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const RelativeImplementation = class Relative extends RelativeBase {
   static {
     ccc.codec(RelativeCodec)(this);
   }
@@ -73,10 +93,26 @@ export class Relative extends RelativeBase {
     if (this.padding.length !== 32 || this.padding.some((x) => x !== 0)) {
       throw new Error("Relative master invalid, non standard padding");
     }
+    if (this.distance < minInt32 || this.distance > maxInt32) {
+      throw new Error("Relative master distance exceeds Int32");
+    }
   }
 
   /** Returns true when validation succeeds. */
   public isValid(): boolean {
     return isValidEntity(this);
   }
-}
+};
+
+/** CCC-backed relative-pointer constructor and codec. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const Relative: {
+  byteLength?: number;
+  new (padding: ccc.Bytes, distance: ccc.Num): Relative;
+  create: (distance: ccc.Num) => Relative;
+  decode: (encoded: ccc.BytesLike) => Relative;
+  encode: (relative: RelativeLike) => ccc.Bytes;
+  from: (relative: RelativeLike) => Relative;
+  fromBytes: (encoded: ccc.BytesLike) => Relative;
+  padding: () => ccc.Bytes;
+} = RelativeImplementation;

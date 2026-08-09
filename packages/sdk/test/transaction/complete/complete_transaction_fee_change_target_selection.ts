@@ -5,7 +5,6 @@ import {
   signerWithLock,
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import { baseClient } from "../base/support/sdk_core_support.ts";
 import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";
 
 afterEach(() => {
@@ -31,7 +30,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
 
     await sdk.completeTransaction(tx, {
       signer,
-      client: baseClient,
       feeRate: 8n,
     });
 
@@ -55,7 +53,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
 
     await sdk.completeTransaction(tx, {
       signer,
-      client: baseClient,
       feeRate: 9n,
     });
 
@@ -79,7 +76,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
 
     await sdk.completeTransaction(tx, {
       signer,
-      client: baseClient,
       feeRate: 11n,
     });
 

@@ -64,7 +64,7 @@ describe(L1_STATE_SUITE, () => {
     expect(state.user.orders[0]?.order).not.toBe(ownerOrder.group.order);
     expect(state.user.orders[0]?.order.maturity).toBe(0n);
     expect(ownerOrder.group.order.maturity).toBe(999n);
-    expect(state.system.orderPool).toEqual([marketOrder.group.order]);
+    expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 });
 
@@ -78,7 +78,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
     const state = await sdk.getL1State(client, [userLock]);
 
     expect(state.user.orders).toEqual([]);
-    expect(state.system.orderPool).toEqual([marketOrder.group.order]);
+    expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 
   it("leaves non-user orders outside liquidity when neither side beats midpoint", async () => {

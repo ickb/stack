@@ -18,42 +18,47 @@
   "bugs": {
     "url": "https://github.com/ickb/stack/issues"
   },
-  "sideEffects": false,
   "type": "module",
-  "private": false,
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
-    "dev": "pnpm --filter @ickb/core --filter @ickb/dao --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && vite",
-    "build": "pnpm --filter @ickb/core --filter @ickb/dao --filter @ickb/order --filter @ickb/sdk --filter @ickb/utils build && tsc && vite build",
+    "dev": "vite",
+    "dev:testnet-wallet": "vite --mode testnet-wallet --host 127.0.0.1",
+    "build": "tsgo && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:ci": "vitest run",
-    "lint": "eslint ./src",
-    "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules"
+    "lint:typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p tsconfig.node.json",
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 apps/interface/src apps/interface/test",
+    "clean": "rm -fr dist"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
     "@ickb/testkit": "workspace:*",
-    "@babel/preset-react": "^7.27.1",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/node": "^22.18.11",
-    "@types/react": "^19.2.2",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.2",
-    "@vitejs/plugin-basic-ssl": "^1.2.0",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "babel-plugin-react-compiler": "^1.0.0",
-    "tailwindcss": "^4.1.14",
-    "typescript": "^5.9.3",
-    "vite": "^6.4.0"
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
   },
   "dependencies": {
     "@ckb-ccc/ccc": "catalog:",
+    "@ckb-ccc/connector-react": "catalog:",
     "@ickb/core": "workspace:*",
-    "@ickb/dao": "workspace:*",
     "@ickb/order": "workspace:*",
     "@ickb/sdk": "workspace:*",
     "@ickb/utils": "workspace:*",
-    "@tanstack/react-query": "^5.90.5",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "@tanstack/react-query": "^5.101.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }

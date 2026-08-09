@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -23,7 +20,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const { sdk, lock } = testSdk();
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,
@@ -36,7 +33,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             ckbAvailable: 1n,
             poolDeposits: {
               deposits: [],
-              readyDeposits: [],
               id: "pool",
             },
           },

@@ -12,7 +12,7 @@ import {
   placeholderReceipt,
   placeholderWithdrawal,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseClient, baseTip, hash } from "./support/sdk_core_support.ts";
+import { baseTip, hash } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -37,16 +37,14 @@ function mockBaseTransactionStepOrder(options: {
     steps,
   } = options;
   vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(
-    async (
-      ...[txLike, deposits, lock, , requestOptions]: [
+    (
+      ...[txLike, deposits, lock, requestOptions]: [
         txLike: ccc.TransactionLike,
         deposits: unknown,
         lock: unknown,
-        client: unknown,
         requestOptions: unknown,
       ]
     ) => {
-      await Promise.resolve();
       steps.push("request");
       expect(deposits).toEqual([requestedDeposit]);
       expect(lock).toEqual(botLock);
@@ -72,8 +70,7 @@ function mockBaseTransactionStepOrder(options: {
     tx.inputs.push(cellInput("72"));
     return tx;
   });
-  vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation(async (txLike) => {
-    await Promise.resolve();
+  vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
     steps.push("withdrawals");
     const tx = ccc.Transaction.from(txLike);
     expect(tx.inputs).toHaveLength(3);
@@ -108,7 +105,7 @@ function cellInput(byte: string): ccc.CellInput {
 }
 
 describe(BUILD_BASE_TRANSACTION_SUITE, () => {
-  it("requests withdrawals before input-only base activity", async () => {
+  it("requests withdrawals before input-only base activity", () => {
     const { botLock, dao, logic, orderManager, logicManager, ownedOwnerManager, sdk } =
       baseTransactionFixture();
     const steps: string[] = [];
@@ -128,7 +125,7 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
       steps,
     });
 
-    const tx = await sdk.buildBaseTransaction(ccc.Transaction.default(), baseClient, {
+    const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
       withdrawalRequest: {
         deposits: [requestedDeposit],
         requiredLiveDeposits: [requiredLiveDeposit],

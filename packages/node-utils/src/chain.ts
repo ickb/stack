@@ -7,6 +7,39 @@ const UNKNOWN_ERROR_MESSAGE = "Unknown error";
 /** Supported public CKB network names. */
 export type SupportedChain = "mainnet" | "testnet";
 
+/** Public, credential-free identity for one RPC endpoint policy. */
+export interface PublicRpcEndpointIdentity {
+  mode: "exclusive";
+  protocol: "http:" | "https:";
+  hostname: string;
+  port: string;
+  pathname: string;
+}
+
+/** Reduces a configured RPC URL to the public fields needed for runtime identity. */
+export function publicRpcEndpointIdentity(rpcUrl: string): PublicRpcEndpointIdentity {
+  let url: URL;
+  try {
+    url = new URL(rpcUrl);
+  } catch {
+    throw invalidRpcEndpointIdentity();
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username !== "" ||
+    url.password !== ""
+  ) {
+    throw invalidRpcEndpointIdentity();
+  }
+  return {
+    mode: "exclusive",
+    protocol: url.protocol,
+    hostname: url.hostname,
+    port: url.port,
+    pathname: url.pathname,
+  };
+}
+
 interface ChainIdentity {
   chain: SupportedChain;
   networkName: string;
@@ -100,13 +133,14 @@ export async function verifyChainPreflight(
 }
 
 /**
- * Creates a CCC public client for the selected chain and optional RPC URL.
+ * Creates a CCC public client for the selected chain and required RPC URL.
+ *
+ * @remarks `rpcUrl` is the exclusive endpoint pool (`fallbacks: []`); CCC
+ * would otherwise retain public fallbacks beside a custom primary URL.
  */
-export function createPublicClient(
-  chain: SupportedChain,
-  rpcUrl: string | undefined,
-): ccc.Client {
-  const config = rpcUrl === undefined || rpcUrl === "" ? undefined : { url: rpcUrl };
+export function createPublicClient(chain: SupportedChain, rpcUrl: string): ccc.Client {
+  publicRpcEndpointIdentity(rpcUrl);
+  const config = { url: rpcUrl, fallbacks: [] };
   return chain === "mainnet"
     ? new ccc.ClientPublicMainnet(config)
     : new ccc.ClientPublicTestnet(config);
@@ -205,4 +239,8 @@ function stringifyErrorMessage(error: unknown): string {
   } catch {
     return UNKNOWN_ERROR_MESSAGE;
   }
+}
+
+function invalidRpcEndpointIdentity(): TypeError {
+  return new TypeError("Invalid RPC endpoint identity input");
 }

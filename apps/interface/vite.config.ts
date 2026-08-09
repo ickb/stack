@@ -1,58 +1,72 @@
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath, type AliasOptions } from "vite";
 
-const monorepoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const workspacePackageSources = fileURLToPath(
+  new URL("../../packages/*/src/**", import.meta.url),
+);
+const workspacePackageSource = (name: string): string =>
+  fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url));
+const workspaceAliases: AliasOptions = [
+  { find: "@ickb/core", replacement: workspacePackageSource("core") },
+  { find: "@ickb/dao", replacement: workspacePackageSource("dao") },
+  { find: "@ickb/order", replacement: workspacePackageSource("order") },
+  { find: "@ickb/sdk", replacement: workspacePackageSource("sdk") },
+  { find: "@ickb/utils", replacement: workspacePackageSource("utils") },
+];
+const testnetWalletMode = "testnet-wallet";
+const testnetWalletGate = fileURLToPath(
+  new URL("test/browser/LiveTestnetWalletHarness.tsx", import.meta.url),
+);
+const workspaceRoot = normalizePath(
+  fileURLToPath(new URL("../../", import.meta.url)),
+).replace(/\/$/u, "");
+export const reactCompilerPackageExclusions = [
+  "core",
+  "dao",
+  "order",
+  "sdk",
+  "utils",
+].map((name) => `${workspaceRoot}/packages/${name}/src/**`);
+const reactCompiler = reactCompilerPreset();
+reactCompiler.rolldown.filter = {
+  ...reactCompiler.rolldown.filter,
+  id: {
+    exclude: reactCompilerPackageExclusions,
+  },
+};
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  resolve: {
-    alias: {
-      "@ickb/core": fileURLToPath(
-        new URL("../../packages/core/dist/index.js", import.meta.url),
-      ),
-      "@ickb/dao": fileURLToPath(
-        new URL("../../packages/dao/dist/index.js", import.meta.url),
-      ),
-      "@ickb/order": fileURLToPath(
-        new URL("../../packages/order/dist/index.js", import.meta.url),
-      ),
-      "@ickb/sdk": fileURLToPath(
-        new URL("../../packages/sdk/dist/index.js", import.meta.url),
-      ),
-      "@ickb/utils": fileURLToPath(
-        new URL("../../packages/utils/dist/index.js", import.meta.url),
-      ),
-    },
-  },
-  server: {
-    host: true,
-  },
-  plugins: [
-    tailwindcss(),
-    react({
-      include: [/\.[jt]sx?$/u],
-      exclude: [
-        /\/packages\/core\/src\//u,
-        /\/packages\/dao\/src\//u,
-        /\/packages\/order\/src\//u,
-        /\/packages\/sdk\/src\//u,
-        /\/packages\/utils\/src\//u,
+export default defineConfig(({ command, mode }) => {
+  const isTestnetWallet = command === "serve" && mode === testnetWalletMode;
+  return {
+    resolve: {
+      alias: [
+        ...workspaceAliases,
+        ...(isTestnetWallet
+          ? [{ find: "../wallet/WalletGate.tsx", replacement: testnetWalletGate }]
+          : []),
       ],
-      babel: {
-        plugins: [["babel-plugin-react-compiler"]],
-      },
-    }),
-    basicSsl(),
-  ],
-  optimizeDeps: {
-    exclude: ["@ickb/core", "@ickb/dao", "@ickb/order", "@ickb/sdk", "@ickb/utils"],
-  },
-  build: {
-    commonjsOptions: {
-      include: [/node_modules/u, new RegExp(`${monorepoRoot}/packages/.+/dist/`)],
     },
-  },
+    server: {
+      host: isTestnetWallet ? "127.0.0.1" : true,
+    },
+    plugins: [
+      tailwindcss(),
+      react(),
+      babel({ presets: [reactCompiler] }),
+      ...(isTestnetWallet ? [] : [basicSsl()]),
+    ],
+    optimizeDeps: {
+      exclude: ["@ickb/core", "@ickb/dao", "@ickb/order", "@ickb/sdk", "@ickb/utils"],
+    },
+    build: {
+      commonjsOptions: {
+        include: [/node_modules/u, workspacePackageSources],
+      },
+    },
+  };
 });

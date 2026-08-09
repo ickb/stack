@@ -38,7 +38,7 @@ See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 
 `selectReadyWithdrawalDeposits(...)` exposes the stack's ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, the current tip, amount/count limits, and optional ring filters. Setting `minCount` and `maxCount` to the same value requests an exact number of deposits. The selector compares bounded best-fit and greedy candidates, returns the chosen deposits, and also returns `requiredLiveDeposits` supplied by the caller for live `cell_dep` checks when building the withdrawal request.
 
-Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDepositFor(...)` operate on the full live pool snapshot. Normal bot and interface direct withdrawals use ring surplus only; bot reserve recovery is app policy and may relax that rule after surplus recovery fails.
+Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDepositFor(...)` operate on the full supplied live pool sample. Normal bot and interface direct withdrawals use ring surplus only; bot reserve recovery is app policy and may relax that rule after surplus recovery fails.
 
 `IckbSdk.buildBaseTransaction(...)` accepts `withdrawalRequest.requiredLiveDeposits` and adds those cells as live cell deps. This is an inclusion-time liveness check for public pool anchors, not a reservation of those cells after the transaction commits.
 
@@ -46,11 +46,11 @@ Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDeposi
 
 `IckbSdk.buildConversionTransaction(...)` builds a partial conversion transaction plus domain metadata. It owns the reusable CKB-to-iCKB and iCKB-to-CKB planning policy: base transaction assembly, direct deposit limits, exact ready-withdrawal selection, required live deposit anchors, order fallback construction, small iCKB dust order terms, and maturity metadata. The helper returns typed failures such as `amount-too-small`, `not-enough-ready-deposits`, and `nothing-to-do`; callers own user-facing copy.
 
-For iCKB-to-CKB planning, `getPoolDeposits(client, tip, options?)` fetches the public pool deposit snapshot on chain. `getL1State(...)` includes that snapshot in `system.poolDeposits` so UI callers can key previews by the same pool identity and avoid re-fetching for every preview. `getPoolDeposits(...)`, `getL1State(...)`, and `getL1AccountState(...)` accept `cellPageSize` as the shared CCC cell-query page size; it does not cap total results. `getL1State(...)` also accepts `poolDeposits` range filters for callers that need a narrower pool window.
+For iCKB-to-CKB planning, `getPoolDeposits(client, tip, options?)` fetches the public pool deposits on chain. `getL1State(...)` includes that required scan result in `system.poolDeposits` so UI callers can key previews by the same pool identity without a second planning-time scan. `getPoolDeposits(...)`, `getL1State(...)`, and `getL1AccountState(...)` accept `cellPageSize` as the shared per-request CCC cell-query page size. Full pages must advance the indexer cursor; legitimate advancing scans have no total item or page limit and return the complete result. `getL1State(...)` also accepts `poolDeposits` range filters for callers that need a narrower pool window.
 
-`getL1State(...)` and `getL1AccountState(...)` return best-effort state computed from a sampled `system.tip`; they do not perform a final current-tip assertion after all scans complete. Callers should keep the time from state fetch to transaction build low and let transaction validation decide whether referenced cells are still live and the transaction can be accepted.
+`getL1State(...)` and `getL1AccountState(...)` return eventually consistent, best-effort state computed from a sampled `system.tip`. Their targeted indexer queries can observe different points in indexer progress and are not an atomic snapshot. The SDK does not reread the scans or perform a final current-tip assertion. Callers should keep the time from state fetch to transaction build low and let transaction validation decide whether referenced cells are still live and the transaction can be accepted.
 
-The returned transaction is not completed, signed, sent, or confirmed. Callers still explicitly call `sdk.completeTransaction(...)` with their signer/client/fee rate before sending.
+The returned transaction is not completed, signed, sent, or confirmed. Callers still explicitly call `sdk.completeTransaction(...)` with `{ signer, feeRate }` before sending.
 
 ## Small iCKB Order Previews
 
@@ -60,7 +60,9 @@ SDK estimates use `OrderManager.convert(...)` as the quote boundary. The display
 
 ## Send Confirmation
 
-`sendAndWaitForCommit(...)` returns the transaction hash after commit. If a transaction was broadcast but later reaches a terminal non-committed status or times out while still pending, it throws `TransactionConfirmationError` with the broadcast `txHash`, last observed `status`, and `isTimeout` flag. Callers that need to log the hash immediately after broadcast can use the `onSent` callback. Callers that need structured lifecycle evidence can use `onLifecycle`, which emits `pre_broadcast_failed`, `broadcasted`, `committed`, `timeout_after_broadcast`, `post_broadcast_unresolved`, and `terminal_rejection` events without changing the returned hash or thrown transaction error contract.
+`signAndSendTransaction(signer, tx, recordTxHash?)` signs locally and calls `recordTxHash` with `signed.hash()` before starting the send RPC. It broadcasts through `signer.client.sendTransactionNoCache`, then marks the accepted transaction in that same client's cache. Send ambiguity throws `TransactionBroadcastError` carrying `txHash`; cache-mark failure after node acceptance still returns the hash.
+
+`waitTransaction(client, txHash, confirmations?, timeout?, interval?, signal?)` temporarily mirrors CCC's waiter defaults and return value, with one absolute timeout budget and an optional abort signal covering polling and in-flight client operations. For `ClientJsonRpc`, it raw-polls `get_transaction` verbosity 1 so status-only rejections are preserved despite the current CCC cache issue, then returns the normal CCC transaction response after commitment and the requested confirmation depth. A terminal rejection throws `TransactionWaitError` with `txHash`, `status`, the node `reason`, and `rebuildReady`, which is true only when that wait's single cache-clear attempt succeeded. Timeout uses CCC's `ErrorClientWaitTransactionTimeout`. Non-JSON clients fall back to `getTransaction`, so they cannot recover a terminal status their implementation discards. CCC transports cannot be cancelled, so an in-flight operation may complete after the waiter rejects; its late settlement is handled. This helper can be replaced with `client.waitTransaction(...)` after CCC preserves status-only responses.
 
 ## Epoch Semantic Versioning
 

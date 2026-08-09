@@ -36,7 +36,13 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
       index: 10n,
     };
     const info = directionalInfo();
-    const origin = absoluteOrderCell({ master, info, outPointByte: "44" });
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
     const nonMint = absoluteOrderCell({ master, info, outPointByte: "cc" });
     const otherNonMint = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -62,7 +68,13 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
       index: 10n,
     };
     const info = directionalInfo();
-    const origin = absoluteOrderCell({ master, info, outPointByte: "44" });
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
     const nonMint = absoluteOrderCell({ master, info, outPointByte: "ce" });
     const mint = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -92,8 +104,8 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info,
-      master: { type: "absolute", value: master },
-      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
     });
     const duplicate = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),

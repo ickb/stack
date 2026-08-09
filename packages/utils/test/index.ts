@@ -4,6 +4,7 @@ import * as utils from "../src/index.ts";
 describe("utils package barrel", () => {
   it("exposes runtime behavior through the barrel", async () => {
     expect(utils.CheckedInt32LE.decode(utils.CheckedInt32LE.encode(-42))).toBe(-42);
+    expect(utils.CheckedUint128LE.decode(utils.CheckedUint128LE.encode(42n))).toBe(42n);
     expect(utils.binarySearch(6, (index) => index >= 4)).toBe(4);
     await expect(
       utils.asyncBinarySearch(6, async (index) => {

@@ -1,15 +1,19 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { MasterCell, OrderCell, OrderGroup } from "../../src/model/cells.ts";
+import { OrderMatcher } from "../../src/matching/order_matcher.ts";
+import { OrderCell, OrderGroup } from "../../src/model/cells.ts";
 import { Info } from "../../src/model/info.ts";
 import { OrderData } from "../../src/model/order_data.ts";
 import { Ratio } from "../../src/model/ratio.ts";
-import { OrderManager, OrderMatcher } from "../../src/order.ts";
+import { OrderManager } from "../../src/order.ts";
 import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import {
-  exhaustiveSequentialBestMatch,
+  cycle02ResidualGroups,
+  exhaustiveIntegerBestMatch,
   makeUdtToCkbOrder,
   matchKey,
+  resolvedOrderGroup,
+  resolvedOrderGroups,
 } from "./support/order_match_helpers.ts";
 import {
   byte32FromByte,
@@ -21,16 +25,16 @@ const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
 const OWNER_LOCK = script("33");
 const WRONG_MANAGER_ERROR = "does not match this order manager";
+const EXPECTED_MATCHER_ERROR = "Expected order to be matchable";
 
 describe(ORDER_MATCHER_SUITE, () => {
   registerOrderMatcherMinimumTests();
-  registerSequentialMatcherTests();
 });
 
 function registerOrderMatcherMinimumTests(): void {
   it("rejects UDT-to-CKB partials below the converted CKB minimum", () => {
     const order = makeUdtToCkbOrder();
-    const matcher = OrderMatcher.from(order, false, 0n);
+    const matcher = OrderMatcher.from(resolvedOrderGroup(order), false, 0n);
 
     const belowMinimum = matcher?.match(1n);
     const atMinimum = matcher?.match(3n);
@@ -58,10 +62,10 @@ function registerOrderMatcherMinimumTests(): void {
         index: 0n,
       },
     });
-    const matcher = OrderMatcher.from(order, false, 0n);
+    const matcher = OrderMatcher.from(resolvedOrderGroup(order), false, 0n);
 
     if (matcher === undefined) {
-      throw new Error("Expected order to be matchable");
+      throw new Error(EXPECTED_MATCHER_ERROR);
     }
     expect(matcher.bMaxMatch).toBeLessThan(1n << 33n);
     expect(matcher.bMinMatch).toBe(matcher.bMaxMatch);
@@ -70,64 +74,6 @@ function registerOrderMatcherMinimumTests(): void {
 
     expect(match.partials).toHaveLength(1);
     expect(match.partials[0]?.ckbOut).toBe(matcher.bMaxOut);
-  });
-}
-
-function registerSequentialMatcherTests(): void {
-  it("continues trying larger allowances after an allowance below the minimum", () => {
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(200),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: {
-        type: "absolute",
-        value: {
-          txHash: byte32FromByte("33"),
-          index: 1n,
-        },
-      },
-      outPoint: {
-        txHash: byte32FromByte("46"),
-        index: 0n,
-      },
-    });
-    const matcher = OrderMatcher.from(order, true, 0n);
-
-    if (matcher === undefined) {
-      throw new Error("Expected order to be matchable");
-    }
-    expect(ccc.fixedPointFrom(50)).toBeLessThan(matcher.bMinMatch);
-
-    const matches = Array.from(
-      OrderManager.sequentialMatcher([order], true, ccc.fixedPointFrom(50), 0n),
-    );
-
-    expect(matches.find((match) => match.partials.length === 1)?.partials).toHaveLength(
-      1,
-    );
-  });
-
-  it("rejects a zero sequential allowance step", () => {
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(200),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: {
-        type: "absolute",
-        value: {
-          txHash: byte32FromByte("33"),
-          index: 1n,
-        },
-      },
-      outPoint: {
-        txHash: byte32FromByte("47"),
-        index: 0n,
-      },
-    });
-
-    expect(() =>
-      Array.from(OrderManager.sequentialMatcher([order], true, 0n, 0n)),
-    ).toThrow("Allowance step must be positive");
   });
 }
 
@@ -152,18 +98,16 @@ describe("OrderManager no-op transaction helpers", () => {
         partials: [],
       }).inputs,
     ).toEqual([]);
-    expect(manager.match(order, false, 0n)).toEqual({
-      ckbDelta: 0n,
-      udtDelta: 0n,
-      partials: [],
-    });
     expect(
       OrderManager.bestMatch(
         [],
         { ckbValue: 1n, udtValue: 1n },
         { ckbScale: 1n, udtScale: 1n },
       ),
-    ).toEqual({ ckbDelta: 0n, udtDelta: 0n, partials: [] });
+    ).toEqual({
+      kind: "complete",
+      match: { ckbDelta: 0n, udtDelta: 0n, partials: [] },
+    });
     expect(
       manager.melt(ccc.Transaction.default(), [], { isFulfilledOnly: true }).inputs,
     ).toEqual([]);
@@ -173,7 +117,10 @@ describe("OrderManager no-op transaction helpers", () => {
 describe("OrderManager match and melt transaction helpers", () => {
   registerMatchMeltSuccessTests();
   registerMintTransactionValidationTests();
+  registerMatchInputValidationTests();
+  registerMatchAccountingValidationTests();
   registerMatchPartialValidationTests();
+  registerOrderGroupProvenanceTests();
   registerMeltGroupValidationTests();
   registerMatcherConstructorValidationTests();
 });
@@ -197,13 +144,12 @@ function registerMatchMeltSuccessTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
       outPoint: { txHash: byte32FromByte("55"), index: 0n },
     });
-    const master = MasterCell.from(masterCell());
-    const group = new OrderGroup(master, order, order);
+    const group = resolvedOrderGroup(order);
 
     const matched = manager.addMatch(ccc.Transaction.default(), {
-      ckbDelta: 1n,
-      udtDelta: -1n,
-      partials: [{ order, ckbOut: order.ckbValue, udtOut: order.udtValue }],
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [{ group, ckbOut: order.ckbValue, udtOut: order.udtValue }],
     });
     const melted = manager.melt(ccc.Transaction.default(), [group]);
     const fulfilledOnly = manager.melt(ccc.Transaction.default(), [group], {
@@ -266,6 +212,60 @@ function registerMintTransactionValidationTests(): void {
   });
 }
 
+function registerMatchInputValidationTests(): void {
+  it("rejects a match order already present in transaction inputs", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 10n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("54"), index: 0n },
+    });
+    const tx = ccc.Transaction.default();
+    tx.addInput(order.cell);
+    const group = resolvedOrderGroup(order);
+
+    expect(() =>
+      manager.addMatch(tx, {
+        ckbDelta: 0n,
+        udtDelta: 0n,
+        partials: [{ group, ckbOut: order.ckbValue, udtOut: order.udtValue }],
+      }),
+    ).toThrow(`Match order ${order.cell.outPoint.toHex()} is already being spent`);
+  });
+}
+
+function registerMatchAccountingValidationTests(): void {
+  it("rejects mismatched aggregate deltas without mutating the transaction", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 10n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("53"), index: 0n },
+    });
+    const tx = ccc.Transaction.default();
+    const before = tx.toBytes();
+
+    expect(() =>
+      manager.addMatch(tx, {
+        ckbDelta: 1n,
+        udtDelta: 0n,
+        partials: [
+          {
+            group: resolvedOrderGroup(order),
+            ckbOut: order.ckbValue,
+            udtOut: order.udtValue,
+          },
+        ],
+      }),
+    ).toThrow("Match deltas do not match partial order accounting");
+    expect(tx.toBytes()).toEqual(before);
+  });
+}
+
 function registerMatchPartialValidationTests(): void {
   it("rejects fabricated match partials", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
@@ -296,14 +296,17 @@ function registerMatchPartialValidationTests(): void {
       order.absProgress,
       order.maturity,
     );
+    const group = resolvedOrderGroup(order);
+    const foreignGroup = resolvedOrderGroup(foreign);
+    const mismatchedGroup = new OrderGroup(group.master, mismatched, group.origin);
 
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
         partials: [
-          { order, ckbOut: order.ckbValue, udtOut: order.udtValue },
-          { order, ckbOut: order.ckbValue, udtOut: order.udtValue },
+          { group, ckbOut: order.ckbValue, udtOut: order.udtValue },
+          { group, ckbOut: order.ckbValue, udtOut: order.udtValue },
         ],
       }),
     ).toThrow(`Match contains duplicate order cells: ${order.cell.outPoint.toHex()}`);
@@ -312,7 +315,7 @@ function registerMatchPartialValidationTests(): void {
         ckbDelta: 0n,
         udtDelta: 0n,
         partials: [
-          { order: foreign, ckbOut: foreign.ckbValue, udtOut: foreign.udtValue },
+          { group: foreignGroup, ckbOut: foreign.ckbValue, udtOut: foreign.udtValue },
         ],
       }),
     ).toThrow(WRONG_MANAGER_ERROR);
@@ -320,36 +323,97 @@ function registerMatchPartialValidationTests(): void {
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
-        partials: [{ order, ckbOut: -1n, udtOut: order.udtValue }],
+        partials: [{ group, ckbOut: -1n, udtOut: order.udtValue }],
       }),
     ).toThrow("negative CKB output");
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
-        partials: [{ order, ckbOut: order.ckbValue, udtOut: -1n }],
+        partials: [{ group, ckbOut: order.ckbValue, udtOut: -1n }],
       }),
     ).toThrow("negative UDT output");
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
-        partials: [{ order: mismatched, ckbOut: order.ckbValue, udtOut: order.udtValue }],
+        partials: [
+          { group: mismatchedGroup, ckbOut: order.ckbValue, udtOut: order.udtValue },
+        ],
       }),
     ).toThrow("does not match its cell data");
   });
 }
 
+function registerOrderGroupProvenanceTests(): void {
+  it("rejects a fabricated origin at a resolved group's claimed outpoint", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 10n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("57"), index: 0n },
+    });
+    const group = resolvedOrderGroup(order);
+    const fabricatedOrigin = OrderCell.mustFrom(
+      ccc.Cell.from({
+        outPoint: group.origin.cell.outPoint,
+        cellOutput: group.origin.cell.cellOutput,
+        outputData: group.origin.cell.outputData,
+      }),
+    );
+    const fabricatedGroup = new OrderGroup(group.master, group.order, fabricatedOrigin);
+
+    expect(() =>
+      manager.addMatch(ccc.Transaction.default(), {
+        ckbDelta: 0n,
+        udtDelta: 0n,
+        partials: [
+          { group: fabricatedGroup, ckbOut: order.ckbValue, udtOut: order.udtValue },
+        ],
+      }),
+    ).toThrow("OrderGroup does not match its resolver attestation");
+  });
+}
+
 function registerMeltGroupValidationTests(): void {
-  it("rejects melt groups from a different manager", () => {
+  it("rejects canonical cell mutation after resolution", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
       info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("57"), index: 0n },
+      master: { type: "absolute", value: { txHash: byte32FromByte("77"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("5b"), index: 0n },
     });
+    const group = resolvedOrderGroup(order);
+    group.order.cell.outputData = "0x";
+
+    expect(() => manager.melt(ccc.Transaction.default(), [group])).toThrow(
+      "Resolved OrderGroup canonical cells were mutated",
+    );
+  });
+
+  it("rejects decoded wrapper mutation after resolution", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+      master: { type: "absolute", value: { txHash: byte32FromByte("78"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("5c"), index: 0n },
+    });
+    const group = resolvedOrderGroup(order);
+    group.order.ckbUnoccupied += 1n;
+
+    expect(() => manager.melt(ccc.Transaction.default(), [group])).toThrow(
+      "Resolved OrderGroup wrapper was mutated",
+    );
+  });
+
+  it("rejects melt groups from a different manager", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const foreignOrder = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
@@ -358,22 +422,9 @@ function registerMeltGroupValidationTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
       outPoint: { txHash: byte32FromByte("58"), index: 0n },
     });
-    const master = MasterCell.from(masterCell());
-    const foreignMaster = MasterCell.from(
-      ccc.Cell.from({
-        outPoint: { txHash: byte32FromByte("66"), index: 1n },
-        cellOutput: { capacity: 61n, lock: OWNER_LOCK, type: script("99") },
-        outputData: "0x",
-      }),
-    );
-    const group = new OrderGroup(foreignMaster, order, order);
+    const foreignOrderGroup = resolvedOrderGroup(foreignOrder);
 
-    expect(() =>
-      manager.melt(ccc.Transaction.default(), [
-        new OrderGroup(master, foreignOrder, foreignOrder),
-      ]),
-    ).toThrow(WRONG_MANAGER_ERROR);
-    expect(() => manager.melt(ccc.Transaction.default(), [group])).toThrow(
+    expect(() => manager.melt(ccc.Transaction.default(), [foreignOrderGroup])).toThrow(
       WRONG_MANAGER_ERROR,
     );
   });
@@ -387,8 +438,7 @@ function registerMeltGroupValidationTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
       outPoint: { txHash: byte32FromByte("5a"), index: 0n },
     });
-    const master = MasterCell.from(masterCell());
-    const group = new OrderGroup(master, order, order);
+    const group = resolvedOrderGroup(order);
     const tx = ccc.Transaction.default();
     tx.addInput(order.cell);
 
@@ -411,18 +461,67 @@ function registerMatcherConstructorValidationTests(): void {
       outPoint: { txHash: byte32FromByte("59"), index: 0n },
     });
     const constructMatcher = (): OrderMatcher =>
-      new OrderMatcher(order, true, 1n, 1n, -1n, 0n, 0n, 0n, 0n, 0n, 1n, 1n);
+      new OrderMatcher(
+        resolvedOrderGroup(order),
+        true,
+        1n,
+        1n,
+        -1n,
+        0n,
+        0n,
+        0n,
+        0n,
+        0n,
+        1n,
+        1n,
+      );
 
     expect(constructMatcher).toThrow("OrderMatcher aIn must be non-negative");
   });
 }
 
 describe(ORDER_MATCHER_SUITE, () => {
+  it("keeps the globally optimal intermediate allowance", () => {
+    const specs = [
+      [12n, 12n, 1n, 3n],
+      [6n, 1n, 5n, 1n],
+    ] as const;
+    const groups = resolvedOrderGroups(
+      specs.map(([ckbUnoccupied, udtValue, ckbScale, udtScale], index) => {
+        const ratio = Ratio.from({ ckbScale, udtScale });
+        return makeOrderCell({
+          ckbUnoccupied,
+          udtValue,
+          info: Info.from({ ckbToUdt: ratio, udtToCkb: ratio, ckbMinMatchLog: 0 }),
+          master: {
+            type: "absolute",
+            value: { txHash: byte32FromByte(`9${index.toString()}`), index: 1n },
+          },
+          outPoint: { txHash: byte32FromByte(`b${index.toString()}`), index: 0n },
+        });
+      }),
+    );
+    const allowance = { ckbValue: 6n, udtValue: 2n };
+    const exchangeRate = { ckbScale: 1n, udtScale: 1n };
+    const options = { feeRate: 0n, ckbAllowanceStep: 2n, maxPartials: 2 };
+
+    const result = OrderManager.bestMatch(groups, allowance, exchangeRate, options);
+    const { match } = result;
+
+    expect(result.kind).toBe("complete");
+    expect(matchKey(match)).toEqual(
+      matchKey(exhaustiveIntegerBestMatch(groups, allowance, exchangeRate, options)),
+    );
+    expect(match).toMatchObject({ ckbDelta: 8n, udtDelta: -2n });
+  });
+});
+
+describe(ORDER_MATCHER_SUITE, () => {
   it("matches an exhaustive cross-product on a bounded pool", () => {
     const orders = [
       makeOrderCell({
-        ckbUnoccupied: ccc.fixedPointFrom(90),
-        udtValue: ccc.fixedPointFrom(40),
+        ckbUnoccupied: 9n,
+        udtValue: 4n,
         info: dualInfo(),
         master: {
           type: "absolute",
@@ -431,8 +530,8 @@ describe(ORDER_MATCHER_SUITE, () => {
         outPoint: { txHash: byte32FromByte("47"), index: 0n },
       }),
       makeOrderCell({
-        ckbUnoccupied: ccc.fixedPointFrom(60),
-        udtValue: ccc.fixedPointFrom(80),
+        ckbUnoccupied: 6n,
+        udtValue: 8n,
         info: dualInfo(),
         master: {
           type: "absolute",
@@ -441,8 +540,8 @@ describe(ORDER_MATCHER_SUITE, () => {
         outPoint: { txHash: byte32FromByte("48"), index: 0n },
       }),
       makeOrderCell({
-        ckbUnoccupied: ccc.fixedPointFrom(30),
-        udtValue: ccc.fixedPointFrom(120),
+        ckbUnoccupied: 3n,
+        udtValue: 12n,
         info: dualInfo(),
         master: {
           type: "absolute",
@@ -452,21 +551,125 @@ describe(ORDER_MATCHER_SUITE, () => {
       }),
     ];
     const allowance = {
-      ckbValue: ccc.fixedPointFrom(160),
-      udtValue: ccc.fixedPointFrom(120),
+      ckbValue: 16n,
+      udtValue: 12n,
     };
     const exchangeRate = { ckbScale: 1n, udtScale: 1n };
     const options = {
       feeRate: 0n,
-      ckbAllowanceStep: ccc.fixedPointFrom(50),
+      ckbAllowanceStep: 5n,
       maxPartials: 3,
     };
 
+    const groups = resolvedOrderGroups(orders);
     expect(
-      matchKey(OrderManager.bestMatch(orders, allowance, exchangeRate, options)),
+      matchKey(OrderManager.bestMatch(groups, allowance, exchangeRate, options).match),
     ).toEqual(
-      matchKey(exhaustiveSequentialBestMatch(orders, allowance, exchangeRate, options)),
+      matchKey(exhaustiveIntegerBestMatch(groups, allowance, exchangeRate, options)),
     );
+  });
+});
+
+describe(ORDER_MATCHER_SUITE, () => {
+  it("reports an incomplete exact search for the five-group stress case", () => {
+    const specs = [
+      [119n, 210n, 2n, 13n],
+      [13n, 2n, 6n, 1n],
+      [147n, 152n, 10n, 5n],
+      [123n, 130n, 14n, 9n],
+      [217n, 116n, 2n, 13n],
+    ] as const;
+    const masterIds = ["70", "71", "72", "73", "74"] as const;
+    const orderIds = ["80", "81", "82", "83", "84"] as const;
+    const orders = specs.map(([ckbUnoccupied, udtValue, ckbScale, udtScale], index) => {
+      const ratio = Ratio.from({ ckbScale, udtScale });
+      return makeOrderCell({
+        ckbUnoccupied,
+        udtValue,
+        info: Info.from({
+          ckbToUdt: ratio,
+          udtToCkb: ratio,
+          ckbMinMatchLog: 0,
+        }),
+        master: {
+          type: "absolute",
+          value: { txHash: byte32FromByte(masterIds[index] ?? "70"), index: 1n },
+        },
+        outPoint: {
+          txHash: byte32FromByte(orderIds[index] ?? "80"),
+          index: 0n,
+        },
+      });
+    });
+    const groups = resolvedOrderGroups(orders);
+    const allowance = { ckbValue: 181n, udtValue: 0n };
+    const exchangeRate = { ckbScale: 16n, udtScale: 3n };
+    const options = {
+      feeRate: 0n,
+      ckbAllowanceStep: 61n,
+      maxPartials: 5,
+      candidateBudget: 10_000,
+    };
+
+    expect(
+      OrderManager.bestMatch(groups, allowance, exchangeRate, options),
+    ).toMatchObject({
+      kind: "incomplete",
+      reason: "candidate_budget_exhausted",
+    });
+  });
+});
+
+describe(`${ORDER_MATCHER_SUITE} residual budgets`, () => {
+  it("uses residual budget after an existing same-direction partial", () => {
+    const groups = cycle02ResidualGroups();
+    const allowance = { ckbValue: 11n, udtValue: 82n };
+    const exchangeRate = { ckbScale: 2n, udtScale: 5n };
+    const options = {
+      feeRate: 0n,
+      ckbAllowanceStep: 29n,
+      maxPartials: 3,
+      candidateBudget: 100_000,
+    };
+
+    const { match } = OrderManager.bestMatch(groups, allowance, exchangeRate, options);
+
+    expect(match).toMatchObject({ ckbDelta: -11n, udtDelta: 7n });
+    expect(match.ckbDelta * 2n + match.udtDelta * 5n).toBe(13n);
+    expect(match.partials).toHaveLength(2);
+    expect(
+      match.partials.map((partial) => partial.group.order.cell.outPoint.toHex()),
+    ).toEqual([
+      groups[3]?.order.cell.outPoint.toHex(),
+      groups[1]?.order.cell.outPoint.toHex(),
+    ]);
+    expect(
+      new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT).addMatch(
+        ccc.Transaction.default(),
+        match,
+      ).inputs,
+    ).toHaveLength(2);
+  });
+
+  it("stops while extending a same-direction residual budget", () => {
+    const groups = cycle02ResidualGroups();
+    expect(
+      OrderManager.bestMatch(
+        groups,
+        { ckbValue: 11n, udtValue: 82n },
+        { ckbScale: 2n, udtScale: 5n },
+        {
+          feeRate: 0n,
+          ckbAllowanceStep: 29n,
+          maxPartials: 3,
+          candidateBudget: 301,
+        },
+      ),
+    ).toMatchObject({
+      kind: "incomplete",
+      work: 301,
+      truncation: { phase: "candidates", requiredWork: 302n },
+    });
   });
 });
 

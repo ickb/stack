@@ -1,0 +1,77 @@
+{
+  "extends": "dependency-cruiser/configs/recommended-strict",
+  "forbidden": [
+    {
+      "name": "no-orphans",
+      "from": {
+        "orphan": true,
+        "pathNot": [
+          "(^|/)\\.[^/]+\\.(js|cjs|mjs|ts|json)$",
+          "\\.d\\.(c|m)?ts$",
+          "(^|/)tsconfig\\.json$",
+          "(^|/)(?:babel|webpack)\\.config\\.(?:js|cjs|mjs|ts|json)$",
+          "^scripts/(?:run-node-tests|lint-source-structure)[.](?:mts|ts)$",
+          "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
+          "^scripts/tooling/eslint/plugins[.]ts$",
+          "^scripts/test/.+[.](?:mts|ts)$",
+          "^(?:apps|packages)/[^/]+/vitest[.]config[.]mts$",
+          "^apps/interface/vite[.]config[.]ts$",
+          "^apps/interface/eslint[.]config[.]mts$",
+        ],
+      },
+    },
+    {
+      "name": "not-prod-to-test-source",
+      "comment": "Production source must not import test-only files. Keep test fixtures behind test/ boundaries.",
+      "severity": "error",
+      "from": {
+        "path": "^(?:(?:apps|packages)/[^/]+/src/|scripts/)",
+        "pathNot": [
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+      "to": {
+        "path": [
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+    },
+    {
+      "name": "not-prod-to-testkit",
+      "comment": "Production source must not import @ickb/testkit. Keep test harness dependencies under test/.",
+      "severity": "error",
+      "from": {
+        "path": "^(apps|packages)/[^/]+/src/",
+        "pathNot": [
+          "^packages/testkit/src/",
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+      "to": {
+        "path": "^packages/testkit/src/",
+      },
+    },
+  ],
+  "options": {
+    "exclude": {
+      "path": "(?:^|/)(?:coverage|dist)/",
+    },
+    "includeOnly": "^(apps|packages|scripts)/",
+    "tsConfig": {
+      "fileName": "tsconfig.json",
+    },
+    "tsPreCompilationDeps": "specify",
+  },
+}

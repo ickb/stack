@@ -1,10 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import type { DaoWithdrawalRequestCell } from "../src/cells.ts";
-import { DaoManager } from "../src/index.ts";
+import { DAO_OUTPUT_LIMIT, DaoManager, DaoOutputLimitError } from "../src/index.ts";
 import {
   byte32FromByte,
-  client,
   headerLike,
   headerWithHash,
   script,
@@ -16,13 +15,13 @@ describe("DaoManager.withdraw", () => {
 });
 
 function registerWithdrawConstructionTests(): void {
-  it("writes since, header deps, and witness inputType for withdrawals", async () => {
+  it("writes since, header deps, and witness inputType for withdrawals", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
     const withdrawal = withdrawalCell(manager, depositHeader, withdrawHeader);
 
-    const tx = await manager.withdraw(ccc.Transaction.default(), [withdrawal], client());
+    const tx = manager.withdraw(ccc.Transaction.default(), [withdrawal]);
 
     expect(tx.headerDeps).toEqual([depositHeader.hash, withdrawHeader.hash]);
     expect(tx.inputs).toHaveLength(1);
@@ -32,10 +31,10 @@ function registerWithdrawConstructionTests(): void {
     }
     expect(ccc.Since.from(since).metric).toBe("epoch");
     expect(ccc.Since.from(since).value).toBe(withdrawal.maturity.toNum());
-    expect(tx.getWitnessArgsAt(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
+    expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
   });
 
-  it("does not duplicate withdrawal header deps", async () => {
+  it("does not duplicate withdrawal header deps", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
@@ -43,12 +42,12 @@ function registerWithdrawConstructionTests(): void {
     const tx = ccc.Transaction.default();
     tx.headerDeps.push(depositHeader.hash, withdrawHeader.hash);
 
-    const updated = await manager.withdraw(tx, [withdrawal], client());
+    const updated = manager.withdraw(tx, [withdrawal]);
 
     expect(updated.headerDeps).toEqual([depositHeader.hash, withdrawHeader.hash]);
   });
 
-  it("preserves an existing non-input witness by shifting it after the new input", async () => {
+  it("preserves an existing non-input witness by shifting it after the new input", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
@@ -57,15 +56,15 @@ function registerWithdrawConstructionTests(): void {
     const preservedWitness = ccc.WitnessArgs.from({ inputType: "0xab" }).toHex();
     tx.witnesses.push(preservedWitness);
 
-    const updated = await manager.withdraw(tx, [withdrawal], client());
+    const updated = manager.withdraw(tx, [withdrawal]);
 
-    expect(updated.getWitnessArgsAt(0)?.inputType).toBe(
+    expect(updated.getWitnessArgs(0)?.inputType).toBe(
       ccc.hexFrom(ccc.numLeToBytes(0n, 8)),
     );
     expect(updated.witnesses[1]).toBe(preservedWitness);
   });
 
-  it("leaves transactions unchanged when ready-only withdrawals are pending", async () => {
+  it("leaves transactions unchanged when ready-only withdrawals are pending", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
@@ -75,14 +74,24 @@ function registerWithdrawConstructionTests(): void {
     };
     const tx = ccc.Transaction.default();
 
-    await expect(
-      manager.withdraw(tx, [pending], client(), { isReadyOnly: true }),
-    ).resolves.toEqual(tx);
+    expect(manager.withdraw(tx, [pending], { isReadyOnly: true })).toEqual(tx);
+  });
+
+  it("rejects DAO withdrawals with more than 64 outputs", () => {
+    const manager = new DaoManager(script("11"), []);
+    const depositHeader = headerLike(1n);
+    const withdrawal = withdrawalCell(manager, depositHeader, headerWithHash(2n, "99"));
+    const tx = ccc.Transaction.default();
+    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addOutput({ capacity: 1n, lock: script("44") }, "0x");
+    }
+
+    expect(() => manager.withdraw(tx, [withdrawal])).toThrow(DaoOutputLimitError);
   });
 }
 
 function registerWithdrawValidationTests(): void {
-  it("rejects withdrawal witnesses whose input type is already set", async () => {
+  it("rejects withdrawal witnesses whose input type is already set", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
@@ -91,68 +100,64 @@ function registerWithdrawValidationTests(): void {
     const addInput = tx.addInput.bind(tx);
     tx.addInput = (input): number => {
       const inputCount = addInput(input);
-      tx.setWitnessArgsAt(inputCount - 1, ccc.WitnessArgs.from({ inputType: "0xab" }));
+      tx.setWitnessArgs(inputCount - 1, ccc.WitnessArgs.from({ inputType: "0xab" }));
       return inputCount;
     };
 
-    await expect(manager.withdraw(tx, [withdrawal], client())).rejects.toThrow(
+    expect(() => manager.withdraw(tx, [withdrawal])).toThrow(
       "Witnesses of withdrawal request already in use",
     );
   });
 
-  it("rejects withdrawal requests whose cell output has no DAO type script", async () => {
+  it("rejects withdrawal requests whose cell output has no DAO type script", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
     const withdrawal = withdrawalCell(manager, depositHeader, withdrawHeader);
     withdrawal.cell.cellOutput.type = undefined;
 
-    await expect(
-      manager.withdraw(ccc.Transaction.default(), [withdrawal], client()),
-    ).rejects.toThrow(
+    expect(() => manager.withdraw(ccc.Transaction.default(), [withdrawal])).toThrow(
       `DAO withdrawal request ${withdrawal.cell.outPoint.toHex()} does not match this DAO script`,
     );
   });
 
-  it("rejects withdrawal requests whose header tx hash does not match the cell", async () => {
+  it("rejects withdrawal requests whose header tx hash does not match the cell", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
     const withdrawal = withdrawalCell(manager, depositHeader, withdrawHeader);
     withdrawal.headers[1] = { ...withdrawal.headers[1], txHash: byte32FromByte("44") };
 
-    await expect(
-      manager.withdraw(ccc.Transaction.default(), [withdrawal], client()),
-    ).rejects.toThrow("header txHash");
+    expect(() => manager.withdraw(ccc.Transaction.default(), [withdrawal])).toThrow(
+      "header txHash",
+    );
   });
 
-  it("rejects withdrawal requests whose payload deposit block does not match the deposit header", async () => {
+  it("rejects withdrawal requests whose payload deposit block does not match the deposit header", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
     const withdrawal = withdrawalCell(manager, depositHeader, withdrawHeader);
     withdrawal.cell.outputData = ccc.hexFrom(ccc.mol.Uint64LE.encode(9n));
 
-    await expect(
-      manager.withdraw(ccc.Transaction.default(), [withdrawal], client()),
-    ).rejects.toThrow("deposit block 9 does not match header block 1");
+    expect(() => manager.withdraw(ccc.Transaction.default(), [withdrawal])).toThrow(
+      "deposit block 9 does not match header block 1",
+    );
   });
 
-  it("rejects malformed withdrawal request payloads with out point context", async () => {
+  it("rejects malformed withdrawal request payloads with out point context", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
     const withdrawal = withdrawalCell(manager, depositHeader, withdrawHeader);
     withdrawal.cell.outputData = "0x12";
 
-    await expect(
-      manager.withdraw(ccc.Transaction.default(), [withdrawal], client()),
-    ).rejects.toThrow(
+    expect(() => manager.withdraw(ccc.Transaction.default(), [withdrawal])).toThrow(
       `Invalid DAO withdrawal request payload at ${withdrawal.cell.outPoint.toHex()}: 0x12`,
     );
   });
 
-  it("rejects duplicated or already-spent withdrawal request inputs", async () => {
+  it("rejects duplicated or already-spent withdrawal request inputs", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
     const withdrawHeader = headerWithHash(2n, "99");
@@ -160,12 +165,10 @@ function registerWithdrawValidationTests(): void {
     const tx = ccc.Transaction.default();
     tx.addInput(withdrawal.cell);
 
-    await expect(
-      manager.withdraw(ccc.Transaction.default(), [withdrawal, withdrawal], client()),
-    ).rejects.toThrow(
-      `DAO withdrawal request ${withdrawal.cell.outPoint.toHex()} is duplicated`,
-    );
-    await expect(manager.withdraw(tx, [withdrawal], client())).rejects.toThrow(
+    expect(() =>
+      manager.withdraw(ccc.Transaction.default(), [withdrawal, withdrawal]),
+    ).toThrow(`DAO withdrawal request ${withdrawal.cell.outPoint.toHex()} is duplicated`);
+    expect(() => manager.withdraw(tx, [withdrawal])).toThrow(
       `DAO withdrawal request ${withdrawal.cell.outPoint.toHex()} is already being spent`,
     );
   });

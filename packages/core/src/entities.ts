@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE } from "@ickb/utils";
+import { CheckedInt32LE, CheckedUint32LE, CheckedUint64LE } from "@ickb/utils";
 
 /**
  * Represents a permissive data structure of the owner data of the owned owner script.
@@ -11,28 +11,34 @@ export interface OwnerDataLike {
   ownedDistance: ccc.NumLike;
 }
 
-/**
- * Represents the data structure to encode the owner data of the owned owner script.
- *
- * Backed by `ccc.Entity.Base<OwnerDataLike, OwnerData>`.
- */
 const OwnerDataCodec = mol.struct({
   ownedDistance: CheckedInt32LE,
 });
 
-/**
- * Base CCC entity class used to encode and decode owned-owner payloads.
- *
- * @public
- */
-export const OwnerBase = ccc.Entity.Base<OwnerDataLike, OwnerData>();
+const OwnerEntityBase = ccc.Entity.Base<OwnerDataLike, OwnerData>();
 
 /**
  * Encodes the owned-owner marker data that links an owner cell to its owned cell.
  *
  * @public
  */
-export class OwnerData extends OwnerBase {
+export interface OwnerData {
+  /** Signed output-index distance from the owner marker to the owned cell. */
+  ownedDistance: ccc.Num;
+  /** Creates a copy of this owner data. */
+  clone(): OwnerData;
+  /** Returns whether another value has the same owner data. */
+  eq(other: OwnerDataLike): boolean;
+  /** Returns the CKB hash of the serialized owner data. */
+  hash(): ccc.Hex;
+  /** Serializes the owner data to bytes. */
+  toBytes(): ccc.Bytes;
+  /** Serializes the owner data to full-width hexadecimal. */
+  toHex(): ccc.Hex;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const OwnerDataImplementation = class OwnerData extends OwnerEntityBase {
   static {
     ccc.codec(OwnerDataCodec)(this);
   }
@@ -75,7 +81,19 @@ export class OwnerData extends OwnerBase {
   public static decodePrefix(encoded: ccc.Hex): OwnerData {
     return OwnerData.decode(encoded.slice(0, 10));
   }
-}
+};
+
+/** CCC-backed owner-data constructor and codec. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const OwnerData: {
+  byteLength?: number;
+  new (ownedDistance: ccc.Num): OwnerData;
+  decode: (encoded: ccc.BytesLike) => OwnerData;
+  decodePrefix: (encoded: ccc.Hex) => OwnerData;
+  encode: (data: OwnerDataLike) => ccc.Bytes;
+  from: (data: OwnerDataLike) => OwnerData;
+  fromBytes: (encoded: ccc.BytesLike) => OwnerData;
+} = OwnerDataImplementation;
 
 /**
  * Represents a permissive data structure of the data structure for a receipt.
@@ -89,29 +107,37 @@ export interface ReceiptDataLike {
   depositAmount: ccc.FixedPointLike;
 }
 
-/**
- * Represents receipt data containing deposit information.
- *
- * Backed by `ccc.Entity.Base<ReceiptDataLike, ReceiptData>`.
- */
 const ReceiptDataCodec = mol.struct({
-  depositQuantity: mol.Uint32,
-  depositAmount: mol.Uint64,
+  depositQuantity: CheckedUint32LE,
+  depositAmount: CheckedUint64LE,
 });
 
-/**
- * Base CCC entity class used to encode and decode iCKB receipt payloads.
- *
- * @public
- */
-export const ReceiptBase = ccc.Entity.Base<ReceiptDataLike, ReceiptData>();
+const ReceiptEntityBase = ccc.Entity.Base<ReceiptDataLike, ReceiptData>();
 
 /**
  * Encodes the receipt payload for one or more identical iCKB deposits.
  *
  * @public
  */
-export class ReceiptData extends ReceiptBase {
+export interface ReceiptData {
+  /** Number of identical deposits represented by this receipt. */
+  depositQuantity: ccc.Num;
+  /** Free CKB capacity of each represented deposit before iCKB conversion. */
+  depositAmount: ccc.FixedPoint;
+  /** Creates a copy of this receipt data. */
+  clone(): ReceiptData;
+  /** Returns whether another value has the same receipt data. */
+  eq(other: ReceiptDataLike): boolean;
+  /** Returns the CKB hash of the serialized receipt data. */
+  hash(): ccc.Hex;
+  /** Serializes the receipt data to bytes. */
+  toBytes(): ccc.Bytes;
+  /** Serializes the receipt data to full-width hexadecimal. */
+  toHex(): ccc.Hex;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const ReceiptDataImplementation = class ReceiptData extends ReceiptEntityBase {
   static {
     ccc.codec(ReceiptDataCodec)(this);
   }
@@ -162,4 +188,16 @@ export class ReceiptData extends ReceiptBase {
   public static decodePrefix(encoded: ccc.Hex): ReceiptData {
     return ReceiptData.decode(encoded.slice(0, 26));
   }
-}
+};
+
+/** CCC-backed receipt-data constructor and codec. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const ReceiptData: {
+  byteLength?: number;
+  new (depositQuantity: ccc.Num, depositAmount: ccc.FixedPoint): ReceiptData;
+  decode: (encoded: ccc.BytesLike) => ReceiptData;
+  decodePrefix: (encoded: ccc.Hex) => ReceiptData;
+  encode: (data: ReceiptDataLike) => ccc.Bytes;
+  from: (data: ReceiptDataLike) => ReceiptData;
+  fromBytes: (encoded: ccc.BytesLike) => ReceiptData;
+} = ReceiptDataImplementation;

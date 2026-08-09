@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "@ickb/utils";
 import type { Match } from "../matching/match_types.ts";
-import { OrderCell, type OrderGroup } from "../model/cells.ts";
+import { OrderGroup, validatedOrderGroup } from "../model/cells.ts";
 import type { Info } from "../model/info.ts";
 import { OrderData } from "../model/order_data.ts";
 import { Relative } from "../model/relative.ts";
 import { cellInputLike } from "./order_io.ts";
-import { isMasterCell, isOrderCell } from "./order_scan.ts";
+import { isOrderCell } from "./order_scan.ts";
 
 interface OrderTransactionContext {
   script: ccc.Script;
@@ -54,7 +54,16 @@ export function addOrderMatch(
   match: Match,
 ): ccc.Transaction {
   const { cellDeps, script, udtScript } = context;
-  const partials = match.partials;
+  const partials = match.partials.map((partial) => assertMatchPartial(context, partial));
+  let ckbDelta = 0n;
+  let udtDelta = 0n;
+  for (const { group, ckbOut, udtOut } of partials) {
+    ckbDelta += group.order.ckbValue - ckbOut;
+    udtDelta += group.order.udtValue - udtOut;
+  }
+  if (match.ckbDelta !== ckbDelta || match.udtDelta !== udtDelta) {
+    throw new Error("Match deltas do not match partial order accounting");
+  }
   if (partials.length === 0) {
     return tx;
   }
@@ -63,10 +72,18 @@ export function addOrderMatch(
     throw new Error(`Match contains duplicate order cells: ${duplicateOutPoint}`);
   }
 
+  const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  for (const partial of partials) {
+    const outPoint = partial.group.order.cell.outPoint.toHex();
+    if (spent.has(outPoint)) {
+      throw new Error(`Match order ${outPoint} is already being spent`);
+    }
+  }
+
   tx.addCellDeps(cellDeps);
   for (const partial of partials) {
-    assertMatchPartial(context, partial);
-    const { order, ckbOut, udtOut } = partial;
+    const { group, ckbOut, udtOut } = partial;
+    const { order } = group;
     tx.addInput(cellInputLike(order.cell));
     tx.addOutput(
       { lock: script, type: udtScript, capacity: ckbOut },
@@ -86,10 +103,15 @@ export function meltOrderGroups(
   groups: OrderGroup[],
   options?: { isFulfilledOnly?: boolean },
 ): ccc.Transaction {
-  const selectedGroups =
-    options?.isFulfilledOnly === true
-      ? groups.filter((g) => g.order.isFulfilled())
-      : groups;
+  const selectedGroups: OrderGroup[] = [];
+  for (const group of groups) {
+    const validated = validatedOrderGroup(group);
+    const { order } = validated;
+    if (options?.isFulfilledOnly === true && !order.isFulfilled()) {
+      continue;
+    }
+    selectedGroups.push(validated);
+  }
   if (selectedGroups.length === 0) {
     return tx;
   }
@@ -111,7 +133,7 @@ type MatchPartial = Match["partials"][number];
 function duplicatePartialOrderOutPoint(partials: Match["partials"]): string | undefined {
   const outPoints = new Set<string>();
   for (const partial of partials) {
-    const key = partial.order.cell.outPoint.toHex();
+    const key = partial.group.order.cell.outPoint.toHex();
     if (outPoints.has(key)) {
       return key;
     }
@@ -122,8 +144,19 @@ function duplicatePartialOrderOutPoint(partials: Match["partials"]): string | un
 
 function assertMatchPartial(
   context: OrderTransactionContext,
-  { order, ckbOut, udtOut }: MatchPartial,
-): void {
+  { group, ckbOut, udtOut }: MatchPartial,
+): MatchPartial {
+  if (!(group instanceof OrderGroup)) {
+    throw new TypeError("Match partial is missing resolved order provenance");
+  }
+  const wrappedOrder = group.order;
+  const wrappedOutPoint = wrappedOrder.cell.outPoint.toHex();
+  if (ccc.hexFrom(wrappedOrder.data.toBytes()) !== wrappedOrder.cell.outputData) {
+    throw new Error(`Match order ${wrappedOutPoint} does not match its cell data`);
+  }
+
+  const validatedGroup = validatedOrderGroup(group);
+  const { order } = validatedGroup;
   const outPoint = order.cell.outPoint.toHex();
   if (!isOrderCell(order.cell, context.script, context.udtScript)) {
     throw new Error(`Match order ${outPoint} does not match this order manager`);
@@ -135,10 +168,7 @@ function assertMatchPartial(
     throw new Error(`Match order ${outPoint} has negative UDT output`);
   }
 
-  OrderCell.mustFrom(order.cell);
-  if (ccc.hexFrom(order.data.toBytes()) !== order.cell.outputData) {
-    throw new Error(`Match order ${outPoint} does not match its cell data`);
-  }
+  return { group: validatedGroup, ckbOut, udtOut };
 }
 
 function assertOrderGroupForMelt(
@@ -146,14 +176,9 @@ function assertOrderGroupForMelt(
   group: OrderGroup,
 ): void {
   const orderOutPoint = group.order.cell.outPoint.toHex();
-  const masterOutPoint = group.master.cell.outPoint.toHex();
   if (!isOrderCell(group.order.cell, context.script, context.udtScript)) {
     throw new Error(`Melt order ${orderOutPoint} does not match this order manager`);
   }
-  if (!isMasterCell(group.master.cell, context.script)) {
-    throw new Error(`Melt master ${masterOutPoint} does not match this order manager`);
-  }
-  group.validate();
 }
 
 function assertMeltInputsUnspent(tx: ccc.Transaction, groups: OrderGroup[]): void {

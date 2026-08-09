@@ -1,0 +1,13 @@
+**/node_modules/
+**/dist/
+**/etc/*.api.md
+**/*.tsbuildinfo
+coverage/
+.git/
+.scratch/
+config/
+log/
+apps/*/log_*.json
+apps/sampler/rate.csv
+forks/
+pnpm-lock.yaml

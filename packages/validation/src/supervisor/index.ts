@@ -1,0 +1,33 @@
+/** Live supervisor core and test-facing exports. */
+
+export * from "./args/supervisorArgs.ts";
+export * from "./args/supervisorCli.ts";
+export * from "./args/supervisorPaths.ts";
+export * from "./artifacts/supervisorArtifacts.ts";
+export * from "./classification/supervisorBotClassificationA.ts";
+export * from "./classification/supervisorBotClassificationB.ts";
+export * from "./classification/supervisorBotFailureClassification.ts";
+export * from "./classification/supervisorClassification.ts";
+export * from "./classification/supervisorClassifyUtils.ts";
+export * from "./preflight/supervisorPreflightBudget.ts";
+export * from "./preflight/supervisorPreflightClassification.ts";
+export * from "./preflight/supervisorPreflightFinish.ts";
+export * from "./preflight/supervisorPreflightRetry.ts";
+export * from "./preflight/supervisorPreflightRun.ts";
+export * from "./preflight/supervisorPreflightState.ts";
+export * from "./preflight/supervisorPreflightStep.ts";
+export * from "./runtime/actor/supervisorActorCommand.ts";
+export * from "./runtime/actor/supervisorActorRun.ts";
+export * from "./runtime/command/supervisorCommandRun.ts";
+export * from "./runtime/dry-run/supervisorDryRun.ts";
+export * from "./runtime/dry-run/supervisorDryRunSamples.ts";
+export * from "./runtime/shared/supervisorConstants.ts";
+export * from "./runtime/shared/supervisorCoverage.ts";
+export * from "./runtime/shared/supervisorEvidence.ts";
+export * from "./runtime/shared/supervisorMainRun.ts";
+export * from "./runtime/shared/supervisorPublicState.ts";
+export * from "./runtime/shared/supervisorStops.ts";
+export * from "./runtime/shared/supervisorSummary.ts";
+export type * from "./runtime/shared/supervisorTypes.ts";
+export * from "./tester/supervisorTesterClassification.ts";
+export * from "./tester/supervisorTesterEvidence.ts";

@@ -9,8 +9,16 @@ export {
   postTransactionAccountPlainCkbBalance,
   signerAccountLocks,
 } from "./account.ts";
-export { createPublicClient, verifyChainPreflight } from "./chain.ts";
-export type { ChainPreflightEvidence, SupportedChain } from "./chain.ts";
+export {
+  createPublicClient,
+  publicRpcEndpointIdentity,
+  verifyChainPreflight,
+} from "./chain.ts";
+export type {
+  ChainPreflightEvidence,
+  PublicRpcEndpointIdentity,
+  SupportedChain,
+} from "./chain.ts";
 export { formatCkb } from "./format.ts";
 export {
   STOP_EXIT_CODE,
@@ -20,6 +28,25 @@ export {
   writeJsonLine,
 } from "./logging.ts";
 export type { JsonLogValue } from "./logging.ts";
+export { firstSymlinkInPath } from "./path.ts";
+export type { SymlinkPathDependencies } from "./path.ts";
+export {
+  ProcessSignalError,
+  minimalProcessEnv,
+  readLinuxProcessIdentity,
+  runProcess,
+  signalExitCode,
+  timerDelayMs,
+  withProcessSignalForwarding,
+} from "./process.ts";
+export type {
+  LinuxProcessIdentity,
+  ProcessChild,
+  ProcessResult,
+  ProcessRunnerDependencies,
+  ProcessSignalContext,
+  RunProcessOptions,
+} from "./process.ts";
 export {
   isRetryableCkbStateRaceError,
   isRetryableRpcResponseShapeError,

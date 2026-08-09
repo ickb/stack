@@ -1,3 +1,4 @@
+import type { ccc } from "@ckb-ccc/core";
 import { LogicManager, OwnedOwnerManager, type WithdrawalGroup } from "@ickb/core";
 import { DaoManager } from "@ickb/dao";
 import { OrderManager } from "@ickb/order";
@@ -21,7 +22,7 @@ afterEach(() => {
 const WITHDRAWAL_FAILED = "withdrawal failed";
 
 describe(L1_STATE_SUITE, () => {
-  it("propagates bot withdrawal scan failures after bot capacity scanning succeeds", async () => {
+  it("starts bot scans concurrently and propagates withdrawal failures", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -33,10 +34,14 @@ describe(L1_STATE_SUITE, () => {
       [],
       new DaoManager(dao, []),
     );
+    const capacityGate = Promise.withResolvers<undefined>();
+    const withdrawalGate = Promise.withResolvers<undefined>();
+    const started = new Set<string>();
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(
       async function* () {
+        started.add("withdrawal");
+        await withdrawalGate.promise;
         yield* none<WithdrawalGroup>();
-        await Promise.resolve();
         throw new Error(WITHDRAWAL_FAILED);
       },
     );
@@ -49,9 +54,24 @@ describe(L1_STATE_SUITE, () => {
     );
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(headerLike(1n)),
-      findCellsOnChain: emptyCellScan,
+      async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
+        if (
+          query.filter?.scriptLenRange !== undefined &&
+          query.filter.outputDataLenRange !== undefined
+        ) {
+          started.add("capacity");
+          await capacityGate.promise;
+        }
+        yield* emptyCellScan();
+      },
     });
 
-    await expect(sdk.getL1State(client, [])).rejects.toThrow(WITHDRAWAL_FAILED);
+    const state = sdk.getL1State(client, []);
+    await vi.waitFor(() => {
+      expect(started).toEqual(new Set(["capacity", "withdrawal"]));
+    });
+    capacityGate.resolve(undefined);
+    withdrawalGate.resolve(undefined);
+    await expect(state).rejects.toThrow(WITHDRAWAL_FAILED);
   });
 });

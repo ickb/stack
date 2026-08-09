@@ -1,4 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
+import { CheckedUint128LE } from "@ickb/utils";
 import { isValidEntity } from "./entity_validity.ts";
 import { Info, type InfoLike } from "./info.ts";
 import {
@@ -8,6 +9,8 @@ import {
   type Master,
   type MasterLike,
 } from "./master.ts";
+
+const maxUint128 = (1n << 128n) - 1n;
 
 /**
  * Wire shape for order cell data.
@@ -24,24 +27,47 @@ export interface OrderDataLike {
 }
 
 const OrderDataCodec = mol.struct({
-  udtValue: mol.Uint128,
+  udtValue: CheckedUint128LE,
   master: MasterCodec,
   info: Info,
 });
 
-/**
- * CCC entity base for serializing and decoding order cell payloads.
- *
- * @public
- */
-export const OrderBase = ccc.Entity.Base<OrderDataLike, OrderData>();
+const OrderBase = ccc.Entity.Base<OrderDataLike, OrderData>();
 
 /**
  * Serialized order cell payload.
  *
  * @public
  */
-export class OrderData extends OrderBase {
+export interface OrderData {
+  /** UDT amount held by the order cell. */
+  udtValue: ccc.FixedPoint;
+  /** Master-cell pointer. */
+  master: Master;
+  /** Price and minimum-match metadata. */
+  info: Info;
+  /** Creates a copy of this order payload. */
+  clone(): OrderData;
+  /** Returns whether another value has the same order payload. */
+  eq(other: OrderDataLike): boolean;
+  /** Resolves a relative master against `current`, or returns the absolute master. */
+  getMaster(current: ccc.OutPoint): ccc.OutPoint;
+  /** Returns the CKB hash of the serialized order payload. */
+  hash(): ccc.Hex;
+  /** Returns whether the master pointer is relative to the current output. */
+  isMint(): boolean;
+  /** Returns whether the UDT value, master pointer, and info pass validation. */
+  isValid(): boolean;
+  /** Serializes the order payload to bytes. */
+  toBytes(): ccc.Bytes;
+  /** Serializes the order payload to full-width hexadecimal. */
+  toHex(): ccc.Hex;
+  /** Throws if the UDT value, master pointer, or info is invalid. */
+  validate(): void;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const OrderDataImplementation = class OrderData extends OrderBase {
   static {
     ccc.codec(OrderDataCodec)(this);
   }
@@ -73,8 +99,11 @@ export class OrderData extends OrderBase {
 
   /** Throws when the order payload is not internally valid. */
   public validate(): void {
-    if (this.udtValue < 0) {
+    if (this.udtValue < 0n) {
       throw new Error("udtValue invalid, negative");
+    }
+    if (this.udtValue > maxUint128) {
+      throw new Error("udtValue exceeds Uint128");
     }
     masterValidate(this.master);
     this.info.validate();
@@ -97,4 +126,15 @@ export class OrderData extends OrderBase {
       ? new ccc.OutPoint(current.txHash, current.index + value.distance)
       : value;
   }
-}
+};
+
+/** CCC-backed order-data constructor and codec. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const OrderData: {
+  byteLength?: number;
+  new (udtValue: ccc.FixedPoint, master: Master, info: Info): OrderData;
+  decode: (encoded: ccc.BytesLike) => OrderData;
+  encode: (data: OrderDataLike) => ccc.Bytes;
+  from: (data: OrderDataLike) => OrderData;
+  fromBytes: (encoded: ccc.BytesLike) => OrderData;
+} = OrderDataImplementation;

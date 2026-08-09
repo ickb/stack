@@ -17,6 +17,22 @@ afterEach(() => {
 });
 
 describe(L1_STATE_SUITE, () => {
+  it("uses the default page size when pool scan options are omitted", async () => {
+    const { sdk, logicManager } = testSdk();
+    const findDeposits = vi
+      .spyOn(logicManager, "findDeposits")
+      .mockImplementation(() => none());
+    const client = new StubClient({ findCellsOnChain: emptyCellScan });
+
+    await sdk.getPoolDeposits(client, baseTip);
+
+    expect(findDeposits).toHaveBeenCalledWith(client, {
+      onChain: true,
+      tip: baseTip,
+      pageSize: defaultCellPageSize,
+    });
+  });
+
   it("passes a custom page size to pool deposit scanning", async () => {
     const { sdk, logicManager } = testSdk();
     const findDeposits = vi

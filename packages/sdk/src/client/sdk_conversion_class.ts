@@ -13,20 +13,21 @@ import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
 } from "../conversion/sdk_conversion_plans.ts";
+import { sumUdtValue } from "../conversion/sdk_value_helpers.ts";
 import { IckbSdkBase } from "./sdk_base.ts";
 import { errorOf } from "./sdk_error.ts";
-import { sdkManagers } from "./sdk_state_store.ts";
-import type {
-  ConversionTransactionOptions,
-  ConversionTransactionResult,
-  GetPoolDepositsOptions,
-  PoolDepositState,
+import {
+  MAX_DIRECT_DEPOSITS,
+  MAX_WITHDRAWAL_REQUESTS,
+  type ConversionTransactionOptions,
+  type ConversionTransactionResult,
+  type GetPoolDepositsOptions,
+  type PoolDepositState,
 } from "./sdk_types.ts";
 
 /**
  * SDK layer that builds conversion transactions from a sampled state context.
  *
- * @public
  */
 export abstract class IckbSdkConversion extends IckbSdkBase {
   /** Reads public pool deposits and evaluates readiness against the supplied sampled tip. */
@@ -43,11 +44,21 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
    * A successful result still needs `completeTransaction`, signing, and send.
    * Failure results are expected planning outcomes; unexpected build errors throw.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Keep the established Promise contract while all partial manager builders are synchronous.
   public async buildConversionTransaction(
     txLike: ccc.TransactionLike,
-    client: ccc.Client,
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
+    assertCountLimit(
+      options.limits?.maxDirectDeposits ?? MAX_DIRECT_DEPOSITS,
+      MAX_DIRECT_DEPOSITS,
+      "maxDirectDeposits",
+    );
+    assertCountLimit(
+      options.limits?.maxWithdrawalRequests ?? MAX_WITHDRAWAL_REQUESTS,
+      MAX_WITHDRAWAL_REQUESTS,
+      "maxWithdrawalRequests",
+    );
     const { amount, context, direction } = options;
     if (amount < 0n) {
       return conversionFailure("amount-negative", context.estimatedMaturity);
@@ -61,24 +72,19 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
 
     const baseTx = ccc.Transaction.from(txLike);
     if (amount === 0n) {
-      return this.buildCollectOnlyConversion(baseTx, client, options);
+      return this.buildCollectOnlyConversion(baseTx, options);
     }
     return direction === "ckb-to-ickb"
-      ? this.buildCkbToIckbConversion(baseTx, client, options)
-      : this.buildIckbToCkbConversion(baseTx, client, options);
+      ? this.buildCkbToIckbConversion(baseTx, options)
+      : this.buildIckbToCkbConversion(baseTx, options);
   }
 
-  private async buildCollectOnlyConversion(
+  private buildCollectOnlyConversion(
     baseTx: ccc.Transaction,
-    client: ccc.Client,
     options: ConversionTransactionOptions,
-  ): Promise<ConversionTransactionResult> {
+  ): ConversionTransactionResult {
     const { context } = options;
-    const tx = await this.buildBaseTransaction(
-      baseTx,
-      client,
-      baseTransactionOptions(context),
-    );
+    const tx = this.buildBaseTransaction(baseTx, baseTransactionOptions(context));
     if (!hasTransactionActivity(tx)) {
       return conversionFailure(NOTHING_TO_DO_REASON, context.estimatedMaturity);
     }
@@ -90,15 +96,14 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     };
   }
 
-  private async buildCkbToIckbConversion(
+  private buildCkbToIckbConversion(
     baseTx: ccc.Transaction,
-    client: ccc.Client,
     options: ConversionTransactionOptions,
-  ): Promise<ConversionTransactionResult> {
+  ): ConversionTransactionResult {
     const { context, lock } = options;
-    const { ickbLogic } = sdkManagers(this);
     const planResult = ckbToIckbConversionPlans(options);
     const lastFailure = planResult.lastFailure ?? NOTHING_TO_DO_REASON;
+    const completionOutputReserve = this.completionOutputReserve(baseTx, context, 0n);
     let lastError: unknown;
     for (const {
       depositCapacity,
@@ -108,7 +113,9 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     } of planResult.plans) {
       const outputLimitError = plannedDaoOutputLimitError(
         baseTx,
-        (depositCount > 0 ? depositCount + 1 : 0) + orderOutputCount(order),
+        (depositCount > 0 ? depositCount + 1 : 0) +
+          orderOutputCount(order) +
+          completionOutputReserve,
         depositCount > 0 || context.readyWithdrawals.length > 0,
       );
       if (outputLimitError !== undefined) {
@@ -116,16 +123,15 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
         continue;
       }
       try {
-        let tx = await this.buildBaseTransaction(
+        let tx = this.buildBaseTransaction(
           baseTx.clone(),
-          client,
           baseTransactionOptions(context),
         );
         if (depositCount > 0) {
-          tx = await ickbLogic.deposit(tx, depositCount, depositCapacity, lock, client);
+          tx = this.ickbLogic.deposit(tx, depositCount, depositCapacity, lock);
         }
         if (order !== undefined) {
-          tx = await this.request(tx, lock, order.estimate.info, order.amounts);
+          tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
         }
         return {
           ok: true,
@@ -146,23 +152,24 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     return conversionFailure(lastFailure, context.estimatedMaturity);
   }
 
-  private async buildIckbToCkbConversion(
+  private buildIckbToCkbConversion(
     baseTx: ccc.Transaction,
-    client: ccc.Client,
     options: ConversionTransactionOptions,
-  ): Promise<ConversionTransactionResult> {
+  ): ConversionTransactionResult {
     const { context, lock } = options;
-    const poolDeposits =
-      context.system.poolDeposits ??
-      (await this.getPoolDeposits(client, context.system.tip));
-    const planResult = ickbToCkbConversionPlans(options, poolDeposits);
+    const planResult = ickbToCkbConversionPlans(options, context.system.poolDeposits);
     const lastFailure = planResult.lastFailure ?? NOTHING_TO_DO_REASON;
+    const completionOutputReserve = this.completionOutputReserve(
+      baseTx,
+      context,
+      options.amount,
+    );
     let lastError: unknown;
     for (const plan of planResult.plans) {
       const { estimatedMaturity, order, requiredLiveDeposits, selectedDeposits } = plan;
       const outputLimitError = plannedDaoOutputLimitError(
         baseTx,
-        selectedDeposits.length * 2 + orderOutputCount(order),
+        selectedDeposits.length * 2 + orderOutputCount(order) + completionOutputReserve,
         selectedDeposits.length > 0 || context.readyWithdrawals.length > 0,
       );
       if (outputLimitError !== undefined) {
@@ -170,9 +177,8 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
         continue;
       }
       try {
-        let tx = await this.buildBaseTransaction(
+        let tx = this.buildBaseTransaction(
           baseTx.clone(),
-          client,
           baseTransactionOptions(context, {
             deposits: selectedDeposits,
             requiredLiveDeposits,
@@ -180,7 +186,7 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
           }),
         );
         if (order !== undefined) {
-          tx = await this.request(tx, lock, order.estimate.info, order.amounts);
+          tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
         }
         return {
           ok: true,
@@ -204,5 +210,37 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
       throw errorOf(lastError);
     }
     return conversionFailure(lastFailure, context.estimatedMaturity);
+  }
+
+  private completionOutputReserve(
+    baseTx: ccc.Transaction,
+    context: ConversionTransactionOptions["context"],
+    plannedIckbSpend: bigint,
+  ): number {
+    // Caller-supplied inputs are unresolved here and may carry iCKB surplus.
+    if (baseTx.inputs.length > 0) {
+      return 2;
+    }
+
+    let requiredIckb = plannedIckbSpend;
+    for (const output of baseTx.outputCells) {
+      if (this.ickbUdt.isUdt(output)) {
+        requiredIckb += ccc.udtBalanceFrom(output.outputData);
+      }
+    }
+    const forcedIckbInputs =
+      sumUdtValue(context.receipts) + sumUdtValue(context.availableOrders);
+    const canNeedIckbChange =
+      forcedIckbInputs > requiredIckb ||
+      (forcedIckbInputs < requiredIckb && context.ickbAvailable > requiredIckb);
+    return 1 + Number(canNeedIckbChange);
+  }
+}
+
+function assertCountLimit(limit: number, maximum: number, name: string): void {
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > maximum) {
+    throw new RangeError(
+      `${name} must be a non-negative safe integer at most ${String(maximum)}`,
+    );
   }
 }

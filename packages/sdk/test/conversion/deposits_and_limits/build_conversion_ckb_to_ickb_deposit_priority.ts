@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -25,8 +22,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const remainder = ccc.fixedPointFrom(10000);
     const deposit = vi
       .spyOn(logicManager, "deposit")
-      .mockImplementation(async (txLike, quantity, depositCapacity, depositLock) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, quantity, depositCapacity, depositLock) => {
         calls.push(`deposit:${String(quantity)}`);
         expect(depositCapacity).toBe(ICKB_DEPOSIT_CAP);
         expect(depositLock).toBe(lock);
@@ -47,20 +43,16 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         return tx;
       });
 
-    const result = await sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      baseClient,
-      {
-        direction: CKB_TO_ICKB,
-        amount: ICKB_DEPOSIT_CAP * 2n + remainder,
-        lock,
-        context: conversionContext({
-          system: { ckbAvailable: ICKB_DEPOSIT_CAP * 3n },
-          ckbAvailable: ICKB_DEPOSIT_CAP * 2n + remainder,
-          ickbAvailable: 0n,
-        }),
-      },
-    );
+    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      direction: CKB_TO_ICKB,
+      amount: ICKB_DEPOSIT_CAP * 2n + remainder,
+      lock,
+      context: conversionContext({
+        system: { ckbAvailable: ICKB_DEPOSIT_CAP * 3n },
+        ckbAvailable: ICKB_DEPOSIT_CAP * 2n + remainder,
+        ickbAvailable: 0n,
+      }),
+    });
 
     expect(result).toMatchObject({
       ok: true,

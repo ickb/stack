@@ -15,11 +15,12 @@ const VALID_PRIVATE_KEY = `0x${"11".repeat(32)}`;
 const CONFIG_FILE_NAME = "config.json";
 const CONFIG_ENV_NAME = "BOT_CONFIG_FILE";
 const INVALID_CONFIG_ENV_ERROR = `Invalid env ${CONFIG_ENV_NAME}`;
-const RUNTIME_CONFIG_TEST_DIR = path.join(
+const { join, resolve } = path;
+const RUNTIME_CONFIG_TEST_DIR = join(
   import.meta.dirname,
   "../../../.scratch/node-utils-runtime-config",
 );
-const RUNTIME_CONFIG_FILE_PATH = path.join(RUNTIME_CONFIG_TEST_DIR, CONFIG_FILE_NAME);
+const RUNTIME_CONFIG_FILE_PATH = join(RUNTIME_CONFIG_TEST_DIR, CONFIG_FILE_NAME);
 
 describe("runtime config intervals", () => {
   it("parses positive sleep intervals as milliseconds", async () => {
@@ -151,7 +152,7 @@ describe("runtime config JSON shape", () => {
     await expect(
       readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: 5 })),
     ).resolves.toMatchObject({
-      rpcUrl: undefined,
+      rpcUrl: "https://testnet.example/",
       sleepIntervalMs: 5000,
       maxRetryableAttempts: undefined,
     });
@@ -179,6 +180,30 @@ describe("runtime config JSON shape", () => {
 
   it("rejects non-object JSON object members without exposing contents", async () => {
     await expect(readRuntimeConfigText("null")).rejects.toThrow(INVALID_CONFIG_ENV_ERROR);
+  });
+});
+
+describe("runtime config RPC URL", () => {
+  it("rejects userinfo without exposing credential-bearing URLs", () => {
+    const urls = [
+      "https://user@rpc.example/",
+      "https://:password@rpc.example/",
+      "https://user:password@rpc.example/",
+      "https://%75ser:%70assword@rpc.example/",
+    ];
+
+    for (const rpcUrl of urls) {
+      let error: unknown;
+      try {
+        parseRuntimeConfig(runtimeConfigText({ rpcUrl }), CONFIG_ENV_NAME);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({ message: INVALID_CONFIG_ENV_ERROR });
+      expect(error instanceof Error ? error.message : String(error)).not.toContain(
+        rpcUrl,
+      );
+    }
   });
 });
 
@@ -233,7 +258,7 @@ describe("runtime config file env", () => {
         `Empty env ${CONFIG_ENV_NAME}`,
       );
       await expect(
-        readRuntimeConfigEnv(path.join(RUNTIME_CONFIG_TEST_DIR, "missing"), CONFIG_ENV_NAME),
+        readRuntimeConfigEnv(join(RUNTIME_CONFIG_TEST_DIR, "missing"), CONFIG_ENV_NAME),
       ).rejects.toThrow(`Invalid file from env ${CONFIG_ENV_NAME}`);
       process.env["INIT_CWD"] = RUNTIME_CONFIG_TEST_DIR;
       await expect(
@@ -243,7 +268,7 @@ describe("runtime config file env", () => {
         privateKey,
       });
       await expect(
-        readRuntimeConfigEnv(path.resolve(CONFIG_FILE_NAME), CONFIG_ENV_NAME),
+        readRuntimeConfigEnv(resolve(CONFIG_FILE_NAME), CONFIG_ENV_NAME),
       ).rejects.toThrow(`Invalid file from env ${CONFIG_ENV_NAME}`);
       await writeRuntimeConfigFile("");
       await expect(
@@ -284,6 +309,7 @@ function invalidRuntimeConfigTexts(): string[] {
     runtimeConfigText({ extra: true }),
     runtimeConfigText({ privateKey: 1 }),
     runtimeConfigText({ privateKey: `${VALID_PRIVATE_KEY}\n` }),
+    runtimeConfigText({ rpcUrl: undefined }),
     runtimeConfigText({ rpcUrl: "" }),
     runtimeConfigText({ rpcUrl: "file:///tmp/socket" }),
     runtimeConfigText({ rpcUrl: "https://[bad" }),
@@ -301,6 +327,7 @@ function runtimeConfigText(overrides: Record<string, unknown>): string {
   const config: Record<string, unknown> = {
     chain: "testnet",
     privateKey: VALID_PRIVATE_KEY,
+    rpcUrl: "https://testnet.example/",
     sleepIntervalSeconds: 60,
     ...overrides,
   };

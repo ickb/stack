@@ -1,4 +1,4 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 
 /**
  * The default page size used when querying cells from the chain.
@@ -15,28 +15,141 @@ import type { ccc } from "@ckb-ccc/core";
 export const defaultCellPageSize = 400;
 
 /**
- * Collects every item yielded by a paged async scan.
+ * A page returned to {@link collectPagedScan}.
  *
- * @remarks `pageSize` is passed to the supplied scan factory as an RPC/indexer
- * page size. It is not a total result cap.
+ * @public
+ */
+export type PagedScanPage<T> =
+  | { items: readonly T[]; lastCursor?: string }
+  | { cells: readonly T[]; lastCursor?: string };
+
+/**
+ * Stable error code for a full page that cannot advance pagination.
+ *
+ * @public
+ */
+export const pagedScanCursorErrorCode = "PAGED_SCAN_CURSOR_NOT_ADVANCING";
+
+/**
+ * Raised when a full page omits its next cursor or repeats a cursor in the scan.
+ *
+ * @public
+ */
+export class PagedScanCursorError extends Error {
+  /** Machine-readable stable error code. */
+  public readonly code = pagedScanCursorErrorCode;
+
+  /** Cursor supplied to the failed page request. */
+  public readonly previousCursor: string | undefined;
+
+  /** Cursor returned by the failed page request. */
+  public readonly lastCursor: string | undefined;
+
+  /** Creates a cursor-progress error for one failed page. */
+  constructor(
+    progress: { previousCursor: string | undefined; lastCursor: string | undefined },
+    options?: ErrorOptions,
+  ) {
+    super("Paged scan returned a full page without an advancing lastCursor", options);
+    this.name = "PagedScanCursorError";
+    this.previousCursor = progress.previousCursor;
+    this.lastCursor = progress.lastCursor;
+  }
+}
+
+/**
+ * Fetches and collects every page while enforcing cursor progress.
+ *
+ * @remarks `pageSize` is passed to each request and is not a total result cap.
+ * Empty and short pages complete the scan. Every full page must return a
+ * non-empty cursor not previously observed by the scan. Legitimate advancing
+ * scans continue without an item or page limit.
  *
  * @public
  */
 export async function collectPagedScan<T>(
-  scan: (pageSize: number) => AsyncIterable<T>,
+  fetchPage: (pageSize: number, after: string | undefined) => Promise<PagedScanPage<T>>,
   options: {
     pageSize: number;
   },
 ): Promise<T[]> {
-  if (!Number.isSafeInteger(options.pageSize) || options.pageSize <= 0) {
-    throw new Error("pageSize must be a positive safe integer");
-  }
+  assertPageSize(options.pageSize);
 
   const results: T[] = [];
-  for await (const item of scan(options.pageSize)) {
-    results.push(item);
+  const seenCursors = new Set<string>();
+  let after: string | undefined;
+  for (;;) {
+    const page = await fetchPage(options.pageSize, after);
+    const items = "items" in page ? page.items : page.cells;
+    results.push(...items);
+    if (items.length < options.pageSize) {
+      return results;
+    }
+    if (
+      page.lastCursor === undefined ||
+      page.lastCursor === "" ||
+      page.lastCursor === after ||
+      seenCursors.has(page.lastCursor)
+    ) {
+      throw new PagedScanCursorError({
+        previousCursor: after,
+        lastCursor: page.lastCursor,
+      });
+    }
+    seenCursors.add(page.lastCursor);
+    after = page.lastCursor;
   }
-  return results;
+}
+
+/**
+ * Collects CCC cell pages while preserving its cached and on-chain scan modes.
+ *
+ * @remarks Cached scans yield matching cached cells first, then omit unusable
+ * or duplicate on-chain cells. On-chain scans bypass cache reads. Both modes
+ * still use CCC's `findCellsPaged`, which records fetched cells in the client
+ * cache, and enforce cursor progress through {@link collectPagedScan}.
+ *
+ * @public
+ */
+export async function collectCellsPaged(
+  client: ccc.Client,
+  keyLike: Parameters<ccc.Client["findCells"]>[0],
+  order: "asc" | "desc",
+  options: { onChain: boolean; pageSize: number },
+): Promise<ccc.Cell[]> {
+  const key = ccc.ClientIndexerSearchKey.from(keyLike);
+  const cached: ccc.Cell[] = [];
+  const cells = await collectPagedScan(
+    async (requestPageSize, after) => {
+      if (!options.onChain && after === undefined) {
+        for await (const cell of client.cache.findCells(key)) {
+          cached.push(cell);
+        }
+      }
+      return client.findCellsPaged(key, order, requestPageSize, after);
+    },
+    { pageSize: options.pageSize },
+  );
+  if (options.onChain) {
+    return cells;
+  }
+
+  const result = [...cached];
+  for (const cell of cells) {
+    if (
+      !(await client.cache.isUnusable(cell.outPoint)) &&
+      cached.every((cachedCell) => !cachedCell.outPoint.eq(cell.outPoint))
+    ) {
+      result.push(cell);
+    }
+  }
+  return result;
+}
+
+function assertPageSize(pageSize: number): void {
+  if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+    throw new Error("pageSize must be a positive safe integer");
+  }
 }
 
 /**
@@ -229,58 +342,6 @@ export function compareBigInt(left: bigint, right: bigint): number {
   }
 
   return 0;
-}
-
-/**
- * A buffered generator that tries to maintain a fixed-size buffer of values.
- *
- * @public
- */
-export class BufferedGenerator<T> {
-  /** Current buffered window of values. */
-  public buffer: T[] = [];
-
-  /** Wrapped generator that supplies future values. */
-  public generator: Generator<T, void, void>;
-
-  /** Target maximum number of buffered values. */
-  public maxSize: number;
-
-  /**
-   * Creates a `BufferedGenerator` and fills the initial buffer.
-   *
-   * @param generator - The generator to buffer values from.
-   * @param maxSize - The non-negative integer target maximum buffer size.
-   */
-  constructor(generator: Generator<T, void, void>, maxSize: number) {
-    this.generator = generator;
-    this.maxSize = maxSize;
-    while (this.buffer.length < this.maxSize) {
-      const { value, done } = this.generator.next();
-      if (done === true) {
-        break;
-      }
-      this.buffer.push(value);
-    }
-  }
-
-  /**
-   * Advances the buffer by discarding buffered values and reading replacements.
-   *
-   * @remarks
-   * The buffer can shrink below `maxSize` once the wrapped generator is exhausted.
-   *
-   * @param n - The non-negative integer number of buffered positions to advance.
-   */
-  public next(n: number): void {
-    for (let i = 0; i < n; i++) {
-      this.buffer.shift();
-      const { value, done } = this.generator.next();
-      if (done !== true) {
-        this.buffer.push(value);
-      }
-    }
-  }
 }
 
 /**

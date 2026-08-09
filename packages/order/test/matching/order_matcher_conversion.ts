@@ -1,13 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import { orderMatchers } from "../../src/matching/order_match_sequence.ts";
+import { OrderMatcher } from "../../src/matching/order_matcher.ts";
 import { Info } from "../../src/model/info.ts";
 import { Ratio } from "../../src/model/ratio.ts";
-import {
-  OrderConversionRepresentabilityError,
-  OrderManager,
-  OrderMatcher,
-} from "../../src/order.ts";
+import { OrderConversionRepresentabilityError, OrderManager } from "../../src/order.ts";
 import {
   ORDER_MATCHER_SUITE,
   RATIO_SCALE_EXCEEDS_UINT64,
@@ -16,14 +13,17 @@ import {
   exactAdjustedConversion,
   fullMatchOutput,
   makeUdtToCkbOrder,
+  resolvedOrderGroup,
+  resolvedOrderGroups,
 } from "./support/order_match_helpers.ts";
 import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
 describe(ORDER_MATCHER_SUITE, () => {
   it("sorts effective ratios exactly beyond Number precision", () => {
-    const order = makeUdtToCkbOrder();
+    const order = makeUdtToCkbOrder({ udtValue: 100n });
+    const group = resolvedOrderGroup(order);
     const scale = 2n ** 60n;
     const better = new OrderMatcher(
-      order,
+      group,
       true,
       1n,
       1n,
@@ -37,7 +37,7 @@ describe(ORDER_MATCHER_SUITE, () => {
       scale,
     );
     const worse = new OrderMatcher(
-      order,
+      group,
       true,
       1n,
       1n,
@@ -79,11 +79,15 @@ describe(ORDER_MATCHER_SUITE, () => {
       outPoint: { txHash: byte32FromByte("43"), index: 0n },
     });
 
-    const matchers = orderMatchers([validA, invalidDirection, validB], true, 0n);
-
-    expect(matchers.map((matcher) => matcher.order.cell.outPoint.toHex())).not.toContain(
-      invalidDirection.cell.outPoint.toHex(),
+    const matchers = orderMatchers(
+      resolvedOrderGroups([validA, invalidDirection, validB]),
+      true,
+      0n,
     );
+
+    expect(
+      matchers.map((matcher) => matcher.group.order.cell.outPoint.toHex()),
+    ).not.toContain(invalidDirection.cell.outPoint.toHex());
     expect(matchers).toHaveLength(2);
     const [firstMatcher, secondMatcher] = matchers;
     if (firstMatcher === undefined || secondMatcher === undefined) {
@@ -211,33 +215,31 @@ describe(ORDER_MATCHER_SUITE, () => {
 describe(ORDER_MATCHER_SUITE, () => {
   it("uses udtToCkb scales for UDT-to-CKB orders", () => {
     const order = makeUdtToCkbOrder();
+    const group = resolvedOrderGroup(order);
 
-    const matcher = OrderMatcher.from(order, false, 0n);
+    const matcher = OrderMatcher.from(group, false, 0n);
 
     if (matcher === undefined) {
       throw new Error("Expected UDT-to-CKB order to be matchable");
     }
-    expect(OrderMatcher.from(order, true, 0n)).toBeUndefined();
+    expect(OrderMatcher.from(group, true, 0n)).toBeUndefined();
     expect(matcher.aScale).toBe(2n);
     expect(matcher.bScale).toBe(5n);
     expect(matcher.bMaxMatch).toBeGreaterThan(0n);
   });
 
-  it("exposes the non-decreasing rounded output helper", () => {
-    expect(OrderMatcher.nonDecreasing(3n, 2n, 10n, 1n, 7n)).toBe(6n);
-  });
-
   it("rejects invalid direct matcher construction", () => {
     const order = makeUdtToCkbOrder();
+    const group = resolvedOrderGroup(order);
 
     expect(
-      () => new OrderMatcher(order, true, 0n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 1n, 1n),
+      () => new OrderMatcher(group, true, 0n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 1n, 1n),
     ).toThrow("OrderMatcher scales must be positive");
     expect(
-      () => new OrderMatcher(order, true, 1n, 1n, 0n, 0n, 0n, 2n, 1n, 0n, 1n, 1n),
+      () => new OrderMatcher(group, true, 1n, 1n, 0n, 0n, 0n, 2n, 1n, 0n, 1n, 1n),
     ).toThrow("OrderMatcher maximum match must be at least the minimum match");
     expect(
-      () => new OrderMatcher(order, true, 1n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 1n),
+      () => new OrderMatcher(group, true, 1n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 1n),
     ).toThrow("OrderMatcher real ratio terms must be positive");
   });
 
@@ -259,13 +261,17 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
     });
 
-    expect(OrderMatcher.from(order, true, ccc.fixedPointFrom(2))).toBeUndefined();
+    expect(
+      OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(2)),
+    ).toBeUndefined();
   });
 
   it("rejects matcher parameters with a non-positive effective denominator", () => {
     const order = makeUdtToCkbOrder();
 
-    expect(OrderMatcher.from(order, false, -ccc.fixedPointFrom(100))).toBeUndefined();
+    expect(
+      OrderMatcher.from(resolvedOrderGroup(order), false, -ccc.fixedPointFrom(100)),
+    ).toBeUndefined();
   });
 });
 
@@ -273,10 +279,10 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("lets bestMatch consume UDT-to-CKB orders", () => {
     const order = makeUdtToCkbOrder();
 
-    const match = OrderManager.bestMatch(
-      [order],
+    const { match } = OrderManager.bestMatch(
+      [resolvedOrderGroup(order)],
       {
-        ckbValue: ccc.fixedPointFrom(200),
+        ckbValue: 200n,
         udtValue: 0n,
       },
       {

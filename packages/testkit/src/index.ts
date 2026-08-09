@@ -9,11 +9,6 @@ import { byte32FromByte } from "./bytes.ts";
 
 export { byte32FromByte } from "./bytes.ts";
 
-/** Creates a 32-byte hash fixture by repeating one byte. */
-export function hash(hexByte: string): `0x${string}` {
-  return byte32FromByte(hexByte);
-}
-
 type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
   (...args: never[]) => unknown
@@ -24,6 +19,7 @@ interface StubClientHandlers {
   cache?: ccc.Client["cache"];
   findCells?: ClientMethod<"findCells">;
   findCellsOnChain?: ClientMethod<"findCellsOnChain">;
+  findCellsPaged?: ClientMethod<"findCellsPaged">;
   getCell?: ClientMethod<"getCell">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
@@ -31,10 +27,6 @@ interface StubClientHandlers {
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
 }
-
-export type CommittedTransactionResponseOverrides = Partial<
-  Omit<ccc.ClientTransactionResponseLike, "transaction" | "status">
->;
 
 export interface TransactionWithHeader {
   transaction: ccc.ClientTransactionResponse;
@@ -53,6 +45,8 @@ export class StubClient extends ccc.ClientPublicTestnet {
   private readonly handlers: StubClientHandlers;
   private readonly findCellsHandler: ClientMethod<"findCells">;
   private readonly findCellsOnChainHandler: ClientMethod<"findCellsOnChain">;
+  private readonly findCellsPagedHandler: ClientMethod<"findCellsPaged"> | undefined;
+  private readonly legacyCellScanHandler: ClientMethod<"findCellsOnChain"> | undefined;
   private readonly getCellHandler: ClientMethod<"getCell">;
   private readonly getHeaderByNumberHandler: ClientMethod<"getHeaderByNumber">;
   private readonly getTransactionHandler: ClientMethod<"getTransaction">;
@@ -72,6 +66,13 @@ export class StubClient extends ccc.ClientPublicTestnet {
     this.findCellsHandler = handlers.findCells ?? super.findCells.bind(this);
     this.findCellsOnChainHandler =
       handlers.findCellsOnChain ?? super.findCellsOnChain.bind(this);
+    this.findCellsPagedHandler = handlers.findCellsPaged;
+    const findCells = handlers.findCells;
+    this.legacyCellScanHandler =
+      findCells === undefined
+        ? handlers.findCellsOnChain
+        : (key, order, limit): ReturnType<ClientMethod<"findCellsOnChain">> =>
+            findCells(key, order, limit);
     this.getCellHandler = handlers.getCell ?? super.getCell.bind(this);
     this.getHeaderByNumberHandler =
       handlers.getHeaderByNumber ?? super.getHeaderByNumber.bind(this);
@@ -104,6 +105,28 @@ export class StubClient extends ccc.ClientPublicTestnet {
     ...args: Parameters<ClientMethod<"findCellsOnChain">>
   ): ReturnType<ClientMethod<"findCellsOnChain">> {
     return this.findCellsOnChainHandler(...args);
+  }
+
+  /** Delegates page scans or adapts a configured generator scan for existing fixtures. */
+  public override async findCellsPaged(
+    ...args: Parameters<ClientMethod<"findCellsPaged">>
+  ): ReturnType<ClientMethod<"findCellsPaged">> {
+    if (this.findCellsPagedHandler !== undefined) {
+      return this.findCellsPagedHandler(...args);
+    }
+    if (this.legacyCellScanHandler === undefined) {
+      return super.findCellsPaged(...args);
+    }
+
+    const [key, order, limit = 10, after] = args;
+    const pageSize = Number(ccc.numFrom(limit));
+    const offset = after === undefined ? 0 : Number(after.slice("stub:".length));
+    const allCells: ccc.Cell[] = [];
+    for await (const cell of this.legacyCellScanHandler(key, order, pageSize)) {
+      allCells.push(cell);
+    }
+    const cells = allCells.slice(offset, offset + pageSize);
+    return { cells, lastCursor: `stub:${String(offset + cells.length)}` };
   }
 
   /** Delegates single-cell lookup to the configured handler or the base client. */
@@ -203,7 +226,9 @@ export function passthroughTransaction(txLike: ccc.TransactionLike): ccc.Transac
  */
 export function committedTransactionResponse(
   transaction: ccc.TransactionLike,
-  overrides: CommittedTransactionResponseOverrides = {},
+  overrides: Partial<
+    Omit<ccc.ClientTransactionResponseLike, "transaction" | "status">
+  > = {},
 ): ccc.ClientTransactionResponse {
   return ccc.ClientTransactionResponse.from({
     transaction,

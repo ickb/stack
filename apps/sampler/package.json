@@ -18,32 +18,16 @@
   "bugs": {
     "url": "https://github.com/ickb/stack/issues"
   },
-  "sideEffects": false,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
   },
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest run",
-    "build": "pnpm --filter @ickb/utils --filter @ickb/dao --filter @ickb/core build && tsc -p tsconfig.build.json",
-    "lint": "eslint ./src",
-    "clean": "rm -fr dist",
-    "clean:deep": "rm -fr dist node_modules",
-    "start": "node dist/index.js | tee rate.csv"
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 apps/sampler/src apps/sampler/test",
+    "start": "node src/index.ts | tee rate.csv"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",

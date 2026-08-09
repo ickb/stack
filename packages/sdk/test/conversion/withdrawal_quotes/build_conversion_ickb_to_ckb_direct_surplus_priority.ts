@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -34,8 +31,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike, deposits) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, deposits) => {
         expect(deposits).toEqual([earlier]);
         return ccc.Transaction.from(txLike);
       });
@@ -44,7 +40,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       .mockImplementation((txLike) => ccc.Transaction.from(txLike));
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -54,7 +50,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             ckbAvailable: 10n,
             poolDeposits: {
               deposits: [laterHigherGain, earlier],
-              readyDeposits: [laterHigherGain, earlier],
               id: "pool",
             },
           },

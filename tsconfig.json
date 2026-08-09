@@ -5,8 +5,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true,
     "isolatedModules": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -14,10 +14,13 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
     "noImplicitOverride": true,
-    "noImplicitAny": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noEmit": true,
     "noEmitOnError": true,
     "removeComments": true,
@@ -25,8 +28,25 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "importHelpers": true
+    "sourceMap": true
   },
-  "include": ["packages/**/*", "vitest.config.mts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "scripts/**/*.ts",
+    "eslint.config.mts",
+    "prettier.config.mts",
+    "apps/bot/src/**/*.ts",
+    "apps/validation/src/**/*.ts",
+    "apps/sampler/src/**/*.ts",
+    "vitest.config.mts",
+    "apps/*/vitest.config.mts",
+    "apps/*/eslint.config.mts",
+    "packages/*/vitest.config.mts",
+    "apps/interface/vite.config.ts",
+    "packages/*/test/**/*.ts",
+    "apps/bot/test/**/*.ts",
+    "apps/sampler/test/**/*.ts",
+    "apps/validation/test/**/*.ts",
+    "packages/validation/test/**/*.ts"
+  ]
 }

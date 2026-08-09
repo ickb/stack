@@ -1,8 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createPublicClient,
   isRetryableRpcTransportError,
+  publicRpcEndpointIdentity,
+  runProcess,
   verifyChainPreflight,
 } from "../src/index.ts";
 import {
@@ -15,24 +18,99 @@ import {
 } from "./support/node_utils_support.ts";
 
 const MISSING_TESTNET_GENESIS_HEADER = "Missing testnet genesis header";
+const MAINNET_RPC_URL = "https://mainnet.example";
+const INVALID_RPC_ENDPOINT_IDENTITY = "Invalid RPC endpoint identity input";
 const TESTNET_PREFLIGHT_FAILURE_MESSAGE = "Failed to verify testnet RPC chain identity";
+const HTTP_CLIENT_PROCESS = fileURLToPath(
+  new URL("fixtures/httpPublicClientProcess.ts", import.meta.url),
+);
 
 describe("public clients and preflight identity", () => {
-  it("creates network-specific public clients and forwards custom RPC URLs", () => {
-    const mainnet = createPublicClient("mainnet", "https://mainnet.example");
-    const testnet = createPublicClient("testnet", undefined);
-    const emptyConfiguredTestnet = createPublicClient("testnet", "");
-    const defaultTestnet = new ccc.ClientPublicTestnet();
+  it("reduces RPC configuration to credential-free endpoint identity", () => {
+    expect(
+      publicRpcEndpointIdentity("https://rpc.example:8443/ckb?token=secret#private"),
+    ).toEqual({
+      mode: "exclusive",
+      protocol: "https:",
+      hostname: "rpc.example",
+      port: "8443",
+      pathname: "/ckb",
+    });
+    for (const value of [
+      "",
+      "invalid",
+      "wss://rpc.example/ws",
+      "https://user@rpc.example/",
+    ]) {
+      expect(() => publicRpcEndpointIdentity(value)).toThrow(
+        INVALID_RPC_ENDPOINT_IDENTITY,
+      );
+    }
+  });
+
+  it("creates network-specific public clients with explicit RPC URLs", () => {
+    const mainnet = createPublicClient("mainnet", MAINNET_RPC_URL);
+    const testnetUrl = "http://127.0.0.1:8114/";
+    const testnet = createPublicClient("testnet", testnetUrl);
 
     expect(mainnet).toBeInstanceOf(ccc.ClientPublicMainnet);
     expect(testnet).toBeInstanceOf(ccc.ClientPublicTestnet);
     expect(mainnet.addressPrefix).toBe("ckb");
     expect(testnet.addressPrefix).toBe("ckt");
-    expect(mainnet.url).toBe("https://mainnet.example");
-    expect(testnet.url).toBe(defaultTestnet.url);
-    expect(emptyConfiguredTestnet.url).toBe(defaultTestnet.url);
+    expect(mainnet.url).toBe(MAINNET_RPC_URL);
+    expect(testnet.url).toBe(testnetUrl);
   });
 
+  it("makes a configured RPC URL the exclusive endpoint pool", () => {
+    const mainnetUrl = MAINNET_RPC_URL;
+    const testnetUrl = "http://127.0.0.1:8114/";
+    const mainnet = createPublicClient("mainnet", mainnetUrl);
+    const testnet = createPublicClient("testnet", testnetUrl);
+    const exclusiveMainnet = new ccc.ClientPublicMainnet({
+      url: mainnetUrl,
+      fallbacks: [],
+    });
+    const exclusiveTestnet = new ccc.ClientPublicTestnet({
+      url: testnetUrl,
+      fallbacks: [],
+    });
+
+    expect(endpointPoolUrls(mainnet)).toEqual(endpointPoolUrls(exclusiveMainnet));
+    expect(endpointPoolUrls(testnet)).toEqual(endpointPoolUrls(exclusiveTestnet));
+    expect(endpointPoolUrls(mainnet)).toEqual([mainnetUrl]);
+    expect(endpointPoolUrls(testnet)).toEqual([testnetUrl]);
+  });
+
+  it("rejects omitted and empty RPC URLs instead of selecting CCC defaults", () => {
+    expect(() => createPublicClient("testnet", "")).toThrow(
+      INVALID_RPC_ENDPOINT_IDENTITY,
+    );
+    expect(() =>
+      createPublicClient(
+        "testnet",
+        // @ts-expect-error Runtime callers must fail closed too.
+        undefined,
+      ),
+    ).toThrow(INVALID_RPC_ENDPOINT_IDENTITY);
+  });
+});
+describe("finite public clients", () => {
+  it("lets a process exit naturally after a real HTTP client request", async () => {
+    await expect(
+      runProcess(process.execPath, [HTTP_CLIENT_PROCESS], {
+        forwardSignals: false,
+        timeoutMs: 5_000,
+      }),
+    ).resolves.toMatchObject({
+      status: 0,
+      stdout: "completed\n",
+      stderr: "",
+      timedOut: false,
+    });
+  });
+});
+
+describe("public client preflight identity", () => {
   it("reads and verifies public chain identity evidence", async () => {
     const client = preflightClient({
       addressPrefix: "ckt",
@@ -252,5 +330,26 @@ function testnetClient(): ccc.Client {
     tipHash: byte32FromByte("22"),
     tipNumber: 123n,
     tipTimestamp: 456n,
+  });
+}
+
+function endpointPoolUrls(client: ccc.Client): string[] {
+  if (!(client instanceof ccc.ClientJsonRpc)) {
+    throw new TypeError("expected JSON-RPC public client");
+  }
+  const { transport } = client.requestor;
+  if (!("transports" in transport) || !Array.isArray(transport.transports)) {
+    throw new Error("expected CCC TransportFallback endpoint pool");
+  }
+  return transport.transports.map((entry: unknown) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !("url" in entry) ||
+      typeof entry.url !== "string"
+    ) {
+      throw new Error("expected transport URL");
+    }
+    return entry.url;
   });
 }

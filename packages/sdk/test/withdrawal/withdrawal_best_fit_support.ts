@@ -81,9 +81,6 @@ describe("withdrawal best-fit concrete selection support", () => {
     const deposits = [a, b, c];
 
     expect(selectByMasks(deposits, 0b101)).toEqual([a, c]);
-    expect(() => selectByMasks([a, undefined, c], 0b111)).toThrow(
-      "Selection item 1 is missing",
-    );
     expect(pickBetterSelection(deposits, [b], [a], (deposit) => deposit.score)).toEqual([
       b,
     ]);
@@ -101,6 +98,12 @@ describe("withdrawal best-fit concrete selection support", () => {
 });
 
 describe("ready deposit selection support", () => {
+  it("returns no bounded subset when the required count exceeds the candidates", () => {
+    expect(
+      selectReadyDeposits([{ udtValue: 1n }], 1n, { minCount: 2, maxCount: 2 }),
+    ).toEqual([]);
+  });
+
   it("keeps an earlier bounded candidate when a later one scores worse", () => {
     const first = { udtValue: 1n, score: 0n };
     const second = { udtValue: 1n, score: -1n };

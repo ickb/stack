@@ -5,6 +5,7 @@ import {
   DAO_OUTPUT_LIMIT,
   DaoManager,
   DaoOutputLimitError,
+  DaoOutputLimitIndeterminateError,
 } from "../src/index.ts";
 import { cellOutputLikeFrom } from "../src/transaction_shape.ts";
 import {
@@ -29,7 +30,7 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
     expect(like.lock).toBe(output.lock);
   });
 
-  it("adds DAO deposit outputs and leaves empty deposits unchanged", async () => {
+  it("adds DAO deposit outputs and leaves empty deposits unchanged", () => {
     const manager = new DaoManager(script("11"), [
       ccc.CellDep.from({
         outPoint: ccc.OutPoint.from({ txHash: byte32FromByte("aa"), index: 0n }),
@@ -38,15 +39,12 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
     ]);
     const baseTx = ccc.Transaction.default();
 
-    await expect(manager.deposit(baseTx, [], script("22"), client())).resolves.toEqual(
-      baseTx,
-    );
+    expect(manager.deposit(baseTx, [], script("22"))).toEqual(baseTx);
 
-    const tx = await manager.deposit(
+    const tx = manager.deposit(
       ccc.Transaction.default(),
       [ccc.fixedPointFrom(100082)],
       script("22"),
-      client(),
     );
 
     expect(tx.cellDeps).toHaveLength(1);
@@ -55,50 +53,147 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
     expect(tx.outputsData).toEqual([DaoManager.depositData()]);
   });
 
-  it("does not apply the DAO output limit to non-DAO transactions", async () => {
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
-      tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
-    }
+  it("rejects DAO deposits that produce output 65", () => {
+    const manager = new DaoManager(script("11"), []);
+    const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT);
 
-    await expect(assertDaoOutputLimit(tx, new StubClient())).resolves.toBeUndefined();
-  });
-
-  it("throws a typed DAO output-limit error", async () => {
-    const testClient = new StubClient();
-    const knownDaoScript = await testClient.getKnownScript(ccc.KnownScript.NervosDao);
-    const daoType = ccc.Script.from({
-      codeHash: knownDaoScript.codeHash,
-      hashType: knownDaoScript.hashType,
-      args: "0x",
-    });
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
-      tx.addOutput(
-        { capacity: 1n, lock: script("99"), type: index === 0 ? daoType : undefined },
-        "0x",
-      );
-    }
-
-    await expect(assertDaoOutputLimit(tx, testClient)).rejects.toBeInstanceOf(
+    expect(() => manager.deposit(tx, [ccc.fixedPointFrom(100082)], script("22"))).toThrow(
       DaoOutputLimitError,
     );
   });
 
-  it("always rejects withdrawal locks with different args size", async () => {
+  it("always rejects withdrawal locks with different args size", () => {
     const manager = new DaoManager(script("11"), []);
     const deposit = depositCell(manager, { lock: script("33", "0x1234") });
 
-    await expect(
+    expect(() =>
       manager.requestWithdrawal(
         ccc.Transaction.default(),
         [deposit],
         script("44", "0x12"),
-        client(),
       ),
-    ).rejects.toThrow("Withdrawal request lock args has different size from deposit");
+    ).toThrow("Withdrawal request lock args has different size from deposit");
   });
 });
+
+describe("assertDaoOutputLimit resolved activity", () => {
+  it("accepts oversized transactions with fully resolved non-DAO inputs", () => {
+    const daoScript = script("11");
+    const tx = ccc.Transaction.default();
+    tx.addInput(
+      ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("21"), index: 0n },
+        cellOutput: { capacity: 1n, lock: script("99") },
+        outputData: "0x",
+      }),
+    );
+    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
+    }
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).not.toThrow();
+  });
+
+  it("accepts transactions at the limit even when inputs are unresolved", () => {
+    const daoScript = script("11");
+    const tx = ccc.Transaction.default();
+    tx.addInput({ previousOutput: { txHash: byte32FromByte("22"), index: 0n } });
+    for (let index = 0; index < DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
+    }
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).not.toThrow();
+  });
+
+  it("throws a typed output-limit error for the configured DAO script", () => {
+    const daoScript = script("11");
+    const tx = ccc.Transaction.default();
+    for (let index = 0; index < DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addOutput(
+        {
+          capacity: 1n,
+          lock: script("99"),
+          type: index === 0 ? daoScript : undefined,
+        },
+        "0x",
+      );
+    }
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).not.toThrow();
+
+    tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).toThrow(DaoOutputLimitError);
+  });
+
+  it("checks resolved DAO inputs without a client lookup", () => {
+    const daoScript = script("11");
+    const tx = ccc.Transaction.default();
+    tx.addInput(
+      ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("22"), index: 0n },
+        cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
+        outputData: DaoManager.depositData(),
+      }),
+    );
+    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
+      tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
+    }
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).toThrow(DaoOutputLimitError);
+  });
+});
+
+describe("assertDaoOutputLimit unresolved inputs", () => {
+  it("rejects an unresolved DAO-shaped input as indeterminate", () => {
+    const daoScript = script("11");
+    const daoCell = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("23"), index: 0n },
+      cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
+      outputData: DaoManager.depositData(),
+    });
+    const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
+    tx.addInput({ previousOutput: daoCell.outPoint });
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).toThrow(DaoOutputLimitIndeterminateError);
+  });
+
+  it("rejects an unresolved non-DAO input as indeterminate", () => {
+    const daoScript = script("11");
+    const plainCell = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("24"), index: 0n },
+      cellOutput: { capacity: 1n, lock: script("99") },
+      outputData: "0x",
+    });
+    const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
+    tx.addInput({ previousOutput: plainCell.outPoint });
+
+    expect(() => {
+      assertDaoOutputLimit(tx, daoScript);
+    }).toThrow(
+      "Cannot determine whether transaction with 65 output cells uses NervosDAO because an input cell output is unresolved",
+    );
+  });
+});
+
+function transactionWithPlainOutputs(count: number): ccc.Transaction {
+  const tx = ccc.Transaction.default();
+  for (let index = 0; index < count; index += 1) {
+    tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
+  }
+  return tx;
+}
 
 describe(REQUEST_WITHDRAWAL_SUITE, () => {
   registerRequestWithdrawalSelectionTests();
@@ -106,16 +201,15 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
 });
 
 function registerRequestWithdrawalSelectionTests(): void {
-  it("keeps non-ready deposits unless isReadyOnly is set", async () => {
+  it("keeps non-ready deposits unless isReadyOnly is set", () => {
     const manager = new DaoManager(script("11"), []);
     const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
     const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
 
-    const tx = await manager.requestWithdrawal(
+    const tx = manager.requestWithdrawal(
       ccc.Transaction.default(),
       [pending, ready],
       script("44"),
-      client(),
     );
 
     expect(tx.inputs).toHaveLength(2);
@@ -123,16 +217,15 @@ function registerRequestWithdrawalSelectionTests(): void {
     expect(tx.outputsData).toHaveLength(2);
   });
 
-  it("filters non-ready deposits when isReadyOnly is set", async () => {
+  it("filters non-ready deposits when isReadyOnly is set", () => {
     const manager = new DaoManager(script("11"), []);
     const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
     const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
 
-    const tx = await manager.requestWithdrawal(
+    const tx = manager.requestWithdrawal(
       ccc.Transaction.default(),
       [pending, ready],
       script("44"),
-      client(),
       { isReadyOnly: true },
     );
 
@@ -141,82 +234,75 @@ function registerRequestWithdrawalSelectionTests(): void {
     expect(tx.inputs[0]?.previousOutput.txHash).toBe(ready.cell.outPoint.txHash);
   });
 
-  it("leaves the transaction unchanged when ready-only deposits are all pending", async () => {
+  it("leaves the transaction unchanged when ready-only deposits are all pending", () => {
     const manager = new DaoManager(script("11"), []);
     const baseTx = ccc.Transaction.default();
 
-    await expect(
+    expect(
       manager.requestWithdrawal(
         baseTx,
         [depositCell(manager, { isReady: false })],
         script("44"),
-        client(),
         { isReadyOnly: true },
       ),
-    ).resolves.toEqual(baseTx);
+    ).toEqual(baseTx);
   });
 
-  it("does not duplicate existing deposit header deps", async () => {
+  it("does not duplicate existing deposit header deps", () => {
     const manager = new DaoManager(script("11"), []);
     const deposit = depositCell(manager);
     const tx = ccc.Transaction.default();
     tx.headerDeps.push(deposit.headers[0].header.hash);
 
-    const updated = await manager.requestWithdrawal(
-      tx,
-      [deposit],
-      script("44"),
-      client(),
-    );
+    const updated = manager.requestWithdrawal(tx, [deposit], script("44"));
 
     expect(updated.headerDeps).toEqual([deposit.headers[0].header.hash]);
   });
 
-  it("requires matched input and output counts before appending requests", async () => {
+  it("requires matched input and output counts before appending requests", () => {
     const manager = new DaoManager(script("11"), []);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(1000), lock: script("55") }, "0x");
 
-    await expect(
-      manager.requestWithdrawal(tx, [depositCell(manager)], script("44"), client()),
-    ).rejects.toThrow("Transaction has different inputs and outputs lengths");
+    expect(() =>
+      manager.requestWithdrawal(tx, [depositCell(manager)], script("44")),
+    ).toThrow("Transaction has different inputs and outputs lengths");
+  });
+
+  it("rejects withdrawal requests that produce output 65", () => {
+    const manager = new DaoManager(script("11"), []);
+    const tx = balancedTransactionWithPlainOutputs(DAO_OUTPUT_LIMIT);
+
+    expect(() =>
+      manager.requestWithdrawal(tx, [depositCell(manager)], script("44")),
+    ).toThrow(DaoOutputLimitError);
   });
 }
 
 function registerRequestWithdrawalValidationTests(): void {
-  it("rejects deposits whose DAO type script was erased", async () => {
+  it("rejects deposits whose DAO type script was erased", () => {
     const manager = new DaoManager(script("11"), []);
     const deposit = depositCell(manager);
     deposit.cell.cellOutput.type = undefined;
 
-    await expect(
-      manager.requestWithdrawal(
-        ccc.Transaction.default(),
-        [deposit],
-        script("44"),
-        client(),
-      ),
-    ).rejects.toThrow(
+    expect(() =>
+      manager.requestWithdrawal(ccc.Transaction.default(), [deposit], script("44")),
+    ).toThrow(
       `DAO deposit ${deposit.cell.outPoint.toHex()} does not match this DAO script`,
     );
   });
 
-  it("rejects deposits whose header tx hash does not match the cell", async () => {
+  it("rejects deposits whose header tx hash does not match the cell", () => {
     const manager = new DaoManager(script("11"), []);
     const deposit = depositCell(manager);
     deposit.headers[0] = { ...deposit.headers[0], txHash: byte32FromByte("99") };
 
-    await expect(
-      manager.requestWithdrawal(
-        ccc.Transaction.default(),
-        [deposit],
-        script("44"),
-        client(),
-      ),
-    ).rejects.toThrow("header txHash");
+    expect(() =>
+      manager.requestWithdrawal(ccc.Transaction.default(), [deposit], script("44")),
+    ).toThrow("header txHash");
   });
 
-  it("rejects duplicated or already-spent deposit inputs", async () => {
+  it("rejects duplicated or already-spent deposit inputs", () => {
     const manager = new DaoManager(script("11"), []);
     const deposit = depositCell(manager);
     const tx = ccc.Transaction.default();
@@ -226,20 +312,31 @@ function registerRequestWithdrawalValidationTests(): void {
       "0x",
     );
 
-    await expect(
+    expect(() =>
       manager.requestWithdrawal(
         ccc.Transaction.default(),
         [deposit, deposit],
         script("44"),
-        client(),
       ),
-    ).rejects.toThrow(`DAO deposit ${deposit.cell.outPoint.toHex()} is duplicated`);
-    await expect(
-      manager.requestWithdrawal(tx, [deposit], script("44"), client()),
-    ).rejects.toThrow(
+    ).toThrow(`DAO deposit ${deposit.cell.outPoint.toHex()} is duplicated`);
+    expect(() => manager.requestWithdrawal(tx, [deposit], script("44"))).toThrow(
       `DAO deposit ${deposit.cell.outPoint.toHex()} is already being spent`,
     );
   });
+}
+
+function balancedTransactionWithPlainOutputs(count: number): ccc.Transaction {
+  const tx = transactionWithPlainOutputs(count);
+  for (let index = 0; index < count; index += 1) {
+    tx.addInput(
+      ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("aa"), index: BigInt(index) },
+        cellOutput: { capacity: 1n, lock: script("99") },
+        outputData: "0x",
+      }),
+    );
+  }
+  return tx;
 }
 
 describe("DaoManager cell decoding ownership from out points", () => {

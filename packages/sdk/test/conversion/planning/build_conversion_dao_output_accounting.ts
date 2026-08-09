@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  baseClient,
   hash,
   system,
   transactionWithOutputs,
@@ -44,8 +43,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       );
       return tx;
     });
-    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation(async (txLike) => {
-      await Promise.resolve();
+    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
       const tx = ccc.Transaction.from(txLike);
       tx.inputs.push(
         ccc.CellInput.from({
@@ -54,18 +52,15 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       );
       return tx;
     });
-    const deposit = vi
-      .spyOn(logicManager, "deposit")
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
+    const deposit = vi.spyOn(logicManager, "deposit").mockImplementation((txLike) => {
+      return ccc.Transaction.from(txLike);
+    });
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike) => ccc.Transaction.from(txLike));
 
     await expect(
-      sdk.buildConversionTransaction(transactionWithOutputs(62, lock), baseClient, {
+      sdk.buildConversionTransaction(transactionWithOutputs(60, lock), {
         direction: CKB_TO_ICKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,

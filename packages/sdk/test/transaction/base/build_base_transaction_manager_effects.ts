@@ -10,19 +10,16 @@ import {
   baseTransactionFixture,
   BUILD_BASE_TRANSACTION_SUITE,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
+import {
+  makeOrderGroup,
+  resolveOrderGroupFixture,
+} from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   depositCell,
   readyWithdrawalGroup,
   receiptCell,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import {
-  baseClient,
-  baseTip,
-  dep,
-  hash,
-  headerLike,
-} from "./support/sdk_core_support.ts";
+import { baseTip, dep, hash, headerLike } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -94,27 +91,27 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
     expectRealBaseTransactionEffects(tx, effects);
   });
 
-  it("rejects non-ready withdrawal request deposits before calling core", async () => {
+  it("rejects non-ready withdrawal request deposits before calling core", () => {
     const { botLock, dao, logic, ownedOwnerManager, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("74", logic, dao, baseTip, baseTip, {
       isReady: false,
     });
     const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal");
 
-    await expect(
-      sdk.buildBaseTransaction(ccc.Transaction.default(), baseClient, {
+    expect(() =>
+      sdk.buildBaseTransaction(ccc.Transaction.default(), {
         withdrawalRequest: {
           deposits: [requestedDeposit],
           lock: botLock,
         },
       }),
-    ).rejects.toThrow(
+    ).toThrow(
       `Withdrawal deposit ${requestedDeposit.cell.outPoint.toHex()} is not ready`,
     );
     expect(requestWithdrawal).not.toHaveBeenCalled();
   });
 
-  it("rejects duplicated required live withdrawal deposits", async () => {
+  it("rejects duplicated required live withdrawal deposits", () => {
     const { botLock, dao, logic, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("75", logic, dao, baseTip, baseTip, {
       isReady: true,
@@ -123,34 +120,34 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
       isReady: true,
     });
 
-    await expect(
-      sdk.buildBaseTransaction(ccc.Transaction.default(), baseClient, {
+    expect(() =>
+      sdk.buildBaseTransaction(ccc.Transaction.default(), {
         withdrawalRequest: {
           deposits: [requestedDeposit],
           requiredLiveDeposits: [requiredLiveDeposit, requiredLiveDeposit],
           lock: botLock,
         },
       }),
-    ).rejects.toThrow(
+    ).toThrow(
       `Withdrawal live deposit anchor ${requiredLiveDeposit.cell.outPoint.toHex()} is duplicated`,
     );
   });
 
-  it("rejects required live withdrawal deposits that are also spent", async () => {
+  it("rejects required live withdrawal deposits that are also spent", () => {
     const { botLock, dao, logic, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("77", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
 
-    await expect(
-      sdk.buildBaseTransaction(ccc.Transaction.default(), baseClient, {
+    expect(() =>
+      sdk.buildBaseTransaction(ccc.Transaction.default(), {
         withdrawalRequest: {
           deposits: [requestedDeposit],
           requiredLiveDeposits: [requestedDeposit],
           lock: botLock,
         },
       }),
-    ).rejects.toThrow(
+    ).toThrow(
       `Withdrawal live deposit anchor ${requestedDeposit.cell.outPoint.toHex()} is also being spent`,
     );
   });
@@ -163,12 +160,13 @@ async function buildRealBaseTransactionCase(): Promise<
   const ownedDep = dep("d2");
   const logicDep = dep("d3");
   const orderDep = dep("d4");
-  const { botLock, dao, logic, order, ownedOwner, sdk, udt } = baseTransactionFixture({
-    daoDeps: [daoDep],
-    logicDeps: [logicDep],
-    orderDeps: [orderDep],
-    ownedOwnerDeps: [ownedDep],
-  });
+  const { botLock, dao, logic, order, orderManager, ownedOwner, sdk, udt } =
+    baseTransactionFixture({
+      daoDeps: [daoDep],
+      logicDeps: [logicDep],
+      orderDeps: [orderDep],
+      ownedOwnerDeps: [ownedDep],
+    });
   const depositHeader = headerLike(10n, { hash: hash("a1") });
   const receiptHeader = headerLike(11n, { hash: hash("a2") });
   const withdrawalHeader = headerLike(12n, { hash: hash("a3") });
@@ -178,16 +176,14 @@ async function buildRealBaseTransactionCase(): Promise<
   const requiredLiveDeposit = depositCell("71", logic, dao, depositHeader, baseTip, {
     isReady: true,
   });
-  const {
-    group: orderGroup,
-    orderCell,
-    masterCell,
-  } = makeOrderGroup({
+  const orderFixture = makeOrderGroup({
     orderScript: order,
     udtScript: udt,
     ownerLock: botLock,
     txHashByte: "72",
   });
+  const { orderCell, masterCell } = orderFixture;
+  const orderGroup = await resolveOrderGroupFixture(orderManager, orderFixture);
   const receipt = receiptCell("73", botLock, logic, receiptHeader);
   const withdrawalGroup = readyWithdrawalGroup({
     ownerLock: botLock,
@@ -197,7 +193,7 @@ async function buildRealBaseTransactionCase(): Promise<
     withdrawalHeader,
   });
 
-  const tx = await sdk.buildBaseTransaction(ccc.Transaction.default(), baseClient, {
+  const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
     withdrawalRequest: {
       deposits: [requestedDeposit],
       requiredLiveDeposits: [requiredLiveDeposit],

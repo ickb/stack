@@ -1,9 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -24,16 +21,14 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
       .mockImplementation(
-        async (
-          ...[txLike, deposits, requestLock, , requestOptions]: [
+        (
+          ...[txLike, deposits, requestLock, requestOptions]: [
             txLike: ccc.TransactionLike,
             deposits: unknown,
             requestLock: unknown,
-            client: unknown,
             requestOptions: unknown,
           ]
         ) => {
-          await Promise.resolve();
           expect(deposits).toEqual([extra]);
           expect(requestLock).toBe(lock);
           expect(requestOptions).toEqual({
@@ -43,25 +38,20 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         },
       );
 
-    const result = await sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      baseClient,
-      {
-        direction: ICKB_TO_CKB,
-        amount: 10n,
-        lock,
-        context: conversionContext({
-          system: {
-            poolDeposits: {
-              deposits: [extra, protectedAnchor],
-              readyDeposits: [extra, protectedAnchor],
-              id: "pool",
-            },
+    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      direction: ICKB_TO_CKB,
+      amount: 10n,
+      lock,
+      context: conversionContext({
+        system: {
+          poolDeposits: {
+            deposits: [extra, protectedAnchor],
+            id: "pool",
           },
-          ickbAvailable: 10n,
-        }),
-      },
-    );
+        },
+        ickbAvailable: 10n,
+      }),
+    });
 
     expect(result).toMatchObject({ ok: true, conversion: { kind: "direct" } });
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

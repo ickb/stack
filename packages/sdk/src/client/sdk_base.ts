@@ -1,37 +1,55 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-import { assertDaoOutputLimit } from "@ickb/dao";
-import type { Info, OrderGroup } from "@ickb/order";
+import type {
+  IckbDepositCell,
+  IckbUdt,
+  LogicManager,
+  OwnedOwnerManager,
+} from "@ickb/core";
+import { assertDaoOutputLimit, DAO_OUTPUT_LIMIT, DaoOutputLimitError } from "@ickb/dao";
+import type { Info, OrderGroup, OrderManager } from "@ickb/order";
 import type { ValueComponents } from "@ickb/utils";
 import { isChangeCellCapacityError } from "../conversion/sdk_conversion_common.ts";
 import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
-import { sdkManagers } from "./sdk_state_store.ts";
 import type {
   BuildBaseTransactionOptions,
   CompleteIckbTransactionOptions,
+  SdkManagers,
 } from "./sdk_types.ts";
 
 /**
  * Base SDK transaction helpers shared by conversion and L1 APIs.
  *
- * @public
  */
-export class IckbSdkBase {
-  protected constructor() {}
+export abstract class IckbSdkBase {
+  protected readonly ickbUdt: IckbUdt;
+  protected readonly ownedOwner: OwnedOwnerManager;
+  protected readonly ickbLogic: LogicManager;
+  protected readonly order: OrderManager;
+  protected readonly bots: ccc.Script[];
+
+  constructor({ ickbUdt, ownedOwner, ickbLogic, order, bots }: SdkManagers) {
+    this.ickbUdt = ickbUdt;
+    this.ownedOwner = ownedOwner;
+    this.ickbLogic = ickbLogic;
+    this.order = order;
+    this.bots = bots;
+  }
 
   /**
    * Completes iCKB/xUDT inputs and transaction fees for a partial transaction.
    *
    * @remarks
    * This does not sign or send the transaction. It retries fee completion once
-   * when CCC needs to place fee change into an existing iCKB-owned output.
+   * when CCC needs to place fee change into an existing iCKB-owned output or
+   * ordinary fee change would exceed the DAO output limit.
    */
   public async completeTransaction(
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
-    const { ickbUdt } = sdkManagers(this);
-    const tx = await ickbUdt.completeBy(txLike, options.signer);
+    const pristineTx = ccc.Transaction.from(txLike).clone();
+    const tx = await this.ickbUdt.completeBy(pristineTx.clone(), options.signer);
+    const outputCountBeforeFee = tx.outputs.length;
     try {
       await tx.completeFeeBy(options.signer, options.feeRate);
     } catch (error) {
@@ -39,23 +57,29 @@ export class IckbSdkBase {
         throw error;
       }
 
-      const retryTx = await ickbUdt.completeBy(txLike, options.signer);
-      const feeChangeOutputIndex = await this.findFeeChangeOutputIndex(
-        retryTx,
-        options.signer,
-      );
-      if (feeChangeOutputIndex === undefined) {
+      const retryTx = await this.completeFeeChangeToOutput(pristineTx, options);
+      if (retryTx === undefined) {
         throw error;
       }
-      await retryTx.completeFeeChangeToOutput(
-        options.signer,
-        feeChangeOutputIndex,
-        options.feeRate,
-      );
-      await assertDaoOutputLimit(retryTx, options.client);
       return retryTx;
     }
-    await assertDaoOutputLimit(tx, options.client);
+    try {
+      assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
+    } catch (error) {
+      if (
+        !(error instanceof DaoOutputLimitError) ||
+        outputCountBeforeFee !== DAO_OUTPUT_LIMIT ||
+        tx.outputs.length !== DAO_OUTPUT_LIMIT + 1
+      ) {
+        throw error;
+      }
+
+      const retryTx = await this.completeFeeChangeToOutput(pristineTx, options);
+      if (retryTx !== undefined) {
+        return retryTx;
+      }
+      throw error;
+    }
     return tx;
   }
 
@@ -68,10 +92,9 @@ export class IckbSdkBase {
     info: Info,
     amounts: ValueComponents,
   ): Promise<ccc.Transaction> {
-    const { order } = sdkManagers(this);
     const lock =
       "codeHash" in user ? user : (await user.getRecommendedAddressObj()).script;
-    return order.mint(txLike, lock, info, amounts);
+    return this.order.mint(txLike, lock, info, amounts);
   }
 
   /**
@@ -82,7 +105,7 @@ export class IckbSdkBase {
     groups: OrderGroup[],
     options?: { isFulfilledOnly?: boolean },
   ): ccc.Transaction {
-    return sdkManagers(this).order.melt(txLike, groups, options);
+    return this.order.melt(txLike, groups, options);
   }
 
   /**
@@ -92,12 +115,10 @@ export class IckbSdkBase {
    * The result is still partial. Callers should use `completeTransaction` before
    * signing and sending.
    */
-  public async buildBaseTransaction(
+  public buildBaseTransaction(
     txLike: ccc.TransactionLike,
-    client: ccc.Client,
     options: BuildBaseTransactionOptions = {},
-  ): Promise<ccc.Transaction> {
-    const { ownedOwner, ickbLogic } = sdkManagers(this);
+  ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     const {
       withdrawalRequest,
@@ -112,11 +133,10 @@ export class IckbSdkBase {
         withdrawalRequest.deposits,
         requiredLiveDeposits,
       );
-      tx = await ownedOwner.requestWithdrawal(
+      tx = this.ownedOwner.requestWithdrawal(
         tx,
         withdrawalRequest.deposits,
         withdrawalRequest.lock,
-        client,
         requiredLiveDeposits.length > 0 ? { requiredLiveDeposits } : undefined,
       );
     }
@@ -124,52 +144,61 @@ export class IckbSdkBase {
       tx = this.collect(tx, orders);
     }
     if (receipts.length > 0) {
-      tx = ickbLogic.completeDeposit(tx, receipts);
+      tx = this.ickbLogic.completeDeposit(tx, receipts);
     }
     if (readyWithdrawals.length > 0) {
-      tx = await ownedOwner.withdraw(tx, readyWithdrawals, client);
+      tx = this.ownedOwner.withdraw(tx, readyWithdrawals);
     }
     return tx;
-  }
-
-  /**
-   * Throws when the chain tip changed since the sampled state was built.
-   */
-  public async assertCurrentTip(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-  ): Promise<void> {
-    const currentTip = await client.getTipHeader();
-    if (currentTip.number !== tip.number || currentTip.hash !== tip.hash) {
-      throw new Error(
-        `L1 state scan crossed chain tip; sampled block ${String(tip.number)} ${tip.hash}; current block ${String(currentTip.number)} ${currentTip.hash}; retry with a fresh state`,
-      );
-    }
   }
 
   private async findFeeChangeOutputIndex(
     tx: ccc.Transaction,
     signer: ccc.Signer,
   ): Promise<number | undefined> {
-    const { ickbLogic, ownedOwner, order } = sdkManagers(this);
     const { script: userLock } = await signer.getRecommendedAddressObj();
     let masterIndex: number | undefined;
     let ownerIndex: number | undefined;
+    let plainIndex: number | undefined;
     for (const [index, output] of Array.from(tx.outputs.entries()).toReversed()) {
       if (!output.lock.eq(userLock)) {
         continue;
       }
-      if (output.type?.eq(ickbLogic.script) === true) {
+      if (output.type?.eq(this.ickbLogic.script) === true) {
         return index;
       }
-      if (masterIndex === undefined && output.type?.eq(order.script) === true) {
+      if (masterIndex === undefined && output.type?.eq(this.order.script) === true) {
         masterIndex = index;
       }
-      if (ownerIndex === undefined && output.type?.eq(ownedOwner.script) === true) {
+      if (ownerIndex === undefined && output.type?.eq(this.ownedOwner.script) === true) {
         ownerIndex = index;
       }
+      if (plainIndex === undefined && output.type === undefined) {
+        plainIndex = index;
+      }
     }
-    return masterIndex ?? ownerIndex;
+    return masterIndex ?? ownerIndex ?? plainIndex;
+  }
+
+  private async completeFeeChangeToOutput(
+    pristineTx: ccc.Transaction,
+    options: CompleteIckbTransactionOptions,
+  ): Promise<ccc.Transaction | undefined> {
+    const retryTx = await this.ickbUdt.completeBy(pristineTx.clone(), options.signer);
+    const feeChangeOutputIndex = await this.findFeeChangeOutputIndex(
+      retryTx,
+      options.signer,
+    );
+    if (feeChangeOutputIndex === undefined) {
+      return undefined;
+    }
+    await retryTx.completeFeeChangeToOutput(
+      options.signer,
+      feeChangeOutputIndex,
+      options.feeRate,
+    );
+    assertDaoOutputLimit(retryTx, this.ickbLogic.daoManager.script);
+    return retryTx;
   }
 }
 

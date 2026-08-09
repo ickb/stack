@@ -2,15 +2,16 @@
 **/node_modules/
 
 # Artifacts
+**/coverage/
 **/dist/
+**/temp/*.api.md
+**/*.tsbuildinfo
 log/
 apps/*/log_*.json
+apps/sampler/rate.csv
 
 # Local runtime config files
-config/
-
-# Local logs
-logs/
+/config/
 
 # Local scratch files
 .scratch/

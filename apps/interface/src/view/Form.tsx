@@ -1,0 +1,186 @@
+import type { JSX } from "react";
+import type { QuoteStateLike } from "../shared/quote.ts";
+import {
+  CKB,
+  direction2Symbol,
+  parseAmountInput,
+  symbol2Direction,
+  toText,
+} from "../shared/utils.ts";
+import {
+  amountQuoteText,
+  formAssets,
+  type AssetDisplay,
+  type FormBalances,
+} from "./formState.ts";
+
+const amountErrorId = "conversion-amount-error";
+
+export default function Form({
+  rawText,
+  setRawText,
+  quoteState,
+  isFrozen,
+  balances,
+}: Readonly<{
+  rawText: string;
+  setRawText: (value: string) => void;
+  quoteState?: QuoteStateLike;
+  isFrozen: boolean;
+  balances?: FormBalances;
+}>): JSX.Element {
+  const symbol = rawText.startsWith("I") ? "I" : direction2Symbol(true);
+  const text = rawText.slice(1);
+  const isCkb2Udt = symbol2Direction(symbol);
+  const amountInput = parseAmountInput(text);
+  const hasAmountError = amountInput.status === "invalid";
+  const amountQuote = amountQuoteText(
+    amountInput.amount,
+    rawText,
+    quoteState,
+    amountInput.error,
+  );
+  const toggle = (): void => {
+    setRawText(direction2Symbol(!isCkb2Udt) + text);
+  };
+
+  const [a, b] = formAssets(balances, isCkb2Udt);
+  const selectMax = maxSelector(a, symbol, setRawText);
+  const selectReverseMax = maxSelector(b, direction2Symbol(!isCkb2Udt), setRawText);
+
+  return (
+    <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
+      {nativeBalanceDisplay(a, isFrozen, selectMax)}
+      <span className="text-2xl text-ickb-text">{a.name}</span>
+      {lockedBalanceDisplay(a)}
+      <input
+        placeholder="0"
+        disabled={isFrozen}
+        autoFocus={true}
+        value={text}
+        onChange={(event) => {
+          setRawText(symbol + event.target.value);
+        }}
+        autoComplete="off"
+        inputMode="decimal"
+        type="text"
+        aria-invalid={hasAmountError}
+        aria-describedby={hasAmountError ? amountErrorId : undefined}
+        className="col-span-3 w-full rounded border-0 bg-transparent text-center text-3xl text-ickb-action outline-none placeholder:text-ickb-action/35 focus:text-ickb-action disabled:cursor-default"
+        aria-label="Amount to be converted"
+      />
+      <button
+        className="relative col-span-3 h-11 w-11 cursor-pointer rounded border-0 bg-transparent text-3xl leading-none text-ickb-action transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+        disabled={isFrozen}
+        onClick={toggle}
+        aria-label="Switch conversion direction"
+      >
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[54%] tracking-[-0.2em]"
+        >
+          ↿⇂
+        </span>
+      </button>
+      <span
+        id={hasAmountError ? amountErrorId : undefined}
+        role={hasAmountError ? "alert" : undefined}
+        className={`col-span-3 max-w-full text-center text-ickb-action ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-3xl text-ellipsis whitespace-nowrap"}`}
+        title={amountQuote}
+      >
+        ⏳{amountQuote}
+      </span>
+      {nativeBalanceDisplay(b, isFrozen, selectReverseMax)}
+      <span className="text-2xl whitespace-nowrap text-ickb-text">{b.name}</span>
+      {lockedBalanceDisplay(b)}
+    </div>
+  );
+}
+
+function nativeBalanceDisplay(
+  asset: AssetDisplay,
+  isFrozen: boolean,
+  selectMax: (() => void) | undefined,
+): JSX.Element {
+  if (!hasBalance(asset)) {
+    return <span aria-hidden="true" />;
+  }
+
+  const renderedBalance = display(asset.available, "✅");
+  if (selectMax === undefined) {
+    return (
+      <span
+        className="whitespace-nowrap text-ickb-action"
+        aria-label={`Available ${asset.name}: ${toText(asset.available)}`}
+      >
+        {renderedBalance}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      className="cursor-pointer rounded whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+      disabled={isFrozen}
+      onClick={selectMax}
+      aria-label={`Use maximum ${asset.name}: ${toText(asset.available)}`}
+    >
+      {renderedBalance}
+    </button>
+  );
+}
+
+function maxSelector(
+  asset: AssetDisplay,
+  symbol: string,
+  setRawText: (value: string) => void,
+): (() => void) | undefined {
+  if (asset.name !== "iCKB" || asset.available === undefined) {
+    return undefined;
+  }
+  const available = asset.available;
+
+  return (): void => {
+    setRawText(symbol + toText(available));
+  };
+}
+
+function hasBalance(asset: AssetDisplay): asset is Required<AssetDisplay> {
+  return (
+    asset.available !== undefined &&
+    asset.locked !== undefined &&
+    asset.status !== undefined
+  );
+}
+
+function lockedBalanceDisplay(asset: AssetDisplay): JSX.Element {
+  if (
+    asset.available === undefined ||
+    asset.locked === undefined ||
+    asset.status === undefined
+  ) {
+    return <span aria-hidden="true" />;
+  }
+
+  return (
+    <span className="cursor-wait whitespace-nowrap text-ickb-muted">
+      {display(asset.locked, asset.status)}
+    </span>
+  );
+}
+
+function display(shannons: bigint, prefix: string): JSX.Element {
+  const isMaturing = prefix === "⏳";
+  return (
+    <span className={`flex flex-row ${isMaturing ? "cursor-wait" : ""}`}>
+      <span className={isMaturing ? "animate-pulse motion-reduce:animate-none" : ""}>
+        {prefix}
+      </span>
+      <span className="sm:hidden">
+        {String(shannons / CKB)}
+        {shannons % CKB === 0n ? "" : "+"}
+      </span>
+      <span className="hidden sm:block">{toText(shannons)}</span>
+    </span>
+  );
+}

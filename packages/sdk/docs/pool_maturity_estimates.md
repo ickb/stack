@@ -27,6 +27,8 @@ Not-ready deposits remain in the future maturity buckets.
 
 These scans use the configured `cellPageSize` as the CCC cell-query page size. The page size tunes paging without changing how many total deposits can be collected.
 
+The result is eventually consistent rather than snapshot-atomic: the targeted indexer scans can observe different indexer progress while sharing one sampled tip. The SDK does not reread them to manufacture snapshot semantics.
+
 ## Why Direct Scans Are Used
 
 The older snapshot idea tried to summarize the full deposit pool without scanning every deposit.

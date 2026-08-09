@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -23,8 +20,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
     const deposit = vi
       .spyOn(logicManager, "deposit")
-      .mockImplementation(async (txLike, quantity) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, quantity) => {
         expect(quantity).toBe(maxDirectDeposits);
         return ccc.Transaction.from(txLike);
       });
@@ -32,7 +28,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       ccc.Transaction.from(txLike),
     );
 
-    await sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+    await sdk.buildConversionTransaction(ccc.Transaction.default(), {
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
       lock,

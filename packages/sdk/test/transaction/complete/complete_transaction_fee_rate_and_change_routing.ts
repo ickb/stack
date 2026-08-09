@@ -5,11 +5,40 @@ import {
   signerWithLock,
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import { baseClient, transactionWithOutputs } from "../base/support/sdk_core_support.ts";
+import { transactionWithOutputs } from "../base/support/sdk_core_support.ts";
 import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe(COMPLETE_TRANSACTION_SUITE, () => {
+  it("applies the configured DAO output limit only after UDT and fee completion", async () => {
+    const calls: string[] = [];
+    const { sdk, ickbUdt, logicManager, lock } = testSdk();
+    const signer = signerWithLock(lock);
+    const tx = transactionWithOutputs(65, lock);
+    const firstOutput = tx.outputs[0];
+    if (firstOutput === undefined) {
+      throw new Error("Expected transaction output");
+    }
+    firstOutput.type = logicManager.daoManager.script;
+    vi.spyOn(ickbUdt, "completeBy").mockImplementation(async (txLike) => {
+      calls.push("udt");
+      await Promise.resolve();
+      return ccc.Transaction.from(txLike);
+    });
+    vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockImplementation(async () => {
+      calls.push("fee");
+      await Promise.resolve();
+      return [0, false];
+    });
+
+    await expect(sdk.completeTransaction(tx, { signer, feeRate: 42n })).rejects.toThrow(
+      DaoOutputLimitError,
+    );
+    expect(calls).toEqual(["udt", "fee"]);
+  });
 });
 
 describe(COMPLETE_TRANSACTION_SUITE, () => {
@@ -31,7 +60,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        client: baseClient,
         feeRate: 42n,
       }),
     ).rejects.toThrow(DaoOutputLimitError);
@@ -48,7 +76,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
 
     await sdk.completeTransaction(ccc.Transaction.default(), {
       signer,
-      client: baseClient,
       feeRate: 123n,
     });
 
@@ -74,7 +101,6 @@ describe(COMPLETE_TRANSACTION_SUITE, () => {
 
     await sdk.completeTransaction(tx, {
       signer,
-      client: baseClient,
       feeRate: 7n,
     });
 

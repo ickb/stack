@@ -1,6 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { compareBigInt } from "@ickb/utils";
-import type { OrderCell } from "../model/cells.ts";
+import type { OrderCell, OrderGroup } from "../model/cells.ts";
 import type { Match } from "./match_types.ts";
 
 type OrderMatcherParameters = [
@@ -17,7 +17,7 @@ type OrderMatcherParameters = [
 ];
 
 type OrderMatcherConstructorArgs = [
-  order: OrderCell,
+  group: OrderGroup,
   isCkb2Udt: boolean,
   ...parameters: OrderMatcherParameters,
 ];
@@ -42,7 +42,7 @@ interface OrderMatcherValues {
 }
 
 export class OrderMatcher {
-  public readonly order: OrderCell;
+  public readonly group: OrderGroup;
   public readonly isCkb2Udt: boolean;
   public readonly aScale: ccc.Num;
   public readonly bScale: ccc.Num;
@@ -57,7 +57,7 @@ export class OrderMatcher {
 
   constructor(
     ...[
-      order,
+      group,
       isCkb2Udt,
       aScale,
       bScale,
@@ -83,7 +83,7 @@ export class OrderMatcher {
       realRatioNumerator,
       realRatioDenominator,
     });
-    this.order = order;
+    this.group = group;
     this.isCkb2Udt = isCkb2Udt;
     this.aScale = aScale;
     this.bScale = bScale;
@@ -105,14 +105,14 @@ export class OrderMatcher {
   }
 
   public static from(
-    order: OrderCell,
+    group: OrderGroup,
     isCkb2Udt: boolean,
     ckbMiningFee: ccc.FixedPoint,
   ): OrderMatcher | undefined {
-    const parameters = orderMatcherParameters(order, isCkb2Udt, ckbMiningFee);
+    const parameters = orderMatcherParameters(group.order, isCkb2Udt, ckbMiningFee);
     return parameters === undefined
       ? undefined
-      : new OrderMatcher(order, isCkb2Udt, ...parameters);
+      : new OrderMatcher(group, isCkb2Udt, ...parameters);
   }
 
   public match(bAllowance: ccc.FixedPoint): Match {
@@ -142,19 +142,13 @@ export class OrderMatcher {
       ? {
           ckbDelta: this.aIn - aOut,
           udtDelta: this.bIn - bOut,
-          partials: [{ order: this.order, ckbOut: aOut, udtOut: bOut }],
+          partials: [{ group: this.group, ckbOut: aOut, udtOut: bOut }],
         }
       : {
           ckbDelta: this.bIn - bOut,
           udtDelta: this.aIn - aOut,
-          partials: [{ order: this.order, ckbOut: bOut, udtOut: aOut }],
+          partials: [{ group: this.group, ckbOut: bOut, udtOut: aOut }],
         };
-  }
-
-  public static nonDecreasing(
-    ...[aScale, bScale, aIn, bIn, aOut]: NonDecreasingArgs
-  ): ccc.FixedPoint {
-    return nonDecreasing(aScale, bScale, aIn, bIn, aOut);
   }
 }
 

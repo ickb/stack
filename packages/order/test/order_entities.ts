@@ -5,10 +5,79 @@ import { Info } from "../src/model/info.ts";
 import { OrderData } from "../src/model/order_data.ts";
 import { Ratio } from "../src/model/ratio.ts";
 import { Relative } from "../src/model/relative.ts";
+import { resolvedOrderGroup } from "./matching/support/order_match_helpers.ts";
 
 const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
 const OWNER_LOCK = script("33");
+const ORDER_OUT_POINT_HEX = `${byte32("55")}00000000`;
+const MINT_ORDER_DATA_HEX =
+  "0x09000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fbffffff020000000000000003000000000000000000000000000000000000000000000000";
+const MATCH_ORDER_DATA_HEX =
+  "0x0d0000000000000000000000000000000100000007070707070707070707070707070707070707070707070707070707070707070b000000050000000000000008000000000000000000000000000000000000000000000000";
+
+describe("order data golden vectors", () => {
+  it("matches the Rust mint order data golden vector", () => {
+    const encoded = OrderData.from({
+      udtValue: 9n,
+      master: { type: "relative", value: Relative.create(-5n) },
+      info: Info.from({
+        ckbToUdt: Ratio.from({ ckbScale: 2n, udtScale: 3n }),
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
+    }).toBytes();
+
+    expect(encoded).toHaveLength(89);
+    expect(ccc.hexFrom(encoded)).toBe(MINT_ORDER_DATA_HEX);
+
+    const decoded = OrderData.decode(MINT_ORDER_DATA_HEX);
+    expect(decoded.udtValue).toBe(9n);
+    expect(decoded.master.type).toBe("relative");
+    if (decoded.master.type !== "relative") {
+      throw new Error("Expected relative master");
+    }
+    expect(ccc.hexFrom(decoded.master.value.padding)).toBe(
+      ccc.hexFrom(Relative.padding()),
+    );
+    expect(decoded.master.value.distance).toBe(-5n);
+    expect(decoded.info.ckbToUdt.ckbScale).toBe(2n);
+    expect(decoded.info.ckbToUdt.udtScale).toBe(3n);
+    expect(decoded.info.udtToCkb).toEqual(Ratio.empty());
+    expect(decoded.info.ckbMinMatchLog).toBe(0);
+  });
+
+  it("matches the Rust matched order data golden vector", () => {
+    const encoded = OrderData.from({
+      udtValue: 13n,
+      master: {
+        type: "absolute",
+        value: { txHash: byte32("07"), index: 11n },
+      },
+      info: Info.from({
+        ckbToUdt: Ratio.from({ ckbScale: 5n, udtScale: 8n }),
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
+    }).toBytes();
+
+    expect(encoded).toHaveLength(89);
+    expect(ccc.hexFrom(encoded)).toBe(MATCH_ORDER_DATA_HEX);
+
+    const decoded = OrderData.decode(MATCH_ORDER_DATA_HEX);
+    expect(decoded.udtValue).toBe(13n);
+    expect(decoded.master.type).toBe("absolute");
+    if (decoded.master.type !== "absolute") {
+      throw new Error("Expected absolute master");
+    }
+    expect(decoded.master.value.txHash).toBe(byte32("07"));
+    expect(decoded.master.value.index).toBe(11n);
+    expect(decoded.info.ckbToUdt.ckbScale).toBe(5n);
+    expect(decoded.info.ckbToUdt.udtScale).toBe(8n);
+    expect(decoded.info.udtToCkb).toEqual(Ratio.empty());
+    expect(decoded.info.ckbMinMatchLog).toBe(0);
+  });
+});
 
 describe("order entity validation", () => {
   it("validates relative pointers and order data", () => {
@@ -37,7 +106,7 @@ describe("order entity validation", () => {
         master: { type: "relative", value: relative },
         info,
       }).validate();
-    }).toThrow("udtValue invalid");
+    }).toThrow("udtValue invalid, negative");
     const invalidOutPoint = ccc.OutPoint.from({ txHash: byte32("77"), index: 0n });
     invalidOutPoint.index = -1n;
     expect(() => {
@@ -75,14 +144,14 @@ describe("order entity validation", () => {
         udtToCkb: Ratio.empty(),
         ckbMinMatchLog: 0,
       }).validate();
-    }).toThrow("udtToCkb is Empty");
+    }).toThrow("Ratio invalid");
     expect(() => {
       Info.from({
         ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 0n }),
         udtToCkb: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         ckbMinMatchLog: 0,
       }).validate();
-    }).toThrow("One ratio is invalid");
+    }).toThrow("Ratio invalid");
     expect(() => {
       Info.from({
         ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 10n }),
@@ -90,6 +159,115 @@ describe("order entity validation", () => {
         ckbMinMatchLog: 0,
       }).validate();
     }).toThrow("allow order value to be extracted");
+  });
+});
+
+describe("order entity wire bounds", () => {
+  const maxUint64 = (1n << 64n) - 1n;
+
+  it("accepts exactly encodable ratio and info bounds", () => {
+    for (const ratio of [
+      Ratio.empty(),
+      Ratio.from({ ckbScale: maxUint64, udtScale: 1n }),
+    ]) {
+      expect(ratio.isValid()).toBe(true);
+      expect(() => {
+        ratio.toBytes();
+      }).not.toThrow();
+    }
+    for (const ckbMinMatchLog of [0, 64]) {
+      const info = Info.create(
+        true,
+        { ckbScale: maxUint64, udtScale: maxUint64 },
+        ckbMinMatchLog,
+      );
+      expect(info.isValid()).toBe(true);
+      expect(() => {
+        info.toBytes();
+      }).not.toThrow();
+    }
+  });
+
+  it("rejects out-of-range ratio scales and nested ratios", () => {
+    for (const [ratio, field] of [
+      [Ratio.from({ ckbScale: -1n, udtScale: 1n }), "ckbScale"],
+      [Ratio.from({ ckbScale: maxUint64 + 1n, udtScale: 1n }), "ckbScale"],
+      [Ratio.from({ ckbScale: 1n, udtScale: -1n }), "udtScale"],
+      [Ratio.from({ ckbScale: 1n, udtScale: maxUint64 + 1n }), "udtScale"],
+    ] as const) {
+      expect(ratio.isValid()).toBe(false);
+      expect(() => {
+        ratio.validate();
+      }).toThrow("Ratio scale exceeds Uint64");
+      expect(() => {
+        ratio.toBytes();
+      }).toThrow(`struct.${field} - NumLike out of uint64 bounds`);
+    }
+    expect(Info.create(true, { ckbScale: maxUint64 + 1n, udtScale: 1n }).isValid()).toBe(
+      false,
+    );
+  });
+
+  it("enforces the semantic Info integer range", () => {
+    for (const ckbMinMatchLog of [-1, 65, 0.5, NaN]) {
+      const info = Info.create(true, { ckbScale: 1n, udtScale: 1n }, ckbMinMatchLog);
+      expect(info.isValid()).toBe(false);
+      expect(() => {
+        info.validate();
+      }).toThrow("ckbMinMatchLog invalid");
+    }
+  });
+});
+
+describe("order data wire bounds", () => {
+  const maxUint128 = (1n << 128n) - 1n;
+
+  it("accepts and rejects exact Uint128 and Int32 boundaries", () => {
+    const info = Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0);
+    for (const udtValue of [0n, maxUint128]) {
+      const data = OrderData.from({
+        udtValue,
+        master: { type: "relative", value: Relative.create(1n) },
+        info,
+      });
+      expect(data.isValid()).toBe(true);
+      expect(() => {
+        data.toBytes();
+      }).not.toThrow();
+    }
+    for (const udtValue of [-1n, maxUint128 + 1n]) {
+      const data = OrderData.from({
+        udtValue,
+        master: { type: "relative", value: Relative.create(1n) },
+        info,
+      });
+      expect(data.isValid()).toBe(false);
+      expect(() => {
+        data.validate();
+      }).toThrow(
+        udtValue < 0n ? "udtValue invalid, negative" : "udtValue exceeds Uint128",
+      );
+      expect(() => {
+        data.toBytes();
+      }).toThrow("struct.udtValue - NumLike out of uint128 bounds");
+    }
+    for (const distance of [-(1n << 31n), (1n << 31n) - 1n]) {
+      const relative = Relative.create(distance);
+      expect(relative.isValid()).toBe(true);
+      expect(() => {
+        relative.toBytes();
+      }).not.toThrow();
+    }
+    for (const distance of [-(1n << 31n) - 1n, 1n << 31n]) {
+      const relative = Relative.create(distance);
+      expect(relative.isValid()).toBe(false);
+      expect(() => {
+        relative.validate();
+      }).toThrow("Relative master distance exceeds Int32");
+      expect(() => {
+        relative.toBytes();
+      }).toThrow("struct.distance - NumLike out of int32 bounds");
+    }
   });
 });
 
@@ -106,7 +284,7 @@ describe("order cells", () => {
       info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
     });
     const master = MasterCell.from(masterCell());
-    const group = new OrderGroup(master, order, order);
+    const group = resolvedOrderGroup(order);
 
     expect(order.ckbValue).toBe(order.cell.cellOutput.capacity);
     expect(order.udtValue).toBe(10n);
@@ -120,8 +298,45 @@ describe("order cells", () => {
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,
     );
     expect(group.udtValue).toBe(order.data.udtValue);
-    expect(group.isOwner(OWNER_LOCK)).toBe(true);
+    expect(group.isOwner(group.master.cell.cellOutput.lock)).toBe(true);
     expect(group.isOwner(script("99"))).toBe(false);
+  });
+
+  it("reports malformed order data with its outpoint and codec cause", () => {
+    const cell = orderCell({ ckbValue: 1000n, udtValue: 10n }).cell;
+    cell.outputData = "0x";
+
+    const error = catchError(() => OrderCell.mustFrom(cell));
+    expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(OrderCell.tryFrom(cell)).toBeUndefined();
+  });
+
+  it("reports order validation failures with their outpoint and cause", () => {
+    const cell = orderCell({ ckbValue: 1000n, udtValue: 10n }).cell;
+    cell.outputData = ccc.hexFrom(
+      OrderData.from({
+        udtValue: 10n,
+        master: {
+          type: "absolute",
+          value: { txHash: byte32("66"), index: 1n },
+        },
+        info: Info.from({
+          ckbToUdt: Ratio.empty(),
+          udtToCkb: Ratio.empty(),
+          ckbMinMatchLog: 0,
+        }),
+      }).toBytes(),
+    );
+
+    const error = catchError(() => OrderCell.mustFrom(cell));
+    expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
+    expect(error.cause).toBeInstanceOf(Error);
+    const { cause } = error;
+    if (!(cause instanceof Error)) {
+      throw new Error("Expected validation error cause");
+    }
+    expect(cause.message).toBe("ckbToUdt is Empty, but udtToCkb is not Populated");
   });
 });
 
@@ -130,6 +345,7 @@ describe("order descendant identity", () => {
     const origin = orderCell({
       ckbValue: ccc.fixedPointFrom(1000),
       udtValue: 10n,
+      mint: true,
       outPointIndex: 0n,
     });
     const same = orderCell({
@@ -178,6 +394,7 @@ describe("order descendant values", () => {
     const origin = orderCell({
       ckbValue: ccc.fixedPointFrom(1000),
       udtValue: 10n,
+      mint: true,
       outPointIndex: 0n,
     });
     const wrongInfo = orderCell({
@@ -196,6 +413,7 @@ describe("order descendant values", () => {
       ckbValue: ccc.fixedPointFrom(1000),
       udtValue: 10n,
       info: udtInfo,
+      mint: true,
       outPointIndex: 3n,
     });
     const lowerProgress = orderCell({
@@ -214,6 +432,9 @@ describe("order descendant values", () => {
     expect(() => {
       udtOrigin.validate(lowerProgress);
     }).toThrow("Progress is lower");
+    expect(() => {
+      wrongInfo.validate(origin);
+    }).toThrow("Origin is not a mint order");
   });
 });
 
@@ -222,6 +443,7 @@ describe("order descendant resolution", () => {
     const origin = orderCell({
       ckbValue: ccc.fixedPointFrom(1000),
       udtValue: 10n,
+      mint: true,
       outPointIndex: 0n,
     });
     const better = orderCell({
@@ -244,6 +466,7 @@ describe("order groups", () => {
     const origin = orderCell({
       ckbValue: ccc.fixedPointFrom(1000),
       udtValue: 10n,
+      mint: true,
       outPointIndex: 0n,
     });
 
@@ -272,13 +495,14 @@ function orderCell(options: {
   lock?: ccc.Script;
   udtScript?: ccc.Script;
   masterIndex?: bigint;
+  mint?: boolean;
   outPointIndex?: bigint;
 }): OrderCell {
   const info = options.info ?? Info.create(true, { ckbScale: 1n, udtScale: 1n });
   const index = options.outPointIndex ?? 0n;
   const masterIndex = options.masterIndex ?? 1n;
   const cell = ccc.Cell.from({
-    outPoint: { txHash: byte32("55"), index },
+    outPoint: { txHash: byte32(options.mint === true ? "66" : "55"), index },
     cellOutput: {
       capacity: options.ckbValue,
       lock: options.lock ?? ORDER_SCRIPT,
@@ -286,10 +510,13 @@ function orderCell(options: {
     },
     outputData: OrderData.from({
       udtValue: options.udtValue,
-      master: {
-        type: "absolute",
-        value: { txHash: byte32("66"), index: masterIndex },
-      },
+      master:
+        options.mint === true
+          ? { type: "relative", value: Relative.create(masterIndex - index) }
+          : {
+              type: "absolute",
+              value: { txHash: byte32("66"), index: masterIndex },
+            },
       info,
     }).toBytes(),
   });
@@ -310,4 +537,16 @@ function script(byte: string): ccc.Script {
 
 function byte32(byte: string): `0x${string}` {
   return `0x${byte.repeat(32)}`;
+}
+
+function catchError(callback: () => unknown): Error {
+  try {
+    callback();
+  } catch (error) {
+    if (error instanceof Error) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error("Expected callback to throw");
 }

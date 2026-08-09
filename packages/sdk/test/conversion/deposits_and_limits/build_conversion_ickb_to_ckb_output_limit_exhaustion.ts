@@ -4,7 +4,6 @@ import { DaoOutputLimitError } from "@ickb/dao";
 import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  baseClient,
   system,
   transactionWithOutputs,
 } from "../../transaction/base/support/sdk_core_support.ts";
@@ -23,8 +22,6 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-const DIRECT_PLUS_ORDER = "direct-plus-order";
-
 const CKB_TO_ICKB = "ckb-to-ickb";
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
@@ -35,8 +32,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const requestedCounts: number[] = [];
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike, deposits) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, deposits) => {
         requestedCounts.push(deposits.length);
         return ccc.Transaction.from(txLike);
       });
@@ -45,7 +41,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     );
 
     await expect(
-      sdk.buildConversionTransaction(transactionWithOutputs(60, lock), baseClient, {
+      sdk.buildConversionTransaction(transactionWithOutputs(60, lock), {
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP + 1n,
         lock,
@@ -53,7 +49,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           system: system({
             poolDeposits: {
               deposits: [first, second],
-              readyDeposits: [first, second],
               id: "pool",
             },
           }),
@@ -67,29 +62,26 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       }),
     ).resolves.toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversion: { kind: "order" },
     });
 
-    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
-    expect(requestedCounts).toEqual([1]);
+    expect(requestWithdrawal).not.toHaveBeenCalled();
+    expect(requestedCounts).toEqual([]);
   });
 });
 
 describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} output-limit exhaustion`, () => {
   it("reports predictable DAO output-limit exhaustion", async () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
-    const deposit = vi
-      .spyOn(logicManager, "deposit")
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
+    const deposit = vi.spyOn(logicManager, "deposit").mockImplementation((txLike) => {
+      return ccc.Transaction.from(txLike);
+    });
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike) => ccc.Transaction.from(txLike));
 
     await expect(
-      sdk.buildConversionTransaction(transactionWithOutputs(64, lock), baseClient, {
+      sdk.buildConversionTransaction(transactionWithOutputs(64, lock), {
         direction: CKB_TO_ICKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -119,13 +111,12 @@ describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} output-limit exhaustion`, () => 
     });
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike) => {
-        await Promise.resolve();
+      .mockImplementation((txLike) => {
         return ccc.Transaction.from(txLike);
       });
 
     await expect(
-      sdk.buildConversionTransaction(transactionWithOutputs(64, lock), baseClient, {
+      sdk.buildConversionTransaction(transactionWithOutputs(64, lock), {
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -137,7 +128,6 @@ describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} output-limit exhaustion`, () => 
             }),
             poolDeposits: {
               deposits: [anchorDeposit, readyDeposit],
-              readyDeposits: [anchorDeposit, readyDeposit],
               id: "pool",
             },
           }),

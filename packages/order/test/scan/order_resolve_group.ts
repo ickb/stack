@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { resolveOrderGroup } from "../../src/io/order_scan.ts";
-import { MasterCell } from "../../src/model/cells.ts";
+import { MasterCell, validatedOrderGroup } from "../../src/model/cells.ts";
 import { Relative } from "../../src/model/relative.ts";
 import type { GetTransactionReturn } from "../fixtures/order_constants.ts";
 import {
@@ -18,6 +18,46 @@ import {
 } from "./support/order_scan_helpers.ts";
 
 const MISSING_ORIGIN = "missing-origin";
+
+describe("resolveOrderGroup provenance", () => {
+  it("attests a genuinely resolved group for matching and transaction boundaries", async () => {
+    const { orderScript, ownerLock } = findOrdersFixture();
+    const originMaster = { txHash: byte32FromByte("68"), index: 1n };
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "relative", value: Relative.create(1n) },
+      lock: orderScript,
+      outPoint: { txHash: originMaster.txHash, index: 0n },
+    });
+    const liveOrder = absoluteOrderCell({
+      master: originMaster,
+      outPointByte: "69",
+      info: directionalInfo(),
+      lock: orderScript,
+    });
+    const master = new MasterCell(masterCell(originMaster, orderScript, ownerLock));
+    const client = new StubClient({
+      cache: new ccc.ClientCacheMemory(),
+      getTransaction: async (): GetTransactionReturn => {
+        await Promise.resolve();
+        return transactionResponse(transactionWithOutputs([origin.cell, master.cell]));
+      },
+    });
+
+    const result = await resolveOrderGroup(client, master, [liveOrder], (cell) =>
+      cell.cellOutput.lock.eq(orderScript),
+    );
+
+    if (!result.ok) {
+      throw new Error(`Expected resolved group, received ${result.reason}`);
+    }
+    expect(validatedOrderGroup(result.group).order.cell.outPoint.toHex()).toBe(
+      liveOrder.cell.outPoint.toHex(),
+    );
+  });
+});
 
 describe("resolveOrderGroup", () => {
   it("reports invalid groups after resolving a descendant", async () => {

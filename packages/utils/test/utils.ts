@@ -3,11 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
   binarySearch,
-  BufferedGenerator,
   collect,
+  collectCellsPaged,
   collectPagedScan,
   compareBigInt,
   isPlainCapacityCell,
+  PagedScanCursorError,
+  pagedScanCursorErrorCode,
   unique,
 } from "../src/utils.ts";
 
@@ -19,67 +21,165 @@ describe("compareBigInt", () => {
   });
 });
 
-describe("BufferedGenerator", () => {
-  it("keeps advancing the wrapped generator after the initial fill", () => {
-    function* numbers(): Generator<number, void, void> {
-      yield 1;
-      yield 2;
-      yield 3;
-    }
+describe("scan collection", () => {
+  it("completes after an empty page", async () => {
+    const fetchPage = vi.fn(async () => {
+      await Promise.resolve();
+      return { items: new Array<number>(), lastCursor: "ignored" };
+    });
 
-    const buffered = new BufferedGenerator(numbers(), 2);
-
-    expect(buffered.buffer).toEqual([1, 2]);
-
-    buffered.next(1);
-    expect(buffered.buffer).toEqual([2, 3]);
-
-    buffered.next(1);
-    expect(buffered.buffer).toEqual([3]);
+    await expect(collectPagedScan(fetchPage, { pageSize: 2 })).resolves.toEqual([]);
+    expect(fetchPage).toHaveBeenCalledWith(2, undefined);
+    expect(fetchPage).toHaveBeenCalledTimes(1);
   });
 
-  it("stops initial buffering when the wrapped generator is exhausted", () => {
-    function* oneNumber(): Generator<number, void, void> {
-      yield 1;
-    }
+  it("completes after a short page without requiring a cursor", async () => {
+    const fetchPage = vi.fn(async () => {
+      await Promise.resolve();
+      return { cells: [1] };
+    });
 
-    const buffered = new BufferedGenerator(oneNumber(), 3);
+    await expect(collectPagedScan(fetchPage, { pageSize: 2 })).resolves.toEqual([1]);
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+  });
 
-    expect(buffered.buffer).toEqual([1]);
+  it("collects every advancing page without a total item or page cap", async () => {
+    const afters: Array<string | undefined> = [];
+    const fetchPage = vi.fn(async (pageSize: number, after: string | undefined) => {
+      await Promise.resolve();
+      afters.push(after);
+      const page = after === undefined ? 0 : Number(after);
+      return page < 5
+        ? {
+            items: [page * pageSize, page * pageSize + 1],
+            lastCursor: String(page + 1),
+          }
+        : { items: [page * pageSize] };
+    });
+
+    await expect(collectPagedScan(fetchPage, { pageSize: 2 })).resolves.toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ]);
+    expect(afters).toEqual([undefined, "1", "2", "3", "4", "5"]);
+  });
+
+  it("rejects a full page with a missing cursor", async () => {
+    const promise = collectPagedScan(
+      async () => {
+        await Promise.resolve();
+        return { items: [1, 2] };
+      },
+      { pageSize: 2 },
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(PagedScanCursorError);
+    await expect(promise).rejects.toMatchObject({
+      code: pagedScanCursorErrorCode,
+      previousCursor: undefined,
+      lastCursor: undefined,
+    });
+  });
+
+  it("rejects a full page with an unchanged cursor", async () => {
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [1], lastCursor: "same" })
+      .mockResolvedValueOnce({ items: [2], lastCursor: "same" });
+
+    await expect(collectPagedScan(fetchPage, { pageSize: 1 })).rejects.toMatchObject({
+      name: "PagedScanCursorError",
+      code: pagedScanCursorErrorCode,
+      previousCursor: "same",
+      lastCursor: "same",
+    });
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a full page that returns any previously observed cursor", async () => {
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [1], lastCursor: "a" })
+      .mockResolvedValueOnce({ items: [2], lastCursor: "b" })
+      .mockResolvedValueOnce({ items: [3], lastCursor: "a" });
+
+    await expect(collectPagedScan(fetchPage, { pageSize: 1 })).rejects.toMatchObject({
+      name: "PagedScanCursorError",
+      code: pagedScanCursorErrorCode,
+      previousCursor: "b",
+      lastCursor: "a",
+    });
+    expect(fetchPage).toHaveBeenCalledTimes(3);
   });
 });
 
-describe("scan collection", () => {
-  it("passes the cell page size through and collects all yielded items", async () => {
-    const seenPageSizes: number[] = [];
-
-    await expect(
-      collectPagedScan(
-        async function* (pageSize: number): AsyncGenerator<number> {
-          seenPageSizes.push(pageSize);
-          yield 1;
-          yield 2;
-          await Promise.resolve();
-        },
-        { pageSize: 2 },
-      ),
-    ).resolves.toEqual([1, 2]);
-    expect(seenPageSizes).toEqual([2]);
-  });
-
-  it("rejects invalid page sizes before creating the scan", async () => {
-    const scan = vi.fn((): AsyncIterable<number> => {
-      throw new Error("scan factory should not be called");
+describe("scan validation", () => {
+  it("rejects invalid page sizes before calling the page fetcher", async () => {
+    const fetchPage = vi.fn(async () => {
+      await Promise.resolve();
+      return { items: new Array<number>() };
     });
 
     for (const pageSize of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-      await expect(collectPagedScan(scan, { pageSize })).rejects.toThrow(
+      await expect(collectPagedScan(fetchPage, { pageSize })).rejects.toThrow(
         "pageSize must be a positive safe integer",
       );
     }
-    expect(scan).not.toHaveBeenCalled();
+    expect(fetchPage).not.toHaveBeenCalled();
   });
 
+  it("validates a CCC scan before cache or RPC access", async () => {
+    const client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+    const cacheScan = vi.spyOn(client.cache, "findCells");
+    const rpc = vi.spyOn(client, "findCellsPaged");
+
+    await expect(
+      collectCellsPaged(
+        client,
+        {
+          script: testCell({ type: undefined, outputData: "0x" }).cellOutput.lock,
+          scriptType: "lock",
+          scriptSearchMode: "exact",
+        },
+        "asc",
+        { onChain: false, pageSize: 0 },
+      ),
+    ).rejects.toThrow("pageSize must be a positive safe integer");
+    expect(cacheScan).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("CCC cached scans", () => {
+  it("merges cached cells with distinct usable on-chain cells", async () => {
+    const client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+    const cached = testCell({ type: undefined, outputData: "0x" });
+    const fresh = testCell({ type: undefined, outputData: "0x", txByte: "33" });
+    vi.spyOn(client.cache, "findCells").mockImplementation(async function* () {
+      await Promise.resolve();
+      yield cached;
+    });
+    vi.spyOn(client.cache, "isUnusable").mockResolvedValue(false);
+    vi.spyOn(client, "findCellsPaged").mockResolvedValue({
+      cells: [cached, fresh],
+      lastCursor: "done",
+    });
+
+    await expect(
+      collectCellsPaged(
+        client,
+        {
+          script: cached.cellOutput.lock,
+          scriptType: "lock",
+          scriptSearchMode: "exact",
+        },
+        "asc",
+        { onChain: false, pageSize: 3 },
+      ),
+    ).resolves.toEqual([cached, fresh]);
+  });
+});
+
+describe("async iterable collection", () => {
   it("collects async iterable values", async () => {
     await expect(
       collect(
@@ -144,12 +244,14 @@ describe("unique", () => {
 function testCell({
   type,
   outputData,
+  txByte = "11",
 }: {
   type: ccc.ScriptLike | undefined;
   outputData: ccc.Hex;
+  txByte?: string;
 }): ccc.Cell {
   return ccc.Cell.from({
-    outPoint: { txHash: `0x${"11".repeat(32)}`, index: 0n },
+    outPoint: { txHash: `0x${txByte.repeat(32)}`, index: 0n },
     cellOutput: {
       capacity: 0n,
       lock: { codeHash: `0x${"22".repeat(32)}`, hashType: "type", args: "0x" },

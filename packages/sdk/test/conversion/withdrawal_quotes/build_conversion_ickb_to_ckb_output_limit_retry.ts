@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { DaoOutputLimitError } from "@ickb/dao";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   testSdk,
@@ -29,8 +26,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const requestedCounts: number[] = [];
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(async (txLike, deposits) => {
-        await Promise.resolve();
+      .mockImplementation((txLike, deposits) => {
         requestedCounts.push(deposits.length);
         if (requestedCounts.length === 1) {
           throw new DaoOutputLimitError(65);
@@ -43,7 +39,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     );
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -51,7 +47,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           system: {
             poolDeposits: {
               deposits: [first, second, ringAnchor],
-              readyDeposits: [first, second, ringAnchor],
               id: "pool",
             },
           },

@@ -1,57 +1,9 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ccc, JoyId } from "@ckb-ccc/ccc";
-import { getConfig, IckbSdk } from "@ickb/sdk";
-import Connector from "./Connector.tsx";
-import { parseWalletChain, type RootConfig } from "./utils.ts";
-import appIcon from "/favicon.png?url";
+import { InterfaceRoot } from "./app/loadInterface.tsx";
 
-const appName = "iCKB DApp";
-
-function createRootConfig(chain: "mainnet" | "testnet"): RootConfig {
-  const config = getConfig(chain);
-
-  return {
-    chain,
-    queryClient: new QueryClient(),
-    cccClient:
-      chain === "mainnet"
-        ? new ccc.ClientPublicMainnet()
-        : new ccc.ClientPublicTestnet(),
-    sdk: IckbSdk.fromConfig(config),
-  };
+const rootElement = document.getElementById("wallet-app");
+if (rootElement === null) {
+  throw new Error("Missing wallet app root");
 }
-
-const rootConfigs = {
-  mainnet: createRootConfig("mainnet"),
-  testnet: createRootConfig("testnet"),
-};
-
-export function startApp(walletChain: string): void {
-  const { walletName, chain } = parseWalletChain(walletChain);
-  const rootConfig = rootConfigs[chain];
-
-  const signerInfo = JoyId.getJoyIdSigners(
-    rootConfig.cccClient,
-    appName,
-    ["https://ickb.org", appIcon].join(""),
-  ).find((candidate) => candidate.name === "CKB");
-  if (!signerInfo) {
-    throw new Error("CKB signer not found. Please ensure it is enabled in your JoyID app.");
-  }
-
-  const { signer } = signerInfo;
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const rootElement = document.getElementById("app")!;
-  const root = createRoot(rootElement);
-  rootElement.textContent = "";
-  root.render(
-    <StrictMode>
-      <QueryClientProvider client={rootConfig.queryClient}>
-        <Connector {...{ rootConfig, signer, walletName }} />
-      </QueryClientProvider>
-    </StrictMode>,
-  );
-}
+const root = createRoot(rootElement);
+root.render(<InterfaceRoot />);

@@ -38,6 +38,7 @@ function system(overrides: Partial<SystemState> = {}): SystemState {
     orderPool: [],
     ckbAvailable: 0n,
     ckbMaturing: [],
+    poolDeposits: { deposits: [], id: "" },
     ...overrides,
   };
 }

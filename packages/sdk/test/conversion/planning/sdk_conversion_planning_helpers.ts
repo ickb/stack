@@ -1,8 +1,8 @@
+import type { IckbDepositCell } from "@ickb/core";
 import { Ratio } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { errorOf } from "../../../src/client/sdk_error.ts";
-import { sdkManagers } from "../../../src/client/sdk_state_store.ts";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
@@ -42,29 +42,25 @@ describe("sdk conversion planning helpers", () => {
       },
       {
         deposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
-        readyDeposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
         id: "pool",
       },
-    );
-    const immediatelyMaturePlans = orderedPlans.plans.filter(
-      (plan) => plan.estimatedMaturity === 0n,
-    );
-    const twoDepositPlans = orderedPlans.plans.filter(
-      (plan) => plan.selectedDeposits.length === 2,
     );
 
     expect(zeroCapacityPlans).toMatchObject({
       lastFailure: "amount-too-small",
       plans: [],
     });
-    expect(immediatelyMaturePlans).toHaveLength(2);
-    expect(twoDepositPlans).toHaveLength(1);
+    expectOrderedCandidates(orderedPlans, [
+      [anchorDeposit, "anchor"],
+      [pairDeposit, "pair"],
+      [unitA, "unit-a"],
+      [unitB, "unit-b"],
+      [laterDeposit, "later"],
+    ]);
   });
 
-  it("derives ready pool deposits from the concrete pool snapshot", () => {
+  it("derives ready pool deposits from the concrete pool sample", () => {
     const lock = script("11");
-    const fabricatedReadyDeposit = projectionReadyDeposit(2n, 0n, { id: "55" });
-
     expect(
       ickbToCkbConversionPlans(
         {
@@ -75,14 +71,13 @@ describe("sdk conversion planning helpers", () => {
         },
         {
           deposits: [],
-          readyDeposits: [fabricatedReadyDeposit],
           id: "pool",
         },
       ),
     ).toMatchObject({ lastFailure: "amount-too-small", plans: [] });
   });
 
-  it("normalizes unknown errors and missing SDK managers", () => {
+  it("normalizes unknown errors", () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;
 
@@ -90,6 +85,22 @@ describe("sdk conversion planning helpers", () => {
     expect(errorOf({ message: "from object" }).message).toBe("from object");
     expect(errorOf({ value: 1n }).message).toBe('{"value":"1"}');
     expect(errorOf(circular).message).toBe("[object Object]");
-    expect(() => sdkManagers({})).toThrow("SDK managers not initialized");
   });
 });
+
+function expectOrderedCandidates(
+  result: ReturnType<typeof ickbToCkbConversionPlans>,
+  names: Array<[IckbDepositCell, string]>,
+): void {
+  const candidateNames = new Map(names);
+  expect(
+    result.plans.map((plan) => ({
+      candidates: plan.selectedDeposits.map((deposit) => candidateNames.get(deposit)),
+      count: plan.selectedDeposits.length,
+    })),
+  ).toEqual([
+    { candidates: ["unit-a", "unit-b"], count: 2 },
+    { candidates: ["pair"], count: 1 },
+    { candidates: ["later"], count: 1 },
+  ]);
+}

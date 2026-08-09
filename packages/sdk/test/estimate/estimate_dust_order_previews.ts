@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { type Info, OrderCell, OrderData, OrderManager, Ratio } from "@ickb/order";
+import { type Info, OrderData, OrderManager, Ratio } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IckbSdk } from "../../src/sdk.ts";
+import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import {
   hash,
   headerLike,
-  ratio,
   system,
 } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
@@ -15,10 +15,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function orderFromEstimate(
+async function orderFromEstimate(
   info: Info | undefined,
   amounts: { ckbValue: bigint; udtValue: bigint },
-): OrderCell {
+): ReturnType<typeof resolveOrderGroupFixture> {
   if (info === undefined) {
     throw new Error("Expected order estimate info");
   }
@@ -36,17 +36,25 @@ function orderFromEstimate(
     cellOutput: { lock: script("55"), type: udtScript },
     outputData,
   });
-  return OrderCell.mustFrom(
-    ccc.Cell.from({
-      outPoint: { txHash: hash("78"), index: 0n },
-      cellOutput: {
-        capacity: minimalCell.cellOutput.capacity + amounts.ckbValue,
-        lock: script("55"),
-        type: udtScript,
-      },
-      outputData,
-    }),
-  );
+  const orderCell = ccc.Cell.from({
+    outPoint: { txHash: hash("78"), index: 0n },
+    cellOutput: {
+      capacity: minimalCell.cellOutput.capacity + amounts.ckbValue,
+      lock: script("55"),
+      type: udtScript,
+    },
+    outputData,
+  });
+  const masterCell = ccc.Cell.from({
+    outPoint: { txHash: hash("78"), index: 1n },
+    cellOutput: { lock: script("11"), type: script("55") },
+    outputData: "0x",
+  });
+  return resolveOrderGroupFixture(new OrderManager(script("55"), [], udtScript), {
+    masterCell,
+    orderCell,
+    originCell: orderCell,
+  });
 }
 
 const DUST_ICKB_TO_CKB = "dust-ickb-to-ckb";
@@ -186,35 +194,43 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 });
 
 describe(`${ESTIMATE_SUITE} dust order validity`, () => {
-  it("keeps one-sat iCKB-to-CKB dust state-valid but not bot-actionable", () => {
-    const orderManager = new OrderManager(script("55"), [], script("66"));
+  it("keeps one-sat iCKB-to-CKB dust state-valid but not bot-actionable", async () => {
     const estimate = IckbSdk.estimate(false, { ckbValue: 0n, udtValue: 1n }, system(), {
       fee: 0n,
     });
-    const order = orderFromEstimate(estimate.info, {
+    const order = await orderFromEstimate(estimate.info, {
       ckbValue: 0n,
       udtValue: 1n,
     });
 
-    const match = orderManager.match(order, false, 1n);
+    const matchingRate = { ckbScale: 1n, udtScale: 2n };
+    const match = OrderManager.bestMatch(
+      [order],
+      { ckbValue: 1n, udtValue: 0n },
+      matchingRate,
+      {
+        feeRate: 0n,
+        ckbAllowanceStep: 1n,
+      },
+    );
     const botMatch = OrderManager.bestMatch(
       [order],
       { ckbValue: 1n, udtValue: 0n },
-      ratio,
+      matchingRate,
       {
         feeRate: 1n,
         ckbAllowanceStep: 1n,
       },
     );
 
-    expect(match.partials).toHaveLength(1);
-    expect(match.partials[0]).toMatchObject({
-      ckbOut: order.ckbValue + 1n,
+    expect(match.match.partials).toHaveLength(1);
+    expect(match.match.partials[0]).toMatchObject({
+      ckbOut: order.order.ckbValue + 1n,
       udtOut: 0n,
     });
-    expect(match.ckbDelta).toBe(-1n);
-    expect(match.udtDelta).toBe(1n);
-    expect(botMatch.partials).toHaveLength(0);
+    expect(match.match.ckbDelta).toBe(-1n);
+    expect(match.match.udtDelta).toBe(1n);
+    expect(botMatch.match.partials).toHaveLength(0);
   });
 
   it("builds dust iCKB-to-CKB orders with quote-preserving Uint64 encoding", () => {

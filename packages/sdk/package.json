@@ -39,7 +39,8 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "build": "rm -fr dist && tsgo -p tsconfig.build.json && node ../../scripts/tooling/build/rewrite-dts-imports.ts dist",
-    "lint:api": "api-extractor run --local",
+    "lint:api": "api-extractor run",
+    "lint:publish": "publint --strict --pack pnpm",
     "lint": "pnpm --workspace-root exec eslint --max-warnings=0 packages/sdk/src packages/sdk/test",
     "clean": "rm -fr dist"
   },

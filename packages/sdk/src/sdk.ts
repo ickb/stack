@@ -1,22 +1,27 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
-import type { OrderManager } from "@ickb/order";
+import type { Info, OrderGroup, OrderManager } from "@ickb/order";
 import type { ValueComponents } from "@ickb/utils";
 import { IckbSdkL1 } from "./client/sdk_l1_class.ts";
-import { setSdkManagers } from "./client/sdk_state_store.ts";
 import type {
+  AccountState,
+  BuildBaseTransactionOptions,
+  CompleteIckbTransactionOptions,
   ConversionOrderEstimate,
+  ConversionTransactionOptions,
+  ConversionTransactionResult,
+  GetL1StateOptions,
+  GetPoolDepositsOptions,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
+  PoolDepositState,
   SystemState,
 } from "./client/sdk_types.ts";
 import type { getConfig } from "./constants.ts";
 import { estimate, estimateIckbToCkbOrder } from "./estimate/sdk_estimate.ts";
 import { maturity } from "./estimate/sdk_maturity.ts";
 
-export { IckbSdkBase } from "./client/sdk_base.ts";
-export { IckbSdkConversion } from "./client/sdk_conversion_class.ts";
-export { IckbSdkL1 } from "./client/sdk_l1_class.ts";
+export { MAX_WITHDRAWAL_REQUESTS } from "./client/sdk_types.ts";
 export type {
   AccountAvailabilityProjection,
   AccountState,
@@ -45,19 +50,75 @@ export {
   projectAccountAvailability,
   projectConversionTransactionContext,
 } from "./estimate/sdk_projection.ts";
-export { sendAndWaitForCommit } from "./send/send_and_wait.ts";
-export type {
-  SendAndWaitForCommitEvent,
-  SendAndWaitForCommitOptions,
-} from "./send/send_and_wait.ts";
-export { TransactionConfirmationError } from "./send/send_and_wait_error.ts";
+export {
+  signAndSendTransaction,
+  TransactionBroadcastError,
+} from "./send/sign_and_send_transaction.ts";
+export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 
-/**
- * SDK for managing iCKB operations.
- *
- * @public
- */
-export class IckbSdk extends IckbSdkL1 {
+/** SDK for managing iCKB operations. @public */
+export interface IckbSdk {
+  /** Adds requested withdrawal, collection, receipt, and ready-withdrawal steps. */
+  buildBaseTransaction(
+    txLike: ccc.TransactionLike,
+    options?: BuildBaseTransactionOptions,
+  ): ccc.Transaction;
+  /** Builds a partial conversion or returns a typed planning failure. */
+  buildConversionTransaction(
+    txLike: ccc.TransactionLike,
+    options: ConversionTransactionOptions,
+  ): Promise<ConversionTransactionResult>;
+  /** Adds order-group inputs for collection or fulfilled-order cleanup. */
+  collect(
+    txLike: ccc.TransactionLike,
+    groups: OrderGroup[],
+    options?: { isFulfilledOnly?: boolean },
+  ): ccc.Transaction;
+  /** Completes iCKB inputs and fees without signing or sending the transaction. */
+  completeTransaction(
+    txLike: ccc.TransactionLike,
+    options: CompleteIckbTransactionOptions,
+  ): Promise<ccc.Transaction>;
+  /** Scans wallet-owned cells, evaluating withdrawal readiness at `tip`. */
+  getAccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    tip: ccc.ClientBlockHeader,
+    options?: { cellPageSize?: number },
+  ): Promise<AccountState>;
+  /** Returns sampled system, user-order, and account state from best-effort scans. */
+  getL1AccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }>;
+  /** Samples system state and partitions user orders from the public order pool. */
+  getL1State(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }>;
+  /** Scans public pool deposits and evaluates readiness against `tip`. */
+  getPoolDeposits(
+    client: ccc.Client,
+    tip: ccc.ClientBlockHeader,
+    options?: GetPoolDepositsOptions,
+  ): Promise<PoolDepositState>;
+  /** Adds a user-owned order request, deriving its lock from a signer when needed. */
+  request(
+    txLike: ccc.TransactionLike,
+    user: ccc.Signer | ccc.Script,
+    info: Info,
+    amounts: ValueComponents,
+  ): Promise<ccc.Transaction>;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
   /** Creates an SDK from resolved protocol managers and bot lock scripts. */
   constructor(
     ...[ickbUdt, ownedOwner, ickbLogic, order, bots]: [
@@ -68,8 +129,13 @@ export class IckbSdk extends IckbSdkL1 {
       bots: ccc.Script[],
     ]
   ) {
-    super();
-    setSdkManagers(this, { ickbUdt, ownedOwner, ickbLogic, order, bots });
+    super({
+      ickbUdt,
+      ownedOwner,
+      ickbLogic,
+      order,
+      bots,
+    });
   }
 
   /** Estimates one conversion order against the sampled system state. */
@@ -106,4 +172,28 @@ export class IckbSdk extends IckbSdkL1 {
   public static maturity(o: MaturityOrderInput, system: SystemState): bigint | undefined {
     return maturity(o, system);
   }
-}
+};
+
+/** Concrete iCKB SDK constructor and static estimators. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const IckbSdk: {
+  new (
+    ickbUdt: IckbUdt,
+    ownedOwner: OwnedOwnerManager,
+    ickbLogic: LogicManager,
+    order: OrderManager,
+    bots: ccc.Script[],
+  ): IckbSdk;
+  estimate: (
+    isCkb2Udt: boolean,
+    amounts: ValueComponents,
+    system: SystemState,
+    options?: { fee?: ccc.Num; feeBase?: ccc.Num },
+  ) => ConversionOrderEstimate;
+  estimateIckbToCkbOrder: (
+    amounts: ValueComponents,
+    system: SystemState,
+  ) => IckbToCkbOrderEstimate | undefined;
+  fromConfig: (config: ReturnType<typeof getConfig>) => IckbSdk;
+  maturity: (o: MaturityOrderInput, system: SystemState) => bigint | undefined;
+} = IckbSdkImplementation;

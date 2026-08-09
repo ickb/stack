@@ -71,6 +71,19 @@ describe("sdk helper coverage", () => {
     expect(mint).toHaveBeenCalledWith(expect.any(ccc.Transaction), lock, info, amounts);
   });
 
+  it("mints order requests with a direct lock script", async () => {
+    const { sdk, orderManager, lock } = testSdk();
+    const mint = vi
+      .spyOn(orderManager, "mint")
+      .mockImplementation((txLike) => ccc.Transaction.from(txLike));
+    const info = Info.create(true, ratio);
+    const amounts = { ckbValue: 1n, udtValue: 0n };
+
+    await sdk.request(ccc.Transaction.default(), lock, info, amounts);
+
+    expect(mint).toHaveBeenCalledWith(expect.any(ccc.Transaction), lock, info, amounts);
+  });
+
   it("covers retryable conversion errors and DAO output planning", () => {
     const tx = ccc.Transaction.default();
     const limitError = plannedDaoOutputLimitError(tx, 65, true);

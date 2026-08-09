@@ -117,7 +117,7 @@ async function expectCustomPageSizeThroughL1StateLoading(): Promise<void> {
   });
 
   await sdk.getL1State(client, [], { cellPageSize });
-  expect(capacityLimits).toEqual([cellPageSize]);
+  expect(capacityLimits).toEqual([cellPageSize, cellPageSize]);
   expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
     onChain: true,
     tip: sampledTip,

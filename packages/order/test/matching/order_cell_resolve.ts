@@ -2,9 +2,10 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { OrderCell } from "../../src/model/cells.ts";
+import { Relative } from "../../src/model/relative.ts";
 import { OrderManager } from "../../src/order.ts";
 import { ORDER_CELL_RESOLVE_SUITE } from "../fixtures/order_constants.ts";
-import { makeUdtToCkbOrder } from "./support/order_match_helpers.ts";
+import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import {
   directionalInfo,
   dualInfo,
@@ -14,7 +15,11 @@ describe("OrderManager.addMatch", () => {
   it("rejects duplicate partials for the same order cell", () => {
     const manager = new OrderManager(script("11"), [], script("22"));
     const order = makeUdtToCkbOrder();
-    const partial = { order, ckbOut: order.ckbValue, udtOut: order.udtValue };
+    const partial = {
+      group: resolvedOrderGroup(order),
+      ckbOut: order.ckbValue,
+      udtOut: order.udtValue,
+    };
 
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
@@ -70,8 +75,8 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info,
-      master: { type: "absolute", value: master },
-      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
     });
     const progressed = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(50),
@@ -103,8 +108,8 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info,
-      master: { type: "absolute", value: master },
-      outPoint: { txHash: byte32FromByte("44"), index: 0n },
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
     });
     const lowerValue = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -125,5 +130,88 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
     expect(higherValue.absProgress).toBe(higherValue.absTotal);
     expect(higherValue.absTotal).toBeGreaterThan(lowerValue.absTotal);
     expect(origin.resolve([lowerValue, higherValue])).toBe(higherValue);
+  });
+});
+
+describe(ORDER_CELL_RESOLVE_SUITE, () => {
+  it("rejects higher progress that underfunds the mint baseline", () => {
+    const master = { txHash: byte32FromByte("af"), index: 10n };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
+    const underfunded = makeOrderCell({
+      ckbUnoccupied: 0n,
+      udtValue: ccc.fixedPointFrom(50),
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("b3"), index: 0n },
+    });
+
+    expect(underfunded.absProgress).toBeGreaterThan(origin.absProgress);
+    expect(underfunded.absTotal).toBeLessThan(origin.absTotal);
+    expect(origin.isValid(underfunded)).toBe(false);
+    expect(origin.resolve([underfunded])).toBeUndefined();
+  });
+
+  it("uses total value to resolve equal-progress descendants", () => {
+    const master = { txHash: byte32FromByte("ab"), index: 10n };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
+    const lowerValue = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(90),
+      udtValue: ccc.fixedPointFrom(10),
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("ac"), index: 0n },
+    });
+    const higherValue = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: ccc.fixedPointFrom(10),
+      info,
+      master: { type: "absolute", value: master },
+      outPoint: { txHash: byte32FromByte("ad"), index: 0n },
+    });
+
+    expect(lowerValue.absProgress).toBe(higherValue.absProgress);
+    expect(higherValue.absTotal).toBeGreaterThan(lowerValue.absTotal);
+    expect(origin.resolve([higherValue, lowerValue])).toBe(higherValue);
+    expect(origin.resolve([lowerValue, higherValue])).toBe(higherValue);
+  });
+
+  it("accepts a distinct better descendant after an equal-score ambiguity", () => {
+    const master = { txHash: byte32FromByte("ae"), index: 10n };
+    const info = directionalInfo();
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info,
+      master: { type: "relative", value: Relative.create(1n) },
+      outPoint: { txHash: master.txHash, index: 9n },
+    });
+    const descendant = (byte: string, ckb: bigint, udt: bigint): OrderCell =>
+      makeOrderCell({
+        ckbUnoccupied: ckb,
+        udtValue: udt,
+        info,
+        master: { type: "absolute", value: master },
+        outPoint: { txHash: byte32FromByte(byte), index: 0n },
+      });
+    const equalA = descendant("b0", ccc.fixedPointFrom(90), ccc.fixedPointFrom(10));
+    const equalB = descendant("b1", ccc.fixedPointFrom(90), ccc.fixedPointFrom(10));
+    const better = descendant("b2", ccc.fixedPointFrom(80), ccc.fixedPointFrom(20));
+
+    expect(origin.resolve([equalA, equalB])).toBeUndefined();
+    expect(origin.resolve([equalA, equalB, better])).toBe(better);
   });
 });

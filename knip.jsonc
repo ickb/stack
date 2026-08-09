@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/{lint-source-structure,run-node-tests,tooling/build/rewrite-dts-imports,bot/{collect-incident,launcher},live/{config-from-env,generate-config,preflight},supervisor/{dynamic-loop-cli,loop-cli}}.ts",
+        "scripts/test/**/*.ts",
+        "!scripts/test/**/*support.ts",
+      ],
+      "includeEntryExports": true,
+      "project": ["scripts/**/*.ts", "*.config.{ts,mts}"],
+    },
+    "apps/interface": {
+      "ignoreDependencies": ["tailwindcss"],
+    },
+  },
+  "ignoreUnresolved": ["/favicon.png?url"],
+}

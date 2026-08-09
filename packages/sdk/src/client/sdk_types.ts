@@ -11,6 +11,7 @@ import type { Info, OrderCell, OrderGroup, OrderManager, Ratio } from "@ickb/ord
 import type { ValueComponents } from "@ickb/utils";
 
 export const MAX_DIRECT_DEPOSITS = 60;
+/** Maximum withdrawal requests accepted by one SDK conversion. @public */
 export const MAX_WITHDRAWAL_REQUESTS = 30;
 export const ORDER_MINT_OUTPUTS = 2;
 export const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
@@ -32,10 +33,7 @@ export interface PoolDepositState {
   /** All scanned iCKB pool deposits, with readiness evaluated against the sampled tip. */
   deposits: IckbDepositCell[];
 
-  /** Ready deposits sorted for withdrawal planning. */
-  readyDeposits: IckbDepositCell[];
-
-  /** Opaque snapshot identity suitable for preview and cache keys. */
+  /** Opaque scan identity suitable for preview and cache keys. */
   id: string;
 }
 
@@ -99,15 +97,15 @@ export interface ConversionTransactionOptions {
   /** User lock for newly created user-owned outputs. */
   lock: ccc.Script;
 
-  /** State snapshot used to plan this conversion. */
+  /** Sampled state used to plan this conversion. */
   context: ConversionTransactionContext;
 
   /** Optional per-transaction planning limits. */
   limits?: {
-    /** Maximum direct DAO deposits to create or request in one transaction. */
+    /** Direct DAO deposit cap from zero through the stack maximum of 60. */
     maxDirectDeposits?: number;
 
-    /** Maximum withdrawal requests to create in one transaction. */
+    /** Withdrawal request cap from zero through the stack maximum of 30. */
     maxWithdrawalRequests?: number;
   };
 }
@@ -191,15 +189,12 @@ export interface CompleteIckbTransactionOptions {
   /** Signer used for iCKB input completion and fee completion. */
   signer: ccc.Signer;
 
-  /** Client used for final transaction safety checks. */
-  client: ccc.Client;
-
   /** Fee rate passed to CCC fee completion. */
   feeRate: ccc.Num;
 }
 
 /**
- * Options for scanning the L1 state snapshot.
+ * Options for scanning L1 state.
  *
  * @public
  */
@@ -306,19 +301,19 @@ export interface AccountAvailabilityProjection {
 }
 
 /**
- * Combined projection and transaction-planning context for one account snapshot.
+ * Combined projection and transaction-planning context for one sampled account state.
  *
  * @public
  */
 export interface ConversionTransactionContextProjection {
   /** User-facing availability projection. */
   projection: AccountAvailabilityProjection;
-  /** Builder-facing transaction context derived from the same snapshot. */
+  /** Builder-facing transaction context derived from the same sampled state. */
   context: ConversionTransactionContext;
 }
 
 /**
- * Public system snapshot used for quotes, maturity, and conversion planning.
+ * Public sampled system state used for quotes, maturity, and conversion planning.
  *
  * @public
  */
@@ -329,14 +324,14 @@ export interface SystemState {
   tip: ccc.ClientBlockHeader;
   /** The exchange ratio between CKB and UDT. */
   exchangeRatio: Ratio;
-  /** The order pool containing order cells matching system criteria. */
-  orderPool: OrderCell[];
+  /** The order pool containing resolved groups matching system criteria. */
+  orderPool: OrderGroup[];
   /** The total available CKB (as FixedPoint). */
   ckbAvailable: ccc.FixedPoint;
   /** Array of CKB maturing entries with cumulative amounts and maturity timestamps. */
   ckbMaturing: CkbCumulative[];
   /** Public pool deposit scan evaluated against this tip for conversion planning. */
-  poolDeposits?: PoolDepositState;
+  poolDeposits: PoolDepositState;
 }
 
 /**

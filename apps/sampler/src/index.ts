@@ -1,16 +1,18 @@
 /**
  * @packageDocumentation
  *
- * Entry-point script that samples block headers from a CKB mainnet public client
- * and prints a CSV report (BlockNumber, Date, Value, Note).
+ * Entry-point script that samples block headers from a CKB mainnet public client,
+ * or an injected compatible client, and prints a CSV report (BlockNumber, Date,
+ * CkbPerIckb, Note).
  *
  * Summary of behavior:
- * - Constructs a `ccc.ClientPublicMainnet` client and queries the genesis and tip headers.
- * - Builds a set of Date samples between genesis and tip (including a small set of
- *   named dates such as "Genesis", "iCKB Launch", and the "Tip").
+ * - Uses an injected client when provided, otherwise constructs `ccc.ClientPublicMainnet`.
+ * - Queries the genesis and tip headers.
+ * - Logs genesis separately, then builds a set of Date samples between genesis
+ *   and tip, adding "iCKB Launch" only when it falls in range and always adding "Tip".
  * - For each sample date, performs a binary search over block numbers to find
  *   the first block whose timestamp is greater than or equal to the sample date.
- * - Logs CSV lines with block number, ISO timestamp, converted value, and an optional note.
+ * - Logs CSV lines with block number, ISO timestamp, CKB per 1 iCKB, and an optional note.
  *
  * Remarks:
  * - The sampling functions accept timestamps as bigint millisecond values.
@@ -18,42 +20,59 @@
  * - Failures in fetching blocks will throw.
  *
  * Example output (CSV):
- * BlockNumber, Date, Value, Note
+ * BlockNumber, Date, CkbPerIckb, Note
  * 0, 2019-11-15T21:09:50.812Z, 1.00082, Genesis
  *
  * @public
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { convert } from "@ickb/core";
+import { convert, ickbExchangeRatio } from "@ickb/core";
 import { asyncBinarySearch } from "@ickb/utils";
 import { pathToFileURL } from "node:url";
 
-interface SamplerClient {
-  getHeaderByNumber: ccc.Client["getHeaderByNumber"];
-  getTipHeader: ccc.Client["getTipHeader"];
+interface MainOptions {
+  /** Optional client override for tests or alternate mainnet RPC providers. */
+  client?: ccc.Client;
+
+  /** Optional default-client factory for tests. */
+  createClient?: () => ccc.Client;
+
+  /** Optional line logger; defaults to stdout. */
+  log?: (line: string) => void;
+
+  /** Number of evenly spaced timestamp positions to consider per covered UTC year. */
+  samplesPerYear?: number;
 }
 
-interface MainOptions {
-  client?: SamplerClient;
-  log?: (line: string) => void;
-  samplesPerYear?: number;
+export async function runSamplerEntrypoint(
+  argv: string[] = process.argv,
+  moduleUrl: string = import.meta.url,
+  run: () => Promise<void> = main,
+): Promise<void> {
+  if (argv[1] === undefined || moduleUrl !== pathToFileURL(argv[1]).href) {
+    return;
+  }
+
+  await run();
 }
 
 /**
  * Main program that orchestrates sampling and logging.
  *
- * - Constructs a public mainnet client.
- * - Fetches genesis and tip headers (throws if missing).
- * - Computes an upper bound `n` for the block-number binary search using the
- *   bit-length of tip.number (a simple power-of-two bound).
- * - Generates date samples (per-year, `n` samples per year) and inserts a
- *   named "iCKB Launch" sample.
- * - For each date sample, finds the earliest block whose timestamp >= sample
+ * - Uses an injected client when provided, otherwise constructs a public mainnet client.
+ * - Fetches genesis and tip headers (throws if genesis is missing).
+ * - Computes a power-of-two search bound from the bit-length of tip.number.
+ * - Generates date samples using `samplesPerYear`, adds "Tip", and adds "iCKB Launch" when in range.
+ * - For each date sample, finds the earliest block whose `timestamp >= sample`
  *   date via `asyncBinarySearch` and logs a CSV row for that header.
  *
+ * @remarks The tip is sampled once at startup and used as the upper bound for
+ * every search in this run.
+ *
  * Notes on error handling:
- * - Missing blocks will cause this function to throw.
+ * - Missing probed headers move binary search left; a missing selected result
+ *   header causes this function to throw.
  *
  * @returns Promise<void> that resolves when sampling and logging complete.
  *
@@ -61,14 +80,26 @@ interface MainOptions {
  */
 export async function main(options: MainOptions = {}): Promise<void> {
   // Create a public mainnet client (network I/O happens on method calls).
-  const client = options.client ?? new ccc.ClientPublicMainnet();
-  const log = options.log ?? ((line: string): void => {
-    console.log(line);
-  });
+  const createClient = options.createClient ?? createSamplerClient;
+  const client = options.client ?? createClient();
+  const log =
+    options.log ??
+    ((line: string): void => {
+      process.stdout.write(`${line}\n`);
+    });
+  const headers = new Map<number, ccc.ClientBlockHeader | undefined>();
+  const getHeader = async (
+    blockNumber: number,
+  ): Promise<ccc.ClientBlockHeader | undefined> => {
+    if (!headers.has(blockNumber)) {
+      headers.set(blockNumber, await client.getHeaderByNumber(blockNumber));
+    }
+    return headers.get(blockNumber);
+  };
 
   // Fetch genesis header (block 0). If absent, abort early.
-  const genesis = await client.getHeaderByNumber(0);
-  if (!genesis) {
+  const genesis = await getHeader(0);
+  if (genesis === undefined) {
     throw new Error("Genesis block not found");
   }
 
@@ -84,7 +115,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   const dates = sampleTargets(genesis.timestamp, tip.timestamp, options.samplesPerYear);
 
   // Emit CSV header and the genesis row.
-  log(["BlockNumber", "Date", "Value", "Note"].join(", "));
+  log(["BlockNumber", "Date", "CkbPerIckb", "Note"].join(", "));
   logRow(genesis, "Genesis", log);
 
   // For each sample date, find the earliest block whose timestamp is >= date.
@@ -95,8 +126,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
     const blockNumber = await asyncBinarySearch(
       n,
       async (i: number): Promise<boolean> => {
-        const header = await client.getHeaderByNumber(i);
-        if (!header) {
+        const header = await getHeader(i);
+        if (header === undefined) {
           // If there's no header at i, signal "true" so the search moves left.
           return true;
         }
@@ -106,8 +137,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
     );
 
     // Fetch header for the found block number and log it.
-    const header = await client.getHeaderByNumber(blockNumber);
-    if (!header) {
+    const header = await getHeader(blockNumber);
+    if (header === undefined) {
       throw new Error("Header not found");
     }
 
@@ -115,13 +146,20 @@ export async function main(options: MainOptions = {}): Promise<void> {
   }
 }
 
-function sampleTargets(
-  startMs: bigint,
-  endMs: bigint,
-  n = 4,
-): [Date, string][] {
-  const dates = samples(startMs, endMs, n).map((d) => [d, ""] as [Date, string]);
-  dates.push([new Date("2024-09-12T15:13:19.574Z"), "iCKB Launch"]);
+export function createSamplerClient(): ccc.Client {
+  return new ccc.ClientPublicMainnet({
+    url: "https://mainnet.ckb.dev/",
+    fallbacks: [],
+  });
+}
+
+function sampleTargets(startMs: bigint, endMs: bigint, n = 4): Array<[Date, string]> {
+  const dates = samples(startMs, endMs, n).map((d): [Date, string] => [d, ""]);
+  const launch = new Date("2024-09-12T15:13:19.574Z");
+  const launchMs = BigInt(launch.getTime());
+  if (launchMs >= startMs && launchMs <= endMs) {
+    dates.push([launch, "iCKB Launch"]);
+  }
   dates.push([new Date(Number(endMs)), "Tip"]);
   dates.sort((a, b) => a[0].getTime() - b[0].getTime());
   return dates;
@@ -131,7 +169,7 @@ function sampleTargets(
  * Log a CSV row for a header.
  *
  * Behavior:
- * - Converts the header value via `convert(false, ccc.One, header)`,
+ * - Converts 1 iCKB via `convert(false, ccc.One, ickbExchangeRatio(header))`,
  *   formats it with `ccc.fixedPointToString`, and writes a CSV line.
  * - This helper is intentionally lightweight and will throw only on programmer errors
  *   (e.g. unexpected undefined header when called).
@@ -148,16 +186,13 @@ function logRow(
 ): void {
   // Compute ISO timestamp from header timestamp (milliseconds).
   const date = new Date(Number(header.timestamp));
-  // Convert the header's monetary value to a fixed-point representation.
-  const val = convert(false, ccc.One, header);
+  // Include the recoverable occupied capacity of a standard deposit.
+  const val = convert(false, ccc.One, ickbExchangeRatio(header));
   // Emit CSV row: blockNumber, ISO date, formatted value, note.
   log(
-    [
-      String(header.number),
-      date.toISOString(),
-      ccc.fixedPointToString(val),
-      note,
-    ].join(", "),
+    [String(header.number), date.toISOString(), ccc.fixedPointToString(val), note].join(
+      ", ",
+    ),
   );
 }
 
@@ -166,23 +201,27 @@ function logRow(
  *
  * The function:
  * - Splits the overall [startMs, endMs] span by UTC calendar years.
- * - Emits `n` evenly-spaced samples within each year span [Y0, Y1).
- * - Uses integer-rounded millisecond timestamps and returns Date objects.
+ * - Considers `n` evenly-spaced positions within each year span [Y0, Y1).
+ * - Returns only positions inside the inclusive overall range as Date objects.
  *
  * @param startMs - Inclusive start of the sampling range as a bigint (ms since epoch).
  * @param endMs - Inclusive end of the sampling range as a bigint (ms since epoch).
- * @param n - Number of evenly-spaced samples to generate per year span. Must be >= 1.
+ * @param n - Number of evenly-spaced positions to consider per year span. Must be a positive safe integer.
  *
  * @returns An array of Date objects. Samples are generated year-by-year; calling
  *          code may sort again for global ordering (the caller does so).
  *
- * @throws Error if endMs < startMs or if n < 1.
+ * @throws Error if `endMs < startMs` or if `n` is not a positive safe integer.
  *
  * @public
  */
 export function samples(startMs: bigint, endMs: bigint, n: number): Date[] {
-  if (endMs < startMs) throw new Error("endMs must be bigger than startMs");
-  if (n < 1) throw new Error("n must be a positive number");
+  if (endMs < startMs) {
+    throw new Error("endMs must be bigger than startMs");
+  }
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new Error("n must be a positive safe integer");
+  }
 
   // Convert bigints (ms) to Dates for year extraction.
   const start = new Date(Number(startMs));
@@ -212,7 +251,5 @@ export function samples(startMs: bigint, endMs: bigint, n: number): Date[] {
   return out;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
-  process.exit(0);
-}
+// eslint-disable-next-line unicorn/no-top-level-side-effects -- CLI module runs only when imported as the process entrypoint.
+await runSamplerEntrypoint();

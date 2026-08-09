@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { OrderGroup } from "../model/cells.ts";
 
 export function cellInputLike(cell: ccc.Cell): ccc.CellInputLike {
   return {
@@ -16,10 +17,10 @@ export function cellOutputLike(output: ccc.CellOutput): ccc.CellOutputLike {
   };
 }
 
-export function maxOrderOccupiedSize(orderPool: Array<{ cell: ccc.Cell }>): number {
+export function maxOrderOccupiedSize(orderPool: OrderGroup[]): number {
   let maxSize = 0;
-  for (const order of orderPool) {
-    maxSize = Math.max(maxSize, order.cell.occupiedSize);
+  for (const group of orderPool) {
+    maxSize = Math.max(maxSize, group.order.cell.occupiedSize);
   }
   return maxSize;
 }

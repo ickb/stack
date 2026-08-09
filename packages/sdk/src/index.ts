@@ -8,14 +8,14 @@ export { getConfig } from "./constants.ts";
 export type { CodeScriptDeps, IckbDeploymentConfig } from "./constants.ts";
 export {
   IckbSdk,
-  IckbSdkBase,
-  IckbSdkConversion,
-  IckbSdkL1,
+  MAX_WITHDRAWAL_REQUESTS,
+  TransactionBroadcastError,
+  TransactionWaitError,
   estimateMaturityFeeThreshold,
   projectAccountAvailability,
   projectConversionTransactionContext,
-  sendAndWaitForCommit,
-  TransactionConfirmationError,
+  signAndSendTransaction,
+  waitTransaction,
 } from "./sdk.ts";
 export type {
   AccountAvailabilityProjection,
@@ -38,8 +38,6 @@ export type {
   MaturityOrderInput,
   PoolDepositRangeOptions,
   PoolDepositState,
-  SendAndWaitForCommitEvent,
-  SendAndWaitForCommitOptions,
   SystemState,
 } from "./sdk.ts";
 export {

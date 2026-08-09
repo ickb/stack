@@ -1,20 +1,15 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { compareBigInt, type ExchangeRatio } from "@ickb/utils";
+import { CheckedUint64LE, compareBigInt, type ExchangeRatio } from "@ickb/utils";
 import { isValidEntity } from "./entity_validity.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
 
 const RatioCodec = mol.struct({
-  ckbScale: mol.Uint64,
-  udtScale: mol.Uint64,
+  ckbScale: CheckedUint64LE,
+  udtScale: CheckedUint64LE,
 });
 
-/**
- * CCC entity base for serializing and decoding exchange ratio values.
- *
- * @public
- */
-export const RatioBase = ccc.Entity.Base<ExchangeRatio, Ratio>();
+const RatioBase = ccc.Entity.Base<ExchangeRatio, Ratio>();
 
 /**
  * Serialized exchange ratio used by order info.
@@ -25,7 +20,41 @@ export const RatioBase = ccc.Entity.Base<ExchangeRatio, Ratio>();
  *
  * @public
  */
-export class Ratio extends RatioBase {
+export interface Ratio extends ExchangeRatio {
+  /** Applies a directional fee and returns the reduced adjusted ratio. */
+  applyFee(isCkb2Udt: boolean, fee: ccc.Num, feeBase: ccc.Num): Ratio;
+  /** Creates a copy of this ratio. */
+  clone(): Ratio;
+  /** Compares effective CKB-to-UDT prices, returning their numeric ordering. */
+  compare(other: Ratio): number;
+  /** Converts an amount in the selected direction, rounding up only when requested. */
+  convert(isCkb2Udt: boolean, amount: ccc.FixedPoint, mustCeil: boolean): ccc.FixedPoint;
+  /** Returns whether another value has the same scales. */
+  eq(other: ExchangeRatio): boolean;
+  /** Returns reduced direction-oriented scales after applying the fee fraction. */
+  feeAdjustedScales(
+    isCkb2Udt: boolean,
+    fee: ccc.Num,
+    feeBase: ccc.Num,
+  ): { aScale: ccc.Num; bScale: ccc.Num };
+  /** Returns the CKB hash of the serialized ratio. */
+  hash(): ccc.Hex;
+  /** Returns whether both scales are zero. */
+  isEmpty(): boolean;
+  /** Returns whether both scales are positive. */
+  isPopulated(): boolean;
+  /** Returns whether both scales fit Uint64 and are both zero or both positive. */
+  isValid(): boolean;
+  /** Serializes the ratio to bytes. */
+  toBytes(): ccc.Bytes;
+  /** Serializes the ratio to full-width hexadecimal. */
+  toHex(): ccc.Hex;
+  /** Throws unless both scales fit Uint64 and are both zero or both positive. */
+  validate(): void;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
+const RatioImplementation = class Ratio extends RatioBase {
   static {
     ccc.codec(RatioCodec)(this);
   }
@@ -54,6 +83,14 @@ export class Ratio extends RatioBase {
 
   /** Throws when the ratio is neither empty nor fully populated. */
   public validate(): void {
+    if (
+      this.ckbScale < 0n ||
+      this.ckbScale > maxUint64 ||
+      this.udtScale < 0n ||
+      this.udtScale > maxUint64
+    ) {
+      throw new Error("Ratio scale exceeds Uint64");
+    }
     if (!this.isEmpty() && !this.isPopulated()) {
       throw new Error("Ratio invalid: not empty, not populated");
     }
@@ -93,6 +130,7 @@ export class Ratio extends RatioBase {
   }
 
   /** Returns a fee-adjusted ratio for one conversion direction. */
+  // eslint-disable-next-line @typescript-eslint/prefer-return-this-type -- A nonzero fee returns a distinct base Ratio.
   public applyFee(isCkb2Udt: boolean, fee: ccc.Num, feeBase: ccc.Num): Ratio {
     if (fee >= feeBase) {
       throw new Error("Fee too big relative to feeBase");
@@ -166,4 +204,16 @@ export class Ratio extends RatioBase {
 
     return (amount * aScale + (mustCeil ? bScale - 1n : 0n)) / bScale;
   }
-}
+};
+
+/** CCC-backed ratio constructor and codec. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
+export const Ratio: {
+  byteLength?: number;
+  new (ckbScale: ccc.Num, udtScale: ccc.Num): Ratio;
+  decode: (encoded: ccc.BytesLike) => Ratio;
+  empty: () => Ratio;
+  encode: (ratio: ExchangeRatio) => ccc.Bytes;
+  from: (ratio: ExchangeRatio) => Ratio;
+  fromBytes: (encoded: ccc.BytesLike) => Ratio;
+} = RatioImplementation;

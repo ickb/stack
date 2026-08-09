@@ -2,6 +2,14 @@
 
 General utilities built on top of CCC
 
+## Cell Pagination
+
+`collectPagedScan(...)` owns cursor-based pagination for L1 cell scans. Its
+`pageSize` is the size of each request, not a total cap. Empty and short pages
+complete the scan; each full page must return a non-empty `lastCursor` that
+differs from the cursor used for that request. Advancing scans continue without
+an item or page limit and return the complete result.
+
 ## Dependencies
 
 ```mermaid

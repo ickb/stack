@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseClient,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   expectCkbToIckbDirectRetryBuild,
@@ -28,7 +25,9 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     Object.defineProperty(outputLimitError, "name", {
       value: DAO_OUTPUT_LIMIT_ERROR_NAME,
     });
-    const deposit = mockUnitDeposit(logicManager).mockRejectedValueOnce(outputLimitError);
+    const deposit = mockUnitDeposit(logicManager).mockImplementationOnce(() => {
+      throw outputLimitError;
+    });
     mockPassthroughMint(orderManager);
 
     await expectCkbToIckbDirectRetryBuild(sdk, lock);
@@ -38,12 +37,12 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
 
   it("fails fast on non-retryable CKB-to-iCKB construction errors", async () => {
     const { sdk, logicManager, lock } = testSdk();
-    const deposit = vi
-      .spyOn(logicManager, "deposit")
-      .mockRejectedValue(new Error(RPC_FAILED));
+    const deposit = vi.spyOn(logicManager, "deposit").mockImplementation(() => {
+      throw new Error(RPC_FAILED);
+    });
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), baseClient, {
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: "ckb-to-ickb",
         amount: ICKB_DEPOSIT_CAP * 2n,
         lock,

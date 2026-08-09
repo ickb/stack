@@ -7,14 +7,19 @@ export const FETCH_FAILED_MESSAGE = "fetch failed";
  * Returns true for transient fetch transport failures surfaced by the RPC client.
  */
 export function isRetryableRpcTransportError(error: unknown): boolean {
-  if (error instanceof TypeError && error.message === FETCH_FAILED_MESSAGE) {
-    return true;
+  let current = error;
+  const seen = new Set<object>();
+  while (typeof current === "object" && current !== null) {
+    if (isFetchFailedTypeErrorCause(current)) {
+      return true;
+    }
+    if (!(current instanceof Error) || seen.has(current) || !("cause" in current)) {
+      return false;
+    }
+    seen.add(current);
+    current = current.cause;
   }
-  if (!(error instanceof Error) || error.message !== FETCH_FAILED_MESSAGE) {
-    return false;
-  }
-  const cause = "cause" in error ? error.cause : undefined;
-  return isFetchFailedTypeErrorCause(cause);
+  return false;
 }
 
 /**

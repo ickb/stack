@@ -2,19 +2,15 @@ import { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "@ickb/utils";
 import { OrderData } from "./order_data.ts";
 
-/**
- * Constructor tuple for the decoded cell, order payload, value totals, progress, and optional maturity estimate.
- *
- * @public
- */
-export type OrderCellConstructorArgs = [
-  cell: ccc.Cell,
-  data: OrderData,
-  ckbUnoccupied: ccc.FixedPoint,
-  absTotal: ccc.Num,
-  absProgress: ccc.Num,
-  maturity: bigint | undefined,
-];
+interface ResolvedOrderGroupAttestation {
+  master: ccc.Cell;
+  masterBytes: string;
+  orderBytes: string;
+  origin: ccc.Cell;
+  originBytes: string;
+}
+
+const resolvedOrderGroups = new WeakMap<ccc.Cell, ResolvedOrderGroupAttestation>();
 
 /**
  * Represents a parsed order cell on the blockchain.
@@ -53,14 +49,14 @@ export class OrderCell implements ValueComponents {
    *     `undefined` for in-progress or dual orders and `0n` for completed directional orders.
    */
   constructor(
-    ...[
-      cell,
-      data,
-      ckbUnoccupied,
-      absTotal,
-      absProgress,
-      maturity,
-    ]: OrderCellConstructorArgs
+    ...[cell, data, ckbUnoccupied, absTotal, absProgress, maturity]: [
+      cell: ccc.Cell,
+      data: OrderData,
+      ckbUnoccupied: ccc.FixedPoint,
+      absTotal: ccc.Num,
+      absProgress: ccc.Num,
+      maturity: bigint | undefined,
+    ]
   ) {
     this.cell = cell;
     this.data = data;
@@ -114,9 +110,15 @@ export class OrderCell implements ValueComponents {
    * @throws When decoding or validation fails.
    */
   public static mustFrom(cell: ccc.Cell): OrderCell {
-    // Decode and validate the order payload
-    const data = OrderData.decode(cell.outputData);
-    data.validate();
+    let data: OrderData;
+    try {
+      data = OrderData.decode(cell.outputData);
+      data.validate();
+    } catch (error) {
+      throw new Error(`Invalid order payload at ${cell.outPoint.toHex()}`, {
+        cause: error,
+      });
+    }
 
     const udtValue = data.udtValue;
     const ckbUnoccupied = cell.capacityFree;
@@ -162,7 +164,7 @@ export class OrderCell implements ValueComponents {
   /**
    * Checks whether the CKB-to-UDT side is enabled and has nonzero inventory.
    *
-   * @remarks Executable-match checks for fee, minimum output, and ratio bounds happen in `OrderMatcher`.
+   * @remarks Executable-match checks for fee, minimum output, and ratio bounds happen during matching.
    */
   public isCkb2UdtMatchable(): boolean {
     return this.data.info.isCkb2Udt() && this.ckbUnoccupied > 0n;
@@ -171,7 +173,7 @@ export class OrderCell implements ValueComponents {
   /**
    * Checks whether the UDT-to-CKB side is enabled and has nonzero inventory.
    *
-   * @remarks Executable-match checks for fee, minimum output, and ratio bounds happen in `OrderMatcher`.
+   * @remarks Executable-match checks for fee, minimum output, and ratio bounds happen during matching.
    */
   public isUdt2CkbMatchable(): boolean {
     return this.data.info.isUdt2Ckb() && this.data.udtValue > 0n;
@@ -208,9 +210,8 @@ export class OrderCell implements ValueComponents {
    * See {@link https://github.com/ickb/whitepaper/issues/19}.
    */
   public validate(descendant: OrderCell): void {
-    // Same cell, nothing to check
-    if (this.cell.outPoint.eq(descendant.cell.outPoint)) {
-      return;
+    if (!this.data.isMint()) {
+      throw new Error("Origin is not a mint order");
     }
 
     if (!this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock)) {
@@ -257,9 +258,10 @@ export class OrderCell implements ValueComponents {
    * Resolves the best valid descendant order.
    *
    * @remarks
-   * Resolution prefers greater progress, then a mint order over a non-mint order
-   * at equal progress. Equal-progress non-identical candidates with the same
-   * mint status are ambiguous and resolve to `undefined`.
+   * The genuine mint origin is the immutable validation baseline. Resolution
+   * prefers greater progress and then greater total value; candidate identity is
+   * irrelevant. Equal-score non-mint candidates are ambiguous, while the mint
+   * origin wins an equal-score tie when it is still live.
    */
   public resolve(descendants: OrderCell[]): OrderCell | undefined {
     let resolution: OrderResolution | undefined;
@@ -326,10 +328,10 @@ function betterOrderResolution(
   current: OrderResolution | undefined,
   candidate: OrderCell,
 ): OrderResolution {
-  if (current === undefined || current.order.absProgress < candidate.absProgress) {
+  if (current === undefined || compareOrderScore(current.order, candidate) < 0) {
     return { isAmbiguous: false, order: candidate };
   }
-  if (current.order.absProgress !== candidate.absProgress) {
+  if (compareOrderScore(current.order, candidate) > 0) {
     return current;
   }
   if (current.order.cell.outPoint.eq(candidate.cell.outPoint)) {
@@ -342,6 +344,16 @@ function betterOrderResolution(
     return current;
   }
   return { ...current, isAmbiguous: true };
+}
+
+function compareOrderScore(left: OrderCell, right: OrderCell): number {
+  if (left.absProgress !== right.absProgress) {
+    return left.absProgress < right.absProgress ? -1 : 1;
+  }
+  if (left.absTotal !== right.absTotal) {
+    return left.absTotal < right.absTotal ? -1 : 1;
+  }
+  return 0;
 }
 
 /**
@@ -471,6 +483,7 @@ export class OrderGroup implements ValueComponents {
    * @throws Will throw an error if validation fails.
    */
   public validate(): void {
+    this.master.validate(this.origin);
     this.master.validate(this.order);
     this.origin.validate(this.order);
   }
@@ -497,5 +510,69 @@ export class OrderGroup implements ValueComponents {
   public isOwner(...locks: ccc.Script[]): boolean {
     const lock = this.master.cell.cellOutput.lock;
     return locks.some((l) => lock.eq(l));
+  }
+}
+
+/** Records canonical resolver output without exposing forgeable provenance data. */
+export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
+  group.validate();
+  resolvedOrderGroups.set(group.order.cell, {
+    master: group.master.cell,
+    masterBytes: canonicalCellBytes(group.master.cell),
+    orderBytes: canonicalCellBytes(group.order.cell),
+    origin: group.origin.cell,
+    originBytes: canonicalCellBytes(group.origin.cell),
+  });
+  return group;
+}
+
+/** Re-reads and validates a resolved group at a matching or transaction boundary. */
+export function validatedOrderGroup(group: OrderGroup): OrderGroup {
+  if (!(group instanceof OrderGroup)) {
+    throw new TypeError("Matching requires resolved OrderGroups from findOrders()");
+  }
+
+  const attestation = resolvedOrderGroups.get(group.order.cell);
+  if (attestation === undefined) {
+    throw new TypeError("OrderGroup was not produced by the order resolver");
+  }
+  if (
+    group.master.cell !== attestation.master ||
+    group.origin.cell !== attestation.origin
+  ) {
+    throw new TypeError("OrderGroup does not match its resolver attestation");
+  }
+  if (
+    canonicalCellBytes(group.master.cell) !== attestation.masterBytes ||
+    canonicalCellBytes(group.order.cell) !== attestation.orderBytes ||
+    canonicalCellBytes(group.origin.cell) !== attestation.originBytes
+  ) {
+    throw new Error("Resolved OrderGroup canonical cells were mutated");
+  }
+  assertCanonicalOrderWrapper(group.order);
+  assertCanonicalOrderWrapper(group.origin);
+
+  const validated = new OrderGroup(
+    MasterCell.from(group.master.cell),
+    OrderCell.mustFrom(group.order.cell),
+    OrderCell.mustFrom(group.origin.cell),
+  );
+  validated.validate();
+  return validated;
+}
+
+function canonicalCellBytes(cell: ccc.Cell): string {
+  return `${cell.outPoint.toHex()}:${cell.cellOutput.toHex()}:${cell.outputData}`;
+}
+
+function assertCanonicalOrderWrapper(order: OrderCell): void {
+  const canonical = OrderCell.mustFrom(order.cell);
+  if (
+    ccc.hexFrom(order.data.toBytes()) !== order.cell.outputData ||
+    order.ckbUnoccupied !== canonical.ckbUnoccupied ||
+    order.absTotal !== canonical.absTotal ||
+    order.absProgress !== canonical.absProgress
+  ) {
+    throw new Error("Resolved OrderGroup wrapper was mutated");
   }
 }
