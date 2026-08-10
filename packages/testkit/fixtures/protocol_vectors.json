@@ -1,66 +1,502 @@
 {
   "depositToIckb": [
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "100000000000", "expectedIckb": "100000000000", "note": "minimum deposit bound, 1000 CKB unoccupied at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "500000000000", "expectedIckb": "500000000000", "note": "mid-range 5000 CKB at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "10000000000000", "expectedIckb": "10000000000000", "note": "standard 100k CKB deposit at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "10000000000000", "expectedIckb": "10000000000000", "note": "soft-cap boundary: largest amount with no discount at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "10000000000001", "expectedIckb": "10000000000001", "note": "one shannon past the soft-cap boundary at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "25000000000000", "expectedIckb": "23500000000000", "note": "mid discount region, 250k CKB at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10000000000000000", "unoccupiedShannons": "100000000000000", "expectedIckb": "91000000000000", "note": "maximum deposit bound, 1M CKB unoccupied at genesis AR 1e16 (identity)"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "100000000000", "expectedIckb": "95238095238", "note": "minimum deposit bound, 1000 CKB unoccupied at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "500000000000", "expectedIckb": "476190476190", "note": "mid-range 5000 CKB at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "10000000000000", "expectedIckb": "9523809523809", "note": "standard 100k CKB deposit at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "10500000000001", "expectedIckb": "10000000000000", "note": "soft-cap boundary: largest amount with no discount at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "10500000000002", "expectedIckb": "10000000000001", "note": "one shannon past the soft-cap boundary at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "25000000000000", "expectedIckb": "22428571428571", "note": "mid discount region, 250k CKB at AR 1.05e16"},
-    {"arDecimal": "10500000000000000", "unoccupiedShannons": "100000000000000", "expectedIckb": "86714285714286", "note": "maximum deposit bound, 1M CKB unoccupied at AR 1.05e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "100000000000", "expectedIckb": "84745762711", "note": "minimum deposit bound, 1000 CKB unoccupied at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "500000000000", "expectedIckb": "423728813559", "note": "mid-range 5000 CKB at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "10000000000000", "expectedIckb": "8474576271186", "note": "standard 100k CKB deposit at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "11800000000001", "expectedIckb": "10000000000000", "note": "soft-cap boundary: largest amount with no discount at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "11800000000002", "expectedIckb": "10000000000001", "note": "one shannon past the soft-cap boundary at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "25000000000000", "expectedIckb": "20067796610170", "note": "mid discount region, 250k CKB at AR 1.18e16"},
-    {"arDecimal": "11800000000000000", "unoccupiedShannons": "100000000000000", "expectedIckb": "77271186440678", "note": "maximum deposit bound, 1M CKB unoccupied at AR 1.18e16"},
-    {"arDecimal": "10000000000000001", "unoccupiedShannons": "10000000000000", "expectedIckb": "9999999999999", "note": "AR one above genesis: floor drops one shannon"},
-    {"arDecimal": "20000000000000000", "unoccupiedShannons": "10000000000000", "expectedIckb": "5000000000000", "note": "doubled AR halves iCKB for standard deposit"},
-    {"arDecimal": "20000000000000000", "unoccupiedShannons": "100000000000000", "expectedIckb": "46000000000000", "note": "doubled AR, max deposit, discount region"}
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "100000000000",
+      "expectedIckb": "100000000000",
+      "note": "minimum deposit bound, 1000 CKB unoccupied at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "500000000000",
+      "expectedIckb": "500000000000",
+      "note": "mid-range 5000 CKB at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "10000000000000",
+      "note": "standard 100k CKB deposit at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "10000000000000",
+      "note": "soft-cap boundary: largest amount with no discount at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "10000000000001",
+      "expectedIckb": "10000000000001",
+      "note": "one shannon past the soft-cap boundary at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "25000000000000",
+      "expectedIckb": "23500000000000",
+      "note": "mid discount region, 250k CKB at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10000000000000000",
+      "unoccupiedShannons": "100000000000000",
+      "expectedIckb": "91000000000000",
+      "note": "maximum deposit bound, 1M CKB unoccupied at genesis AR 1e16 (identity)"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "100000000000",
+      "expectedIckb": "95238095238",
+      "note": "minimum deposit bound, 1000 CKB unoccupied at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "500000000000",
+      "expectedIckb": "476190476190",
+      "note": "mid-range 5000 CKB at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "9523809523809",
+      "note": "standard 100k CKB deposit at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "10500000000001",
+      "expectedIckb": "10000000000000",
+      "note": "soft-cap boundary: largest amount with no discount at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "10500000000002",
+      "expectedIckb": "10000000000001",
+      "note": "one shannon past the soft-cap boundary at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "25000000000000",
+      "expectedIckb": "22428571428571",
+      "note": "mid discount region, 250k CKB at AR 1.05e16"
+    },
+    {
+      "arDecimal": "10500000000000000",
+      "unoccupiedShannons": "100000000000000",
+      "expectedIckb": "86714285714286",
+      "note": "maximum deposit bound, 1M CKB unoccupied at AR 1.05e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "100000000000",
+      "expectedIckb": "84745762711",
+      "note": "minimum deposit bound, 1000 CKB unoccupied at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "500000000000",
+      "expectedIckb": "423728813559",
+      "note": "mid-range 5000 CKB at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "8474576271186",
+      "note": "standard 100k CKB deposit at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "11800000000001",
+      "expectedIckb": "10000000000000",
+      "note": "soft-cap boundary: largest amount with no discount at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "11800000000002",
+      "expectedIckb": "10000000000001",
+      "note": "one shannon past the soft-cap boundary at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "25000000000000",
+      "expectedIckb": "20067796610170",
+      "note": "mid discount region, 250k CKB at AR 1.18e16"
+    },
+    {
+      "arDecimal": "11800000000000000",
+      "unoccupiedShannons": "100000000000000",
+      "expectedIckb": "77271186440678",
+      "note": "maximum deposit bound, 1M CKB unoccupied at AR 1.18e16"
+    },
+    {
+      "arDecimal": "10000000000000001",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "9999999999999",
+      "note": "AR one above genesis: floor drops one shannon"
+    },
+    {
+      "arDecimal": "20000000000000000",
+      "unoccupiedShannons": "10000000000000",
+      "expectedIckb": "5000000000000",
+      "note": "doubled AR halves iCKB for standard deposit"
+    },
+    {
+      "arDecimal": "20000000000000000",
+      "unoccupiedShannons": "100000000000000",
+      "expectedIckb": "46000000000000",
+      "note": "doubled AR, max deposit, discount region"
+    }
   ],
   "limitOrderMatch": [
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "output": {"ckb": "8076", "udt": "4048", "ckbUnoccupied": "7976"}, "verdict": "ok", "note": "ckb2udt 2:1 equal-value partial match"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "output": {"ckb": "8076", "udt": "4047", "ckbUnoccupied": "7976"}, "verdict": "DecreasingValue", "note": "ckb2udt: one udt shannon short of equal value"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "output": {"ckb": "8076", "udt": "4049", "ckbUnoccupied": "7976"}, "verdict": "ok", "note": "ckb2udt: matcher overpays one udt shannon"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "output": {"ckb": "9076", "udt": "2048", "ckbUnoccupied": "8976"}, "verdict": "ok", "note": "ckb2udt: partial match exactly at ckb_min_match 1024"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "output": {"ckb": "9077", "udt": "2046", "ckbUnoccupied": "8977"}, "verdict": "InsufficientMatch", "note": "ckb2udt: one shannon below ckb_min_match"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "200", "udt": "0", "ckbUnoccupied": "100"}, "output": {"ckb": "100", "udt": "200", "ckbUnoccupied": "0"}, "verdict": "ok", "note": "ckb2udt: below-min final fill allowed when output is fulfilled"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "4048", "ckbUnoccupied": "0"}, "output": {"ckb": "10000", "udt": "4248", "ckbUnoccupied": "0"}, "verdict": "AttemptToChangeFulfilled", "note": "ckb2udt: value-preserving change of fulfilled order rejected"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "201", "udt": "0", "ckbUnoccupied": "1"}, "output": {"ckb": "200", "udt": "2", "ckbUnoccupied": "0"}, "verdict": "ok", "note": "ckb2udt: single-shannon completion of nearly fulfilled order"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "0"}, "output": {"ckb": "10000", "udt": "100", "ckbUnoccupied": "0"}, "verdict": "DecreasingValue", "note": "check order: DecreasingValue precedes AttemptToChangeFulfilled"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000"}, "output": {"ckb": "30100", "udt": "30000", "ckbUnoccupied": "30000"}, "verdict": "ok", "note": "udt2ckb 1:1 equal-value partial match"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000"}, "output": {"ckb": "30099", "udt": "30000", "ckbUnoccupied": "29999"}, "verdict": "DecreasingValue", "note": "udt2ckb: one ckb shannon short of equal value"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000"}, "output": {"ckb": "11124", "udt": "48976", "ckbUnoccupied": "11024"}, "verdict": "ok", "note": "udt2ckb: udt moved exactly the min-match equivalent 1024"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000"}, "output": {"ckb": "11123", "udt": "48977", "ckbUnoccupied": "11023"}, "verdict": "InsufficientMatch", "note": "udt2ckb: one udt below the min-match equivalent"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "200", "udt": "10", "ckbUnoccupied": "100"}, "output": {"ckb": "210", "udt": "0", "ckbUnoccupied": "110"}, "verdict": "ok", "note": "udt2ckb: below-min final fill allowed when udt is exhausted"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "10000", "udt": "0", "ckbUnoccupied": "9900"}, "output": {"ckb": "10100", "udt": "0", "ckbUnoccupied": "10000"}, "verdict": "InvalidMatch", "note": "fulfilled udt2ckb: udt=0 matches no direction arm, so InvalidMatch, never AttemptToChangeFulfilled"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 3, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1098", "udt": "4", "ckbUnoccupied": "998"}, "verdict": "InsufficientMatch", "note": "C1: moving 2 ckb is below ckb_min_match 8"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 3, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1092", "udt": "16", "ckbUnoccupied": "992"}, "verdict": "ok", "note": "C1: correct minimum, 8 ckb for 16 udt"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "2", "udtMul": "3"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "10000", "ckbUnoccupied": "10000"}, "output": {"ckb": "11125", "udt": "9317", "ckbUnoccupied": "11025"}, "verdict": "ok", "note": "asymmetric 2:3: 683 udt meets the min-match equivalent"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "2", "udtMul": "3"}, "ckbMinMatchLog": 10, "input": {"ckb": "10100", "udt": "10000", "ckbUnoccupied": "10000"}, "output": {"ckb": "11123", "udt": "9318", "ckbUnoccupied": "11023"}, "verdict": "InsufficientMatch", "note": "asymmetric 2:3: 682 udt is one below the min-match equivalent"},
-    {"ckbToUdt": {"ckbMul": "1000000007", "udtMul": "730000001"}, "udtToCkb": null, "ckbMinMatchLog": 0, "input": {"ckb": "10000000000", "udt": "0", "ckbUnoccupied": "9999999900"}, "output": {"ckb": "9269999999", "udt": "1000000007", "ckbUnoccupied": "9269999899"}, "verdict": "ok", "note": "large multipliers: exact equal value ckb2udt"},
-    {"ckbToUdt": {"ckbMul": "1000000007", "udtMul": "730000001"}, "udtToCkb": null, "ckbMinMatchLog": 0, "input": {"ckb": "10000000000", "udt": "0", "ckbUnoccupied": "9999999900"}, "output": {"ckb": "9269999999", "udt": "1000000006", "ckbUnoccupied": "9269999899"}, "verdict": "DecreasingValue", "note": "large multipliers: one udt shannon short"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "999983", "udtMul": "1299709"}, "ckbMinMatchLog": 0, "input": {"ckb": "10000000000", "udt": "2000000", "ckbUnoccupied": "9999999900"}, "output": {"ckb": "10001299709", "udt": "1000017", "ckbUnoccupied": "10001299609"}, "verdict": "ok", "note": "large multipliers: exact equal value udt2ckb"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1000", "udtMul": "1000000000000000"}, "ckbMinMatchLog": 0, "input": {"ckb": "10000", "udt": "330000000000000000000000000000000000000", "ckbUnoccupied": "9900"}, "output": {"ckb": "1000000000010000", "udt": "329999999999999999999999999999999999000", "ckbUnoccupied": "1000000000009900"}, "verdict": "ok", "note": "256-bit regime: value products exceed u128, C256 stays exact"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1000", "udtMul": "1000000000000000"}, "ckbMinMatchLog": 0, "input": {"ckb": "10000", "udt": "330000000000000000000000000000000000000", "ckbUnoccupied": "9900"}, "output": {"ckb": "1000000000009999", "udt": "329999999999999999999999999999999999000", "ckbUnoccupied": "1000000000009899"}, "verdict": "DecreasingValue", "note": "256-bit regime: one ckb shannon short"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 0, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1000", "udt": "150", "ckbUnoccupied": "900"}, "verdict": "DecreasingValue", "note": "dual ratio: ckb-decrease priced by ckb_to_udt 2:1, 150 udt insufficient"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 0, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1000", "udt": "200", "ckbUnoccupied": "900"}, "verdict": "ok", "note": "dual ratio: 200 udt satisfies ckb_to_udt 2:1"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 0, "input": {"ckb": "1100", "udt": "300", "ckbUnoccupied": "1000"}, "output": {"ckb": "1160", "udt": "200", "ckbUnoccupied": "1060"}, "verdict": "DecreasingValue", "note": "dual ratio: udt-decrease priced by udt_to_ckb 1:1, 60 ckb insufficient though 2:1 would pass"},
-    {"ckbToUdt": {"ckbMul": "2", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 0, "input": {"ckb": "1100", "udt": "300", "ckbUnoccupied": "1000"}, "output": {"ckb": "1200", "udt": "200", "ckbUnoccupied": "1100"}, "verdict": "ok", "note": "dual ratio: udt_to_ckb side exact equal value"},
-    {"ckbToUdt": null, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1000", "udt": "100", "ckbUnoccupied": "900"}, "verdict": "InvalidMatch", "note": "sell-ckb move against a udt2ckb-only order"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 10, "input": {"ckb": "1000", "udt": "100", "ckbUnoccupied": "900"}, "output": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "verdict": "InvalidMatch", "note": "sell-udt move against a ckb2udt-only order"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "1100", "udt": "100", "ckbUnoccupied": "1000"}, "output": {"ckb": "1100", "udt": "100", "ckbUnoccupied": "1000"}, "verdict": "InvalidMatch", "note": "no-op match rejected"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "1100", "udt": "100", "ckbUnoccupied": "1000"}, "output": {"ckb": "1000", "udt": "50", "ckbUnoccupied": "900"}, "verdict": "InvalidMatch", "note": "both sides decrease"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": {"ckbMul": "1", "udtMul": "1"}, "ckbMinMatchLog": 10, "input": {"ckb": "1000", "udt": "50", "ckbUnoccupied": "900"}, "output": {"ckb": "1100", "udt": "100", "ckbUnoccupied": "1000"}, "verdict": "InvalidMatch", "note": "both sides increase"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 64, "input": {"ckb": "2000", "udt": "0", "ckbUnoccupied": "1900"}, "output": {"ckb": "1000", "udt": "1000", "ckbUnoccupied": "900"}, "verdict": "InsufficientMatch", "note": "min-match log 64: any partial ckb2udt is insufficient"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 64, "input": {"ckb": "2000", "udt": "0", "ckbUnoccupied": "1900"}, "output": {"ckb": "100", "udt": "1900", "ckbUnoccupied": "0"}, "verdict": "ok", "note": "min-match log 64: completion bypasses the check"},
-    {"ckbToUdt": {"ckbMul": "1", "udtMul": "1"}, "udtToCkb": null, "ckbMinMatchLog": 0, "input": {"ckb": "1100", "udt": "0", "ckbUnoccupied": "1000"}, "output": {"ckb": "1099", "udt": "1", "ckbUnoccupied": "999"}, "verdict": "ok", "note": "min-match log 0: single-shannon partial match allowed"}
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "8076", "udt": "4048", "ckbUnoccupied": "7976" },
+      "verdict": "ok",
+      "note": "ckb2udt 2:1 equal-value partial match"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "8076", "udt": "4047", "ckbUnoccupied": "7976" },
+      "verdict": "DecreasingValue",
+      "note": "ckb2udt: one udt shannon short of equal value"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "8076", "udt": "4049", "ckbUnoccupied": "7976" },
+      "verdict": "ok",
+      "note": "ckb2udt: matcher overpays one udt shannon"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "9076", "udt": "2048", "ckbUnoccupied": "8976" },
+      "verdict": "ok",
+      "note": "ckb2udt: partial match exactly at ckb_min_match 1024"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "9077", "udt": "2046", "ckbUnoccupied": "8977" },
+      "verdict": "InsufficientMatch",
+      "note": "ckb2udt: one shannon below ckb_min_match"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "200", "udt": "0", "ckbUnoccupied": "100" },
+      "output": { "ckb": "100", "udt": "200", "ckbUnoccupied": "0" },
+      "verdict": "ok",
+      "note": "ckb2udt: below-min final fill allowed when output is fulfilled"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "4048", "ckbUnoccupied": "0" },
+      "output": { "ckb": "10000", "udt": "4248", "ckbUnoccupied": "0" },
+      "verdict": "AttemptToChangeFulfilled",
+      "note": "ckb2udt: value-preserving change of fulfilled order rejected"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "201", "udt": "0", "ckbUnoccupied": "1" },
+      "output": { "ckb": "200", "udt": "2", "ckbUnoccupied": "0" },
+      "verdict": "ok",
+      "note": "ckb2udt: single-shannon completion of nearly fulfilled order"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "0" },
+      "output": { "ckb": "10000", "udt": "100", "ckbUnoccupied": "0" },
+      "verdict": "DecreasingValue",
+      "note": "check order: DecreasingValue precedes AttemptToChangeFulfilled"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "30100", "udt": "30000", "ckbUnoccupied": "30000" },
+      "verdict": "ok",
+      "note": "udt2ckb 1:1 equal-value partial match"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "30099", "udt": "30000", "ckbUnoccupied": "29999" },
+      "verdict": "DecreasingValue",
+      "note": "udt2ckb: one ckb shannon short of equal value"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "11124", "udt": "48976", "ckbUnoccupied": "11024" },
+      "verdict": "ok",
+      "note": "udt2ckb: udt moved exactly the min-match equivalent 1024"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "50000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "11123", "udt": "48977", "ckbUnoccupied": "11023" },
+      "verdict": "InsufficientMatch",
+      "note": "udt2ckb: one udt below the min-match equivalent"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "200", "udt": "10", "ckbUnoccupied": "100" },
+      "output": { "ckb": "210", "udt": "0", "ckbUnoccupied": "110" },
+      "verdict": "ok",
+      "note": "udt2ckb: below-min final fill allowed when udt is exhausted"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10000", "udt": "0", "ckbUnoccupied": "9900" },
+      "output": { "ckb": "10100", "udt": "0", "ckbUnoccupied": "10000" },
+      "verdict": "InvalidMatch",
+      "note": "fulfilled udt2ckb: udt=0 matches no direction arm, so InvalidMatch, never AttemptToChangeFulfilled"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 3,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1098", "udt": "4", "ckbUnoccupied": "998" },
+      "verdict": "InsufficientMatch",
+      "note": "C1: moving 2 ckb is below ckb_min_match 8"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 3,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1092", "udt": "16", "ckbUnoccupied": "992" },
+      "verdict": "ok",
+      "note": "C1: correct minimum, 8 ckb for 16 udt"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "2", "udtMul": "3" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "10000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "11125", "udt": "9317", "ckbUnoccupied": "11025" },
+      "verdict": "ok",
+      "note": "asymmetric 2:3: 683 udt meets the min-match equivalent"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "2", "udtMul": "3" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "10100", "udt": "10000", "ckbUnoccupied": "10000" },
+      "output": { "ckb": "11123", "udt": "9318", "ckbUnoccupied": "11023" },
+      "verdict": "InsufficientMatch",
+      "note": "asymmetric 2:3: 682 udt is one below the min-match equivalent"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1000000007", "udtMul": "730000001" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "10000000000", "udt": "0", "ckbUnoccupied": "9999999900" },
+      "output": {
+        "ckb": "9269999999",
+        "udt": "1000000007",
+        "ckbUnoccupied": "9269999899"
+      },
+      "verdict": "ok",
+      "note": "large multipliers: exact equal value ckb2udt"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1000000007", "udtMul": "730000001" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "10000000000", "udt": "0", "ckbUnoccupied": "9999999900" },
+      "output": {
+        "ckb": "9269999999",
+        "udt": "1000000006",
+        "ckbUnoccupied": "9269999899"
+      },
+      "verdict": "DecreasingValue",
+      "note": "large multipliers: one udt shannon short"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "999983", "udtMul": "1299709" },
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "10000000000", "udt": "2000000", "ckbUnoccupied": "9999999900" },
+      "output": {
+        "ckb": "10001299709",
+        "udt": "1000017",
+        "ckbUnoccupied": "10001299609"
+      },
+      "verdict": "ok",
+      "note": "large multipliers: exact equal value udt2ckb"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1000", "udtMul": "1000000000000000" },
+      "ckbMinMatchLog": 0,
+      "input": {
+        "ckb": "10000",
+        "udt": "330000000000000000000000000000000000000",
+        "ckbUnoccupied": "9900"
+      },
+      "output": {
+        "ckb": "1000000000010000",
+        "udt": "329999999999999999999999999999999999000",
+        "ckbUnoccupied": "1000000000009900"
+      },
+      "verdict": "ok",
+      "note": "256-bit regime: value products exceed u128, C256 stays exact"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1000", "udtMul": "1000000000000000" },
+      "ckbMinMatchLog": 0,
+      "input": {
+        "ckb": "10000",
+        "udt": "330000000000000000000000000000000000000",
+        "ckbUnoccupied": "9900"
+      },
+      "output": {
+        "ckb": "1000000000009999",
+        "udt": "329999999999999999999999999999999999000",
+        "ckbUnoccupied": "1000000000009899"
+      },
+      "verdict": "DecreasingValue",
+      "note": "256-bit regime: one ckb shannon short"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1000", "udt": "150", "ckbUnoccupied": "900" },
+      "verdict": "DecreasingValue",
+      "note": "dual ratio: ckb-decrease priced by ckb_to_udt 2:1, 150 udt insufficient"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1000", "udt": "200", "ckbUnoccupied": "900" },
+      "verdict": "ok",
+      "note": "dual ratio: 200 udt satisfies ckb_to_udt 2:1"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "1100", "udt": "300", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1160", "udt": "200", "ckbUnoccupied": "1060" },
+      "verdict": "DecreasingValue",
+      "note": "dual ratio: udt-decrease priced by udt_to_ckb 1:1, 60 ckb insufficient though 2:1 would pass"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "2", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "1100", "udt": "300", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1200", "udt": "200", "ckbUnoccupied": "1100" },
+      "verdict": "ok",
+      "note": "dual ratio: udt_to_ckb side exact equal value"
+    },
+    {
+      "ckbToUdt": null,
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1000", "udt": "100", "ckbUnoccupied": "900" },
+      "verdict": "InvalidMatch",
+      "note": "sell-ckb move against a udt2ckb-only order"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "1000", "udt": "100", "ckbUnoccupied": "900" },
+      "output": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "verdict": "InvalidMatch",
+      "note": "sell-udt move against a ckb2udt-only order"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "1100", "udt": "100", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1100", "udt": "100", "ckbUnoccupied": "1000" },
+      "verdict": "InvalidMatch",
+      "note": "no-op match rejected"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "1100", "udt": "100", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1000", "udt": "50", "ckbUnoccupied": "900" },
+      "verdict": "InvalidMatch",
+      "note": "both sides decrease"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": { "ckbMul": "1", "udtMul": "1" },
+      "ckbMinMatchLog": 10,
+      "input": { "ckb": "1000", "udt": "50", "ckbUnoccupied": "900" },
+      "output": { "ckb": "1100", "udt": "100", "ckbUnoccupied": "1000" },
+      "verdict": "InvalidMatch",
+      "note": "both sides increase"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 64,
+      "input": { "ckb": "2000", "udt": "0", "ckbUnoccupied": "1900" },
+      "output": { "ckb": "1000", "udt": "1000", "ckbUnoccupied": "900" },
+      "verdict": "InsufficientMatch",
+      "note": "min-match log 64: any partial ckb2udt is insufficient"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 64,
+      "input": { "ckb": "2000", "udt": "0", "ckbUnoccupied": "1900" },
+      "output": { "ckb": "100", "udt": "1900", "ckbUnoccupied": "0" },
+      "verdict": "ok",
+      "note": "min-match log 64: completion bypasses the check"
+    },
+    {
+      "ckbToUdt": { "ckbMul": "1", "udtMul": "1" },
+      "udtToCkb": null,
+      "ckbMinMatchLog": 0,
+      "input": { "ckb": "1100", "udt": "0", "ckbUnoccupied": "1000" },
+      "output": { "ckb": "1099", "udt": "1", "ckbUnoccupied": "999" },
+      "verdict": "ok",
+      "note": "min-match log 0: single-shannon partial match allowed"
+    }
   ]
 }
