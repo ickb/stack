@@ -59,7 +59,10 @@ function rows(value: unknown, key: string): Array<Record<string, unknown>> {
   return value[key].filter(isRecord);
 }
 
-function ratioField(record: Record<string, unknown>, key: string): OracleRatio | undefined {
+function ratioField(
+  record: Record<string, unknown>,
+  key: string,
+): OracleRatio | undefined {
   const value = record[key];
   if (value === null || value === undefined) {
     return undefined;
@@ -90,11 +93,13 @@ function logField(record: Record<string, unknown>): number {
   return value;
 }
 
-const vectorsPath = path.join(import.meta.dirname, "..", "fixtures", "protocol_vectors.json");
-const parsed: unknown = JSON.parse(
-   
-  await readFile(vectorsPath, "utf8"),
+const vectorsPath = path.join(
+  import.meta.dirname,
+  "..",
+  "fixtures",
+  "protocol_vectors.json",
 );
+const parsed: unknown = JSON.parse(await readFile(vectorsPath, "utf8"));
 
 const depositRows: DepositRow[] = rows(parsed, "depositToIckb").map((row) => ({
   arDecimal: bigintField(row, "arDecimal"),

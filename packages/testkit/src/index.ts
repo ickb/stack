@@ -8,6 +8,7 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "./bytes.ts";
 
 export { byte32FromByte } from "./bytes.ts";
+export { ChainState, chainState } from "./chain_state.ts";
 export {
   AR_0,
   ckbMinMatchFromLog,
@@ -19,6 +20,7 @@ export {
   type OracleVerdict,
   type OrderState,
 } from "./contract_oracle.ts";
+export { FakeClient, FakeClientError, type FakeClientOverrides } from "./fake_client.ts";
 
 type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
