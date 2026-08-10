@@ -1,12 +1,9 @@
-import { validateMatch, type OracleInfo, type OrderState } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { OrderMatcher } from "../../src/matching/order_matcher.ts";
-import type { Match } from "../../src/matching/match_types.ts";
+import type { OrderMatcher } from "../../src/matching/order_matcher.ts";
 import type { OrderCell } from "../../src/model/cells.ts";
 import { Info } from "../../src/model/info.ts";
 import { Ratio } from "../../src/model/ratio.ts";
-import { resolvedOrderGroup } from "./support/order_match_helpers.ts";
-import { makeOrderCell } from "./support/order_order_helpers.ts";
+import { adjudicate, mustMatcher, orderWith } from "./support/order_oracle_helpers.ts";
 
 /**
  * Adjudicates every partial the matcher emits against the contract oracle: the
@@ -27,59 +24,6 @@ function infoFrom(options: {
       options.udtToCkb === undefined ? Ratio.empty() : Ratio.from(options.udtToCkb),
     ckbMinMatchLog: options.ckbMinMatchLog,
   });
-}
-
-function oracleInfoFrom(info: Info): OracleInfo {
-  const ratio = (r: Ratio): { ckbMul: bigint; udtMul: bigint } | undefined =>
-    r.isEmpty() ? undefined : { ckbMul: r.ckbScale, udtMul: r.udtScale };
-  return {
-    ckbToUdt: ratio(info.ckbToUdt),
-    udtToCkb: ratio(info.udtToCkb),
-    ckbMinMatch: info.getCkbMinMatch(),
-  };
-}
-
-/** Adjudicates one emitted match; returns the verdicts (one per partial). */
-function adjudicate(order: OrderCell, match: Match): string[] {
-  const occupied = order.ckbValue - order.ckbUnoccupied;
-  const input: OrderState = {
-    ckb: order.ckbValue,
-    udt: order.udtValue,
-    ckbUnoccupied: order.ckbUnoccupied,
-  };
-  return match.partials.map((partial) => {
-    const output: OrderState = {
-      ckb: partial.ckbOut,
-      udt: partial.udtOut,
-      ckbUnoccupied: partial.ckbOut - occupied,
-    };
-    return validateMatch(input, output, oracleInfoFrom(order.data.info));
-  });
-}
-
-function orderWith(options: {
-  info: Info;
-  ckbUnoccupied: bigint;
-  udtValue: bigint;
-}): OrderCell {
-  return makeOrderCell({
-    ckbUnoccupied: options.ckbUnoccupied,
-    udtValue: options.udtValue,
-    info: options.info,
-    master: { type: "absolute", value: { txHash: `0x${"ab".repeat(32)}`, index: 0n } },
-    outPoint: { txHash: `0x${"cd".repeat(32)}`, index: 0n },
-  });
-}
-
-function mustMatcher(
-  order: OrderCell,
-  isCkb2Udt: boolean,
-): OrderMatcher {
-  const matcher = OrderMatcher.from(resolvedOrderGroup(order), isCkb2Udt, 0n);
-  if (matcher === undefined) {
-    throw new Error("Order is not matchable in the requested direction");
-  }
-  return matcher;
 }
 
 /** Sweeps allowances 0..=80, adjudicating every emitted partial; returns the count. */
@@ -114,7 +58,10 @@ describe("order matcher versus contract oracle", () => {
   });
 
   it("pins the C1 counterexample: min 8 CKB at 2:1 requires 16 UDT, not 4", () => {
-    const info = infoFrom({ ckbToUdt: { ckbScale: 2n, udtScale: 1n }, ckbMinMatchLog: 3 });
+    const info = infoFrom({
+      ckbToUdt: { ckbScale: 2n, udtScale: 1n },
+      ckbMinMatchLog: 3,
+    });
     const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
     const matcher = mustMatcher(order, true);
 
@@ -129,7 +76,10 @@ describe("order matcher versus contract oracle", () => {
   });
 
   it("is not over-restrictive in the inverse regime: min 8 CKB at 1:2 needs only 4 UDT", () => {
-    const info = infoFrom({ ckbToUdt: { ckbScale: 1n, udtScale: 2n }, ckbMinMatchLog: 3 });
+    const info = infoFrom({
+      ckbToUdt: { ckbScale: 1n, udtScale: 2n },
+      ckbMinMatchLog: 3,
+    });
     const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
     const matcher = mustMatcher(order, true);
 
@@ -141,7 +91,10 @@ describe("order matcher versus contract oracle", () => {
   });
 
   it("full fills bypass the minimum-match rule, as on-chain", () => {
-    const info = infoFrom({ ckbToUdt: { ckbScale: 2n, udtScale: 1n }, ckbMinMatchLog: 6 });
+    const info = infoFrom({
+      ckbToUdt: { ckbScale: 2n, udtScale: 1n },
+      ckbMinMatchLog: 6,
+    });
     const order = orderWith({ info, ckbUnoccupied: 7n, udtValue: 0n });
     const matcher = mustMatcher(order, true);
 
