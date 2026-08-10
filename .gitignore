@@ -6,7 +6,7 @@
 **/dist/
 **/temp/*.api.md
 **/*.tsbuildinfo
-log/
+/log/
 apps/*/log_*.json
 apps/sampler/rate.csv
 
