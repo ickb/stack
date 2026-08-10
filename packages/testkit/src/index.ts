@@ -8,6 +8,17 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "./bytes.ts";
 
 export { byte32FromByte } from "./bytes.ts";
+export {
+  AR_0,
+  ckbMinMatchFromLog,
+  depositToIckb,
+  ICKB_SOFT_CAP,
+  validateMatch,
+  type OracleInfo,
+  type OracleRatio,
+  type OracleVerdict,
+  type OrderState,
+} from "./contract_oracle.ts";
 
 type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],

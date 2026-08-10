@@ -134,6 +134,16 @@ export class OrderMatcher {
       return { ckbDelta: 0n, udtDelta: 0n, partials: [] };
     }
 
+    // limit_order entry.rs:116 — unless the output is fulfilled, the plain CKB delta
+    // must reach ckb_min_match; authoritative over the bMinMatch allowance pre-gate.
+    if (
+      this.isCkb2Udt &&
+      aOut !== this.aMin &&
+      this.aIn < aOut + this.group.order.data.info.getCkbMinMatch()
+    ) {
+      return { ckbDelta: 0n, udtDelta: 0n, partials: [] };
+    }
+
     return this.create(aOut, bOut);
   }
 
@@ -206,7 +216,10 @@ function orderMatcherValues(
       aIn: order.ckbValue,
       bIn: order.udtValue,
       aMin: order.cell.cellOutput.capacity - order.ckbUnoccupied,
-      bMinMatch: (order.data.info.getCkbMinMatch() * bScale + aScale - 1n) / aScale,
+      // The contract's ckb2udt minimum is a plain CKB delta (limit_order entry.rs:116);
+      // a value-conserving partial moving u UDT moves u*udtScale/ckbScale CKB, so the
+      // UDT-denominated floor is ceil(minMatch * ckbScale / udtScale) = m*aScale/bScale.
+      bMinMatch: (order.data.info.getCkbMinMatch() * aScale + bScale - 1n) / bScale,
       aMiningFee: ckbMiningFee,
       bMiningFee: 0n,
     };
