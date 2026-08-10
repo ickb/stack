@@ -45,6 +45,7 @@ function punycodeGuardLoad(originalLoad: ModuleLoad, requests: string[]): Module
   };
 }
 
+// eslint-disable-next-line sonarjs/assertions-in-tests -- Asserts via node:assert deepEqual on the collected punycode-require list; sonarjs does not track it through the loop.
 void test("workspace packages import directly from TypeScript source", async () => {
   for (const modulePath of [
     "packages/utils/src/index.ts",
@@ -81,6 +82,7 @@ void test("native source imports do not load deprecated builtin punycode", async
   assert.deepEqual(requests, []);
 });
 
+// eslint-disable-next-line sonarjs/assertions-in-tests -- Asserts via node:assert deepEqual on the collected punycode-require list; sonarjs does not track it through the loop.
 void test("Node app entrypoints import directly from TypeScript source", async () => {
   for (const modulePath of [
     "apps/bot/src/index.ts",

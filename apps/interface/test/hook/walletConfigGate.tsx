@@ -18,7 +18,9 @@ describe("hook-based wallet config gate", () => {
     signer.replaceCallback?.();
     const firstConfig = await walletConfigQueryOptions().queryFn();
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).toHaveBeenCalledTimes(1);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).toHaveBeenCalledWith();
     expect(firstConfig.address).toBe("ckt1recommended");
     expect(firstConfig.accountLocks).toHaveLength(2);
@@ -31,6 +33,7 @@ describe("hook-based wallet config gate", () => {
       WalletConfigPendingView,
     );
     await walletConfigQueryOptions().queryFn();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(connectedSigner.connect).not.toHaveBeenCalled();
 
     resetHooks();
