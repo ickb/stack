@@ -22,5 +22,8 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
   }
 }
