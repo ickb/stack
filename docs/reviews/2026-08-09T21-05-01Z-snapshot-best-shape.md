@@ -7,7 +7,7 @@
 
 ## 1. Headline
 
-Rebuilt from scratch with today's knowledge, the repo lands at **~50-55k TS lines total (src+test) versus ~107k today** — roughly half — while *adding* capability (deployed-code congruence check, contract-oracle adjudication, sd_notify readiness) and keeping every fund-safety invariant. The extra distance below the addendum's ~65k projection comes from product-level cuts: the bot's ring policy, the validation coverage ledger, tester stimulus diversity, react-query and its cache choreography, four npm publish surfaces' worth of scaffolding, and test suites written fresh against typed seams instead of trimmed.
+Rebuilt from scratch with today's knowledge, the repo lands at **~50-55k TS lines total (src+test) versus ~107k today** — roughly half — while _adding_ capability (deployed-code congruence check, contract-oracle adjudication, sd_notify readiness) and keeping every fund-safety invariant. The extra distance below the addendum's ~65k projection comes from product-level cuts: the bot's ring policy, the validation coverage ledger, tester stimulus diversity, react-query and its cache choreography, four npm publish surfaces' worth of scaffolding, and test suites written fresh against typed seams instead of trimmed.
 
 ## 2. Consensus findings (adopted; no adjudication needed)
 
@@ -15,7 +15,7 @@ Rebuilt from scratch with today's knowledge, the repo lands at **~50-55k TS line
 
 Protocol health is designed to be emergent (anyone can match, anyone exits through anyone's deposit, the 10% oversize discount incentivizes matching; a user-side low-liquidity exit fallback is specified). The justified kernel is "match profitably, don't go broke," plus a thin liveness courtesy:
 
-- **The ring is over-engineered ~20×.** Its honest kernel — "is the current maturity window thin, and don't consume its last deposit" — is ~30 stateless lines (a deposit made now can only ever cover the window *now*; segmentation/density/anchors/requiredLiveDeposits deliver nothing beyond that, and the spec itself admits the public-state control loop is attacker-steerable). Replace with the one-window check (lookahead W ≈ 22 epochs); delete segments, anchors, surplus filter, `requiredLiveDeposits` plumbing into core, both cross-layer invariant banners, and the ring diagnostics mirror (~600 lines → ~30).
+- **The ring is over-engineered ~20×.** Its honest kernel — "is the current maturity window thin, and don't consume its last deposit" — is ~30 stateless lines (a deposit made now can only ever cover the window _now_; segmentation/density/anchors/requiredLiveDeposits deliver nothing beyond that, and the spec itself admits the public-state control loop is attacker-steerable). Replace with the one-window check (lookahead W ≈ 22 epochs); delete segments, anchors, surplus filter, `requiredLiveDeposits` plumbing into core, both cross-layer invariant banners, and the ring diagnostics mirror (~600 lines → ~30).
 - **Best-fit → greedy** (resolves addendum call 2, both zero-base reviewers concur): with protocol-incentivized uniform deposit sizes, greedy is within dust of optimal; fixed iCKB float replaces the dynamic useful-floors machinery.
 - **Minimal policy ≈ 200 lines vs ~1,150 today.** Kept verbatim, untouchable: the reserve floor + projected post-tx guard + recovery exception (fund-stuck), match-value-beats-fee (fund-loss), 21/20 shutdown (fund-loss), consensus output caps (reclassified as SDK mechanism).
 - **Monitoring replaces policy**: four metrics already computed in the decision transcript (max forward maturity gap, ready-in-window count, allowance-rejection streaks, leftover excess after withdrawal) become alerts instead of control loops.
@@ -53,19 +53,19 @@ Protocol health is designed to be emergent (anyone can match, anyone exits throu
 ## 3. Conflicts requiring maintainer adjudication
 
 **A. Published package count — 5 (decided) vs 4 (CCC reviewer) vs 1 (architect).**
-The CCC reviewer's 4-package case is the best-evidenced middle: fold **dao** into core as `@ickb/core/dao` (zero consumers anywhere outside core/sdk; CCC is eating its generic thesis upstream; iCKB-free boundary stays depcruise-enforced so extraction remains a `git mv`), keep **order** standalone (the one real differentiated generic artifact), keep **core/sdk** separate (the mechanical sdk→core-public rule), keep **utils** while order is published (order needs its 6 symbols; folding forces order→core, violating the generic tier). The architect's 1-package shape maximizes simplicity but buries the generic libs' npm identity inside a protocol-named package — directly against the stated generic-reuse goal. *Recommendation: 4 — `utils`, `order`, `core` (+`/dao` subpath), `sdk`; revisit utils→3 only after upstreaming lands.*
+The CCC reviewer's 4-package case is the best-evidenced middle: fold **dao** into core as `@ickb/core/dao` (zero consumers anywhere outside core/sdk; CCC is eating its generic thesis upstream; iCKB-free boundary stays depcruise-enforced so extraction remains a `git mv`), keep **order** standalone (the one real differentiated generic artifact), keep **core/sdk** separate (the mechanical sdk→core-public rule), keep **utils** while order is published (order needs its 6 symbols; folding forces order→core, violating the generic tier). The architect's 1-package shape maximizes simplicity but buries the generic libs' npm identity inside a protocol-named package — directly against the stated generic-reuse goal. _Recommendation: 4 — `utils`, `order`, `core` (+`/dao` subpath), `sdk`; revisit utils→3 only after upstreaming lands._
 
 **B. Coverage ledger — keep (architect) vs kill (validation zero-base).**
-The validation reviewer brought consumer evidence: `summary.json` is read only by the harness's own scripts — no CI lane, no external tool, no reviewer pipeline; the "external loops" of the design intent are the scripts the settled plan already absorbs. The architect asserted "it is the product" without a consumer check. Classification (what makes pass/fail meaningful on a shared testnet) is kept by both. *Recommendation: kill the ledger/scenario-chooser/target-outcome contracts (~450-600 lines + the stimulus-diversity tail), keep per-run classification + summary as operator artifact.*
+The validation reviewer brought consumer evidence: `summary.json` is read only by the harness's own scripts — no CI lane, no external tool, no reviewer pipeline; the "external loops" of the design intent are the scripts the settled plan already absorbs. The architect asserted "it is the product" without a consumer check. Classification (what makes pass/fail meaningful on a shared testnet) is kept by both. _Recommendation: kill the ledger/scenario-chooser/target-outcome contracts (~450-600 lines + the stimulus-diversity tail), keep per-run classification + summary as operator artifact._
 
 **C. Ring — one-window kernel vs none.**
-Both are defensible per the policy reviewer; the one-window check is so cheap (~30 lines) that it dominates "none". *Recommendation: one-window check + gap alert.*
+Both are defensible per the policy reviewer; the one-window check is so cheap (~30 lines) that it dominates "none". _Recommendation: one-window check + gap alert._
 
 **D. Changesets — keep (decisions §2) vs single CHANGELOG (architect).**
-With lockstep and (post-A) four packages, changesets still provides PR-time changelog discipline at near-zero cost; a single CHANGELOG is simpler but hand-maintained. *Recommendation: keep changesets; revisit if A lands on 1 package.*
+With lockstep and (post-A) four packages, changesets still provides PR-time changelog discipline at near-zero cost; a single CHANGELOG is simpler but hand-maintained. _Recommendation: keep changesets; revisit if A lands on 1 package._
 
 **E. Bot policy depth — minimal (~200 lines) vs current-minus-ring.**
-The minimal policy trades whale-order capture latency and exact excess-withdrawal optimality for ~950 lines and two invariant banners. The reviewer's risk table shows nothing fund-loss-class is admitted. *Recommendation: adopt minimal; the four alert metrics are the safety net; policy can grow back selectively if profit data demands it.*
+The minimal policy trades whale-order capture latency and exact excess-withdrawal optimality for ~950 lines and two invariant banners. The reviewer's risk table shows nothing fund-loss-class is admitted. _Recommendation: adopt minimal; the four alert metrics are the safety net; policy can grow back selectively if profit data demands it._
 
 ## 4. Consolidated must-never-cut list (all five reviewers)
 
@@ -78,14 +78,14 @@ The minimal policy trades whale-order capture latency and exact excess-withdrawa
 
 ## 5. Net effect on the plan
 
-| Layer | Decisions/addendum plan | Best shape |
-|---|---|---|
-| Published packages | 5, ~10,400 src | 4 (pending A), ~8,700 src, −600 CCC dupes, 9-symbol floor guaranteed, upstreaming pipeline |
-| Bot (app+ops) | ~3,600 + 750 sh | ~2,700-3,000 + 750 sh (minimal policy, ring kernel) |
-| Validation | ~6,600-7,700 | ~4,300-5,300 (ledger dead, smoke+watch product, +40-line congruence) |
-| Interface | ~3,800 | ~1,560 src + ~2,000 test |
-| Workspaces / configs / root scripts | 11 / ~40 / ~12 | 6 / ~30 / ~8 |
-| **Repo total (src+test)** | **~65k** | **~50-55k** |
+| Layer                               | Decisions/addendum plan | Best shape                                                                                 |
+| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------ |
+| Published packages                  | 5, ~10,400 src          | 4 (pending A), ~8,700 src, −600 CCC dupes, 9-symbol floor guaranteed, upstreaming pipeline |
+| Bot (app+ops)                       | ~3,600 + 750 sh         | ~2,700-3,000 + 750 sh (minimal policy, ring kernel)                                        |
+| Validation                          | ~6,600-7,700            | ~4,300-5,300 (ledger dead, smoke+watch product, +40-line congruence)                       |
+| Interface                           | ~3,800                  | ~1,560 src + ~2,000 test                                                                   |
+| Workspaces / configs / root scripts | 11 / ~40 / ~12          | 6 / ~30 / ~8                                                                               |
+| **Repo total (src+test)**           | **~65k**                | **~50-55k**                                                                                |
 
 ## 6. Open items after this pass
 

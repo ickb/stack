@@ -39,7 +39,13 @@ The 3-level inheritance chain (`IckbSdkBase → IckbSdkConversion → IckbSdkL1 
 
 ```ts
 type EstimateResult =
-  | { ok: true; output: bigint; ckbFee: bigint; maturity: MaturityEstimate; notice?: ConversionNotice }
+  | {
+      ok: true;
+      output: bigint;
+      ckbFee: bigint;
+      maturity: MaturityEstimate;
+      notice?: ConversionNotice;
+    }
   | { ok: false; reason: "unrepresentable" | "amount-too-small" };
 ```
 
@@ -78,8 +84,8 @@ The three historical money bugs are type-system failures: C1 hand-inlined a rati
 ```ts
 type Rounding = "floor" | "ceil";
 class Ratio {
-  udtFromCkb(ckb: Ckb, rounding: Rounding): Udt;  // the ONLY amount·ckbScale/udtScale
-  ckbFromUdt(udt: Udt, rounding: Rounding): Ckb;  // the ONLY amount·udtScale/ckbScale
+  udtFromCkb(ckb: Ckb, rounding: Rounding): Udt; // the ONLY amount·ckbScale/udtScale
+  ckbFromUdt(udt: Udt, rounding: Rounding): Ckb; // the ONLY amount·udtScale/ckbScale
 }
 // order_matcher.ts:209 becomes, un-invertibly:
 const bMinMatch = ratio.udtFromCkb(info.getCkbMinMatch(), "ceil");
@@ -192,13 +198,24 @@ Keep the verified-good policy layer intact; redesign the shell around it:
 
 ```ts
 type IterationState =
-  | { phase: "read" } | { phase: "decide"; state: BotState }
-  | { phase: "build"; decision: Decision } | { phase: "send"; tx: ccc.Transaction }
+  | { phase: "read" }
+  | { phase: "decide"; state: BotState }
+  | { phase: "build"; decision: Decision }
+  | { phase: "send"; tx: ccc.Transaction }
   | { phase: "confirm"; sent: SentTransaction; windowsUsed: number }
   | { phase: "settle"; outcome: IterationOutcome };
 
-interface ConfirmationPolicy { windowMs: number; intervalMs: number; maxWindows: number | "unbounded"; }
-type StopReason = "max_iterations" | "low_capital" | "retry_budget_exhausted" | "non_retryable" | "signal";
+interface ConfirmationPolicy {
+  windowMs: number;
+  intervalMs: number;
+  maxWindows: number | "unbounded";
+}
+type StopReason =
+  | "max_iterations"
+  | "low_capital"
+  | "retry_budget_exhausted"
+  | "non_retryable"
+  | "signal";
 async function runBotLoop(ports: BotPorts, policy: BotPolicy): Promise<StopReason>;
 ```
 
@@ -206,14 +223,14 @@ The confirmation budget becomes declared data instead of an inline `while` (reso
 
 ### R2. Five process layers → two
 
-| Boundary today | Target |
-|---|---|
-| dynamic-loop → supervisor-loop (OS process, stdout-regex contract) | **library call** — both merge into `apps/validation` as modes of one loop; `OutcomeKind` becomes importable, deleting the regex contract, the token-pattern re-validation (`loop/summary.ts:131-213`), and the exit-code re-mapping table |
-| supervisor-loop → supervisor (OS process, `stdio: "ignore"`, reads `summary.json`) | **library call** returning a typed `SupervisionResult`; `summary.json` remains as an operator artifact, not the API |
-| stimulus → supervisor (already in-process, but round-trips `summary.json`) | typed return value; deletes the second summary re-parser (`liveBotStimulusTesterRun.ts:88-148`) |
-| supervisor → preflight (3 independent spawn copies) | **library call** (it is repo-local TypeScript reading the same chain state) |
-| supervisor → bot / tester actors | **stays an OS process** — genuine crash isolation, separate signing configs, and the production launcher parity argument all hold |
-| launcher → bot | **stays** — independent production process, unchanged |
+| Boundary today                                                                     | Target                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dynamic-loop → supervisor-loop (OS process, stdout-regex contract)                 | **library call** — both merge into `apps/validation` as modes of one loop; `OutcomeKind` becomes importable, deleting the regex contract, the token-pattern re-validation (`loop/summary.ts:131-213`), and the exit-code re-mapping table |
+| supervisor-loop → supervisor (OS process, `stdio: "ignore"`, reads `summary.json`) | **library call** returning a typed `SupervisionResult`; `summary.json` remains as an operator artifact, not the API                                                                                                                       |
+| stimulus → supervisor (already in-process, but round-trips `summary.json`)         | typed return value; deletes the second summary re-parser (`liveBotStimulusTesterRun.ts:88-148`)                                                                                                                                           |
+| supervisor → preflight (3 independent spawn copies)                                | **library call** (it is repo-local TypeScript reading the same chain state)                                                                                                                                                               |
+| supervisor → bot / tester actors                                                   | **stays an OS process** — genuine crash isolation, separate signing configs, and the production launcher parity argument all hold                                                                                                         |
+| launcher → bot                                                                     | **stays** — independent production process, unchanged                                                                                                                                                                                     |
 
 Result: the only spawn boundaries left are the two that isolate keys and crashes. The `stimulus/` parallel mini-framework dissolves into the supervisor proper (shared constants/utils per E2); the 9 arg parsers become one `node:util` `parseArgs` wrapper with per-command option tables (~70% reduction measured against the two 530-line hand parsers alone). Rough size arithmetic from the anatomy map: ~3.1k lines of loop scripts + ~3.4k stimulus + ~1k parsers + duplicated helper families collapse into the merged supervisor; a ~40-50% reduction of the ~19k-line non-test harness (validation src + supervisor scripts + launcher/incident) is realistic without touching the fail-closed classification core, which stays as-is.
 
@@ -223,7 +240,12 @@ The config catalog found: 5 paths to set an RPC URL (validated by 4 near-identic
 
 ```ts
 // @ickb/node-utils/config — ONE schema, ONE parser, layered resolution
-resolveConfig(schema, { defaults, file: readJson(path), env: mapEnv(prefix), flags: parseArgs(spec) })
+resolveConfig(schema, {
+  defaults,
+  file: readJson(path),
+  env: mapEnv(prefix),
+  flags: parseArgs(spec),
+});
 // precedence: defaults < file < env < flags; unknown keys rejected at every layer
 ```
 

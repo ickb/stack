@@ -60,7 +60,7 @@
   1. Real-header fixture library (sampler dumps raw mainnet header bytes) alongside fabricated headers — fabricated for edge sweeps (cap boundaries, maturity edges the real chain can't produce on demand; scripts cannot distinguish fake headers from real ones since they trust consensus-verified fields), real for encoding truth.
   2. The real `dao.c` system script binary included in executed groups, so phase-2 `since`/epoch rules are checked by the actual consensus script.
   - Added requirements (all dev/CI): pinned prebuilt ckb-debugger binary (checksummed, cached; tests skip-if-absent locally, required in CI); the 4 contract ELFs + `dao.c` committed as sha256-pinned fixtures; ~150-line mock-tx serializer; header fixture file.
-- Live-testnet validation demotes to a scheduled smoke run (wallets, fee market, mempool — what no local layer can fake). The residual gap the debugger layer cannot cover — live header *selection* against a real node — stays with the smoke run.
+- Live-testnet validation demotes to a scheduled smoke run (wallets, fee market, mempool — what no local layer can fake). The residual gap the debugger layer cannot cover — live header _selection_ against a real node — stays with the smoke run.
 
 ### 7. Coverage under the retained 100% mandate
 

@@ -15,7 +15,7 @@ Authoritative record for the rewrite. Consolidates and, where stated, amends the
 ## 2. Adjudicated decisions (user-confirmed)
 
 - **A**: one package, single entry, as above.
-- **B**: coverage ledger, scenario auto-chooser, and target-outcome *contracts* killed. Kept: per-run classification, `summary.json`, incident files (with `suggestedNextAction`), and a `--target-outcome` **summary echo** (requested vs observed, no ledger machinery). Supersession chain: addendum listed the ledger as keep; best-shape overturned with consumer evidence; user confirmed after the LLM-operator reframe.
+- **B**: coverage ledger, scenario auto-chooser, and target-outcome _contracts_ killed. Kept: per-run classification, `summary.json`, incident files (with `suggestedNextAction`), and a `--target-outcome` **summary echo** (requested vs observed, no ledger machinery). Supersession chain: addendum listed the ledger as keep; best-shape overturned with consumer evidence; user confirmed after the LLM-operator reframe.
 - **C**: ring policy → one-window kernel (~30 lines): don't deposit into an already-thick maturity window; don't consume a thin window's last ready deposit; window W ≈ 22 epochs; gap metric alerts.
 - **D**: single CHANGELOG (consequence of A).
 - **E**: minimal bot policy (~200 lines): match-value-beats-fee, reserve floor + projected post-tx guard + recovery exception, 21/20 shutdown, fixed iCKB float, ring kernel, greedy withdrawals under consensus caps. Monitoring replaces deleted policy — see the alert table (§6).
@@ -47,27 +47,27 @@ Invariants to preserve verbatim in the send-path rewrite: the explicit `DEFAULT_
 
 CCC divergences to add to the documented-reasons list: `TransportFallback` shared-index race under concurrency; `TransportHttp` abort-timer leak on failed-primary; WebSocket default transports keeping finite processes alive — the real reasons behind `fallbacks: []`.
 
-Matcher rules that must survive the rewrite: work budget charged per visited pair *before* feasibility filtering; marginal partial fee computed on the **prepared** serialized size (one empty witness entry, +8 bytes, per preceding order input).
+Matcher rules that must survive the rewrite: work budget charged per visited pair _before_ feasibility filtering; marginal partial fee computed on the **prepared** serialized size (one empty witness entry, +8 bytes, per preceding order input).
 
 Audit reconciliation (only record of per-ID status): **ICKB-017 is a stale false positive** (its repro mirrors old control flow; the audit's `pnpm test:deps` green is untrustworthy until corrected). Cycle-19 table: open-then = 001, 018, 020, 022, 023, 025; fixed/stale = 007, 009-012, 021, 024; deliberate/policy/latent = 002-005, 008, 013-016. Post-rewrite: 025 mooted by greedy-only; 002 rides the CCC-upstream watch. **The ckb-integration-audit catalog is non-Git local** (`/var/home/user/Projects/ckb-integration-audit/` — REPORT.md, DEPENDENCIES.md, BEHAVIORS.md, SOURCES.md, candidates.md, findings/ickb-stack/, IDs through ICKB-025); the baseline tag does not preserve it — this record is the pointer. Evidence pins: CCC 1.17.0 = `a74017fc99e00c0e3cbd2a45afe150908b8ab734`; deployed `ickb_logic` = `454cfa966052a621c4e8b67001718c29ee8191a2`.
 
 ## 5. CCC-audit constraint (blocking, mapping in flight)
 
-The integration audit documents **59 confirmed CCC defects** against CCC pin `8a19abcd`. The full mapping is **delivered**: see `2026-08-10T00-12-04Z-final-decisions-appendix-ccc-audit.md` (constraints table + 12 amendments, all adopted). Headlines: installed CCC 1.17.0 *predates* the audit pin (all 59 defects present; the "fixed on master" items are not in 1.17.0) — maintainer has authorized updating CCC and other deps to latest published versions under the pnpm minimum-release-age rules, which supersedes the floor question once the update lands at ≥ `8a19abcd`; DAO claim-epoch math never migrates to CCC (bug 057 verified in 1.17.0); ICKB-017 is superseded by ICKB-022 (bounded reconcile-by-hash + `-1107`→accepted mapping, bot and interface); `snapshot()` gains a tip fence; sdk/bot own the pending-spend set (CCC cache is a read accelerator only); debugger `dao.c`/system-script fixtures pin to deployed genesis binaries (`ckb-system-scripts@f25c5ae` — repo HEAD removed the 64-output cap); config gains a `maxFeeRate` knob. Phase-2 send/wait/cache is unblocked under these constraints.
+The integration audit documents **59 confirmed CCC defects** against CCC pin `8a19abcd`. The full mapping is **delivered**: see `2026-08-10T00-12-04Z-final-decisions-appendix-ccc-audit.md` (constraints table + 12 amendments, all adopted). Headlines: installed CCC 1.17.0 _predates_ the audit pin (all 59 defects present; the "fixed on master" items are not in 1.17.0) — maintainer has authorized updating CCC and other deps to latest published versions under the pnpm minimum-release-age rules, which supersedes the floor question once the update lands at ≥ `8a19abcd`; DAO claim-epoch math never migrates to CCC (bug 057 verified in 1.17.0); ICKB-017 is superseded by ICKB-022 (bounded reconcile-by-hash + `-1107`→accepted mapping, bot and interface); `snapshot()` gains a tip fence; sdk/bot own the pending-spend set (CCC cache is a read accelerator only); debugger `dao.c`/system-script fixtures pin to deployed genesis binaries (`ckb-system-scripts@f25c5ae` — repo HEAD removed the 64-output cap); config gains a `maxFeeRate` knob. Phase-2 send/wait/cache is unblocked under these constraints.
 
 ## 6. Alert table (watch leg owns; bot emits in the decision transcript)
 
-| Signal | Source | Alert condition |
-|---|---|---|
-| Exit code 2 / nonzero exit | systemd | any |
-| Missing `bot.iteration.started` | events | > 2× sleep interval |
-| `confirmation_timeout` / `post_broadcast_unresolved` | classification | any |
-| Stale tip | preflight/state | no growth over threshold |
-| Max forward maturity gap | pool scan | > W′ |
-| Ready-in-window count | pool scan | 0 while withdrawals pending |
-| Allowance-rejection streak | match reasons | ≥ N consecutive |
-| Leftover excess iCKB after withdrawal loop | balances | > threshold across loops |
-| Secret-leak sentinel | logs | any |
+| Signal                                               | Source          | Alert condition             |
+| ---------------------------------------------------- | --------------- | --------------------------- |
+| Exit code 2 / nonzero exit                           | systemd         | any                         |
+| Missing `bot.iteration.started`                      | events          | > 2× sleep interval         |
+| `confirmation_timeout` / `post_broadcast_unresolved` | classification  | any                         |
+| Stale tip                                            | preflight/state | no growth over threshold    |
+| Max forward maturity gap                             | pool scan       | > W′                        |
+| Ready-in-window count                                | pool scan       | 0 while withdrawals pending |
+| Allowance-rejection streak                           | match reasons   | ≥ N consecutive             |
+| Leftover excess iCKB after withdrawal loop           | balances        | > threshold across loops    |
+| Secret-leak sentinel                                 | logs            | any                         |
 
 ## 7. Fund-safety keep-list (verbatim; inviolable)
 
