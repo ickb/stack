@@ -51,7 +51,7 @@ export default function Form({
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
       {nativeBalanceDisplay(a, isFrozen, selectMax)}
-      <span className="text-2xl text-ickb-text">{a.name}</span>
+      <span className="text-2xl text-ickb-text normal-case">{a.name}</span>
       {lockedBalanceDisplay(a)}
       <input
         placeholder="0"
@@ -85,13 +85,15 @@ export default function Form({
       <span
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}
-        className={`col-span-3 max-w-full text-center text-ickb-action ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-3xl text-ellipsis whitespace-nowrap"}`}
+        className={`col-span-3 max-w-full text-center text-ickb-action ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal normal-case" : "overflow-hidden text-3xl text-ellipsis whitespace-nowrap"}`}
         title={amountQuote}
       >
         ⏳{amountQuote}
       </span>
       {nativeBalanceDisplay(b, isFrozen, selectReverseMax)}
-      <span className="text-2xl whitespace-nowrap text-ickb-text">{b.name}</span>
+      <span className="text-2xl whitespace-nowrap text-ickb-text normal-case">
+        {b.name}
+      </span>
       {lockedBalanceDisplay(b)}
     </div>
   );

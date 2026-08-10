@@ -29,7 +29,7 @@ export function unscaledTimeLabels(minX: number, maxX: number): JSX.Element[] {
     return (
       <span
         key={["time", label, String(value)].join(":")}
-        className={`absolute text-base whitespace-nowrap text-ickb-muted ${timeLabelClass(anchor)}`}
+        className={`absolute text-sm whitespace-nowrap text-ickb-muted sm:text-base ${timeLabelClass(anchor)}`}
         style={{
           left: `${String((x / chartWidth) * 100)}%`,
           top: `${String((y / chartHeight) * 100)}%`,
@@ -76,7 +76,7 @@ export function unscaledValueLabel({
   return (
     <span
       key={["label", String(index), String(value)].join(":")}
-      className="absolute right-0 translate-y-[-50%] text-base whitespace-nowrap text-ickb-muted"
+      className="absolute right-0 translate-y-[-50%] text-sm whitespace-nowrap text-ickb-muted sm:text-base"
       style={{ top: `${String((y / chartHeight) * 100)}%` }}
     >
       {label}

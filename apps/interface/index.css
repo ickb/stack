@@ -11,6 +11,11 @@
   --color-ickb-panel: oklch(15.5% 0.007 286);
 }
 
+/* The interface ships a single dark theme; render native controls and scrollbars to match. */
+html {
+  color-scheme: dark;
+}
+
 /* Scale up hit targets on high resolution mobile devices. */
 @media (min-resolution: 200dpi) {
   html {
