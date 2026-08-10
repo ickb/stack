@@ -40,7 +40,7 @@ Defects to fix in the rewrite (none covered by C1-C10):
 3. **ICKB-018 — waived by maintainer (2026-08-10)**: no credentialed-path RPC providers in use; pathname in endpoint identity is not a leak here. Revisit only if a path-keyed provider is ever adopted.
 4. **ICKB-020 — terminal rejection clears the whole client cache**, wiping unrelated transactions' marks; must be scoped before any CCC upstreaming of `waitTransaction`.
 5. **ICKB-008 — `waitTransaction` confirmations>0 reorg race** (status and tip read separately, no inclusion re-check): fix in the `SentTransaction.wait` rewrite; it is published wallet API.
-6. **ICKB-022 remainder — pre-admission ambiguity recovery**: retain signed bytes with the submission owner; reconcile bounded; rebroadcast identical bytes when admission stays unknown; never rebuild/discard identity until terminal reconciliation. Interface counterpart (ICKB-014): the indefinite confirmation retry with frozen preview is an unmade product decision — carried to open items.
+6. **ICKB-022 remainder — pre-admission ambiguity recovery**: retain signed bytes with the submission owner; reconcile bounded; rebroadcast identical bytes when admission stays unknown; never rebuild/discard identity until terminal reconciliation. Interface counterpart (ICKB-014): bounded confirmation is adopted on the interface path too (appendix amendment 3); only the post-deadline presentation remains open (see open items).
 7. **ICKB-019 — sampler earliest-block search assumes monotone timestamps** (consensus permits decreases): fix or rename result approximate; matters for the fixtures mode.
 
 Invariants to preserve verbatim in the send-path rewrite: the explicit `DEFAULT_MAX_FEE_RATE` guard is load-bearing (`sendTransactionNoCache` bypasses CCC's ceiling); locally derived hash is authoritative (mismatch throws before cache marking, unresolved not rebuild-ready); post-acceptance cache-mark failure is swallowed so node acceptance is never reported as failure.
@@ -86,13 +86,13 @@ Because this is in-place (not a fresh tree), two blueprint pins re-bind: **ESLin
 2. **Phase 1 — test bed**: golden vectors, FakeClient, api-extractor entity-pattern gate, treeshake probe.
 3. **Phase 2 — SDK reshape**: Snapshot, result unions, brands, B4 entities, IckbError; send/wait/cache proceeds under the delivered §5/appendix constraints. **Phase-2 exit gate: ckb-debugger execution against all pinned binaries (amendment §2); prerequisite for signing paths.**
 4. **Phase 3 — package merge + workspace/tooling collapse** (after Phase 0-1 gates green).
-5. **Phase 4 — runtime**: bot state machine + minimal policy + kernel; validation four-leg harness; events-contract module; config system; systemd-native ops (coordinated `launches.ndjson` change).
+5. **Phase 4 — runtime**: bot state machine + minimal policy + kernel; validation four-leg harness (incl. journal digester); events-contract module; config system; systemd-native ops via the staged cutover of amendments §3-4.
 6. **Phase 5 — depth**: ckb-debugger layer + fixtures, mutation spot-checks, soak journal digester, live smoke wiring.
 
 ## 9. Open items
 
 - npm version + registry handling (blocks publish only).
-- ICKB-014 interface product decision: bounded vs indefinite confirmation UX for the pending transaction.
+- ICKB-014: post-deadline interface presentation only (what the user sees/can do when the adopted bounded wait expires).
 - CCC-audit mapping: delivered (appendix); constraints live in §5 + appendix. Nothing blocked.
 - Correct the integration-audit catalog (ICKB-017 stale repro) so its gate is trustworthy again.
 - api-extractor × entity pattern check (Phase-1 gate).
