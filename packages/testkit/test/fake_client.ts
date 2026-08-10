@@ -336,7 +336,7 @@ describe("FakeClient scripting and identity", () => {
   });
 });
 
-describe("FakeClient override dispatch", () => {
+describe("FakeClient unscripted and hash-lookup overrides", () => {
   it("throws unscripted for block-by-hash and delegates its header override", async () => {
     const bare = new FakeClient(chainState());
     await expect(bare.getBlockByHashNoCache(byte32FromByte("77"))).rejects.toThrow(
@@ -360,7 +360,9 @@ describe("FakeClient override dispatch", () => {
     const served = await client.getHeaderByHashNoCache(byte32FromByte("31"));
     expect(served?.number).toBe(31n);
   });
+});
 
+describe("FakeClient override dispatch", () => {
   it("dispatches every remaining member override", async () => {
     const header = headerLike({ number: 21n, hash: byte32FromByte("21") });
     const block = ccc.ClientBlock.from({
