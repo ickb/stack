@@ -213,5 +213,11 @@
     "owner": null,
     "kind": "value",
     "note": "Phase-2 B4 entity base (core ReceiptData); joins the enforced floor when implemented."
+  },
+  {
+    "name": "IckbErrorCode",
+    "owner": null,
+    "kind": "type",
+    "note": "Phase-2 ratified name for the IckbError machine-readable code union (review F-014); joins the enforced floor with IckbError."
   }
 ]

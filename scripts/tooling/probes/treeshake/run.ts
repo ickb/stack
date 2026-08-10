@@ -1,6 +1,7 @@
 import { glob, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 /**
  * Treeshake probe (final decisions record, amendment 12).
@@ -33,23 +34,21 @@ function report(message: string): void {
   console.error(`treeshake probe: ${message}`);
 }
 
-/** Extracts the full text of every `static {}` block, brace-aware. */
+/**
+ * Extracts the full text of every `static {}` block via the TypeScript AST,
+ * which lexes strings, comments, templates, and regexes correctly — a
+ * hand-rolled brace counter is truncated by `const text = "}";`.
+ */
 function staticBlocks(source: string): string[] {
+  const file = ts.createSourceFile("probe.ts", source, ts.ScriptTarget.Latest, true);
   const blocks: string[] = [];
-  for (const opener of source.matchAll(/\bstatic\s*\{/gu)) {
-    let depth = 1;
-    let index = opener.index + opener[0].length;
-    while (index < source.length && depth > 0) {
-      const character = source[index];
-      if (character === "{") {
-        depth += 1;
-      } else if (character === "}") {
-        depth -= 1;
-      }
-      index += 1;
+  const visit = (node: ts.Node): void => {
+    if (ts.isClassStaticBlockDeclaration(node)) {
+      blocks.push(node.getFullText(file));
     }
-    blocks.push(source.slice(opener.index, index));
-  }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return blocks;
 }
 
@@ -60,11 +59,21 @@ const nestedControl = `class C {
   }
 }`;
 
+const lexicalControl = `class C {
+  static {
+    const text = "}";
+    /* @__PURE__ */ register(C, text);
+  }
+}`;
+
 async function scanForPureInStaticBlocks(): Promise<void> {
-  // Negative control: the scanner must see through nested braces; a naive
-  // first-closing-brace regex misses this annotation.
-  if (staticBlocks(nestedControl).every((block) => !block.includes("@__PURE__"))) {
-    fail("scanner negative control failed: nested-brace PURE annotation not detected");
+  // Negative controls: nested braces, and a string containing a closing
+  // brace — the latter truncates any lexically-naive brace counter before
+  // the annotation.
+  for (const control of [nestedControl, lexicalControl]) {
+    if (staticBlocks(control).every((block) => !block.includes("@__PURE__"))) {
+      fail("scanner negative control failed: PURE annotation not detected");
+    }
   }
 
   const offenders: string[] = [];
@@ -82,7 +91,9 @@ async function scanForPureInStaticBlocks(): Promise<void> {
       `@__PURE__ inside static {} blocks (runtime-breakage hazard): ${offenders.join(", ")}`,
     );
   }
-  report("no @__PURE__ inside static blocks (brace-aware scan, negative control passed)");
+  report(
+    "no @__PURE__ inside static blocks (TypeScript AST scan; nested-brace and lexical negative controls passed)",
+  );
 }
 
 const hazardCodec = `const registry = new Set();
