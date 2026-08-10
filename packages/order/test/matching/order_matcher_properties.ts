@@ -52,13 +52,23 @@ const ratioArb = fc.oneof(
 
 const allowanceArb = fc.bigInt({ min: 0n, max: MAX_AMOUNT });
 
-/** Orders guaranteed matchable in the requested direction (ckbMiningFee 0n). */
-function orderArb(isCkb2Udt: boolean): fc.Arbitrary<OrderCell> {
+/** Mining fees the matcher reserves, plus a pinned nonzero constant case. */
+const feeArb = fc.oneof(
+  { arbitrary: fc.bigInt({ min: 0n, max: 10n ** 7n }), weight: 3 },
+  { arbitrary: fc.constant(100_000n), weight: 1 },
+);
+
+/** Orders guaranteed matchable in the requested direction at the given fee. */
+function orderArb(isCkb2Udt: boolean, ckbMiningFee = 0n): fc.Arbitrary<OrderCell> {
   return fc
     .record({
       ratio: ratioArb,
       ckbMinMatchLog: fc.integer({ min: 0, max: 20 }),
-      ckbUnoccupied: fc.bigInt({ min: isCkb2Udt ? 1n : 0n, max: MAX_AMOUNT }),
+      // The ckb2udt admission check is aIn > aMin + fee, i.e. ckbUnoccupied > fee.
+      ckbUnoccupied: fc.bigInt({
+        min: isCkb2Udt ? ckbMiningFee + 1n : 0n,
+        max: MAX_AMOUNT,
+      }),
       udtValue: fc.bigInt({ min: isCkb2Udt ? 0n : 1n, max: MAX_AMOUNT }),
     })
     .map(({ ratio, ckbMinMatchLog, ckbUnoccupied, udtValue }) =>
@@ -68,6 +78,18 @@ function orderArb(isCkb2Udt: boolean): fc.Arbitrary<OrderCell> {
         udtValue,
       }),
     );
+}
+
+/** Fee plus an order that stays matchable under it. */
+function orderAndFeeArb(
+  isCkb2Udt: boolean,
+): fc.Arbitrary<{ order: OrderCell; ckbMiningFee: bigint }> {
+  return feeArb.chain((ckbMiningFee) =>
+    fc.record({
+      order: orderArb(isCkb2Udt, ckbMiningFee),
+      ckbMiningFee: fc.constant(ckbMiningFee),
+    }),
+  );
 }
 
 /** Amount of the b-side asset the matcher's caller pays into the match. */
@@ -82,15 +104,17 @@ const DIRECTIONS = [
 
 describe("order matcher properties versus contract oracle", () => {
   it.each(DIRECTIONS)(
-    "$name: every emitted partial satisfies the contract",
+    "$name: every emitted partial satisfies the contract at any ckbMiningFee",
     ({ isCkb2Udt }) => {
+      // The fee is a matcher-side margin the contract never sees, so contract
+      // validity of emitted partials must be fee-invariant.
       fc.assert(
         fc.property(
-          orderArb(isCkb2Udt),
+          orderAndFeeArb(isCkb2Udt),
           allowanceArb,
           fc.bigInt({ min: 0n, max: 3n }),
-          (order, allowance, boundaryOffset) => {
-            const matcher = mustMatcher(order, isCkb2Udt);
+          ({ order, ckbMiningFee }, allowance, boundaryOffset) => {
+            const matcher = mustMatcher(order, isCkb2Udt, ckbMiningFee);
             // Probe the drawn allowance plus the min-match boundary band, which
             // uniform draws almost never hit and where defect C1 lived.
             for (const bAllowance of [allowance, matcher.bMinMatch + boundaryOffset]) {
@@ -166,4 +190,71 @@ describe("order matcher properties versus contract oracle", () => {
       );
     },
   );
+});
+
+describe("ckb2udt entry.rs:116 post-guard reachability", () => {
+  it("admitted partial-band allowances clear the plain-CKB minimum at any fee", () => {
+    // The post-guard fires only when a partial moves less than ckbMinMatch
+    // plain CKB. This property samples that the bMinMatch pre-gate already
+    // excludes that for every admitted allowance, at any fee; the
+    // deterministic test below carries the actual unreachability argument.
+    fc.assert(
+      fc.property(orderAndFeeArb(true), allowanceArb, ({ order, ckbMiningFee }, pick) => {
+        const matcher = mustMatcher(order, true, ckbMiningFee);
+        const band = matcher.bMaxMatch - matcher.bMinMatch;
+        if (band === 0n) {
+          return; // Only full fills exist; the partial branch is empty.
+        }
+        // Probe the exact bMinMatch edge plus a drawn in-band allowance.
+        for (const bAllowance of [matcher.bMinMatch, matcher.bMinMatch + (pick % band)]) {
+          const match = matcher.match(bAllowance);
+          expect(match.partials).toHaveLength(1);
+          expect(match.ckbDelta).toBeGreaterThanOrEqual(order.data.info.getCkbMinMatch());
+        }
+      }),
+    );
+  });
+
+  // Attempted witness: an allowance the bMinMatch pre-gate admits but the
+  // post-guard rejects. None exists, at any fee: ckbMiningFee never enters
+  // aOut, bMinMatch, or bMaxMatch (only matcher admission and real-ratio
+  // ordering), and in the partial branch the plain CKB delta is
+  // floor(bAllowance * udtScale / ckbScale), which is at least ckbMinMatch
+  // exactly when bAllowance >= ceil(ckbMinMatch * ckbScale / udtScale) =
+  // bMinMatch. The pre-gate is the guard's own bound applied earlier, so the
+  // post-guard is dead code. This test pins that equivalence on a concrete
+  // fee-bearing order by sweeping every allowance up to the full fill.
+  it("the pre-gate rejects exactly the partials the guard protects against", () => {
+    const info = Info.create(true, { ckbScale: 2n, udtScale: 1n }, 3); // min 8 CKB
+    const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
+    const matcher = mustMatcher(order, true, 1_000n);
+    expect(matcher.bMinMatch).toBe(16n); // ceil(8 * 2 / 1)
+
+    // Below the gate the matcher emits nothing, and rightly so: the would-be
+    // partial (aOut via the matcher's own nonDecreasing rounding) moves
+    // 1..7 CKB and the contract rejects it as an insufficient match.
+    for (let bAllowance = 2n; bAllowance < 16n; bAllowance += 1n) {
+      expect(matcher.match(bAllowance).partials).toHaveLength(0);
+      const bOut = matcher.bIn + bAllowance;
+      const aOut =
+        (matcher.bScale * (matcher.bIn - bOut) +
+          matcher.aScale * (matcher.aIn + 1n) -
+          1n) /
+        matcher.aScale;
+      const wouldBe: Match = {
+        ckbDelta: matcher.aIn - aOut,
+        udtDelta: matcher.bIn - bOut,
+        partials: [{ group: matcher.group, ckbOut: aOut, udtOut: bOut }],
+      };
+      expect(adjudicate(order, wouldBe)).toEqual(["InsufficientMatch"]);
+    }
+
+    // Past the gate the guard never fires: the whole partial band emits, and
+    // every partial moves at least the 8-CKB minimum the guard checks for.
+    for (let bAllowance = 16n; bAllowance < matcher.bMaxMatch; bAllowance += 1n) {
+      const match = matcher.match(bAllowance);
+      expect(match.partials).toHaveLength(1);
+      expect(match.ckbDelta).toBeGreaterThanOrEqual(8n);
+    }
+  });
 });

@@ -52,8 +52,12 @@ export function orderWith(options: {
 }
 
 /** Builds a matcher for the requested direction, throwing when unmatchable. */
-export function mustMatcher(order: OrderCell, isCkb2Udt: boolean): OrderMatcher {
-  const matcher = OrderMatcher.from(resolvedOrderGroup(order), isCkb2Udt, 0n);
+export function mustMatcher(
+  order: OrderCell,
+  isCkb2Udt: boolean,
+  ckbMiningFee = 0n,
+): OrderMatcher {
+  const matcher = OrderMatcher.from(resolvedOrderGroup(order), isCkb2Udt, ckbMiningFee);
   if (matcher === undefined) {
     throw new Error("Order is not matchable in the requested direction");
   }

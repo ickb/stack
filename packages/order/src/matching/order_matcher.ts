@@ -134,8 +134,10 @@ export class OrderMatcher {
       return { ckbDelta: 0n, udtDelta: 0n, partials: [] };
     }
 
-    // limit_order entry.rs:116 — unless the output is fulfilled, the plain CKB delta
-    // must reach ckb_min_match; authoritative over the bMinMatch allowance pre-gate.
+    // limit_order entry.rs:116 mirrored as defense-in-depth: for matchers built via
+    // from(), the bMinMatch pre-gate is provably equivalent (floor(u*b/a) >= m iff
+    // u >= ceil(m*a/b), fee-invariant — see order_matcher_properties.ts reachability
+    // suite), so this fires only on direct-constructor misconstruction.
     if (
       this.isCkb2Udt &&
       aOut !== this.aMin &&
