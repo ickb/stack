@@ -27,6 +27,7 @@
     "test:ci": "vitest run && node scripts/run-node-tests.ts",
     "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
     "clean:deep": "pnpm clean && rm -fr node_modules packages/*/node_modules apps/*/node_modules",
+    "probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts",
     "live:generate-config": "node scripts/live/generate-config.ts",
     "live:check:source": "tsgo --noEmit -p tsconfig.json",
     "live:config-from-env": "node scripts/live/config-from-env.ts",

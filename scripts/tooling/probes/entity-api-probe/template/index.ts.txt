@@ -1,0 +1,65 @@
+/**
+ * B4 entity-pattern probe: one real CCC entity published through a named,
+ * annotated base so declaration emit and api-extractor stay clean. The
+ * `EntityBase` helper lives in a separate module, mirroring the amendment §7
+ * target shape (shared helper + per-entity base + entity).
+ *
+ * @packageDocumentation
+ */
+
+import { ccc, mol } from "@ckb-ccc/core";
+import type { EntityBase } from "./entity_base.ts";
+
+export type { EntityBase } from "./entity_base.ts";
+
+/**
+ * Permissive input shape of the probe entity.
+ *
+ * @public
+ */
+export interface ProbeDataLike {
+  /** The probed value. */
+  value: ccc.NumLike;
+}
+
+/**
+ * Exported, annotated per-entity base (the B4 recipe's `XBase`).
+ *
+ * @public
+ */
+export const ProbeDataBase: EntityBase<ProbeDataLike, ProbeData> = ccc.Entity.Base<
+  ProbeDataLike,
+  ProbeData
+>();
+
+/**
+ * Probe entity extending the named base (the B4 recipe's `X`).
+ *
+ * @public
+ */
+export class ProbeData extends ProbeDataBase {
+  static {
+    ccc.codec(mol.struct({ value: mol.Uint64LE }))(this);
+  }
+
+  /** The probed value. */
+  public value: ccc.Num;
+
+  constructor(value: ccc.Num) {
+    super();
+    this.value = value;
+  }
+
+  /**
+   * Creates a probe entity from the provided data.
+   *
+   * @param data - The data to create the probe entity from.
+   * @returns A probe entity instance.
+   */
+  public static override from(data: ProbeDataLike): ProbeData {
+    if (data instanceof ProbeData) {
+      return data;
+    }
+    return new ProbeData(ccc.numFrom(data.value));
+  }
+}

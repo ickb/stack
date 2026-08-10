@@ -1,0 +1,107 @@
+[
+  { "name": "OrderManager", "owner": "order", "kind": "value" },
+  { "name": "Match", "owner": "order", "kind": "type" },
+  { "name": "OrderGroup", "owner": "order", "kind": "value" },
+  { "name": "OrderCell", "owner": "order", "kind": "value" },
+  { "name": "Info", "owner": "order", "kind": "value" },
+  { "name": "Ratio", "owner": "order", "kind": "value" },
+  { "name": "convert", "owner": "core", "kind": "value" },
+  { "name": "ickbExchangeRatio", "owner": "core", "kind": "value" },
+  { "name": "ICKB_DEPOSIT_CAP", "owner": "core", "kind": "value" },
+  { "name": "receiptPhase2Capacity", "owner": "core", "kind": "value" },
+  {
+    "name": "receiptCellFrom",
+    "owner": "core",
+    "kind": "value",
+    "expectedMissing": true,
+    "note": "Declared in packages/core/src/cells.ts; known missing from the core barrel."
+  },
+  {
+    "name": "ickbValue",
+    "owner": "core",
+    "kind": "value",
+    "expectedMissing": true,
+    "note": "Declared in packages/core/src/udt.ts; known missing from the core barrel."
+  },
+  { "name": "IckbDepositCell", "owner": "core", "kind": "type" },
+  { "name": "ReceiptCell", "owner": "core", "kind": "type" },
+  { "name": "WithdrawalGroup", "owner": "core", "kind": "value" },
+  { "name": "unique", "owner": "utils", "kind": "value" },
+  { "name": "LogicManager", "owner": "core", "kind": "value" },
+  { "name": "OwnedOwnerManager", "owner": "core", "kind": "value" },
+  { "name": "DaoManager", "owner": "dao", "kind": "value" },
+  {
+    "name": "MAX_DIRECT_DEPOSITS",
+    "owner": "sdk",
+    "kind": "value",
+    "expectedMissing": true,
+    "note": "Declared in packages/sdk/src/client/sdk_types.ts; not in the sdk barrel."
+  },
+  {
+    "name": "CKB_RESERVE",
+    "owner": "bot",
+    "kind": "value",
+    "expectedMissing": true,
+    "note": "The record's named bot reserve constant; declared in packages/bot/src/policy/constants.ts; not in the bot barrel."
+  },
+  {
+    "name": "availableOutputSlots",
+    "owner": null,
+    "kind": "value",
+    "note": "Not implemented in any current package; DAO-domain output-slot helper."
+  },
+  {
+    "name": "DAO_OUTPUT_LIMIT",
+    "owner": null,
+    "kind": "value",
+    "note": "packages/dao currently exports DAO_OUTPUT_LIMIT; the floor name does not exist yet."
+  },
+  {
+    "name": "DEFAULT_ORDER_FEE",
+    "owner": null,
+    "kind": "value",
+    "note": "Not implemented in any current package."
+  },
+  {
+    "name": "DEFAULT_ORDER_FEE_BASE",
+    "owner": null,
+    "kind": "value",
+    "note": "Not implemented in any current package."
+  },
+  {
+    "name": "snapshot",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 Snapshot API root export."
+  },
+  {
+    "name": "SentTransaction",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 Snapshot API root export."
+  },
+  {
+    "name": "quoteConversion",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 Snapshot API root export."
+  },
+  {
+    "name": "completeTransaction",
+    "owner": null,
+    "kind": "value",
+    "note": "Exists today only as an IckbSdk method; the root-level export lands with the Phase-2 Snapshot API."
+  },
+  {
+    "name": "IckbError",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 error type; its code union joins the floor when its name is fixed."
+  },
+  {
+    "name": "EntityBase",
+    "owner": null,
+    "kind": "type",
+    "note": "B4 shared helper (amendment §7); lands in shared/ with the Phase-2 entities. Per-entity <X>Base consts join the floor then."
+  }
+]

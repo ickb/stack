@@ -1,0 +1,10 @@
+import { ccc } from "@ckb-ccc/core";
+
+/**
+ * Named alias for the anonymous class returned by `ccc.Entity.Base`, so the
+ * per-entity base const can be annotated with an exportable type. The real
+ * helper lives in `shared/` after the Phase-3 merge (amendment §7).
+ *
+ * @public
+ */
+export type EntityBase<Like, Type> = ReturnType<typeof ccc.Entity.Base<Like, Type>>;
