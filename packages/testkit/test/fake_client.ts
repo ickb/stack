@@ -337,6 +337,30 @@ describe("FakeClient scripting and identity", () => {
 });
 
 describe("FakeClient override dispatch", () => {
+  it("throws unscripted for block-by-hash and delegates its header override", async () => {
+    const bare = new FakeClient(chainState());
+    await expect(bare.getBlockByHashNoCache(byte32FromByte("77"))).rejects.toThrow(
+      "getBlockByHashNoCache is not scripted",
+    );
+    const header = ccc.ClientBlockHeader.from(
+      headerLike({ number: 31n, hash: byte32FromByte("31") }),
+    );
+    const block = ccc.ClientBlock.from({
+      header,
+      proposals: [],
+      transactions: [],
+      uncles: [],
+    });
+    const client = new FakeClient(chainState(), {
+      getBlockByHashNoCache: scripted(block),
+      getHeaderByHashNoCache: scripted(header),
+    });
+    const servedBlock = await client.getBlockByHashNoCache(byte32FromByte("31"));
+    expect(servedBlock?.header.number).toBe(31n);
+    const served = await client.getHeaderByHashNoCache(byte32FromByte("31"));
+    expect(served?.number).toBe(31n);
+  });
+
   it("dispatches every remaining member override", async () => {
     const header = headerLike({ number: 21n, hash: byte32FromByte("21") });
     const block = ccc.ClientBlock.from({

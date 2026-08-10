@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OrderMatcher } from "../../src/matching/order_matcher.ts";
+import { OrderMatcher } from "../../src/matching/order_matcher.ts";
 import type { OrderCell } from "../../src/model/cells.ts";
 import { Info } from "../../src/model/info.ts";
 import { Ratio } from "../../src/model/ratio.ts";
@@ -102,5 +102,36 @@ describe("order matcher versus contract oracle", () => {
     const full = matcher.match(matcher.bMaxMatch);
     expect(full.partials).toHaveLength(1);
     expect(adjudicate(order, full)).toEqual(["ok"]);
+  });
+});
+
+describe("defense-in-depth guard on direct construction", () => {
+  it("rejects sub-minimum partials when bMinMatch is desynced from the order info", () => {
+    const info = infoFrom({
+      ckbToUdt: { ckbScale: 2n, udtScale: 1n },
+      ckbMinMatchLog: 3,
+    });
+    const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
+    const sound = mustMatcher(order, true);
+
+    // The public from() path derives bMinMatch = 16 from the info; a direct
+    // construction may desync them, which is exactly what the entry.rs:116
+    // mirror defends against: an admitted 4-UDT allowance moves only 2 CKB.
+    const desynced = new OrderMatcher(
+      sound.group,
+      true,
+      sound.aScale,
+      sound.bScale,
+      sound.aIn,
+      sound.bIn,
+      sound.aMin,
+      1n,
+      sound.bMaxMatch,
+      sound.bMaxOut,
+      sound.realRatioNumerator,
+      sound.realRatioDenominator,
+    );
+    expect(desynced.match(4n).partials).toHaveLength(0);
+    expect(sound.match(16n).partials).toHaveLength(1);
   });
 });

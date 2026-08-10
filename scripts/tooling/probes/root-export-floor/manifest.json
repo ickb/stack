@@ -1,14 +1,54 @@
 [
-  { "name": "OrderManager", "owner": "order", "kind": "value" },
-  { "name": "Match", "owner": "order", "kind": "type" },
-  { "name": "OrderGroup", "owner": "order", "kind": "value" },
-  { "name": "OrderCell", "owner": "order", "kind": "value" },
-  { "name": "Info", "owner": "order", "kind": "value" },
-  { "name": "Ratio", "owner": "order", "kind": "value" },
-  { "name": "convert", "owner": "core", "kind": "value" },
-  { "name": "ickbExchangeRatio", "owner": "core", "kind": "value" },
-  { "name": "ICKB_DEPOSIT_CAP", "owner": "core", "kind": "value" },
-  { "name": "receiptPhase2Capacity", "owner": "core", "kind": "value" },
+  {
+    "name": "OrderManager",
+    "owner": "order",
+    "kind": "value"
+  },
+  {
+    "name": "Match",
+    "owner": "order",
+    "kind": "type"
+  },
+  {
+    "name": "OrderGroup",
+    "owner": "order",
+    "kind": "value"
+  },
+  {
+    "name": "OrderCell",
+    "owner": "order",
+    "kind": "value"
+  },
+  {
+    "name": "Info",
+    "owner": "order",
+    "kind": "value"
+  },
+  {
+    "name": "Ratio",
+    "owner": "order",
+    "kind": "value"
+  },
+  {
+    "name": "convert",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "ickbExchangeRatio",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "ICKB_DEPOSIT_CAP",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "receiptPhase2Capacity",
+    "owner": "core",
+    "kind": "value"
+  },
   {
     "name": "receiptCellFrom",
     "owner": "core",
@@ -23,13 +63,41 @@
     "expectedMissing": true,
     "note": "Declared in packages/core/src/udt.ts; known missing from the core barrel."
   },
-  { "name": "IckbDepositCell", "owner": "core", "kind": "type" },
-  { "name": "ReceiptCell", "owner": "core", "kind": "type" },
-  { "name": "WithdrawalGroup", "owner": "core", "kind": "value" },
-  { "name": "unique", "owner": "utils", "kind": "value" },
-  { "name": "LogicManager", "owner": "core", "kind": "value" },
-  { "name": "OwnedOwnerManager", "owner": "core", "kind": "value" },
-  { "name": "DaoManager", "owner": "dao", "kind": "value" },
+  {
+    "name": "IckbDepositCell",
+    "owner": "core",
+    "kind": "type"
+  },
+  {
+    "name": "ReceiptCell",
+    "owner": "core",
+    "kind": "type"
+  },
+  {
+    "name": "WithdrawalGroup",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "unique",
+    "owner": "utils",
+    "kind": "value"
+  },
+  {
+    "name": "LogicManager",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "OwnedOwnerManager",
+    "owner": "core",
+    "kind": "value"
+  },
+  {
+    "name": "DaoManager",
+    "owner": "dao",
+    "kind": "value"
+  },
   {
     "name": "MAX_DIRECT_DEPOSITS",
     "owner": "sdk",
@@ -52,9 +120,9 @@
   },
   {
     "name": "DAO_OUTPUT_LIMIT",
-    "owner": null,
+    "owner": "dao",
     "kind": "value",
-    "note": "packages/dao currently exports DAO_OUTPUT_LIMIT; the floor name does not exist yet."
+    "note": "Consensus 64-output limit constant; owned by the dao barrel today, root-contract name adopted as-is."
   },
   {
     "name": "DEFAULT_ORDER_FEE",
@@ -102,6 +170,48 @@
     "name": "EntityBase",
     "owner": null,
     "kind": "type",
-    "note": "B4 shared helper (amendment §7); lands in shared/ with the Phase-2 entities. Per-entity <X>Base consts join the floor then."
+    "note": "B4 shared helper (amendment \u00a77); lands in shared/ with the Phase-2 entities. Per-entity <X>Base consts join the floor then."
+  },
+  {
+    "name": "EstimateResult",
+    "owner": null,
+    "kind": "type",
+    "note": "Phase-2 result union (estimate); joins the enforced floor when implemented."
+  },
+  {
+    "name": "ConversionPlanResult",
+    "owner": null,
+    "kind": "type",
+    "note": "Phase-2 result union (planConversion); joins the enforced floor when implemented."
+  },
+  {
+    "name": "InfoBase",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 B4 entity base (order Info); joins the enforced floor when implemented."
+  },
+  {
+    "name": "RatioBase",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 B4 entity base (order Ratio); joins the enforced floor when implemented."
+  },
+  {
+    "name": "OrderDataBase",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 B4 entity base (order OrderData); joins the enforced floor when implemented."
+  },
+  {
+    "name": "OwnerDataBase",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 B4 entity base (core OwnerData); joins the enforced floor when implemented."
+  },
+  {
+    "name": "ReceiptDataBase",
+    "owner": null,
+    "kind": "value",
+    "note": "Phase-2 B4 entity base (core ReceiptData); joins the enforced floor when implemented."
   }
 ]
