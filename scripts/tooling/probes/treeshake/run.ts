@@ -33,17 +33,48 @@ function report(message: string): void {
   console.error(`treeshake probe: ${message}`);
 }
 
+/** Extracts the full text of every `static {}` block, brace-aware. */
+function staticBlocks(source: string): string[] {
+  const blocks: string[] = [];
+  for (const opener of source.matchAll(/\bstatic\s*\{/gu)) {
+    let depth = 1;
+    let index = opener.index + opener[0].length;
+    while (index < source.length && depth > 0) {
+      const character = source[index];
+      if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+      }
+      index += 1;
+    }
+    blocks.push(source.slice(opener.index, index));
+  }
+  return blocks;
+}
+
+const nestedControl = `class C {
+  static {
+    const inner = { nested: { deep: true } };
+    /* @__PURE__ */ register(C, inner);
+  }
+}`;
+
 async function scanForPureInStaticBlocks(): Promise<void> {
+  // Negative control: the scanner must see through nested braces; a naive
+  // first-closing-brace regex misses this annotation.
+  if (staticBlocks(nestedControl).every((block) => !block.includes("@__PURE__"))) {
+    fail("scanner negative control failed: nested-brace PURE annotation not detected");
+  }
+
   const offenders: string[] = [];
   for await (const file of glob("packages/*/src/**/*.{ts,tsx}", {
     cwd: repositoryRoot,
   })) {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Iterates the repo's own glob results under packages/*/src.
     const source = await readFile(path.join(repositoryRoot, file), "utf8");
-    for (const block of source.matchAll(/static\s*\{[^}]*\}/gu)) {
-      if (block[0].includes("@__PURE__")) {
-        offenders.push(file);
-      }
+    if (staticBlocks(source).some((block) => block.includes("@__PURE__"))) {
+      offenders.push(file);
     }
   }
   if (offenders.length > 0) {
@@ -51,7 +82,7 @@ async function scanForPureInStaticBlocks(): Promise<void> {
       `@__PURE__ inside static {} blocks (runtime-breakage hazard): ${offenders.join(", ")}`,
     );
   }
-  report("no @__PURE__ inside static blocks");
+  report("no @__PURE__ inside static blocks (brace-aware scan, negative control passed)");
 }
 
 const hazardCodec = `const registry = new Set();

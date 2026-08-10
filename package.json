@@ -9,8 +9,8 @@
     "check": "CI=true pnpm check:base",
     "check:base": "pnpm clean:deep && pnpm install && pnpm audit && pnpm lint && pnpm --filter ./apps/interface build",
     "check:fresh": "rm -f pnpm-lock.yaml && pnpm check",
-    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:structure && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
-    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:structure lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint; do pnpm \"$script\" || status=1; done; exit \"$status\"",
+    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:structure && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint && pnpm lint:probes",
+    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:structure lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint lint:probes; do pnpm \"$script\" || status=1; done; exit \"$status\"",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./apps/interface lint:typecheck",
     "lint:format": "prettier --check .",
     "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript apps packages scripts",
@@ -35,7 +35,8 @@
     "live:supervisor": "node apps/validation/src/supervisor.ts",
     "live:supervisor:bot-stimulus-test": "node apps/validation/src/liveBotStimulusTest.ts",
     "live:supervisor:loop": "node scripts/supervisor/loop-cli.ts",
-    "live:supervisor:dynamic-loop": "node scripts/supervisor/dynamic-loop-cli.ts"
+    "live:supervisor:dynamic-loop": "node scripts/supervisor/dynamic-loop-cli.ts",
+    "lint:probes": "pnpm probes"
   },
   "engines": {
     "node": ">=22.19.0"
