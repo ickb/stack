@@ -1,7 +1,7 @@
 // Contract oracle: a freestanding TypeScript port of the on-chain Rust validation
 // rules, used as an independent adjudicator in tests. It intentionally imports
 // NOTHING (no @ickb/*, no CCC) so it cannot inherit a defect from the
-// implementation it judges; a lint rule will enforce this independence.
+// implementation it judges; lint guards the direct dependency forms.
 //
 // Sources of truth (contracts checkout, commit-pinned by the review docs):
 // - contracts/scripts/contracts/limit_order/src/entry.rs
@@ -98,7 +98,6 @@ export function ckbMinMatchFromLog(ckbMinMatchLog: number): bigint {
  * @param info - Order terms shared by both cells (see {@link OracleInfo}).
  * @returns The verdict the on-chain script would produce for this pair.
  */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- Verbatim port of the on-chain validate() control flow (entry.rs:86-133); restructuring for the metric would break the line-by-line auditability against the deployed Rust that this oracle exists to provide.
 export function validateMatch(
   input: OrderState,
   output: OrderState,

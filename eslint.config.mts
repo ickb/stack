@@ -1,7 +1,7 @@
 // @ts-check
 
 import eslint from "@eslint/js";
-import type { Linter } from "eslint";
+import type { ESLint, Linter, Rule } from "eslint";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 import {
@@ -138,6 +138,48 @@ const guardedVitestRuleErrors = {
   "vitest/valid-expect-in-promise": "error",
   "vitest/warn-todo": "error",
 } as const;
+
+const noDependencyLoading: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      dynamic: "The contract oracle must not load dependencies dynamically.",
+      reference: "The contract oracle must not reference dependency declarations.",
+      type: "The contract oracle must not reference dependencies through import types.",
+    },
+  },
+  create(context): Rule.RuleListener {
+    const loaderNames = new Set(["createRequire", "getBuiltinModule", "require"]);
+
+    return {
+      Identifier(node: Rule.Node): void {
+        if (loaderNames.has(context.sourceCode.getText(node))) {
+          context.report({ messageId: "dynamic", node });
+        }
+      },
+      ImportExpression(node: Rule.Node): void {
+        context.report({ messageId: "dynamic", node });
+      },
+      Program(): void {
+        for (const comment of context.sourceCode.getAllComments()) {
+          if (/^\/\s*<reference\b/iu.test(comment.value.trim())) {
+            context.report({ messageId: "reference", node: comment });
+          }
+        }
+      },
+      TSImportType(node: Rule.Node): void {
+        context.report({ messageId: "type", node });
+      },
+    };
+  },
+};
+
+const oracleIndependencePlugin: ESLint.Plugin = {
+  rules: {
+    "no-dependency-loading": noDependencyLoading,
+  },
+};
 
 export default defineConfig(
   { ignores: ["**/dist/**"] },
@@ -514,6 +556,27 @@ export default defineConfig(
           ],
         },
       ],
+    },
+  },
+  {
+    files: ["packages/testkit/src/contract_oracle.ts"],
+    linterOptions: { noInlineConfig: true },
+    plugins: { "oracle-independence": oracleIndependencePlugin },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["*"],
+              message: "The contract oracle must not import or re-export dependencies.",
+            },
+          ],
+        },
+      ],
+      "oracle-independence/no-dependency-loading": "error",
+      // The oracle mirrors deployed Rust control flow; restructuring it for this metric harms auditability.
+      "sonarjs/cognitive-complexity": "off",
     },
   },
 );
