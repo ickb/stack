@@ -57,6 +57,107 @@ export class PagedScanCursorError extends Error {
   }
 }
 
+/** Why a bounded paged scan stopped before returning complete results. @public */
+export type PagedScanBudgetReason = "items" | "pages" | "aborted";
+
+/** Minimal cancellation signal accepted by the browser-safe scan collector. @public */
+export interface PagedScanSignal {
+  /** Whether cancellation has been requested. */
+  readonly aborted: boolean;
+  /** Caller-owned cancellation reason, when one was supplied. */
+  readonly reason?: unknown;
+}
+
+/** Raised when a shared paged-scan budget is exhausted or aborted. @public */
+export class PagedScanBudgetError extends Error {
+  /** Limit that stopped the scan. */
+  public readonly reason: PagedScanBudgetReason;
+
+  /** Number of items accepted before the failure. */
+  public readonly items: number;
+
+  /** Number of page requests started before the failure. */
+  public readonly pages: number;
+
+  /** Creates a scan-budget failure from the current budget counters. */
+  constructor(
+    message: string,
+    options: ErrorOptions & {
+      reason: PagedScanBudgetReason;
+      items: number;
+      pages: number;
+    },
+  ) {
+    super(message, options);
+    this.name = "PagedScanBudgetError";
+    this.reason = options.reason;
+    this.items = options.items;
+    this.pages = options.pages;
+  }
+}
+
+/** Shared aggregate budget for one logical scan composed of several page collectors. @public */
+export class PagedScanBudget {
+  private items = 0;
+  private pages = 0;
+  private readonly maxItems: number;
+  private readonly maxPages: number;
+  private readonly signal: PagedScanSignal | undefined;
+
+  /** Creates a fixed aggregate budget. */
+  constructor(maxItems: number, maxPages: number, signal?: PagedScanSignal) {
+    assertPositiveSafeInteger(maxItems, "maxItems");
+    assertPositiveSafeInteger(maxPages, "maxPages");
+    this.maxItems = maxItems;
+    this.maxPages = maxPages;
+    this.signal = signal;
+  }
+
+  /** Charges one page request before it starts. */
+  public startPage(): void {
+    this.assertActive();
+    if (this.pages >= this.maxPages) {
+      throw this.error("pages");
+    }
+    this.pages += 1;
+  }
+
+  /** Charges returned items before the caller can observe partial results. */
+  public addItems(count: number): void {
+    this.assertActive();
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new RangeError("Paged scan item count must be a non-negative safe integer");
+    }
+    if (this.items + count > this.maxItems) {
+      throw this.error("items");
+    }
+    this.items += count;
+  }
+
+  /** Converts an in-flight request failure to an abort when its signal fired. */
+  public rethrowIfAborted(cause: unknown): void {
+    if (this.signal?.aborted === true) {
+      throw this.error("aborted", { cause });
+    }
+  }
+
+  private assertActive(): void {
+    if (this.signal?.aborted === true) {
+      throw this.error("aborted", { cause: this.signal.reason });
+    }
+  }
+
+  private error(
+    reason: PagedScanBudgetReason,
+    options?: ErrorOptions,
+  ): PagedScanBudgetError {
+    return new PagedScanBudgetError(
+      `Paged scan stopped at ${String(this.items)} items and ${String(this.pages)} pages: ${reason}`,
+      { reason, items: this.items, pages: this.pages, ...options },
+    );
+  }
+}
+
 /**
  * Fetches and collects every page while enforcing cursor progress.
  *
@@ -71,6 +172,7 @@ export async function collectPagedScan<T>(
   fetchPage: (pageSize: number, after: string | undefined) => Promise<PagedScanPage<T>>,
   options: {
     pageSize: number;
+    budget?: PagedScanBudget;
   },
 ): Promise<T[]> {
   assertPageSize(options.pageSize);
@@ -79,8 +181,16 @@ export async function collectPagedScan<T>(
   const seenCursors = new Set<string>();
   let after: string | undefined;
   for (;;) {
-    const page = await fetchPage(options.pageSize, after);
+    options.budget?.startPage();
+    let page: PagedScanPage<T>;
+    try {
+      page = await fetchPage(options.pageSize, after);
+    } catch (error) {
+      options.budget?.rethrowIfAborted(error);
+      throw error;
+    }
     const items = "items" in page ? page.items : page.cells;
+    options.budget?.addItems(items.length);
     results.push(...items);
     if (items.length < options.pageSize) {
       return results;
@@ -115,7 +225,7 @@ export async function collectCellsPaged(
   client: ccc.Client,
   keyLike: Parameters<ccc.Client["findCells"]>[0],
   order: "asc" | "desc",
-  options: { onChain: boolean; pageSize: number },
+  options: { onChain: boolean; pageSize: number; budget?: PagedScanBudget },
 ): Promise<ccc.Cell[]> {
   const key = ccc.ClientIndexerSearchKey.from(keyLike);
   const cached: ccc.Cell[] = [];
@@ -128,7 +238,10 @@ export async function collectCellsPaged(
       }
       return client.findCellsPaged(key, order, requestPageSize, after);
     },
-    { pageSize: options.pageSize },
+    {
+      pageSize: options.pageSize,
+      ...(options.budget === undefined ? {} : { budget: options.budget }),
+    },
   );
   if (options.onChain) {
     return cells;
@@ -147,8 +260,12 @@ export async function collectCellsPaged(
 }
 
 function assertPageSize(pageSize: number): void {
-  if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
-    throw new Error("pageSize must be a positive safe integer");
+  assertPositiveSafeInteger(pageSize, "pageSize");
+}
+
+function assertPositiveSafeInteger(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`);
   }
 }
 

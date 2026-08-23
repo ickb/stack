@@ -4,6 +4,7 @@ import {
   collectCellsPaged,
   defaultCellPageSize,
   unique,
+  type PagedScanBudget,
   type ScriptDeps,
 } from "@ickb/utils";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.ts";
@@ -171,6 +172,7 @@ export class OwnedOwnerManager implements ScriptDeps {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
       pageSize?: number;
+      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<WithdrawalGroup> {
     const tip = options?.tip ?? (await client.getTipHeader());
@@ -195,6 +197,7 @@ export class OwnedOwnerManager implements ScriptDeps {
         await collectCellsPaged(client, ...findCellsArgs, {
           onChain: options?.onChain === true,
           pageSize,
+          ...(options?.budget === undefined ? {} : { budget: options.budget }),
         })
       )
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))

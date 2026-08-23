@@ -202,6 +202,9 @@ export interface GetL1StateOptions {
   /** CCC cell pagination size for each scan. This is not a result cap. */
   cellPageSize?: number;
 
+  /** Cancels bounded account scans without returning partial financial state. */
+  signal?: AbortSignal;
+
   /** Optional readiness window for public pool deposit scans. */
   poolDeposits?: PoolDepositRangeOptions;
 }

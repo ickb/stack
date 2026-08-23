@@ -58,7 +58,7 @@ describe(`${L1_STATE_SUITE} page sizes`, () => {
     expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
       pageSize: cellPageSize,
     });
-    expect(state.account.capacityCells).toEqual([cell, cell]);
+    expect(state.account.capacityCells).toEqual([cell]);
   });
 
   it("uses default page sizes when L1 account state loading has no override", async () => {

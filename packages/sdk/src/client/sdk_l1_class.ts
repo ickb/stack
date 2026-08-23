@@ -6,6 +6,9 @@ import {
   collectCellsPaged,
   defaultCellPageSize,
   isPlainCapacityCell,
+  PagedScanBudget,
+  PagedScanBudgetError,
+  PagedScanCursorError,
   unique,
 } from "@ickb/utils";
 import {
@@ -19,6 +22,7 @@ import {
 } from "../conversion/sdk_value_helpers.ts";
 import { orderGroupWithMaturity } from "../estimate/sdk_maturity_order_group.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
+import { IckbError } from "./sdk_error.ts";
 import type {
   AccountState,
   CkbCumulative,
@@ -60,17 +64,22 @@ export class IckbSdkL1 extends IckbSdkConversion {
     client: ccc.Client,
     locks: ccc.Script[],
     tip: ccc.ClientBlockHeader,
-    options?: { cellPageSize?: number },
+    options?: { cellPageSize?: number; signal?: AbortSignal },
   ): Promise<AccountState> {
     const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
-    const [capacityCells, nativeUdtCells, receipts, withdrawalGroups] = await Promise.all(
-      [
-        this.findAccountCapacityCells(client, locks, { pageSize: cellPageSize }),
-        this.findAccountNativeUdtCells(client, locks, { pageSize: cellPageSize }),
+    const itemLimit = 6_400;
+    const scanCount = Array.from(unique(locks)).length * 3;
+    const pageLimit = Math.ceil(itemLimit / cellPageSize) + scanCount;
+    const budget = new PagedScanBudget(itemLimit, pageLimit, options?.signal);
+    let scanned: [ccc.Cell[], AccountState["receipts"], AccountState["withdrawalGroups"]];
+    try {
+      scanned = await Promise.all([
+        this.findAccountLiquidCells(client, locks, { pageSize: cellPageSize, budget }),
         collect(
           this.ickbLogic.findReceipts(client, locks, {
             onChain: true,
             pageSize: cellPageSize,
+            budget,
           }),
         ),
         collect(
@@ -78,10 +87,25 @@ export class IckbSdkL1 extends IckbSdkConversion {
             onChain: true,
             tip,
             pageSize: cellPageSize,
+            budget,
           }),
         ),
-      ],
-    );
+      ]);
+    } catch (error) {
+      if (
+        error instanceof PagedScanBudgetError ||
+        error instanceof PagedScanCursorError
+      ) {
+        throw new IckbError(
+          "Account scan did not complete within its fixed 6400-item budget",
+          { code: "account_scan_limit", cause: error },
+        );
+      }
+      throw error;
+    }
+    const [liquidCells, receipts, withdrawalGroups] = scanned;
+    const capacityCells = liquidCells.filter(isPlainCapacityCell);
+    const nativeUdtCells = liquidCells.filter((cell) => this.ickbUdt.isUdt(cell));
     const nativeUdt = nativeUdtCells.reduce(
       (acc, cell) => ({
         capacity: acc.capacity + cell.cellOutput.capacity,
@@ -117,6 +141,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
       ...(options?.cellPageSize === undefined
         ? {}
         : { cellPageSize: options.cellPageSize }),
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
     });
 
     return { system, user, account };
@@ -202,6 +227,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
     client: ccc.Client,
     lock: ccc.Script,
     pageSize: number,
+    budget?: PagedScanBudget,
   ): Promise<ccc.Cell[]> {
     const cells = await collectCellsPaged(
       client,
@@ -213,7 +239,11 @@ export class IckbSdkL1 extends IckbSdkConversion {
         withData: true,
       },
       "asc",
-      { onChain: true, pageSize },
+      {
+        onChain: true,
+        pageSize,
+        ...(budget === undefined ? {} : { budget }),
+      },
     );
     return cells.filter(
       (cell) => cell.cellOutput.lock.eq(lock) && isPlainCapacityCell(cell),
@@ -235,52 +265,40 @@ export class IckbSdkL1 extends IckbSdkConversion {
     return botWithdrawalCkb(withdrawals, tip);
   }
 
-  private async findAccountCapacityCells(
+  private async findAccountLiquidCells(
     client: ccc.Client,
     locks: ccc.Script[],
-    options: { pageSize: number },
+    options: { pageSize: number; budget: PagedScanBudget },
   ): Promise<ccc.Cell[]> {
-    const cells: ccc.Cell[] = [];
-    const { pageSize } = options;
+    const seen = new Set<string>();
+    const liquidCells: ccc.Cell[] = [];
     for (const lock of unique(locks)) {
-      cells.push(...(await this.findPlainCapacityCells(client, lock, pageSize)));
-    }
-    return cells;
-  }
-
-  private async findAccountNativeUdtCells(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    options: { pageSize: number },
-  ): Promise<ccc.Cell[]> {
-    const cells: ccc.Cell[] = [];
-    const scriptSize = BigInt(this.ickbUdt.script.occupiedSize);
-    for (const lock of unique(locks)) {
-      const found = await collectCellsPaged(
+      const cells = await collectCellsPaged(
         client,
         {
           script: lock,
           scriptType: "lock",
-          filter: {
-            script: this.ickbUdt.script,
-            scriptLenRange: [scriptSize, scriptSize + 1n],
-          },
           scriptSearchMode: "exact",
           withData: true,
         },
         "asc",
-        { onChain: true, pageSize: options.pageSize },
+        { onChain: true, pageSize: options.pageSize, budget: options.budget },
       );
-      cells.push(
-        ...found.filter(
-          (cell) =>
-            cell.cellOutput.lock.eq(lock) &&
-            cell.cellOutput.type?.eq(this.ickbUdt.script) === true &&
-            this.ickbUdt.isUdt(cell),
-        ),
-      );
+      for (const cell of cells) {
+        if (
+          !cell.cellOutput.lock.eq(lock) ||
+          (!isPlainCapacityCell(cell) && !this.ickbUdt.isUdt(cell))
+        ) {
+          continue;
+        }
+        const outPoint = cell.outPoint.toHex();
+        if (!seen.has(outPoint)) {
+          seen.add(outPoint);
+          liquidCells.push(cell);
+        }
+      }
     }
-    return cells;
+    return liquidCells;
   }
 }
 

@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+export { expectedChainIdentity } from "./chain.ts";
+export type { ChainIdentity, SupportedChain } from "./chain.ts";
 export {
   CheckedInt32LE,
   CheckedUint128LE,
@@ -12,6 +14,8 @@ export {
   CheckedUint8,
 } from "./codec.ts";
 export {
+  PagedScanBudget,
+  PagedScanBudgetError,
   PagedScanCursorError,
   asyncBinarySearch,
   binarySearch,
@@ -26,7 +30,9 @@ export {
 } from "./utils.ts";
 export type {
   ExchangeRatio,
+  PagedScanBudgetReason,
   PagedScanPage,
+  PagedScanSignal,
   ScriptDeps,
   TransactionHeader,
   ValueComponents,

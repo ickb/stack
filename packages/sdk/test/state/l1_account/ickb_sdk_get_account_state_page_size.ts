@@ -49,6 +49,6 @@ describe("IckbSdk.getAccountState", () => {
     expect(findWithdrawalGroups.mock.calls[0]?.[2]).toMatchObject({
       pageSize: cellPageSize,
     });
-    expect(state.capacityCells).toEqual([cell, cell]);
+    expect(state.capacityCells).toEqual([cell]);
   });
 });

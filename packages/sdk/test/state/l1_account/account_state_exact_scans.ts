@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { IckbError } from "../../../src/sdk.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip, hash } from "../../transaction/base/support/sdk_core_support.ts";
 import { none } from "./support/sdk_l1_support.ts";
@@ -10,7 +11,7 @@ afterEach(() => {
 });
 
 describe("IckbSdk.getAccountState exact scans", () => {
-  it("separates capacity and native iCKB scans and rejects prefix extensions", async () => {
+  it("classifies one exact-lock scan and rejects typed prefix extensions", async () => {
     const { sdk, ickbUdt, logicManager, ownedOwnerManager } = testSdk();
     const lock = script("71");
     const extendedUdt = ccc.Script.from({
@@ -35,7 +36,7 @@ describe("IckbSdk.getAccountState exact scans", () => {
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
     const queries: ccc.ClientIndexerSearchKeyLike[] = [];
     const pageSizes: number[] = [];
-    const afters = new Map<"capacity" | "udt", Array<string | undefined>>();
+    const afters: Array<string | undefined> = [];
     const client = new StubClient({
       findCellsPaged: async (
         query,
@@ -45,23 +46,17 @@ describe("IckbSdk.getAccountState exact scans", () => {
       ): ReturnType<ccc.Client["findCellsPaged"]> => {
         queries.push(query);
         pageSizes.push(Number(pageSize ?? 0));
-        const scan = query.filter?.script === undefined ? "capacity" : "udt";
-        const scanAfters = afters.get(scan) ?? [];
-        scanAfters.push(after);
-        afters.set(scan, scanAfters);
+        afters.push(after);
         await Promise.resolve();
-        if (scan === "capacity") {
-          return after === undefined
-            ? { cells: [capacity], lastCursor: "capacity-1" }
-            : { cells: [], lastCursor: "capacity-end" };
-        }
-
         if (after === undefined) {
-          return { cells: [nativeUdt], lastCursor: "udt-1" };
+          return { cells: [capacity], lastCursor: "account-1" };
         }
-        return after === "udt-1"
-          ? { cells: [prefixExtension], lastCursor: "udt-2" }
-          : { cells: [], lastCursor: "udt-end" };
+        if (after === "account-1") {
+          return { cells: [nativeUdt], lastCursor: "account-2" };
+        }
+        return after === "account-2"
+          ? { cells: [prefixExtension], lastCursor: "account-3" }
+          : { cells: [], lastCursor: "account-end" };
       },
     });
 
@@ -72,35 +67,71 @@ describe("IckbSdk.getAccountState exact scans", () => {
     expect(state.capacityCells).toEqual([capacity]);
     expect(state.nativeUdtCells).toEqual([nativeUdt]);
     expect(state.nativeUdtBalance).toBe(7n);
-    expect(pageSizes).toEqual([1, 1, 1, 1, 1]);
-    expect(afters).toEqual(
-      new Map([
-        ["capacity", [undefined, "capacity-1"]],
-        ["udt", [undefined, "udt-1", "udt-2"]],
-      ]),
-    );
-    assertExactQueries(queries, lock, ickbUdt.script);
+    expect(pageSizes).toEqual([1, 1, 1, 1]);
+    expect(afters).toEqual([undefined, "account-1", "account-2", "account-3"]);
+    assertExactQueries(queries, lock);
+  });
+});
+
+describe("IckbSdk.getAccountState bounded scans", () => {
+  it("derives the page budget from a caller's small page size", async () => {
+    const { sdk, logicManager, ownedOwnerManager } = testSdk();
+    const lock = script("71");
+    const capacity = cell("81", lock);
+    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    let calls = 0;
+    const client = new StubClient({
+      findCellsPaged: async (): ReturnType<ccc.Client["findCellsPaged"]> => {
+        await Promise.resolve();
+        calls += 1;
+        return calls <= 65
+          ? { cells: [capacity], lastCursor: `account-${String(calls)}` }
+          : { cells: [], lastCursor: "account-end" };
+      },
+    });
+
+    const state = await sdk.getAccountState(client, [lock], baseTip, {
+      cellPageSize: 1,
+    });
+
+    expect(calls).toBe(66);
+    expect(state.capacityCells).toEqual([capacity]);
+  });
+
+  it("maps an aborted aggregate scan to account_scan_limit", async () => {
+    const { sdk, logicManager, ownedOwnerManager } = testSdk();
+    const controller = new AbortController();
+    controller.abort(new Error("preview expired"));
+    vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
+    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
+    const findCellsPaged = vi.fn();
+    const client = new StubClient({ findCellsPaged });
+
+    const result = sdk.getAccountState(client, [script("71")], baseTip, {
+      signal: controller.signal,
+    });
+    await expect(result).rejects.toBeInstanceOf(IckbError);
+    await expect(result).rejects.toMatchObject({
+      name: "IckbError",
+      code: "account_scan_limit",
+      retryable: false,
+    });
+    expect(findCellsPaged).not.toHaveBeenCalled();
   });
 });
 
 function assertExactQueries(
   queries: ccc.ClientIndexerSearchKeyLike[],
   lock: ccc.Script,
-  udt: ccc.Script,
 ): void {
-  expect(queries).toHaveLength(5);
+  expect(queries).toHaveLength(4);
   for (const query of queries) {
     expect(query.scriptSearchMode).toBe("exact");
     expect(ccc.Script.from(query.script).eq(lock)).toBe(true);
+    expect(query.filter).toBeUndefined();
+    expect(query.withData).toBe(true);
   }
-  expect(queries[0]?.filter).toMatchObject({
-    scriptLenRange: [0n, 1n],
-    outputDataLenRange: [0n, 1n],
-  });
-  expect(queries[1]?.filter).toMatchObject({
-    script: udt,
-    scriptLenRange: [BigInt(udt.occupiedSize), BigInt(udt.occupiedSize) + 1n],
-  });
 }
 
 function cell(

@@ -3,6 +3,7 @@ import { assertDaoOutputLimit, DaoManager } from "@ickb/dao";
 import {
   collectCellsPaged,
   defaultCellPageSize,
+  type PagedScanBudget,
   type ScriptDeps,
   unique,
 } from "@ickb/utils";
@@ -218,6 +219,7 @@ export class LogicManager implements ScriptDeps {
        * Cell query page size per lock script. Defaults to {@link defaultCellPageSize}.
        */
       pageSize?: number;
+      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<ReceiptCell> {
     const pageSize = options?.pageSize ?? defaultCellPageSize;
@@ -243,6 +245,7 @@ export class LogicManager implements ScriptDeps {
         await collectCellsPaged(client, ...findCellsArgs, {
           onChain: options?.onChain === true,
           pageSize,
+          ...(options?.budget === undefined ? {} : { budget: options.budget }),
         })
       ).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 

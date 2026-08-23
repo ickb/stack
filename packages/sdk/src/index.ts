@@ -7,11 +7,13 @@
 export { getConfig } from "./constants.ts";
 export type { CodeScriptDeps, IckbDeploymentConfig } from "./constants.ts";
 export {
+  IckbError,
   IckbSdk,
   MAX_WITHDRAWAL_REQUESTS,
   TransactionBroadcastError,
   TransactionWaitError,
   estimateMaturityFeeThreshold,
+  isIckbError,
   projectAccountAvailability,
   projectConversionTransactionContext,
   signAndSendTransaction,
@@ -34,6 +36,7 @@ export type {
   ConversionTransactionResult,
   GetL1StateOptions,
   GetPoolDepositsOptions,
+  IckbErrorCode,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
   PoolDepositRangeOptions,

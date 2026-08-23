@@ -20,6 +20,8 @@ import type {
 import type { getConfig } from "./constants.ts";
 import { estimate, estimateIckbToCkbOrder } from "./estimate/sdk_estimate.ts";
 import { maturity } from "./estimate/sdk_maturity.ts";
+export { IckbError, isIckbError } from "./client/sdk_error.ts";
+export type { IckbErrorCode } from "./client/sdk_error.ts";
 
 export { MAX_WITHDRAWAL_REQUESTS } from "./client/sdk_types.ts";
 export type {
@@ -84,7 +86,7 @@ export interface IckbSdk {
     client: ccc.Client,
     locks: ccc.Script[],
     tip: ccc.ClientBlockHeader,
-    options?: { cellPageSize?: number },
+    options?: { cellPageSize?: number; signal?: AbortSignal },
   ): Promise<AccountState>;
   /** Returns sampled system, user-order, and account state from best-effort scans. */
   getL1AccountState(

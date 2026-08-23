@@ -8,8 +8,11 @@ import {
   collectPagedScan,
   compareBigInt,
   isPlainCapacityCell,
+  PagedScanBudget,
+  PagedScanBudgetError,
   PagedScanCursorError,
   pagedScanCursorErrorCode,
+  type PagedScanSignal,
   unique,
 } from "../src/utils.ts";
 
@@ -109,6 +112,57 @@ describe("scan collection", () => {
       lastCursor: "a",
     });
     expect(fetchPage).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("bounded scan collection", () => {
+  it("shares one item budget across collectors", async () => {
+    const budget = new PagedScanBudget(3, 10);
+    const first = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [1, 2], lastCursor: "first" })
+      .mockResolvedValueOnce({ items: [3] });
+    const second = vi.fn().mockResolvedValue({ items: [4, 5] });
+
+    await expect(collectPagedScan(first, { pageSize: 2, budget })).resolves.toEqual([
+      1, 2, 3,
+    ]);
+    await expect(collectPagedScan(second, { pageSize: 2, budget })).rejects.toMatchObject(
+      {
+        name: "PagedScanBudgetError",
+        reason: "items",
+        items: 3,
+        pages: 3,
+      },
+    );
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed before requesting a page beyond the shared page budget", async () => {
+    const budget = new PagedScanBudget(10, 1);
+    const fetchPage = vi.fn().mockResolvedValue({ items: [1], lastCursor: "next" });
+
+    await expect(
+      collectPagedScan(fetchPage, { pageSize: 1, budget }),
+    ).rejects.toBeInstanceOf(PagedScanBudgetError);
+    await expect(
+      collectPagedScan(fetchPage, { pageSize: 1, budget }),
+    ).rejects.toMatchObject({ reason: "pages", items: 1, pages: 1 });
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call the page fetcher when an aggregate scan is already aborted", async () => {
+    const signal: PagedScanSignal = {
+      aborted: true,
+      reason: new Error("deadline"),
+    };
+    const budget = new PagedScanBudget(10, 10, signal);
+    const fetchPage = vi.fn().mockResolvedValue({ items: [] });
+
+    await expect(
+      collectPagedScan(fetchPage, { pageSize: 1, budget }),
+    ).rejects.toMatchObject({ name: "PagedScanBudgetError", reason: "aborted" });
+    expect(fetchPage).not.toHaveBeenCalled();
   });
 });
 
