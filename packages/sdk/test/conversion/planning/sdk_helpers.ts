@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   baseTransactionOptions,
   conversionKind,
-  isRetryableConversionBuildError,
   plannedDaoOutputLimitError,
 } from "../../../src/conversion/sdk_conversion_common.ts";
 import {
@@ -84,16 +83,11 @@ describe("sdk helper coverage", () => {
     expect(mint).toHaveBeenCalledWith(expect.any(ccc.Transaction), lock, info, amounts);
   });
 
-  it("covers retryable conversion errors and DAO output planning", () => {
+  it("covers DAO output planning", () => {
     const tx = ccc.Transaction.default();
     const limitError = plannedDaoOutputLimitError(tx, 65, true);
-    const namedDaoError = new Error("x");
-    Object.defineProperty(namedDaoError, "name", { value: "DaoOutputLimitError" });
 
     expect(plannedDaoOutputLimitError(tx, 65, false)).toBeUndefined();
     expect(limitError).toBeInstanceOf(DaoOutputLimitError);
-    expect(isRetryableConversionBuildError(limitError)).toBe(true);
-    expect(isRetryableConversionBuildError(namedDaoError)).toBe(true);
-    expect(isRetryableConversionBuildError(new Error("x"))).toBe(false);
   });
 });

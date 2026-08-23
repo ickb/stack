@@ -14,8 +14,6 @@ import {
 } from "../withdrawal_quotes/support/sdk_cell_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
-  expectCkbToIckbDirectRetryBuild,
-  mockPassthroughMint,
   mockUnitDeposit,
   testSdk,
 } from "./support/sdk_fixture_support.ts";
@@ -202,18 +200,6 @@ describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} iCKB change reserve`, () => {
 });
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
-  it("retries CKB-to-iCKB direct deposits after DAO output-limit failures", async () => {
-    const { sdk, logicManager, orderManager, lock } = testSdk();
-    const deposit = mockUnitDeposit(logicManager).mockImplementationOnce(() => {
-      throw new DaoOutputLimitError(65);
-    });
-    mockPassthroughMint(orderManager);
-
-    await expectCkbToIckbDirectRetryBuild(sdk, lock);
-
-    expect(deposit).toHaveBeenCalledTimes(2);
-  });
-
   it("skips predictably oversized CKB-to-iCKB candidates before building", async () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
     const quantities: number[] = [];

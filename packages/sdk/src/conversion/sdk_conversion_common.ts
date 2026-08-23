@@ -53,13 +53,6 @@ export function isChangeCellCapacityError(error: unknown): boolean {
   return error instanceof ccc.ErrorTransactionInsufficientCapacity && error.isForChange;
 }
 
-export function isRetryableConversionBuildError(error: unknown): boolean {
-  return (
-    error instanceof DaoOutputLimitError ||
-    (error instanceof Error && error.name === "DaoOutputLimitError")
-  );
-}
-
 export function plannedDaoOutputLimitError(
   tx: ccc.Transaction,
   additionalOutputs: number,

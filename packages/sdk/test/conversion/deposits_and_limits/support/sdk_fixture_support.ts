@@ -31,7 +31,6 @@ interface WithdrawalRemainderOrderMocks {
   requestWithdrawal: MockInstance<OwnedOwnerManager["requestWithdrawal"]>;
 }
 
-const CKB_TO_ICKB = "ckb-to-ickb";
 const ICKB_TO_CKB = "ickb-to-ckb";
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
@@ -156,27 +155,6 @@ export function mockUnitDeposit(
   return vi.spyOn(logicManager, "deposit").mockImplementation((txLike, quantity) => {
     expect(quantity).toBe(1);
     return passthroughTransaction(txLike);
-  });
-}
-
-export async function expectCkbToIckbDirectRetryBuild(
-  sdk: IckbSdk,
-  lock: ccc.Script,
-): Promise<void> {
-  await expect(
-    sdk.buildConversionTransaction(ccc.Transaction.default(), {
-      direction: CKB_TO_ICKB,
-      amount: ICKB_DEPOSIT_CAP * 2n,
-      lock,
-      context: conversionContext({
-        system: { ckbAvailable: ICKB_DEPOSIT_CAP * 2n },
-        ckbAvailable: ICKB_DEPOSIT_CAP * 2n,
-        ickbAvailable: 0n,
-      }),
-    }),
-  ).resolves.toMatchObject({
-    ok: true,
-    conversion: { kind: DIRECT_PLUS_ORDER },
   });
 }
 

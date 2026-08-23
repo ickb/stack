@@ -4,9 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
-  expectCkbToIckbDirectRetryBuild,
-  mockPassthroughMint,
-  mockUnitDeposit,
   testSdk,
 } from "./support/sdk_fixture_support.ts";
 
@@ -14,27 +11,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const DAO_OUTPUT_LIMIT_ERROR_NAME = "DaoOutputLimitError";
-
 const RPC_FAILED = "RPC failed";
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
-  it("recognizes DAO output-limit errors across package runtime boundaries", async () => {
-    const { sdk, logicManager, orderManager, lock } = testSdk();
-    const outputLimitError = new Error("same domain error from another package copy");
-    Object.defineProperty(outputLimitError, "name", {
-      value: DAO_OUTPUT_LIMIT_ERROR_NAME,
-    });
-    const deposit = mockUnitDeposit(logicManager).mockImplementationOnce(() => {
-      throw outputLimitError;
-    });
-    mockPassthroughMint(orderManager);
-
-    await expectCkbToIckbDirectRetryBuild(sdk, lock);
-
-    expect(deposit).toHaveBeenCalledTimes(2);
-  });
-
   it("fails fast on non-retryable CKB-to-iCKB construction errors", async () => {
     const { sdk, logicManager, lock } = testSdk();
     const deposit = vi.spyOn(logicManager, "deposit").mockImplementation(() => {

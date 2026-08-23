@@ -4,7 +4,6 @@ import {
   conversionFailure,
   conversionKind,
   hasTransactionActivity,
-  isRetryableConversionBuildError,
   NOTHING_TO_DO_REASON,
   orderOutputCount,
   plannedDaoOutputLimitError,
@@ -122,29 +121,19 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
         lastError ??= outputLimitError;
         continue;
       }
-      try {
-        let tx = this.buildBaseTransaction(
-          baseTx.clone(),
-          baseTransactionOptions(context),
-        );
-        if (depositCount > 0) {
-          tx = this.ickbLogic.deposit(tx, depositCount, depositCapacity, lock);
-        }
-        if (order !== undefined) {
-          tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
-        }
-        return {
-          ok: true,
-          tx,
-          estimatedMaturity,
-          conversion: { kind: conversionKind(depositCount > 0, order !== undefined) },
-        };
-      } catch (error) {
-        if (!isRetryableConversionBuildError(error)) {
-          throw errorOf(error);
-        }
-        lastError ??= error;
+      let tx = this.buildBaseTransaction(baseTx.clone(), baseTransactionOptions(context));
+      if (depositCount > 0) {
+        tx = this.ickbLogic.deposit(tx, depositCount, depositCapacity, lock);
       }
+      if (order !== undefined) {
+        tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
+      }
+      return {
+        ok: true,
+        tx,
+        estimatedMaturity,
+        conversion: { kind: conversionKind(depositCount > 0, order !== undefined) },
+      };
     }
     if (lastError !== undefined) {
       throw errorOf(lastError);
@@ -176,35 +165,28 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
         lastError ??= outputLimitError;
         continue;
       }
-      try {
-        let tx = this.buildBaseTransaction(
-          baseTx.clone(),
-          baseTransactionOptions(context, {
-            deposits: selectedDeposits,
-            requiredLiveDeposits,
-            lock,
-          }),
-        );
-        if (order !== undefined) {
-          tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
-        }
-        return {
-          ok: true,
-          tx,
-          estimatedMaturity,
-          conversion: {
-            kind: conversionKind(selectedDeposits.length > 0, order !== undefined),
-          },
-          ...(order?.conversionNotice === undefined
-            ? {}
-            : { conversionNotice: order.conversionNotice }),
-        };
-      } catch (error) {
-        if (!isRetryableConversionBuildError(error)) {
-          throw errorOf(error);
-        }
-        lastError ??= error;
+      let tx = this.buildBaseTransaction(
+        baseTx.clone(),
+        baseTransactionOptions(context, {
+          deposits: selectedDeposits,
+          requiredLiveDeposits,
+          lock,
+        }),
+      );
+      if (order !== undefined) {
+        tx = this.order.mint(tx, lock, order.estimate.info, order.amounts);
       }
+      return {
+        ok: true,
+        tx,
+        estimatedMaturity,
+        conversion: {
+          kind: conversionKind(selectedDeposits.length > 0, order !== undefined),
+        },
+        ...(order?.conversionNotice === undefined
+          ? {}
+          : { conversionNotice: order.conversionNotice }),
+      };
     }
     if (lastError !== undefined) {
       throw errorOf(lastError);
