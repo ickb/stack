@@ -1,9 +1,11 @@
-# Best Shape Snapshot — Zero-Base Synthesis
+# Selected Architecture
+
+> Status: Historical synthesis. The current decisions in `../decisions.md` incorporate and supersede its adopted conclusions.
 
 ## Scope
 
 - Fourth review pass: everything reopenable (product scope, tech stack, prior decisions), requested as "imagine the best shape, go wild, less is more". Five zero-base reviewers: greenfield repo architect, interface, bot policy (product-level), validation (product-level), published libs vs CCC leverage. All grounded in code/whitepaper/CCC-typings cites at baseline `42a090c`; read-only.
-- This synthesis adopts the consensus findings, surfaces the inter-reviewer conflicts for maintainer adjudication (§5), and consolidates the fund-safety keep-list. It amends the decisions snapshot (`2026-08-09T20-26-38Z`) and the addendum (`2026-08-09T20-41-50Z`) where noted.
+- This synthesis adopts the consensus findings, surfaces the inter-reviewer conflicts for maintainer adjudication (§5), and consolidates the fund-safety keep-list. It amends the [maintainer decisions](maintainer-decisions.md) and [simplification review](simplification-review.md) where noted.
 
 ## 1. Headline
 

@@ -1,9 +1,11 @@
-# Overhaul Decisions Snapshot
+# Maintainer Decisions
+
+> Status: Historical decision pass. The current decisions in `../decisions.md` supersede this document where they differ.
 
 ## Scope
 
 - Records the maintainer decisions from the 2026-08-09 design discussion, point by point.
-- Supersedes the corresponding proposals in `2026-08-09T01-08-17Z-snapshot-design-blueprint.md` where they differ; everything not amended here stands as written there.
+- Supersedes the corresponding proposals in the [rewrite design](rewrite-design.md) where they differ; everything not amended here stands as written there.
 - Baseline for comparison: tag `pre-rewrite-baseline` (commit `42a090c`), worktree at `../stack-baseline`.
 - Constraint set: nothing is frozen except the on-chain contracts; published packages stay near-zero-dependency (CCC only); dev-dependencies acceptable; 100% coverage mandate retained.
 

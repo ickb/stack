@@ -1,8 +1,10 @@
-# Less-Is-More Addendum
+# Simplification Review
+
+> Status: Historical review. It records the additional cuts considered after the first maintainer decision pass.
 
 ## Scope
 
-- Third review pass, requested after the decisions snapshot (`2026-08-09T20-26-38Z-snapshot-overhaul-decisions.md`): additional cuts unlocked by the settled decisions. Three auditors (validation harness, ops layer vs systemd, published packages + interface + tooling), each instructed to flag load-bearing code alongside deletion candidates. All claims verified against code at baseline `42a090c`; read-only.
+- Third review pass, requested after the [maintainer decisions](maintainer-decisions.md): additional cuts unlocked by the settled decisions. Three auditors (validation harness, ops layer vs systemd, published packages + interface + tooling), each instructed to flag load-bearing code alongside deletion candidates. All claims verified against code at baseline `42a090c`; read-only.
 - Verdicts below either extend the decisions snapshot or need a maintainer call (marked **[call]**).
 
 ## 1. Ops layer: the launcher dissolves into systemd (5,665 → ~1,350 src lines)

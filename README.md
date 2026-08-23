@@ -2,6 +2,8 @@
 
 iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps built on top of [CCC](https://github.com/ckb-devrel/ccc).
 
+The Stack rewrite is in progress. The [rewrite overview](docs/stack-rewrite/README.md) explains the target architecture, completed foundations, remaining phases, and open design findings. The rest of this README describes the current repository.
+
 ## Transaction Completion Boundary
 
 `@ickb/sdk` builders still return partial `ccc.Transaction` values. Callers explicitly choose when to finalize, and the shared completion path now also lives in `@ickb/sdk`.

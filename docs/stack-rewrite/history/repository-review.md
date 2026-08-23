@@ -1,4 +1,6 @@
-# Whole-Repo Parallel Review Snapshot
+# Repository Review
+
+> Status: Historical review. The current decisions in `../decisions.md` supersede this document where they differ.
 
 ## Scope
 

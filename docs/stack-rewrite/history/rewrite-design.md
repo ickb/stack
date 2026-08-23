@@ -1,9 +1,11 @@
-# Design Blueprint Snapshot — The Better Version
+# Rewrite Design
+
+> Status: Historical proposal. It records the design before maintainer adjudication and later simplification passes.
 
 ## Scope
 
 - Checkout: `/var/home/user/Projects/ickb/stack`, branch `wip` at `ca51bf88d57887fcc554f8697939e0560e9ef2ab`.
-- Companion to the defect-focused snapshot `2026-08-09T00-33-53Z-snapshot-whole-repo-parallel-review.md` (referenced below as "the defect review", findings C1-C10). This report does not re-list defects; it designs the target shape of the stack.
+- Companion to the defect-focused [repository review](repository-review.md), referenced below as "the defect review" (findings C1-C10). This report does not re-list defects; it designs the target shape of the stack.
 - Premise set by the maintainer: the library is **unpublished** (breaking API changes are free), the on-chain **contracts are fixed**, primary published-package audience is **wallet/dApp integrators**, a single packaging recommendation was requested, **dev-dependencies are acceptable but published packages stay near-zero-dependency** (CCC only), and the **100% coverage mandate stays** — proposals work within it.
 - Method: six parallel design reviewers (consumer-driven API, domain modeling/type safety, workspace/pipeline blueprint, error+observability model, bot/validation runtime, testing strategy) plus four deep exploration maps (event/log contract surfaces, app-boundary error handling, validation harness anatomy, config-surface catalog). All current-behavior claims were verified against the cited files; two proposals were additionally verified by execution (the entity-pattern compilation check against CCC typings, and the matcher counterexample).
 - Role boundary: review only. No source, test, or configuration files were modified; this report is the only artifact written.
