@@ -6,6 +6,7 @@ import {
   headerLike as testHeaderLike,
 } from "@ickb/testkit";
 import { expect, it, vi } from "vitest";
+import { daoClaimEpoch } from "../src/cells.ts";
 import { DaoManager } from "../src/dao.ts";
 
 const DAO_CELL_WITHDRAWAL_READINESS_SUITE = "daoCellFrom withdrawal readiness";
@@ -89,6 +90,23 @@ it(`${DAO_CELL_WITHDRAWAL_READINESS_SUITE} keeps withdrawal requests pending bef
   );
 
   expect(daoCell.isReady).toBe(false);
+});
+
+it(`${DAO_CELL_WITHDRAWAL_READINESS_SUITE} does not add another cycle at an equal fractional epoch`, async () => {
+  const manager = new DaoManager(script("33"), []);
+  const depositHeader = headerLike([1n, 1n, 2n], 1n);
+  const withdrawHeader = headerLike([181n, 1n, 2n], 2n);
+  const tip = headerLike([181n, 1n, 2n], 3n);
+
+  const daoCell = await manager.withdrawalRequestCellFrom(
+    withdrawalCell(),
+    clientFor(depositHeader, withdrawHeader),
+    { tip },
+  );
+
+  expect(daoClaimEpoch(depositHeader, withdrawHeader).eq([181n, 1n, 2n])).toBe(true);
+  expect(daoCell.maturity.eq([181n, 1n, 2n])).toBe(true);
+  expect(daoCell.isReady).toBe(true);
 });
 
 it(`${DAO_CELL_WITHDRAWAL_READINESS_SUITE} rejects invalid withdrawal payloads`, async () => {

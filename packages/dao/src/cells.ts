@@ -146,7 +146,7 @@ export async function daoCellFrom(
   const [oldest, newest] = headers;
 
   const interests = ccc.calcDaoProfit(cell.capacityFree, oldest.header, newest.header);
-  let maturity = ccc.calcDaoClaimEpoch(oldest.header, newest.header);
+  let maturity = daoClaimEpoch(oldest.header, newest.header);
 
   const minLockUp = options.minLockUp ?? defaultMinLockUp;
   const maxLockUp = options.maxLockUp ?? defaultMaxLockUp;
@@ -175,6 +175,24 @@ export async function daoCellFrom(
   return options.isDeposit
     ? { ...common, isDeposit: true }
     : { ...common, isDeposit: false };
+}
+
+/** Matches deployed dao.c at ckb-system-scripts@f25c5ae: equal fractions do not roll twice. */
+export function daoClaimEpoch(
+  depositHeader: ccc.ClientBlockHeaderLike,
+  withdrawHeader: ccc.ClientBlockHeaderLike,
+): ccc.Epoch {
+  const deposit = ccc.ClientBlockHeader.from(depositHeader).epoch.normalizeBase();
+  const withdraw = ccc.ClientBlockHeader.from(withdrawHeader).epoch.normalizeBase();
+  const fullCycle = 180n;
+  const partialCycle = (withdraw.integer - deposit.integer) % fullCycle;
+  const depositFractionPrecedesWithdraw =
+    deposit.numerator * withdraw.denominator < withdraw.numerator * deposit.denominator;
+  const withdrawInteger =
+    partialCycle !== 0n || depositFractionPrecedesWithdraw
+      ? withdraw.integer - partialCycle + fullCycle
+      : withdraw.integer;
+  return ccc.Epoch.from([withdrawInteger, deposit.numerator, deposit.denominator]);
 }
 
 async function depositHeaders(
