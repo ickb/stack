@@ -69,6 +69,29 @@ function registerCompleteByCollectionTests(): void {
     expect(completed.outputs).toHaveLength(1);
   });
 
+  it("completeBy does not consume prefix-matching foreign xUDT cells", async () => {
+    const { ickbUdt, type } = testIckbUdt();
+    const prefixedType = ccc.Script.from({
+      codeHash: type.codeHash,
+      hashType: type.hashType,
+      args: `${type.args}00`,
+    });
+    const foreign = xudtCell(900n, prefixedType);
+    foreign.outPoint.index = 1n;
+    const exact = xudtCell(100n, type);
+    exact.outPoint.index = 2n;
+    const tx = ccc.Transaction.from({
+      outputs: [{ lock: script("22"), type }],
+      outputsData: [ccc.numLeToBytes(100n, 16)],
+    });
+    const signer = signerWithCells([foreign, exact], clientWithHeader(headerLike(1n)));
+
+    const completed = await ickbUdt.completeBy(tx, signer);
+
+    expect(completed.inputs).toHaveLength(1);
+    expect(completed.inputs[0]?.previousOutput.eq(exact.outPoint)).toBe(true);
+  });
+
   it("completeBy changes existing two xUDT input surplus without collecting more", async () => {
     const { ickbUdt, type } = testIckbUdt();
     const firstInput = xudtCell(80n, type);

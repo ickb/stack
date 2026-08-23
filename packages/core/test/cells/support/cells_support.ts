@@ -69,6 +69,37 @@ export function xudtCell(
 }
 
 export function signerWithCells(cells: ccc.Cell[], client: ccc.Client): ccc.Signer {
+  const findCellsPagedNoCache: ccc.Client["findCellsPagedNoCache"] = async (
+    keyLike,
+    _order,
+    _limit,
+    after,
+  ) => {
+    await Promise.resolve();
+    const key = ccc.ClientIndexerSearchKey.from(keyLike);
+    return {
+      cells:
+        after === undefined
+          ? cells.filter((cell) => cell.cellOutput.lock.eq(key.script))
+          : [],
+      lastCursor: after === undefined ? "test:end" : "test:done",
+    };
+  };
+  Object.defineProperties(client, {
+    findCellsPaged: {
+      configurable: true,
+      value: async (): ReturnType<ccc.Client["findCellsPaged"]> => {
+        await Promise.resolve();
+        throw new Error("iCKB completion must use the no-cache cell scan");
+      },
+      writable: true,
+    },
+    findCellsPagedNoCache: {
+      configurable: true,
+      value: findCellsPagedNoCache,
+      writable: true,
+    },
+  });
   return new TestSigner(client, cells);
 }
 
@@ -104,12 +135,11 @@ class TestSigner extends ccc.Signer {
 
   public override async getAddressObjs(): Promise<ccc.Address[]> {
     await Promise.resolve();
-    return [new ccc.Address(script("22"), "ckt")];
-  }
-
-  public override async *findCells(): AsyncGenerator<ccc.Cell> {
-    await Promise.resolve();
-    yield* this.cells;
+    const locks = [script("22"), ...this.cells.map((cell) => cell.cellOutput.lock)];
+    return Array.from(
+      new Map(locks.map((lock) => [lock.toHex(), lock])).values(),
+      (lock) => new ccc.Address(lock, "ckt"),
+    );
   }
 }
 

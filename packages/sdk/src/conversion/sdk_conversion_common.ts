@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "@ickb/core";
 import { DAO_OUTPUT_LIMIT, DaoOutputLimitError } from "@ickb/dao";
 import {
@@ -47,10 +47,6 @@ export function baseTransactionOptions(
 
 export function hasTransactionActivity(tx: ccc.Transaction): boolean {
   return tx.inputs.length > 0 || tx.outputs.length > 0;
-}
-
-export function isChangeCellCapacityError(error: unknown): boolean {
-  return error instanceof ccc.ErrorTransactionInsufficientCapacity && error.isForChange;
 }
 
 export function plannedDaoOutputLimitError(

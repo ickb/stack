@@ -33,6 +33,7 @@ interface StubClientHandlers {
   findCells?: ClientMethod<"findCells">;
   findCellsOnChain?: ClientMethod<"findCellsOnChain">;
   findCellsPaged?: ClientMethod<"findCellsPaged">;
+  findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
   getCell?: ClientMethod<"getCell">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
@@ -64,6 +65,7 @@ export class StubClient extends ccc.ClientPublicTestnet {
   private readonly getHeaderByNumberHandler: ClientMethod<"getHeaderByNumber">;
   private readonly getTransactionHandler: ClientMethod<"getTransaction">;
   private readonly getTransactionWithHeaderHandler: ClientMethod<"getTransactionWithHeader">;
+  declare public findCellsPagedNoCache: ClientMethod<"findCellsPagedNoCache">;
   declare public getTipHeader: ClientMethod<"getTipHeader">;
   declare public sendTransactionDry: ClientMethod<"sendTransactionDry">;
 
@@ -72,6 +74,7 @@ export class StubClient extends ccc.ClientPublicTestnet {
    */
   constructor(handlers: StubClientHandlers = {}) {
     super({ url: "https://example.invalid" });
+    const baseFindCellsPagedNoCache = this.findCellsPagedNoCache.bind(this);
     this.handlers = handlers;
     if (handlers.cache !== undefined) {
       this.cache = handlers.cache;
@@ -86,6 +89,16 @@ export class StubClient extends ccc.ClientPublicTestnet {
         ? handlers.findCellsOnChain
         : (key, order, limit): ReturnType<ClientMethod<"findCellsOnChain">> =>
             findCells(key, order, limit);
+    const findCellsPagedNoCache =
+      handlers.findCellsPagedNoCache ??
+      (this.findCellsPagedHandler === undefined &&
+      this.legacyCellScanHandler === undefined
+        ? baseFindCellsPagedNoCache
+        : this.findCellsPaged.bind(this));
+    this.findCellsPagedNoCache = async (
+      ...args
+    ): ReturnType<ClientMethod<"findCellsPagedNoCache">> =>
+      findCellsPagedNoCache(...args);
     this.getCellHandler = handlers.getCell ?? super.getCell.bind(this);
     this.getHeaderByNumberHandler =
       handlers.getHeaderByNumber ?? super.getHeaderByNumber.bind(this);

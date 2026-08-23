@@ -96,10 +96,10 @@ export class IckbSdkL1 extends IckbSdkConversion {
         error instanceof PagedScanBudgetError ||
         error instanceof PagedScanCursorError
       ) {
-        throw new IckbError(
-          "Account scan did not complete within its fixed 6400-item budget",
-          { code: "account_scan_limit", cause: error },
-        );
+        throw new IckbError("Account scan did not complete", {
+          code: "account_scan_limit",
+          cause: error,
+        });
       }
       throw error;
     }

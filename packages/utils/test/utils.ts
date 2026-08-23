@@ -16,6 +16,8 @@ import {
   unique,
 } from "../src/utils.ts";
 
+const invalidRpcUrl = "https://example.invalid";
+
 describe("compareBigInt", () => {
   it("orders bigint values", () => {
     expect(compareBigInt(1n, 2n)).toBe(-1);
@@ -182,7 +184,7 @@ describe("scan validation", () => {
   });
 
   it("validates a CCC scan before cache or RPC access", async () => {
-    const client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+    const client = new ccc.ClientPublicTestnet({ url: invalidRpcUrl });
     const cacheScan = vi.spyOn(client.cache, "findCells");
     const rpc = vi.spyOn(client, "findCellsPaged");
 
@@ -205,7 +207,7 @@ describe("scan validation", () => {
 
 describe("CCC cached scans", () => {
   it("merges cached cells with distinct usable on-chain cells", async () => {
-    const client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+    const client = new ccc.ClientPublicTestnet({ url: invalidRpcUrl });
     const cached = testCell({ type: undefined, outputData: "0x" });
     const fresh = testCell({ type: undefined, outputData: "0x", txByte: "33" });
     vi.spyOn(client.cache, "findCells").mockImplementation(async function* () {
@@ -230,6 +232,35 @@ describe("CCC cached scans", () => {
         { onChain: false, pageSize: 3 },
       ),
     ).resolves.toEqual([cached, fresh]);
+  });
+});
+
+describe("CCC committed scans", () => {
+  it("uses the no-cache page method without invoking the recording wrapper", async () => {
+    const client = new ccc.ClientPublicTestnet({ url: invalidRpcUrl });
+    const cell = testCell({ type: undefined, outputData: "0x" });
+    const noCache = vi.spyOn(client, "findCellsPagedNoCache").mockResolvedValue({
+      cells: [cell],
+      lastCursor: "done",
+    });
+    const recording = vi
+      .spyOn(client, "findCellsPaged")
+      .mockRejectedValue(new Error("cache-recording scan used"));
+
+    await expect(
+      collectCellsPaged(
+        client,
+        {
+          script: cell.cellOutput.lock,
+          scriptType: "lock",
+          scriptSearchMode: "exact",
+        },
+        "asc",
+        { onChain: true, pageSize: 3 },
+      ),
+    ).resolves.toEqual([cell]);
+    expect(noCache).toHaveBeenCalledTimes(1);
+    expect(recording).not.toHaveBeenCalled();
   });
 });
 

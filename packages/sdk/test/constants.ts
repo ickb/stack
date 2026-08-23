@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbUdt } from "@ickb/core";
 import { outPoint, script as typeScript } from "@ickb/testkit";
+import { PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
@@ -53,8 +54,9 @@ describe("getConfig", () => {
     });
     const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
     const completeBy = vi.fn(
-      async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
+      async (...args: Parameters<IckbUdt["completeBy"]>): Promise<ccc.Transaction> => {
         await Promise.resolve();
+        const [txLike] = args;
         const completed = ccc.Transaction.from(txLike);
         completed.outputsData.push("0x01");
         return completed;
@@ -69,8 +71,11 @@ describe("getConfig", () => {
       feeRate: 1n,
     });
 
-    expect(completeBy).toHaveBeenCalledWith(expect.any(ccc.Transaction), signer);
-    expect(completeBy.mock.calls[0]?.[0]).not.toBe(tx);
+    const call = completeBy.mock.calls[0];
+    expect(call?.[0]).toBeInstanceOf(ccc.Transaction);
+    expect(call?.[0]).not.toBe(tx);
+    expect(call?.[1]).toBe(signer);
+    expect(call?.[2]?.budget).toBeInstanceOf(PagedScanBudget);
     expect(tx.outputsData).toEqual([]);
     expect(completed.outputsData).toEqual(["0x01"]);
   });

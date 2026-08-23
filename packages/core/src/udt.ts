@@ -1,7 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { udt } from "@ckb-ccc/udt";
 import type { DaoManager } from "@ickb/dao";
-import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "@ickb/utils";
+import {
+  CheckedUint128LE,
+  CheckedUint32LE,
+  defaultCellPageSize,
+  findSignerCellsPagedNoCache,
+  PagedScanBudget,
+  type ExchangeRatio,
+} from "@ickb/utils";
 import { ReceiptData } from "./entities.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
@@ -120,13 +127,18 @@ export class IckbUdt extends udt.Udt {
     txLike: ccc.TransactionLike,
     signer: ccc.Signer,
     changeLike: ccc.ScriptLike,
+    options?: { budget?: PagedScanBudget },
   ): Promise<ccc.Transaction> {
     const tx = this.addCellDeps(txLike);
     let inputTally = await this.inputTallyFromTransaction(tx, signer.client);
     const requiredBalance = this.requiredBalanceFromOutputs(tx);
 
     if (shouldCollectMoreInputs(inputTally, requiredBalance)) {
-      inputTally = await this.collectXudtInputs(tx, signer, inputTally, requiredBalance);
+      inputTally = await this.collectXudtInputs(tx, signer, {
+        inputTally,
+        requiredBalance,
+        budget: options?.budget,
+      });
     }
 
     addUdtChangeOutput(tx, changeLike, this.script, inputTally.balance - requiredBalance);
@@ -140,9 +152,10 @@ export class IckbUdt extends udt.Udt {
   public override async completeBy(
     txLike: ccc.TransactionLike,
     signer: ccc.Signer,
+    options?: { budget?: PagedScanBudget },
   ): Promise<ccc.Transaction> {
     const { script } = await signer.getRecommendedAddressObj();
-    return this.completeChangeToLock(txLike, signer, script);
+    return this.completeChangeToLock(txLike, signer, script, options);
   }
 
   /**
@@ -193,36 +206,43 @@ export class IckbUdt extends udt.Udt {
   private async collectXudtInputs(
     tx: ccc.Transaction,
     signer: ccc.Signer,
-    inputTally: IckbInputTally,
-    requiredBalance: ccc.Num,
+    options: {
+      inputTally: IckbInputTally;
+      requiredBalance: ccc.Num;
+      budget?: PagedScanBudget;
+    },
   ): Promise<IckbInputTally> {
+    const { inputTally, requiredBalance } = options;
+    const budget = options.budget ?? new PagedScanBudget(6_400, 6_400);
     const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
     const collectedTally = new IckbInputTally(inputTally.balance, inputTally.xudtCount);
-    let completedBalance = collectedTally.balance;
-    const { accumulated } = await tx.completeInputs(
+    for await (const cell of findSignerCellsPagedNoCache(
       signer,
       {
         script: this.script,
         outputDataLenRange: [udtDataSize, ccc.numFrom("0xffffffff")],
       },
-      async (balance, cell) => {
-        collectedTally.balance = balance;
-        collectedTally.addAssign(
-          await this.inputContribution(cell, signer.client, transactionCache),
-        );
-        completedBalance = collectedTally.balance;
-        return shouldCollectMoreInputs(collectedTally, requiredBalance)
-          ? collectedTally.balance
-          : undefined;
-      },
-      collectedTally.balance,
-    );
-    if (accumulated !== undefined && accumulated < requiredBalance) {
+      { pageSize: defaultCellPageSize, budget },
+    )) {
+      if (
+        tx.inputs.some(({ previousOutput }) => previousOutput.eq(cell.outPoint)) ||
+        !this.isUdt(cell)
+      ) {
+        continue;
+      }
+      collectedTally.addAssign(
+        await this.inputContribution(cell, signer.client, transactionCache),
+      );
+      tx.addInput(cell);
+      if (!shouldCollectMoreInputs(collectedTally, requiredBalance)) {
+        break;
+      }
+    }
+    if (collectedTally.balance < requiredBalance) {
       throw new Error(
-        `Insufficient iCKB, need ${String(requiredBalance - accumulated)} more`,
+        `Insufficient iCKB, need ${String(requiredBalance - collectedTally.balance)} more`,
       );
     }
-    collectedTally.balance = accumulated ?? completedBalance;
     return collectedTally;
   }
 

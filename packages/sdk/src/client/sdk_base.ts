@@ -5,11 +5,19 @@ import type {
   LogicManager,
   OwnedOwnerManager,
 } from "@ickb/core";
-import { assertDaoOutputLimit, DAO_OUTPUT_LIMIT, DaoOutputLimitError } from "@ickb/dao";
+import { assertDaoOutputLimit } from "@ickb/dao";
 import type { Info, OrderGroup, OrderManager } from "@ickb/order";
-import type { ValueComponents } from "@ickb/utils";
-import { isChangeCellCapacityError } from "../conversion/sdk_conversion_common.ts";
+import {
+  defaultCellPageSize,
+  findSignerCellsPagedNoCache,
+  isPlainCapacityCell,
+  PagedScanBudget,
+  PagedScanBudgetError,
+  PagedScanCursorError,
+  type ValueComponents,
+} from "@ickb/utils";
 import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
+import { IckbError } from "./sdk_error.ts";
 import type {
   BuildBaseTransactionOptions,
   CompleteIckbTransactionOptions,
@@ -38,49 +46,38 @@ export abstract class IckbSdkBase {
   /**
    * Completes iCKB/xUDT inputs and transaction fees for a partial transaction.
    *
-   * @remarks
-   * This does not sign or send the transaction. It retries fee completion once
-   * when CCC needs to place fee change into an existing iCKB-owned output or
-   * ordinary fee change would exceed the DAO output limit.
+   * @remarks This does not sign or send the transaction. Candidate inputs come
+   * from bounded committed scans and ordinary change is always a plain cell.
+   * Existing outputs are never reinterpreted or resized as fee change.
+   * Callers must resolve or independently exclude inputs from pending attempts
+   * before rebuilding; completion deliberately does not chain pending outputs.
    */
   public async completeTransaction(
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
-    const pristineTx = ccc.Transaction.from(txLike).clone();
-    const tx = await this.ickbUdt.completeBy(pristineTx.clone(), options.signer);
-    const outputCountBeforeFee = tx.outputs.length;
+    const budget = new PagedScanBudget(6_400, 6_400);
     try {
-      await tx.completeFeeBy(options.signer, options.feeRate);
-    } catch (error) {
-      if (!isChangeCellCapacityError(error)) {
-        throw error;
-      }
-
-      const retryTx = await this.completeFeeChangeToOutput(pristineTx, options);
-      if (retryTx === undefined) {
-        throw error;
-      }
-      return retryTx;
-    }
-    try {
+      const tx = await this.ickbUdt.completeBy(
+        ccc.Transaction.from(txLike).clone(),
+        options.signer,
+        { budget },
+      );
+      await this.completeFeeFromCommittedCells(tx, options, budget);
       assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
+      return tx;
     } catch (error) {
       if (
-        !(error instanceof DaoOutputLimitError) ||
-        outputCountBeforeFee !== DAO_OUTPUT_LIMIT ||
-        tx.outputs.length !== DAO_OUTPUT_LIMIT + 1
+        error instanceof PagedScanBudgetError ||
+        error instanceof PagedScanCursorError
       ) {
-        throw error;
-      }
-
-      const retryTx = await this.completeFeeChangeToOutput(pristineTx, options);
-      if (retryTx !== undefined) {
-        return retryTx;
+        throw new IckbError(
+          "Transaction completion did not finish its committed-cell scan",
+          { code: "account_scan_limit", cause: error },
+        );
       }
       throw error;
     }
-    return tx;
   }
 
   /**
@@ -152,53 +149,58 @@ export abstract class IckbSdkBase {
     return tx;
   }
 
-  private async findFeeChangeOutputIndex(
+  private async completeFeeFromCommittedCells(
     tx: ccc.Transaction,
-    signer: ccc.Signer,
-  ): Promise<number | undefined> {
-    const { script: userLock } = await signer.getRecommendedAddressObj();
-    let masterIndex: number | undefined;
-    let ownerIndex: number | undefined;
-    let plainIndex: number | undefined;
-    for (const [index, output] of Array.from(tx.outputs.entries()).toReversed()) {
-      if (!output.lock.eq(userLock)) {
-        continue;
-      }
-      if (output.type?.eq(this.ickbLogic.script) === true) {
-        return index;
-      }
-      if (masterIndex === undefined && output.type?.eq(this.order.script) === true) {
-        masterIndex = index;
-      }
-      if (ownerIndex === undefined && output.type?.eq(this.ownedOwner.script) === true) {
-        ownerIndex = index;
-      }
-      if (plainIndex === undefined && output.type === undefined) {
-        plainIndex = index;
+    options: CompleteIckbTransactionOptions,
+    budget: PagedScanBudget,
+  ): Promise<void> {
+    const candidates = findSignerCellsPagedNoCache(
+      options.signer,
+      { scriptLenRange: [0, 1], outputDataLenRange: [0, 1] },
+      { pageSize: defaultCellPageSize, budget },
+    );
+    const selected = new Set(
+      tx.inputs.map(({ previousOutput }) => previousOutput.toHex()),
+    );
+    for (;;) {
+      try {
+        await tx.completeFeeBy(options.signer, options.feeRate, undefined, {
+          shouldAddInputs: false,
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof ccc.ErrorTransactionInsufficientCapacity)) {
+          throw error;
+        }
+        await this.addCommittedCapacity(tx, candidates, selected, error);
       }
     }
-    return masterIndex ?? ownerIndex ?? plainIndex;
   }
 
-  private async completeFeeChangeToOutput(
-    pristineTx: ccc.Transaction,
-    options: CompleteIckbTransactionOptions,
-  ): Promise<ccc.Transaction | undefined> {
-    const retryTx = await this.ickbUdt.completeBy(pristineTx.clone(), options.signer);
-    const feeChangeOutputIndex = await this.findFeeChangeOutputIndex(
-      retryTx,
-      options.signer,
-    );
-    if (feeChangeOutputIndex === undefined) {
-      return undefined;
+  private async addCommittedCapacity(
+    tx: ccc.Transaction,
+    candidates: AsyncGenerator<ccc.Cell, void>,
+    selected: Set<string>,
+    shortfall: ccc.ErrorTransactionInsufficientCapacity,
+  ): Promise<void> {
+    let addedCapacity = 0n;
+    while (addedCapacity < shortfall.amount) {
+      const next = await candidates.next();
+      if (next.done === true) {
+        throw new IckbError(shortfall.message, {
+          code: "insufficient_capacity",
+          cause: shortfall,
+        });
+      }
+      const cell = next.value;
+      const outPoint = cell.outPoint.toHex();
+      if (selected.has(outPoint) || !isPlainCapacityCell(cell)) {
+        continue;
+      }
+      selected.add(outPoint);
+      tx.addInput(cell);
+      addedCapacity += cell.cellOutput.capacity;
     }
-    await retryTx.completeFeeChangeToOutput(
-      options.signer,
-      feeChangeOutputIndex,
-      options.feeRate,
-    );
-    assertDaoOutputLimit(retryTx, this.ickbLogic.daoManager.script);
-    return retryTx;
   }
 }
 

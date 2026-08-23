@@ -175,9 +175,19 @@ export async function collectPagedScan<T>(
     budget?: PagedScanBudget;
   },
 ): Promise<T[]> {
+  const results: T[] = [];
+  for await (const item of iteratePagedScan(fetchPage, options)) {
+    results.push(item);
+  }
+  return results;
+}
+
+async function* iteratePagedScan<T>(
+  fetchPage: (pageSize: number, after: string | undefined) => Promise<PagedScanPage<T>>,
+  options: { pageSize: number; budget?: PagedScanBudget },
+): AsyncGenerator<T> {
   assertPageSize(options.pageSize);
 
-  const results: T[] = [];
   const seenCursors = new Set<string>();
   let after: string | undefined;
   for (;;) {
@@ -191,9 +201,9 @@ export async function collectPagedScan<T>(
     }
     const items = "items" in page ? page.items : page.cells;
     options.budget?.addItems(items.length);
-    results.push(...items);
+    yield* items;
     if (items.length < options.pageSize) {
-      return results;
+      return;
     }
     if (
       page.lastCursor === undefined ||
@@ -215,9 +225,8 @@ export async function collectPagedScan<T>(
  * Collects CCC cell pages while preserving its cached and on-chain scan modes.
  *
  * @remarks Cached scans yield matching cached cells first, then omit unusable
- * or duplicate on-chain cells. On-chain scans bypass cache reads. Both modes
- * still use CCC's `findCellsPaged`, which records fetched cells in the client
- * cache, and enforce cursor progress through {@link collectPagedScan}.
+ * or duplicate on-chain cells. On-chain scans use `findCellsPagedNoCache`, so
+ * they neither read nor mutate CCC's cache. Both modes enforce cursor progress.
  *
  * @public
  */
@@ -236,7 +245,9 @@ export async function collectCellsPaged(
           cached.push(cell);
         }
       }
-      return client.findCellsPaged(key, order, requestPageSize, after);
+      return options.onChain
+        ? client.findCellsPagedNoCache(key, order, requestPageSize, after)
+        : client.findCellsPaged(key, order, requestPageSize, after);
     },
     {
       pageSize: options.pageSize,
@@ -257,6 +268,37 @@ export async function collectCellsPaged(
     }
   }
   return result;
+}
+
+/** Iterates signer-owned committed candidate pages without using CCC's cell cache. @public */
+export async function* findSignerCellsPagedNoCache(
+  signer: ccc.Signer,
+  filter: Parameters<ccc.Signer["findCellsOnChain"]>[0],
+  options: { pageSize: number; budget?: PagedScanBudget },
+): AsyncGenerator<ccc.Cell, void> {
+  const seen = new Set<string>();
+  const locks = unique((await signer.getAddressObjs()).map(({ script }) => script));
+  for (const lock of locks) {
+    const key = ccc.ClientIndexerSearchKey.from({
+      script: lock,
+      scriptType: "lock",
+      filter,
+      scriptSearchMode: "exact",
+      withData: true,
+    });
+    for await (const cell of iteratePagedScan(
+      async (pageSize, after): ReturnType<ccc.Client["findCellsPagedNoCache"]> =>
+        signer.client.findCellsPagedNoCache(key, "asc", pageSize, after),
+      options,
+    )) {
+      const outPoint = cell.outPoint.toHex();
+      if (!cell.cellOutput.lock.eq(lock) || seen.has(outPoint)) {
+        continue;
+      }
+      seen.add(outPoint);
+      yield cell;
+    }
+  }
 }
 
 function assertPageSize(pageSize: number): void {

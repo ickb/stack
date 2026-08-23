@@ -177,7 +177,7 @@ export async function daoCellFrom(
     : { ...common, isDeposit: false };
 }
 
-/** Matches deployed dao.c at ckb-system-scripts@f25c5ae: equal fractions do not roll twice. */
+/** Matches deployed dao.c at ckb-system-scripts\@f25c5ae: equal fractions do not roll twice. */
 export function daoClaimEpoch(
   depositHeader: ccc.ClientBlockHeaderLike,
   withdrawHeader: ccc.ClientBlockHeaderLike,
