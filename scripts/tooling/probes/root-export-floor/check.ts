@@ -136,7 +136,9 @@ function compileConsumerFixture(): FixtureVerdict {
   });
   const { output } = result;
   const missing = new Set<string>();
-  for (const match of output.matchAll(/no exported member (?:named )?'([^']+)'/gu)) {
+  for (const match of output.matchAll(
+    /error TS(?:2305|2724):[^\n]*?exported member (?:named )?'([^']+)'/gu,
+  )) {
     const name = match[1];
     if (name !== undefined) {
       missing.add(name);
@@ -151,7 +153,7 @@ function compileConsumerFixture(): FixtureVerdict {
   }
   const unexpected = [...output.matchAll(/error TS(\d+)/gu)]
     .map((match) => match[1])
-    .filter((code) => !["2305", "2339", "2694", "2724"].includes(code ?? ""));
+    .filter((code) => !["2305", "2339", "2551", "2694", "2724"].includes(code ?? ""));
   const detected = missing.size > 0 || notAValue.size > 0;
   if (unexpected.length > 0 || (result.status !== 0 && !detected)) {
     console.error(output);

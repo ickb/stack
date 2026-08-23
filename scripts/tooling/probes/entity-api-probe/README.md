@@ -1,7 +1,7 @@
 # entity-api-probe
 
 Committed, re-runnable check for the Phase-1 exit item recorded in
-`docs/reviews/2026-08-10T00-12-04Z-final-decisions.md` amendment §8 (review
+`docs/stack-rewrite/decisions.md` amendment 8 (review
 finding F-006): the previously-ephemeral `/tmp/entity-ae-check` verdict is now
 reproducible on demand.
 
@@ -37,7 +37,7 @@ export class X extends XBase { ... }
 
 with `@public` on `XLike`, `XBase`, and `X`. The shared `EntityBase` helper
 lives in `shared/` after the Phase-3 merge; the per-entity `XBase` consts are
-part of the root export contract (final-decisions amendment §7).
+part of the root export contract (decision-record amendment 7).
 
 **Config caveat (amendment §8):** when committed api reports are enabled at
 Phase-3a, set `"ae-forgotten-export": {"logLevel": "error",

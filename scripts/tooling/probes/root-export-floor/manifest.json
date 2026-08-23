@@ -122,7 +122,7 @@
     "name": "DAO_OUTPUT_LIMIT",
     "owner": "dao",
     "kind": "value",
-    "note": "Consensus 64-output limit constant; owned by the dao barrel today, root-contract name adopted as-is."
+    "note": "Consensus 64-output limit constant; the authority renamed the earlier DAO_TX_OUTPUT_LIMIT proposal to this existing dao-barrel name."
   },
   {
     "name": "DEFAULT_ORDER_FEE",
@@ -140,31 +140,31 @@
     "name": "snapshot",
     "owner": null,
     "kind": "value",
-    "note": "Phase-2 Snapshot API root export."
+    "note": "Provisional Phase-2 name; implement only if a supported consumer needs a separate factory."
   },
   {
     "name": "SentTransaction",
     "owner": null,
     "kind": "value",
-    "note": "Phase-2 Snapshot API root export."
+    "note": "Phase-2 SDK transaction observation handle."
   },
   {
     "name": "quoteConversion",
     "owner": null,
     "kind": "value",
-    "note": "Phase-2 Snapshot API root export."
+    "note": "Phase-2 scan-free conversion quote."
   },
   {
     "name": "completeTransaction",
     "owner": null,
     "kind": "value",
-    "note": "Exists today only as an IckbSdk method; the root-level export lands with the Phase-2 Snapshot API."
+    "note": "Phase-2 root completion boundary; selection and CCC mechanics remain private."
   },
   {
     "name": "IckbError",
-    "owner": null,
+    "owner": "sdk",
     "kind": "value",
-    "note": "Phase-2 error type; its code union joins the floor when its name is fixed."
+    "note": "Phase-2 stable typed SDK failure."
   },
   {
     "name": "EntityBase",
@@ -216,7 +216,7 @@
   },
   {
     "name": "IckbErrorCode",
-    "owner": null,
+    "owner": "sdk",
     "kind": "type",
     "note": "Phase-2 ratified name for the IckbError machine-readable code union (review F-014); joins the enforced floor with IckbError."
   }

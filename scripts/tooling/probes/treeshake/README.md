@@ -1,6 +1,7 @@
 # Treeshake probe
 
-Committed reproducer for the amendment-12 verdict (final decisions record):
+Committed reproducer for amendment 12 of the
+[Stack rewrite decisions](../../../../docs/stack-rewrite/decisions.md):
 
 1. **Source scan** — fails if any `@__PURE__` annotation appears inside a
    `static {}` block under `packages/*/src` (rollup deletes the annotated call

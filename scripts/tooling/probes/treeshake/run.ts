@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 /**
- * Treeshake probe (final decisions record, amendment 12).
+ * Treeshake probe (docs/stack-rewrite/decisions.md, amendment 12).
  *
  * Three deterministic checks, pinned to the repo's rollup and esbuild
  * devDependencies:
