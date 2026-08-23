@@ -15,3 +15,4 @@ apps/sampler/rate.csv
 
 # Local scratch files
 .scratch/
+/private/
