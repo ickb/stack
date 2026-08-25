@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { DaoManager } from "@ickb/dao";
+import { PagedScanBudget } from "@ickb/utils";
 import { describe, expect, it } from "vitest";
 import {
   convert,
@@ -23,6 +24,8 @@ import {
 
 describe(RECEIPT_PREFIX_DECODING_SUITE, () => {
   registerCompleteByCollectionTests();
+  registerCompleteByExistingInputTests();
+  registerCompleteByBudgetTests();
   registerCompleteByErrorTests();
   registerCompleteByContextErrorTests();
   registerCompleteByProtocolInputTests();
@@ -91,7 +94,9 @@ function registerCompleteByCollectionTests(): void {
     expect(completed.inputs).toHaveLength(1);
     expect(completed.inputs[0]?.previousOutput.eq(exact.outPoint)).toBe(true);
   });
+}
 
+function registerCompleteByExistingInputTests(): void {
   it("completeBy changes existing two xUDT input surplus without collecting more", async () => {
     const { ickbUdt, type } = testIckbUdt();
     const firstInput = xudtCell(80n, type);
@@ -111,6 +116,29 @@ function registerCompleteByCollectionTests(): void {
 
     expect(completed.inputs).toHaveLength(2);
     expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(30n, 16)));
+  });
+}
+
+function registerCompleteByBudgetTests(): void {
+  it("completeBy charges a supplied aggregate scan budget", async () => {
+    const { ickbUdt, type } = testIckbUdt();
+    const tx = ccc.Transaction.from({
+      outputs: [{ lock: script("22"), type }],
+      outputsData: [ccc.numLeToBytes(100n, 16)],
+    });
+    const signer = signerWithCells(
+      [xudtCell(100n, type)],
+      clientWithHeader(headerLike(1n)),
+    );
+    const budget = new PagedScanBudget(1, 1, {
+      aborted: true,
+      reason: new Error("aggregate preview expired"),
+    });
+
+    await expect(ickbUdt.completeBy(tx, signer, { budget })).rejects.toMatchObject({
+      name: "PagedScanBudgetError",
+      reason: "aborted",
+    });
   });
 }
 

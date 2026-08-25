@@ -185,6 +185,37 @@ export class StubClient extends ccc.ClientPublicTestnet {
 }
 
 /**
+ * Creates a stub client whose on-chain scans serve full pages forever.
+ *
+ * @remarks Only a scan budget can end a scan against this client, so tests can
+ * prove a bounded scan fails instead of paging without end. `pages` counts the
+ * page requests served, including the one a budget rejects.
+ *
+ * @param cell - Cell repeated to fill every served page.
+ */
+export function endlessCellPageClient(cell: ccc.Cell): {
+  client: StubClient;
+  pages: () => number;
+} {
+  let pages = 0;
+  const client = new StubClient({
+    findCellsPagedNoCache: async (
+      _key,
+      _order,
+      limit,
+    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
+      await Promise.resolve();
+      pages += 1;
+      return {
+        cells: Array.from({ length: Number(limit) }, () => cell),
+        lastCursor: `page:${String(pages)}`,
+      };
+    },
+  });
+  return { client, pages: (): number => pages };
+}
+
+/**
  * Creates a type-hash script whose code hash is a repeated byte.
  *
  * @param codeHashByte - Two hex characters repeated to form the 32-byte code hash.

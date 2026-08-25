@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
 import { formatCkb } from "@ickb/node-utils";
 import {
@@ -164,21 +164,12 @@ async function sendTesterAttempt({
     }
     txHash = error.txHash;
   }
-  for (;;) {
-    try {
-      await waitTransaction(
-        runtime.signer.client,
-        txHash,
-        0,
-        VALIDATION_TRANSACTION_TIMEOUT_MS,
-      );
-      return;
-    } catch (error) {
-      if (error instanceof ccc.ErrorClientWaitTransactionTimeout) {
-        continue;
-      }
-      throw testerTransactionConfirmationError(error, txHash);
-    }
+  try {
+    await waitTransaction(runtime.signer.client, txHash, {
+      timeout: VALIDATION_TRANSACTION_TIMEOUT_MS,
+    });
+  } catch (error) {
+    throw testerTransactionConfirmationError(error, txHash);
   }
 }
 
@@ -186,7 +177,6 @@ interface TransactionConfirmationErrorOptions {
   cause?: unknown;
   isTimeout: boolean;
   reason?: string;
-  rebuildReady: boolean;
   status: string;
   txHash: ccc.Hex;
 }
@@ -194,7 +184,6 @@ interface TransactionConfirmationErrorOptions {
 class TransactionConfirmationError extends Error {
   public readonly isTimeout: boolean;
   public readonly reason: string | undefined;
-  public readonly rebuildReady: boolean;
   public readonly status: string;
   public readonly txHash: ccc.Hex;
 
@@ -203,7 +192,6 @@ class TransactionConfirmationError extends Error {
     this.name = "TransactionConfirmationError";
     this.isTimeout = options.isTimeout;
     this.reason = options.reason;
-    this.rebuildReady = options.rebuildReady;
     this.status = options.status;
     this.txHash = options.txHash;
   }
@@ -218,15 +206,14 @@ function testerTransactionConfirmationError(
       txHash,
       status: error.status,
       isTimeout: false,
-      rebuildReady: error.rebuildReady,
-      ...(error.reason === undefined ? {} : { reason: error.reason }),
+      reason: error.reason,
     });
   }
+  // A closed window leaves the attempt unresolved rather than rejected.
   return new TransactionConfirmationError("Transaction status remained unresolved", {
     txHash,
     status: "sent",
     isTimeout: true,
-    rebuildReady: false,
     cause: error,
   });
 }

@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_INTERVAL_MS = 2_000;
 
 /** Error reported when CKB gives a terminal non-committed transaction status. @public */
 export class TransactionWaitError extends Error {
@@ -10,225 +12,333 @@ export class TransactionWaitError extends Error {
   public readonly status: string;
   /** Optional rejection reason reported by the node. */
   public readonly reason: string | undefined;
-  /** Whether the owning client cache was cleared and rebuilding is safe. */
-  public readonly rebuildReady: boolean;
 
   /** Creates an error from a transaction hash and terminal node status. */
   constructor(
     txHash: ccc.Hex,
-    options: ErrorOptions & { status: string; reason?: string; rebuildReady: boolean },
+    options: ErrorOptions & { status: string; reason?: string },
   ) {
-    const { status, reason, rebuildReady } = options;
+    const { status, reason } = options;
     const detail = reason === undefined ? status : `${status}: ${reason}`;
     super(`Transaction ${txHash} ended with status ${detail}`, options);
     this.name = "TransactionWaitError";
     this.txHash = txHash;
     this.status = status;
     this.reason = reason;
-    this.rebuildReady = rebuildReady;
   }
+}
+
+/** One bounded observation window for an already-broadcast transaction. @public */
+export interface WaitTransactionOptions {
+  /**
+   * Canonical depth below the tip required before returning. Defaults to 0.
+   *
+   * @remarks A positive depth fails closed: the inclusion recheck needs both the
+   * block number and the block hash, so a client whose committed response omits
+   * `blockHash` never confirms and the wait ends at its timeout.
+   */
+  confirmations?: number;
+  /** Absolute budget in milliseconds for the whole wait. Defaults to 60000. */
+  timeout?: number;
+  /** Delay in milliseconds between polls. Defaults to 2000. */
+  interval?: number;
+  /** Cancels polling and any in-flight client operation. */
+  signal?: AbortSignal;
 }
 
 /**
- * Waits for a transaction using CCC's parameter order, defaults, return value,
- * confirmation depth, and timeout behavior.
+ * Arguments accepted after the client and the transaction hash.
  *
- * @remarks JSON-RPC clients poll `get_transaction` verbosity 1 directly so a
- * status-only rejection is not hidden by CCC's transaction cache. Other client
- * implementations fall back to `getTransaction` and therefore cannot recover a
- * terminal status that the client itself discards. Timeout and abort also apply
- * while awaiting client operations, but CCC transports cannot be cancelled and
- * may finish after this function rejects.
+ * @remarks Exactly one call form per call: the options object, or the shipped
+ * positional arguments. Mixing them is rejected at compile time.
  *
  * @public
  */
-// eslint-disable-next-line max-params -- Matches Client.waitTransaction for drop-in migration.
+export type WaitTransactionArguments =
+  | [options: WaitTransactionOptions]
+  | [confirmations?: number, timeout?: number, interval?: number, signal?: AbortSignal];
+
+/**
+ * Observes one already-broadcast transaction for a single bounded window.
+ *
+ * @remarks Accepts `(client, txHash, options)` or the shipped positional
+ * `(client, txHash, confirmations?, timeout?, interval?, signal?)`. JSON-RPC
+ * clients poll `get_transaction` verbosity 1 directly so a status-only
+ * rejection is not hidden by CCC's transaction cache, and every transaction
+ * body read bypasses that cache. Timeout and abort also apply while awaiting
+ * client operations, but CCC transports cannot be cancelled and may finish
+ * after this function rejects. Nothing here mutates the client cache: later
+ * attempts rebuild from exact committed reads.
+ *
+ * @public
+ */
 export async function waitTransaction(
   client: ccc.Client,
   txHashLike: ccc.HexLike,
-  confirmations = 0,
-  timeout = 60_000,
-  interval = 2_000,
-  signal?: AbortSignal,
-): Promise<ccc.ClientTransactionResponse | undefined> {
-  signal?.throwIfAborted();
-  validateWaitParameters(confirmations, timeout, interval);
-  const wait = {
-    deadline: Date.now() + timeout,
+  ...args: WaitTransactionArguments
+): Promise<ccc.ClientTransactionResponse> {
+  const {
+    confirmations = 0,
+    timeout = DEFAULT_TIMEOUT_MS,
+    interval = DEFAULT_INTERVAL_MS,
     signal,
-    timeoutError: Number.isFinite(timeout)
-      ? new ccc.ErrorClientWaitTransactionTimeout(timeout)
-      : undefined,
-  };
+  } = waitOptions(args);
+  validateWaitOptions(confirmations, timeout, interval);
+  // Normalized before the window opens so a malformed hash cannot leave a timer
+  // or abort listener installed outside the try/finally that closes them.
   const txHash = ccc.hexFrom(txHashLike);
+  signal?.throwIfAborted();
 
-  for (;;) {
-    signal?.throwIfAborted();
-    const transaction = await getCommittedTransaction(
-      client,
-      txHash,
-      confirmations > 0,
-      wait,
-    );
-    signal?.throwIfAborted();
-    if (
-      transaction !== undefined &&
-      (confirmations === 0 ||
-        (await isConfirmed(client, transaction, confirmations, wait)))
-    ) {
-      signal?.throwIfAborted();
-      return transaction;
+  const budget = openWaitWindow(timeout, signal);
+  const poll = { client, txHash, budget };
+  try {
+    for (;;) {
+      const committed = await readCommittedTransaction(poll);
+      if (
+        committed !== undefined &&
+        (confirmations === 0 || (await isConfirmed(poll, committed, confirmations)))
+      ) {
+        // An abort synchronized into the gap between the last read and this
+        // return must not resolve the wait successfully.
+        budget.throwIfStopped();
+        return committed;
+      }
+      if (Date.now() + interval >= budget.deadline) {
+        throw budget.timeoutError;
+      }
+      await pollingSleep(interval, budget);
     }
-
-    signal?.throwIfAborted();
-    if (Date.now() + interval >= wait.deadline) {
-      throw getTimeoutError(wait);
-    }
-    await pollingSleep(interval, wait);
+  } finally {
+    budget.close();
   }
 }
 
-async function pollingSleep(interval: number, wait: WaitContext): Promise<void> {
-  const sleep = Promise.withResolvers<undefined>();
-  const cancelTimer = scheduleAt(Date.now() + interval, () => {
-    sleep.resolve(undefined);
-  });
-  await awaitWithinDeadline(async () => sleep.promise, wait, cancelTimer);
+interface WaitWindow {
+  deadline: number;
+  timeoutError: ccc.ErrorClientWaitTransactionTimeout;
+  stopped: Promise<never>;
+  throwIfStopped: () => void;
+  close: () => void;
 }
 
-function validateWaitParameters(
+interface WaitPoll {
+  client: ccc.Client;
+  txHash: ccc.Hex;
+  budget: WaitWindow;
+}
+
+interface TransactionStatus {
+  status: string | undefined;
+  reason: string | undefined;
+  response?: ccc.ClientTransactionResponse;
+}
+
+function waitOptions(args: WaitTransactionArguments): WaitTransactionOptions {
+  if (isOptionsForm(args)) {
+    return args[0];
+  }
+  const [confirmations, timeout, interval, signal] = args;
+  return { confirmations, timeout, interval, signal };
+}
+
+function isOptionsForm(
+  args: WaitTransactionArguments,
+): args is [options: WaitTransactionOptions] {
+  // The positional form is shipped public API, so anything that is not an
+  // options object is read as `confirmations` rather than defaulting to zero.
+  return typeof args[0] === "object";
+}
+
+function validateWaitOptions(
   confirmations: number,
   timeout: number,
   interval: number,
 ): void {
-  if (!Number.isSafeInteger(confirmations) || confirmations < 0) {
-    throw new RangeError("confirmations must be a non-negative safe integer");
-  }
-  if (timeout !== Infinity && (!Number.isSafeInteger(timeout) || timeout < 0)) {
-    throw new RangeError("timeout must be a non-negative safe integer or Infinity");
-  }
-  if (!Number.isSafeInteger(interval) || interval < 0) {
-    throw new RangeError("interval must be a non-negative safe integer");
+  assertCount(confirmations, "confirmations");
+  assertCount(interval, "interval");
+  assertCount(timeout, "timeout");
+  // A single unarmed timer owns the whole window, so the budget must fit one.
+  if (timeout > MAX_TIMEOUT_MS) {
+    throw new RangeError(`timeout must not exceed ${String(MAX_TIMEOUT_MS)} ms`);
   }
 }
 
-function abortReason(signal: AbortSignal): Error {
-  return signal.reason instanceof Error
+function assertCount(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitWindow {
+  const stop = Promise.withResolvers<never>();
+  const timeoutError = new ccc.ErrorClientWaitTransactionTimeout(timeout);
+  const timer = setTimeout(() => {
+    stop.reject(timeoutError);
+  }, timeout);
+  const onAbort = (): void => {
+    stop.reject(abortReason(signal));
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  // Only the operation currently racing this window consumes its rejection.
+  void stop.promise.catch(ignoreSettlement);
+  return {
+    deadline: Date.now() + timeout,
+    timeoutError,
+    stopped: stop.promise,
+    throwIfStopped: (): void => {
+      // Only a promise currently racing the window observes its rejection, so
+      // an abort landing outside a race has to be read from the signal itself.
+      if (signal?.aborted === true) {
+        throw abortReason(signal);
+      }
+    },
+    close: (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+function ignoreSettlement(): void {
+  // Deliberately empty: the racing caller owns the outcome.
+}
+
+function abortReason(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error
     ? signal.reason
-    : new Error("Transaction wait aborted", { cause: signal.reason });
+    : new Error("Transaction wait aborted", { cause: signal?.reason });
 }
 
-async function getCommittedTransaction(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-  refreshInclusion: boolean,
-  wait: WaitContext,
+async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promise<T> {
+  if (Date.now() >= budget.deadline) {
+    throw budget.timeoutError;
+  }
+  const running = operation();
+  // CCC transports cannot be cancelled, so a settlement arriving after the
+  // window closed must stay handled rather than surface as an unhandled one.
+  void running.catch(ignoreSettlement);
+  const result = await Promise.race([running, budget.stopped]);
+  // An operation that settles in the same turn as an abort can win the race, so
+  // cancellation is decided before the result is accepted.
+  budget.throwIfStopped();
+  // An operation that blocks the event loop past the deadline starves the
+  // window timer, so its overdue result must not win the race.
+  if (Date.now() >= budget.deadline) {
+    throw budget.timeoutError;
+  }
+  return result;
+}
+
+async function pollingSleep(interval: number, budget: WaitWindow): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const sleeping = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, interval);
+  });
+  try {
+    await Promise.race([sleeping, budget.stopped]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readCommittedTransaction(
+  poll: WaitPoll,
 ): Promise<ccc.ClientTransactionResponse | undefined> {
-  const status = await getTransactionStatus(client, txHash, wait);
-  await assertNotRejected(client, txHash, status, wait);
+  const status = await readTransactionStatus(poll);
+  assertNotRejected(poll.txHash, status);
   if (status.status !== "committed") {
     return undefined;
   }
 
-  const response =
-    status.response ??
-    (await awaitWithinDeadline(
-      async () =>
-        refreshInclusion && client instanceof ccc.ClientJsonRpc
-          ? client.getTransactionNoCache(txHash)
-          : client.getTransaction(txHash),
-      wait,
-    ));
+  const response = status.response ?? (await readTransactionBody(poll));
   if (response === undefined) {
     return undefined;
   }
-  await assertNotRejected(
-    client,
-    txHash,
-    {
-      status: response.status,
-      ...(response.reason === undefined ? {} : { reason: response.reason }),
-    },
-    wait,
-  );
-  return response.blockNumber === undefined || isPendingStatus(response.status)
-    ? undefined
-    : response;
+  assertNotRejected(poll.txHash, {
+    status: response.status,
+    reason: response.reason,
+  });
+  // Only a body that itself reports commitment counts: an uncached read may lag
+  // or disagree with the status poll, and any other status is not commitment.
+  return response.status === "committed" && response.blockNumber !== undefined
+    ? response
+    : undefined;
 }
 
-async function assertNotRejected(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-  status: TransactionStatusRecord,
-  wait: WaitContext,
-): Promise<void> {
-  if (status.status !== "rejected") {
-    return;
+async function readTransactionStatus(poll: WaitPoll): Promise<TransactionStatus> {
+  const { client, txHash, budget } = poll;
+  if (client instanceof ccc.ClientJsonRpc) {
+    // Raw verbosity-1 polling keeps a status-only rejection that CCC's cached
+    // transaction response discards.
+    return rawTransactionStatus(
+      await within(
+        async () => client.requestor.request("get_transaction", [txHash, "0x1"]),
+        budget,
+      ),
+    );
   }
 
-  const { reason } = status;
-  const rebuildReady = await clearCacheForRebuild(client, wait);
-  throw new TransactionWaitError(txHash, {
-    status: status.status,
-    rebuildReady,
-    ...(reason === undefined ? {} : { reason }),
-  });
+  const response = await readTransactionBody(poll);
+  return response === undefined
+    ? { status: undefined, reason: undefined }
+    : { status: response.status, reason: response.reason, response };
+}
+
+async function readTransactionBody(
+  poll: WaitPoll,
+): Promise<ccc.ClientTransactionResponse | undefined> {
+  const response = await within(
+    async () => poll.client.getTransactionNoCache(poll.txHash),
+    poll.budget,
+  );
+  if (response === undefined) {
+    return undefined;
+  }
+  try {
+    // A generic client may return an unvalidated shape, and a body that cannot
+    // be normalized is not evidence of commitment: keep the window polling.
+    return ccc.ClientTransactionResponse.from(response);
+  } catch {
+    return undefined;
+  }
+}
+
+function assertNotRejected(txHash: ccc.Hex, status: TransactionStatus): void {
+  if (status.status === "rejected") {
+    throw new TransactionWaitError(txHash, {
+      status: status.status,
+      reason: status.reason,
+    });
+  }
 }
 
 async function isConfirmed(
-  client: ccc.Client,
-  transaction: ccc.ClientTransactionResponse,
+  poll: WaitPoll,
+  committed: ccc.ClientTransactionResponse,
   confirmations: number,
-  wait: WaitContext,
 ): Promise<boolean> {
-  const { blockNumber } = transaction;
-  return (
-    blockNumber !== undefined &&
-    (await awaitWithinDeadline(async () => client.getTipHeader(), wait)).number -
-      blockNumber >=
-      confirmations
-  );
-}
-
-interface WaitContext {
-  deadline: number;
-  signal: AbortSignal | undefined;
-  timeoutError: ccc.ErrorClientWaitTransactionTimeout | undefined;
-}
-
-interface TransactionStatusRecord {
-  status: string | undefined;
-  reason?: string;
-  response?: ccc.ClientTransactionResponse;
-}
-
-async function getTransactionStatus(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-  wait: WaitContext,
-): Promise<TransactionStatusRecord> {
-  if (client instanceof ccc.ClientJsonRpc) {
-    const response = await awaitWithinDeadline(
-      async () => client.requestor.request("get_transaction", [txHash, "0x1"]),
-      wait,
-    );
-    return rawTransactionStatus(response);
+  const tip = await within(async () => poll.client.getTipHeader(), poll.budget);
+  if (
+    committed.blockNumber === undefined ||
+    tip.number - committed.blockNumber < confirmations
+  ) {
+    return false;
   }
 
-  const response = await awaitWithinDeadline(
-    async () => client.getTransaction(txHash),
-    wait,
+  // Depth below a tip is not inclusion: re-read without cache so a reorg that
+  // moved or dropped the transaction cannot be reported as confirmed.
+  const current = await readCommittedTransaction(poll);
+  if (current === undefined) {
+    return false;
+  }
+  return (
+    committed.blockHash !== undefined &&
+    current.blockNumber === committed.blockNumber &&
+    current.blockHash === committed.blockHash
   );
-  return response === undefined
-    ? { status: undefined }
-    : {
-        status: response.status,
-        ...(response.reason === undefined ? {} : { reason: response.reason }),
-        response,
-      };
 }
 
-function rawTransactionStatus(response: unknown): TransactionStatusRecord {
+function rawTransactionStatus(response: unknown): TransactionStatus {
   if (
     typeof response !== "object" ||
     response === null ||
@@ -236,7 +346,7 @@ function rawTransactionStatus(response: unknown): TransactionStatusRecord {
     typeof response.tx_status !== "object" ||
     response.tx_status === null
   ) {
-    return { status: undefined };
+    return { status: undefined, reason: undefined };
   }
 
   const { tx_status: statusRecord } = response;
@@ -244,122 +354,6 @@ function rawTransactionStatus(response: unknown): TransactionStatusRecord {
   const reason = "reason" in statusRecord ? statusRecord.reason : undefined;
   return {
     status: typeof status === "string" ? status : undefined,
-    ...(typeof reason === "string" ? { reason } : {}),
+    reason: typeof reason === "string" ? reason : undefined,
   };
-}
-
-function isPendingStatus(status: string): boolean {
-  return status === "sent" || status === "pending" || status === "proposed";
-}
-
-async function clearCacheForRebuild(
-  client: ccc.Client,
-  wait: WaitContext,
-): Promise<boolean> {
-  try {
-    await awaitWithinDeadline(async () => client.cache.clear(), wait);
-    return true;
-  } catch (error) {
-    if (wait.signal?.aborted === true) {
-      throw error;
-    }
-    return false;
-  }
-}
-
-async function awaitWithinDeadline<T>(
-  operation: () => PromiseLike<T>,
-  wait: WaitContext,
-  cancel?: () => void,
-): Promise<T> {
-  const { deadline, signal } = wait;
-  signal?.throwIfAborted();
-  if (deadline <= Date.now()) {
-    throw getTimeoutError(wait);
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    let cancelTimeout: (() => void) | undefined;
-    function settle(): boolean {
-      if (settled) {
-        return false;
-      }
-      settled = true;
-      cancelTimeout?.();
-      signal?.removeEventListener("abort", onAbort);
-      cancel?.();
-      return true;
-    }
-    function onAbort(): void {
-      if (signal !== undefined && settle()) {
-        reject(abortReason(signal));
-      }
-    }
-    function onTimeout(): void {
-      if (settle()) {
-        reject(getTimeoutError(wait));
-      }
-    }
-    function onFulfilled(value: T): void {
-      if (signal?.aborted === true) {
-        onAbort();
-      } else if (deadline <= Date.now()) {
-        onTimeout();
-      } else {
-        settle();
-        resolve(value);
-      }
-    }
-    function onRejected(error: unknown): void {
-      if (signal?.aborted === true) {
-        onAbort();
-      } else if (deadline <= Date.now()) {
-        onTimeout();
-      } else {
-        settle();
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the client rejection unchanged.
-        reject(error);
-      }
-    }
-    if (Number.isFinite(deadline)) {
-      cancelTimeout = scheduleAt(deadline, onTimeout);
-    }
-    signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted === true) {
-      onAbort();
-      return;
-    }
-
-    void Promise.resolve(operation()).then(onFulfilled, onRejected);
-  });
-}
-
-function scheduleAt(time: number, callback: () => void): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  function arm(): void {
-    const remaining = time - Date.now();
-    timer = setTimeout(
-      () => {
-        timer = undefined;
-        if (time <= Date.now()) {
-          callback();
-        } else {
-          arm();
-        }
-      },
-      Math.max(0, Math.min(remaining, MAX_TIMER_DELAY_MS)),
-    );
-  }
-  arm();
-  return () => {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  };
-}
-
-function getTimeoutError(wait: WaitContext): ccc.ErrorClientWaitTransactionTimeout {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Infinite waits have no deadline and cannot reach a timeout path.
-  return wait.timeoutError!;
 }

@@ -1,38 +1,31 @@
+import type { ccc } from "@ckb-ccc/ccc";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransactionHash,
-  hydratePendingTransaction,
   pendingTransactionHash,
   pendingTransactionQueryKey,
   pendingTransactionState,
-  storePendingTransactionHash,
   submitPendingTransaction,
   type PendingTransactionState,
 } from "../../src/query/pendingTransactionQuery.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
-import { memoryStorage } from "../shared/fixtures/storage.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const walletRejected = "wallet rejected";
 
-beforeEach(() => {
-  vi.stubGlobal("localStorage", memoryStorage());
-});
-
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllGlobals();
 });
 
 describe("pending transaction query", () => {
-  it("stores public hashes for only the exact chain and account", () => {
+  it("records hashes for only the exact chain and account", async () => {
     const queryClient = new QueryClient();
     const account = config(queryClient, "testnet", "ckt1account");
     const otherAccount = config(queryClient, "testnet", "ckt1other");
     const otherChain = config(queryClient, "mainnet", "ckt1account");
 
-    storePendingTransactionHash(account, txHash);
+    await recordPending(account, txHash);
 
     expect(pendingTransactionQueryKey(account)).toEqual([
       "testnet",
@@ -48,125 +41,26 @@ describe("pending transaction query", () => {
   });
 });
 
-describe("pending transaction durable identity", () => {
-  it("hydrates strict v1 identity into a fresh QueryClient with chain/account isolation", () => {
-    vi.stubGlobal("localStorage", memoryStorage());
-    const first = config(new QueryClient(), "testnet", "ckt1account");
-    storePendingTransactionHash(first, txHash);
+describe("pending transaction session scope", () => {
+  it("gives a replacement QueryClient no pending identity", async () => {
+    const account = config(new QueryClient(), "testnet", "ckt1account");
+    await recordPending(account, txHash);
 
     const reloaded = config(new QueryClient(), "testnet", "ckt1account");
-    const otherAccount = config(new QueryClient(), "testnet", "ckt1other");
-    const otherChain = config(new QueryClient(), "mainnet", "ckt1account");
 
-    expect(hydratePendingTransaction(reloaded)).toEqual({
-      status: "pending",
-      txHash,
-    });
-    expect(hydratePendingTransaction(otherAccount)).toBeUndefined();
-    expect(hydratePendingTransaction(otherChain)).toBeUndefined();
-  });
-
-  it("ignores malformed durable values and lets memory pending identity win", () => {
-    const localStorage = memoryStorage();
-    vi.stubGlobal("localStorage", localStorage);
-    const durable = config(new QueryClient(), "testnet", "ckt1account");
-    storePendingTransactionHash(durable, txHash);
-    const [key] = localStorage.keys();
-    if (key === undefined) {
-      throw new Error("Expected durable pending key");
-    }
-    localStorage.setItem(key, JSON.stringify({ version: 1, txHash, unexpected: true }));
-    expect(
-      hydratePendingTransaction(config(new QueryClient(), "testnet", "ckt1account")),
-    ).toBeUndefined();
-
-    const memory = config(new QueryClient(), "testnet", "ckt1account");
-    const newerHash = `0x${"cd".repeat(32)}` as const;
-    storePendingTransactionHash(memory, newerHash);
-    localStorage.setItem(key, JSON.stringify({ version: 1, txHash }));
-    expect(hydratePendingTransaction(memory)).toEqual({
-      status: "pending",
-      txHash: newerHash,
-    });
-  });
-
-  it("treats unavailable storage and storage read errors as no durable identity", () => {
-    vi.stubGlobal("localStorage", memoryStorage());
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("storage unavailable");
-      },
-    });
-    expect(
-      hydratePendingTransaction(config(new QueryClient(), "testnet", "ckt1account")),
-    ).toBeUndefined();
-
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem() {
-          throw new Error("storage read failed");
-        },
-      },
-    });
-    expect(
-      hydratePendingTransaction(config(new QueryClient(), "testnet", "ckt1account")),
-    ).toBeUndefined();
-  });
-});
-
-describe("pending transaction durable admission", () => {
-  it("requires browser storage before publishing pending identity", () => {
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("storage unavailable");
-      },
-    });
-    const account = config(new QueryClient(), "testnet", "ckt1account");
-
-    expect(() => {
-      storePendingTransactionHash(account, txHash);
-    }).toThrow("Durable browser storage is required before broadcasting");
-    expect(pendingTransactionState(account)).toBeUndefined();
-  });
-
-  it("rejects submission before broadcast when durable identity cannot be stored", async () => {
-    vi.stubGlobal("localStorage", {
-      getItem: () => null,
-      setItem() {
-        throw new Error("storage write failed");
-      },
-    });
-    const account = config(new QueryClient(), "testnet", "ckt1account");
-    let broadcast = false;
-
-    const attempt = submitPendingTransaction(account, async (recordTxHash) => {
-      await Promise.resolve();
-      recordTxHash(txHash);
-      broadcast = true;
-      return txHash;
-    });
-
-    await expect(attempt).rejects.toThrow("storage write failed");
-    expect(broadcast).toBe(false);
-    expect(pendingTransactionState(account)).toBeUndefined();
-    expect(
-      hydratePendingTransaction(config(new QueryClient(), "testnet", "ckt1account")),
-    ).toBeUndefined();
+    expect(pendingTransactionState(reloaded)).toBeUndefined();
   });
 });
 
 describe("pending transaction cache", () => {
-  it("survives a shorter global garbage-collection policy until explicit clear", () => {
+  it("survives a shorter global garbage-collection policy until explicit clear", async () => {
     vi.useFakeTimers();
     const queryClient = new QueryClient({
       defaultOptions: { queries: { gcTime: 5 } },
     });
     const account = config(queryClient, "testnet", "ckt1account");
 
-    storePendingTransactionHash(account, txHash);
+    await recordPending(account, txHash);
     vi.advanceTimersByTime(100);
 
     expect(pendingTransactionHash(account)).toBe(txHash);
@@ -174,7 +68,7 @@ describe("pending transaction cache", () => {
     expect(pendingTransactionHash(account)).toBeUndefined();
   });
 
-  it("publishes an exact clear to an attached account observer", () => {
+  it("publishes an exact clear to an attached account observer", async () => {
     const queryClient = new QueryClient();
     const account = config(queryClient, "testnet", "ckt1account");
     const observer = new QueryObserver<PendingTransactionState | null>(queryClient, {
@@ -186,7 +80,7 @@ describe("pending transaction cache", () => {
       observed.push(result.data);
     });
 
-    storePendingTransactionHash(account, txHash);
+    await recordPending(account, txHash);
     clearPendingTransactionHash(account);
 
     expect(observed).toContainEqual({ status: "pending", txHash });
@@ -240,7 +134,9 @@ describe("pending transaction submission ownership", () => {
     await expect(attempt).rejects.toThrow(walletRejected);
     expect(pendingTransactionState(account)).toBeUndefined();
   });
+});
 
+describe("pending transaction late settlement", () => {
   it("does not let a late rejection clear a newer owner", async () => {
     const queryClient = new QueryClient();
     const account = config(queryClient, "testnet", "ckt1account");
@@ -251,7 +147,9 @@ describe("pending transaction submission ownership", () => {
     });
     await Promise.resolve();
     const newerHash = `0x${"cd".repeat(32)}` as const;
-    storePendingTransactionHash(account, newerHash);
+    // Only a clear frees the account for the newer submission that must survive.
+    clearPendingTransactionHash(account);
+    await recordPending(account, newerHash);
 
     rejected.reject(new Error(walletRejected));
     await expect(attempt).rejects.toThrow(walletRejected);
@@ -265,7 +163,8 @@ describe("pending transaction submission ownership", () => {
     const attempt = submitPendingTransaction(account, async () => sent.promise);
     await Promise.resolve();
     const newerHash = `0x${"cd".repeat(32)}` as const;
-    storePendingTransactionHash(account, newerHash);
+    clearPendingTransactionHash(account);
+    await recordPending(account, newerHash);
 
     sent.resolve(txHash);
 
@@ -287,6 +186,18 @@ describe("pending transaction submission ownership", () => {
     expect(pendingTransactionState(account)).toBeUndefined();
   });
 });
+
+/** Establishes pending state exactly as a completed submission does. */
+async function recordPending(
+  account: Pick<WalletConfig, "chain" | "address" | "queryClient">,
+  hash: ccc.Hex,
+): Promise<void> {
+  await submitPendingTransaction(account, async (recordTxHash) => {
+    recordTxHash(hash);
+    await Promise.resolve();
+    return hash;
+  });
+}
 
 function config(
   queryClient: QueryClient,

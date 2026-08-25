@@ -7,7 +7,7 @@ import { hash } from "../transaction/base/support/sdk_core_support.ts";
 const TX_HASH = hash("81");
 
 describe("signAndSendTransaction", () => {
-  it("records signed chain identity before RPC and marks only after acceptance", async () => {
+  it("records signed chain identity before RPC and never marks the cache", async () => {
     const { signer, signedHash, feeRate, send, mark } = signerFixture();
     const calls: string[] = [];
     signedHash.mockImplementation(() => {
@@ -25,10 +25,6 @@ describe("signAndSendTransaction", () => {
       calls.push("send");
       return TX_HASH;
     });
-    mark.mockImplementation(async () => {
-      await Promise.resolve();
-      calls.push("mark");
-    });
 
     await expect(
       signAndSendTransaction(signer, ccc.Transaction.default(), (txHash) => {
@@ -37,11 +33,12 @@ describe("signAndSendTransaction", () => {
       }),
     ).resolves.toBe(TX_HASH);
 
-    expect(calls).toEqual(["hash", "feeRate", "record", "send", "mark"]);
+    expect(calls).toEqual(["hash", "feeRate", "record", "send"]);
+    expect(mark).not.toHaveBeenCalled();
   });
 
   it("rejects an excessive signed fee rate before recording or broadcast", async () => {
-    const { signer, feeRate, send, mark } = signerFixture();
+    const { signer, feeRate, send } = signerFixture();
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
     feeRate.mockResolvedValueOnce(cccA.DEFAULT_MAX_FEE_RATE + 1n);
 
@@ -51,20 +48,37 @@ describe("signAndSendTransaction", () => {
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
-    expect(mark).not.toHaveBeenCalled();
   });
+});
 
-  it("retains the accepted hash when cache marking fails", async () => {
-    const { signer, mark } = signerFixture();
-    mark.mockRejectedValueOnce(new Error("cache unavailable"));
+describe("signAndSendTransaction broadcast outcomes", () => {
+  it("accepts a duplicate submission naming the same transaction", async () => {
+    const { signer, send } = signerFixture();
+    send.mockRejectedValueOnce(duplicatedTransaction(TX_HASH));
 
     await expect(signAndSendTransaction(signer, ccc.Transaction.default())).resolves.toBe(
       TX_HASH,
     );
   });
 
+  it("fails closed on a duplicate submission naming another transaction", async () => {
+    const { signer, send } = signerFixture();
+    const nodeTxHash = hash("82");
+    send.mockRejectedValueOnce(duplicatedTransaction(nodeTxHash));
+
+    await expect(
+      signAndSendTransaction(signer, ccc.Transaction.default()),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "TransactionBroadcastError",
+        txHash: TX_HASH,
+        nodeTxHash,
+      }),
+    );
+  });
+
   it("throws a public hash-preserving error when send is ambiguous", async () => {
-    const { signer, send, mark } = signerFixture();
+    const { signer, send } = signerFixture();
     const transportError = new TypeError("fetch failed");
     send.mockRejectedValueOnce(transportError);
 
@@ -74,14 +88,14 @@ describe("signAndSendTransaction", () => {
       expect.objectContaining({
         name: "TransactionBroadcastError",
         txHash: TX_HASH,
+        nodeTxHash: undefined,
         cause: transportError,
       }),
     );
-    expect(mark).not.toHaveBeenCalled();
   });
 
   it("preserves local identity when the node returns an inconsistent hash", async () => {
-    const { signer, send, mark } = signerFixture();
+    const { signer, send } = signerFixture();
     const nodeTxHash = hash("82");
     send.mockResolvedValueOnce(nodeTxHash);
 
@@ -93,9 +107,15 @@ describe("signAndSendTransaction", () => {
         nodeTxHash,
       }),
     );
-    expect(mark).not.toHaveBeenCalled();
   });
 });
+
+function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransaction {
+  return new ccc.ErrorClientDuplicatedTransaction(
+    { code: -1107, data: `Duplicated(Byte32(${txHash}))` },
+    txHash,
+  );
+}
 
 function signerFixture(): {
   signer: ccc.Signer;

@@ -3,7 +3,9 @@ import {
   CheckedUint64LE,
   collectCellsPaged,
   defaultCellPageSize,
+  defaultScanBudget,
   unique,
+  type PagedScanBudget,
   type ScriptDeps,
 } from "@ickb/utils";
 import {
@@ -281,8 +283,9 @@ export class DaoManager implements ScriptDeps {
    * Finds DAO deposit cells for the given locks.
    *
    * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
-   * `minLockUp` and `maxLockUp` override deposit readiness windows.
+   * `minLockUp` and `maxLockUp` override deposit readiness windows. `budget` shares one bound with the other scans of a composed state read.
    * @remarks The transaction cache is shared across the scan so deposit conversions reuse transaction-header reads.
+   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial deposits.
    */
   public async *findDeposits(
     client: ccc.Client,
@@ -293,13 +296,17 @@ export class DaoManager implements ScriptDeps {
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
       pageSize?: number;
+      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<DaoDepositCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
     const pageSize = options?.pageSize ?? defaultCellPageSize;
+    const locksToScan = Array.from(unique(locks));
+    const budget = options?.budget ?? defaultScanBudget({ pageSize });
 
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
-    for (const lock of unique(locks)) {
+    const foundDeposits: DaoDepositCell[] = [];
+    for (const lock of locksToScan) {
       const findCellsArgs = [
         {
           script: lock,
@@ -319,6 +326,7 @@ export class DaoManager implements ScriptDeps {
         await collectCellsPaged(client, ...findCellsArgs, {
           onChain: options?.onChain === true,
           pageSize,
+          budget,
         })
       ).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
 
@@ -332,17 +340,20 @@ export class DaoManager implements ScriptDeps {
           }),
         ),
       );
-      for (const deposit of deposits) {
-        yield deposit;
-      }
+      foundDeposits.push(...deposits);
+    }
+    for (const deposit of foundDeposits) {
+      yield deposit;
     }
   }
 
   /**
    * Finds DAO withdrawal request cells for the given locks.
    *
-   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
+   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, `pageSize` is per lock,
+   * and `budget` shares one bound with the other scans of a composed state read.
    * @remarks Header and transaction caches are shared across the scan so withdrawal conversions reuse DAO reads.
+   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial withdrawal requests.
    */
   public async *findWithdrawalRequests(
     client: ccc.Client,
@@ -351,14 +362,18 @@ export class DaoManager implements ScriptDeps {
       tip?: ccc.ClientBlockHeader;
       onChain?: boolean;
       pageSize?: number;
+      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<DaoWithdrawalRequestCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
     const pageSize = options?.pageSize ?? defaultCellPageSize;
+    const locksToScan = Array.from(unique(locks));
+    const budget = options?.budget ?? defaultScanBudget({ pageSize });
 
     const headerCache: DaoCellFromCache["headerCache"] = new Map();
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
-    for (const lock of unique(locks)) {
+    const foundWithdrawals: DaoWithdrawalRequestCell[] = [];
+    for (const lock of locksToScan) {
       const findCellsArgs = [
         {
           script: lock,
@@ -376,6 +391,7 @@ export class DaoManager implements ScriptDeps {
         await collectCellsPaged(client, ...findCellsArgs, {
           onChain: options?.onChain === true,
           pageSize,
+          budget,
         })
       ).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
 
@@ -388,9 +404,10 @@ export class DaoManager implements ScriptDeps {
           }),
         ),
       );
-      for (const withdrawal of withdrawals) {
-        yield withdrawal;
-      }
+      foundWithdrawals.push(...withdrawals);
+    }
+    for (const withdrawal of foundWithdrawals) {
+      yield withdrawal;
     }
   }
 

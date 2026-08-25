@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
+  expectIckbToCkbDirectPlusOrder,
+  mockWithdrawalWithRemainderOrder,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
@@ -60,6 +62,29 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     ).resolves.toMatchObject({
       ok: true,
       conversion: { kind: DIRECT_PLUS_ORDER },
+    });
+
+    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers more direct deposits when value and surplus tie", async () => {
+    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const unit = ICKB_DEPOSIT_CAP / 10n;
+    const large = projectionReadyDeposit(8n * unit, 0n, { id: "c1" });
+    const smallFirst = projectionReadyDeposit(4n * unit, 0n, { id: "c2" });
+    const smallSecond = projectionReadyDeposit(4n * unit, 0n, { id: "c3" });
+    const { mint, requestWithdrawal } = mockWithdrawalWithRemainderOrder(
+      { ownedOwnerManager, orderManager },
+      [smallFirst, smallSecond],
+      { ckbValue: 0n, udtValue: 2n * unit },
+    );
+
+    await expectIckbToCkbDirectPlusOrder({
+      sdk,
+      lock,
+      deposits: [smallFirst, smallSecond, large],
+      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
     });
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

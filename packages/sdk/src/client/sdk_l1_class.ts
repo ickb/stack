@@ -5,11 +5,12 @@ import {
   collect,
   collectCellsPaged,
   defaultCellPageSize,
+  defaultScanBudget,
   isPlainCapacityCell,
-  PagedScanBudget,
   PagedScanBudgetError,
   PagedScanCursorError,
   unique,
+  type PagedScanBudget,
 } from "@ickb/utils";
 import {
   addBotCkb,
@@ -29,36 +30,45 @@ import type {
   GetL1StateOptions,
   GetPoolDepositsOptions,
   MaturingCkb,
+  PoolDepositRangeOptions,
   PoolDepositState,
   SystemState,
 } from "./sdk_types.ts";
+
+/** Options shared by the components of one composed L1 scan. */
+interface ScanOptions {
+  cellPageSize: number;
+  budget: PagedScanBudget;
+}
 
 /**
  * SDK layer that scans public and account L1 state.
  *
  */
 export class IckbSdkL1 extends IckbSdkConversion {
-  /** Scans public iCKB pool deposits and evaluates readiness against the sampled tip. */
+  /**
+   * Scans public iCKB pool deposits and evaluates readiness against the sampled tip.
+   *
+   * @remarks The scan is bounded on its own; it fails rather than returning a
+   * partial pool. `signal` cancels it without returning partial state.
+   */
   public async getPoolDeposits(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
     options?: GetPoolDepositsOptions,
   ): Promise<PoolDepositState> {
-    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
-    const deposits = await collect(
-      this.ickbLogic.findDeposits(client, {
-        onChain: true,
-        tip,
-        pageSize: cellPageSize,
-        ...(options?.minLockUp === undefined ? {} : { minLockUp: options.minLockUp }),
-        ...(options?.maxLockUp === undefined ? {} : { maxLockUp: options.maxLockUp }),
-      }),
+    const scan = this.scanOptions(options);
+    return boundedL1Scan(
+      async () => this.scanPoolDeposits(client, tip, scan, options),
+      options?.signal,
     );
-    return { deposits, id: poolDepositsKey(deposits, tip) };
   }
 
   /**
    * Scans account cells, receipts, withdrawal groups, and native iCKB xUDT cells.
+   *
+   * @remarks All component scans share one bound and fail together, so account
+   * state is never returned partially. `signal` cancels the whole scan.
    */
   public async getAccountState(
     client: ccc.Client,
@@ -66,44 +76,95 @@ export class IckbSdkL1 extends IckbSdkConversion {
     tip: ccc.ClientBlockHeader,
     options?: { cellPageSize?: number; signal?: AbortSignal },
   ): Promise<AccountState> {
-    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
-    const itemLimit = 6_400;
-    const scanCount = Array.from(unique(locks)).length * 3;
-    const pageLimit = Math.ceil(itemLimit / cellPageSize) + scanCount;
-    const budget = new PagedScanBudget(itemLimit, pageLimit, options?.signal);
-    let scanned: [ccc.Cell[], AccountState["receipts"], AccountState["withdrawalGroups"]];
-    try {
-      scanned = await Promise.all([
-        this.findAccountLiquidCells(client, locks, { pageSize: cellPageSize, budget }),
-        collect(
-          this.ickbLogic.findReceipts(client, locks, {
-            onChain: true,
-            pageSize: cellPageSize,
-            budget,
-          }),
-        ),
-        collect(
-          this.ownedOwner.findWithdrawalGroups(client, locks, {
-            onChain: true,
-            tip,
-            pageSize: cellPageSize,
-            budget,
-          }),
-        ),
-      ]);
-    } catch (error) {
-      if (
-        error instanceof PagedScanBudgetError ||
-        error instanceof PagedScanCursorError
-      ) {
-        throw new IckbError("Account scan did not complete", {
-          code: "account_scan_limit",
-          cause: error,
-        });
-      }
-      throw error;
-    }
-    const [liquidCells, receipts, withdrawalGroups] = scanned;
+    const scan = this.scanOptions(options);
+    return boundedL1Scan(
+      async () => this.scanAccountState(client, locks, tip, scan),
+      options?.signal,
+    );
+  }
+
+  /**
+   * Reads system and account state using one sampled L1 system state.
+   *
+   * @remarks System and account components share one bound and one `signal`, so
+   * the whole read fails or cancels rather than mixing complete system state
+   * with partial account state.
+   */
+  public async getL1AccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }> {
+    const scan = this.scanOptions(options);
+    return boundedL1Scan(
+      async () => this.scanL1AccountState(client, locks, scan, options),
+      options?.signal,
+    );
+  }
+
+  /**
+   * Samples L1 system state and partitions user-owned orders from the public order pool.
+   *
+   * @remarks Pool deposit, order, and bot scans share one bound and one
+   * `signal`, so system state is never returned partially.
+   */
+  public async getL1State(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
+    const scan = this.scanOptions(options);
+    return boundedL1Scan(
+      async () => this.scanL1State(client, locks, scan, options),
+      options?.signal,
+    );
+  }
+
+  private async scanL1AccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    scan: ScanOptions,
+    options?: GetL1StateOptions,
+  ): Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }> {
+    const { system, user } = await this.scanL1State(client, locks, scan, options);
+    const account = await this.scanAccountState(client, locks, system.tip, scan);
+
+    return { system, user, account };
+  }
+
+  private async scanAccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    tip: ccc.ClientBlockHeader,
+    options: ScanOptions,
+  ): Promise<AccountState> {
+    const { cellPageSize, budget } = options;
+    const [liquidCells, receipts, withdrawalGroups] = await Promise.all([
+      this.findAccountLiquidCells(client, locks, { pageSize: cellPageSize, budget }),
+      collect(
+        this.ickbLogic.findReceipts(client, locks, {
+          onChain: true,
+          pageSize: cellPageSize,
+          budget,
+        }),
+      ),
+      collect(
+        this.ownedOwner.findWithdrawalGroups(client, locks, {
+          onChain: true,
+          tip,
+          pageSize: cellPageSize,
+          budget,
+        }),
+      ),
+    ]);
     const capacityCells = liquidCells.filter(isPlainCapacityCell);
     const nativeUdtCells = liquidCells.filter((cell) => this.ickbUdt.isUdt(cell));
     const nativeUdt = nativeUdtCells.reduce(
@@ -124,48 +185,31 @@ export class IckbSdkL1 extends IckbSdkConversion {
     };
   }
 
-  /**
-   * Reads system and account state using one sampled L1 system state.
-   */
-  public async getL1AccountState(
+  private async scanL1State(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1StateOptions,
-  ): Promise<{
-    system: SystemState;
-    user: { orders: OrderGroup[] };
-    account: AccountState;
-  }> {
-    const { system, user } = await this.getL1State(client, locks, options);
-    const account = await this.getAccountState(client, locks, system.tip, {
-      ...(options?.cellPageSize === undefined
-        ? {}
-        : { cellPageSize: options.cellPageSize }),
-      ...(options?.signal === undefined ? {} : { signal: options.signal }),
-    });
-
-    return { system, user, account };
-  }
-
-  /**
-   * Samples L1 system state and partitions user-owned orders from the public order pool.
-   */
-  public async getL1State(
-    client: ccc.Client,
-    locks: ccc.Script[],
+    scan: ScanOptions,
     options?: GetL1StateOptions,
   ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
-    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
     const [poolDeposits, orders, feeRate] = await Promise.all([
-      this.getPoolDeposits(client, tip, { ...options?.poolDeposits, cellPageSize }),
-      collect(this.order.findOrders(client, { onChain: true, pageSize: cellPageSize })),
+      this.scanPoolDeposits(client, tip, scan, options?.poolDeposits),
+      collect(
+        this.order.findOrders(client, {
+          onChain: true,
+          pageSize: scan.cellPageSize,
+          budget: scan.budget,
+        }),
+      ),
       getFeeRate(client),
     ]);
-    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits, {
-      cellPageSize,
-    });
+    const { ckbAvailable, ckbMaturing } = await this.getCkb(
+      client,
+      tip,
+      poolDeposits,
+      scan,
+    );
     const { systemOrders, userOrders } = partitionOrders(orders, locks, exchangeRatio);
     const system = {
       feeRate,
@@ -182,20 +226,49 @@ export class IckbSdkL1 extends IckbSdkConversion {
     };
   }
 
+  /** Builds the shared options for one composed scan. */
+  private scanOptions(options?: {
+    cellPageSize?: number;
+    signal?: AbortSignal;
+  }): ScanOptions {
+    const cellPageSize = options?.cellPageSize ?? defaultCellPageSize;
+    return {
+      cellPageSize,
+      budget: defaultScanBudget({
+        pageSize: cellPageSize,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      }),
+    };
+  }
+
+  private async scanPoolDeposits(
+    client: ccc.Client,
+    tip: ccc.ClientBlockHeader,
+    scan: ScanOptions,
+    range?: PoolDepositRangeOptions,
+  ): Promise<PoolDepositState> {
+    const deposits = await collect(
+      this.ickbLogic.findDeposits(client, {
+        onChain: true,
+        tip,
+        pageSize: scan.cellPageSize,
+        budget: scan.budget,
+        ...(range?.minLockUp === undefined ? {} : { minLockUp: range.minLockUp }),
+        ...(range?.maxLockUp === undefined ? {} : { maxLockUp: range.maxLockUp }),
+      }),
+    );
+    return { deposits, id: poolDepositsKey(deposits, tip) };
+  }
+
   private async getCkb(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
     poolDeposits: PoolDepositState,
-    options: { cellPageSize: number },
+    scan: ScanOptions,
   ): Promise<{ ckbAvailable: ccc.FixedPoint; ckbMaturing: CkbCumulative[] }> {
     const [botCkb, withdrawalCkb] = await Promise.all([
-      this.getBotCkbBalances(client, {
-        cellPageSize: options.cellPageSize,
-        tip,
-      }),
-      this.getBotWithdrawalCkb(client, tip, {
-        cellPageSize: options.cellPageSize,
-      }),
+      this.getBotCkbBalances(client, scan),
+      this.getBotWithdrawalCkb(client, tip, scan),
     ]);
     const poolCkb = poolDepositCkb(poolDeposits, tip);
 
@@ -211,11 +284,11 @@ export class IckbSdkL1 extends IckbSdkConversion {
 
   private async getBotCkbBalances(
     client: ccc.Client,
-    options: { cellPageSize: number; tip: ccc.ClientBlockHeader },
+    scan: ScanOptions,
   ): Promise<Map<string, ccc.FixedPoint>> {
     const bot2Ckb = new Map<string, ccc.FixedPoint>();
     for (const lock of unique(this.bots)) {
-      const cells = await this.findPlainCapacityCells(client, lock, options.cellPageSize);
+      const cells = await this.findPlainCapacityCells(client, lock, scan);
       for (const cell of cells) {
         addBotCkb(bot2Ckb, lock.toHex(), cell.cellOutput.capacity);
       }
@@ -226,8 +299,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
   private async findPlainCapacityCells(
     client: ccc.Client,
     lock: ccc.Script,
-    pageSize: number,
-    budget?: PagedScanBudget,
+    scan: ScanOptions,
   ): Promise<ccc.Cell[]> {
     const cells = await collectCellsPaged(
       client,
@@ -239,11 +311,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
         withData: true,
       },
       "asc",
-      {
-        onChain: true,
-        pageSize,
-        ...(budget === undefined ? {} : { budget }),
-      },
+      { onChain: true, pageSize: scan.cellPageSize, budget: scan.budget },
     );
     return cells.filter(
       (cell) => cell.cellOutput.lock.eq(lock) && isPlainCapacityCell(cell),
@@ -253,13 +321,14 @@ export class IckbSdkL1 extends IckbSdkConversion {
   private async getBotWithdrawalCkb(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
-    options: { cellPageSize: number },
+    scan: ScanOptions,
   ): Promise<{ ready: Map<string, ccc.FixedPoint>; maturing: MaturingCkb[] }> {
     const withdrawals = await collect(
       this.ownedOwner.findWithdrawalGroups(client, this.bots, {
         onChain: true,
         tip,
-        pageSize: options.cellPageSize,
+        pageSize: scan.cellPageSize,
+        budget: scan.budget,
       }),
     );
     return botWithdrawalCkb(withdrawals, tip);
@@ -300,6 +369,63 @@ export class IckbSdkL1 extends IckbSdkConversion {
     }
     return liquidCells;
   }
+}
+
+/**
+ * Runs one composed scan under its signal and maps an exhausted or cancelled
+ * scan to the typed SDK failure.
+ *
+ * @remarks The scan fails on abort even while a client request that the shared
+ * budget never sees is still unresolved.
+ */
+async function boundedL1Scan<T>(
+  startScan: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  try {
+    signal?.throwIfAborted();
+    const scan = startScan();
+    if (signal === undefined) {
+      return await scan;
+    }
+    // Client requests cannot be cancelled, so a scan this function stops waiting
+    // on still settles and its rejection must stay handled.
+    void scan.catch(ignoreSettlement);
+    const stop = Promise.withResolvers<never>();
+    const onAbort = (): void => {
+      stop.reject(signal.reason);
+    };
+    void stop.promise.catch(ignoreSettlement);
+    signal.addEventListener("abort", onAbort, { once: true });
+    // An abort raised while the scan was starting fired before this listener
+    // existed, and a cancelled scan may never settle, so it is replayed here.
+    if (signal.aborted) {
+      stop.reject(signal.reason);
+    }
+    try {
+      const state = await Promise.race([scan, stop.promise]);
+      // An abort after the last page must not return the state it cancelled.
+      signal.throwIfAborted();
+      return state;
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  } catch (error) {
+    // Caller cancellation is the caller's own reason, whether the abort reached
+    // a page budget, an awaited client request, or the end of the scan.
+    signal?.throwIfAborted();
+    if (error instanceof PagedScanBudgetError || error instanceof PagedScanCursorError) {
+      throw new IckbError("L1 scan did not complete", {
+        code: "account_scan_limit",
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
+function ignoreSettlement(): void {
+  // Deliberately empty: the racing caller owns the outcome.
 }
 
 function partitionOrders(

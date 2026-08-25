@@ -157,7 +157,7 @@ vi.mock(
     const useQuery = ((options: unknown): unknown => {
       queryMock.options = options;
       if (isPendingTransactionOptions(options)) {
-        return { data: options.initialData() };
+        return { data: options.queryFn() };
       }
       return queryMock.result;
     }) as typeof ReactQueryModule.useQuery;
@@ -170,7 +170,7 @@ vi.mock(
 );
 
 function isPendingTransactionOptions(options: unknown): options is {
-  initialData: () => unknown;
+  queryFn: () => unknown;
   queryKey: readonly unknown[];
 } {
   return (
@@ -179,8 +179,8 @@ function isPendingTransactionOptions(options: unknown): options is {
     "queryKey" in options &&
     Array.isArray(options.queryKey) &&
     options.queryKey.at(-1) === "pendingTransactionConfirmation" &&
-    "initialData" in options &&
-    typeof options.initialData === "function"
+    "queryFn" in options &&
+    typeof options.queryFn === "function"
   );
 }
 

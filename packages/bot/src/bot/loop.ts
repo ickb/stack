@@ -5,11 +5,7 @@ import {
   sleep,
   STOP_EXIT_CODE,
 } from "@ickb/node-utils";
-import {
-  TransactionBroadcastError,
-  TransactionWaitError,
-  waitTransaction,
-} from "@ickb/sdk";
+import { TransactionBroadcastError, waitTransaction } from "@ickb/sdk";
 import { errorSummary } from "../observability/error.ts";
 import {
   emitDecisionEvents,
@@ -295,59 +291,48 @@ async function confirmTransaction({
   txHash: ccc.Hex;
   startedAt: number;
 }): Promise<void> {
-  for (;;) {
-    try {
-      const committed = await operations.waitTransaction(
-        context.runtime.client,
-        txHash,
-        0,
-        BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-        BOT_TRANSACTION_WAIT_INTERVAL_MS,
-      );
-      const confirmation = {
-        txHash,
-        phase: "confirmation",
-        outcome: "committed",
-        status: committed?.status ?? "committed",
-        elapsedMs: Date.now() - startedAt,
-        timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-        intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-      };
-      context.events.emit(iterationId, "bot.transaction.confirmation", {
-        ...confirmation,
-        retryable: false,
-        terminal: true,
-      });
-      context.events.emit(iterationId, "bot.transaction.committed", confirmation);
-      return;
-    } catch (error) {
-      const confirmationError = postBroadcastError(txHash, error);
-      const retryable = isRetryableBotError(confirmationError);
-      const failure = {
-        txHash,
-        phase: "confirmation",
-        outcome: confirmationError.isTimeout ? "timeout" : "confirmation_failed",
-        status: confirmationError.status,
-        ...(confirmationError.reason === undefined
-          ? {}
-          : { reason: confirmationError.reason }),
-        isTimeout: confirmationError.isTimeout,
-        retryable,
-        terminal: !confirmationError.isTimeout && !retryable,
-        elapsedMs: Date.now() - startedAt,
-        timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-        intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-        error: errorSummary(confirmationError, {
-          includeStack: !retryable && !confirmationError.isTimeout,
-        }),
-      };
-      context.events.emit(iterationId, "bot.transaction.confirmation", failure);
-      if (confirmationError.isTimeout) {
-        continue;
-      }
-      context.events.emit(iterationId, "bot.transaction.failed", failure);
-      throw confirmationError;
-    }
+  try {
+    const committed = await operations.waitTransaction(context.runtime.client, txHash, {
+      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    });
+    const confirmation = {
+      txHash,
+      phase: "confirmation",
+      outcome: "committed",
+      status: committed.status,
+      elapsedMs: Date.now() - startedAt,
+      timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    };
+    context.events.emit(iterationId, "bot.transaction.confirmation", {
+      ...confirmation,
+      retryable: false,
+      terminal: true,
+    });
+    context.events.emit(iterationId, "bot.transaction.committed", confirmation);
+  } catch (error) {
+    const confirmationError = postBroadcastError(txHash, error);
+    const retryable = isRetryableBotError(confirmationError);
+    const failure = {
+      txHash,
+      phase: "confirmation",
+      outcome: confirmationError.isTimeout ? "timeout" : "confirmation_failed",
+      status: confirmationError.status,
+      ...(confirmationError.reason === undefined
+        ? {}
+        : { reason: confirmationError.reason }),
+      isTimeout: confirmationError.isTimeout,
+      retryable,
+      terminal: !retryable,
+      elapsedMs: Date.now() - startedAt,
+      timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+      error: errorSummary(confirmationError, { includeStack: !retryable }),
+    };
+    context.events.emit(iterationId, "bot.transaction.confirmation", failure);
+    context.events.emit(iterationId, "bot.transaction.failed", failure);
+    throw confirmationError;
   }
 }
 
@@ -357,7 +342,6 @@ class BotTransactionConfirmationError extends Error {
   public readonly status: string;
   public readonly isTimeout: boolean;
   public readonly reason: string | undefined;
-  public readonly rebuildReady: boolean;
 
   constructor(
     txHash: ccc.Hex,
@@ -365,7 +349,6 @@ class BotTransactionConfirmationError extends Error {
       cause: unknown;
       isTimeout: boolean;
       reason: string | undefined;
-      rebuildReady: boolean;
       status: string;
     },
   ) {
@@ -379,7 +362,6 @@ class BotTransactionConfirmationError extends Error {
     this.status = options.status;
     this.isTimeout = options.isTimeout;
     this.reason = options.reason;
-    this.rebuildReady = options.rebuildReady;
   }
 }
 
@@ -396,7 +378,6 @@ function postBroadcastError(
     cause: error,
     isTimeout: timeout,
     reason,
-    rebuildReady: error instanceof TransactionWaitError ? error.rebuildReady : false,
     status,
   });
 }

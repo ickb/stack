@@ -2,7 +2,6 @@ import type { ccc } from "@ckb-ccc/ccc";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import {
-  hydratePendingTransaction,
   pendingTransactionQueryKey,
   pendingTransactionState,
   type PendingTransactionState,
@@ -98,13 +97,11 @@ export default function Action({
       message: failureMessage,
     });
   };
-  const hydratedTransactionOwner = hydratePendingTransaction(walletConfig);
   const transactionOwnerQuery = useQuery<PendingTransactionState | null>({
     queryKey: pendingTransactionQueryKey(walletConfig),
     queryFn: () => pendingTransactionState(walletConfig) ?? null,
     enabled: false,
     gcTime: Infinity,
-    initialData: () => hydratedTransactionOwner,
   });
   const transactionOwner = transactionOwnerQuery.data ?? undefined;
   const transactionHash =

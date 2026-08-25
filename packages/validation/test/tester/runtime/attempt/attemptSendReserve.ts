@@ -54,7 +54,7 @@ describe("runTesterAttempt send outcomes", () => {
     const sendTransaction = vi
       .spyOn(runtime.signer, "sendTransaction")
       .mockResolvedValue(txHash);
-    waitTransactionMock.mockResolvedValueOnce(undefined);
+    waitTransactionMock.mockResolvedValueOnce(committedResponse());
     const executionLog: Record<string, unknown> = {};
 
     const result = await runTesterAttempt({
@@ -67,7 +67,9 @@ describe("runTesterAttempt send outcomes", () => {
 
     expect(result).toBe("completed");
     expect(sendTransaction).toHaveBeenCalledTimes(1);
-    expect(waitTransactionMock).toHaveBeenCalledWith(runtime.client, txHash, 0, 600_000);
+    expect(waitTransactionMock).toHaveBeenCalledWith(runtime.client, txHash, {
+      timeout: 600_000,
+    });
     expect(executionLog["actions"]).toMatchObject({
       testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
     });
@@ -77,23 +79,29 @@ describe("runTesterAttempt send outcomes", () => {
 });
 
 describe("runTesterAttempt wait failures", () => {
-  it("opens repeated finite confirmation windows without rebuilding or resending", async () => {
+  it("ends one finite confirmation window as unresolved without resending", async () => {
     const { calls, runtime } = fundedSendRuntime();
     const txHash = byte32FromByte("47");
     vi.spyOn(runtime.signer, "sendTransaction").mockResolvedValue(txHash);
-    waitTransactionMock
-      .mockRejectedValueOnce(new ccc.ErrorClientWaitTransactionTimeout(600_000))
-      .mockRejectedValueOnce(new ccc.ErrorClientWaitTransactionTimeout(600_000))
-      .mockResolvedValueOnce(undefined);
+    const timeout = new ccc.ErrorClientWaitTransactionTimeout(600_000);
+    waitTransactionMock.mockRejectedValue(timeout);
     const executionLog: Record<string, unknown> = {};
 
-    await expect(runFundedSendAttempt(runtime, executionLog)).resolves.toBe("completed");
+    await expect(runFundedSendAttempt(runtime, executionLog)).rejects.toMatchObject({
+      name: "TransactionConfirmationError",
+      txHash,
+      status: "sent",
+      isTimeout: true,
+      cause: timeout,
+    });
 
     expect(signAndSendTransactionMock).toHaveBeenCalledTimes(1);
-    expect(waitTransactionMock).toHaveBeenCalledTimes(3);
-    for (const call of waitTransactionMock.mock.calls) {
-      expect(call).toEqual([runtime.client, txHash, 0, 600_000]);
-    }
+    expect(waitTransactionMock).toHaveBeenCalledTimes(1);
+    expect(waitTransactionMock.mock.calls[0]).toEqual([
+      runtime.client,
+      txHash,
+      { timeout: 600_000 },
+    ]);
     expect(calls).toEqual(["base", "request", "complete"]);
     expect(executionLog["txHash"]).toBe(txHash);
   });
@@ -103,11 +111,7 @@ describe("runTesterAttempt wait failures", () => {
     const txHash = byte32FromByte("48");
     vi.spyOn(runtime.signer, "sendTransaction").mockResolvedValue(txHash);
     waitTransactionMock.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, {
-        status: "rejected",
-        reason: "invalid",
-        rebuildReady: true,
-      }),
+      new TransactionWaitError(txHash, { status: "rejected", reason: "invalid" }),
     );
 
     await expect(runFundedSendAttempt(runtime, {})).rejects.toMatchObject({
@@ -116,24 +120,19 @@ describe("runTesterAttempt wait failures", () => {
       status: "rejected",
       reason: "invalid",
       isTimeout: false,
-      rebuildReady: true,
     });
 
     const withoutReason = fundedSendRuntime().runtime;
     const secondTxHash = byte32FromByte("4a");
     vi.spyOn(withoutReason.signer, "sendTransaction").mockResolvedValue(secondTxHash);
     waitTransactionMock.mockRejectedValueOnce(
-      new TransactionWaitError(secondTxHash, {
-        status: "rejected",
-        rebuildReady: true,
-      }),
+      new TransactionWaitError(secondTxHash, { status: "rejected" }),
     );
     await expect(runFundedSendAttempt(withoutReason, {})).rejects.toMatchObject({
       txHash: secondTxHash,
       status: "rejected",
       reason: undefined,
       isTimeout: false,
-      rebuildReady: true,
     });
   });
 
@@ -158,7 +157,7 @@ describe("runTesterAttempt wait failures", () => {
 });
 
 describe("runTesterAttempt send ambiguity", () => {
-  it("confirms the recorded identity after ambiguous send timeouts without resending", async () => {
+  it("confirms the recorded identity after an ambiguous send without resending", async () => {
     const { calls, runtime } = fundedSendRuntime();
     const txHash = byte32FromByte("4b");
     signAndSendTransactionMock.mockImplementationOnce(
@@ -170,26 +169,17 @@ describe("runTesterAttempt send ambiguity", () => {
         });
       },
     );
-    waitTransactionMock
-      .mockRejectedValueOnce(new ccc.ErrorClientWaitTransactionTimeout(600_000))
-      .mockResolvedValueOnce(undefined);
+    waitTransactionMock.mockResolvedValueOnce(committedResponse());
     const executionLog: Record<string, unknown> = {};
 
     await expect(runFundedSendAttempt(runtime, executionLog)).resolves.toBe("completed");
 
     expect(signAndSendTransactionMock).toHaveBeenCalledTimes(1);
-    expect(waitTransactionMock).toHaveBeenCalledTimes(2);
+    expect(waitTransactionMock).toHaveBeenCalledTimes(1);
     expect(waitTransactionMock.mock.calls[0]).toEqual([
       runtime.client,
       txHash,
-      0,
-      600_000,
-    ]);
-    expect(waitTransactionMock.mock.calls[1]).toEqual([
-      runtime.client,
-      txHash,
-      0,
-      600_000,
+      { timeout: 600_000 },
     ]);
     expect(calls).toEqual(["base", "request", "complete"]);
     expect(executionLog["txHash"]).toBe(txHash);
@@ -327,6 +317,16 @@ async function runFundedSendAttempt(
     executionLog,
     startTime,
   });
+}
+
+function committedResponse(): ccc.ClientTransactionResponse {
+  return new ccc.ClientTransactionResponse(
+    ccc.Transaction.default(),
+    "committed",
+    undefined,
+    byte32FromByte("4e"),
+    10n,
+  );
 }
 
 async function rejectionFrom(promise: Promise<unknown>): Promise<unknown> {

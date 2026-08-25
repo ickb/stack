@@ -3,6 +3,7 @@ import { assertDaoOutputLimit, type DaoCellFromCache, type DaoManager } from "@i
 import {
   collectCellsPaged,
   defaultCellPageSize,
+  defaultScanBudget,
   unique,
   type PagedScanBudget,
   type ScriptDeps,
@@ -162,8 +163,10 @@ export class OwnedOwnerManager implements ScriptDeps {
   /**
    * Finds owner marker cells for the given locks and yields valid owned withdrawal groups.
    *
-   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
+   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, `pageSize` is per lock,
+   * and `budget` shares one bound with the other scans of a composed state read.
    * @remarks Header and transaction caches span all requested locks so related DAO cell conversions share the same reads.
+   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial withdrawal groups.
    */
   public async *findWithdrawalGroups(
     client: ccc.Client,
@@ -177,9 +180,12 @@ export class OwnedOwnerManager implements ScriptDeps {
   ): AsyncGenerator<WithdrawalGroup> {
     const tip = options?.tip ?? (await client.getTipHeader());
     const pageSize = options?.pageSize ?? defaultCellPageSize;
+    const locksToScan = Array.from(unique(locks));
+    const budget = options?.budget ?? defaultScanBudget({ pageSize });
     const headerCache: DaoCellFromCache["headerCache"] = new Map();
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
-    for (const lock of unique(locks)) {
+    const foundGroups: WithdrawalGroup[] = [];
+    for (const lock of locksToScan) {
       const findCellsArgs = [
         {
           script: lock,
@@ -197,7 +203,7 @@ export class OwnedOwnerManager implements ScriptDeps {
         await collectCellsPaged(client, ...findCellsArgs, {
           onChain: options?.onChain === true,
           pageSize,
-          ...(options?.budget === undefined ? {} : { budget: options.budget }),
+          budget,
         })
       )
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
@@ -228,11 +234,10 @@ export class OwnedOwnerManager implements ScriptDeps {
         ),
       );
 
-      for (const group of withdrawalGroups) {
-        if (group !== undefined) {
-          yield group;
-        }
-      }
+      foundGroups.push(...withdrawalGroups.filter((group) => group !== undefined));
+    }
+    for (const group of foundGroups) {
+      yield group;
     }
   }
 }

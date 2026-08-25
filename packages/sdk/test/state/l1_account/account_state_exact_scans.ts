@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IckbError } from "../../../src/sdk.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip, hash } from "../../transaction/base/support/sdk_core_support.ts";
 import { none } from "./support/sdk_l1_support.ts";
@@ -99,10 +98,11 @@ describe("IckbSdk.getAccountState bounded scans", () => {
     expect(state.capacityCells).toEqual([capacity]);
   });
 
-  it("maps an aborted aggregate scan to account_scan_limit", async () => {
+  it("propagates the caller abort reason for an aborted aggregate scan", async () => {
     const { sdk, logicManager, ownedOwnerManager } = testSdk();
+    const cancellationReason = new Error("preview expired");
     const controller = new AbortController();
-    controller.abort(new Error("preview expired"));
+    controller.abort(cancellationReason);
     vi.spyOn(logicManager, "findReceipts").mockImplementation(() => none());
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
     const findCellsPaged = vi.fn();
@@ -111,12 +111,7 @@ describe("IckbSdk.getAccountState bounded scans", () => {
     const result = sdk.getAccountState(client, [script("71")], baseTip, {
       signal: controller.signal,
     });
-    await expect(result).rejects.toBeInstanceOf(IckbError);
-    await expect(result).rejects.toMatchObject({
-      name: "IckbError",
-      code: "account_scan_limit",
-      retryable: false,
-    });
+    await expect(result).rejects.toBe(cancellationReason);
     expect(findCellsPaged).not.toHaveBeenCalled();
   });
 });

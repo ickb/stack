@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { LogicManager, OwnedOwnerManager } from "@ickb/core";
 import { DaoManager } from "@ickb/dao";
 import { script } from "@ickb/testkit";
+import { PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
@@ -55,11 +56,12 @@ describe(L1_STATE_SUITE, () => {
 
     const state = await sdk.getL1State(client, []);
 
-    expect(findDeposits).toHaveBeenCalledWith(client, {
+    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
       pageSize: 400,
       tip,
     });
+    expect(findDeposits.mock.calls[0]?.[1]?.budget).toBeInstanceOf(PagedScanBudget);
     expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(100082));
     expect(state.system.ckbMaturing).toEqual([]);
   });

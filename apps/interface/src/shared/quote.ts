@@ -1,4 +1,5 @@
 import { OrderManager, type Ratio } from "@ickb/order";
+import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "@ickb/sdk";
 import { direction2Symbol, parseAmountInput, toText } from "./utils.ts";
 
 export interface QuoteDraft {
@@ -32,7 +33,7 @@ export function conversionQuote(rawText: string, state: QuoteStateLike): Convers
         ckbValue: draft.isCkb2Udt ? draft.amount : 0n,
         udtValue: draft.isCkb2Udt ? 0n : draft.amount,
       },
-      { fee: 1n, feeBase: 100000n },
+      { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
     );
   } catch (error) {
     if (error instanceof Error && error.name === "OrderConversionRepresentabilityError") {

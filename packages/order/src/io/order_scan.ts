@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { collectCellsPaged } from "@ickb/utils";
+import { collectCellsPaged, type PagedScanBudget } from "@ickb/utils";
 import {
   attestResolvedOrderGroup,
   MasterCell,
@@ -48,12 +48,16 @@ interface OriginOrderAtOptions {
   isOrder: (cell: ccc.Cell) => boolean;
 }
 
-interface FindSimpleOrdersOptions {
+interface FindCellsOptions {
   client: ccc.Client;
   script: ccc.Script;
-  udtScript: ccc.Script;
   onChain: boolean;
   pageSize: number;
+  budget: PagedScanBudget;
+}
+
+interface FindSimpleOrdersOptions extends FindCellsOptions {
+  udtScript: ccc.Script;
 }
 
 /** Finds simple order cells before grouping them with masters. */
@@ -63,6 +67,7 @@ export async function findSimpleOrders({
   udtScript,
   onChain,
   pageSize,
+  budget,
 }: FindSimpleOrdersOptions): Promise<OrderCell[]> {
   const findCellsArgs = [
     {
@@ -78,6 +83,7 @@ export async function findSimpleOrders({
   for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
     onChain,
     pageSize,
+    budget,
   })) {
     const order = OrderCell.tryFrom(cell);
     if (order !== undefined && isOrderCell(cell, script, udtScript)) {
@@ -89,12 +95,13 @@ export async function findSimpleOrders({
 }
 
 /** Finds master cells for the order script. */
-export async function findAllMasters(
-  client: ccc.Client,
-  script: ccc.Script,
-  onChain: boolean,
-  pageSize: number,
-): Promise<MasterCell[]> {
+export async function findAllMasters({
+  client,
+  script,
+  onChain,
+  pageSize,
+  budget,
+}: FindCellsOptions): Promise<MasterCell[]> {
   const findCellsArgs = [
     {
       script,
@@ -108,6 +115,7 @@ export async function findAllMasters(
   for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
     onChain,
     pageSize,
+    budget,
   })) {
     if (isMasterCell(cell, script)) {
       masters.push(new MasterCell(cell));

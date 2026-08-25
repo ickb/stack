@@ -8,11 +8,21 @@ import { ccc } from "@ckb-ccc/core";
  *
  * @remarks
  * When searching for cells, callers may override this page size by passing a
- * custom `pageSize` in their options. This does not cap total results.
+ * custom `pageSize` in their options. Total results are bounded separately by
+ * the scan budget, see {@link defaultScanBudget}.
  *
  * @public
  */
 export const defaultCellPageSize = 400;
+
+/**
+ * Fixed item ceiling for one bounded scan of financial state.
+ *
+ * @remarks Scans that would exceed it fail instead of returning partial state.
+ *
+ * @public
+ */
+export const defaultScanItemLimit = 6_400;
 
 /**
  * A page returned to {@link collectPagedScan}.
@@ -159,12 +169,43 @@ export class PagedScanBudget {
 }
 
 /**
+ * Terminal short pages one default budget allows across all its collectors.
+ *
+ * Every component scan ends on a short page, which is empty when its result
+ * count is an exact multiple of the page size. Allowing a fixed number of them,
+ * derived from the item ceiling at {@link defaultCellPageSize}, keeps the total
+ * absolute: arbitrarily many empty per-lock scans cannot raise it.
+ */
+const defaultTerminalPageAllowance = defaultScanItemLimit / defaultCellPageSize;
+
+/**
+ * Creates the default budget shared by the collectors of one logical scan.
+ *
+ * @remarks The page allowance is absolute and independent of how many component
+ * collectors share it: the pages the item ceiling spends at `pageSize`, plus a
+ * fixed terminal-page allowance for their short final pages.
+ *
+ * @public
+ */
+export function defaultScanBudget(options: {
+  pageSize: number;
+  signal?: PagedScanSignal;
+}): PagedScanBudget {
+  assertPageSize(options.pageSize);
+  return new PagedScanBudget(
+    defaultScanItemLimit,
+    Math.ceil(defaultScanItemLimit / options.pageSize) + defaultTerminalPageAllowance,
+    options.signal,
+  );
+}
+
+/**
  * Fetches and collects every page while enforcing cursor progress.
  *
- * @remarks `pageSize` is passed to each request and is not a total result cap.
- * Empty and short pages complete the scan. Every full page must return a
- * non-empty cursor not previously observed by the scan. Legitimate advancing
- * scans continue without an item or page limit.
+ * @remarks `pageSize` is passed to each request and is not a total result cap;
+ * a `budget` bounds total items and pages. Empty and short pages complete the
+ * scan. Every full page must return a non-empty cursor not previously observed
+ * by the scan.
  *
  * @public
  */
@@ -226,7 +267,8 @@ async function* iteratePagedScan<T>(
  *
  * @remarks Cached scans yield matching cached cells first, then omit unusable
  * or duplicate on-chain cells. On-chain scans use `findCellsPagedNoCache`, so
- * they neither read nor mutate CCC's cache. Both modes enforce cursor progress.
+ * they neither read nor mutate CCC's cache. Both modes enforce cursor progress,
+ * and an optional `budget` charges cached cells and RPC page items alike.
  *
  * @public
  */
@@ -242,6 +284,9 @@ export async function collectCellsPaged(
     async (requestPageSize, after) => {
       if (!options.onChain && after === undefined) {
         for await (const cell of client.cache.findCells(key)) {
+          // Charged per observed cell so an oversized or nonterminating cache
+          // iterator fails on the same budget as RPC pages, before any request.
+          options.budget?.addItems(1);
           cached.push(cell);
         }
       }
@@ -270,7 +315,14 @@ export async function collectCellsPaged(
   return result;
 }
 
-/** Iterates signer-owned committed candidate pages without using CCC's cell cache. @public */
+/**
+ * Iterates signer-owned committed candidate pages without using CCC's cell cache.
+ *
+ * @remarks Without a caller-supplied budget the scan bounds itself with
+ * {@link defaultScanBudget}, shared by its per-lock collectors.
+ *
+ * @public
+ */
 export async function* findSignerCellsPagedNoCache(
   signer: ccc.Signer,
   filter: Parameters<ccc.Signer["findCellsOnChain"]>[0],
@@ -278,6 +330,7 @@ export async function* findSignerCellsPagedNoCache(
 ): AsyncGenerator<ccc.Cell, void> {
   const seen = new Set<string>();
   const locks = unique((await signer.getAddressObjs()).map(({ script }) => script));
+  const budget = options.budget ?? defaultScanBudget({ pageSize: options.pageSize });
   for (const lock of locks) {
     const key = ccc.ClientIndexerSearchKey.from({
       script: lock,
@@ -289,7 +342,7 @@ export async function* findSignerCellsPagedNoCache(
     for await (const cell of iteratePagedScan(
       async (pageSize, after): ReturnType<ccc.Client["findCellsPagedNoCache"]> =>
         signer.client.findCellsPagedNoCache(key, "asc", pageSize, after),
-      options,
+      { pageSize: options.pageSize, budget },
     )) {
       const outPoint = cell.outPoint.toHex();
       if (!cell.cellOutput.lock.eq(lock) || seen.has(outPoint)) {

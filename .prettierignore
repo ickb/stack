@@ -9,5 +9,4 @@ config/
 log/
 apps/*/log_*.json
 apps/sampler/rate.csv
-forks/
 pnpm-lock.yaml

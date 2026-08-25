@@ -7,8 +7,15 @@ General utilities built on top of CCC
 `collectPagedScan(...)` owns cursor-based pagination for L1 cell scans. Its
 `pageSize` is the size of each request, not a total cap. Empty and short pages
 complete the scan; each full page must return a non-empty `lastCursor` that
-differs from the cursor used for that request. Advancing scans continue without
-an item or page limit and return the complete result.
+differs from the cursor used for that request.
+
+Total results are bounded by a `PagedScanBudget`. `defaultScanBudget(...)` builds
+the fixed default from `defaultScanItemLimit` and the requested `pageSize`: the
+pages that item ceiling spends, plus a fixed terminal-page allowance for the
+short final page of each component scan. The allowance does not grow with the
+number of component scans sharing it, so the collectors of one logical scan fail
+together rather than returning partial state, and arbitrarily many empty
+per-lock scans stay bounded.
 
 ## Dependencies
 

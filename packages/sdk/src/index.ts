@@ -7,6 +7,8 @@
 export { getConfig } from "./constants.ts";
 export type { CodeScriptDeps, IckbDeploymentConfig } from "./constants.ts";
 export {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
   IckbError,
   IckbSdk,
   MAX_WITHDRAWAL_REQUESTS,
@@ -42,6 +44,8 @@ export type {
   PoolDepositRangeOptions,
   PoolDepositState,
   SystemState,
+  WaitTransactionArguments,
+  WaitTransactionOptions,
 } from "./sdk.ts";
 export {
   ringRequiredLiveDepositFor,

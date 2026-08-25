@@ -1,4 +1,10 @@
+import { STOP_EXIT_CODE } from "@ickb/node-utils";
+import { TransactionBroadcastError } from "@ickb/sdk";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  handleIterationFailure,
+  type FailureHandlingResult,
+} from "../../src/bot/failure.ts";
 import { isRetryableBotError, iterationFailureEventFields } from "../../src/index.ts";
 
 const FETCH_FAILED = "fetch failed";
@@ -80,11 +86,91 @@ describe("bot iteration failure metadata", () => {
       ),
     ).toBe(false);
     expect(isRetryableBotError(confirmationError({ reason: undefined }))).toBe(false);
+  });
+});
+
+describe("bot post-broadcast confirmation outcomes", () => {
+  it("never retries outcomes other than an RBF replacement", () => {
     expect(
       isRetryableBotError(
-        confirmationError({ reason: RBF_REJECTED_REASON, rebuildReady: false }),
+        confirmationError({ reason: undefined, status: "pending", isTimeout: true }),
       ),
     ).toBe(false);
+    expect(
+      isRetryableBotError(
+        confirmationError({
+          reason: RBF_REJECTED_REASON,
+          status: "pending",
+          isTimeout: true,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableBotError(
+        confirmationError({
+          reason: undefined,
+          status: "unresolved",
+          cause: new TypeError(FETCH_FAILED),
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("bot post-broadcast confirmation exit codes", () => {
+  it("stops the deployed service after a confirmation timeout", () => {
+    const { result, events } = handleFailure(
+      confirmationError({ reason: undefined, status: "pending", isTimeout: true }),
+    );
+
+    // A restart would rebuild and resend a transaction that may still commit.
+    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
+    expect(events.at(-1)).toMatchObject({
+      type: "bot.iteration.failed",
+      fields: { retryable: false, terminal: true },
+    });
+  });
+
+  it("stops the deployed service when transport hid the confirmation outcome", () => {
+    const { result } = handleFailure(
+      confirmationError({
+        reason: undefined,
+        status: "unresolved",
+        cause: new TypeError(FETCH_FAILED),
+      }),
+    );
+
+    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
+  });
+
+  it("keeps an RBF confirmation rejection retryable and running", () => {
+    const { result } = handleFailure(rbfConfirmationError());
+
+    expect(process.exitCode).toBeUndefined();
+    expect(result).toMatchObject({ retryableAttempt: true, stopAfterLog: false });
+  });
+
+  it("stops the deployed service after a node transaction hash mismatch", () => {
+    const { result } = handleFailure(
+      new TransactionBroadcastError(`0x${"11".repeat(32)}`, {
+        nodeTxHash: `0x${"22".repeat(32)}`,
+        cause: new TypeError(FETCH_FAILED),
+      }),
+    );
+
+    // The node accepted something under a hash this attempt cannot bind, so the
+    // local transaction may already be in the pool.
+    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
+  });
+
+  it("keeps unrelated non-retryable failures at exit code 1", () => {
+    const { result } = handleFailure(new Error(DETERMINISTIC_BUILD_FAILURE));
+
+    expect(process.exitCode).toBe(1);
+    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
   });
 });
 
@@ -160,6 +246,31 @@ describe("bot retryable iteration failures", () => {
   });
 });
 
+function handleFailure(error: unknown): {
+  result: FailureHandlingResult;
+  events: Array<{ type: string; fields: Record<string, unknown> | undefined }>;
+} {
+  const events: Array<{ type: string; fields: Record<string, unknown> | undefined }> = [];
+  const result = handleIterationFailure({
+    context: {
+      events: {
+        emit: (
+          _iterationId: number,
+          type: "bot.iteration.failed",
+          fields?: Record<string, unknown>,
+        ): void => {
+          events.push({ type, fields });
+        },
+      },
+      maxRetryableAttempts: undefined,
+    },
+    iterationId: 1,
+    error,
+    retryableAttempts: 0,
+  });
+  return { result, events };
+}
+
 function rbfConfirmationError(): Error {
   return confirmationError({ reason: RBF_REJECTED_REASON });
 }
@@ -175,18 +286,26 @@ function wrappedTransactionHeaderFetchFailure(): Error {
 
 function confirmationError({
   reason,
-  rebuildReady = true,
+  status = REJECTED_STATUS,
+  isTimeout = false,
+  cause,
 }: {
   reason: string | undefined;
-  rebuildReady?: boolean;
+  status?: string;
+  isTimeout?: boolean;
+  cause?: unknown;
 }): Error {
-  const error = Object.assign(new Error("Transaction ended with status: rejected"), {
-    txHash: TX_HASH,
-    status: REJECTED_STATUS,
-    isTimeout: false,
-    reason,
-    rebuildReady,
-  });
+  const error = Object.assign(
+    new Error(`Transaction ended with status: ${status}`, {
+      cause,
+    }),
+    {
+      txHash: TX_HASH,
+      status,
+      isTimeout,
+      reason,
+    },
+  );
   Object.defineProperty(error, "name", { value: TRANSACTION_CONFIRMATION_ERROR });
   return error;
 }

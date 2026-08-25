@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { StubClient } from "@ickb/testkit";
-import { defaultCellPageSize } from "@ickb/utils";
+import { defaultCellPageSize, PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
@@ -26,11 +26,13 @@ describe(L1_STATE_SUITE, () => {
 
     await sdk.getPoolDeposits(client, baseTip);
 
-    expect(findDeposits).toHaveBeenCalledWith(client, {
+    expect(findDeposits.mock.calls[0]?.[0]).toBe(client);
+    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       onChain: true,
       tip: baseTip,
       pageSize: defaultCellPageSize,
     });
+    expect(findDeposits.mock.calls[0]?.[1]?.budget).toBeInstanceOf(PagedScanBudget);
   });
 
   it("passes a custom page size to pool deposit scanning", async () => {

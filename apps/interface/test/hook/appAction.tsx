@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransactionHash,
-  storePendingTransactionHash,
   submitPendingTransaction,
 } from "../../src/query/pendingTransactionQuery.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
@@ -376,7 +375,7 @@ function registerActionConfirmationTests(): void {
       params.lockIntent();
       const { build, ...state } = await params.refreshPreview();
       params.freezePreview({ ...state, txInfo: await build() });
-      storePendingTransactionHash(params.walletConfig, `0x${"ab".repeat(32)}`);
+      await recordPending(params.walletConfig, `0x${"ab".repeat(32)}`);
       params.setIsConfirming(true);
       waitingReady.resolve(undefined);
       await confirmation.promise;
@@ -415,12 +414,24 @@ function registerActionConfirmationTests(): void {
   });
 }
 
+/** Establishes pending state exactly as a completed submission does. */
+async function recordPending(
+  config: ReturnType<typeof walletConfig>,
+  txHash: `0x${string}`,
+): Promise<void> {
+  await submitPendingTransaction(config, async (recordTxHash) => {
+    recordTxHash(txHash);
+    await Promise.resolve();
+    return txHash;
+  });
+}
+
 function registerPendingTransactionRecoveryTests(): void {
-  it("restores only the same account hash and aborts ownership on unmount", () => {
+  it("restores only the same account hash and aborts ownership on unmount", async () => {
     const txHash = `0x${"cd".repeat(32)}` as const;
     const config = walletConfig();
     clearPendingTransactionHash(config);
-    storePendingTransactionHash(config, txHash);
+    await recordPending(config, txHash);
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     const freeze = vi.fn<(value: boolean) => void>();
     const restored = elementProps<Parameters<typeof ActionLayout>[0]>(

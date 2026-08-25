@@ -47,7 +47,11 @@ export type {
   PoolDepositState,
   SystemState,
 } from "./client/sdk_types.ts";
-export { estimateMaturityFeeThreshold } from "./estimate/sdk_estimate.ts";
+export {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
+  estimateMaturityFeeThreshold,
+} from "./estimate/sdk_estimate.ts";
 export {
   projectAccountAvailability,
   projectConversionTransactionContext,
@@ -57,6 +61,10 @@ export {
   TransactionBroadcastError,
 } from "./send/sign_and_send_transaction.ts";
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
+export type {
+  WaitTransactionArguments,
+  WaitTransactionOptions,
+} from "./send/wait_transaction.ts";
 
 /** SDK for managing iCKB operations. @public */
 export interface IckbSdk {

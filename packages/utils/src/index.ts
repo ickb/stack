@@ -24,6 +24,8 @@ export {
   collectPagedScan,
   compareBigInt,
   defaultCellPageSize,
+  defaultScanBudget,
+  defaultScanItemLimit,
   findSignerCellsPagedNoCache,
   isPlainCapacityCell,
   pagedScanCursorErrorCode,

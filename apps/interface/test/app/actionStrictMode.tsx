@@ -4,11 +4,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type * as TransactionModule from "../../src/action/actionTransaction.ts";
 import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
-import { storePendingTransactionHash } from "../../src/query/pendingTransactionQuery.ts";
+import { submitPendingTransaction } from "../../src/query/pendingTransactionQuery.ts";
 import type { L1StateType } from "../../src/query/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { txWithInput } from "../action/fixtures/transaction.ts";
-import { memoryStorage } from "../shared/fixtures/storage.ts";
 
 class TestElement {
   public readonly nodeType = 1;
@@ -55,7 +54,6 @@ vi.mock(import("../../src/action/actionTransaction.ts"), async (importActual) =>
 
 const actionComponent = (await import("../../src/action/Action.tsx")).default;
 const originalDocument: unknown = Reflect.get(globalThis, "document");
-const originalLocalStorage: unknown = Reflect.get(globalThis, "localStorage");
 const originalWindow: unknown = Reflect.get(globalThis, "window");
 const nativeAbortController = AbortController;
 const testDocument = fakeDocument();
@@ -66,7 +64,6 @@ const { createRoot } = await import("react-dom/client");
 
 beforeEach(() => {
   vi.stubGlobal("document", testDocument);
-  vi.stubGlobal("localStorage", memoryStorage());
   vi.stubGlobal("window", testDocument.defaultView);
   mocks.layout = undefined;
   mocks.retryConfirmation.mockClear();
@@ -85,7 +82,6 @@ afterAll(async () => {
     }, 0);
   });
   vi.stubGlobal("document", originalDocument);
-  vi.stubGlobal("localStorage", originalLocalStorage);
   vi.stubGlobal("window", originalWindow);
 });
 
@@ -111,9 +107,9 @@ describe("Action StrictMode ownership", () => {
     expect(freeze).toHaveBeenCalledWith(false);
   });
 
-  it("uses the fresh controller generation for recovered confirmation retry", () => {
+  it("uses the fresh controller generation for recovered confirmation retry", async () => {
     const fixture = walletFixture();
-    storePendingTransactionHash(fixture.config, txHash);
+    await recordPending(fixture.config);
     const { controllers, root } = strictAction(
       fixture.config,
       vi.fn<(value: boolean) => void>(),
@@ -137,13 +133,15 @@ describe("Action StrictMode ownership", () => {
   it("stops an active wait and retries it with a fresh controller", stopAndRetry);
 });
 
-function stopAndRetry(): void {
+async function stopAndRetry(): Promise<void> {
   const fixture = walletFixture();
   const { root } = strictAction(fixture.config, vi.fn<(value: boolean) => void>());
+  let submitted: Promise<unknown> | undefined;
   mocks.transact.mockImplementationOnce(async (params) => {
     params.lockIntent();
-    storePendingTransactionHash(params.walletConfig, txHash);
     params.setIsConfirming(true);
+    submitted = recordPending(params.walletConfig);
+    await submitted;
     await new Promise<void>((resolve) => {
       params.signal.addEventListener(
         "abort",
@@ -159,7 +157,13 @@ function stopAndRetry(): void {
     currentLayout().onAction?.();
   });
   const firstSignal = mocks.transact.mock.calls[0]?.[0].signal;
-  expect(currentLayout().action).toBe("stop waiting");
+  // The shared submission publishes the hash asynchronously, so the layout only
+  // shows the recovered wait once the render it schedules is flushed.
+  await submitted;
+  await vi.waitFor(() => {
+    flushSync(flushScheduledRender);
+    expect(currentLayout().action).toBe("stop waiting");
+  });
   expect(currentLayout().disabled).toBe(false);
 
   flushSync(() => {
@@ -186,6 +190,19 @@ function stopAndRetry(): void {
     root.unmount();
   });
   expect(retrySignal.aborted).toBe(true);
+}
+
+function flushScheduledRender(): void {
+  // Deliberately empty: flushSync itself renders the already-scheduled update.
+}
+
+/** Establishes pending state exactly as a completed submission does. */
+async function recordPending(walletConfig: WalletConfig): Promise<void> {
+  await submitPendingTransaction(walletConfig, async (recordTxHash) => {
+    recordTxHash(txHash);
+    await Promise.resolve();
+    return txHash;
+  });
 }
 
 function strictAction(

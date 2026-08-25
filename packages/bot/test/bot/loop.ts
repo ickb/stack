@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { STOP_EXIT_CODE } from "@ickb/node-utils";
 import { TransactionBroadcastError, TransactionWaitError } from "@ickb/sdk";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -118,9 +119,10 @@ it("sends explicitly and waits with the finite production policy", async () => {
   expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
     harness.context.runtime.client,
     TX_HASH,
-    0,
-    BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    {
+      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    },
   );
   expect(eventTypes(harness.events)).toEqual([
     BOT_ITERATION_STARTED,
@@ -188,9 +190,10 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
     harness.context.runtime.client,
     TX_HASH,
-    0,
-    BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    {
+      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    },
   );
   expect(harness.events).toEqual(
     expect.arrayContaining([
@@ -226,9 +229,10 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
   expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
     harness.context.runtime.client,
     TX_HASH,
-    0,
-    BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    {
+      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
+    },
   );
   expect(harness.events).toContainEqual(
     expect.objectContaining({
@@ -260,7 +264,9 @@ it("fails closed on a node hash mismatch without waiting or retrying its cause",
 
   await runBotLoop(harness.context);
 
-  expect(process.exitCode).toBe(1);
+  // The node answered about a transaction this attempt cannot bind, so the local
+  // one may already be accepted and a restart could resend it.
+  expect(process.exitCode).toBe(STOP_EXIT_CODE);
   expect(sendTransaction).toHaveBeenCalledTimes(1);
   expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
   expect(harness.operations.waitTransaction).not.toHaveBeenCalled();
@@ -302,7 +308,8 @@ it("normalizes confirmation error fields from public errors", async () => {
 
   await runBotLoop(harness.context);
 
-  expect(process.exitCode).toBe(1);
+  // A broadcast transaction with an unresolved outcome must not be resent.
+  expect(process.exitCode).toBe(2);
   expect(
     harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
   ).toMatchObject({
@@ -317,11 +324,15 @@ it("normalizes confirmation error fields from public errors", async () => {
 });
 
 it.each([
-  { rebuildReady: false, expectedBuilds: 1, expectedExitCode: 1 },
-  { rebuildReady: true, expectedBuilds: 2, expectedExitCode: undefined },
+  { reason: RBF_REJECTED_REASON, expectedBuilds: 2, expectedExitCode: undefined },
+  {
+    reason: "Resolve failed Dead(OutPoint(...))",
+    expectedBuilds: 1,
+    expectedExitCode: 2,
+  },
 ])(
-  "uses rejection cache readiness for RBF rebuilding: $rebuildReady",
-  async ({ rebuildReady, expectedBuilds, expectedExitCode }) => {
+  "rebuilds from committed state only for RBF rejection: $reason",
+  async ({ reason, expectedBuilds, expectedExitCode }) => {
     const results: BuildTransactionResult[] = [
       builtResult(ccc.Transaction.default()),
       skippedResult(),
@@ -333,11 +344,7 @@ it.each([
       },
       waitTransaction: async () => {
         await Promise.resolve();
-        throw new TransactionWaitError(TX_HASH, {
-          status: "rejected",
-          reason: RBF_REJECTED_REASON,
-          rebuildReady,
-        });
+        throw new TransactionWaitError(TX_HASH, { status: "rejected", reason });
       },
     });
 
@@ -382,7 +389,7 @@ it("tolerates confirmation fields disappearing during inspection", async () => {
   ).toMatchObject({ status: "unresolved" });
 });
 
-it("opens repeated finite confirmation windows for the same hash without resending", async () => {
+it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
   const tx = ccc.Transaction.default();
   const timeout = new ccc.ErrorClientWaitTransactionTimeout(
     BOT_TRANSACTION_WAIT_TIMEOUT_MS,
@@ -392,43 +399,39 @@ it("opens repeated finite confirmation windows for the same hash without resendi
       await Promise.resolve();
       return builtResult(tx);
     },
-    waitTransaction: vi
-      .fn()
-      .mockRejectedValueOnce(timeout)
-      .mockResolvedValueOnce(undefined),
+    waitTransaction: vi.fn().mockRejectedValue(timeout),
     sendTransaction: vi.fn(async () => {
       await Promise.resolve();
       return TX_HASH;
     }),
+    // A spare retry budget would let a retryable timeout rebuild and resend.
+    maxRetryableAttempts: 3,
   });
+  harness.context.maxIterations = undefined;
 
   await runBotLoop(harness.context);
 
+  expect(process.exitCode).toBe(2);
   expect(harness.context.runtime.sendTransaction).toHaveBeenCalledTimes(1);
   expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.waitTransaction).toHaveBeenCalledTimes(2);
-  const waitTransaction = vi.mocked(harness.operations.waitTransaction);
-  expect(waitTransaction.mock.calls[0]?.[1]).toBe(TX_HASH);
-  expect(waitTransaction.mock.calls[1]?.[1]).toBe(TX_HASH);
-  expect(
-    harness.events.find(
-      (event) =>
-        event.type === BOT_TRANSACTION_CONFIRMATION && event["outcome"] === "timeout",
-    ),
-  ).toMatchObject({
+  expect(harness.operations.waitTransaction).toHaveBeenCalledTimes(1);
+  expect(harness.operations.sleep).not.toHaveBeenCalled();
+  const timeoutFailure = {
     txHash: TX_HASH,
     outcome: "timeout",
     isTimeout: true,
-    retryable: true,
-    terminal: false,
-  });
+    retryable: false,
+    terminal: true,
+  };
   expect(
-    harness.events.filter((event) => event.type === BOT_TRANSACTION_FAILED),
+    harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
+  ).toMatchObject(timeoutFailure);
+  expect(
+    harness.events.find((event) => event.type === BOT_TRANSACTION_FAILED),
+  ).toMatchObject(timeoutFailure);
+  expect(
+    harness.events.filter((event) => event.type === BOT_TRANSACTION_COMMITTED),
   ).toHaveLength(0);
-  expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_TRANSACTION_COMMITTED,
-    txHash: TX_HASH,
-  });
 });
 
 it("retries transient failures without consuming bounded iterations", async () => {
@@ -524,7 +527,7 @@ function loopHarness(
     readBotState: vi.fn(operationOverrides.readBotState ?? defaultReadState),
     sleep: vi.fn(operationOverrides.sleep ?? asyncNoop),
     sleepInterval: vi.fn(operationOverrides.sleepInterval ?? ((): number => 0)),
-    waitTransaction: vi.fn(operationOverrides.waitTransaction ?? asyncNoop),
+    waitTransaction: vi.fn(operationOverrides.waitTransaction ?? asyncCommitted),
   };
   return {
     context: {
@@ -559,6 +562,17 @@ async function defaultReadState(): Promise<ReturnType<typeof botState>> {
 async function asyncNoop(): Promise<undefined> {
   await Promise.resolve();
   return undefined;
+}
+
+async function asyncCommitted(): Promise<ccc.ClientTransactionResponse> {
+  await Promise.resolve();
+  return new ccc.ClientTransactionResponse(
+    ccc.Transaction.default(),
+    "committed",
+    undefined,
+    hash("cd"),
+    10n,
+  );
 }
 
 function skippedResult(): BuildTransactionResult {

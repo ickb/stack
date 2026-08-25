@@ -50,20 +50,6 @@
     "kind": "value"
   },
   {
-    "name": "receiptCellFrom",
-    "owner": "core",
-    "kind": "value",
-    "expectedMissing": true,
-    "note": "Declared in packages/core/src/cells.ts; known missing from the core barrel."
-  },
-  {
-    "name": "ickbValue",
-    "owner": "core",
-    "kind": "value",
-    "expectedMissing": true,
-    "note": "Declared in packages/core/src/udt.ts; known missing from the core barrel."
-  },
-  {
     "name": "IckbDepositCell",
     "owner": "core",
     "kind": "type"
@@ -99,26 +85,6 @@
     "kind": "value"
   },
   {
-    "name": "MAX_DIRECT_DEPOSITS",
-    "owner": "sdk",
-    "kind": "value",
-    "expectedMissing": true,
-    "note": "Declared in packages/sdk/src/client/sdk_types.ts; not in the sdk barrel."
-  },
-  {
-    "name": "CKB_RESERVE",
-    "owner": "bot",
-    "kind": "value",
-    "expectedMissing": true,
-    "note": "The record's named bot reserve constant; declared in packages/bot/src/policy/constants.ts; not in the bot barrel."
-  },
-  {
-    "name": "availableOutputSlots",
-    "owner": null,
-    "kind": "value",
-    "note": "Not implemented in any current package; DAO-domain output-slot helper."
-  },
-  {
     "name": "DAO_OUTPUT_LIMIT",
     "owner": "dao",
     "kind": "value",
@@ -126,39 +92,21 @@
   },
   {
     "name": "DEFAULT_ORDER_FEE",
-    "owner": null,
+    "owner": "sdk",
     "kind": "value",
-    "note": "Not implemented in any current package."
+    "note": "Stack conversion quote and planning fee numerator; owned by the sdk estimate module."
   },
   {
     "name": "DEFAULT_ORDER_FEE_BASE",
-    "owner": null,
+    "owner": "sdk",
     "kind": "value",
-    "note": "Not implemented in any current package."
+    "note": "Stack conversion quote and planning fee denominator; owned by the sdk estimate module."
   },
   {
-    "name": "snapshot",
-    "owner": null,
+    "name": "IckbSdk",
+    "owner": "sdk",
     "kind": "value",
-    "note": "Provisional Phase-2 name; implement only if a supported consumer needs a separate factory."
-  },
-  {
-    "name": "SentTransaction",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 SDK transaction observation handle."
-  },
-  {
-    "name": "quoteConversion",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 scan-free conversion quote."
-  },
-  {
-    "name": "completeTransaction",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 root completion boundary; selection and CCC mechanics remain private."
+    "note": "Consumer-proven SDK boundary for sampling, planning, completion, and static estimates."
   },
   {
     "name": "IckbError",
@@ -167,52 +115,10 @@
     "note": "Phase-2 stable typed SDK failure."
   },
   {
-    "name": "EntityBase",
-    "owner": null,
+    "name": "ConversionTransactionResult",
+    "owner": "sdk",
     "kind": "type",
-    "note": "B4 shared helper (amendment \u00a77); lands in shared/ with the Phase-2 entities. Per-entity <X>Base consts join the floor then."
-  },
-  {
-    "name": "EstimateResult",
-    "owner": null,
-    "kind": "type",
-    "note": "Phase-2 result union (estimate); joins the enforced floor when implemented."
-  },
-  {
-    "name": "ConversionPlanResult",
-    "owner": null,
-    "kind": "type",
-    "note": "Phase-2 result union (planConversion); joins the enforced floor when implemented."
-  },
-  {
-    "name": "InfoBase",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 B4 entity base (order Info); joins the enforced floor when implemented."
-  },
-  {
-    "name": "RatioBase",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 B4 entity base (order Ratio); joins the enforced floor when implemented."
-  },
-  {
-    "name": "OrderDataBase",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 B4 entity base (order OrderData); joins the enforced floor when implemented."
-  },
-  {
-    "name": "OwnerDataBase",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 B4 entity base (core OwnerData); joins the enforced floor when implemented."
-  },
-  {
-    "name": "ReceiptDataBase",
-    "owner": null,
-    "kind": "value",
-    "note": "Phase-2 B4 entity base (core ReceiptData); joins the enforced floor when implemented."
+    "note": "Typed result of IckbSdk conversion planning."
   },
   {
     "name": "IckbErrorCode",

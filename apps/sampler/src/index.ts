@@ -9,9 +9,10 @@
  * - Uses an injected client when provided, otherwise constructs `ccc.ClientPublicMainnet`.
  * - Queries the genesis and tip headers.
  * - Logs genesis separately, then builds a set of Date samples between genesis
- *   and tip, adding "iCKB Launch" only when it falls in range and always adding "Tip".
- * - For each sample date, performs a binary search over block numbers to find
- *   the first block whose timestamp is greater than or equal to the sample date.
+ *   and tip, adding "iCKB Launch" only when it falls in range.
+ * - For each historical sample date, performs a bounded binary search over block
+ *   numbers and labels the result approximate because block timestamps may decrease.
+ * - Logs the fetched tip header last; like genesis it is exact, not searched.
  * - Logs CSV lines with block number, ISO timestamp, CKB per 1 iCKB, and an optional note.
  *
  * Remarks:
@@ -63,9 +64,10 @@ export async function runSamplerEntrypoint(
  * - Uses an injected client when provided, otherwise constructs a public mainnet client.
  * - Fetches genesis and tip headers (throws if genesis is missing).
  * - Computes a power-of-two search bound from the bit-length of tip.number.
- * - Generates date samples using `samplesPerYear`, adds "Tip", and adds "iCKB Launch" when in range.
- * - For each date sample, finds the earliest block whose `timestamp >= sample`
- *   date via `asyncBinarySearch` and logs a CSV row for that header.
+ * - Generates date samples using `samplesPerYear` and adds "iCKB Launch" when in range.
+ * - For each historical date sample, uses `asyncBinarySearch` to select an
+ *   approximate block and marks that limitation in the CSV note.
+ * - Logs the sampled tip header itself as the exact final row.
  *
  * @remarks The tip is sampled once at startup and used as the upper bound for
  * every search in this run.
@@ -118,7 +120,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   log(["BlockNumber", "Date", "CkbPerIckb", "Note"].join(", "));
   logRow(genesis, "Genesis", log);
 
-  // For each sample date, find the earliest block whose timestamp is >= date.
+  // Consensus permits timestamp decreases, so binary-search rows are approximate.
   for (const [date, note] of dates) {
     // asyncBinarySearch expects a predicate that returns true when the index i
     // is at or past the desired condition. We provide a predicate that fetches
@@ -144,6 +146,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
     logRow(header, note, log);
   }
+
+  // The tip header is already exact, so it is logged directly like genesis.
+  logRow(tip, "Tip", log);
 }
 
 export function createSamplerClient(): ccc.Client {
@@ -154,13 +159,15 @@ export function createSamplerClient(): ccc.Client {
 }
 
 function sampleTargets(startMs: bigint, endMs: bigint, n = 4): Array<[Date, string]> {
-  const dates = samples(startMs, endMs, n).map((d): [Date, string] => [d, ""]);
+  const dates = samples(startMs, endMs, n).map((date): [Date, string] => [
+    date,
+    "Approximate timestamp sample",
+  ]);
   const launch = new Date("2024-09-12T15:13:19.574Z");
   const launchMs = BigInt(launch.getTime());
   if (launchMs >= startMs && launchMs <= endMs) {
-    dates.push([launch, "iCKB Launch"]);
+    dates.push([launch, "Approximate iCKB Launch"]);
   }
-  dates.push([new Date(Number(endMs)), "Tip"]);
   dates.sort((a, b) => a[0].getTime() - b[0].getTime());
   return dates;
 }

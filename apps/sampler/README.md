@@ -2,6 +2,8 @@
 
 A utility to sample the gross CKB value recoverable from 1 iCKB across time. The value uses the standard 100,000 iCKB deposit and includes its recoverable 82 CKB occupied capacity.
 
+Historical rows are approximate block selections. The sampler uses bounded binary search, while CKB consensus permits block timestamps to decrease, so it does not claim to find the globally earliest block at a target time. Genesis and tip rows are exact.
+
 ## Run the sampler on mainnet
 
 From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app itself runs from TypeScript source under Node 22.19+.

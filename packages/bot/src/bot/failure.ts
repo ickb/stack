@@ -13,7 +13,6 @@ interface TransactionConfirmationErrorLike extends Error {
   status: unknown;
   isTimeout: unknown;
   reason: unknown;
-  rebuildReady: unknown;
 }
 
 export interface FailureHandlingResult {
@@ -63,7 +62,7 @@ export function handleIterationFailure({
   if (failure.retryable) {
     return handleRetryableFailure(failure, nextRetryableAttempts);
   }
-  return handleNonRetryableFailure(nextRetryableAttempts);
+  return handleNonRetryableFailure(error, nextRetryableAttempts);
 }
 
 /**
@@ -140,8 +139,19 @@ function handleRetryableFailure(
   return { retryableAttempt: true, retryableAttempts, stopAfterLog: false };
 }
 
-function handleNonRetryableFailure(retryableAttempts: number): FailureHandlingResult {
-  process.exitCode = 1;
+function handleNonRetryableFailure(
+  error: unknown,
+  retryableAttempts: number,
+): FailureHandlingResult {
+  // The transaction may already be accepted and its outcome stayed unresolved,
+  // so a restart could resend funds: stop the service instead of letting the
+  // supervisor relaunch the turn. A node hash mismatch is such an outcome, since
+  // the node answered the send RPC about a transaction this attempt cannot bind.
+  process.exitCode =
+    (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined) ||
+    (error instanceof Error && isTransactionConfirmationErrorLike(error))
+      ? STOP_EXIT_CODE
+      : 1;
   return {
     retryableAttempt: false,
     retryableAttempts,
@@ -163,11 +173,15 @@ export function reachedMaxRetryableAttempts(
  * Identifies transient bot failures that can be retried without consuming a terminal iteration.
  */
 export function isRetryableBotError(error: unknown): boolean {
-  if (
-    isBlockedRejectedConfirmation(error) ||
-    (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined)
-  ) {
+  if (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined) {
     return false;
+  }
+  if (error instanceof Error && isTransactionConfirmationErrorLike(error)) {
+    // The transaction is already broadcast, so no confirmation outcome may send
+    // a rebuilt intent: one broadcast gets one finite observation window. Only
+    // an RBF replacement makes the sent transaction permanently unconfirmable,
+    // so only it is worth rebuilding from committed state.
+    return isRbfRejectedConfirmation(error);
   }
   let current = error;
   const seen = new Set<object>();
@@ -192,39 +206,17 @@ function isRetryableErrorLevel(error: object): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return [
-    isRetryableConfirmationTimeout,
-    isRetryableRpcResponseShapeError,
-    isRetryableRpcTransportError,
-    isRetryableRbfConfirmationError,
-  ].some((classify) => classify(error));
-}
-
-function isRetryableConfirmationTimeout(error: Error): boolean {
-  return (
-    error.name === "BotTransactionConfirmationError" &&
-    "isTimeout" in error &&
-    error.isTimeout === true
+  return [isRetryableRpcResponseShapeError, isRetryableRpcTransportError].some(
+    (classify) => classify(error),
   );
 }
 
-function isRetryableRbfConfirmationError(error: Error): boolean {
+function isRbfRejectedConfirmation(error: TransactionConfirmationErrorLike): boolean {
   return (
-    isTransactionConfirmationErrorLike(error) &&
     error.status === "rejected" &&
     error.isTimeout === false &&
-    error.rebuildReady === true &&
     typeof error.reason === "string" &&
     isRbfRejectedReason(error.reason)
-  );
-}
-
-function isBlockedRejectedConfirmation(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    isTransactionConfirmationErrorLike(error) &&
-    error.status === "rejected" &&
-    error.rebuildReady !== true
   );
 }
 
@@ -236,7 +228,6 @@ function isTransactionConfirmationErrorLike(
       error.name === "BotTransactionConfirmationError") &&
     "status" in error &&
     "isTimeout" in error &&
-    "reason" in error &&
-    "rebuildReady" in error
+    "reason" in error
   );
 }

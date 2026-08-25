@@ -8,11 +8,10 @@ import { createElement, Fragment, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
-import { pendingTransactionQueryKey } from "../../src/query/pendingTransactionQuery.ts";
 import type { L1StateType } from "../../src/query/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { txWithInput } from "../action/fixtures/transaction.ts";
-import { memoryStorage } from "../shared/fixtures/storage.ts";
+import { waitCallOptions } from "../support/wait.ts";
 
 class TestElement {
   public readonly nodeType = 1;
@@ -63,7 +62,6 @@ const { flushSync } = await import("react-dom");
 const { createRoot } = await import("react-dom/client");
 
 beforeEach(() => {
-  vi.stubGlobal("localStorage", memoryStorage());
   mocks.layout = undefined;
   mocks.signAndSendTransaction.mockReset();
   mocks.signAndSendTransaction.mockImplementation(async (signer, tx, recordTxHash) => {
@@ -86,20 +84,9 @@ afterAll(async () => {
 });
 
 describe("pending transaction remount ownership", () => {
-  it("hydrates a fresh QueryClient from storage and confirms without sending again", async () => {
+  it("retries the recorded hash after a remount on the same QueryClient", async () => {
     const queryClient = new QueryClient();
-    const sent = Promise.withResolvers<ccc.Hex>();
-    const firstSend = vi.fn(async () => sent.promise);
-    const firstConfig = walletConfig(queryClient, firstSend);
-    const firstRoot = renderAction(firstConfig);
-    await expect(
-      queryClient.fetchQuery({ queryKey: pendingTransactionQueryKey(firstConfig) }),
-    ).resolves.toBeNull();
-
-    currentLayout().onAction?.();
-    await vi.waitFor(() => {
-      expect(firstSend).toHaveBeenCalledTimes(1);
-    });
+    const { sent, root: firstRoot, send: firstSend } = await submittedAction(queryClient);
     flushSync(() => {
       firstRoot.unmount();
     });
@@ -108,31 +95,67 @@ describe("pending transaction remount ownership", () => {
       await Promise.resolve();
       return txHash;
     });
-    const replacementConfig = walletConfig(new QueryClient(), replacementSend);
+    const replacementConfig = walletConfig(queryClient, replacementSend);
     const replacementRoot = renderAction(replacementConfig);
     expect(currentLayout().action).toBe("retry confirmation");
     expect(currentLayout().disabled).toBe(false);
-    expect(firstSend).toHaveBeenCalledTimes(1);
-    expect(replacementSend).not.toHaveBeenCalled();
 
     currentLayout().onAction?.();
 
     expect(firstSend).toHaveBeenCalledTimes(1);
     expect(replacementSend).not.toHaveBeenCalled();
-    expect(mocks.waitTransaction).toHaveBeenCalledWith(
-      replacementConfig.signer.client,
-      txHash,
-      0,
-      expect.any(Number),
-      undefined,
-      expect.any(AbortSignal),
-    );
+    const waitCall = mocks.waitTransaction.mock.calls[0];
+    expect(waitCall?.[0]).toBe(replacementConfig.signer.client);
+    expect(waitCall?.[1]).toBe(txHash);
+    const waitOptions = waitCallOptions(waitCall);
+    expect(waitOptions.timeout).toBeGreaterThan(0);
+    expect(waitOptions.signal).toBeInstanceOf(AbortSignal);
+    sent.resolve(txHash);
+    flushSync(() => {
+      replacementRoot.unmount();
+    });
+  });
+
+  it("offers no recorded hash to a replacement QueryClient", async () => {
+    const {
+      freshAction,
+      sent,
+      root: firstRoot,
+    } = await submittedAction(new QueryClient());
+    flushSync(() => {
+      firstRoot.unmount();
+    });
+
+    const replacementRoot = renderAction(walletConfig(new QueryClient(), vi.fn()));
+
+    expect(currentLayout().action).toBe(freshAction);
+    expect(mocks.waitTransaction).not.toHaveBeenCalled();
     sent.resolve(txHash);
     flushSync(() => {
       replacementRoot.unmount();
     });
   });
 });
+
+/** Renders an action, submits it, and leaves the broadcast unresolved with its hash recorded. */
+async function submittedAction(queryClient: QueryClient): Promise<{
+  freshAction: string;
+  root: ReturnType<typeof createRoot>;
+  send: ReturnType<typeof vi.fn>;
+  sent: PromiseWithResolvers<ccc.Hex>;
+}> {
+  const sent = Promise.withResolvers<ccc.Hex>();
+  const send = vi.fn(async () => sent.promise);
+  const root = renderAction(walletConfig(queryClient, send));
+  const freshAction = currentLayout().action;
+  expect(freshAction).not.toBe("retry confirmation");
+
+  currentLayout().onAction?.();
+  await vi.waitFor(() => {
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  return { freshAction, root, send, sent };
+}
 
 function renderAction(walletConfig: WalletConfig): ReturnType<typeof createRoot> {
   walletConfig.queryClient.setQueryData(
@@ -261,11 +284,12 @@ function isL1State(value: unknown): value is L1StateType {
   return typeof value === "object" && value !== null && "txBuilder" in value;
 }
 
-async function waitUntilStopped(
+// eslint-disable-next-line @typescript-eslint/promise-function-async -- The wait double never settles except on abort.
+function waitUntilStopped(
   ...args: Parameters<typeof sdkWaitTransaction>
 ): ReturnType<typeof sdkWaitTransaction> {
-  const signal = args[5];
-  await new Promise<never>((_resolve, reject) => {
+  const { signal } = waitCallOptions(args);
+  return new Promise<never>((_resolve, reject) => {
     if (signal === undefined) {
       reject(new Error("Missing confirmation signal"));
       return;
@@ -278,7 +302,6 @@ async function waitUntilStopped(
       { once: true },
     );
   });
-  return undefined;
 }
 
 function fakeDocument(): TestDocument {

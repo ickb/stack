@@ -12,6 +12,7 @@ const SAMPLER_MODULE_SUITE = "sampler module";
 const SAMPLE_GENESIS_ISO = "2024-09-12T00:00:00.000Z";
 const SAMPLE_LAUNCH_ISO = "2024-09-12T15:13:19.574Z";
 const SAMPLE_TIP_ISO = "2024-09-13T00:00:00.000Z";
+const APPROXIMATE_SAMPLE = "Approximate timestamp sample";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -147,7 +148,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
       ["1", SAMPLE_LAUNCH_ISO],
       ["2", SAMPLE_TIP_ISO],
     ]);
-    expect(lines.at(-2)?.endsWith(", iCKB Launch")).toBe(true);
+    expect(lines.at(-2)?.endsWith(", Approximate iCKB Launch")).toBe(true);
     expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
     expect(lines[1]?.split(", ", 4)[2]).toBe("1.00082");
   });
@@ -174,6 +175,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
 
     expect(lines).toHaveLength(4);
     expect(lines[2]?.startsWith(`0, ${genesisIso}`)).toBe(true);
+    expect(lines[2]?.endsWith(", Approximate timestamp sample")).toBe(true);
     expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
   });
 });
@@ -245,6 +247,70 @@ describe(SAMPLER_MODULE_SUITE, () => {
     });
 
     expect(lines.join("\n")).not.toContain("iCKB Launch");
+    expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
+  });
+});
+
+describe(SAMPLER_MODULE_SUITE, () => {
+  it("orders the iCKB launch sample among the yearly samples", async () => {
+    const headers = new Map(
+      [
+        "2024-01-01T00:00:00.000Z",
+        "2024-04-01T00:00:00.000Z",
+        "2024-07-02T00:00:00.000Z",
+        SAMPLE_LAUNCH_ISO,
+        "2024-10-01T00:00:00.000Z",
+        "2024-12-31T00:00:00.000Z",
+      ].map((iso, index): [number, ccc.ClientBlockHeader] => [
+        index,
+        sampleHeader(BigInt(index), iso),
+      ]),
+    );
+    const tip = headers.get(5);
+    const lines: string[] = [];
+
+    await main({
+      client: sampleClient(headers, tip ?? sampleHeader(5n, SAMPLE_TIP_ISO)),
+      log: (line) => {
+        lines.push(line);
+      },
+      samplesPerYear: 4,
+    });
+
+    expect(lines.slice(1).map((line) => line.split(", ", 4)[3])).toEqual([
+      "Genesis",
+      APPROXIMATE_SAMPLE,
+      APPROXIMATE_SAMPLE,
+      APPROXIMATE_SAMPLE,
+      "Approximate iCKB Launch",
+      APPROXIMATE_SAMPLE,
+      "Tip",
+    ]);
+  });
+
+  it("logs the exact tip header without searching for it", async () => {
+    const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
+    const launch = sampleHeader(1n, SAMPLE_LAUNCH_ISO);
+    const tip = sampleHeader(2n, SAMPLE_TIP_ISO);
+    const lines: string[] = [];
+
+    await main({
+      // The tip block is unreachable by number, so only the fetched tip header
+      // can produce an exact tip row.
+      client: sampleClient(
+        new Map([
+          [0, genesis],
+          [1, launch],
+        ]),
+        tip,
+      ),
+      log: (line) => {
+        lines.push(line);
+      },
+      samplesPerYear: 1,
+    });
+
+    expect(lines.at(-1)?.startsWith(`2, ${SAMPLE_TIP_ISO}`)).toBe(true);
     expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
   });
 

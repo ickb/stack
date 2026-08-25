@@ -6,8 +6,8 @@ import {
   CheckedUint32LE,
   defaultCellPageSize,
   findSignerCellsPagedNoCache,
-  PagedScanBudget,
   type ExchangeRatio,
+  type PagedScanBudget,
 } from "@ickb/utils";
 import { ReceiptData } from "./entities.ts";
 
@@ -213,7 +213,6 @@ export class IckbUdt extends udt.Udt {
     },
   ): Promise<IckbInputTally> {
     const { inputTally, requiredBalance } = options;
-    const budget = options.budget ?? new PagedScanBudget(6_400, 6_400);
     const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
     const collectedTally = new IckbInputTally(inputTally.balance, inputTally.xudtCount);
     for await (const cell of findSignerCellsPagedNoCache(
@@ -222,7 +221,10 @@ export class IckbUdt extends udt.Udt {
         script: this.script,
         outputDataLenRange: [udtDataSize, ccc.numFrom("0xffffffff")],
       },
-      { pageSize: defaultCellPageSize, budget },
+      {
+        pageSize: defaultCellPageSize,
+        ...(options.budget === undefined ? {} : { budget: options.budget }),
+      },
     )) {
       if (
         tx.inputs.some(({ previousOutput }) => previousOutput.eq(cell.outPoint)) ||

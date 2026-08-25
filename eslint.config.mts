@@ -245,12 +245,6 @@ export default defineConfig(
         },
         {
           selector:
-            "CallExpression:matches([callee.name='waitTransaction'], [callee.type='MemberExpression'][callee.property.name='waitTransaction'])[arguments.3.type='Identifier'][arguments.3.name='Infinity']",
-          message:
-            "Transaction confirmation waits must have a finite timeout. Post-broadcast recovery remains a caller-owned runtime contract.",
-        },
-        {
-          selector:
             "TSAsExpression:not([typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const']), TSTypeAssertion",
           message:
             "Avoid type assertions. If this cast is justified, add a local ESLint disable with the reason.",

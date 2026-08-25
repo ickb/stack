@@ -11,6 +11,8 @@ import {
   type PoolDepositState,
 } from "../client/sdk_types.ts";
 import {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
   estimateConversionOrder,
   estimateIckbToCkbOrder,
   maxMaturity,
@@ -121,7 +123,13 @@ function ckbToIckbConversionPlan(
 
   if (remainder > 0n) {
     const amounts = { ckbValue: remainder, udtValue: 0n };
-    const estimate = estimateConversionOrder(true, amounts, context.system, 1n, 100000n);
+    const estimate = estimateConversionOrder(
+      true,
+      amounts,
+      context.system,
+      DEFAULT_ORDER_FEE,
+      DEFAULT_ORDER_FEE_BASE,
+    );
     if (estimate?.maturity === undefined) {
       return undefined;
     }

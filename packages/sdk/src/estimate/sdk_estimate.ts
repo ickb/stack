@@ -13,13 +13,23 @@ import {
 import { maturity } from "./sdk_maturity.ts";
 import { maxMaturity } from "./sdk_projection.ts";
 
+/** Default order-fee numerator used by Stack conversion quotes and plans. @public */
+export const DEFAULT_ORDER_FEE = 1n;
+
+/** Default order-fee denominator used by Stack conversion quotes and plans. @public */
+export const DEFAULT_ORDER_FEE_BASE = 100000n;
+
 export function estimate(
   isCkb2Udt: boolean,
   amounts: ValueComponents,
   system: SystemState,
   options?: { fee?: ccc.Num; feeBase?: ccc.Num },
 ): ConversionOrderEstimate {
-  const estimateOptions = { fee: 1n, feeBase: 100000n, ...options };
+  const estimateOptions = {
+    fee: DEFAULT_ORDER_FEE,
+    feeBase: DEFAULT_ORDER_FEE_BASE,
+    ...options,
+  };
   const conversion = estimateConversionOrder(
     isCkb2Udt,
     amounts,
@@ -78,7 +88,13 @@ function estimateIckbToCkbOrderDefaultFee(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  return estimateConversionOrder(false, amounts, system, 1n, 100000n);
+  return estimateConversionOrder(
+    false,
+    amounts,
+    system,
+    DEFAULT_ORDER_FEE,
+    DEFAULT_ORDER_FEE_BASE,
+  );
 }
 
 function dustIckbToCkbOrderEstimate(
@@ -105,7 +121,13 @@ function estimateDustIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  const baseEstimate = estimateConversionOrder(false, amounts, system, 0n, 100000n);
+  const baseEstimate = estimateConversionOrder(
+    false,
+    amounts,
+    system,
+    0n,
+    DEFAULT_ORDER_FEE_BASE,
+  );
   if (baseEstimate === undefined) {
     return undefined;
   }

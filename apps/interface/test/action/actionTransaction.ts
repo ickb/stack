@@ -5,7 +5,7 @@ import {
   type signAndSendTransaction as sdkSignAndSendTransaction,
   type waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
   retryConfirmation,
@@ -17,11 +17,11 @@ import {
 import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
   pendingTransactionHash,
-  storePendingTransactionHash,
+  submitPendingTransaction,
   type PendingTransactionState,
 } from "../../src/query/pendingTransactionQuery.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
-import { memoryStorage } from "../shared/fixtures/storage.ts";
+import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 
 const nothingToDo = "Nothing to do";
@@ -40,10 +40,6 @@ vi.mock(import("@ickb/sdk"), async (importActual) => ({
   waitTransaction,
 }));
 
-beforeEach(() => {
-  vi.stubGlobal("localStorage", memoryStorage());
-});
-
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -58,45 +54,44 @@ afterEach(() => {
 });
 
 describe("finite-window confirmation", () => {
-  it("silently retries a timeout window for the same hash until commitment", async () => {
-    waitTransaction
-      .mockRejectedValueOnce(
-        new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
-      )
-      .mockResolvedValueOnce(undefined);
+  it("observes one finite window and surfaces its timeout honestly", async () => {
+    const timeout = new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs);
+    waitTransaction.mockRejectedValueOnce(timeout);
     const config = walletConfig();
     const controller = new AbortController();
 
     await expect(
       waitForConfirmation(config.cccClient, txHash, controller.signal),
-    ).resolves.toBeUndefined();
+    ).rejects.toBe(timeout);
 
-    expect(waitTransaction).toHaveBeenCalledTimes(2);
-    expect(waitTransaction).toHaveBeenNthCalledWith(
-      1,
-      config.cccClient,
-      txHash,
-      0,
-      confirmationWindowMs,
-      undefined,
-      controller.signal,
+    expect(waitTransaction).toHaveBeenCalledTimes(1);
+    expect(waitTransaction).toHaveBeenCalledWith(config.cccClient, txHash, {
+      timeout: confirmationWindowMs,
+      signal: controller.signal,
+    });
+  });
+
+  it("keeps an unconfirmed hash pending with current-session wording", async () => {
+    waitTransaction.mockRejectedValueOnce(
+      new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
     );
-    expect(waitTransaction).toHaveBeenNthCalledWith(
-      2,
-      config.cccClient,
-      txHash,
-      0,
-      confirmationWindowMs,
-      undefined,
-      controller.signal,
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.setFailure).toHaveBeenCalledWith(
+      `Transaction ${txHash} is still unconfirmed after 60s. It may still confirm; check again.`,
+      freshStateId,
     );
+    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
+    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
   });
 });
 
 describe("transact fresh preview boundary", () => {
   it("freezes and sends only the freshly rebuilt transaction", async () => {
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     const cachedTx = activeTxInfo("11").tx;
     const freshTxInfo = activeTxInfo("22", {
       fee: 9n,
@@ -180,20 +175,16 @@ describe("transact post-broadcast outcomes", () => {
       expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     });
 
-    storePendingTransactionHash(calls.walletConfig, txHash);
-    waitTransaction.mockResolvedValueOnce(undefined);
+    await recordPending(calls.walletConfig);
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     releasePreview.resolve(undefined);
     await attempt;
 
     expect(signAndSendTransaction).not.toHaveBeenCalled();
-    expect(waitTransaction).toHaveBeenCalledWith(
-      calls.walletConfig.cccClient,
-      txHash,
-      0,
-      confirmationWindowMs,
-      undefined,
-      calls.signal,
-    );
+    expect(waitTransaction).toHaveBeenCalledWith(calls.walletConfig.cccClient, txHash, {
+      timeout: confirmationWindowMs,
+      signal: calls.signal,
+    });
   });
 
   it("retains raw uncertainty and retries the same hash without rebroadcast", async () => {
@@ -210,7 +201,7 @@ describe("transact post-broadcast outcomes", () => {
     expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
 
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     const retry = retryConfirmation({ ...calls, txHash });
     await vi.runAllTimersAsync();
     await retry;
@@ -267,7 +258,6 @@ describe("transact broadcast identity and rejection", () => {
       new TransactionWaitError(txHash, {
         status: "rejected",
         reason: "validation failed",
-        rebuildReady: true,
       }),
     );
     const calls = transactionCalls();
@@ -282,29 +272,13 @@ describe("transact broadcast identity and rejection", () => {
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingTransactionHash(calls.walletConfig)).toBeUndefined();
   });
-
-  it("keeps rejection frozen when cache clearing did not make rebuilding safe", async () => {
-    waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, {
-        status: "rejected",
-        reason: "validation failed",
-        rebuildReady: false,
-      }),
-    );
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
-  });
 });
 
 describe("retryConfirmation", () => {
   it("silently ignores retry after its owner has already unmounted", async () => {
     const controller = new AbortController();
     const calls = transactionCalls(refreshedPreview(), undefined, controller);
-    storePendingTransactionHash(calls.walletConfig, txHash);
+    await recordPending(calls.walletConfig);
     controller.abort();
 
     await retryConfirmation({ ...calls, txHash });
@@ -320,11 +294,10 @@ describe("retryConfirmation", () => {
       new TransactionWaitError(txHash, {
         status: "rejected",
         reason: "conflicting input",
-        rebuildReady: true,
       }),
     );
     const calls = transactionCalls();
-    storePendingTransactionHash(calls.walletConfig, txHash);
+    await recordPending(calls.walletConfig);
 
     await retryConfirmation({ ...calls, txHash });
 
@@ -338,7 +311,7 @@ describe("retryConfirmation", () => {
 
   it("falls back to terminal status when retry rejection has no reason", async () => {
     waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, { status: "rejected", rebuildReady: true }),
+      new TransactionWaitError(txHash, { status: "rejected" }),
     );
     const calls = transactionCalls();
 
@@ -462,12 +435,12 @@ describe("attempt ownership after broadcast", () => {
     const controller = new AbortController();
     let ownsWait = false;
     waitTransaction.mockImplementationOnce(async (...args) => {
-      const signal = args[5];
+      const { signal } = waitCallOptions(args);
       if (signal === undefined) {
         throw new Error("Missing confirmation signal");
       }
       ownsWait = true;
-      await new Promise<void>((_resolve, reject) => {
+      return new Promise<never>((_resolve, reject) => {
         signal.addEventListener(
           "abort",
           () => {
@@ -490,7 +463,7 @@ describe("attempt ownership after broadcast", () => {
     await attempt;
 
     expect(waitTransaction).toHaveBeenCalledTimes(1);
-    expect(waitTransaction.mock.calls[0]?.[5]).toBe(controller.signal);
+    expect(waitCallOptions(waitTransaction.mock.calls[0]).signal).toBe(controller.signal);
     expect(ownsWait).toBe(false);
     expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
     expect(calls.formReset).not.toHaveBeenCalled();
@@ -500,7 +473,7 @@ describe("attempt ownership after broadcast", () => {
     expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
 
     const retryController = new AbortController();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     await retryConfirmation({
       ...calls,
       signal: retryController.signal,
@@ -508,11 +481,32 @@ describe("attempt ownership after broadcast", () => {
     });
 
     expect(waitTransaction).toHaveBeenCalledTimes(2);
-    expect(waitTransaction.mock.calls[1]?.[5]).toBe(retryController.signal);
+    expect(waitCallOptions(waitTransaction.mock.calls[1]).signal).toBe(
+      retryController.signal,
+    );
     expect(retryController.signal).not.toBe(controller.signal);
     expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
   });
 });
+
+/** Establishes pending state exactly as a completed submission does. */
+async function recordPending(walletConfig: WalletConfig): Promise<void> {
+  await submitPendingTransaction(walletConfig, async (recordTxHash) => {
+    recordTxHash(txHash);
+    await Promise.resolve();
+    return txHash;
+  });
+}
+
+function committedResponse(): ccc.ClientTransactionResponse {
+  return new ccc.ClientTransactionResponse(
+    ccc.Transaction.default(),
+    "committed",
+    undefined,
+    `0x${"cd".repeat(32)}`,
+    10n,
+  );
+}
 
 function attemptCallbackCounts(calls: Parameters<typeof transact>[0]): number[] {
   return [
@@ -529,7 +523,7 @@ describe("attempt ownership during completion", () => {
   it("does not reset or clear the hash when unmounted during invalidation", async () => {
     const controller = new AbortController();
     const invalidation = Promise.withResolvers<undefined>();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     const calls = transactionCalls(refreshedPreview(), undefined, controller);
     walletQueryClient(calls.walletConfig).invalidateQueries.mockReturnValueOnce(
       invalidation.promise,

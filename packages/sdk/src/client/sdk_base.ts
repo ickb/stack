@@ -9,11 +9,12 @@ import { assertDaoOutputLimit } from "@ickb/dao";
 import type { Info, OrderGroup, OrderManager } from "@ickb/order";
 import {
   defaultCellPageSize,
+  defaultScanBudget,
   findSignerCellsPagedNoCache,
   isPlainCapacityCell,
-  PagedScanBudget,
   PagedScanBudgetError,
   PagedScanCursorError,
+  type PagedScanBudget,
   type ValueComponents,
 } from "@ickb/utils";
 import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
@@ -56,7 +57,8 @@ export abstract class IckbSdkBase {
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
-    const budget = new PagedScanBudget(6_400, 6_400);
+    // The xUDT and fee scans page over every signer lock on one shared budget.
+    const budget = defaultScanBudget({ pageSize: defaultCellPageSize });
     try {
       const tx = await this.ickbUdt.completeBy(
         ccc.Transaction.from(txLike).clone(),

@@ -63,7 +63,7 @@ class AttemptAbortedError extends Error {
   }
 }
 
-/** Sends a valid preview once, then waits indefinitely through finite polling windows. */
+/** Sends a valid preview once, then observes it for one finite confirmation window. */
 export async function transact({
   lockIntent,
   refreshPreview,
@@ -113,7 +113,8 @@ export async function transact({
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash), stateId);
     callbacks.setMessage("");
-    if (error instanceof TransactionWaitError && error.rebuildReady) {
+    if (error instanceof TransactionWaitError) {
+      // A known rejection is final; the next action rebuilds from committed cells.
       clearPendingTransactionHash(callbacks.walletConfig);
       releaseTransaction(callbacks);
     } else if (txHash === undefined) {
@@ -168,7 +169,7 @@ export async function retryConfirmation({
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
-    if (error instanceof TransactionWaitError && error.rebuildReady) {
+    if (error instanceof TransactionWaitError) {
       clearPendingTransactionHash(callbacks.walletConfig);
       releaseTransaction(callbacks);
     }
@@ -179,26 +180,14 @@ export async function retryConfirmation({
   }
 }
 
-/** Treats SDK window timeouts as internal while preserving every other polling error. */
+/** Observes an already-broadcast hash for exactly one finite window. */
 export async function waitForConfirmation(
   client: ccc.Client,
   txHash: ccc.Hex,
   signal: AbortSignal,
 ): Promise<void> {
-  for (;;) {
-    try {
-      await abortable(
-        waitTransaction(client, txHash, 0, confirmationWindowMs, undefined, signal),
-        signal,
-      );
-      assertCurrent(signal);
-      return;
-    } catch (error) {
-      if (!isWaitWindowTimeout(error)) {
-        throw error;
-      }
-    }
-  }
+  await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
+  assertCurrent(signal);
 }
 
 function assertBroadcastable(txInfo: TxInfo, unavailableMessage: string): void {
@@ -273,6 +262,10 @@ function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined):
   if (error instanceof TransactionWaitError) {
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;
+  }
+  if (isWaitWindowTimeout(error) && txHash !== undefined) {
+    const seconds = String(confirmationWindowMs / 1000);
+    return `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`;
   }
 
   const message = errorMessageOf(error);

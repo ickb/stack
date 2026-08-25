@@ -24,13 +24,14 @@ export class TransactionBroadcastError extends Error {
 }
 
 /**
- * Signs locally, records chain identity before RPC, broadcasts without CCC's
- * cache wrapper, then marks the accepted transaction in the same client cache.
+ * Signs locally, records chain identity before RPC, then broadcasts without
+ * CCC's cache wrapper.
  *
  * @remarks `recordTxHash` is called after the signed fee-rate guard and before
- * the send RPC starts. A send failure remains ambiguous and throws
- * `TransactionBroadcastError`; a post-acceptance cache failure does not discard
- * the accepted transaction hash.
+ * the send RPC starts. A node that already holds this exact transaction is an
+ * acceptance; any other send failure remains ambiguous and throws
+ * `TransactionBroadcastError`. The client cache is never marked: later attempts
+ * rebuild from exact committed reads.
  *
  * @public
  */
@@ -51,17 +52,19 @@ export async function signAndSendTransaction(
   try {
     nodeTxHash = ccc.hexFrom(await signer.client.sendTransactionNoCache(signed));
   } catch (cause) {
+    // A duplicate submission of this exact transaction is already accepted; a
+    // duplicate naming another transaction is the same fail-closed mismatch.
+    if (cause instanceof ccc.ErrorClientDuplicatedTransaction) {
+      if (cause.txHash === txHash) {
+        return txHash;
+      }
+      throw new TransactionBroadcastError(txHash, { nodeTxHash: cause.txHash, cause });
+    }
     throw new TransactionBroadcastError(txHash, { cause });
   }
 
   if (nodeTxHash !== txHash) {
     throw new TransactionBroadcastError(txHash, { nodeTxHash });
-  }
-
-  try {
-    await signer.client.cache.markTransactions(signed);
-  } catch {
-    // Node acceptance and the locally computed hash remain authoritative.
   }
   return txHash;
 }

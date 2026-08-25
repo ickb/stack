@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/ccc";
+import type { ccc } from "@ckb-ccc/ccc";
 import type { WalletConfig } from "../shared/utils.ts";
 
 type PendingTransactionChain = WalletConfig["chain"];
@@ -9,9 +9,10 @@ interface PendingTransactionSubmission {
   readonly result: Promise<ccc.Hex>;
 }
 
-const pendingTransactionStoragePrefix = "ickb-pending-transaction:v1";
-const strictTxHashPattern = /^0x[0-9a-f]{64}$/u;
-
+/**
+ * Current-session ownership only: a new QueryClient or a reload starts with no
+ * pending identity, and the next action rebuilds from committed cells.
+ */
 export type PendingTransactionState =
   | Readonly<{ status: "submitting"; owner: PendingTransactionSubmission }>
   | Readonly<{ status: "pending"; txHash: ccc.Hex }>;
@@ -35,31 +36,6 @@ export function pendingTransactionHash(
   return state?.status === "pending" ? state.txHash : undefined;
 }
 
-/** Hydrates public pending identity without replacing a live memory owner. */
-export function hydratePendingTransaction(
-  walletConfig: PendingTransactionCache,
-): PendingTransactionState | undefined {
-  const queryKey = pendingTransactionQueryKey(walletConfig);
-  const current = walletConfig.queryClient.getQueryData<PendingTransactionState | null>(
-    queryKey,
-  );
-  if (current !== undefined) {
-    return current ?? undefined;
-  }
-
-  const txHash = readStoredTransactionHash(walletConfig);
-  if (txHash === undefined) {
-    return undefined;
-  }
-  const pending = { status: "pending", txHash } as const;
-  walletConfig.queryClient.setQueryDefaults(queryKey, { gcTime: Infinity });
-  walletConfig.queryClient.setQueryData<PendingTransactionState | null>(
-    queryKey,
-    pending,
-  );
-  return pending;
-}
-
 export function pendingTransactionState(
   walletConfig: PendingTransactionCache,
 ): PendingTransactionState | undefined {
@@ -67,20 +43,6 @@ export function pendingTransactionState(
     walletConfig.queryClient.getQueryData<PendingTransactionState | null>(
       pendingTransactionQueryKey(walletConfig),
     ) ?? undefined
-  );
-}
-
-export function storePendingTransactionHash(
-  walletConfig: PendingTransactionCache,
-  txHash: ccc.Hex,
-): void {
-  writeStoredTransactionHash(walletConfig, txHash);
-  walletConfig.queryClient.setQueryDefaults(pendingTransactionQueryKey(walletConfig), {
-    gcTime: Infinity,
-  });
-  walletConfig.queryClient.setQueryData<PendingTransactionState | null>(
-    pendingTransactionQueryKey(walletConfig),
-    () => ({ status: "pending", txHash }),
   );
 }
 
@@ -93,8 +55,9 @@ export function submitPendingTransaction(
   const owner: PendingTransactionSubmission = { result: completion.promise };
   const submission: PendingTransactionState = { status: "submitting", owner };
   const queryKey = pendingTransactionQueryKey(walletConfig);
+  // Infinite gcTime keeps the hash retryable for the whole session, whatever the global policy.
   walletConfig.queryClient.setQueryDefaults(queryKey, { gcTime: Infinity });
-  const current = hydratePendingTransaction(walletConfig) ?? submission;
+  const current = pendingTransactionState(walletConfig) ?? submission;
   walletConfig.queryClient.setQueryData<PendingTransactionState | null>(
     queryKey,
     current,
@@ -138,7 +101,6 @@ export function clearPendingTransactionHash(walletConfig: PendingTransactionCach
     queryKey: pendingTransactionQueryKey(walletConfig),
     exact: true,
   });
-  removeStoredTransactionHash(walletConfig);
 }
 
 function storeSubmissionHash(
@@ -153,7 +115,6 @@ function storeSubmissionHash(
   if (current?.status !== "submitting" || current.owner !== owner) {
     return;
   }
-  writeStoredTransactionHash(walletConfig, txHash);
   walletConfig.queryClient.setQueryData<PendingTransactionState | null>(queryKey, () => ({
     status: "pending",
     txHash,
@@ -172,67 +133,5 @@ function clearSubmission(
   );
   if (current === null) {
     walletConfig.queryClient.removeQueries({ queryKey, exact: true });
-  }
-}
-
-function pendingTransactionStorageKey(walletConfig: PendingTransactionAccount): string {
-  return `${pendingTransactionStoragePrefix}:${walletConfig.chain}:${encodeURIComponent(walletConfig.address)}`;
-}
-
-function browserStorage(): Storage | undefined {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return undefined;
-  }
-}
-
-function readStoredTransactionHash(
-  walletConfig: PendingTransactionAccount,
-): ccc.Hex | undefined {
-  try {
-    const stored = browserStorage()?.getItem(pendingTransactionStorageKey(walletConfig));
-    if (stored === undefined || stored === null) {
-      return undefined;
-    }
-    const value: unknown = JSON.parse(stored);
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      Array.isArray(value) ||
-      Object.keys(value).length !== 2 ||
-      !("version" in value) ||
-      value.version !== 1 ||
-      !("txHash" in value) ||
-      typeof value.txHash !== "string" ||
-      !strictTxHashPattern.test(value.txHash)
-    ) {
-      return undefined;
-    }
-    return ccc.hexFrom(value.txHash);
-  } catch {
-    return undefined;
-  }
-}
-
-function writeStoredTransactionHash(
-  walletConfig: PendingTransactionAccount,
-  txHash: ccc.Hex,
-): void {
-  const storage = browserStorage();
-  if (storage === undefined) {
-    throw new Error("Durable browser storage is required before broadcasting");
-  }
-  storage.setItem(
-    pendingTransactionStorageKey(walletConfig),
-    JSON.stringify({ version: 1, txHash }),
-  );
-}
-
-function removeStoredTransactionHash(walletConfig: PendingTransactionAccount): void {
-  try {
-    browserStorage()?.removeItem(pendingTransactionStorageKey(walletConfig));
-  } catch {
-    // A failed durable clear remains fail-closed on the next reload.
   }
 }
