@@ -34,11 +34,17 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     expect(projection.ickbAvailable).toBe(29n);
   });
 
-  it("keeps matchable non-dual orders pending by default", () => {
+  it("keeps every matchable order pending by default, including dual-ratio", () => {
     const matchable = projectionOrderGroup({
       ckbValue: 31n,
       udtValue: 37n,
       isDualRatio: false,
+      isMatchable: true,
+    });
+    const dualRatio = projectionOrderGroup({
+      ckbValue: 41n,
+      udtValue: 43n,
+      isDualRatio: true,
       isMatchable: true,
     });
 
@@ -51,14 +57,14 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [matchable],
+      [matchable, dualRatio],
     );
 
     expect(projection.availableOrders).toEqual([]);
-    expect(projection.pendingOrders).toEqual([matchable]);
+    expect(projection.pendingOrders).toEqual([matchable, dualRatio]);
     expect(projection.ckbAvailable).toBe(0n);
     expect(projection.ickbAvailable).toBe(0n);
-    expect(projection.ckbPending).toBe(31n);
-    expect(projection.ickbPending).toBe(37n);
+    expect(projection.ckbPending).toBe(31n + 41n);
+    expect(projection.ickbPending).toBe(37n + 43n);
   });
 });

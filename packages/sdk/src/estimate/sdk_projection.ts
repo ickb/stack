@@ -115,11 +115,7 @@ function splitOrders(
   const availableOrders: OrderGroup[] = [];
   const pendingOrders: OrderGroup[] = [];
   for (const group of userOrders) {
-    if (
-      options?.collectedOrdersAvailable === true ||
-      group.order.isDualRatio() ||
-      !group.order.isMatchable()
-    ) {
+    if (options?.collectedOrdersAvailable === true || !group.order.isMatchable()) {
       availableOrders.push(group);
     } else {
       pendingOrders.push(group);

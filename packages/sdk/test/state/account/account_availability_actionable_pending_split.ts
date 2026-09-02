@@ -32,13 +32,13 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     const availableOrder = projectionOrderGroup({
       ckbValue: 23n,
       udtValue: 29n,
-      isDualRatio: true,
-      isMatchable: true,
+      isDualRatio: false,
+      isMatchable: false,
     });
     const pendingOrder = projectionOrderGroup({
       ckbValue: 31n,
       udtValue: 37n,
-      isDualRatio: false,
+      isDualRatio: true,
       isMatchable: true,
     });
     const nativeUdt = nativeUdtCell(7n, { capacity: 5n });

@@ -94,17 +94,17 @@ describe("sdk projection value helpers", () => {
 
 describe("sdk projection account availability", () => {
   it("projects pending and available account values", () => {
-    const pending = projectionOrderGroup({
+    const dual = projectionOrderGroup({
       ckbValue: 2n,
       udtValue: 3n,
-      isDualRatio: false,
-      isMatchable: true,
-    });
-    const dual = projectionOrderGroup({
-      ckbValue: 5n,
-      udtValue: 7n,
       isDualRatio: true,
       isMatchable: true,
+    });
+    const settled = projectionOrderGroup({
+      ckbValue: 5n,
+      udtValue: 7n,
+      isDualRatio: false,
+      isMatchable: false,
     });
     const nativeUdt = nativeUdtCell(13n, { byte: "47" });
     const projection = projectAccountAvailability(
@@ -116,11 +116,11 @@ describe("sdk projection account availability", () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [pending, dual],
+      [dual, settled],
     );
 
-    expect(projection.availableOrders).toEqual([dual]);
-    expect(projection.pendingOrders).toEqual([pending]);
+    expect(projection.availableOrders).toEqual([settled]);
+    expect(projection.pendingOrders).toEqual([dual]);
     expect(projection.ckbBalance).toBe(projection.ckbAvailable + projection.ckbPending);
     expect(projection.ickbBalance).toBe(
       projection.ickbAvailable + projection.ickbPending,
