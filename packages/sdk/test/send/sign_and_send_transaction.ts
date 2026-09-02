@@ -1,24 +1,28 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import { script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { signAndSendTransaction } from "../../src/sdk.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("81");
+const INPUT_OUT_POINT = { txHash: hash("91"), index: 0n };
+const ALTERED_BODY_ERROR =
+  "Signer altered the transaction inputs, outputs or outputs data";
 
 describe("signAndSendTransaction", () => {
   it("records signed chain identity before RPC and never marks the cache", async () => {
-    const { signer, signedHash, feeRate, send, mark } = signerFixture();
+    const signed = bodyTransaction();
+    const { signer, signedHash, getCell, send, mark } = signerFixture(signed);
     const calls: string[] = [];
     signedHash.mockImplementation(() => {
       calls.push("hash");
       return TX_HASH;
     });
-    feeRate.mockImplementation(async (client) => {
+    getCell.mockImplementation(async (outPoint) => {
       await Promise.resolve();
-      expect(client).toBe(signer.client);
-      calls.push("feeRate");
-      return cccA.DEFAULT_MAX_FEE_RATE;
+      calls.push("getCell");
+      return inputCell(outPoint, 100n);
     });
     send.mockImplementation(async () => {
       await Promise.resolve();
@@ -27,29 +31,126 @@ describe("signAndSendTransaction", () => {
     });
 
     await expect(
-      signAndSendTransaction(signer, ccc.Transaction.default(), (txHash) => {
+      signAndSendTransaction(signer, bodyTransaction(), (txHash) => {
         expect(txHash).toBe(TX_HASH);
         calls.push("record");
       }),
     ).resolves.toBe(TX_HASH);
 
-    expect(calls).toEqual(["hash", "feeRate", "record", "send"]);
+    expect(calls).toEqual(["hash", "getCell", "record", "send"]);
     expect(mark).not.toHaveBeenCalled();
   });
 
   it("rejects an excessive signed fee rate before recording or broadcast", async () => {
-    const { signer, feeRate, send } = signerFixture();
+    const signed = bodyTransaction();
+    const { signer, getCell, send } = signerFixture(signed);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
-    feeRate.mockResolvedValueOnce(cccA.DEFAULT_MAX_FEE_RATE + 1n);
+    getCell.mockResolvedValueOnce(
+      inputCell(INPUT_OUT_POINT, 100n + cccA.DEFAULT_MAX_FEE_RATE * 10_000n),
+    );
 
     await expect(
-      signAndSendTransaction(signer, ccc.Transaction.default(), recordTxHash),
+      signAndSendTransaction(signer, bodyTransaction(), recordTxHash),
     ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe("signAndSendTransaction economic body", () => {
+  it("accepts signer-owned witness and dependency preparation", async () => {
+    const requested = bodyTransaction();
+    const prepared = bodyTransaction();
+    prepared.witnesses = ["0xaa"];
+    prepared.cellDeps = [
+      ccc.CellDep.from({
+        outPoint: { txHash: hash("93"), index: 0n },
+        depType: "depGroup",
+      }),
+    ];
+    prepared.headerDeps = [hash("94")];
+    const { signer } = signerFixture(prepared);
+
+    await expect(signAndSendTransaction(signer, requested)).resolves.toBe(TX_HASH);
+  });
+
+  it("rejects a connector-added output before fee inspection or broadcast", async () => {
+    const altered = bodyTransaction();
+    altered.outputs.push(ccc.CellOutput.from({ capacity: 200n, lock: script("22") }));
+    altered.outputsData.push("0x");
+    const { signer, getCell, send } = signerFixture(altered);
+    const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
+
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), recordTxHash),
+    ).rejects.toThrow(ALTERED_BODY_ERROR);
+
+    expect(getCell).not.toHaveBeenCalled();
+    expect(recordTxHash).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects an in-place edit of the requested outputs data", async () => {
+    const requested = bodyTransaction();
+    const { signer, send, signTransaction } = signerFixture(requested);
+    signTransaction.mockImplementation(async () => {
+      await Promise.resolve();
+      requested.outputsData[0] = "0x02";
+      return requested;
+    });
+
+    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+      ALTERED_BODY_ERROR,
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects a connector change to an input since value", async () => {
+    const altered = bodyTransaction();
+    for (const input of altered.inputs) {
+      input.since = 1n;
+    }
+    const { signer, send } = signerFixture(altered);
+
+    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
+      ALTERED_BODY_ERROR,
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("values inputs before signing when connector metadata understates the fee", async () => {
+    const requested = bodyTransaction(100n + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
+    const signed = bodyTransaction(100n);
+    const { signer, getCell, send } = signerFixture(signed);
+    const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
+
+    await expect(
+      signAndSendTransaction(signer, requested, recordTxHash),
+    ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+
+    expect(getCell).not.toHaveBeenCalled();
+    expect(recordTxHash).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+function bodyTransaction(inputCapacity?: bigint): ccc.Transaction {
+  const tx = ccc.Transaction.from({
+    inputs: [{ previousOutput: INPUT_OUT_POINT }],
+    outputs: [{ capacity: 100n, lock: script("11") }],
+    outputsData: ["0x01"],
+  });
+  if (inputCapacity !== undefined) {
+    for (const input of tx.inputs) {
+      input.cellOutput = plainCellOutput(inputCapacity);
+      input.outputData = "0x";
+    }
+  }
+  return tx;
+}
 
 describe("signAndSendTransaction broadcast outcomes", () => {
   it("accepts a duplicate submission naming the same transaction", async () => {
@@ -117,18 +218,21 @@ function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransa
   );
 }
 
-function signerFixture(): {
+function signerFixture(signed = ccc.Transaction.default()): {
   signer: ccc.Signer;
   signedHash: ReturnType<typeof vi.fn<() => ccc.Hex>>;
-  feeRate: ReturnType<typeof vi.fn<(client: ccc.Client) => Promise<ccc.Num>>>;
+  getCell: ReturnType<
+    typeof vi.fn<(outPoint: ccc.OutPointLike) => Promise<ccc.Cell | undefined>>
+  >;
   send: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<ccc.Hex>>>;
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
+  signTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
 } {
-  const signed = ccc.Transaction.default();
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
-  const feeRate = vi
-    .spyOn(signed, "getFeeRate")
-    .mockResolvedValue(cccA.DEFAULT_MAX_FEE_RATE);
+  const getCell = vi.fn(async (outPoint: ccc.OutPointLike) => {
+    await Promise.resolve();
+    return inputCell(outPoint, 100n);
+  });
   const send = vi.fn(async () => {
     await Promise.resolve();
     return TX_HASH;
@@ -137,16 +241,39 @@ function signerFixture(): {
     await Promise.resolve();
   });
   const client = {
+    getCell,
+    // CCC resolves the Nervos DAO script while checking inputs for withdrawal profit.
+    getKnownScript: vi.fn(async () => {
+      await Promise.resolve();
+      return { codeHash: hash("90"), hashType: "type", cellDeps: [] };
+    }),
     sendTransactionNoCache: send,
     cache: { markTransactions: mark },
   };
-  const signer = {
-    client,
-    signTransaction: vi.fn(async () => {
-      await Promise.resolve();
-      return signed;
-    }),
+  const signTransaction = vi.fn(async () => {
+    await Promise.resolve();
+    return signed;
+  });
+  const signer = { client, signTransaction };
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Focused fixture supplies only the public signer/client methods under test.
+    signer: signer as unknown as ccc.Signer,
+    signedHash,
+    getCell,
+    send,
+    mark,
+    signTransaction,
   };
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Focused fixture supplies only the public signer/client methods under test.
-  return { signer: signer as unknown as ccc.Signer, signedHash, feeRate, send, mark };
+}
+
+function inputCell(outPoint: ccc.OutPointLike, capacity: bigint): ccc.Cell {
+  return ccc.Cell.from({
+    outPoint,
+    cellOutput: plainCellOutput(capacity),
+    outputData: "0x",
+  });
+}
+
+function plainCellOutput(capacity: bigint): ccc.CellOutput {
+  return ccc.CellOutput.from({ capacity, lock: script("11") });
 }

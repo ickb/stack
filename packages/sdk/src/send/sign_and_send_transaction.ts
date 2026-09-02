@@ -27,11 +27,16 @@ export class TransactionBroadcastError extends Error {
  * Signs locally, records chain identity before RPC, then broadcasts without
  * CCC's cache wrapper.
  *
- * @remarks `recordTxHash` is called after the signed fee-rate guard and before
- * the send RPC starts. A node that already holds this exact transaction is an
- * acceptance; any other send failure remains ambiguous and throws
- * `TransactionBroadcastError`. The client cache is never marked: later attempts
- * rebuild from exact committed reads.
+ * @remarks The connector must not alter the economic body it was handed: the
+ * ordered inputs, outputs and outputs data are compared against a digest taken
+ * before signing, so in-place mutation cannot evade the check. Witnesses and
+ * cell/header dependency preparation stay signer-owned. The fee ceiling values
+ * inputs from the pre-sign transaction rather than connector-supplied metadata,
+ * while measuring the signed bytes. `recordTxHash` is called after the signed
+ * fee-rate guard and before the send RPC starts. A node that already holds this
+ * exact transaction is an acceptance; any other send failure remains ambiguous
+ * and throws `TransactionBroadcastError`. The client cache is never marked:
+ * later attempts rebuild from exact committed reads.
  *
  * @public
  */
@@ -40,9 +45,18 @@ export async function signAndSendTransaction(
   tx: ccc.TransactionLike,
   recordTxHash?: (txHash: ccc.Hex) => void,
 ): Promise<ccc.Hex> {
+  // Transaction.from reuses Transaction instances, which a signer may mutate in place.
+  const requested = ccc.Transaction.from(tx).clone();
+  const requestedBody = economicBody(requested);
   const signed = await signer.signTransaction(tx);
+  if (economicBody(signed) !== requestedBody) {
+    throw new Error("Signer altered the transaction inputs, outputs or outputs data");
+  }
   const txHash = signed.hash();
-  const feeRate = await signed.getFeeRate(signer.client);
+  // CCC trusts input cell metadata already attached to the connector-controlled result.
+  const feeTransaction = signed.clone();
+  feeTransaction.inputs = requested.inputs;
+  const feeRate = await feeTransaction.getFeeRate(signer.client);
   if (feeRate > cccA.DEFAULT_MAX_FEE_RATE) {
     throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
   }
@@ -67,4 +81,12 @@ export async function signAndSendTransaction(
     throw new TransactionBroadcastError(txHash, { nodeTxHash });
   }
   return txHash;
+}
+
+// Hashing a body-only transaction reuses CCC serialization to freeze the ordered
+// inputs, outputs and outputs data, while ignoring signer-owned witnesses and
+// the cell/header deps a connector may still have to prepare.
+function economicBody(tx: ccc.TransactionLike): ccc.Hex {
+  const { inputs, outputs, outputsData } = ccc.Transaction.from(tx);
+  return ccc.Transaction.from({ inputs, outputs, outputsData }).hash();
 }
