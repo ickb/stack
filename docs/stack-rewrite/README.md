@@ -19,14 +19,14 @@ The work started with a whole-repository review. That review found a small numbe
 
 ## Progress
 
-| Phase               | State    | Work                                                                                                                                                         |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, the C1 matcher correction, contract fixtures, and `ckb-debugger` pinning.                |
-| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                       |
-| 2. SDK reshape      | Active   | Plain sampled state, typed results and errors, bounded exact committed-cell scans, hybrid completion, dependency resolution, congruence, and debugger gates. |
-| 3. Repository shape | Planned  | Merge the SDK packages, move private workspaces, collapse test/config surfaces, and redistribute the required CI gates.                                      |
-| 4. Runtime          | Planned  | Bot state machine, minimal policy, validation product, event contracts, layered configuration, and staged systemd cutover.                                   |
-| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the interface rewrite.                                                                    |
+| Phase               | State    | Work                                                                                                                                                                                                                                             |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, the C1 matcher correction, contract fixtures, and `ckb-debugger` pinning.                                                                                                    |
+| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                                           |
+| 2. SDK reshape      | Active   | Delivered: plain sampled state, typed results and errors, bounded exact committed-cell scans, and hybrid completion. Remaining: the SDK-owned dependency resolver, pre-sign congruence enforcement, and the offline identity/debugger exit lane. |
+| 3. Repository shape | Planned  | Merge the SDK packages, move private workspaces, collapse test/config surfaces, and redistribute the required CI gates.                                                                                                                          |
+| 4. Runtime          | Planned  | Bot state machine, minimal policy, validation product, event contracts, layered configuration, and staged systemd cutover.                                                                                                                       |
+| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice.                           |
 
 Every phase is expected to land through green slices. Required checks move with the code they protect; later CI reorganization cannot defer or weaken an earlier exit gate.
 
@@ -35,6 +35,7 @@ Every phase is expected to land through green slices. Required checks move with 
 These are the rewrite's fund-safety requirements. Implementation proceeds only where a concrete consumer or fund-loss path justifies the boundary.
 
 - Derive the transaction hash locally and reject a different node result.
+- Reject connector-returned changes to ordered inputs, outputs, or output data before fee inspection or broadcast.
 - Keep the fee ceiling on every signing path.
 - Preserve the reserve floor, projected post-transaction guard, recovery exception, match-value-beats-fee rule, 21/20 shutdown, and consensus output limits.
 - Treat ambiguous broadcast results as unresolved for one bounded observation window, then rebuild later from committed state rather than replaying persisted bytes.
@@ -49,6 +50,8 @@ These are the rewrite's fund-safety requirements. Implementation proceeds only w
 | -------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | [Stack rewrite decisions](decisions.md)                              | Current decision record | Target architecture, accepted product decisions, implementation sequence, and amendments.        |
 | [CCC integration constraints](ccc-integration.md)                    | Current companion       | Maps the external CKB/CCC audit findings onto concrete rewrite constraints.                      |
+| [NervDAO iCKB feature investigation](nervdao-feature-map.md)         | Design investigation    | Evaluates which NervDAO workflows justify inclusion in the new interface.                        |
+| [Wallet migration investigation](wallet-migration-investigation.md)  | Design investigation    | Records migration evidence, per-state constraints, and the selected connected-destination slice. |
 | [Findings to investigate](findings-to-investigate.md)                | Open, non-authoritative | Confirmed current-code gaps and questions that remain after the decision record.                 |
 | [Authority and enforcement review](reviews/authority-enforcement.md) | Review evidence         | Findings against a frozen working-tree version of the decision record and its enforcement gates. |
 
@@ -66,6 +69,6 @@ Historical documents remain useful for rationale and evidence, but they do not o
 
 - npm version and registry handling, which blocks publication but not implementation.
 - Correction of the stale ICKB-017 integration-audit reproduction.
-- The architecture questions collected in [findings to investigate](findings-to-investigate.md), including ring intervention and public entity artifacts.
+- The current-code questions collected in [findings to investigate](findings-to-investigate.md), including ring intervention, generated-vector provenance, fee-safe CKB Max, and the deferred order-migration boundary.
 
 This documentation separates settled decisions from open review work so implementation can continue without presenting an unresolved proposal as shipped behavior.

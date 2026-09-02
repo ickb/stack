@@ -20,13 +20,13 @@ The accepted one-window kernel uses hard selection filters. Later review argued 
 ## Additional follow-ups
 
 - Verify the golden-vector generator commit against the deployed ELF fixture authority. Current documentation cites contracts commit `ae8a11f` and deployed `ickb_logic` commit `454cfa96` for different evidence roles.
-- Decide whether raw `IckbDeploymentConfig` or manager construction has external users before removing it from the public constructor surface.
 - Add durable provenance enforcement for generated protocol vectors rather than relying on prose alone.
 - Decide whether manifest history needs mechanical enforcement; the current amendment rule is review-governed.
 - Resolve npm version and registry handling before publication.
+- Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
+- Decide whether order migration ever accepts the deployed resolver's confusion-attack residual; keep orders action-required until then.
 
 ## Investigation order
 
 1. Ratify or reject the ring preference change.
-2. Resolve the public raw-config/manager constructor surface from concrete consumer evidence.
-3. Bind generated-vector provenance to executable fixture evidence.
+2. Bind generated-vector provenance to executable fixture evidence.
