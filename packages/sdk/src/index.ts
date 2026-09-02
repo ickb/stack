@@ -5,7 +5,6 @@
  */
 
 export { getConfig } from "./constants.ts";
-export type { CodeScriptDeps, IckbDeploymentConfig } from "./constants.ts";
 export {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,

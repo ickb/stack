@@ -4,36 +4,21 @@ import { DaoManager } from "@ickb/dao";
 import { OrderManager } from "@ickb/order";
 import { unique, type ScriptDeps } from "@ickb/utils";
 
-/**
- * Script deps plus the direct code out point for scripts used as direct code deps.
- *
- * @public
- */
-export interface CodeScriptDeps extends ScriptDeps {
-  /** Direct code out point for deployments that reference code by cell dep. */
+/** Script deps plus the direct code out point for scripts used as direct code deps. */
+interface CodeScriptDeps extends ScriptDeps {
   codeOutPoint: ccc.OutPointLike;
 }
 
-/**
- * Deployment scripts and cell deps used to construct SDK managers.
- *
- * @public
- */
-export interface IckbDeploymentConfig {
-  /** xUDT type script deps and direct code out point. */
+interface DeploymentConfig {
   udt: CodeScriptDeps;
-  /** iCKB logic script deps and direct code out point. */
   logic: CodeScriptDeps;
-  /** Owned-owner lock script deps. */
   ownedOwner: ScriptDeps;
-  /** Order lock script deps. */
   order: ScriptDeps;
-  /** Nervos DAO type script deps. */
   dao: ScriptDeps;
 }
 
 interface ResolvedDeploymentConfig {
-  deployment: IckbDeploymentConfig;
+  deployment: DeploymentConfig;
   bots: ccc.ScriptLike[];
 }
 
@@ -163,26 +148,21 @@ const TESTNET_KNOWN_BOTS = [
 /**
  * Retrieves the configuration for the given deployment environment.
  *
- * Accepts either a string identifier ("mainnet" or "testnet") or a custom
- * deployment configuration object containing script dependencies.
- *
  * It sets up various managers (UDT, Logic, OwnedOwner, Order, Dao) and also
  * aggregates a unique list of known bot scripts.
  *
- * @param d - Either a network identifier ("mainnet"/"testnet") or an explicit deployment config.
+ * @param d - Network identifier ("mainnet" or "testnet").
  * @param bots - An optional array of bot script-like objects to augment the list of known bots.
  * @returns An object containing the instantiated managers and bots.
  *
  * @remarks Builders still return partial transactions. `IckbSdk` owns the
  * shared iCKB completion path as `sdk.completeTransaction(...)`, which callers
- * should invoke explicitly before send. Custom `udt` and `logic` config entries
- * must include `codeOutPoint` values because the SDK adds those code deps
- * directly.
+ * should invoke explicitly before send.
  *
  * @public
  */
 export function getConfig(
-  d: "mainnet" | "testnet" | IckbDeploymentConfig,
+  d: "mainnet" | "testnet",
   bots: ccc.ScriptLike[] = [],
 ): {
   managers: {
@@ -199,12 +179,12 @@ export function getConfig(
   const dao = new DaoManager(deployment.dao.script, deployment.dao.cellDeps);
 
   const ickbUdt = new IckbUdt(
-    definedCodeOutPoint(deployment.udt.codeOutPoint, "xUDT"),
+    ccc.OutPoint.from(deployment.udt.codeOutPoint),
     IckbUdt.typeScriptFrom(
       ccc.Script.from(deployment.udt.script),
       ccc.Script.from(deployment.logic.script),
     ),
-    definedCodeOutPoint(deployment.logic.codeOutPoint, "Logic"),
+    ccc.OutPoint.from(deployment.logic.codeOutPoint),
     deployment.logic.script,
     dao,
   );
@@ -233,11 +213,11 @@ export function getConfig(
 }
 
 function resolveDeploymentConfig(
-  d: "mainnet" | "testnet" | IckbDeploymentConfig,
+  d: unknown,
   bots: ccc.ScriptLike[],
 ): ResolvedDeploymentConfig {
   if (d !== "mainnet" && d !== "testnet") {
-    return { deployment: d, bots };
+    throw new TypeError("unsupported iCKB network");
   }
 
   const depGroup = d === "mainnet" ? MAINNET_DEP_GROUP : TESTNET_DEP_GROUP;
@@ -279,15 +259,4 @@ function from(script: ccc.ScriptLike, ...cellDeps: ccc.CellDep[]): ScriptDeps {
     script: ccc.Script.from(script),
     cellDeps,
   };
-}
-
-function definedCodeOutPoint(
-  codeOutPoint: ccc.OutPointLike | undefined,
-  label: string,
-): ccc.OutPoint {
-  if (codeOutPoint === undefined) {
-    throw new Error(`custom config missing ${label} code outPoint`);
-  }
-
-  return ccc.OutPoint.from(codeOutPoint);
 }

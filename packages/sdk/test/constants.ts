@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbUdt } from "@ickb/core";
-import { outPoint, script as typeScript } from "@ickb/testkit";
+import type { IckbUdt } from "@ickb/core";
+import { script as typeScript } from "@ickb/testkit";
 import { PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
@@ -19,34 +19,15 @@ afterEach(() => {
 });
 
 describe("getConfig", () => {
-  it("uses explicit custom code outpoints instead of cellDep order", () => {
-    const udt = script("11");
-    const logic = script("22");
-    const udtCode = outPoint("33");
-    const logicCode = outPoint("44");
-    const decoyDep = ccc.CellDep.from({
-      outPoint: outPoint("55"),
-      depType: "depGroup",
-    });
-
-    const { managers } = getConfig({
-      udt: { script: udt, codeOutPoint: udtCode, cellDeps: [decoyDep] },
-      logic: { script: logic, codeOutPoint: logicCode, cellDeps: [decoyDep] },
-      ownedOwner: { script: script("66"), cellDeps: [decoyDep] },
-      order: { script: script("77"), cellDeps: [decoyDep] },
-      dao: { script: script("88"), cellDeps: [decoyDep] },
-    });
-
-    expect(managers.ickbUdt.udtCode.eq(udtCode)).toBe(true);
-    expect(managers.ickbUdt.logicCode.eq(logicCode)).toBe(true);
-    expect(managers.ickbUdt.script.eq(IckbUdt.typeScriptFrom(udt, logic))).toBe(true);
-    expect(managers.logic.daoManager).toBe(managers.dao);
-    expect(managers.ownedOwner.daoManager).toBe(managers.dao);
-    expect(managers.order.udtScript.eq(managers.ickbUdt.script)).toBe(true);
+  it("rejects removed custom deployment configs at runtime", () => {
+    const unsupportedNetwork = {};
+    // @ts-expect-error Runtime rejection protects untyped JavaScript consumers.
+    expect(() => getConfig(unsupportedNetwork)).toThrow("unsupported iCKB network");
   });
 
   it("builds the SDK from one coherent config object", async () => {
     const config = getConfig("testnet");
+    const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
     const sdk = IckbSdk.fromConfig(config);
     const tx = ccc.Transaction.default();
     const client = new ccc.ClientPublicTestnet({
@@ -62,10 +43,13 @@ describe("getConfig", () => {
         return completed;
       },
     );
-    config.managers.ickbUdt.completeBy = completeBy;
+    ickbUdt.completeBy = completeBy;
     vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockResolvedValue([0, false]);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
+    expect(logic.daoManager).toBe(dao);
+    expect(ownedOwner.daoManager).toBe(dao);
+    expect(order.udtScript.eq(ickbUdt.script)).toBe(true);
     const completed = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1n,
@@ -115,34 +99,5 @@ describe("getConfig defaults", () => {
     }
     expect(customBots).toHaveLength(1);
     expect(config.bots).toHaveLength(2);
-  });
-
-  it("rejects custom config missing an explicit code outpoint", () => {
-    const dep = ccc.CellDep.from({
-      outPoint: outPoint("99"),
-      depType: "depGroup",
-    });
-
-    const malformedConfig = {
-      udt: {
-        script: script("11"),
-        codeOutPoint: outPoint("22"),
-        cellDeps: [dep],
-      },
-      logic: {
-        script: script("33"),
-        codeOutPoint: outPoint("33"),
-        cellDeps: [dep],
-      },
-      ownedOwner: { script: script("55"), cellDeps: [dep] },
-      order: { script: script("66"), cellDeps: [dep] },
-      dao: { script: script("77"), cellDeps: [dep] },
-    };
-
-    Reflect.deleteProperty(malformedConfig.udt, "codeOutPoint");
-
-    expect(() => getConfig(malformedConfig)).toThrow(
-      "custom config missing xUDT code outPoint",
-    );
   });
 });
