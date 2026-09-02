@@ -167,7 +167,6 @@ void test("config generator writes only ignored configs and reports public metad
     });
 
     const outputPath = join(dir, defaultOut);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Output is confined to the mkdtemp-owned root.
     assert.deepEqual(JSON.parse(await readFile(outputPath, "utf8")), {
       chain: "testnet",
       privateKey: `0x${"33".repeat(32)}`,
@@ -176,7 +175,6 @@ void test("config generator writes only ignored configs and reports public metad
       maxIterations: 1,
       maxRetryableAttempts: 10,
     });
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Output is confined to the mkdtemp-owned root.
     assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
     assert.deepEqual(result, {
       outputPath: defaultOut,

@@ -461,42 +461,34 @@ ProtectHome=true
 }
 
 async function appendText(filePath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   await fsAppendFile(filePath, text);
 }
 
 async function lstatPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   return fsLstat(filePath);
 }
 
 async function makeDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   await fsMkdir(directory, { recursive: true });
 }
 
 async function readDirectory(directory: string): Promise<string[]> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   return fsReaddir(directory);
 }
 
 async function readLink(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture symlink.
   return fsReadlink(filePath);
 }
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed script or temporary fixture path.
   return fsReadFile(filePath, "utf8");
 }
 
 async function linkSymbolic(target: string, linkPath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture symlink.
   await fsSymlink(target, linkPath, "dir");
 }
 
 async function writeText(filePath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   await fsWriteFile(filePath, text);
 }
 

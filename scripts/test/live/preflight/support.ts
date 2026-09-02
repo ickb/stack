@@ -226,12 +226,10 @@ function mockSdk(options: MockOptions): SdkLike {
 }
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are isolated temp config files.
   return fsReadFile(filePath, "utf8");
 }
 
 async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are isolated temp config files.
   await fsWriteFile(filePath, data);
 }
 

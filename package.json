@@ -3,7 +3,6 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build && node scripts/tooling/build/rewrite-dts-imports.ts --check packages/*/dist",
-    "build:all": "pnpm build && pnpm --filter ./apps/interface build",
     "bot:install": "CI=true pnpm --filter @ickb/bot-cli... install --frozen-lockfile",
     "bot:check": "pnpm --filter @ickb/bot-cli --filter @ickb/bot exec tsgo --noEmit -p tsconfig.json",
     "check": "CI=true pnpm check:base",
@@ -27,7 +26,6 @@
     "test:ci": "vitest run && node scripts/run-node-tests.ts",
     "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
     "clean:deep": "pnpm clean && rm -fr node_modules packages/*/node_modules apps/*/node_modules",
-    "probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts && node scripts/tooling/probes/treeshake/run.ts",
     "live:generate-config": "node scripts/live/generate-config.ts",
     "live:check:source": "tsgo --noEmit -p tsconfig.json",
     "live:config-from-env": "node scripts/live/config-from-env.ts",
@@ -36,7 +34,7 @@
     "live:supervisor:bot-stimulus-test": "node apps/validation/src/liveBotStimulusTest.ts",
     "live:supervisor:loop": "node scripts/supervisor/loop-cli.ts",
     "live:supervisor:dynamic-loop": "node scripts/supervisor/dynamic-loop-cli.ts",
-    "lint:probes": "pnpm probes"
+    "lint:probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts && node scripts/tooling/probes/treeshake/run.ts"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -137,7 +137,6 @@ void test("validated candidate atomically replaces with mode 0600 and durable or
 });
 
 async function readScript(): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test reads the fixed credential helper script under the repository root.
   return fsReadFile(script, "utf8");
 }
 
@@ -247,22 +246,18 @@ async function readEvents(filePath: string): Promise<string[]> {
 }
 
 async function chmodFixture(filePath: string, mode: number): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test modifies files inside its own temporary fixture directory.
   await chmod(filePath, mode);
 }
 
 async function makeFixtureDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test creates directories inside its own temporary fixture directory.
   await mkdir(directory);
 }
 
 async function readFixture(filePath: string): Promise<Buffer> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test reads files inside its own temporary fixture directory.
   return fsReadFile(filePath);
 }
 
 async function statFixture(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test stats files inside its own temporary fixture directory.
   return stat(filePath);
 }
 
@@ -271,6 +266,5 @@ async function writeFixture(
   contents: string | Uint8Array,
   mode?: number,
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test writes files inside its own temporary fixture directory.
   await writeFile(filePath, contents, mode === undefined ? undefined : { mode });
 }

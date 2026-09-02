@@ -15,7 +15,6 @@ describe("bot private key output boundary", () => {
     const output: string[] = [];
     try {
       const configPath = path.join(dir, "config.json");
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The path is inside this test's private temporary directory.
       await writeFile(
         configPath,
         JSON.stringify({

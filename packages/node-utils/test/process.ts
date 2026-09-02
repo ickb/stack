@@ -343,9 +343,7 @@ describe("symlink path traversal", () => {
     try {
       const target = join(root, "target");
       const linked = join(root, "linked");
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths are confined to the mkdtemp-owned root.
       await mkdir(target);
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test intentionally creates a symlink under its private root.
       await symlink(target, linked, "dir");
 
       await expect(firstSymlinkInPath(join(linked, "file"), root)).resolves.toBe(linked);

@@ -80,7 +80,6 @@ async function scanForPureInStaticBlocks(): Promise<void> {
   for await (const file of glob("packages/*/src/**/*.{ts,tsx}", {
     cwd: repositoryRoot,
   })) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Iterates the repo's own glob results under packages/*/src.
     const source = await readFile(path.join(repositoryRoot, file), "utf8");
     if (staticBlocks(source).some((block) => block.includes("@__PURE__"))) {
       offenders.push(file);

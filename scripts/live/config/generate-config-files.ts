@@ -143,7 +143,6 @@ export async function writeConfigFile(
     constants.O_CREAT |
     constants.O_NOFOLLOW |
     (force ? constants.O_TRUNC : constants.O_EXCL);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The path is contained, ignored, and checked with O_NOFOLLOW before secret bytes cross this boundary.
   const handle = await open(filePath, flags, 0o600);
   try {
     await handle.writeFile(text, "utf8");

@@ -41,7 +41,6 @@ async function assembleScratch(options: { breakRecipe: boolean }): Promise<void>
   await rm(scratchDirectory, { recursive: true, force: true });
   await mkdir(path.join(scratchDirectory, "src"), { recursive: true });
   for (const templateFile of templateFiles) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Template names are a fixed list local to this probe.
     const content = await readFile(
       path.join(probeDirectory, "template", `${templateFile}.txt`),
       "utf8",
@@ -55,7 +54,6 @@ async function assembleScratch(options: { breakRecipe: boolean }): Promise<void>
   }
   const scopeDirectory = path.join(scratchDirectory, "node_modules", "@ckb-ccc");
   await mkdir(scopeDirectory, { recursive: true });
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Links the workspace-installed CCC store path into the probe scratch.
   await symlink(
     await realpath(path.join(repositoryRoot, "packages/core/node_modules/@ckb-ccc/core")),
     path.join(scopeDirectory, "core"),
@@ -129,7 +127,6 @@ function probeTool(tool: string, toolArguments: string[], command?: string): Too
 }
 
 async function writeScratchFile(fileName: string, content: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Scratch paths derive from this script's own location, not external input.
   await writeFile(path.join(scratchDirectory, fileName), content);
 }
 

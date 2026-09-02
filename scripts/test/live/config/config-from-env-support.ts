@@ -197,23 +197,19 @@ export function jsonText(value: unknown): string {
 }
 
 export async function modeOf(filePath: string): Promise<number> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests stat files under mkdtemp-owned roots.
   const fileStat = await fsStat(filePath);
   return fileStat.mode & 0o777;
 }
 
 export async function makeDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests create directories under mkdtemp-owned roots.
   await fsMkdir(directory);
 }
 
 export async function linkSymbolic(target: string, linkPath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Symlink tests intentionally link paths under mkdtemp-owned roots.
   await fsSymlink(target, linkPath, "dir");
 }
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests read files under mkdtemp-owned roots.
   return fsReadFile(filePath, "utf8");
 }
 

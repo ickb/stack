@@ -44,11 +44,9 @@ function recursiveFiles(
 }
 
 function pathExists(filePath: string): boolean {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test discovery only scans the fixed scripts/test directory.
   return existsSync(filePath);
 }
 
 function readDirectory(filePath: string): Dirent[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test discovery only scans the fixed scripts/test directory.
   return readdirSync(filePath, { encoding: "utf8", withFileTypes: true });
 }

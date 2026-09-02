@@ -137,7 +137,6 @@ async function readStimulusFixtureFile(
   if (text !== undefined) {
     return text;
   }
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixture paths are test-owned temporary files.
   const diskText = await readFile(targetPath, "utf8");
   if (!path.basename(targetPath).startsWith("bot.events")) {
     return diskText;

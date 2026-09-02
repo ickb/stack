@@ -14,5 +14,5 @@ Committed reproducer for amendment 12 of the
    asserted against the packed merged `@ickb/sdk` tarball and becomes the
    mandatory exit gate.
 
-Run via `pnpm probes` (or `node scripts/tooling/probes/treeshake/run.ts`).
+Run via `pnpm lint:probes` (or `node scripts/tooling/probes/treeshake/run.ts`).
 Scratch output lives under `scratch/` (gitignored) and is always removed.

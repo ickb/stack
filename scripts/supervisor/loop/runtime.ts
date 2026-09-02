@@ -336,6 +336,5 @@ async function readTextFile(
   filePath: string,
   encoding: BufferEncoding,
 ): Promise<string | Buffer> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove supervisor-managed paths before reading summaries.
   return readFile(filePath, encoding);
 }

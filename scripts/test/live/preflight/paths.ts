@@ -121,12 +121,10 @@ void test("preflight refuses symlinked config parent paths", async () => {
 });
 
 async function makeDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are isolated temp directories.
   await fsMkdir(directory);
 }
 
 async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are isolated temp directories.
   await fsWriteFile(filePath, data);
 }
 
@@ -135,7 +133,6 @@ async function linkSymbolic(
   linkPath: string,
   type?: "dir" | "file" | "junction",
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Symlink tests intentionally create links inside temp directories.
   await fsSymlink(target, linkPath, type);
 }
 

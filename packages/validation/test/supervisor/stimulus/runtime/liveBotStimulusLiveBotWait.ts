@@ -34,7 +34,6 @@ it.each([
 ] as const)("rejects %s rotated event evidence", async (_name, eventText, message) => {
   const tmpRoot = await mkdtemp(join(tmpdir(), "ickb-live-bot-rotation-"));
   const botEventsPath = join(tmpRoot, BOT_EVENTS_NDJSON);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(botEventsPath, eventText);
 
   await expect(
@@ -64,7 +63,6 @@ it("accepts same-run non-preflight evidence at the rotation boundary", async () 
     timestamp: "2026-01-01T00:00:00.000Z",
     type: "bot.iteration.started",
   })}\n`;
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(botEventsPath, eventText);
   const times = [0, 0, 0, 1000, 1000];
 
@@ -86,7 +84,6 @@ it("accepts same-run non-preflight evidence at the rotation boundary", async () 
     scan: { acceptedEventCount: 1 },
   });
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(
     botEventsPath,
     `${JSON.stringify({ app: "bot", runId: "run-1", type: "bot.chain.preflight" })}\n`,
@@ -130,10 +127,8 @@ describe(LIVE_BOT_STIMULUS_SUITE, () => {
     const reactionEventText = matchedCommitEventText("ee", "cc");
     let eventText = previousEventText;
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await mkdir(path.dirname(botEventsPath), { recursive: true });
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(botEventsPath, eventText);
     const supervisorArgs: string[][] = [];
     const stdout = textWriter();
@@ -150,7 +145,6 @@ describe(LIVE_BOT_STIMULUS_SUITE, () => {
         setEventText: (text) => {
           eventText = text;
 
-          // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
           writeFileSync(botEventsPath, eventText);
         },
         previousEventText,
@@ -179,9 +173,7 @@ it.each(["launcher-exit", "launcher-restart", "child-exit", "child-restart"] as 
     const reads = new Map([
       [launchesPath, `${JSON.stringify(launcherStartedRecord())}\n`],
     ]);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await mkdir(path.dirname(botEventsPath), { recursive: true });
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(botEventsPath, "");
     const supervisorArgs: string[][] = [];
     let identityReads = 0;
@@ -240,9 +232,7 @@ it.each([
     const reads = new Map([
       [launchesPath, `${JSON.stringify(launcherStartedRecord())}\n`],
     ]);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await mkdir(path.dirname(botEventsPath), { recursive: true });
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(botEventsPath, "");
     const supervisorArgs: string[][] = [];
     const dependencies = liveBotStimulusDependencies({
@@ -365,9 +355,7 @@ it.each([
     const tmpRoot = await mkdtemp(join(tmpdir(), "ickb-live-bot-identity-"));
     const botEventsPath = join(tmpRoot, "bot", BOT_EVENTS_NDJSON);
     const launchesPath = join(tmpRoot, "bot", LAUNCHES_NDJSON);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await mkdir(path.dirname(botEventsPath), { recursive: true });
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(botEventsPath, "");
     const supervisorArgs: string[][] = [];
 
@@ -403,7 +391,6 @@ it("proves bot identity from a bounded prefix of a large event history", async (
   const tmpRoot = await mkdtemp(join(tmpdir(), "ickb-live-bot-history-"));
   const botEventsPath = join(tmpRoot, "bot", BOT_EVENTS_NDJSON);
   const launchesPath = join(tmpRoot, "bot", LAUNCHES_NDJSON);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await mkdir(path.dirname(botEventsPath), { recursive: true });
   const identityEvent = `${JSON.stringify({
     version: 1,
@@ -417,9 +404,7 @@ it("proves bot identity from a bounded prefix of a large event history", async (
     matches: { genesisHash: true, addressPrefix: true },
   })}\n`;
   const oversizedTail = "x".repeat(MAX_EVENT_READ_BYTES + 1);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(botEventsPath, `${identityEvent}${oversizedTail}`);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(
     launchesPath,
     `${oversizedTail}\n${JSON.stringify(launcherStartedRecord())}\n`,

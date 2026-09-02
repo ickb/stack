@@ -331,12 +331,10 @@ export async function readOptionalText(file: string): Promise<string | undefined
 }
 
 export async function readText(file: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Structure lint intentionally reads repository-owned source and config files.
   return readFile(file, "utf8");
 }
 
 async function statPath(file: string): Promise<Awaited<ReturnType<typeof stat>>> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Structure lint stats repository-owned paths returned by git ls-files.
   return stat(file);
 }
 

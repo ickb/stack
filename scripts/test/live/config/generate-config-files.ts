@@ -54,7 +54,6 @@ void test("config generator creates exclusive owner-only output", async () => {
     });
 
     const output = join(dir, configOut);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Output is under the mkdtemp-owned root.
     assert.equal((await stat(output)).mode & 0o777, 0o600);
     await assert.rejects(
       runGenerateConfig({
@@ -81,7 +80,6 @@ void test("config generator checks existing ancestors before creating missing pa
         randomBytes: () => Buffer.from("55".repeat(32), "hex"),
         mkdir: async (filePath, options) => {
           mkdirCalls.push(filePath);
-          // eslint-disable-next-line security/detect-non-literal-fs-filename -- Generated parents stay under the mkdtemp-owned root.
           await fsMkdir(filePath, options);
         },
       },
@@ -115,7 +113,6 @@ void test("config generator removes staged config when final install fails", asy
       /link failed/u,
     );
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test lists its mkdtemp-owned config directory.
     const configNames = await readdir(join(dir, "config"));
     assert.deepEqual(
       configNames.filter((name) => name.includes(".tmp-")),
@@ -173,16 +170,13 @@ void test("config generator accepts absolute outputs through a symlinked repo ro
 });
 
 async function makeDir(filePath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests create paths under mkdtemp-owned roots.
   await fsMkdir(filePath);
 }
 
 async function makeSymlink(target: string, filePath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests create symlinks under mkdtemp-owned roots.
   await fsSymlink(target, filePath, "dir");
 }
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Tests read paths produced under mkdtemp-owned roots.
   return fsReadFile(filePath, "utf8");
 }

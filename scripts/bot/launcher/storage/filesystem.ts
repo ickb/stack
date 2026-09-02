@@ -55,7 +55,6 @@ export async function resetArtifactDirectory(filePath: string): Promise<void> {
 }
 
 export async function safeLstat(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove launcher-managed paths before filesystem use.
   return fsLstat(filePath);
 }
 
@@ -63,12 +62,10 @@ async function safeMkdir(
   directory: string,
   options: Parameters<typeof fsMkdir>[1],
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers build paths from the resolved log root and checked path parts.
   await fsMkdir(directory, options);
 }
 
 async function safeRealpath(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This is the symlink proof for the already resolved launcher path.
   return fsRealpath(filePath);
 }
 
@@ -83,7 +80,6 @@ export async function safeReadFile(
   filePath: string,
   encoding: BufferEncoding,
 ): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Reads target checked launcher log files or package metadata.
   return fsReadFile(filePath, encoding);
 }
 
@@ -92,7 +88,6 @@ export async function safeOpen(
   flags: number,
   mode: number,
 ): Promise<FileHandle> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Opens checked log files with no-follow flags and post-open file validation.
   return fsOpen(filePath, flags, mode);
 }
 

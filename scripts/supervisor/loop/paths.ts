@@ -115,6 +115,5 @@ async function makeDirectory(
   directoryPath: string,
   options?: { recursive?: boolean },
 ): Promise<unknown> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove supervisor output roots before directory creation.
   return mkdir(directoryPath, options);
 }

@@ -514,6 +514,17 @@ export default defineConfig(
   },
   {
     files: [
+      "scripts/**/*.ts",
+      "apps/*/test/**/*.{ts,tsx}",
+      "packages/*/test/**/*.{ts,tsx}",
+    ],
+    rules: {
+      // This rule flags only paths constructed by the repository in scripts and tests.
+      "security/detect-non-literal-fs-filename": "off",
+    },
+  },
+  {
+    files: [
       "apps/*/test/**/*.{ts,tsx}",
       "packages/*/test/**/*.{ts,tsx}",
       "test/**/*.{ts,tsx}",

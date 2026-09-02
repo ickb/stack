@@ -193,12 +193,10 @@ export async function readHandleText(
 }
 
 export async function safeLstat(filePath: string): Promise<StatLike> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove collector-managed paths before filesystem use.
   return fsLstat(filePath);
 }
 
 export async function safeRealpath(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This is the symlink proof for the already resolved collector path.
   return fsRealpath(filePath);
 }
 
@@ -206,7 +204,6 @@ export async function safeReadFile(
   filePath: string,
   encoding: BufferEncoding,
 ): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Reads target package metadata selected by the collector root.
   return fsReadFile(filePath, encoding);
 }
 
@@ -214,7 +211,7 @@ export const safeReaddir: (
   directory: string,
   options: { withFileTypes: true },
 ) => Promise<DirentLike[]> = async (directory, options) => {
-  // eslint-disable-next-line sonarjs/prefer-immediate-return, security/detect-non-literal-fs-filename -- Async wrapper is required by the local promise rule; directory reads stay under checked collector log paths.
+  // eslint-disable-next-line sonarjs/prefer-immediate-return -- Async wrapper is required by the local promise rule; directory reads stay under checked collector log paths.
   const entries = await fsReaddir(directory, options);
   return entries;
 };
@@ -284,7 +281,7 @@ async function safeOpen(
   flags: number,
   mode?: number,
 ): Promise<IncidentFileHandle> {
-  // eslint-disable-next-line sonarjs/prefer-immediate-return, security/detect-non-literal-fs-filename -- Async wrapper is required by the local promise rule; opens checked collector files with no-follow flags and post-open file validation.
+  // eslint-disable-next-line sonarjs/prefer-immediate-return -- Async wrapper is required by the local promise rule; opens checked collector files with no-follow flags and post-open file validation.
   const handle = await fsOpen(filePath, flags, mode);
   return handle;
 }
@@ -293,6 +290,5 @@ async function safeMkdir(
   directory: string,
   options?: { mode?: number; recursive?: boolean },
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers build paths from resolved collector roots and checked path parts.
   await fsMkdir(directory, options);
 }

@@ -184,17 +184,14 @@ export async function makeDirectory(
   directory: string,
   options: { recursive: true },
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are temp dirs or repo-local launcher fixture paths.
   await fsMkdir(directory, options);
 }
 
 export async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are temp dirs or repo-local launcher fixture paths.
   return fsReadFile(filePath, "utf8");
 }
 
 async function statPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are temp dirs or repo-local launcher fixture paths.
   return fsStat(filePath);
 }
 
@@ -203,7 +200,6 @@ export async function pathMode(filePath: string): Promise<number> {
 }
 
 export async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are temp dirs or repo-local launcher fixture paths.
   await fsWriteFile(filePath, data);
 }
 
@@ -212,7 +208,6 @@ export async function linkSymbolic(
   linkPath: string,
   type?: "dir" | "file" | "junction",
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Symlink tests intentionally create links inside their temp directory.
   await fsSymlink(target, linkPath, type);
 }
 

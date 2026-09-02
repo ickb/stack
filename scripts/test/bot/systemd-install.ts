@@ -167,27 +167,22 @@ void test("migration restoration reconstructs the shipped layout and unit", asyn
 });
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed script or temporary fixture path.
   return fsReadFile(filePath, "utf8");
 }
 
 async function makeDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   await fsMkdir(directory, { recursive: true });
 }
 
 async function linkSymbolic(target: string, linkPath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture symlink.
   await fsSymlink(target, linkPath, "dir");
 }
 
 async function statPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   return fsStat(filePath);
 }
 
 async function writeText(filePath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Temporary fixture path.
   await fsWriteFile(filePath, text);
 }
 

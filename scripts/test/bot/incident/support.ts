@@ -315,7 +315,6 @@ export async function writeFixtureSlotLogs(
 }
 
 export async function mkdirp(dir: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Collector tests create directories inside temp fixtures only.
   await fsMkdir(dir, { recursive: true, mode: 0o700 });
 }
 
@@ -380,7 +379,6 @@ export async function openPath(
   flags: number,
   fileMode?: number,
 ): Promise<TestFileHandle> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fsOpen returns Node's FileHandle, which structurally satisfies the collector dependency handle used by this test.
   return fsOpen(filePath, flags, fileMode);
 }
 
@@ -389,7 +387,6 @@ export async function readIncidentSummary(incidentDir: string): Promise<Incident
 }
 
 export async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Collector tests read repo-local scripts or their own temp fixture outputs.
   return fsReadFile(filePath, "utf8");
 }
 
@@ -398,7 +395,6 @@ export async function readVersionJson(incidentDir: string): Promise<VersionJson>
 }
 
 async function statPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Collector tests stat paths inside their own temp fixture directories.
   return fsStat(filePath);
 }
 
@@ -407,7 +403,6 @@ export async function writeText(
   data: string,
   options?: Parameters<typeof fsWriteFile>[2],
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Collector tests write files inside their own temp fixture directories.
   await fsWriteFile(filePath, data, options);
 }
 
@@ -416,7 +411,6 @@ export async function linkSymbolic(
   linkPath: string,
   type?: "dir" | "file" | "junction",
 ): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Symlink tests intentionally create links inside their temp directory.
   await fsSymlink(target, linkPath, type);
 }
 
@@ -436,7 +430,6 @@ export function splitReadHandle(filePath: string, chunks: Uint8Array[]): TestFil
       });
     },
     async stat(): Promise<Stats> {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Split-read fixture stats the collector temp log file path.
       return fsStat(filePath);
     },
   };

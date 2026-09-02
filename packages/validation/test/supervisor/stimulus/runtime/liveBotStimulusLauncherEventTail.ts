@@ -35,9 +35,7 @@ it("reads launcher evidence through the native bounded path", async () => {
     "/repo",
     {},
   );
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await mkdir(paths.botLogDir, { recursive: true });
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
   await writeFile(paths.launchesPath, `${JSON.stringify(launcherStartedRecord())}\n`);
 
   await expect(
@@ -88,13 +86,10 @@ describe(LIVE_BOT_STIMULUS_SUITE, () => {
     const reactionEventText = matchedCommitEventText("ee", "cc");
     let eventText = previousEventText;
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await mkdir(path.dirname(slotEventsPath), { recursive: true });
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(slotEventsPath, eventText);
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
     await writeFile(legacyEventsPath, "");
     const supervisorArgs: string[][] = [];
     const stdout = textWriter();
@@ -111,7 +106,6 @@ describe(LIVE_BOT_STIMULUS_SUITE, () => {
         setEventText: (text) => {
           eventText = text;
 
-          // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is inside this test's private temporary directory.
           writeFileSync(slotEventsPath, eventText);
         },
         previousEventText,

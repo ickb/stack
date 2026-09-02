@@ -118,7 +118,6 @@ async function writeConsumerFixture(manifest: ManifestEntry[]): Promise<void> {
 }
 
 async function writeScratchFile(fileName: string, content: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Scratch paths derive from this script's own location, not external input.
   await writeFile(path.join(scratchDirectory, fileName), content);
 }
 

@@ -183,7 +183,6 @@ export function freshLoopOutputDependencies(
       if (paths.has(filePath)) {
         return { isSymbolicLink: (): boolean => false };
       }
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixture paths are validated supervisor roots or their existing ancestors.
       return fsLstat(filePath);
     },
   };

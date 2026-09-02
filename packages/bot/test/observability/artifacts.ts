@@ -231,38 +231,31 @@ function artifactFilePath(artifactRoot: string, hash: string): string {
 }
 
 async function readArtifactFile(artifactPath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test reads the content-addressed artifact path produced by the code under test.
   return readFile(artifactPath, "utf8");
 }
 
 async function statArtifactFile(artifactPath: string): Promise<{ mode: number }> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test stats the content-addressed artifact path produced by the code under test.
   return stat(artifactPath);
 }
 
 async function writeArtifactFile(artifactPath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test corrupts the artifact path produced by the code under test.
   await writeFile(artifactPath, text, { mode: 0o600 });
 }
 
 async function removeArtifactFile(artifactPath: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test replaces the artifact path produced by the code under test.
   await unlink(artifactPath);
 }
 
 async function artifactTempFiles(artifactRoot: string): Promise<string[]> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test lists the deterministic artifact directory produced by the code under test.
   const names = await readdir(path.join(artifactRoot, artifactDirectory));
   return names.filter((name) => name.includes(".tmp-"));
 }
 
 async function makeArtifactDirectory(directory: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test creates an explicit temp directory below mkdtemp output.
   await mkdir(directory);
 }
 
 async function makeArtifactSymlink(target: string, destination: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test creates an explicit symlink below mkdtemp output to prove refusal.
   await symlink(target, destination, "dir");
 }
 

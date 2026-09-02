@@ -62,14 +62,12 @@ void test("live env config helper removes staged and partially linked outputs", 
             if (linkCount === 2) {
               throw new Error("second link failed");
             }
-            // eslint-disable-next-line security/detect-non-literal-fs-filename -- Staging paths stay under the mkdtemp-owned config directory.
             await link(from, to);
           },
         },
       }),
       /second link failed/u,
     );
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test lists its mkdtemp-owned config directory.
     const names = await readdir(join(dir, configDir));
     assert.deepEqual(names, []);
     await assert.rejects(access(join(dir, botConfigPath)));
@@ -93,7 +91,6 @@ void test("live env config helper restores previous configs after forced replace
             if (from.includes(".tmp-") && to === testerPath) {
               throw new Error("install failed");
             }
-            // eslint-disable-next-line security/detect-non-literal-fs-filename -- Rename paths are generated beneath this test's private root.
             await rename(from, to);
           },
         },
@@ -108,7 +105,6 @@ void test("live env config helper restores previous configs after forced replace
         maxRetryableAttempts: 10,
       }),
     );
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test lists its mkdtemp-owned config directory.
     const names = await readdir(join(dir, configDir));
     assert.deepEqual(
       names.filter((name) => /\.(?:backup|tmp)-/u.test(name)),

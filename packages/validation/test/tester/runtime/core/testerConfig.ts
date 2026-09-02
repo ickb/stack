@@ -39,7 +39,6 @@ describe("readTesterRuntimeConfig", () => {
     try {
       const configPath = path.join(dir, "config.json");
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test writes to a mkdtemp-owned fixture path.
       await writeFile(
         configPath,
         JSON.stringify({
@@ -145,7 +144,6 @@ describe("tester private key output boundary", () => {
     try {
       const configPath = path.join(dir, "config.json");
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test writes to a mkdtemp-owned fixture path.
       await writeFile(
         configPath,
         JSON.stringify({

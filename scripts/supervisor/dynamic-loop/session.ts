@@ -229,7 +229,6 @@ async function assertNoSymlinkedPath(
 }
 
 async function defaultStat(filePath: string): Promise<unknown> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers resolve and validate dynamic-loop paths before probing them.
   return stat(filePath);
 }
 
@@ -243,7 +242,6 @@ async function defaultMkdir(
   filePath: string,
   options?: { recursive?: boolean },
 ): Promise<unknown> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Session paths are resolved, ignored, and symlink-checked before creation.
   return mkdir(filePath, options);
 }
 
@@ -254,7 +252,6 @@ function directoryCreator(
 }
 
 async function defaultWriteFile(filePath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove dynamic-loop-owned session paths before writing.
   await writeFile(filePath, text);
 }
 
@@ -265,7 +262,6 @@ function fileWriter(
 }
 
 async function defaultAppendFile(filePath: string, text: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Callers prove dynamic-loop-owned session paths before appending.
   await appendFile(filePath, text);
 }
 

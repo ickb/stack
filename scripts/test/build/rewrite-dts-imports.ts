@@ -59,12 +59,10 @@ void test("rewrite-dts-imports rewrites relative .ts declaration specifiers", as
 });
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test reads files inside its own temporary fixture directory.
   return fsReadFile(filePath, "utf8");
 }
 
 async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- This test writes files inside its own temporary fixture directory.
   await fsWriteFile(filePath, data);
 }
 

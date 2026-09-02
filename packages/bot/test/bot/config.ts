@@ -16,7 +16,6 @@ describe("readBotRuntimeConfig", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "ickb-bot-config-"));
     try {
       const configPath = path.join(dir, CONFIG_FILE_NAME);
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- mkdtemp owns this test config path.
       await writeFile(
         configPath,
         JSON.stringify({
@@ -50,7 +49,6 @@ describe("readBotRuntimeConfig", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "ickb-bot-config-"));
     try {
       const configPath = path.join(dir, CONFIG_FILE_NAME);
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- mkdtemp owns this test config path.
       await writeFile(
         configPath,
         JSON.stringify({
