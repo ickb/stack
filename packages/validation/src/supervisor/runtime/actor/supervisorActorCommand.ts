@@ -1,12 +1,9 @@
 import process from "node:process";
 import { assertNoSymlinkedConfigPath } from "../../args/supervisorPaths.ts";
 import { liveActorEnv } from "../../classification/supervisorClassifyUtils.ts";
-import { testerScenarioForTargets } from "../../preflight/supervisorPreflightState.ts";
+import { testerScenarioFor } from "../../preflight/supervisorPreflightState.ts";
 import { runCommand } from "../command/supervisorCommandRun.ts";
-import {
-  TESTER_OWNED_TX_HASH_FLAG,
-  type OutcomeKind,
-} from "../shared/supervisorConstants.ts";
+import { TESTER_OWNED_TX_HASH_FLAG } from "../shared/supervisorConstants.ts";
 import type {
   CommandResult,
   ScenarioStep,
@@ -15,10 +12,9 @@ import type {
 } from "../shared/supervisorTypes.ts";
 
 export async function runActor(
-  ...[step, plan, targetOutcomes, timeoutMs, ownedTxHash, dependencies]: [
+  ...[step, plan, timeoutMs, ownedTxHash, dependencies]: [
     step: ScenarioStep,
     plan: SupervisorPlan,
-    targetOutcomes: OutcomeKind[],
     timeoutMs: number,
     ownedTxHash: string | undefined,
     dependencies: SupervisorDependencies,
@@ -26,9 +22,6 @@ export async function runActor(
 ): Promise<CommandResult> {
   const actor = step.actor;
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
-  if (configPath === undefined) {
-    throw new Error(`Missing ${actor} config path`);
-  }
   await assertNoSymlinkedConfigPath(
     plan.rootDir,
     configPath,
@@ -49,7 +42,7 @@ export async function runActor(
       env: liveActorEnv({
         [configEnvName]: configPath,
         INIT_CWD: plan.rootDir,
-        ...(actor === "tester" ? testerEnv(plan, targetOutcomes, step) : {}),
+        ...(actor === "tester" ? testerEnv(plan, step) : {}),
       }),
       timeoutMs,
     },
@@ -57,13 +50,9 @@ export async function runActor(
   );
 }
 
-function testerEnv(
-  plan: SupervisorPlan,
-  targetOutcomes: OutcomeKind[],
-  step: ScenarioStep,
-): Record<string, string> {
+function testerEnv(plan: SupervisorPlan, step: ScenarioStep): Record<string, string> {
   return {
-    TESTER_SCENARIO: testerScenarioForTargets(plan.testerScenario, targetOutcomes, step),
+    TESTER_SCENARIO: testerScenarioFor(plan, step),
     ...(plan.testerFee === undefined ? {} : { TESTER_FEE: plan.testerFee }),
     ...(plan.testerFeeBase === undefined ? {} : { TESTER_FEE_BASE: plan.testerFeeBase }),
   };

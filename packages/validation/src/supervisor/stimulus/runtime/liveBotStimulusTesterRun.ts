@@ -47,8 +47,6 @@ export async function runTesterStimulus(
     "tester-only",
     "--tester-scenario",
     choice.scenario,
-    "--target-outcome",
-    TESTER_ORDER_CREATED,
     "--max-cycles",
     "1",
     "--stop-after-tx-count",

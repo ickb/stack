@@ -41,13 +41,13 @@ Cycles never overlap. Each cycle proves the launcher, runs fresh bot and tester 
 Bounded supervisor chunks are smoke tests or deliberate validation stimulus, not the production watch path. Verify `pnpm live:supervisor:loop --help` before running a short repair smoke:
 
 ```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 1260 -- --scenario auto --max-cycles 10 --max-wall-clock-seconds 1200 --stop-after-tx-count 1 --command-timeout-seconds 900
+pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 1260 -- --scenario standard-cycle --max-cycles 10 --max-wall-clock-seconds 1200 --stop-after-tx-count 1 --command-timeout-seconds 900
 ```
 
 Lengthen a run only after the short summary is understood:
 
 ```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 4260 -- --scenario auto --max-cycles 1000 --max-wall-clock-seconds 4200 --stop-after-tx-count 1 --command-timeout-seconds 3600
+pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 4260 -- --scenario standard-cycle --max-cycles 1000 --max-wall-clock-seconds 4200 --stop-after-tx-count 1 --command-timeout-seconds 3600
 ```
 
 For bounded dynamic validation that does not test the already-running bot, verify `pnpm live:supervisor:dynamic-loop --help` and use the source-owned loop:
@@ -63,7 +63,7 @@ The dynamic loop reads tester preflight balances and selects stimulus determinis
 For deterministic non-dust iCKB-to-CKB stimulus, first verify that the current fee behavior still requires this shape:
 
 ```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 -- --scenario standard-cycle --max-cycles 1 --command-timeout-seconds 240 --tester-scenario ickb-to-ckb-limit-order --tester-fee 1 --tester-fee-base 1000 --target-outcome tester_order_created --target-outcome bot_match_committed
+pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 -- --scenario standard-cycle --max-cycles 1 --command-timeout-seconds 240 --tester-scenario ickb-to-ckb-limit-order --tester-fee 1 --tester-fee-base 1000
 ```
 
 ## Timeout Alignment

@@ -1,14 +1,8 @@
 import { appendSupervisorEvent } from "../../artifacts/supervisorArtifacts.ts";
 import { runPreflightSteps } from "../../preflight/supervisorPreflightRun.ts";
-import {
-  chooseScenario,
-  recordScenarioAttempt,
-  scenarioByName,
-} from "../shared/supervisorCoverage.ts";
-import { stopForUnsupportedChoice } from "../shared/supervisorStops.ts";
+import type { ScenarioName } from "../shared/supervisorConstants.ts";
 import type {
   ParsedArgs,
-  ScenarioChoiceResult,
   SupervisorDependencies,
   SupervisorPlan,
   SupervisorRunState,
@@ -50,26 +44,16 @@ export async function runSupervisorCycle(
   if (cycleWallClockStop !== undefined) {
     return cycleWallClockStop;
   }
-  const choice = chooseScenarioForCycle(args, state);
-  recordScenarioAttempt(state.ledger, cycleIndex, choice);
-  if (choice.kind === "unsupported") {
-    return stopForUnsupportedChoice(cycleIndex, choice, plan, state, dependencies);
-  }
+  const scenario = scenarioForCycle(args, state);
   await appendSupervisorEvent(
     plan,
-    {
-      type: "cycle.started",
-      cycleIndex,
-      scenario: choice.scenario.name,
-      targetOutcomes: choice.targetOutcomes,
-      reason: choice.reason,
-    },
+    { type: "cycle.started", cycleIndex, scenario },
     dependencies,
   );
   return (
     (await runPreflightSteps(
       cycleIndex,
-      choice,
+      scenario,
       plan,
       state,
       stopForUnavailableWallClockBudget,
@@ -78,7 +62,7 @@ export async function runSupervisorCycle(
     )) ??
     (await runActorSteps(
       cycleIndex,
-      choice,
+      scenario,
       args,
       plan,
       state,
@@ -89,18 +73,8 @@ export async function runSupervisorCycle(
   );
 }
 
-function chooseScenarioForCycle(
-  args: ParsedArgs,
-  state: SupervisorRunState,
-): ScenarioChoiceResult {
-  if (state.pendingBotBalanceAudit === undefined) {
-    return chooseScenario(args, state.ledger);
-  }
-  const scenario = scenarioByName("bot-only");
-  return {
-    kind: "scenario",
-    scenario,
-    targetOutcomes: scenario.targetOutcomes,
-    reason: "bot-only cycle selected to resolve pending bot balance audit",
-  };
+// A committed bot transaction must be followed by a bot balance read before any
+// tester step, so the audit cycle runs the bot alone regardless of the request.
+function scenarioForCycle(args: ParsedArgs, state: SupervisorRunState): ScenarioName {
+  return state.pendingBotBalanceAudit === undefined ? args.scenario : "bot-only";
 }

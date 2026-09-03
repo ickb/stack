@@ -1,4 +1,3 @@
-import { recordClassificationCoverage } from "../shared/supervisorCoverage.ts";
 import { txCreatingHashCount } from "../shared/supervisorSummary.ts";
 import type {
   BotBalanceAuditStateRead,
@@ -14,7 +13,6 @@ export function recordActorClassification(
   const recorded = applyBotBalanceAudit(state, classification) ?? classification;
   const txCount = state.txCount + txCreatingHashCount(recorded);
   state.classifications.push(recorded);
-  recordClassificationCoverage(state.ledger, recorded);
   Object.assign(state, {
     txCount,
     latestPublicState: recorded.publicState ?? state.latestPublicState,

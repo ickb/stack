@@ -67,10 +67,8 @@ export interface SummaryRecord {
   [key: string]: unknown;
   aggregateCounts?: unknown;
   artifacts?: unknown;
-  coverage?: unknown;
   preflightState?: unknown;
   publicVsOwnedStateAssumptions?: unknown;
-  scenarioAttempts?: unknown;
   skipReasons?: unknown;
   stopDiagnostics?: unknown;
   stopped?: unknown;

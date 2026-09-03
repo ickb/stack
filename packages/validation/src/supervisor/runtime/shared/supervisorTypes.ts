@@ -12,7 +12,6 @@ import type {
 import type {
   Actor,
   OutcomeKind,
-  ScenarioDefinition,
   ScenarioName,
   ScenarioStep,
   TesterDirection,
@@ -20,13 +19,12 @@ import type {
   TesterScenarioSelection,
 } from "./supervisorConstants.ts";
 
-export type { ScenarioDefinition, ScenarioStep };
+export type { ScenarioStep };
 
 export interface ParsedArgs {
   help: boolean;
-  dryRun: boolean;
-  botConfigPath?: string;
-  testerConfigPath?: string;
+  botConfigPath: string;
+  testerConfigPath: string;
   outDir?: string;
   maxCycles: number;
   maxWallClockSeconds?: number;
@@ -42,10 +40,12 @@ export interface ParsedArgs {
 export interface SupervisorPlan {
   runId: string;
   rootDir: string;
-  botConfigPath?: string;
-  testerConfigPath?: string;
+  botConfigPath: string;
+  testerConfigPath: string;
   outDir: string;
   relativeOutDir: string;
+  /** `--target-outcome` values, echoed as `requestedOutcomes` in summary.json. */
+  targetOutcomes: OutcomeKind[];
   testerScenario?: TesterScenarioSelection;
   testerFee?: string;
   testerFeeBase?: string;
@@ -227,37 +227,6 @@ export type PreflightCkbBalanceSummary = NonNullable<
   PreflightStateSummary["balances"]
 >["CKB"];
 
-export interface CoverageLedger {
-  goals: OutcomeKind[];
-  counts: Record<OutcomeKind, number>;
-  attempts: Array<{
-    cycleIndex: number;
-    scenario: Exclude<ScenarioName, "auto">;
-    targetOutcomes: OutcomeKind[];
-    reason: string;
-  }>;
-  unsupported: Array<{
-    cycleIndex: number;
-    requested: OutcomeKind;
-    reason: string;
-  }>;
-}
-
-export interface ScenarioChoice {
-  kind: "scenario";
-  scenario: ScenarioDefinition;
-  targetOutcomes: OutcomeKind[];
-  reason: string;
-}
-
-export interface UnsupportedScenarioChoice {
-  kind: "unsupported";
-  requested: OutcomeKind;
-  reason: string;
-}
-
-export type ScenarioChoiceResult = ScenarioChoice | UnsupportedScenarioChoice;
-
 export type ParsedArgHandler = (
   args: ParsedArgs,
   argv: string[],
@@ -295,7 +264,6 @@ export interface IncidentArtifact {
 }
 
 export interface SupervisorRunState {
-  ledger: CoverageLedger;
   classifications: Classification[];
   artifacts: string[];
   preflightState: PreflightStateSummary[];

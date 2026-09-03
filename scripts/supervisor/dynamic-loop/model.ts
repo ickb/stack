@@ -19,6 +19,7 @@ export const LOG_ROOT_FLAG = "--log-root";
 export const SESSION_ROOT_FLAG = "--session-root";
 export const OUT_DIR_FLAG = "--out-dir";
 export const MAX_CYCLES_FLAG = "--max-cycles";
+export const SCENARIO_FLAG = "--scenario";
 export const TESTER_SCENARIO_FLAG = "--tester-scenario";
 export const MAX_CHUNKS_FLAG = "--max-chunks";
 export const CHUNK_MAX_RUNS_FLAG = "--chunk-max-runs";

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { main } from "../../../../src/supervisor/index.ts";
 import {
-  fakeChild,
   fakeHangingChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
@@ -11,18 +10,11 @@ import {
   noopAsync,
   noopVoid,
   pathToString,
-  RANDOM_ORDER_SCENARIO,
   realpathFixture,
-  runSupervisorFixture,
   SCENARIO_FLAG,
-  SDK_CONVERSION_SCENARIO,
   spawnFixture,
   SUPERVISOR_CLI_SUITE,
-  TARGET_OUTCOME_FLAG,
   TEST_ACTOR_ENTRYPOINTS,
-  TESTER_ENTRYPOINT,
-  testerOrderStdout,
-  txHash,
 } from "../../support/supervisor/index.ts";
 
 describe(SUPERVISOR_CLI_SUITE, () => {
@@ -91,65 +83,4 @@ describe(SUPERVISOR_CLI_SUITE, () => {
       expect(kills).toEqual([{ pid: -1234, signal: expectedSignal }]);
     },
   );
-});
-
-describe(SUPERVISOR_CLI_SUITE, () => {
-  it("steers tester conversion coverage to the SDK conversion builder", async () => {
-    const { exitCode, spawned } = await runSupervisorFixture(
-      [
-        "--out-dir",
-        "log/live-supervisor/conversion-env-test",
-        TARGET_OUTCOME_FLAG,
-        "tester_conversion_created",
-        MAX_CYCLES_FLAG,
-        "1",
-      ],
-      (commandArgs) =>
-        isPreflightCommand(commandArgs)
-          ? fakeSuccessfulPreflightChild()
-          : fakeChild(
-              JSON.stringify({
-                startTime: "now",
-                actions: {
-                  testerScenario: SDK_CONVERSION_SCENARIO,
-                  conversion: { kind: "direct" },
-                  cancelledOrders: 0,
-                },
-                txHash: txHash("15"),
-                ElapsedSeconds: 1,
-              }),
-            ),
-    );
-
-    const tester = spawned.find((item) => item.args[0] === TESTER_ENTRYPOINT);
-    expect(exitCode).toBe(0);
-    expect(tester?.env).toMatchObject({
-      TESTER_SCENARIO: SDK_CONVERSION_SCENARIO,
-    });
-  });
-});
-
-describe(SUPERVISOR_CLI_SUITE, () => {
-  it("steers tester order coverage to a raw order builder", async () => {
-    const { exitCode, spawned } = await runSupervisorFixture(
-      [
-        "--out-dir",
-        "log/live-supervisor/order-env-test",
-        TARGET_OUTCOME_FLAG,
-        "tester_order_created",
-        MAX_CYCLES_FLAG,
-        "1",
-      ],
-      (commandArgs) =>
-        isPreflightCommand(commandArgs)
-          ? fakeSuccessfulPreflightChild()
-          : fakeChild(testerOrderStdout({ txByte: "8a" })),
-    );
-
-    const tester = spawned.find((item) => item.args[0] === TESTER_ENTRYPOINT);
-    expect(exitCode).toBe(0);
-    expect(tester?.env).toMatchObject({
-      TESTER_SCENARIO: RANDOM_ORDER_SCENARIO,
-    });
-  });
 });

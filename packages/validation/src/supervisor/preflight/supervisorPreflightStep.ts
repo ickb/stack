@@ -56,9 +56,6 @@ export async function runPreflight(
   ]
 ): Promise<CommandResult> {
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
-  if (configPath === undefined) {
-    throw new Error(`Missing ${actor} config path`);
-  }
   await assertNoSymlinkedConfigPath(
     plan.rootDir,
     configPath,

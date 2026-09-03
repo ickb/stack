@@ -4,13 +4,12 @@ import { padCycle } from "../runtime/command/supervisorCommandRun.ts";
 import {
   join,
   type Actor,
-  type OutcomeKind,
+  type ScenarioName,
 } from "../runtime/shared/supervisorConstants.ts";
 import { boundedText, jsonReplacer } from "../runtime/shared/supervisorEvidence.ts";
 import { suggestedNextAction } from "../runtime/shared/supervisorPublicState.ts";
 import {
   aggregateClassifications,
-  coverageSummary,
   testerOrderEvidenceByOutcome,
   txCreatingHashCountTotal,
   txCreatingOutcomeCount,
@@ -21,70 +20,13 @@ import {
 import type {
   Classification,
   CommandResult,
-  CoverageLedger,
   Dependencies,
   IncidentArtifact,
-  PreflightStateSummary,
-  PublicStateAssumption,
-  ScenarioChoice,
   StopDiagnostics,
   SupervisorPlan,
-  UnsupportedScenarioChoice,
+  SupervisorRunState,
 } from "../runtime/shared/supervisorTypes.ts";
 import { commandShape } from "./supervisorArtifactCommandShape.ts";
-
-/**
- * Writes a terminal incident for unmet requested coverage outcomes.
- *
- * @remarks
- * The incident JSON path is appended to `artifacts` by `writeJsonArtifact`.
- */
-export async function writeUnmetCoverageIncident(
-  ...[plan, cycleIndex, unmetGoals, ledger, artifacts, dependencies, budgetLabel]: [
-    plan: SupervisorPlan,
-    cycleIndex: number,
-    unmetGoals: OutcomeKind[],
-    ledger: CoverageLedger,
-    artifacts: string[],
-    dependencies: Dependencies,
-    budgetLabel: string,
-  ]
-): Promise<IncidentArtifact> {
-  const classification: Classification = {
-    actor: "preflight",
-    outcome: "unmet_coverage_goal",
-    terminal: true,
-    reason: `${budgetLabel} ended before observing requested outcomes: ${unmetGoals.join(", ")}`,
-    txHashes: [],
-    evidence: {
-      recordsAccepted: 0,
-      ignoredLineCount: 0,
-      malformedLineCount: 0,
-      exitStatus: null,
-      signal: null,
-      timedOut: false,
-      stdoutTruncated: false,
-      stderrTruncated: false,
-    },
-  };
-  const relativePath = await writeJsonArtifact(
-    plan,
-    `cycle-${padCycle(cycleIndex)}-incident.json`,
-    {
-      runId: plan.runId,
-      cycleIndex,
-      actor: "supervisor",
-      classification,
-      unmetGoals,
-      coverage: coverageSummary(ledger),
-      artifacts,
-      suggestedNextAction: suggestedNextAction(classification),
-    },
-    artifacts,
-    dependencies,
-  );
-  return { relativePath, classification };
-}
 
 /**
  * Writes a terminal actor incident artifact.
@@ -97,20 +39,18 @@ export async function writeIncident(
     plan,
     cycleIndex,
     actor,
-    choice,
+    scenario,
     classification,
     result,
-    ledger,
     artifacts,
     dependencies,
   ]: [
     plan: SupervisorPlan,
     cycleIndex: number,
     actor: Actor,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     classification: Classification,
     result: CommandResult,
-    ledger: CoverageLedger,
     artifacts: string[],
     dependencies: Dependencies,
   ]
@@ -122,8 +62,7 @@ export async function writeIncident(
       runId: plan.runId,
       cycleIndex,
       actor,
-      scenario: choice.scenario.name,
-      targetOutcomes: choice.targetOutcomes,
+      scenario,
       command: commandShape(plan, result),
       exit: {
         spawnError: result.spawnError,
@@ -135,7 +74,6 @@ export async function writeIncident(
         elapsedMs: result.elapsedMs,
       },
       classification,
-      coverage: coverageSummary(ledger),
       stdoutExcerpt: boundedText(result.stdout, 4000),
       stderrExcerpt: boundedText(result.stderr, 4000),
       artifacts,
@@ -147,27 +85,6 @@ export async function writeIncident(
   return { relativePath, classification };
 }
 
-export function unsupportedIncident(
-  ...[plan, cycleIndex, choice, ledger, classification]: [
-    plan: SupervisorPlan,
-    cycleIndex: number,
-    choice: UnsupportedScenarioChoice,
-    ledger: CoverageLedger,
-    classification: Classification,
-  ]
-): Record<string, unknown> {
-  return {
-    runId: plan.runId,
-    cycleIndex,
-    actor: "supervisor",
-    classification,
-    requested: choice.requested,
-    coverage: coverageSummary(ledger),
-    suggestedNextAction:
-      "provide an alternate ignored config or add a tested supervisor/test-harness control surface; do not mutate funded configs in place",
-  };
-}
-
 /**
  * Writes the final supervisor summary artifact.
  *
@@ -176,28 +93,15 @@ export function unsupportedIncident(
  * already present.
  */
 export async function writeSummary(
-  ...[
-    plan,
-    ledger,
-    classifications,
-    artifacts,
-    preflightState,
-    latestPublicState,
-    stopReason,
-    dependencies,
-    stopDiagnostics,
-  ]: [
+  ...[plan, state, stopReason, dependencies, stopDiagnostics]: [
     plan: SupervisorPlan,
-    ledger: CoverageLedger,
-    classifications: Classification[],
-    artifacts: string[],
-    preflightState: PreflightStateSummary[],
-    latestPublicState: PublicStateAssumption | undefined,
+    state: SupervisorRunState,
     stopReason: string,
     dependencies: Dependencies,
     stopDiagnostics?: StopDiagnostics,
   ]
 ): Promise<string> {
+  const { classifications, artifacts, preflightState, latestPublicState } = state;
   return writeJsonArtifact(
     plan,
     "summary.json",
@@ -207,7 +111,7 @@ export async function writeSummary(
       stopDiagnostics: stopDiagnostics ?? null,
       artifacts,
       aggregateCounts: aggregateClassifications(classifications),
-      coverageGoalOutcomes: ledger.goals,
+      requestedOutcomes: plan.targetOutcomes,
       txHashesByOutcome: txHashesByOutcome(classifications),
       uniqueTxHashesByOutcome: uniqueTxHashesByOutcome(classifications),
       txCreatingTxHashCount: txCreatingHashCountTotal(classifications),
@@ -219,8 +123,6 @@ export async function writeSummary(
         .filter((item) => item !== undefined),
       retryableFailures: classifications.flatMap((item) => item.retryableFailures ?? []),
       preflightState,
-      scenarioAttempts: ledger.attempts,
-      coverage: coverageSummary(ledger),
       publicVsOwnedStateAssumptions: latestPublicState ?? null,
     },
     artifacts,

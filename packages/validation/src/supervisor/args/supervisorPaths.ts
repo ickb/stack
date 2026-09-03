@@ -33,14 +33,12 @@ export function resolvePlan(
     "Output directory",
   );
   const relativeOutDir = displayPath(rootDir, outDir);
-  const botConfigPath =
-    args.botConfigPath === undefined
-      ? undefined
-      : insideRepoPath(rootDir, args.botConfigPath, "Bot config path");
-  const testerConfigPath =
-    args.testerConfigPath === undefined
-      ? undefined
-      : insideRepoPath(rootDir, args.testerConfigPath, "Tester config path");
+  const botConfigPath = insideRepoPath(rootDir, args.botConfigPath, "Bot config path");
+  const testerConfigPath = insideRepoPath(
+    rootDir,
+    args.testerConfigPath,
+    "Tester config path",
+  );
   assertSupervisorOutputDirectory(outDir, relativeOutDir);
   if (
     isInside(rootDir, outDir) &&
@@ -50,17 +48,8 @@ export function resolvePlan(
       `Refusing to write non-ignored supervisor output directory: ${relativeOutDir}`,
     );
   }
-  if (botConfigPath !== undefined) {
-    assertIgnoredConfigPath(rootDir, botConfigPath, "Bot config path", dependencies);
-  }
-  if (testerConfigPath !== undefined) {
-    assertIgnoredConfigPath(
-      rootDir,
-      testerConfigPath,
-      "Tester config path",
-      dependencies,
-    );
-  }
+  assertIgnoredConfigPath(rootDir, botConfigPath, "Bot config path", dependencies);
+  assertIgnoredConfigPath(rootDir, testerConfigPath, "Tester config path", dependencies);
 
   return {
     runId,
@@ -69,6 +58,7 @@ export function resolvePlan(
     testerConfigPath,
     outDir,
     relativeOutDir,
+    targetOutcomes: [...new Set(args.targetOutcomes)],
     testerScenario: args.testerScenario,
     testerFee: args.testerFee,
     testerFeeBase: args.testerFeeBase,

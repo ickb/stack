@@ -282,7 +282,10 @@ describe("validation live stimulus entrypoints", () => {
     ): Promise<number> => {
       await Promise.resolve();
       liveBotStimulusCalls.push([argv, dependencies]);
-      const result = await dependencies.runSupervisor(["--scenario", "auto"], io);
+      const result = await dependencies.runSupervisor(
+        ["--scenario", "standard-cycle"],
+        io,
+      );
       return result + 1;
     };
 
@@ -297,7 +300,7 @@ describe("validation live stimulus entrypoints", () => {
     expect(liveBotStimulusCalls[0]?.[0]).toEqual(liveStimulusArgv);
     expect(typeof liveBotStimulusCalls[0]?.[1].runSupervisor).toBe("function");
     expect(runSupervisorMain).toHaveBeenCalledWith(
-      ["--scenario", "auto"],
+      ["--scenario", "standard-cycle"],
       { actorEntrypoints: liveBotActorEntrypoints },
       io,
     );

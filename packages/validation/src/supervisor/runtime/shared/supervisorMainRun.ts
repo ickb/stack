@@ -5,12 +5,8 @@ import {
   now,
   prepareOutputDirectory,
 } from "../command/supervisorCommandRun.ts";
-import { runDryRun } from "../dry-run/supervisorDryRun.ts";
-import { DEFAULT_COVERAGE_GOALS } from "./supervisorConstants.ts";
-import { createCoverageLedger, explicitCoverageGoals } from "./supervisorCoverage.ts";
 import {
   stopForPendingBotBalanceAudit,
-  stopForUnmetGoals,
   stopForWallClockBudget,
 } from "./supervisorStops.ts";
 import type {
@@ -36,18 +32,18 @@ export async function supervise(
     args.maxWallClockSeconds === undefined
       ? undefined
       : startedAt + args.maxWallClockSeconds * 1000;
-  if (!args.dryRun && dependencies.skipBuiltRuntimeCheck !== true) {
+  if (dependencies.skipBuiltRuntimeCheck !== true) {
     assertBuiltRuntime(plan, dependencies);
   }
   await prepareOutputDirectory(plan, dependencies);
 
-  const explicitGoals = explicitCoverageGoals(args);
-  const goals = explicitGoals.length > 0 ? explicitGoals : DEFAULT_COVERAGE_GOALS;
-  if (args.dryRun) {
-    return runDryRun(args, plan, createCoverageLedger(goals), dependencies);
-  }
-
-  const state = initialRunState(goals);
+  const state: SupervisorRunState = {
+    classifications: [],
+    artifacts: [],
+    preflightState: [],
+    txCount: 0,
+    latestPublicState: undefined,
+  };
 
   const stopForUnavailableWallClockBudget: StopForUnavailableWallClockBudget = async (
     incidentCycleIndex,
@@ -90,33 +86,6 @@ export async function supervise(
     return pendingAuditStop;
   }
 
-  const unmetStop = await stopForUnmetGoals(args, plan, state, dependencies);
-  if (unmetStop !== undefined) {
-    return unmetStop;
-  }
-
-  await writeSummary(
-    plan,
-    state.ledger,
-    state.classifications,
-    state.artifacts,
-    state.preflightState,
-    state.latestPublicState,
-    "max_cycles",
-    dependencies,
-  );
+  await writeSummary(plan, state, "max_cycles", dependencies);
   return 0;
-}
-
-function initialRunState(
-  goals: SupervisorRunState["ledger"]["goals"],
-): SupervisorRunState {
-  return {
-    ledger: createCoverageLedger(goals),
-    classifications: [],
-    artifacts: [],
-    preflightState: [],
-    txCount: 0,
-    latestPublicState: undefined,
-  };
 }

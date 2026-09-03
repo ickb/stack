@@ -146,7 +146,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses non-ignored output paths", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "not-ignored"]);
+    const args = parseArgs(["--out-dir", "not-ignored"]);
 
     expect(() =>
       resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(false) }),
@@ -156,7 +156,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses non-ignored output paths under the supervisor artifact root", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/live-supervisor/tracked"]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/tracked"]);
 
     expect(() =>
       resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(false) }),
@@ -166,7 +166,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses ignored output paths outside the supervisor artifact root", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "config/supervisor"]);
+    const args = parseArgs(["--out-dir", "config/supervisor"]);
 
     expect(() =>
       resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) }),
@@ -175,34 +175,34 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 });
 
 describe(SUPERVISOR_CLI_SUITE, () => {
-  it("resolves ignored dry-run artifact paths without configs", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", LIVE_SUPERVISOR_TEST_DIR]);
+  it("resolves ignored artifact paths with the default configs", () => {
+    const args = parseArgs(["--out-dir", LIVE_SUPERVISOR_TEST_DIR]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     expect(plan.relativeOutDir).toBe(LIVE_SUPERVISOR_TEST_DIR);
-    expect(plan.botConfigPath).toBeUndefined();
-    expect(plan.testerConfigPath).toBeUndefined();
+    expect(plan.botConfigPath).toBe(`/repo/${BOT_CONFIG_PATH}`);
+    expect(plan.testerConfigPath).toBe(`/repo/${TESTER_CONFIG_PATH}`);
   });
 });
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("accepts dynamic validation session artifact paths", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", VALIDATION_RUN_DIR]);
+    const args = parseArgs(["--out-dir", VALIDATION_RUN_DIR]);
     const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(new Set([VALIDATION_RUN_DIR])),
+      spawnSyncCommand: selectiveIgnoredChecker(
+        new Set([VALIDATION_RUN_DIR, BOT_CONFIG_PATH, TESTER_CONFIG_PATH]),
+      ),
     });
 
     expect(plan.relativeOutDir).toBe(VALIDATION_RUN_DIR);
-    expect(plan.botConfigPath).toBeUndefined();
-    expect(plan.testerConfigPath).toBeUndefined();
   });
 });
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("rejects validation roots outside run artifact directories", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/validation/dynamic-test"]);
+    const args = parseArgs(["--out-dir", "log/validation/dynamic-test"]);
 
     expect(() =>
       resolvePlan(args, "/repo", { spawnSyncCommand: ignoredChecker(true) }),
@@ -213,7 +213,6 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("rejects validation run artifact directory descendants", () => {
     const args = parseArgs([
-      "--dry-run",
       "--out-dir",
       "log/validation/dynamic-test/chunks/chunk-0001/run-0001/extra",
     ]);
@@ -226,9 +225,11 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("accepts explicit validation session roots outside the repo", () => {
-    const args = parseArgs(["--dry-run", "--out-dir", EXTERNAL_VALIDATION_RUN_DIR]);
+    const args = parseArgs(["--out-dir", EXTERNAL_VALIDATION_RUN_DIR]);
     const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(false),
+      spawnSyncCommand: selectiveIgnoredChecker(
+        new Set([BOT_CONFIG_PATH, TESTER_CONFIG_PATH]),
+      ),
     });
 
     expect(plan.relativeOutDir).toBe(EXTERNAL_VALIDATION_RUN_DIR);
@@ -238,14 +239,17 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses symlinked explicit validation parents outside the repo", async () => {
-    const args = parseArgs(["--dry-run", "--out-dir", EXTERNAL_VALIDATION_RUN_DIR]);
+    const args = parseArgs(["--out-dir", EXTERNAL_VALIDATION_RUN_DIR]);
     const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(false),
+      spawnSyncCommand: selectiveIgnoredChecker(
+        new Set([BOT_CONFIG_PATH, TESTER_CONFIG_PATH]),
+      ),
     });
 
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+        skipBuiltRuntimeCheck: true,
         lstat: lstatFixture((path) =>
           pathToString(path) === EXTERNAL_VALIDATION_PARENT
             ? SYMBOLIC_LINK_STATS

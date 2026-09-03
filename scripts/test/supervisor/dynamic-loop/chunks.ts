@@ -166,7 +166,9 @@ void test("dynamic supervisor loop runs selected bounded chunks", async () => {
     supervisorCommand.args.slice(0, separator).includes("--skip-build"),
     false,
   );
-  assert.deepEqual(supervisorCommand.args.slice(separator + 1, separator + 3), [
+  assert.deepEqual(supervisorCommand.args.slice(separator + 1, separator + 5), [
+    "--scenario",
+    "tester-only",
     TESTER_CONFIG_OPTION,
     CUSTOM_TESTER_CONFIG,
   ]);

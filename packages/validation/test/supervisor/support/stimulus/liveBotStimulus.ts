@@ -58,7 +58,6 @@ export function expectStimulusRunResult({
   appended: Map<string, string>;
 }): void {
   expect(supervisorArgs[0]).toContain("tester-only");
-  expect(supervisorArgs[0]).toContain("tester_order_created");
   expect(supervisorArgs[0]).not.toContain("bot-only");
   expect(supervisorArgs[0]).toEqual(
     expect.arrayContaining(["--max-cycles", "1", "--stop-after-tx-count", "1"]),

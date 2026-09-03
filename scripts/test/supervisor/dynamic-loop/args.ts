@@ -217,11 +217,15 @@ void test("dynamic supervisor loop rejects owned supervisor arguments", () => {
   );
   assert.throws(
     () => parseArgs(["--", TESTER_SCENARIO_OPTION, "random-order"]),
-    /dynamic-loop selects tester scenarios from preflight balances/u,
+    /selects tester scenarios from preflight balances/u,
   );
   assert.throws(
     () => parseArgs(["--", "--tester-scenario=random-order"]),
     /Do not pass supervisor --tester-scenario/u,
+  );
+  assert.throws(
+    () => parseArgs(["--", "--scenario", "standard-cycle"]),
+    /dynamic-loop runs tester-only chunks/u,
   );
   assert.throws(
     () => parseArgs(["--", "--max-cycles", "2"]),

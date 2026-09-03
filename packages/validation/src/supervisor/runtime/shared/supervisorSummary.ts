@@ -1,7 +1,6 @@
 import { TX_CREATING_OUTCOMES, type OutcomeKind } from "./supervisorConstants.ts";
 import type {
   Classification,
-  CoverageLedger,
   PublicStateAssumption,
   TesterOrderEvidence,
 } from "./supervisorTypes.ts";
@@ -105,15 +104,4 @@ export function txCreatingOutcomeCount(classifications: Classification[]): numbe
   return classifications.filter((classification) =>
     TX_CREATING_OUTCOMES.has(classification.outcome),
   ).length;
-}
-
-export function coverageSummary(ledger: CoverageLedger): Record<string, unknown> {
-  return {
-    goals: ledger.goals,
-    covered: ledger.goals.filter((goal) => ledger.counts[goal] > 0),
-    uncovered: ledger.goals.filter((goal) => ledger.counts[goal] === 0),
-    counts: ledger.counts,
-    attempts: ledger.attempts,
-    unsupported: ledger.unsupported,
-  };
 }

@@ -11,12 +11,13 @@ import {
   stepLabel,
 } from "../../preflight/supervisorPreflightStep.ts";
 import {
+  SCENARIO_STEPS,
   STOP_EXIT_CODE,
   TESTER_FRESH_ORDER_SKIP,
   TESTER_FRESH_SKIP_TWO_PASS_SCENARIO,
   TESTER_ORDER_CREATED,
   TX_HASH_PATTERN,
-  type Actor,
+  type ScenarioName,
 } from "../shared/supervisorConstants.ts";
 import { parseJsonEvidence, recordField } from "../shared/supervisorEvidence.ts";
 import type {
@@ -24,8 +25,6 @@ import type {
   CommandResult,
   Dependencies,
   ParsedArgs,
-  ScenarioChoice,
-  ScenarioDefinition,
   ScenarioStep,
   SupervisorDependencies,
   SupervisorPlan,
@@ -51,7 +50,7 @@ interface ClassifiedActorStep {
 export async function runActorSteps(
   ...[
     cycleIndex,
-    choice,
+    scenario,
     args,
     plan,
     state,
@@ -60,7 +59,7 @@ export async function runActorSteps(
     dependencies,
   ]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     args: ParsedArgs,
     plan: SupervisorPlan,
     state: SupervisorRunState,
@@ -73,9 +72,9 @@ export async function runActorSteps(
   ]
 ): Promise<number | undefined> {
   let ownedTxHash: string | undefined;
-  for (const [stepIndex, step] of choice.scenario.steps.entries()) {
+  for (const [stepIndex, step] of SCENARIO_STEPS[scenario].entries()) {
     let provenance: FreshSkipProvenance | undefined;
-    if (choice.scenario.name === TESTER_FRESH_SKIP_TWO_PASS_SCENARIO) {
+    if (scenario === TESTER_FRESH_SKIP_TWO_PASS_SCENARIO) {
       provenance =
         stepIndex === 0
           ? { kind: "pass1" }
@@ -83,7 +82,7 @@ export async function runActorSteps(
     }
     const result = await runActorStep(
       cycleIndex,
-      choice,
+      scenario,
       args,
       step,
       plan,
@@ -96,7 +95,7 @@ export async function runActorSteps(
     if (typeof result === "number") {
       return result;
     }
-    if (choice.scenario.name === TESTER_FRESH_SKIP_TWO_PASS_SCENARIO && stepIndex === 0) {
+    if (scenario === TESTER_FRESH_SKIP_TWO_PASS_SCENARIO && stepIndex === 0) {
       ownedTxHash = result.ownedTxHash;
     }
   }
@@ -112,7 +111,7 @@ export async function runActorSteps(
 async function runActorStep(
   ...[
     cycleIndex,
-    choice,
+    scenario,
     args,
     step,
     plan,
@@ -123,7 +122,7 @@ async function runActorStep(
     dependencies,
   ]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     args: ParsedArgs,
     step: ScenarioStep,
     plan: SupervisorPlan,
@@ -150,7 +149,6 @@ async function runActorStep(
   }
   const result = await runActorCommandAndRecordArtifacts(
     cycleIndex,
-    choice,
     step,
     plan,
     state,
@@ -160,7 +158,6 @@ async function runActorStep(
   );
   const run = await classifyAndRecordActorStep(
     cycleIndex,
-    choice,
     step,
     plan,
     state,
@@ -172,7 +169,7 @@ async function runActorStep(
   if (run.classification.terminal) {
     return stopForTerminalActor(
       cycleIndex,
-      choice,
+      scenario,
       step,
       plan,
       state,
@@ -192,9 +189,8 @@ async function runActorStep(
 }
 
 async function runActorCommandAndRecordArtifacts(
-  ...[cycleIndex, choice, step, plan, state, timeoutMs, provenance, dependencies]: [
+  ...[cycleIndex, step, plan, state, timeoutMs, provenance, dependencies]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
@@ -206,7 +202,6 @@ async function runActorCommandAndRecordArtifacts(
   const result = await runActor(
     step,
     plan,
-    choice.targetOutcomes,
     timeoutMs,
     provenance?.kind === "pass2" ? provenance.expectedTxHash : undefined,
     dependencies,
@@ -224,9 +219,8 @@ async function runActorCommandAndRecordArtifacts(
 }
 
 async function classifyAndRecordActorStep(
-  ...[cycleIndex, choice, step, plan, state, result, provenance, dependencies]: [
+  ...[cycleIndex, step, plan, state, result, provenance, dependencies]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
@@ -238,9 +232,7 @@ async function classifyAndRecordActorStep(
   const classified = classifyActorResult(
     step.actor,
     result,
-    step.actor === "tester"
-      ? testerEvidenceExpectation(plan, choice.targetOutcomes, step)
-      : undefined,
+    step.actor === "tester" ? testerEvidenceExpectation(plan, step) : undefined,
   );
   const classifiedStep =
     provenance?.kind === "pass1"
@@ -338,9 +330,9 @@ function correlateFreshSkipProvenance(
 }
 
 async function stopForTerminalActor(
-  ...[cycleIndex, choice, step, plan, state, classification, result, dependencies]: [
+  ...[cycleIndex, scenario, step, plan, state, classification, result, dependencies]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
@@ -353,23 +345,13 @@ async function stopForTerminalActor(
     plan,
     cycleIndex,
     step.actor,
-    choice,
+    scenario,
     classification,
     result,
-    state.ledger,
     state.artifacts,
     dependencies,
   );
-  await writeSummary(
-    plan,
-    state.ledger,
-    state.classifications,
-    state.artifacts,
-    state.preflightState,
-    state.latestPublicState,
-    incident.classification.outcome,
-    dependencies,
-  );
+  await writeSummary(plan, state, incident.classification.outcome, dependencies);
   return classification.outcome === "nonzero_exit" ? 1 : STOP_EXIT_CODE;
 }
 
@@ -378,16 +360,7 @@ async function stopAfterTxCount(
   state: SupervisorRunState,
   dependencies: Dependencies,
 ): Promise<number> {
-  await writeSummary(
-    plan,
-    state.ledger,
-    state.classifications,
-    state.artifacts,
-    state.preflightState,
-    state.latestPublicState,
-    "stop_after_tx_count",
-    dependencies,
-  );
+  await writeSummary(plan, state, "stop_after_tx_count", dependencies);
   return 0;
 }
 
@@ -414,8 +387,4 @@ async function appendClassificationEvent(
     },
     dependencies,
   );
-}
-
-export function scenarioActors(scenario: ScenarioDefinition): Actor[] {
-  return [...new Set(scenario.steps.map((step) => step.actor))];
 }

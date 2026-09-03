@@ -1,14 +1,4 @@
-import {
-  BOT_MATCH_COMMITTED,
-  BOT_MATCH_PLUS_DEPOSIT_COMMITTED,
-  RANDOM_ORDER_SCENARIO,
-  SDK_CONVERSION_SCENARIO,
-  TESTER_CONVERSION_CREATED,
-  TESTER_FRESH_ORDER_SKIP,
-  TESTER_ORDER_CREATED,
-  type OutcomeKind,
-  type TesterScenarioSelection,
-} from "../runtime/shared/supervisorConstants.ts";
+import type { TesterScenarioSelection } from "../runtime/shared/supervisorConstants.ts";
 import {
   optionalRecordField,
   optionalStringField,
@@ -23,23 +13,27 @@ import type {
 } from "../runtime/shared/supervisorTypes.ts";
 import { stepLabel } from "./supervisorPreflightStep.ts";
 
+/** The operator's `--tester-scenario` wins over the scenario step's own choice. */
+export function testerScenarioFor(
+  plan: SupervisorPlan,
+  step: ScenarioStep,
+): TesterScenarioSelection {
+  return plan.testerScenario ?? step.testerScenario ?? "auto";
+}
+
 export function testerEvidenceExpectation(
   plan: SupervisorPlan,
-  targetOutcomes: OutcomeKind[],
   step: ScenarioStep,
 ): TesterEvidenceExpectation | undefined {
-  const scenario = testerScenarioForTargets(plan.testerScenario, targetOutcomes, step);
-  return scenario !== "auto" ? { scenario } : undefined;
+  const scenario = testerScenarioFor(plan, step);
+  return scenario === "auto" ? undefined : { scenario };
 }
 
 export function preflightStateSummary(
-  ...[cycleIndex, step, plan, targetOutcomes, preflightReport]: [
-    cycleIndex: number,
-    step: ScenarioStep,
-    plan: SupervisorPlan,
-    targetOutcomes: OutcomeKind[],
-    preflightReport: Record<string, unknown>,
-  ]
+  cycleIndex: number,
+  step: ScenarioStep,
+  plan: SupervisorPlan,
+  preflightReport: Record<string, unknown>,
 ): PreflightStateSummary {
   const summary: PreflightStateSummary = {
     cycleIndex,
@@ -55,40 +49,9 @@ export function preflightStateSummary(
     };
   }
   if (step.actor === "tester") {
-    const selectedTesterScenario = testerScenarioForTargets(
-      plan.testerScenario,
-      targetOutcomes,
-      step,
-    );
-    summary.selectedTesterScenario = selectedTesterScenario;
+    summary.selectedTesterScenario = testerScenarioFor(plan, step);
   }
   return summary;
-}
-
-export function testerScenarioForTargets(
-  configuredScenario: TesterScenarioSelection | undefined,
-  targetOutcomes: OutcomeKind[],
-  step: ScenarioStep,
-): TesterScenarioSelection {
-  if (configuredScenario !== undefined) {
-    return configuredScenario;
-  }
-  const stepScenario = step.testerScenario;
-  if (stepScenario !== undefined) {
-    return stepScenario;
-  }
-  if (targetOutcomes.includes(TESTER_CONVERSION_CREATED)) {
-    return SDK_CONVERSION_SCENARIO;
-  }
-  if (
-    targetOutcomes.includes(TESTER_ORDER_CREATED) ||
-    targetOutcomes.includes(TESTER_FRESH_ORDER_SKIP) ||
-    targetOutcomes.includes(BOT_MATCH_COMMITTED) ||
-    targetOutcomes.includes(BOT_MATCH_PLUS_DEPOSIT_COMMITTED)
-  ) {
-    return RANDOM_ORDER_SCENARIO;
-  }
-  return "auto";
 }
 
 function preflightIckbBalanceSummary(

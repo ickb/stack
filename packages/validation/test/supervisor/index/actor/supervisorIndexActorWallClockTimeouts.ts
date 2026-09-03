@@ -5,7 +5,6 @@ import {
   BOT_MATCH_COMMITTED,
   CLASSIFICATION_SUITE,
   COMMAND_TIMEOUT_SECONDS_FLAG,
-  INCIDENT_CLASSIFICATION,
   MAX_CYCLES_FLAG,
   MAX_WALL_CLOCK_SECONDS_FLAG,
   SCENARIO_FLAG,
@@ -106,15 +105,14 @@ describe(CLASSIFICATION_SUITE, () => {
       ...captureWrites(writes),
     });
 
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
-    const incident = jsonArtifact(
-      writes,
-      "/repo/log/live-supervisor/wall-clock-timeout-test/cycle-0001-incident.json",
-    );
-    expect(recordAt(incident.classification, INCIDENT_CLASSIFICATION)).toMatchObject({
-      outcome: "unmet_coverage_goal",
-    });
+    expect(
+      jsonArtifact(
+        writes,
+        "/repo/log/live-supervisor/wall-clock-timeout-test/summary.json",
+      ),
+    ).toMatchObject({ stopped: "max_wall_clock_seconds" });
     expect(
       writes.has(
         "/repo/log/live-supervisor/wall-clock-timeout-test/cycle-0001-bot.command.json",
@@ -166,13 +164,13 @@ describe(CLASSIFICATION_SUITE, () => {
       ...captureWrites(writes),
     });
 
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
     const summary = jsonArtifact(
       writes,
       "/repo/log/live-supervisor/wall-clock-boundary-test/summary.json",
     );
-    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+    expect(summary).toMatchObject({ stopped: "max_wall_clock_seconds" });
   });
 });
 
@@ -221,7 +219,7 @@ describe(CLASSIFICATION_SUITE, () => {
       ...captureWrites(writes),
     });
 
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
     expect(clock).toEqual([0]);
     expect(
@@ -229,11 +227,6 @@ describe(CLASSIFICATION_SUITE, () => {
         writes,
         "/repo/log/live-supervisor/non-monotonic-wall-clock-test/summary.json",
       ),
-    ).toMatchObject({ stopped: "unmet_coverage_goal" });
-    expect(
-      writes.has(
-        "/repo/log/live-supervisor/non-monotonic-wall-clock-test/cycle-0001-incident.json",
-      ),
-    ).toBe(true);
+    ).toMatchObject({ stopped: "max_wall_clock_seconds" });
   });
 });

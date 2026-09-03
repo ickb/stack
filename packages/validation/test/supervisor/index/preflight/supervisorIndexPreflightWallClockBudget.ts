@@ -110,13 +110,13 @@ describe(CLASSIFICATION_SUITE, () => {
       ...captureWrites(writes),
     });
 
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
     const summary = jsonArtifact(
       writes,
       "/repo/log/live-supervisor/tiny-tail-test/summary.json",
     );
-    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+    expect(summary).toMatchObject({ stopped: "max_wall_clock_seconds" });
   });
 });
 

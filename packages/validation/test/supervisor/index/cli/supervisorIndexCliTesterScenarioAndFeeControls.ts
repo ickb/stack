@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   BOT_ENTRYPOINT,
   FRESH_SKIP_TWO_PASS_SCENARIO,
+  INCIDENT_CLASSIFICATION,
   MAX_CYCLES_FLAG,
   RANDOM_ORDER_SCENARIO,
   SCENARIO_FLAG,
+  SDK_CONVERSION_SCENARIO,
   STANDARD_CYCLE_SCENARIO,
   SUMMARY_AGGREGATE_COUNTS,
   SUPERVISOR_CLI_SUITE,
-  TARGET_OUTCOME_FLAG,
   TESTER_ENTRYPOINT,
   TESTER_FEE_BASE_FLAG,
   TESTER_FEE_FLAG,
@@ -26,13 +27,13 @@ import {
 } from "../../support/supervisor/index.ts";
 
 describe(SUPERVISOR_CLI_SUITE, () => {
-  it("preserves explicit tester auto scenario over conversion target steering", async () => {
+  it("lets an explicit auto tester scenario win over the scenario step's choice", async () => {
     const { exitCode, spawned } = await runSupervisorFixture(
       [
         "--out-dir",
         "log/live-supervisor/explicit-auto-env-test",
-        TARGET_OUTCOME_FLAG,
-        "tester_conversion_created",
+        SCENARIO_FLAG,
+        FRESH_SKIP_TWO_PASS_SCENARIO,
         TESTER_SCENARIO_FLAG,
         "auto",
         MAX_CYCLES_FLAG,
@@ -41,22 +42,15 @@ describe(SUPERVISOR_CLI_SUITE, () => {
       (commandArgs) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
-          : fakeChild(
-              JSON.stringify({
-                startTime: "now",
-                actions: {
-                  conversion: { kind: "direct" },
-                  cancelledOrders: 0,
-                },
-                txHash: txHash("17"),
-                ElapsedSeconds: 1,
-              }),
-            ),
+          : fakeChild(testerOrderStdout({ txByte: "17" })),
     );
 
-    const tester = spawned.find((item) => item.args[0] === TESTER_ENTRYPOINT);
+    const testers = spawned.filter((item) => item.args[0] === TESTER_ENTRYPOINT);
     expect(exitCode).toBe(0);
-    expect(tester?.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+    expect(testers).toHaveLength(2);
+    for (const tester of testers) {
+      expect(tester.env).toMatchObject({ TESTER_SCENARIO: "auto" });
+    }
   });
 });
 
@@ -108,10 +102,6 @@ describe(SUPERVISOR_CLI_SUITE, () => {
         "log/live-supervisor/two-pass-test",
         SCENARIO_FLAG,
         FRESH_SKIP_TWO_PASS_SCENARIO,
-        TARGET_OUTCOME_FLAG,
-        "tester_order_created",
-        TARGET_OUTCOME_FLAG,
-        "tester_fresh_order_skip",
         MAX_CYCLES_FLAG,
         "1",
       ],
@@ -150,6 +140,49 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     expect(recordAt(summary.aggregateCounts, SUMMARY_AGGREGATE_COUNTS)).toMatchObject({
       tester_order_created: 1,
       tester_fresh_order_skip: 1,
+    });
+  });
+});
+
+describe(SUPERVISOR_CLI_SUITE, () => {
+  it("stops fail-closed when the tester commits a different scenario than requested", async () => {
+    const { exitCode, writes } = await runSupervisorFixture(
+      [
+        "--out-dir",
+        "log/live-supervisor/tester-scenario-mismatch-test",
+        SCENARIO_FLAG,
+        "tester-only",
+        TESTER_SCENARIO_FLAG,
+        RANDOM_ORDER_SCENARIO,
+        MAX_CYCLES_FLAG,
+        "1",
+      ],
+      (commandArgs) =>
+        isPreflightCommand(commandArgs)
+          ? fakeSuccessfulPreflightChild()
+          : fakeChild(
+              JSON.stringify({
+                startTime: "now",
+                actions: {
+                  testerScenario: SDK_CONVERSION_SCENARIO,
+                  conversion: { kind: "direct" },
+                  cancelledOrders: 0,
+                },
+                txHash: txHash("8b"),
+                ElapsedSeconds: 1,
+              }),
+            ),
+    );
+
+    expect(exitCode).toBe(2);
+    const incident = jsonArtifact(
+      writes,
+      "/repo/log/live-supervisor/tester-scenario-mismatch-test/cycle-0001-incident.json",
+    );
+    expect(recordAt(incident.classification, INCIDENT_CLASSIFICATION)).toMatchObject({
+      outcome: "tester_deterministic_pre_broadcast_error",
+      terminal: true,
+      reason: "tester committed tx for scenario sdk-conversion, expected random-order",
     });
   });
 });

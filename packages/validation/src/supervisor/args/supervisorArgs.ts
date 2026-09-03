@@ -27,13 +27,12 @@ export function usage(): string {
     "  --max-cycles <n>                    Default: 1",
     "  --max-wall-clock-seconds <n>",
     "  --stop-after-tx-count <n>",
-    "  --scenario auto|standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass",
+    "  --scenario standard-cycle|tester-only|bot-only|tester-fresh-skip-two-pass",
     `  --tester-scenario ${testerScenarioList}`,
     "  --tester-fee <n>                    Default: 1",
     "  --tester-fee-base <n>               Default: 100000",
-    "  --target-outcome <outcome>           Repeatable; planner prefers these first",
+    "  --target-outcome <outcome>           Repeatable; echoed as requestedOutcomes in summary.json",
     "  --command-timeout-seconds <n>        Default: 900",
-    "  --dry-run                           Fixture-only run; no live configs required",
     "  -h, --help",
   ].join("\n");
 }
@@ -42,17 +41,15 @@ export function usage(): string {
  * Parses supervisor CLI arguments into the normalized execution options.
  *
  * @remarks
- * A literal `--` is skipped and later flags are still parsed. Help and dry-run
- * modes clear config paths so they do not require live ignored config files.
+ * A literal `--` is skipped and later flags are still parsed.
  */
 export function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
     help: false,
-    dryRun: false,
     botConfigPath: DEFAULT_BOT_CONFIG_PATH,
     testerConfigPath: DEFAULT_TESTER_CONFIG_PATH,
     maxCycles: 1,
-    scenario: "auto",
+    scenario: "standard-cycle",
     targetOutcomes: [],
     commandTimeoutSeconds: DEFAULT_COMMAND_TIMEOUT_SECONDS,
   };
@@ -74,9 +71,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     index = handler(args, argv, index, arg) + 1;
   }
 
-  if (args.help || args.dryRun) {
-    Object.assign(args, { botConfigPath: undefined, testerConfigPath: undefined });
-  }
   return args;
 }
 
@@ -92,13 +86,6 @@ const PARSED_ARG_HANDLERS = new Map<string, ParsedArgHandler>([
     "--help",
     (args, _argv, index): number => {
       Object.assign(args, { help: true });
-      return index;
-    },
-  ],
-  [
-    "--dry-run",
-    (args, _argv, index): number => {
-      Object.assign(args, { dryRun: true });
       return index;
     },
   ],
@@ -233,7 +220,7 @@ function parseScenarioName(value: string): ScenarioName {
     return scenario;
   }
   throw new Error(
-    "Invalid --scenario: expected auto, standard-cycle, tester-only, bot-only, or tester-fresh-skip-two-pass",
+    "Invalid --scenario: expected standard-cycle, tester-only, bot-only, or tester-fresh-skip-two-pass",
   );
 }
 

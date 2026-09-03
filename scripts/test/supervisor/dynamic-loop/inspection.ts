@@ -94,7 +94,7 @@ void test("dynamic supervisor loop preserves supervisor-loop inspection-required
   assert.match(output.text, /"supervisorLoopStopReason":"max_runs"/u);
 });
 
-void test("dynamic supervisor loop leaves supervisor target steering intact for auto tester choice", async () => {
+void test("dynamic supervisor loop passes operator target-outcome through to the supervisor echo", async () => {
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
@@ -126,7 +126,7 @@ void test("dynamic supervisor loop leaves supervisor target steering intact for 
   assert.match(output.text, /testerScenario":"auto"/u);
 });
 
-void test("dynamic supervisor loop leaves fresh-order skip target planning to supervisor", async () => {
+void test("dynamic supervisor loop pins tester-only and passes tester scenario, fee and target-outcome options through", async () => {
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
@@ -160,7 +160,7 @@ void test("dynamic supervisor loop leaves fresh-order skip target planning to su
   const separator = supervisorArgs.indexOf("--");
   const passthrough = supervisorArgs.slice(separator + 1);
   assert.equal(exitCode, 3);
-  assert.equal(passthrough.includes(SCENARIO_OPTION), false);
+  assert.equal(passthrough.includes(SCENARIO_OPTION), true);
   assert.equal(passthrough.includes(TESTER_SCENARIO_OPTION), true);
   assert.equal(passthrough.includes(ICKB_TO_CKB_LIMIT_ORDER), true);
   assert.equal(passthrough.includes(TESTER_FEE_OPTION), true);

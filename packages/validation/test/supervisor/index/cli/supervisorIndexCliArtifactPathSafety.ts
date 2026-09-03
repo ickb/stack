@@ -30,7 +30,7 @@ import {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses to reuse an existing output directory", async () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/live-supervisor/existing"]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/existing"]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
@@ -38,6 +38,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+        skipBuiltRuntimeCheck: true,
         mkdir: async (path) => {
           if (pathToString(path) === "/repo/log/live-supervisor/existing") {
             throw eexist();
@@ -51,7 +52,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("creates only parent directories recursively before reserving a fresh output directory", async () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/live-supervisor/fresh"]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/fresh"]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
@@ -59,6 +60,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
     await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+      skipBuiltRuntimeCheck: true,
       lstat: missingStat,
       realpath: realpathFixture((path) => pathToString(path)),
       mkdir: mkdirFixture((path, options) => {
@@ -84,7 +86,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses output directories created after ancestor checks", async () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/live-supervisor/raced"]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/raced"]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
@@ -92,6 +94,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+        skipBuiltRuntimeCheck: true,
         lstat: missingStat,
         mkdir: async (path) => {
           if (pathToString(path) === "/repo/log/live-supervisor/raced") {
@@ -112,11 +115,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses symlinked supervisor artifact parents", async () => {
-    const args = parseArgs([
-      "--dry-run",
-      "--out-dir",
-      "log/live-supervisor/symlink-parent",
-    ]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/symlink-parent"]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
@@ -124,6 +123,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+        skipBuiltRuntimeCheck: true,
         lstat: lstatFixture((path) => {
           if (pathToString(path) === "/repo/log") {
             return SYMBOLIC_LINK_STATS;
@@ -141,7 +141,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses real supervisor artifact paths outside the repo", async () => {
-    const args = parseArgs(["--dry-run", "--out-dir", "log/live-supervisor/escaped"]);
+    const args = parseArgs(["--out-dir", "log/live-supervisor/escaped"]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: ignoredChecker(true),
     });
@@ -149,6 +149,7 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
+        skipBuiltRuntimeCheck: true,
         stat: missingStat,
         mkdir: noopAsync,
         realpath: realpathFixture(realpathEscapesText),

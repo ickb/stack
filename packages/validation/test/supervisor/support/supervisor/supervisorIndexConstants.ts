@@ -6,8 +6,6 @@ export const SUPERVISOR_CLI_SUITE = "supervisor CLI";
 
 export const CLASSIFICATION_SUITE = "classification";
 
-export const SCENARIO_PLANNING_SUITE = "scenario planning";
-
 export const DETERMINISTIC_INCIDENT_SUITE = "deterministic incident handling";
 
 export const VALIDATION_RUN_DIR =
@@ -130,15 +128,7 @@ export const MAX_WALL_CLOCK_SECONDS_FLAG = "--max-wall-clock-seconds";
 
 export const TESTER_ONLY_SCENARIO = "tester-only";
 
-export const SUMMARY_COVERAGE = "summary coverage";
-
-export const COVERAGE_COVERED = "coverage covered";
-
-export const COVERAGE_UNCOVERED = "coverage uncovered";
-
 export const SUMMARY_TX_HASHES = "summary tx hashes";
-
-export const COVERAGE_COUNTS = "coverage counts";
 
 export const SYMBOLIC_LINK_STATS = lstatSync("/proc/self/exe");
 

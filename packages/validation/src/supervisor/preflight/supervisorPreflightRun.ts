@@ -1,7 +1,10 @@
 import { classifyActorResult } from "../classification/supervisorClassification.ts";
+import {
+  SCENARIO_STEPS,
+  type ScenarioName,
+} from "../runtime/shared/supervisorConstants.ts";
 import type {
   Dependencies,
-  ScenarioChoice,
   ScenarioStep,
   SupervisorPlan,
   SupervisorRunState,
@@ -23,7 +26,7 @@ import { commandTimeoutOrStop, runPreflight } from "./supervisorPreflightStep.ts
 export async function runPreflightSteps(
   ...[
     cycleIndex,
-    choice,
+    scenario,
     plan,
     state,
     stopForUnavailableWallClockBudget,
@@ -31,7 +34,7 @@ export async function runPreflightSteps(
     dependencies,
   ]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     plan: SupervisorPlan,
     state: SupervisorRunState,
     stopForUnavailableWallClockBudget: (
@@ -42,10 +45,10 @@ export async function runPreflightSteps(
     dependencies: Dependencies,
   ]
 ): Promise<number | undefined> {
-  for (const step of choice.scenario.steps) {
+  for (const step of SCENARIO_STEPS[scenario]) {
     const stop = await runPreflightStep(
       cycleIndex,
-      choice,
+      scenario,
       step,
       plan,
       state,
@@ -69,7 +72,7 @@ export async function runPreflightSteps(
 async function runPreflightStep(
   ...[
     cycleIndex,
-    choice,
+    scenario,
     step,
     plan,
     state,
@@ -78,7 +81,7 @@ async function runPreflightStep(
     dependencies,
   ]: [
     cycleIndex: number,
-    choice: ScenarioChoice,
+    scenario: ScenarioName,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
@@ -134,5 +137,5 @@ async function runPreflightStep(
         dependencies,
       )
     : { result: firstResult, classification: firstClassification };
-  return finishPreflightRun(cycleIndex, choice, step, plan, state, run, dependencies);
+  return finishPreflightRun(cycleIndex, scenario, step, plan, state, run, dependencies);
 }

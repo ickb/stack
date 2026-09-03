@@ -120,8 +120,6 @@ export function summarySignature(summary: SummaryRecord): string {
     ),
     testerOrderEvidence: normalizeJson(summary.testerOrderEvidence ?? null),
     preflightState: normalizeJson(summary.preflightState ?? null),
-    scenarioAttempts: normalizeJson(summary.scenarioAttempts ?? null),
-    coverage: normalizeJson(summary.coverage ?? null),
     publicVsOwnedStateAssumptions: normalizeJson(
       summary.publicVsOwnedStateAssumptions ?? null,
     ),

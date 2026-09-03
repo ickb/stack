@@ -1,6 +1,6 @@
 import pathModule from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TesterScenarioSelection } from "../../../testerContract.ts";
+import { RANDOM_ORDER_SCENARIO, type TesterScenario } from "../../../testerContract.ts";
 export {
   CKB_TO_ICKB,
   GIVE_CKB_FIELD,
@@ -12,7 +12,6 @@ export {
   MIXED_DIRECTION_LIMIT_ORDERS_SCENARIO,
   MULTI_ORDER_LIMIT_ORDERS_SCENARIO,
   RANDOM_ORDER_SCENARIO,
-  SDK_CONVERSION_SCENARIO,
   TAKE_CKB_FIELD,
   TAKE_ICKB_FIELD,
   TESTER_FEE_FIELD,
@@ -81,8 +80,6 @@ export const OUTCOME_KINDS = [
   "command_timeout",
   "preflight_retryable_error",
   "nonzero_exit",
-  "unmet_coverage_goal",
-  "unsupported_scenario",
   "unknown",
 ] as const;
 
@@ -93,7 +90,6 @@ export type Actor = "bot" | "tester";
 export const TESTER_FRESH_SKIP_TWO_PASS_SCENARIO = "tester-fresh-skip-two-pass";
 
 export const SCENARIO_NAMES = [
-  "auto",
   "standard-cycle",
   "tester-only",
   "bot-only",
@@ -105,14 +101,7 @@ export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 export interface ScenarioStep {
   actor: Actor;
   label?: string;
-  testerScenario?: TesterScenarioSelection;
-}
-
-export interface ScenarioDefinition {
-  name: Exclude<ScenarioName, "auto">;
-  steps: ScenarioStep[];
-  targetOutcomes: OutcomeKind[];
-  reason: string;
+  testerScenario?: TesterScenario;
 }
 
 export const TESTER_ORDER_CREATED: OutcomeKind = "tester_order_created";
@@ -158,78 +147,17 @@ export const BOT_DECISION_PUBLIC_STATE_EVENTS = new Set([
   BOT_TRANSACTION_BUILT_EVENT,
 ]);
 
-export const SCENARIOS: ScenarioDefinition[] = [
-  {
-    name: "standard-cycle",
-    steps: [{ actor: "tester" }, { actor: "bot" }],
-    targetOutcomes: [
-      TESTER_ORDER_CREATED,
-      TESTER_CONVERSION_CREATED,
-      TESTER_FRESH_ORDER_SKIP,
-      TESTER_SAMPLED_TOO_SMALL_SKIP,
-      "tester_estimated_too_small_skip",
-      BOT_NO_ACTION_SKIP,
-      BOT_MATCH_COMMITTED,
-      BOT_MATCH_PLUS_DEPOSIT_COMMITTED,
-      BOT_RECEIPT_COMPLETION_COMMITTED,
-      BOT_DEPOSIT_ONLY_COMMITTED,
-      BOT_WITHDRAWAL_REQUEST_COMMITTED,
-      BOT_WITHDRAWAL_COMPLETION_COMMITTED,
-    ],
-    reason:
-      "run tester then bot so new and existing public state can exercise bot branches",
-  },
-  {
-    name: "tester-only",
-    steps: [{ actor: "tester" }],
-    targetOutcomes: [
-      TESTER_ORDER_CREATED,
-      TESTER_CONVERSION_CREATED,
-      TESTER_FRESH_ORDER_SKIP,
-      TESTER_SAMPLED_TOO_SMALL_SKIP,
-      "tester_estimated_too_small_skip",
-    ],
-    reason:
-      "focus on tester order creation and skip branches without adding an immediate bot mutation",
-  },
-  {
-    name: "bot-only",
-    steps: [{ actor: "bot" }],
-    targetOutcomes: [
-      BOT_NO_ACTION_SKIP,
-      BOT_MATCH_COMMITTED,
-      BOT_MATCH_PLUS_DEPOSIT_COMMITTED,
-      BOT_RECEIPT_COMPLETION_COMMITTED,
-      BOT_DEPOSIT_ONLY_COMMITTED,
-      BOT_WITHDRAWAL_REQUEST_COMMITTED,
-      BOT_WITHDRAWAL_COMPLETION_COMMITTED,
-    ],
-    reason: "focus on bot behavior against current public iCKB pool and order state",
-  },
-  {
-    name: TESTER_FRESH_SKIP_TWO_PASS_SCENARIO,
-    steps: [
-      { actor: "tester", label: "tester-pass-1" },
-      { actor: "tester", label: "tester-pass-2" },
-    ],
-    targetOutcomes: [TESTER_ORDER_CREATED, TESTER_FRESH_ORDER_SKIP],
-    reason:
-      "run the same tester twice so a fundable first pass can leave a fresh owned order for skip coverage",
-  },
-];
-
-export const DEFAULT_COVERAGE_GOALS: OutcomeKind[] = [
-  TESTER_ORDER_CREATED,
-  TESTER_FRESH_ORDER_SKIP,
-  TESTER_SAMPLED_TOO_SMALL_SKIP,
-  BOT_NO_ACTION_SKIP,
-  BOT_MATCH_COMMITTED,
-  BOT_MATCH_PLUS_DEPOSIT_COMMITTED,
-  BOT_RECEIPT_COMPLETION_COMMITTED,
-  BOT_DEPOSIT_ONLY_COMMITTED,
-  BOT_WITHDRAWAL_REQUEST_COMMITTED,
-  BOT_WITHDRAWAL_COMPLETION_COMMITTED,
-];
+export const SCENARIO_STEPS: Record<ScenarioName, ScenarioStep[]> = {
+  "standard-cycle": [{ actor: "tester" }, { actor: "bot" }],
+  "tester-only": [{ actor: "tester" }],
+  "bot-only": [{ actor: "bot" }],
+  // Pass one must leave a fresh owned order for pass two to skip on; an explicit
+  // --tester-scenario overrides both steps and forfeits that guarantee.
+  [TESTER_FRESH_SKIP_TWO_PASS_SCENARIO]: [
+    { actor: "tester", label: "tester-pass-1", testerScenario: RANDOM_ORDER_SCENARIO },
+    { actor: "tester", label: "tester-pass-2", testerScenario: RANDOM_ORDER_SCENARIO },
+  ],
+};
 
 export const TX_CREATING_OUTCOMES: ReadonlySet<OutcomeKind> = new Set<OutcomeKind>([
   TESTER_ORDER_CREATED,

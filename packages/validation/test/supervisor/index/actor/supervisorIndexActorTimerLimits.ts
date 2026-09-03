@@ -71,13 +71,13 @@ describe(CLASSIFICATION_SUITE, () => {
       ...captureWrites(writes),
     });
 
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
     expectSupervisorSpawnCounts(spawned, { preflight: 1, actor: 0 });
     const summary = jsonArtifact(
       writes,
       "/repo/log/live-supervisor/preflight-retry-wall-clock-test/summary.json",
     );
-    expect(summary).toMatchObject({ stopped: "unmet_coverage_goal" });
+    expect(summary).toMatchObject({ stopped: "max_wall_clock_seconds" });
     expect(
       writes.has(
         "/repo/log/live-supervisor/preflight-retry-wall-clock-test/cycle-0001-bot-preflight-attempt-1.command.json",

@@ -37,6 +37,7 @@ import {
   OUT_DIR_FLAG,
   PREFLIGHT_SCRIPT_FLAG,
   PREFLIGHT_TIMEOUT_SECONDS_FLAG,
+  SCENARIO_FLAG,
   SESSION_ROOT_FLAG,
   STABLE_LIMIT_FLAG,
   SUPERVISOR_LOOP_SCRIPT_FLAG,
@@ -179,12 +180,13 @@ function validateSupervisorPassthrough(supervisorArgs: readonly string[]): void 
       "Do not pass supervisor --out-dir; dynamic-loop owns the session chunk roots",
     );
   }
-  const passthroughTesterScenarioFlag = firstMatchingFlag(supervisorArgs, [
+  const passthroughScenarioFlag = firstMatchingFlag(supervisorArgs, [
+    SCENARIO_FLAG,
     TESTER_SCENARIO_FLAG,
   ]);
-  if (passthroughTesterScenarioFlag !== undefined) {
+  if (passthroughScenarioFlag !== undefined) {
     throw new Error(
-      `Do not pass supervisor ${passthroughTesterScenarioFlag}; dynamic-loop selects tester scenarios from preflight balances`,
+      `Do not pass supervisor ${passthroughScenarioFlag}; dynamic-loop runs tester-only chunks and selects tester scenarios from preflight balances`,
     );
   }
   if (firstMatchingFlag(supervisorArgs, [MAX_CYCLES_FLAG]) !== undefined) {

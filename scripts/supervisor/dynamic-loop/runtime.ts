@@ -15,6 +15,7 @@ import {
 } from "./command.ts";
 import {
   MAX_CYCLES_FLAG,
+  SCENARIO_FLAG,
   TESTER_CONFIG_FLAG,
   TESTER_SCENARIO_FLAG,
   type ChunkStep,
@@ -477,10 +478,14 @@ async function runSupervisorChunk({
       "--child-timeout-seconds",
       String(args.childTimeoutSeconds),
       "--",
+      // The dynamic loop is standalone tester stimulus; the supervisor default would also run the bot.
+      SCENARIO_FLAG,
+      "tester-only",
       TESTER_CONFIG_FLAG,
       args.testerConfig,
       ...testerScenarioArgs,
       MAX_CYCLES_FLAG,
+      SCENARIO_FLAG,
       "1",
       "--command-timeout-seconds",
       String(args.commandTimeoutSeconds),
