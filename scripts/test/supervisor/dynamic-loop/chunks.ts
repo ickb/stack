@@ -26,13 +26,13 @@ import {
   isPrebuildCommand,
   loggedDynamicSpawn,
   maxRunsSupervisorResult,
-  missingStat,
   okResult,
   preflightResult,
   requireBigInt,
   required,
   runDynamicSupervisorLoop,
   scriptCount,
+  tempRoot,
   testOutput,
   validationArgs,
 } from "./support.ts";
@@ -109,7 +109,8 @@ void test("dynamic supervisor loop chooses fundable tester scenarios", () => {
   );
 });
 
-void test("dynamic supervisor loop runs selected bounded chunks", async () => {
+void test("dynamic supervisor loop runs selected bounded chunks", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const sleeps: number[] = [];
   const output = testOutput();
@@ -118,7 +119,7 @@ void test("dynamic supervisor loop runs selected bounded chunks", async () => {
     preflightResult({ ckb: "2100", plainCkb: "2100", ickb: "100", feeRate: "0" }),
   ];
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       TESTER_CONFIG_OPTION,
       CUSTOM_TESTER_CONFIG,
@@ -180,7 +181,8 @@ void test("dynamic supervisor loop runs selected bounded chunks", async () => {
   assert.match(output.text, /testerScenario":"all-ckb-limit-order"/u);
 });
 
-void test("dynamic supervisor loop keep-going continues after expected chunk stops", async () => {
+void test("dynamic supervisor loop keep-going continues after expected chunk stops", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const sleeps: number[] = [];
   const output = testOutput();
@@ -207,7 +209,7 @@ void test("dynamic supervisor loop keep-going continues after expected chunk sto
     },
   ];
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "keep-going",
       "4",
@@ -253,11 +255,12 @@ void test("dynamic supervisor loop keep-going continues after expected chunk sto
   assert.doesNotMatch(output.text, /"type":"continuing_after_chunk","chunkIndex":4/u);
 });
 
-void test("dynamic supervisor loop keep-going stops on repeated status one preflight", async () => {
+void test("dynamic supervisor loop keep-going stops on repeated status one preflight", async (t) => {
+  const root = await tempRoot(t);
   const commands: Array<readonly string[]> = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "repeated-status-one",
       "3",
@@ -268,11 +271,6 @@ void test("dynamic supervisor loop keep-going stops on repeated status one prefl
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: () => true,
-      writeFile: () => true,
-      appendFile: () => true,
       spawnSync: (_command: string, args: readonly string[]) => {
         commands.push(args);
         if (isPrebuildCommand(args)) {
@@ -298,7 +296,8 @@ void test("dynamic supervisor loop keep-going stops on repeated status one prefl
   assert.match(output.text, /"type":"repeated_status_1","chunkIndex":2,"status":1/u);
 });
 
-void test("dynamic supervisor loop keep-going stops on synthetic preflight failures", async () => {
+void test("dynamic supervisor loop keep-going stops on synthetic preflight failures", async (t) => {
+  const root = await tempRoot(t);
   for (const result of [
     {
       status: null,
@@ -317,7 +316,7 @@ void test("dynamic supervisor loop keep-going stops on synthetic preflight failu
     const commands: Array<readonly string[]> = [];
     const output = testOutput();
     const exitCode = await runDynamicSupervisorLoop({
-      root: "/repo",
+      root,
       argv: [
         ...validationArgs(
           `synthetic-preflight-${String(commands.length)}-${String(result.status ?? "null")}`,
@@ -330,11 +329,6 @@ void test("dynamic supervisor loop keep-going stops on synthetic preflight failu
       io: { stdout: output, stderr: output },
       dependencies: {
         checkIgnored: () => true,
-        stat: missingStat,
-        lstat: missingStat,
-        mkdir: () => true,
-        writeFile: () => true,
-        appendFile: () => true,
         spawnSync: (_command: string, args: readonly string[]) => {
           commands.push(args);
           return isPrebuildCommand(args) ? okResult() : result;

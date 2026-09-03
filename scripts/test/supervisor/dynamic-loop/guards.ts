@@ -1,35 +1,42 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+
 import {
   CHILD_TIMEOUT_SECONDS_OPTION,
   COMMAND_TIMEOUT_SECONDS_OPTION,
   LIVE_CHECK_SOURCE_COMMAND,
   LIVE_SUPERVISOR_OUT,
   SUPERVISOR_LOOP_SCRIPT,
-  TESTER_CONFIG_MKDIR_ERROR,
   TESTER_CONFIG_OPTION,
   TESTER_CONFIG_SPAWN_ERROR,
-  TESTER_CONFIG_WRITE_ERROR,
-  VALIDATION_ROOT,
   argsByScript,
   dynamicDependencies,
-  errorWithCode,
   isPrebuildCommand,
   loggedDynamicSpawn,
   maxRunsSupervisorResult,
-  missingStat,
   okResult,
   parseArgs,
   preflightResult,
   runDynamicSupervisorLoop,
+  sessionFile,
+  tempRoot,
   testOutput,
   validationArgs,
+  validationRoot,
 } from "./support.ts";
 
-void test("dynamic supervisor loop refuses non-ignored tester configs before session artifacts", async () => {
+const { join } = path;
+const ELSEWHERE = "elsewhere";
+const RACED_SESSION = "raced-session";
+
+void test("dynamic supervisor loop refuses non-ignored tester configs before session artifacts", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       TESTER_CONFIG_OPTION,
       "tracked-config.json",
@@ -37,30 +44,26 @@ void test("dynamic supervisor loop refuses non-ignored tester configs before ses
     ],
     io: { stdout: output, stderr: output },
     dependencies: {
-      checkIgnored: (path: string) => path.startsWith("log/"),
+      checkIgnored: (relativePath: string) => relativePath.startsWith("log/"),
       spawnSync: () => {
         throw new Error(TESTER_CONFIG_SPAWN_ERROR);
-      },
-      mkdir: () => {
-        throw new Error(TESTER_CONFIG_MKDIR_ERROR);
-      },
-      writeFile: () => {
-        throw new Error(TESTER_CONFIG_WRITE_ERROR);
       },
     },
   });
 
   assert.equal(exitCode, 1);
+  assert.equal(existsSync(join(root, "log")), false);
   assert.match(
     output.text,
     /Refusing to use non-ignored --tester-config: tracked-config\.json/u,
   );
 });
 
-void test("dynamic supervisor loop refuses out-of-repo tester configs before session artifacts", async () => {
+void test("dynamic supervisor loop refuses out-of-repo tester configs before session artifacts", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       TESTER_CONFIG_OPTION,
       "../tester-testnet.json",
@@ -74,23 +77,22 @@ void test("dynamic supervisor loop refuses out-of-repo tester configs before ses
       spawnSync: () => {
         throw new Error(TESTER_CONFIG_SPAWN_ERROR);
       },
-      mkdir: () => {
-        throw new Error(TESTER_CONFIG_MKDIR_ERROR);
-      },
-      writeFile: () => {
-        throw new Error(TESTER_CONFIG_WRITE_ERROR);
-      },
     },
   });
 
   assert.equal(exitCode, 1);
+  assert.equal(existsSync(join(root, "log")), false);
   assert.match(output.text, /--tester-config must stay inside the repo/u);
 });
 
-void test("dynamic supervisor loop refuses symlinked tester config paths before session artifacts", async () => {
+void test("dynamic supervisor loop refuses symlinked tester config paths before session artifacts", async (t) => {
+  const root = await tempRoot(t);
+  await mkdir(join(root, ELSEWHERE));
+  await writeFile(join(root, ELSEWHERE, "tester-testnet.json"), "{}");
+  await symlink(join(root, ELSEWHERE), join(root, "config"));
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       TESTER_CONFIG_OPTION,
       "config/tester-testnet.json",
@@ -98,35 +100,30 @@ void test("dynamic supervisor loop refuses symlinked tester config paths before 
     ],
     io: { stdout: output, stderr: output },
     dependencies: {
-      checkIgnored: (path: string) =>
-        path.startsWith("config/") || path.startsWith("log/"),
-      lstat: (path: string): { isSymbolicLink: () => boolean } => ({
-        isSymbolicLink: (): boolean => path === "/repo/config",
-      }),
+      checkIgnored: (relativePath: string) =>
+        relativePath.startsWith("config/") || relativePath.startsWith("log/"),
       spawnSync: () => {
         throw new Error(TESTER_CONFIG_SPAWN_ERROR);
-      },
-      mkdir: () => {
-        throw new Error(TESTER_CONFIG_MKDIR_ERROR);
-      },
-      writeFile: () => {
-        throw new Error(TESTER_CONFIG_WRITE_ERROR);
       },
     },
   });
 
   assert.equal(exitCode, 1);
-  assert.match(
-    output.text,
-    /Refusing to use tester config through symlinked path: \/repo\/config/u,
+  assert.equal(existsSync(join(root, "log")), false);
+  assert.equal(
+    output.text.includes(
+      `Refusing to use tester config through symlinked path: ${join(root, "config")}`,
+    ),
+    true,
   );
 });
 
-void test("dynamic supervisor loop forwards a child timeout that covers actor command timeout", async () => {
+void test("dynamic supervisor loop forwards a child timeout that covers actor command timeout", async (t) => {
+  const root = await tempRoot(t);
   const commands: Array<readonly string[]> = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "timeout-session",
       "1",
@@ -170,20 +167,15 @@ void test("dynamic supervisor loop rejects child timeouts that cannot cover one 
   );
 });
 
-void test("dynamic supervisor loop reports prebuild failures before opening sessions", async () => {
+void test("dynamic supervisor loop reports prebuild failures before opening sessions", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
-  let mkdirCalled = false;
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("prebuild-failure"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: () => {
-        mkdirCalled = true;
-      },
       spawnSync: () => ({
         status: 1,
         signal: null,
@@ -194,38 +186,26 @@ void test("dynamic supervisor loop reports prebuild failures before opening sess
   });
 
   assert.equal(exitCode, 1);
-  assert.equal(mkdirCalled, false);
+  assert.equal(existsSync(join(validationRoot(root), "prebuild-failure")), false);
   assert.match(output.text, /loop prebuild_failed/u);
   assert.doesNotMatch(output.text, /privateKey|0x1111|operator secret|0x2222/u);
 });
 
-void test("dynamic supervisor loop refuses sessions created during prebuild", async () => {
+void test("dynamic supervisor loop refuses sessions created during prebuild", async (t) => {
+  const root = await tempRoot(t);
   const commands: Array<readonly string[]> = [];
-  const mkdirs: string[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
-    argv: validationArgs("raced-session"),
+    root,
+    argv: validationArgs(RACED_SESSION),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: (path: string) => {
-        mkdirs.push(path);
-        if (path === `${VALIDATION_ROOT}/raced-session`) {
-          throw errorWithCode("exists", "EEXIST");
-        }
-      },
-      writeFile: () => {
-        throw new Error("should not write launch artifact after raced session");
-      },
-      appendFile: () => {
-        throw new Error("should not write events after raced session");
-      },
       spawnSync: (_command: string, args: readonly string[]) => {
         commands.push(args);
         if (isPrebuildCommand(args)) {
+          // Another process claims the session root while the prebuild runs.
+          mkdirSync(join(validationRoot(root), RACED_SESSION), { recursive: true });
           return okResult();
         }
         throw new Error("should not spawn preflight or supervisor after raced session");
@@ -235,34 +215,28 @@ void test("dynamic supervisor loop refuses sessions created during prebuild", as
 
   assert.equal(exitCode, 1);
   assert.deepEqual(commands, [[LIVE_CHECK_SOURCE_COMMAND]]);
-  assert.deepEqual(mkdirs, [VALIDATION_ROOT, `${VALIDATION_ROOT}/raced-session`]);
+  assert.equal(sessionFile(root, RACED_SESSION, "launch.json"), undefined);
   assert.match(
     output.text,
     /Validation session root already exists: log\/validation\/raced-session/u,
   );
 });
 
-void test("dynamic supervisor loop refuses symlinked session parents created during prebuild", async () => {
+void test("dynamic supervisor loop refuses symlinked session parents created during prebuild", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("raced-symlink"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: (path: string): { isSymbolicLink: () => boolean } => ({
-        isSymbolicLink: (): boolean => path === VALIDATION_ROOT,
-      }),
-      mkdir: () => true,
-      writeFile: () => {
-        throw new Error("should not write launch artifact through raced symlink");
-      },
-      appendFile: () => {
-        throw new Error("should not write events through raced symlink");
-      },
       spawnSync: (_command: string, args: readonly string[]) => {
         if (isPrebuildCommand(args)) {
+          // Another process swaps the validation parent for a symlink while the prebuild runs.
+          mkdirSync(join(root, "log"), { recursive: true });
+          mkdirSync(join(root, ELSEWHERE));
+          symlinkSync(join(root, ELSEWHERE), validationRoot(root));
           return okResult();
         }
         throw new Error("should not spawn preflight or supervisor through raced symlink");
@@ -271,8 +245,11 @@ void test("dynamic supervisor loop refuses symlinked session parents created dur
   });
 
   assert.equal(exitCode, 1);
-  assert.match(
-    output.text,
-    /Refusing to use session root through symlinked path: \/repo\/log\/validation/u,
+  assert.equal(sessionFile(root, "raced-symlink", "launch.json"), undefined);
+  assert.equal(
+    output.text.includes(
+      `Refusing to use session root through symlinked path: ${validationRoot(root)}`,
+    ),
+    true,
   );
 });

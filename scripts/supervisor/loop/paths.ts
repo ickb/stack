@@ -1,12 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { firstSymlinkInPath } from "../../../packages/node-utils/src/index.ts";
-import {
-  SUPERVISOR_OUTPUT_ROOT,
-  type LoopOutRoot,
-  type MaybePromise,
-  type SupervisorLoopDependencies,
-} from "./model.ts";
+import { errnoCode, firstSymlinkInPath } from "../../../packages/node-utils/src/index.ts";
+import { SUPERVISOR_OUTPUT_ROOT, type LoopOutRoot } from "./model.ts";
 
 const { dirname, isAbsolute, parse, relative, resolve: resolvePath } = path;
 
@@ -54,12 +49,9 @@ export function defaultOutRoot(nowMs: number, pid: number): string {
 async function assertNoSymlinkedLoopOutputAncestors(
   root: string,
   absolutePath: string,
-  dependencies: SupervisorLoopDependencies,
 ): Promise<void> {
   const base = isInside(root, absolutePath) ? root : parse(absolutePath).root;
-  const symlink = await firstSymlinkInPath(absolutePath, base, {
-    ...(dependencies.lstat === undefined ? {} : { lstat: dependencies.lstat }),
-  });
+  const symlink = await firstSymlinkInPath(absolutePath, base);
   if (symlink !== undefined) {
     throw new Error(
       `Refusing to use loop output root through symlinked path: ${displayPath(root, symlink)}`,
@@ -70,16 +62,14 @@ async function assertNoSymlinkedLoopOutputAncestors(
 export async function reserveLoopOutRoot(
   root: string,
   absolutePath: string,
-  dependencies: SupervisorLoopDependencies,
 ): Promise<void> {
-  const mkdirFn = directoryCreator(dependencies);
-  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath, dependencies);
-  await mkdirFn(dirname(absolutePath), { recursive: true });
-  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath, dependencies);
+  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath);
+  await mkdir(dirname(absolutePath), { recursive: true });
+  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath);
   try {
-    await mkdirFn(absolutePath);
+    await mkdir(absolutePath);
   } catch (error) {
-    if (isAlreadyExistsError(error)) {
+    if (errnoCode(error) === "EEXIST") {
       throw new Error(
         `Refusing to reuse loop output root: ${displayPath(root, absolutePath)}`,
         { cause: error },
@@ -87,7 +77,7 @@ export async function reserveLoopOutRoot(
     }
     throw error;
   }
-  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath, dependencies);
+  await assertNoSymlinkedLoopOutputAncestors(root, absolutePath);
 }
 
 function isInside(root: string, candidatePath: string): boolean {
@@ -99,21 +89,4 @@ function isInside(root: string, candidatePath: string): boolean {
 
 export function displayPath(root: string, candidatePath: string): string {
   return isInside(root, candidatePath) ? relative(root, candidatePath) : candidatePath;
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
-}
-
-function directoryCreator(
-  dependencies: SupervisorLoopDependencies,
-): (path: string, options?: { recursive?: boolean }) => MaybePromise<unknown> {
-  return dependencies.mkdir ?? makeDirectory;
-}
-
-async function makeDirectory(
-  directoryPath: string,
-  options?: { recursive?: boolean },
-): Promise<unknown> {
-  return mkdir(directoryPath, options);
 }

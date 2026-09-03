@@ -1,9 +1,11 @@
-import type {
-  CountRecord,
-  FormattablePrebuildFailure,
-  MissingSummaryInput,
-  SupervisorDecision,
-  SupervisorRun,
+import { errorMessage, isRecord } from "../../../packages/node-utils/src/index.ts";
+import {
+  PREBUILD_COMMAND,
+  type BoundedCommandResult,
+  type CountRecord,
+  type MissingSummaryInput,
+  type SupervisorDecision,
+  type SupervisorRun,
 } from "./model.ts";
 
 export function formatRunLine(run: SupervisorRun, decision: SupervisorDecision): string {
@@ -57,17 +59,13 @@ export function formatMissingSummaryLine({
   return fields.join(" ");
 }
 
-export function formatPrebuildFailure(prebuild: FormattablePrebuildFailure): string {
+export function formatPrebuildFailure(prebuild: BoundedCommandResult): string {
   const fields = [
     "loop prebuild_failed",
-    `target=${shellWord(prebuild.target ?? "unknown")}`,
-    `status=${String(prebuild.status)}`,
+    "target=source",
+    `status=${String(prebuild.status ?? 1)}`,
+    `command=${shellWord(PREBUILD_COMMAND.join(" "))}`,
   ];
-  if (prebuild.command !== undefined) {
-    fields.push(
-      `command=${shellWord([prebuild.command, ...(prebuild.args ?? [])].join(" "))}`,
-    );
-  }
   if (typeof prebuild.signal === "string" && prebuild.signal.length > 0) {
     fields.push(`signal=${shellWord(prebuild.signal)}`);
   }
@@ -101,29 +99,8 @@ function sortedEntries(record: CountRecord): Array<[string, number]> {
   return Object.entries(record).toSorted(([left], [right]) => left.localeCompare(right));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function shellWord(value: unknown): string {
   return String(value).replaceAll(/\s+/gu, "_");
-}
-
-export function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (
-    typeof error === "number" ||
-    typeof error === "bigint" ||
-    typeof error === "boolean"
-  ) {
-    return String(error);
-  }
-  return "Unknown error";
 }
 
 export function childSpawnError(error: unknown): string {

@@ -7,41 +7,33 @@ import {
 } from "../../../packages/node-utils/src/index.ts";
 import {
   DEFAULT_CHILD_TIMEOUT_SECONDS,
-  PREBUILD_COMMANDS,
+  PREBUILD_COMMAND,
   TIMEOUT_KILL_GRACE_MS,
   type BoundedCommandOptions,
   type BoundedCommandResult,
-  type PrebuildResult,
   type SupervisorLoopDependencies,
 } from "./model.ts";
 
-const DEFAULT_PREBUILD_TIMEOUT_SECONDS = DEFAULT_CHILD_TIMEOUT_SECONDS;
-
+/** Typechecks the runtime sources before any supervisor child is launched. */
 export async function prebuildRuntime(
   root: string,
   dependencies: SupervisorLoopDependencies,
-): Promise<PrebuildResult> {
-  for (const step of PREBUILD_COMMANDS) {
-    const result = await runBoundedCommand(
-      step.command,
-      step.args,
-      {
-        cwd: root,
-        env: minimalProcessEnv(process.env),
-        stdio: "ignore",
-        timeout: DEFAULT_PREBUILD_TIMEOUT_SECONDS * 1000,
-        killSignal: "SIGTERM",
-        killAfterTimeout: TIMEOUT_KILL_GRACE_MS,
-        detached: true,
-      },
-      dependencies,
-    );
-    const status = typeof result.status === "number" ? result.status : 1;
-    if (status !== 0) {
-      return { ...step, status, signal: result.signal, error: result.error };
-    }
-  }
-  return { status: 0 };
+): Promise<BoundedCommandResult> {
+  return runBoundedCommand(
+    PREBUILD_COMMAND[0],
+    PREBUILD_COMMAND.slice(1),
+    {
+      cwd: root,
+      env: minimalProcessEnv(process.env),
+      stdio: "ignore",
+      // The single prebuild step gets the same budget as one supervisor child.
+      timeout: DEFAULT_CHILD_TIMEOUT_SECONDS * 1000,
+      killSignal: "SIGTERM",
+      killAfterTimeout: TIMEOUT_KILL_GRACE_MS,
+      detached: true,
+    },
+    dependencies,
+  );
 }
 
 export async function runBoundedCommand(

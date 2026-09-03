@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import type { SpawnOptions } from "node:child_process";
-import { lstat as fsLstat } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import pathModule from "node:path";
+import type { TestContext } from "node:test";
 import {
   type BoundedCommandOptions,
   type BoundedCommandResult,
   decideNext,
-  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
-  DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE,
+  DEFAULT_CHILD_TIMEOUT_SECONDS,
   INSPECTION_REQUIRED_EXIT_CODE,
   parseArgs,
   runSupervisorLoop,
@@ -19,8 +21,7 @@ import {
 } from "../../../supervisor/loop.ts";
 export {
   decideNext,
-  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
-  DEFAULT_PREBUILD_TIMEOUT_SECONDS_VALUE,
+  DEFAULT_CHILD_TIMEOUT_SECONDS,
   INSPECTION_REQUIRED_EXIT_CODE,
   parseArgs,
   runSupervisorLoop,
@@ -31,6 +32,7 @@ export {
 export type { SummaryRecord };
 
 export const { join } = pathModule;
+const { resolve } = pathModule;
 export const BACKOFF_SECONDS_FLAG = "--backoff-seconds";
 export const CHILD_TIMEOUT_SECONDS_FLAG = "--child-timeout-seconds";
 export const LOOP_TEST_OUT_ROOT = "log/live-supervisor/loop-test";
@@ -99,15 +101,6 @@ export function commandEnv(
   return command.options.env ?? {};
 }
 
-export function recordingSpawn(
-  commands: BoundedCommandInvocation[],
-): LoopDependencies["spawnSync"] {
-  return (command, args, options): SpawnResultFixture => {
-    commands.push({ command, args, options });
-    return { status: 0 };
-  };
-}
-
 export function summaryText(extra: SummaryFixture = {}): string {
   return JSON.stringify({
     stopped: "max_cycles",
@@ -124,9 +117,7 @@ export async function assertValidationOutRootAccepted(options: {
   outputPattern: RegExp;
   outRoot: string;
   root: string;
-  summaryPath: string;
 }): Promise<void> {
-  const reads = new Map<string, string>([[options.summaryPath, summaryText()]]);
   const commands: BoundedCommandInvocation[] = [];
   const output = testOutput();
 
@@ -143,9 +134,7 @@ export async function assertValidationOutRootAccepted(options: {
     root: options.root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: recordingSpawn(commands),
-      readFile: (filePath: string) => reads.get(filePath),
+      spawnSync: supervisorSpawn(options.root, { commands, summary: summaryText() }),
     },
   });
 
@@ -164,26 +153,35 @@ export function errorWithCode(message: string, code: string): Error & { code: st
   return Object.assign(new Error(message), { code });
 }
 
-export function freshLoopOutputDependencies(
-  existingPaths: string[] = [],
-): LoopDependencies {
-  const paths = new Set(existingPaths);
-  return {
-    mkdir: (filePath, options): void => {
-      if (options?.recursive === true) {
-        paths.add(filePath);
-        return;
-      }
-      if (paths.has(filePath)) {
-        throw errorWithCode("exists", "EEXIST");
-      }
-      paths.add(filePath);
-    },
-    lstat: async (filePath): Promise<{ isSymbolicLink: () => boolean }> => {
-      if (paths.has(filePath)) {
-        return { isSymbolicLink: (): boolean => false };
-      }
-      return fsLstat(filePath);
-    },
+/** A disposable repository root; the loop writes its real output tree under it. */
+export async function tempRoot(t: TestContext): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "ickb-loop-test-"));
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+/**
+ * Fake child processes: prebuild commands succeed; the supervisor child writes
+ * `summary.json` into its `--out-dir` when a summary is given and returns `result`.
+ */
+export function supervisorSpawn(
+  root: string,
+  options: {
+    commands?: BoundedCommandInvocation[];
+    summary?: string;
+    result?: SpawnResultFixture;
+  } = {},
+): NonNullable<LoopDependencies["spawnSync"]> {
+  return (command, args, spawnOptions): SpawnResultFixture => {
+    options.commands?.push({ command, args, options: spawnOptions });
+    if (command !== process.execPath) {
+      return { status: 0 };
+    }
+    if (options.summary !== undefined) {
+      const outDir = resolve(root, args[args.indexOf("--out-dir") + 1] ?? "");
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(join(outDir, "summary.json"), options.summary);
+    }
+    return options.result ?? { status: 0 };
   };
 }

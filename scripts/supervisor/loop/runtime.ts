@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { errorMessage, isRecord } from "../../../packages/node-utils/src/index.ts";
 import { parseArgs, usage } from "./args.ts";
 import {
   minimalProcessEnv,
@@ -13,7 +14,6 @@ import {
   type BoundedCommandResult,
   type CommandOutput,
   type LoopArgs,
-  type MaybePromise,
   type RunSummaryInput,
   type RunSupervisorLoopInput,
   type SpawnSupervisorHelpInput,
@@ -30,7 +30,6 @@ import {
 } from "./model.ts";
 import {
   childSpawnError,
-  errorMessage,
   formatMissingSummaryLine,
   formatPrebuildFailure,
   formatRunLine,
@@ -78,10 +77,9 @@ export async function runSupervisorLoop({
     return 1;
   }
 
-  const prebuild = await prebuildRuntime(root, dependencies);
-  if (prebuild.status !== 0) {
-    stdout.write(`${formatPrebuildFailure(prebuild)}\n`);
-    return prebuild.status;
+  const prebuildExit = await prebuildExitCode(root, dependencies, stdout);
+  if (prebuildExit !== undefined) {
+    return prebuildExit;
   }
 
   const runState: SupervisorLoopRunState = {
@@ -125,6 +123,20 @@ function runSupervisorHelp(
   return typeof spawnResult.status === "number" ? spawnResult.status : 1;
 }
 
+/** Runs the prebuild and returns its exit code when it fails. */
+async function prebuildExitCode(
+  root: string,
+  dependencies: SupervisorLoopDependencies,
+  stdout: TextWriter,
+): Promise<number | undefined> {
+  const prebuild = await prebuildRuntime(root, dependencies);
+  if (prebuild.status === 0) {
+    return undefined;
+  }
+  stdout.write(`${formatPrebuildFailure(prebuild)}\n`);
+  return prebuild.status ?? 1;
+}
+
 async function prepareSupervisorLoopRuntime(
   args: LoopArgs,
   root: string,
@@ -136,7 +148,7 @@ async function prepareSupervisorLoopRuntime(
     root,
     args.outRoot ?? defaultOutRoot(now(), dependencies.pid ?? process.pid),
   );
-  await reserveLoopOutRoot(root, outRoot.absolutePath, dependencies);
+  await reserveLoopOutRoot(root, outRoot.absolutePath);
   return {
     args,
     dependencies,
@@ -170,7 +182,6 @@ async function runSupervisorLoopIteration(
       { runIndex, relativeOutDir, status },
       runOutDir,
       spawnResult,
-      dependencies,
     );
   } catch (error) {
     stdout.write(
@@ -197,9 +208,8 @@ async function summarizeSupervisorRun(
   input: RunSummaryInput,
   runOutDir: string,
   spawnResult: BoundedCommandResult,
-  dependencies: SupervisorLoopDependencies,
 ): Promise<SupervisorRun> {
-  const summary = await readSummary(join(runOutDir, "summary.json"), dependencies);
+  const summary = await readSummary(join(runOutDir, "summary.json"));
   return {
     ...summarizeRun(summary, input),
     childError:
@@ -284,17 +294,10 @@ function hasHelpFlag(args: readonly string[]): boolean {
   return args.some((arg) => arg === "-h" || arg === "--help");
 }
 
-async function readSummary(
-  summaryPath: string,
-  dependencies: SupervisorLoopDependencies,
-): Promise<SummaryRecord> {
-  const readFileFn = textFileReader(dependencies);
-  const text = await readFileFn(summaryPath, "utf8");
+async function readSummary(summaryPath: string): Promise<SummaryRecord> {
+  const text = await readFile(summaryPath, "utf8");
   let parsed: unknown;
   try {
-    if (typeof text !== "string") {
-      throw new TypeError("summary.json not text");
-    }
     parsed = JSON.parse(text);
   } catch (error) {
     throw new Error("summary.json invalid JSON", { cause: error });
@@ -320,21 +323,4 @@ async function sleep(
 
 function padRun(index: number): string {
   return String(index).padStart(4, "0");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function textFileReader(
-  dependencies: SupervisorLoopDependencies,
-): (path: string, encoding: BufferEncoding) => MaybePromise<string | Buffer | undefined> {
-  return dependencies.readFile ?? readTextFile;
-}
-
-async function readTextFile(
-  filePath: string,
-  encoding: BufferEncoding,
-): Promise<string | Buffer> {
-  return readFile(filePath, encoding);
 }

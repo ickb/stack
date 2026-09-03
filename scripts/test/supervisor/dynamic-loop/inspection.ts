@@ -13,29 +13,29 @@ import {
   TESTER_FEE_BASE_OPTION,
   TESTER_FEE_OPTION,
   TESTER_SCENARIO_OPTION,
-  VALIDATION_ROOT,
-  appendRecorder,
   argsByScript,
   commandByScript,
   dynamicDependencies,
   isPrebuildCommand,
   loggedDynamicSpawn,
   maxRunsSupervisorResult,
-  missingStat,
   okResult,
   preflightResult,
   required,
   runDynamicSupervisorLoop,
   scriptCount,
+  sessionFile,
+  tempRoot,
   testOutput,
   validationArgs,
 } from "./support.ts";
 
-void test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reasons", async () => {
+void test("dynamic supervisor loop stops after inspection-worthy supervisor-loop reasons", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("inspection-session", "3", BETWEEN_CHUNKS_SECONDS_OPTION, "0"),
     io: { stdout: output, stderr: output },
     dependencies: dynamicDependencies(
@@ -60,11 +60,12 @@ void test("dynamic supervisor loop stops after inspection-worthy supervisor-loop
   assert.match(output.text, /"supervisorLoopStopReason":"tx_observed"/u);
 });
 
-void test("dynamic supervisor loop preserves supervisor-loop inspection-required status", async () => {
+void test("dynamic supervisor loop preserves supervisor-loop inspection-required status", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "inspection-status-session",
       "3",
@@ -94,11 +95,12 @@ void test("dynamic supervisor loop preserves supervisor-loop inspection-required
   assert.match(output.text, /"supervisorLoopStopReason":"max_runs"/u);
 });
 
-void test("dynamic supervisor loop passes operator target-outcome through to the supervisor echo", async () => {
+void test("dynamic supervisor loop passes operator target-outcome through to the supervisor echo", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "auto-session",
       "1",
@@ -126,11 +128,12 @@ void test("dynamic supervisor loop passes operator target-outcome through to the
   assert.match(output.text, /testerScenario":"auto"/u);
 });
 
-void test("dynamic supervisor loop pins tester-only and passes tester scenario, fee and target-outcome options through", async () => {
+void test("dynamic supervisor loop pins tester-only and passes tester scenario, fee and target-outcome options through", async (t) => {
+  const root = await tempRoot(t);
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "fresh-skip-session",
       "1",
@@ -167,11 +170,12 @@ void test("dynamic supervisor loop pins tester-only and passes tester scenario, 
   assert.equal(passthrough.includes(TARGET_OUTCOME_OPTION), true);
 });
 
-void test("dynamic supervisor loop lets explicit tester fee options override selected defaults", async () => {
+void test("dynamic supervisor loop lets explicit tester fee options override selected defaults", async (t) => {
+  const root = await tempRoot(t);
   const commands: Array<readonly string[]> = [];
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs(
       "fee-override-session",
       "1",
@@ -204,19 +208,15 @@ void test("dynamic supervisor loop lets explicit tester fee options override sel
   assert.equal(passthrough[passthrough.lastIndexOf(TESTER_FEE_BASE_OPTION) + 1], "2000");
 });
 
-void test("dynamic supervisor loop stops on preflight failures", async () => {
+void test("dynamic supervisor loop stops on preflight failures", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("preflight-failure"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: () => true,
-      writeFile: () => true,
-      appendFile: () => true,
       spawnSync: (_command: string, args: readonly string[]) =>
         isPrebuildCommand(args)
           ? okResult()
@@ -228,19 +228,15 @@ void test("dynamic supervisor loop stops on preflight failures", async () => {
   assert.match(output.text, /preflight_failed/u);
 });
 
-void test("dynamic supervisor loop reports preflight spawn errors", async () => {
+void test("dynamic supervisor loop reports preflight spawn errors", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("preflight-spawn-error"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: () => true,
-      writeFile: () => true,
-      appendFile: () => true,
       spawnSync: (_command: string, args: readonly string[]) =>
         isPrebuildCommand(args)
           ? okResult()
@@ -258,11 +254,11 @@ void test("dynamic supervisor loop reports preflight spawn errors", async () => 
   assert.match(output.text, /preflight command failed: spawn ETIMEDOUT/u);
 });
 
-void test("dynamic supervisor loop preserves supervisor chunk spawn errors", async () => {
-  const { appended, appendFile } = appendRecorder();
+void test("dynamic supervisor loop preserves supervisor chunk spawn errors", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("chunk-spawn-error"),
     io: { stdout: output, stderr: output },
     dependencies: dynamicDependencies(
@@ -276,7 +272,6 @@ void test("dynamic supervisor loop preserves supervisor chunk spawn errors", asy
           error: new Error(SPAWN_TIMEOUT_MESSAGE),
         },
       }),
-      { appendFile },
     ),
   });
 
@@ -284,27 +279,22 @@ void test("dynamic supervisor loop preserves supervisor chunk spawn errors", asy
   assert.match(output.text, /Supervisor chunk failed: spawn ETIMEDOUT/u);
   assert.match(
     required(
-      appended.get(`${VALIDATION_ROOT}/chunk-spawn-error/supervisor/stderr.log`),
+      sessionFile(root, "chunk-spawn-error", "stderr.log"),
       "Missing supervisor stderr log",
     ),
     /Supervisor chunk failed: spawn ETIMEDOUT/u,
   );
 });
 
-void test("dynamic supervisor loop preserves malformed preflight stderr", async () => {
-  const { appended, appendFile } = appendRecorder();
+void test("dynamic supervisor loop preserves malformed preflight stderr", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("preflight-stderr"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: missingStat,
-      mkdir: () => true,
-      writeFile: () => true,
-      appendFile,
       spawnSync: (_command: string, args: readonly string[]) =>
         isPrebuildCommand(args)
           ? okResult()
@@ -321,7 +311,7 @@ void test("dynamic supervisor loop preserves malformed preflight stderr", async 
   assert.match(output.text, /preflight diagnostic/u);
   assert.match(
     required(
-      appended.get(`${VALIDATION_ROOT}/preflight-stderr/supervisor/stderr.log`),
+      sessionFile(root, "preflight-stderr", "stderr.log"),
       "Missing supervisor stderr log",
     ),
     /preflight diagnostic/u,

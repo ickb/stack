@@ -1,5 +1,6 @@
 import { lstat } from "node:fs/promises";
 import path from "node:path";
+import { errnoCode } from "./errors.ts";
 
 export interface SymlinkPathDependencies {
   lstat?: (
@@ -25,20 +26,11 @@ export async function firstSymlinkInPath(
         return current;
       }
     } catch (error) {
-      if (isNotFoundError(error)) {
+      if (errnoCode(error) === "ENOENT") {
         return undefined;
       }
       throw error;
     }
   }
   return undefined;
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ENOENT"
-  );
 }

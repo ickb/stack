@@ -4,7 +4,7 @@ import {
   type BoundedCommandInvocation,
   BACKOFF_SECONDS_FLAG,
   CHILD_TIMEOUT_SECONDS_FLAG,
-  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
+  DEFAULT_CHILD_TIMEOUT_SECONDS,
   INSPECTION_REQUIRED_EXIT_CODE,
   LIVE_RUN_OUT_DIR,
   LOOP_TEST_OUT_ROOT,
@@ -15,11 +15,13 @@ import {
   STANDARD_SCENARIO,
   at,
   decideNext,
-  freshLoopOutputDependencies,
+  join,
   parseArgs,
   runSupervisorLoop,
   summarizeRun,
   summarySignature,
+  supervisorSpawn,
+  tempRoot,
   testOutput,
   usage,
 } from "./support.ts";
@@ -65,7 +67,7 @@ void test("supervisor loop parses accepted loop options and supervisor passthrou
     parseArgs([MAX_RUNS_FLAG, String(Number.MAX_SAFE_INTEGER)]).maxRuns,
     Number.MAX_SAFE_INTEGER,
   );
-  assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE);
+  assert.equal(parseArgs([]).childTimeoutSeconds, DEFAULT_CHILD_TIMEOUT_SECONDS);
   assert.match(usage(), /summary/u);
   assert.match(usage(), /--out-root <dir>/u);
 });
@@ -127,13 +129,14 @@ void test("supervisor loop rejects invalid loop option placement and values", ()
   );
 });
 
-void test("supervisor loop passes child help through visibly", async () => {
+void test("supervisor loop passes child help through visibly", async (t) => {
+  const root = await tempRoot(t);
   for (const helpFlag of ["--help", "-h"]) {
     const output = testOutput();
     const commands: BoundedCommandInvocation[] = [];
     const exitCode = await runSupervisorLoop({
       argv: ["--", helpFlag],
-      root: "/repo",
+      root,
       io: { stdout: output, stderr: output },
       dependencies: {
         spawnSync: (command, args, options) => {
@@ -144,15 +147,12 @@ void test("supervisor loop passes child help through visibly", async () => {
             stderr: "child warning\n",
           };
         },
-        readFile: () => {
-          throw new Error("should not read summary for child help");
-        },
       },
     });
 
     assert.equal(exitCode, 0);
     assert.deepEqual(at(commands, 0).args, [
-      "/repo/apps/validation/src/supervisor.ts",
+      join(root, "apps/validation/src/supervisor.ts"),
       helpFlag,
     ]);
     assert.deepEqual(at(commands, 0).options.stdio, ["ignore", "pipe", "pipe"]);
@@ -225,7 +225,8 @@ void test("supervisor loop summarizes only summary json fields", () => {
   );
 });
 
-void test("supervisor loop prints summary-owned stop diagnostics", async () => {
+void test("supervisor loop prints summary-owned stop diagnostics", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -234,13 +235,11 @@ void test("supervisor loop prints summary-owned stop diagnostics", async () => {
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_wall_clock_seconds",
           stopDiagnostics: { reason: "insufficient_wall_clock_command_budget" },
           aggregateCounts: {},
@@ -248,6 +247,7 @@ void test("supervisor loop prints summary-owned stop diagnostics", async () => {
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 

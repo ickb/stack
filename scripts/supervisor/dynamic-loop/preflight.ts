@@ -1,3 +1,4 @@
+import { isRecord } from "../../../packages/node-utils/src/index.ts";
 import {
   fixed8DecimalToUnits,
   parseCanonicalUnsignedInteger,
@@ -171,10 +172,6 @@ function recordField(value: unknown, key: string): Record<string, unknown> | und
   }
   const field = value[key];
   return isRecord(field) ? field : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function testerFeePolicyFromSupervisorArgs(

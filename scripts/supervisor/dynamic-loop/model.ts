@@ -1,13 +1,8 @@
 import { maxTimerDelaySeconds } from "../helpers.ts";
-import {
-  DEFAULT_PREBUILD_TOTAL_TIMEOUT_SECONDS_VALUE,
-  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS,
-  type BoundedCommandResult,
-  type SupervisorLoopDependencies,
-} from "../loop.ts";
+import type { BoundedCommandResult, SupervisorLoopDependencies } from "../loop.ts";
 
-export const DEFAULT_SUPERVISOR_LOOP_PREBUILD_TIMEOUT_SECONDS =
-  DEFAULT_PREBUILD_TOTAL_TIMEOUT_SECONDS_VALUE;
+export { DEFAULT_CHILD_TIMEOUT_SECONDS } from "../loop.ts";
+
 export const DEFAULT_TESTER_CONFIG = "config/tester-testnet.json";
 export const DEFAULT_PREFLIGHT_SCRIPT = "scripts/live/preflight.ts";
 export const DEFAULT_SUPERVISOR_LOOP_SCRIPT = "scripts/supervisor/loop-cli.ts";
@@ -35,8 +30,6 @@ export const DEFAULT_CHUNK_MAX_RUNS = 8;
 export const DEFAULT_STABLE_LIMIT = 999;
 export const DEFAULT_CHUNK_BACKOFF_SECONDS = 20;
 export const DEFAULT_BETWEEN_CHUNKS_SECONDS = 20;
-export const DEFAULT_CHILD_TIMEOUT_SECONDS =
-  DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS;
 export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 240;
 export const DEFAULT_CHUNK_TIMEOUT_MARGIN_SECONDS = 60;
 export const CHILD_COMMAND_TIMEOUT_MARGIN_SECONDS = 60;
@@ -70,12 +63,8 @@ export const MAX_TIMER_DELAY_SECONDS = BigInt(maxTimerDelaySeconds());
 export const INVALID_PREFLIGHT_BALANCES_REASON =
   "preflight balances or fee rate missing or invalid";
 
-export type MaybePromise<T> = T | Promise<T>;
 export interface TextWriter {
   write: (chunk: string | Uint8Array) => unknown;
-}
-interface SymbolicLinkStats {
-  isSymbolicLink: () => boolean;
 }
 export interface RawOrderFeePolicy {
   fee: bigint;
@@ -110,13 +99,8 @@ interface DynamicLoopIo {
   stderr?: TextWriter;
 }
 export type DynamicLoopDependencies = SupervisorLoopDependencies & {
-  appendFile?: (path: string, text: string) => MaybePromise<unknown>;
   checkIgnored?: (relativePath: string) => boolean;
-  lstat?: (path: string) => MaybePromise<SymbolicLinkStats>;
-  mkdir?: (path: string, options?: { recursive?: boolean }) => MaybePromise<unknown>;
-  sleep?: (ms: number) => MaybePromise<unknown>;
-  stat?: (path: string) => MaybePromise<unknown>;
-  writeFile?: (path: string, text: string) => MaybePromise<unknown>;
+  sleep?: (ms: number) => unknown;
 };
 export interface RunDynamicSupervisorLoopInput {
   argv: readonly string[];

@@ -24,7 +24,6 @@ import {
   DEFAULT_PREFLIGHT_SCRIPT,
   DEFAULT_PREFLIGHT_TIMEOUT_SECONDS,
   DEFAULT_STABLE_LIMIT,
-  DEFAULT_SUPERVISOR_LOOP_PREBUILD_TIMEOUT_SECONDS,
   DEFAULT_SUPERVISOR_LOOP_SCRIPT,
   DEFAULT_TESTER_CONFIG,
   DYNAMIC_LOOP_OWNED_FLAGS,
@@ -256,7 +255,7 @@ export function usage(): string {
 function supervisorLoopChunkTimeoutFloorSeconds(args: DynamicArgs): bigint {
   const cleanupGraceSeconds = BigInt(Math.ceil(TIMEOUT_KILL_GRACE_MS / 1000));
   return (
-    BigInt(DEFAULT_SUPERVISOR_LOOP_PREBUILD_TIMEOUT_SECONDS) +
+    BigInt(DEFAULT_CHILD_TIMEOUT_SECONDS) +
     BigInt(args.chunkMaxRuns) * BigInt(args.childTimeoutSeconds) +
     BigInt(Math.max(0, args.chunkMaxRuns - 1)) * BigInt(args.chunkBackoffSeconds) +
     BigInt(args.chunkMaxRuns + 1) * cleanupGraceSeconds +

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdir, symlink } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import {
   type CommandInvocation,
@@ -11,28 +13,30 @@ import {
   PREFLIGHT_SCRIPT,
   SESSION_ROOT_OPTION,
   SUPERVISOR_LOOP_SCRIPT,
-  VALIDATION_ROOT,
-  appendRecorder,
   at,
   commandEnv,
   dynamicDependencies,
   loggedDynamicSpawn,
-  missingStat,
   preflightResult,
   runDynamicSupervisorLoop,
+  sessionFile,
+  tempRoot,
   testOutput,
   validationArgs,
-  writeRecorder,
+  validationRoot,
 } from "./support.ts";
 
-void test("dynamic loop git ignore guard runs with an allowlisted environment", async () => {
+const { join } = path;
+
+void test("dynamic loop git ignore guard runs with an allowlisted environment", async (t) => {
+  const root = await tempRoot(t);
   const originalPrivateKey = process.env["PRIVATE_KEY"];
   process.env["PRIVATE_KEY"] = "operator-secret";
   const output = testOutput();
   const gitEnvs: Array<Record<string, string | undefined>> = [];
   try {
     const exitCode = await runDynamicSupervisorLoop({
-      root: "/repo",
+      root,
       argv: validationArgs("git-env"),
       io: { stdout: output, stderr: output },
       dependencies: {
@@ -65,11 +69,6 @@ void test("dynamic loop git ignore guard runs with an allowlisted environment", 
           }
           return { status: 0, signal: null, stdout: "", stderr: "" };
         },
-        stat: missingStat,
-        lstat: missingStat,
-        mkdir: () => true,
-        writeFile: () => true,
-        appendFile: () => true,
       },
     });
 
@@ -86,18 +85,17 @@ void test("dynamic loop git ignore guard runs with an allowlisted environment", 
   }
 });
 
-void test("dynamic supervisor loop creates a default validation session root", async () => {
+void test("dynamic supervisor loop creates a default validation session root", async (t) => {
+  const root = await tempRoot(t);
   const originalPrivateKey = process.env["PRIVATE_KEY"];
   process.env["PRIVATE_KEY"] = "operator-secret";
-  const { writes, writeFile } = writeRecorder();
-  const { appended, appendFile } = appendRecorder();
   const commands: CommandInvocation[] = [];
   const output = testOutput();
-  const sessionRoot = `${VALIDATION_ROOT}/dynamic-1700000000-4321`;
+  const session = "dynamic-1700000000-4321";
   const chunkRoot = "log/validation/dynamic-1700000000-4321/chunks/chunk-0001";
   try {
     const exitCode = await runDynamicSupervisorLoop({
-      root: "/repo",
+      root,
       argv: [MAX_CHUNKS_OPTION, "1"],
       io: { stdout: output, stderr: output },
       dependencies: dynamicDependencies(
@@ -120,17 +118,15 @@ void test("dynamic supervisor loop creates a default validation session root", a
         {
           now: () => 1700000000123,
           pid: 4321,
-          checkIgnored: (path: string) =>
-            path.startsWith("config/") || path.startsWith("log/"),
-          writeFile,
-          appendFile,
+          checkIgnored: (relativePath: string) =>
+            relativePath.startsWith("config/") || relativePath.startsWith("log/"),
         },
       ),
     });
 
     assert.equal(exitCode, 3);
-    assert.equal(writes.has(`${sessionRoot}/supervisor/launch.json`), true);
-    assert.equal(appended.has(`${sessionRoot}/supervisor/events.ndjson`), true);
+    assert.notEqual(sessionFile(root, session, "launch.json"), undefined);
+    assert.notEqual(sessionFile(root, session, "events.ndjson"), undefined);
     assert.deepEqual(
       commands.slice(0, 1).map((item) => item.args),
       [[LIVE_CHECK_SOURCE_COMMAND]],
@@ -164,11 +160,12 @@ void test("dynamic supervisor loop creates a default validation session root", a
   }
 });
 
-void test("dynamic supervisor loop validates explicit session roots", async () => {
+void test("dynamic supervisor loop validates explicit session roots", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
 
   const outsideExit = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       LOG_ROOT_OPTION,
       "log",
@@ -190,7 +187,7 @@ void test("dynamic supervisor loop validates explicit session roots", async () =
 
   output.text = "";
   const badShapeExit = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: [
       LOG_ROOT_OPTION,
       "log",
@@ -211,13 +208,13 @@ void test("dynamic supervisor loop validates explicit session roots", async () =
   assert.match(output.text, /--session-root must be <log-root>\/validation\/<session>/u);
 
   output.text = "";
+  await mkdir(join(validationRoot(root), "existing"), { recursive: true });
   const reusedExit = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("existing"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: (): Record<string, never> => ({}),
       spawnSync: () => {
         throw new Error("should not spawn with reused session root");
       },
@@ -230,18 +227,18 @@ void test("dynamic supervisor loop validates explicit session roots", async () =
   );
 });
 
-void test("dynamic supervisor loop refuses symlinked session roots", async () => {
+void test("dynamic supervisor loop refuses symlinked session roots", async (t) => {
+  const root = await tempRoot(t);
+  await mkdir(join(root, "log"));
+  await mkdir(join(root, "elsewhere"));
+  await symlink(join(root, "elsewhere"), validationRoot(root));
   const output = testOutput();
   const exitCode = await runDynamicSupervisorLoop({
-    root: "/repo",
+    root,
     argv: validationArgs("symlinked"),
     io: { stdout: output, stderr: output },
     dependencies: {
       checkIgnored: () => true,
-      stat: missingStat,
-      lstat: (path: string): { isSymbolicLink: () => boolean } => ({
-        isSymbolicLink: (): boolean => path === VALIDATION_ROOT,
-      }),
       spawnSync: () => {
         throw new Error("should not spawn through symlinked session root");
       },
@@ -249,8 +246,10 @@ void test("dynamic supervisor loop refuses symlinked session roots", async () =>
   });
 
   assert.equal(exitCode, 1);
-  assert.match(
-    output.text,
-    /Refusing to use session root through symlinked path: \/repo\/log\/validation/u,
+  assert.equal(
+    output.text.includes(
+      `Refusing to use session root through symlinked path: ${validationRoot(root)}`,
+    ),
+    true,
   );
 });

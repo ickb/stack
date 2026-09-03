@@ -19,6 +19,7 @@ export type {
   PublicRpcEndpointIdentity,
   SupportedChain,
 } from "./chain.ts";
+export { errnoCode, errorMessage, isRecord } from "./errors.ts";
 export { formatCkb } from "./format.ts";
 export {
   STOP_EXIT_CODE,

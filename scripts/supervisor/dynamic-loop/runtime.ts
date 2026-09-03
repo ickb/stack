@@ -1,18 +1,13 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { errorMessage } from "../../../packages/node-utils/src/index.ts";
 import {
   formatPrebuildFailure,
   INSPECTION_REQUIRED_EXIT_CODE,
   prebuildRuntime,
 } from "../loop.ts";
 import { hasHelpFlag, parseArgs, usage } from "./args.ts";
-import {
-  errorMessage,
-  runNode,
-  sleepMs,
-  spawnErrorMessage,
-  writeJsonLine,
-} from "./command.ts";
+import { runNode, sleepMs, spawnErrorMessage, writeJsonLine } from "./command.ts";
 import {
   MAX_CYCLES_FLAG,
   SCENARIO_FLAG,
@@ -83,7 +78,7 @@ export async function runDynamicSupervisorLoop({
   const prebuild = await prebuildRuntime(root, runtime.dependencies);
   if (prebuild.status !== 0) {
     stdout.write(`${formatPrebuildFailure(prebuild)}\n`);
-    return prebuild.status;
+    return prebuild.status ?? 1;
   }
 
   if (!(await startDynamicLoopSession(runtime))) {
@@ -199,7 +194,7 @@ async function prepareDynamicLoopRuntime(
 
 async function startDynamicLoopSession(runtime: DynamicLoopRuntime): Promise<boolean> {
   try {
-    await createValidationSession(runtime.session, runtime.dependencies);
+    await createValidationSession(runtime.session);
     await writeLaunchArtifact(
       runtime.session,
       runtime.args,
@@ -256,7 +251,7 @@ async function handlePreflightFailure({
   await writeSupervisorEvent(session, record, dependencies);
   if (preflight.stderr.length > 0) {
     stderr.write(preflight.stderr);
-    await appendSupervisorStderr(session, preflight.stderr, dependencies);
+    await appendSupervisorStderr(session, preflight.stderr);
   }
   if (!shouldRetryPreflight(args, preflight, chunkIndex)) {
     return { kind: "return", exitCode };
@@ -348,13 +343,13 @@ async function writeChunkOutput(
   }
   if (result.stderr.length > 0) {
     input.stderr.write(result.stderr);
-    await appendSupervisorStderr(input.session, result.stderr, input.dependencies);
+    await appendSupervisorStderr(input.session, result.stderr);
   }
   const chunkError = spawnErrorMessage(result);
   if (chunkError !== undefined) {
     const message = `Supervisor chunk failed: ${chunkError}\n`;
     input.stderr.write(message);
-    await appendSupervisorStderr(input.session, message, input.dependencies);
+    await appendSupervisorStderr(input.session, message);
   }
 }
 

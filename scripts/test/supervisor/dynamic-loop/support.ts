@@ -1,6 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { TestContext } from "node:test";
 import {
   chooseTesterScenario as chooseTesterScenarioRaw,
-  DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS,
+  DEFAULT_CHILD_TIMEOUT_SECONDS as DEFAULT_SUPERVISOR_LOOP_CHILD_TIMEOUT_SECONDS,
   type DynamicArgs,
   type DynamicLoopDependencies,
   fixed8DecimalToUnits,
@@ -54,7 +59,6 @@ export const PREFLIGHT_SCRIPT = "scripts/live/preflight.ts";
 export const SUPERVISOR_LOOP_SCRIPT = "scripts/supervisor/loop-cli.ts";
 export const REPO_SUPERVISOR_LOOP_SCRIPT = `/repo/${SUPERVISOR_LOOP_SCRIPT}`;
 export const LIVE_SUPERVISOR_OUT = "log/live-supervisor/test";
-export const VALIDATION_ROOT = "/repo/log/validation";
 export const CUSTOM_TESTER_CONFIG = "config/custom-tester.json";
 export const TESTER_CONFIG_OPTION = "--tester-config";
 export const LOG_ROOT_OPTION = "--log-root";
@@ -98,10 +102,6 @@ export const ICKB_TO_CKB_LIMIT_ORDER_CHOICE: TesterChoice = {
 export const SPAWN_TIMEOUT_MESSAGE = "spawn ETIMEDOUT";
 export const TESTER_CONFIG_SPAWN_ERROR =
   "should not spawn before tester config boundary passes";
-export const TESTER_CONFIG_MKDIR_ERROR =
-  "should not create session before tester config boundary passes";
-export const TESTER_CONFIG_WRITE_ERROR =
-  "should not write launch artifact before tester config boundary passes";
 
 export function parseArgs(argv: string[]): DynamicArgs {
   return parseDynamicArgs(argv);
@@ -252,16 +252,27 @@ export function dynamicDependencies(
   spawnSync: NonNullable<DynamicDependencies["spawnSync"]>,
   overrides: Partial<DynamicDependencies> = {},
 ): DynamicDependencies {
-  return {
-    checkIgnored: () => true,
-    stat: missingStat,
-    lstat: missingStat,
-    mkdir: () => true,
-    writeFile: () => true,
-    appendFile: () => true,
-    spawnSync,
-    ...overrides,
-  };
+  return { checkIgnored: () => true, spawnSync, ...overrides };
+}
+
+/** A disposable repository root; the loop writes its real session tree under it. */
+export async function tempRoot(t: TestContext): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), "ickb-dynamic-loop-test-"));
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+export function validationRoot(root: string): string {
+  return path.join(root, "log", "validation");
+}
+
+export function sessionFile(
+  root: string,
+  session: string,
+  name: string,
+): string | undefined {
+  const filePath = path.join(validationRoot(root), session, "supervisor", name);
+  return existsSync(filePath) ? readFileSync(filePath, "utf8") : undefined;
 }
 
 export function loggedDynamicSpawn(options: {
@@ -289,40 +300,6 @@ function spawnFixtureResult(
   options: TestSpawnOptions,
 ): SpawnResultFixture {
   return typeof fixture === "function" ? fixture(args, options) : fixture;
-}
-
-export function appendRecorder(): {
-  appended: Map<string, string>;
-  appendFile: (path: string, text: string) => void;
-} {
-  const appended = new Map<string, string>();
-  return {
-    appended,
-    appendFile(path, text): void {
-      appended.set(path, `${appended.get(path) ?? ""}${text}`);
-    },
-  };
-}
-
-export function writeRecorder(): {
-  writes: Map<string, string>;
-  writeFile: (path: string, text: string) => void;
-} {
-  const writes = new Map<string, string>();
-  return {
-    writes,
-    writeFile(path, text): void {
-      writes.set(path, text);
-    },
-  };
-}
-
-export function missingStat(): never {
-  throw errorWithCode("missing", "ENOENT");
-}
-
-export function errorWithCode(message: string, code: string): Error & { code: string } {
-  return Object.assign(new Error(message), { code });
 }
 
 export function isPrebuildCommand(args: readonly string[]): boolean {

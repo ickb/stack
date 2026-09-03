@@ -18,11 +18,7 @@ export const LOOP_OWNED_FLAGS = [
   "--child-timeout-seconds",
   "--supervisor-script",
 ];
-export const PREBUILD_COMMANDS = [
-  { target: "source", command: "pnpm", args: ["live:check:source"] },
-];
-export const DEFAULT_PREBUILD_TOTAL_TIMEOUT_SECONDS_VALUE =
-  DEFAULT_CHILD_TIMEOUT_SECONDS * PREBUILD_COMMANDS.length;
+export const PREBUILD_COMMAND = ["pnpm", "live:check:source"] as const;
 
 export type CommandOutput = string | Buffer;
 
@@ -43,12 +39,8 @@ export type BoundedCommandOptions = Omit<SpawnOptions, "killSignal" | "stdio"> &
   timeout?: number;
 };
 
-export type MaybePromise<T> = T | Promise<T>;
 export interface TextWriter {
   write: (chunk: string | Uint8Array) => unknown;
-}
-interface SymbolicLinkStats {
-  isSymbolicLink: () => boolean;
 }
 type SpawnCommand = (
   command: string,
@@ -138,16 +130,10 @@ interface SupervisorLoopIo {
 }
 export interface SupervisorLoopDependencies {
   addSignalHandler?: (signal: NodeJS.Signals, handler: () => void) => unknown;
-  lstat?: (path: string) => MaybePromise<SymbolicLinkStats>;
-  mkdir?: (path: string, options?: { recursive?: boolean }) => MaybePromise<unknown>;
   now?: () => number;
   pid?: number;
-  readFile?: (
-    path: string,
-    encoding: BufferEncoding,
-  ) => MaybePromise<string | Buffer | undefined>;
   removeSignalHandler?: (signal: NodeJS.Signals, handler: () => void) => unknown;
-  sleep?: (ms: number) => MaybePromise<unknown>;
+  sleep?: (ms: number) => unknown;
   spawn?: SpawnCommand;
   spawnSync?: SpawnSyncCommand;
 }
@@ -171,23 +157,6 @@ export interface SpawnSupervisorHelpInput {
   supervisorArgs: readonly string[];
   dependencies: SupervisorLoopDependencies;
 }
-interface PrebuildCommand {
-  target: string;
-  command: string;
-  args: string[];
-}
-export type PrebuildResult =
-  | { status: 0 }
-  | (PrebuildCommand & {
-      status: number;
-      signal?: NodeJS.Signals | null;
-      error?: unknown;
-    });
-export type FormattablePrebuildFailure = Partial<PrebuildCommand> & {
-  status: number | null;
-  signal?: NodeJS.Signals | null;
-  error?: unknown;
-};
 export interface LoopOutRoot {
   absolutePath: string;
   relativePath: string;

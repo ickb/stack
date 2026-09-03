@@ -1,7 +1,7 @@
 export { fixed8DecimalToUnits } from "../../packages/validation/src/supervisor/stimulus/shared/stimulusArithmetic.ts";
 export { parseArgs, usage } from "./dynamic-loop/args.ts";
 export {
-  DEFAULT_CHILD_TIMEOUT_SECONDS as DEFAULT_CHILD_TIMEOUT_SECONDS_VALUE,
+  DEFAULT_CHILD_TIMEOUT_SECONDS,
   type DynamicArgs,
   type DynamicLoopDependencies,
   type RunDynamicSupervisorLoopInput,

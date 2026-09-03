@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mkdir, symlink } from "node:fs/promises";
 import test from "node:test";
 import {
   type CommandInvocation,
@@ -6,25 +7,24 @@ import {
   BACKOFF_SECONDS_FLAG,
   LIVE_RUN_OUT_DIR,
   OUT_ROOT_FLAG,
-  freshLoopOutputDependencies,
   join,
   runSupervisorLoop,
   summarizeRun,
+  supervisorSpawn,
+  tempRoot,
   testOutput,
 } from "./support.ts";
 
-void test("supervisor loop stops for inspection on new tx-bearing summary", async () => {
-  const root = "/repo";
+void test("supervisor loop stops for inspection on new tx-bearing summary", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [OUT_ROOT_FLAG, "log/live-supervisor/loop-tx", BACKOFF_SECONDS_FLAG, "0"],
     root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "stop_after_tx_count",
           aggregateCounts: { tester_order_created: 1 },
           txCreatingTxHashCount: 1,
@@ -32,6 +32,7 @@ void test("supervisor loop stops for inspection on new tx-bearing summary", asyn
           txHashesByOutcome: { tester_order_created: [`0x${"11".repeat(32)}`] },
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -41,8 +42,8 @@ void test("supervisor loop stops for inspection on new tx-bearing summary", asyn
   assert.match(output.text, /txOutcomes=1/u);
 });
 
-void test("supervisor loop prints tx-creating outcome count when hashes are missing", async () => {
-  const root = "/repo";
+void test("supervisor loop prints tx-creating outcome count when hashes are missing", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -54,16 +55,15 @@ void test("supervisor loop prints tx-creating outcome count when hashes are miss
     root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles",
           aggregateCounts: { tester_order_created: 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 1,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -91,7 +91,8 @@ void test("supervisor loop requires summary-owned tx counters", () => {
   );
 });
 
-void test("supervisor loop rejects malformed aggregateCounts as invalid summary evidence", async () => {
+void test("supervisor loop rejects malformed aggregateCounts as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -100,19 +101,18 @@ void test("supervisor loop rejects malformed aggregateCounts as invalid summary 
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles",
           aggregateCounts: null,
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -122,7 +122,8 @@ void test("supervisor loop rejects malformed aggregateCounts as invalid summary 
   assert.doesNotMatch(output.text, /decision=stable_no_progress|outcomes=-/u);
 });
 
-void test("supervisor loop rejects malformed aggregateCounts values as invalid summary evidence", async () => {
+void test("supervisor loop rejects malformed aggregateCounts values as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -131,19 +132,18 @@ void test("supervisor loop rejects malformed aggregateCounts values as invalid s
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles",
           aggregateCounts: { bot_no_action_skip: "1" },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -153,7 +153,8 @@ void test("supervisor loop rejects malformed aggregateCounts values as invalid s
   assert.doesNotMatch(output.text, /decision=stable_no_progress|outcomes=-/u);
 });
 
-void test("supervisor loop rejects malformed aggregateCounts keys as invalid summary evidence", async () => {
+void test("supervisor loop rejects malformed aggregateCounts keys as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -162,19 +163,18 @@ void test("supervisor loop rejects malformed aggregateCounts keys as invalid sum
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles",
           aggregateCounts: { "bot_no_action_skip status=0": 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -184,7 +184,8 @@ void test("supervisor loop rejects malformed aggregateCounts keys as invalid sum
   assert.doesNotMatch(output.text, /bot_no_action_skip status=0/u);
 });
 
-void test("supervisor loop rejects malformed stopped tokens as invalid summary evidence", async () => {
+void test("supervisor loop rejects malformed stopped tokens as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -193,19 +194,18 @@ void test("supervisor loop rejects malformed stopped tokens as invalid summary e
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles status=0",
           aggregateCounts: { bot_no_action_skip: 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -215,7 +215,8 @@ void test("supervisor loop rejects malformed stopped tokens as invalid summary e
   assert.doesNotMatch(output.text, /max_cycles status=0/u);
 });
 
-void test("supervisor loop rejects missing stopped as invalid summary evidence", async () => {
+void test("supervisor loop rejects missing stopped as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -224,18 +225,17 @@ void test("supervisor loop rejects missing stopped as invalid summary evidence",
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           aggregateCounts: { bot_no_action_skip: 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+      }),
     },
   });
 
@@ -245,7 +245,8 @@ void test("supervisor loop rejects missing stopped as invalid summary evidence",
   assert.doesNotMatch(output.text, /bot_no_action_skip status=0/u);
 });
 
-void test("supervisor loop rejects malformed artifacts as invalid summary evidence", async () => {
+void test("supervisor loop rejects malformed artifacts as invalid summary evidence", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -254,19 +255,18 @@ void test("supervisor loop rejects malformed artifacts as invalid summary eviden
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_cycles",
           aggregateCounts: { bot_no_action_skip: 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [1],
         }),
+      }),
     },
   });
 
@@ -279,17 +279,17 @@ void test("supervisor loop rejects malformed artifacts as invalid summary eviden
   );
 });
 
-void test("supervisor loop refuses symlinked output roots", async () => {
+void test("supervisor loop refuses symlinked output roots", async (t) => {
+  const root = await tempRoot(t);
+  await mkdir(join(root, "log"), { recursive: true });
+  await mkdir(join(root, "elsewhere"));
+  await symlink(join(root, "elsewhere"), join(root, "log", "live-supervisor"));
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [OUT_ROOT_FLAG, "log/live-supervisor/loop-symlink"],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      lstat: (filePath) => ({
-        isSymbolicLink: (): boolean =>
-          filePath === join("/repo", "log", "live-supervisor"),
-      }),
       spawnSync: () => {
         throw new Error("should not spawn supervisor through symlinked output root");
       },
@@ -303,12 +303,13 @@ void test("supervisor loop refuses symlinked output roots", async () => {
   );
 });
 
-void test("supervisor loop reports invalid out-root as a concise CLI error", async () => {
+void test("supervisor loop reports invalid out-root as a concise CLI error", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
 
   const exitCode = await runSupervisorLoop({
     argv: [OUT_ROOT_FLAG, "config/not-allowed"],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
   });
 
@@ -320,16 +321,15 @@ void test("supervisor loop reports invalid out-root as a concise CLI error", asy
   assert.equal(output.text.includes("\n    at "), false);
 });
 
-void test("supervisor loop hides invalid summary JSON contents", async () => {
+void test("supervisor loop hides invalid summary JSON contents", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [OUT_ROOT_FLAG, "log/live-supervisor/loop-invalid", BACKOFF_SECONDS_FLAG, "0"],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: () => ({ status: 0 }),
-      readFile: () => '{"privateKey":"0x1111",',
+      spawnSync: supervisorSpawn(root, { summary: '{"privateKey":"0x1111",' }),
     },
   });
 
@@ -339,21 +339,19 @@ void test("supervisor loop hides invalid summary JSON contents", async () => {
   assert.doesNotMatch(output.text, /privateKey|0x1111/u);
 });
 
-void test("supervisor loop refuses to reuse existing output roots before spawning", async () => {
+void test("supervisor loop refuses to reuse existing output roots before spawning", async (t) => {
+  const root = await tempRoot(t);
+  await mkdir(join(root, "log", "live-supervisor", "loop-existing"), { recursive: true });
   const commands: CommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [OUT_ROOT_FLAG, "log/live-supervisor/loop-existing"],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(["/repo/log/live-supervisor/loop-existing"]),
       spawnSync: (command, args, options) => {
         commands.push({ command, args, options });
         return { status: 0 };
-      },
-      readFile: () => {
-        throw new Error("should not read stale summary from reused output root");
       },
     },
   });

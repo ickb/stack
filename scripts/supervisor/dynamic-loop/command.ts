@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { errorMessage } from "../../../packages/node-utils/src/index.ts";
 import {
   minimalProcessEnv,
   runBoundedCommand,
@@ -50,10 +51,6 @@ function commandOutputToString(output: BoundedCommandResult["stdout"]): string {
     return "";
   }
   return typeof output === "string" ? output : output.toString("utf8");
-}
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export async function sleepMs(

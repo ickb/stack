@@ -3,19 +3,19 @@ import test from "node:test";
 import {
   type BoundedCommandInvocation,
   type CommandInvocation,
-  type SpawnResultFixture,
   BACKOFF_SECONDS_FLAG,
   CHILD_TIMEOUT_SECONDS_FLAG,
   OUT_ROOT_FLAG,
   commandByName,
   errorWithCode,
-  freshLoopOutputDependencies,
   runSupervisorLoop,
+  supervisorSpawn,
+  tempRoot,
   testOutput,
 } from "./support.ts";
 
-void test("supervisor loop applies child timeout at the outer process boundary", async () => {
-  const root = "/repo";
+void test("supervisor loop applies child timeout at the outer process boundary", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const commands: CommandInvocation[] = [];
   const exitCode = await runSupervisorLoop({
@@ -30,7 +30,6 @@ void test("supervisor loop applies child timeout at the outer process boundary",
     root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
       spawnSync: (command, args, options) => {
         commands.push({ command, args, options });
         return command === process.execPath
@@ -40,9 +39,6 @@ void test("supervisor loop applies child timeout at the outer process boundary",
               error: errorWithCode("spawnSync timed out", "ETIMEDOUT"),
             }
           : { status: 0 };
-      },
-      readFile: () => {
-        throw errorWithCode("missing", "ENOENT");
       },
     },
   });
@@ -56,7 +52,8 @@ void test("supervisor loop applies child timeout at the outer process boundary",
   assert.match(output.text, /signal=SIGTERM/u);
 });
 
-void test("supervisor loop reports child timeout metadata when summary exists", async () => {
+void test("supervisor loop reports child timeout metadata when summary exists", async (t) => {
+  const root = await tempRoot(t);
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
     argv: [
@@ -65,26 +62,23 @@ void test("supervisor loop reports child timeout metadata when summary exists", 
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
-      spawnSync: (command: string): SpawnResultFixture =>
-        command === process.execPath
-          ? {
-              status: null,
-              signal: "SIGTERM",
-              error: errorWithCode("spawnSync timed out", "ETIMEDOUT"),
-            }
-          : { status: 0 },
-      readFile: () =>
-        JSON.stringify({
+      spawnSync: supervisorSpawn(root, {
+        summary: JSON.stringify({
           stopped: "max_wall_clock_seconds",
           aggregateCounts: { bot_no_action_skip: 1 },
           txCreatingTxHashCount: 0,
           txCreatingOutcomeCount: 0,
           artifacts: [],
         }),
+        result: {
+          status: null,
+          signal: "SIGTERM",
+          error: errorWithCode("spawnSync timed out", "ETIMEDOUT"),
+        },
+      }),
     },
   });
 
@@ -94,7 +88,8 @@ void test("supervisor loop reports child timeout metadata when summary exists", 
   assert.match(output.text, /signal=SIGTERM/u);
 });
 
-void test("supervisor loop does not print arbitrary child output on missing summary", async () => {
+void test("supervisor loop does not print arbitrary child output on missing summary", async (t) => {
+  const root = await tempRoot(t);
   const commands: BoundedCommandInvocation[] = [];
   const output = testOutput();
   const exitCode = await runSupervisorLoop({
@@ -104,10 +99,9 @@ void test("supervisor loop does not print arbitrary child output on missing summ
       BACKOFF_SECONDS_FLAG,
       "0",
     ],
-    root: "/repo",
+    root,
     io: { stdout: output, stderr: output },
     dependencies: {
-      ...freshLoopOutputDependencies(),
       spawnSync: (command, args, options) => {
         commands.push({ command, args, options });
         if (command !== process.execPath) {
@@ -119,9 +113,6 @@ void test("supervisor loop does not print arbitrary child output on missing summ
           stderr:
             "Live supervisor failed: Missing runtime dependency\noperator secret 0x2222\n",
         };
-      },
-      readFile: () => {
-        throw errorWithCode("missing", "ENOENT");
       },
     },
   });

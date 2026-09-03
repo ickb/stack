@@ -1,13 +1,12 @@
 import { appendFile, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { firstSymlinkInPath } from "../../../packages/node-utils/src/index.ts";
+import { errnoCode, firstSymlinkInPath } from "../../../packages/node-utils/src/index.ts";
 import { checkIgnored, jsonReplacer } from "./command.ts";
 import {
   DEFAULT_LOG_ROOT,
   SESSION_ROOT_FLAG,
   type DynamicArgs,
   type DynamicLoopDependencies,
-  type MaybePromise,
   type ValidationSession,
 } from "./model.ts";
 
@@ -27,7 +26,7 @@ export async function resolveTesterConfig(
   if (!checkIgnored(root, relativePath, dependencies)) {
     throw new Error(`Refusing to use non-ignored --tester-config: ${relativePath}`);
   }
-  await assertNoSymlinkedPath(absolutePath, "tester config", dependencies);
+  await assertNoSymlinkedPath(absolutePath, "tester config");
   return relativePath;
 }
 
@@ -55,8 +54,8 @@ export async function resolveValidationSession(
   );
   assertContained(logRoot, sessionRoot, SESSION_ROOT_FLAG);
   assertValidationSessionShape(logRoot, sessionRoot);
-  await assertNoSymlinkedPath(logRoot, "log root", dependencies);
-  await assertNoSymlinkedPath(sessionRoot, SESSION_ROOT_LABEL, dependencies);
+  await assertNoSymlinkedPath(logRoot, "log root");
+  await assertNoSymlinkedPath(sessionRoot, SESSION_ROOT_LABEL);
 
   const relativeSessionRoot = relative(root, sessionRoot);
   if (
@@ -69,14 +68,13 @@ export async function resolveValidationSession(
     );
   }
 
-  const statFn = fileStatReader(dependencies);
   try {
-    await statFn(sessionRoot);
+    await stat(sessionRoot);
     throw new Error(
       `Validation session root already exists: ${displayPath(root, sessionRoot)}`,
     );
   } catch (error) {
-    if (!isNotFoundError(error)) {
+    if (errnoCode(error) !== "ENOENT") {
       throw error;
     }
   }
@@ -92,18 +90,14 @@ export async function resolveValidationSession(
   };
 }
 
-export async function createValidationSession(
-  session: ValidationSession,
-  dependencies: DynamicLoopDependencies,
-): Promise<void> {
-  const mkdirFn = directoryCreator(dependencies);
-  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL, dependencies);
-  await mkdirFn(dirname(session.sessionRoot), { recursive: true });
-  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL, dependencies);
+export async function createValidationSession(session: ValidationSession): Promise<void> {
+  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL);
+  await mkdir(dirname(session.sessionRoot), { recursive: true });
+  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL);
   try {
-    await mkdirFn(session.sessionRoot);
+    await mkdir(session.sessionRoot);
   } catch (error) {
-    if (isAlreadyExistsError(error)) {
+    if (errnoCode(error) === "EEXIST") {
       throw new Error(
         `Validation session root already exists: ${session.displaySessionRoot}`,
         { cause: error },
@@ -111,9 +105,9 @@ export async function createValidationSession(
     }
     throw error;
   }
-  await mkdirFn(session.supervisorDir);
-  await mkdirFn(session.chunksDir);
-  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL, dependencies);
+  await mkdir(session.supervisorDir);
+  await mkdir(session.chunksDir);
+  await assertNoSymlinkedPath(session.sessionRoot, SESSION_ROOT_LABEL);
 }
 
 export async function writeLaunchArtifact(
@@ -122,9 +116,8 @@ export async function writeLaunchArtifact(
   root: string,
   dependencies: DynamicLoopDependencies,
 ): Promise<void> {
-  const writeFileFn = fileWriter(dependencies);
   const startedAt = new Date((dependencies.now ?? Date.now)()).toISOString();
-  await writeFileFn(
+  await writeFile(
     join(session.supervisorDir, "launch.json"),
     `${JSON.stringify(
       {
@@ -163,8 +156,7 @@ export async function writeSupervisorEvent(
   record: Record<string, unknown>,
   dependencies: DynamicLoopDependencies,
 ): Promise<void> {
-  const appendFileFn = fileAppender(dependencies);
-  await appendFileFn(
+  await appendFile(
     join(session.supervisorDir, "events.ndjson"),
     `${JSON.stringify(
       {
@@ -179,10 +171,8 @@ export async function writeSupervisorEvent(
 export async function appendSupervisorStderr(
   session: ValidationSession,
   text: string,
-  dependencies: DynamicLoopDependencies,
 ): Promise<void> {
-  const appendFileFn = fileAppender(dependencies);
-  await appendFileFn(join(session.supervisorDir, "stderr.log"), text);
+  await appendFile(join(session.supervisorDir, "stderr.log"), text);
 }
 
 function resolveConfiguredPath(root: string, value: string, flag: string): string {
@@ -214,61 +204,12 @@ function assertValidationSessionShape(logRoot: string, sessionRoot: string): voi
   throw new Error(`${SESSION_ROOT_FLAG} must be <log-root>/validation/<session>`);
 }
 
-async function assertNoSymlinkedPath(
-  filePath: string,
-  label: string,
-  dependencies: DynamicLoopDependencies,
-): Promise<void> {
+async function assertNoSymlinkedPath(filePath: string, label: string): Promise<void> {
   const parsed = parse(filePath);
-  const symlink = await firstSymlinkInPath(filePath, parsed.root, {
-    ...(dependencies.lstat === undefined ? {} : { lstat: dependencies.lstat }),
-  });
+  const symlink = await firstSymlinkInPath(filePath, parsed.root);
   if (symlink !== undefined) {
     throw new Error(`Refusing to use ${label} through symlinked path: ${symlink}`);
   }
-}
-
-async function defaultStat(filePath: string): Promise<unknown> {
-  return stat(filePath);
-}
-
-function fileStatReader(
-  dependencies: DynamicLoopDependencies,
-): (filePath: string) => MaybePromise<unknown> {
-  return dependencies.stat ?? defaultStat;
-}
-
-async function defaultMkdir(
-  filePath: string,
-  options?: { recursive?: boolean },
-): Promise<unknown> {
-  return mkdir(filePath, options);
-}
-
-function directoryCreator(
-  dependencies: DynamicLoopDependencies,
-): (filePath: string, options?: { recursive?: boolean }) => MaybePromise<unknown> {
-  return dependencies.mkdir ?? defaultMkdir;
-}
-
-async function defaultWriteFile(filePath: string, text: string): Promise<void> {
-  await writeFile(filePath, text);
-}
-
-function fileWriter(
-  dependencies: DynamicLoopDependencies,
-): (filePath: string, text: string) => MaybePromise<unknown> {
-  return dependencies.writeFile ?? defaultWriteFile;
-}
-
-async function defaultAppendFile(filePath: string, text: string): Promise<void> {
-  await appendFile(filePath, text);
-}
-
-function fileAppender(
-  dependencies: DynamicLoopDependencies,
-): (filePath: string, text: string) => MaybePromise<unknown> {
-  return dependencies.appendFile ?? defaultAppendFile;
 }
 
 export function displayPath(root: string, filePath: string): string {
@@ -276,24 +217,6 @@ export function displayPath(root: string, filePath: string): string {
   return relativePath.startsWith("..") || isAbsolute(relativePath)
     ? filePath
     : relativePath;
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ENOENT"
-  );
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "EEXIST"
-  );
 }
 
 export function chunkOutRootDisplay(

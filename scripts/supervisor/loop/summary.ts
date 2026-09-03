@@ -1,3 +1,4 @@
+import { isRecord } from "../../../packages/node-utils/src/index.ts";
 import {
   INSPECTION_REQUIRED_EXIT_CODE,
   SUMMARY_TOKEN_PATTERN,
@@ -208,8 +209,4 @@ function requiredStringArray(value: unknown, key: string): string[] {
     throw new Error(`summary.json ${key} missing or invalid`);
   }
   return strings;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
