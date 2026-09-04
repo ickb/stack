@@ -31,7 +31,7 @@ Apps:
 - `apps/bot`: Node CLI adapter for the private bot runtime.
 - `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
 - `apps/sampler`: Mainnet sampling utility that writes historical CKB-per-iCKB CSV output.
-- `apps/validation`: Node CLI adapters for deterministic live testnet validation flows, the bounded supervisor and the tester.
+- `apps/validation`: Node CLI adapter for the testnet tester actor.
 
 Apps are private workspace runtimes and run from source under Node 22.19+ or Vite. The supported reusable API surface lives in the packages below. Stack package `build` scripts emit `dist/` for publishing reusable packages only; local development, tests, live supervisor runs, and bot deployments use TypeScript source directly.
 
@@ -45,7 +45,7 @@ Packages:
 - `packages/sdk`: Stack-level SDK that composes core, DAO, and order packages into account state, conversion planning, completion, sending, and confirmation helpers.
 - `packages/testkit`: Private test helpers and fixtures for workspace tests.
 - `packages/utils`: Shared low-level utilities such as complete-scan enforcement, binary search, collection helpers, and bounded subset selection.
-- `packages/validation`: Private live validation core for tester and supervisor flows.
+- `packages/validation`: Private tester core: scenarios, planning, and the fresh-order guard.
 
 ## Dependencies
 
@@ -53,35 +53,23 @@ CCC packages are normal package dependencies resolved through `pnpm-workspace.ya
 
 `pnpm check` is the validation gate. It always runs with `CI=true`.
 
-## Live Testnet Bot Watch
+## Live Testnet Validation
 
-Run the bot as a long-lived process with an unbounded config. Its stdout is the NDJSON event stream: hand it to journald through a systemd unit, or redirect it to a file:
+Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the NDJSON events on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
 
 ```bash
 pnpm live:config-from-env -- --force
+pnpm -s live:preflight -- --config config/bot-testnet.json
 mkdir -p log/bot
-BOT_CONFIG_FILE=config/bot-live-testnet.json node apps/bot/src/index.ts > log/bot/events.ndjson
+BOT_CONFIG_FILE=config/bot-testnet.json node apps/bot/src/index.ts >> log/bot/events.ndjson
+TESTER_CONFIG_FILE=config/tester-testnet.json TESTER_SCENARIO=auto node apps/validation/src/tester.ts
 ```
 
-The watch is operator-driven. Between checks, read the event stream, place a tester order with `pnpm live:supervisor --scenario tester-only` when the bot should be exercised, and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. There is no launcher, launch record, or automated cadence.
+The config helper needs `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL`; it writes ignored `config/bot-testnet.json`, `config/tester-testnet.json`, and the unbounded `config/bot-live-testnet.json`. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
 
-Generated live configs default to `sleepIntervalSeconds: 60`; override with `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` only when the operator deliberately wants a different cadence. Bounded supervisor/tester configs default to `maxRetryableAttempts: 10`; the unbounded live config omits `maxRetryableAttempts` unless `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is set intentionally.
-
-## Live Testnet Supervisor
-
-Provide ignored bounded configs, then run the supervisor from the repo root:
-
-```bash
-pnpm live:supervisor
-```
-
-By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `log/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only.
-
-Rebuild disposable live configs from required `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL` values with `pnpm live:config-from-env -- --force` when they are missing or stale. The RPC URL is exclusive (no CCC public fallbacks), and omission or an empty value fails. The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json` for supervisor/tester runs, plus unbounded `config/bot-live-testnet.json` for the long-running bot. When `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` is unset, all generated configs use `sleepIntervalSeconds: 60`. When `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is unset, bounded configs use `10` and the live config remains unbounded. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd the bot's stream is the unit's journal; see `apps/bot/README.md`.
 
 `pnpm live:preflight -- --config config/bot-testnet.json` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`. For machine-readable JSON without package-manager output, run `pnpm -s live:preflight -- --config config/bot-testnet.json`.
-
-Repeatable `--target-outcome` requests are echoed in `summary.json` as `requestedOutcomes` next to the observed `aggregateCounts`; the supervisor does not enforce them and writes no incident when they go unobserved. `tester_order_created` covers non-dust raw order stimulus; dust-only committed tester orders are reported as `tester_dust_order_created` and stop for tx inspection. Match-only bot commits whose emitted match value does not exceed the tx fee stop as terminal `economic_loss`. The supervisor treats public testnet iCKB deposits, receipts, and orders as observable stress surface, but only bot/tester-owned state from the supplied configs is treated as spend authority.
 
 ## Licensing
 

@@ -27,13 +27,7 @@ export async function freshMatchableOrderSkip(
   runtime: Runtime,
   orders: OrderGroup[],
   tip: ccc.ClientBlockHeader,
-  {
-    feeRate,
-    ownedTxHash,
-  }: {
-    feeRate: ccc.Num;
-    ownedTxHash?: ccc.Hex;
-  },
+  { feeRate }: { feeRate: ccc.Num },
 ): Promise<FreshMatchableOrderSkip | undefined> {
   const tx2BlockNumber = new Map<string, bigint>();
   let firstFreshMint: FreshMatchableOrderSkip | undefined;
@@ -68,9 +62,6 @@ export async function freshMatchableOrderSkip(
         maxElapsedBlocks: MAX_ELAPSED_BLOCKS,
       };
       firstFreshMint ??= freshMint;
-      if (txHash === ownedTxHash) {
-        return freshMint;
-      }
     }
   }
   return firstFreshMint;

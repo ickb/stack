@@ -1,4 +1,3 @@
-import type { ccc } from "@ckb-ccc/core";
 import {
   logExecution,
   randomSleepIntervalMs,
@@ -18,7 +17,6 @@ import {
 /** Runs tester attempts until stopped by config, terminal error, or process exit. */
 export async function runTesterLoop({
   runtime,
-  ownedTxHash,
   testerScenario,
   feePolicy,
   sleepIntervalMs,
@@ -26,7 +24,6 @@ export async function runTesterLoop({
   maxRetryableAttempts,
 }: {
   runtime: Runtime;
-  ownedTxHash?: ccc.Hex;
   testerScenario: TesterScenarioSelection;
   feePolicy: TesterFeePolicy;
   sleepIntervalMs: number;
@@ -51,7 +48,6 @@ export async function runTesterLoop({
     try {
       const result = await runTesterAttempt({
         runtime,
-        ownedTxHash,
         testerScenario,
         feePolicy,
         executionLog,

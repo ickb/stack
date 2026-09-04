@@ -37,14 +37,12 @@ export type TesterAttemptResult = "completed" | "retry" | "stop";
  */
 export async function runTesterAttempt({
   runtime,
-  ownedTxHash,
   testerScenario,
   feePolicy,
   executionLog,
   startTime,
 }: {
   runtime: Runtime;
-  ownedTxHash?: ccc.Hex;
   testerScenario: TesterScenarioSelection;
   feePolicy: TesterFeePolicy;
   executionLog: ExecutionLog;
@@ -64,7 +62,7 @@ export async function runTesterAttempt({
     runtime,
     state.userOrders,
     state.system.tip,
-    { feeRate: state.system.feeRate, ownedTxHash },
+    { feeRate: state.system.feeRate },
   );
   if (skip !== undefined) {
     executionLogWriter.record({ skip });

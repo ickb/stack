@@ -9,11 +9,6 @@
       "count": 2
     }
   },
-  "apps/validation/src/supervisor.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "apps/validation/src/tester.ts": {
     "no-restricted-syntax": {
       "count": 5
@@ -152,111 +147,6 @@
   "packages/sdk/test/transaction/base/build_base_transaction_withdrawal_before_input_activity.ts": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "packages/validation/src/supervisor/artifacts/supervisorArtifactCommandShape.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/supervisor/artifacts/supervisorArtifacts.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "packages/validation/src/supervisor/classification/supervisorBotFailureClassification.ts": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "packages/validation/src/supervisor/classification/supervisorBotOutcomes.ts": {
-    "no-restricted-syntax": {
-      "count": 22
-    }
-  },
-  "packages/validation/src/supervisor/classification/supervisorBotResult.ts": {
-    "no-restricted-syntax": {
-      "count": 12
-    }
-  },
-  "packages/validation/src/supervisor/classification/supervisorClassifyUtils.ts": {
-    "no-restricted-syntax": {
-      "count": 10
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightBudget.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightFinish.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightRetry.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightRun.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightState.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "packages/validation/src/supervisor/preflight/supervisorPreflightStep.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/runtime/actor/supervisorActorCommand.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/supervisor/runtime/actor/supervisorActorRun.ts": {
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
-  "packages/validation/src/supervisor/runtime/actor/supervisorCycleRun.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/supervisor/runtime/shared/supervisorEvidence.ts": {
-    "no-restricted-syntax": {
-      "count": 11
-    }
-  },
-  "packages/validation/src/supervisor/runtime/shared/supervisorPublicState.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "packages/validation/src/supervisor/runtime/shared/supervisorStops.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/runtime/shared/supervisorTypes.ts": {
-    "no-restricted-syntax": {
-      "count": 8
-    }
-  },
-  "packages/validation/src/supervisor/tester/supervisorTesterClassification.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "packages/validation/src/supervisor/tester/supervisorTesterEvidence.ts": {
-    "no-restricted-syntax": {
-      "count": 11
     }
   },
   "packages/validation/src/tester/evidence/testerAttemptEvidence.ts": {

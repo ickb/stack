@@ -1,4 +1,3 @@
-export { main } from "./supervisor/args/supervisorCli.ts";
 export {
   readTesterFeePolicy,
   readTesterRuntimeConfig,
@@ -6,4 +5,3 @@ export {
 } from "./tester/planning/testerConfig.ts";
 export type { Runtime } from "./tester/runtime/runtime.ts";
 export { runTesterLoop } from "./tester/runtime/testerLoop.ts";
-export { TESTER_OWNED_TX_HASH_FLAG } from "./testerContract.ts";

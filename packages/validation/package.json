@@ -2,7 +2,7 @@
   "name": "@ickb/validation",
   "version": "1001.0.0",
   "private": true,
-  "description": "Private live validation core for iCKB tester and supervisor flows",
+  "description": "Private live validation core for the iCKB tester",
   "sideEffects": false,
   "type": "module",
   "engines": {

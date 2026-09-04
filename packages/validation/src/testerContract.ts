@@ -1,4 +1,4 @@
-/** Shared validation contracts used by tester and supervisor. */
+/** Tester scenario and fee contracts. */
 
 export const RANDOM_ORDER_SCENARIO = "random-order";
 export const SDK_CONVERSION_SCENARIO = "sdk-conversion";
@@ -100,14 +100,6 @@ export type TesterDirection = "ckb-to-ickb" | "ickb-to-ckb";
 
 export const CKB_TO_ICKB: TesterDirection = "ckb-to-ickb";
 export const ICKB_TO_CKB: TesterDirection = "ickb-to-ckb";
-
-export const TESTER_FEE_FIELD = "fee";
-export const TESTER_SCENARIO_FIELD = "testerScenario";
-export const GIVE_CKB_FIELD = "giveCkb";
-export const TAKE_ICKB_FIELD = "takeIckb";
-export const GIVE_ICKB_FIELD = "giveIckb";
-export const TAKE_CKB_FIELD = "takeCkb";
-export const TESTER_OWNED_TX_HASH_FLAG = "--owned-tx-hash";
 
 export function isTesterScenario(value: string): value is TesterScenario {
   return TESTER_SCENARIO_VALUES.has(value);

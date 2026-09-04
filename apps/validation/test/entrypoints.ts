@@ -1,14 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig, IckbSdk } from "@ickb/sdk";
-import { TESTER_OWNED_TX_HASH_FLAG } from "@ickb/validation";
 import { describe, expect, it, vi } from "vitest";
 import {
-  runSupervisorCli,
-  runSupervisorEntrypoint,
-  actorEntrypoints as supervisorActorEntrypoints,
-} from "../src/supervisor.ts";
-import {
-  parseOwnedTxHash,
   runTesterCli,
   runTesterEntrypoint,
   type TesterCliDependencies,
@@ -16,58 +9,9 @@ import {
 
 const privateKey = `0x${"11".repeat(32)}` as const;
 const testerScenario = "sdk-conversion";
-const ownedTxHash = `0x${"AB".repeat(32)}` as const;
 type TesterRuntimeConfig = Awaited<
   ReturnType<TesterCliDependencies["readTesterRuntimeConfig"]>
 >;
-
-describe("validation supervisor CLI entrypoints", () => {
-  it("runs the supervisor with source actor paths", async () => {
-    const runMain = vi.fn(async (): Promise<number> => {
-      await Promise.resolve();
-      return 7;
-    });
-
-    await expect(runSupervisorCli(["--help"], runMain)).resolves.toBe(7);
-
-    expect(supervisorActorEntrypoints).toEqual({
-      bot: "apps/bot/src/index.ts",
-      tester: "apps/validation/src/tester.ts",
-    });
-    expect(runMain).toHaveBeenCalledWith(["--help"], {
-      actorEntrypoints: supervisorActorEntrypoints,
-    });
-  });
-
-  it("sets process exit code for the supervisor entrypoint", async () => {
-    const originalArgv = process.argv;
-    const originalExitCode = process.exitCode;
-    const run = vi.fn(async (): Promise<number> => {
-      await Promise.resolve();
-      return 7;
-    });
-    try {
-      process.argv = [
-        originalArgv[0] ?? "node",
-        new URL("../src/supervisor.ts", import.meta.url).pathname,
-        "--help",
-      ];
-      process.exitCode = undefined;
-
-      await runSupervisorEntrypoint(
-        process.argv,
-        new URL("../src/supervisor.ts", import.meta.url).href,
-        run,
-      );
-
-      expect(run).toHaveBeenCalledWith(["--help"]);
-      expect(process.exitCode).toBe(7);
-    } finally {
-      process.argv = originalArgv;
-      process.exitCode = originalExitCode;
-    }
-  });
-});
 
 describe("validation tester CLI entrypoints", () => {
   it("skips tester CLI body when the module is imported", async () => {
@@ -93,13 +37,9 @@ describe("validation tester CLI entrypoints", () => {
     try {
       process.exitCode = undefined;
 
-      await runTesterEntrypoint(
-        ["node", entrypoint.pathname, TESTER_OWNED_TX_HASH_FLAG, ownedTxHash],
-        entrypoint.href,
-        run,
-      );
+      await runTesterEntrypoint(["node", entrypoint.pathname], entrypoint.href, run);
 
-      expect(run).toHaveBeenCalledWith([TESTER_OWNED_TX_HASH_FLAG, ownedTxHash]);
+      expect(run).toHaveBeenCalledWith([]);
       expect(process.exitCode).toBe(0);
     } finally {
       process.exitCode = originalExitCode;
@@ -180,7 +120,6 @@ describe("validation tester CLI runtime", () => {
 
     expect(runTesterLoop).toHaveBeenCalledTimes(1);
     expect(createPublicClient).toHaveBeenCalledWith("testnet", "http://127.0.0.1:8114");
-    expect(runTesterLoop.mock.calls[0]?.[0].ownedTxHash).toBeUndefined();
     const testerLoopCall = runTesterLoop.mock.calls[0]?.[0];
     if (testerLoopCall === undefined) {
       throw new Error("expected tester loop call");
@@ -201,62 +140,11 @@ describe("validation tester CLI runtime", () => {
   });
 });
 
-describe("validation tester CLI provenance", () => {
-  it("accepts one supervisor correlation transaction hash", async () => {
-    const client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
-    const runTesterLoop = vi.fn<TesterCliDependencies["runTesterLoop"]>(async () => {
-      await Promise.resolve();
-    });
-
-    await runTesterCli(
-      [TESTER_OWNED_TX_HASH_FLAG, ownedTxHash],
-      { TESTER_SCENARIO: testerScenario },
-      {
-        createPublicClient: () => client,
-        getConfig: () => getConfig("testnet"),
-        readTesterFeePolicy: () => ({ fee: 1n, feeBase: 1000n }),
-        readTesterRuntimeConfig: async () => {
-          await Promise.resolve();
-          return testerRuntimeConfig();
-        },
-        readTesterScenario: () => testerScenario,
-        runTesterLoop,
-        signerAccountLocks: async () => {
-          await Promise.resolve();
-          return [];
-        },
-        verifyChainPreflight: async () => {
-          await Promise.resolve();
-          return chainPreflightEvidence();
-        },
-      },
+describe("validation tester CLI arguments", () => {
+  it("rejects any argument before runtime setup", async () => {
+    await expect(runTesterCli(["--unknown"], {})).rejects.toThrow(
+      "Unknown argument: --unknown",
     );
-
-    expect(runTesterLoop).toHaveBeenCalledTimes(1);
-    expect(runTesterLoop.mock.calls[0]?.[0].ownedTxHash).toBe(ownedTxHash.toLowerCase());
-    expect(parseOwnedTxHash([TESTER_OWNED_TX_HASH_FLAG, ownedTxHash])).toBe(
-      ownedTxHash.toLowerCase(),
-    );
-  });
-
-  it.each([
-    [["--unknown"], "Unknown argument: --unknown"],
-    [[TESTER_OWNED_TX_HASH_FLAG], `Missing value for ${TESTER_OWNED_TX_HASH_FLAG}`],
-    [
-      [TESTER_OWNED_TX_HASH_FLAG, TESTER_OWNED_TX_HASH_FLAG],
-      `Missing value for ${TESTER_OWNED_TX_HASH_FLAG}`,
-    ],
-    [
-      [TESTER_OWNED_TX_HASH_FLAG, "0x12"],
-      `Invalid ${TESTER_OWNED_TX_HASH_FLAG}: expected a 0x-prefixed 64-digit transaction hash`,
-    ],
-    [
-      [TESTER_OWNED_TX_HASH_FLAG, ownedTxHash, TESTER_OWNED_TX_HASH_FLAG, ownedTxHash],
-      `Duplicate argument: ${TESTER_OWNED_TX_HASH_FLAG}`,
-    ],
-    [[TESTER_OWNED_TX_HASH_FLAG, ownedTxHash, "extra"], "Unknown argument: extra"],
-  ])("rejects unowned tester arguments before runtime setup", (argv, message) => {
-    expect(() => parseOwnedTxHash(argv)).toThrow(message);
   });
 });
 

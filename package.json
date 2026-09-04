@@ -30,7 +30,6 @@
     "live:check:source": "tsgo --noEmit -p tsconfig.json",
     "live:config-from-env": "node scripts/live/config-from-env.ts",
     "live:preflight": "node scripts/live/preflight.ts",
-    "live:supervisor": "node apps/validation/src/supervisor.ts",
     "lint:probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts && node scripts/tooling/probes/treeshake/run.ts"
   },
   "engines": {

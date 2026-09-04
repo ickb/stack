@@ -101,7 +101,7 @@ void test("preflight retryability keeps deterministic failures non-retryable", (
   );
 });
 
-void test("preflight preserves public wrong-chain evidence for supervisor classification", async () => {
+void test("preflight preserves public wrong-chain evidence", async () => {
   const privateKey = randomPrivateKey();
   await withConfigDir(
     baseConfig(privateKey),

@@ -10,7 +10,6 @@ import {
   readTesterRuntimeConfig,
   readTesterScenario,
   runTesterLoop,
-  TESTER_OWNED_TX_HASH_FLAG,
   type Runtime,
 } from "@ickb/validation";
 import { pathToFileURL } from "node:url";
@@ -41,8 +40,6 @@ const defaultDependencies: TesterCliDependencies = {
   verifyChainPreflight,
 };
 
-const TX_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/u;
-
 export async function runTesterEntrypoint(
   argv: string[] = process.argv,
   moduleUrl: string = import.meta.url,
@@ -61,7 +58,9 @@ export async function runTesterCli(
   env: NodeJS.ProcessEnv = process.env,
   dependencies: Partial<TesterCliDependencies> = {},
 ): Promise<void> {
-  const ownedTxHash = parseOwnedTxHash(argv);
+  if (argv.length > 0) {
+    throw new Error(`Unknown argument: ${String(argv[0])}`);
+  }
   const resolved = { ...defaultDependencies, ...dependencies };
   const {
     chain,
@@ -93,39 +92,12 @@ export async function runTesterCli(
 
   await resolved.runTesterLoop({
     runtime,
-    ownedTxHash,
     testerScenario,
     feePolicy,
     sleepIntervalMs,
     maxIterations,
     maxRetryableAttempts,
   });
-}
-
-export function parseOwnedTxHash(argv: string[]): ccc.Hex | undefined {
-  if (argv.length === 0) {
-    return undefined;
-  }
-  if (argv[0] !== TESTER_OWNED_TX_HASH_FLAG) {
-    throw new Error(`Unknown argument: ${String(argv[0])}`);
-  }
-  const value = argv[1];
-  if (value === undefined || value.startsWith("--")) {
-    throw new Error(`Missing value for ${TESTER_OWNED_TX_HASH_FLAG}`);
-  }
-  if (!TX_HASH_PATTERN.test(value)) {
-    throw new Error(
-      `Invalid ${TESTER_OWNED_TX_HASH_FLAG}: expected a 0x-prefixed 64-digit transaction hash`,
-    );
-  }
-  if (argv.length !== 2) {
-    throw new Error(
-      argv[2] === TESTER_OWNED_TX_HASH_FLAG
-        ? `Duplicate argument: ${TESTER_OWNED_TX_HASH_FLAG}`
-        : `Unknown argument: ${String(argv[2])}`,
-    );
-  }
-  return ccc.hexFrom(value.toLowerCase());
 }
 
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- CLI module runs only when imported as the process entrypoint.

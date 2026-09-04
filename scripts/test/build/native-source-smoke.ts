@@ -87,7 +87,6 @@ void test("Node app entrypoints import directly from TypeScript source", async (
   for (const modulePath of [
     "apps/bot/src/index.ts",
     "apps/sampler/src/index.ts",
-    "apps/validation/src/supervisor.ts",
     "apps/validation/src/tester.ts",
   ]) {
     await importFromRoot(modulePath);
@@ -96,7 +95,6 @@ void test("Node app entrypoints import directly from TypeScript source", async (
 
 void test("local CLIs execute from source with native Node", () => {
   const cases: Array<[string, string]> = [
-    ["apps/validation/src/supervisor.ts", "Usage: supervisor [options]"],
     ["scripts/live/preflight.ts", "Usage: node scripts/live/preflight.ts"],
   ];
 
