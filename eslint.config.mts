@@ -139,6 +139,132 @@ const guardedVitestRuleErrors = {
   "vitest/warn-todo": "error",
 } as const;
 
+const restrictedSyntax = [
+  {
+    selector: ":function > RestElement > ArrayPattern",
+    message:
+      "Do not hide a long parameter list behind a rest tuple. Pass one named options object.",
+  },
+  {
+    selector: "CallExpression[callee.name='Error']",
+    message: "Use `new Error(...)` instead of `Error(...)`.",
+  },
+  {
+    selector:
+      "TSAsExpression:not([typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const']), TSTypeAssertion",
+    message:
+      "Avoid type assertions. If this cast is justified, add a local ESLint disable with the reason.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.property.name='todo']",
+    message: "Do not add placeholder tests. Delete the file or add a real assertion.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name=/^(?:assertions|hasAssertions)$/u]",
+    message:
+      "Do not use assertion-count placeholders. Add a concrete behavior assertion or an explicit assertion helper instead.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='anything'][arguments.length=0]",
+    message: "Do not use expect.anything(). Assert a concrete value or behavior instead.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='any'][arguments.0.type='Identifier'][arguments.0.name=/^(?:Function|Object)$/u]",
+    message:
+      "Do not use expect.any(Object) or expect.any(Function). Assert a concrete value, shape, or behavior instead.",
+  },
+  {
+    selector:
+      "MethodDefinition[accessibility=private] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/]), MethodDefinition[key.type='PrivateIdentifier'] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/])",
+    message:
+      "Private protocol helpers should receive normalized CCC values, not broad CCC *Like inputs.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.property.name='toMatchObject'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0]",
+    message:
+      "Do not use toMatchObject({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ObjectExpression'][arguments.0.expression.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ObjectExpression'][arguments.0.expression.expression.properties.length=0]",
+    message:
+      "Do not use expect.objectContaining({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type='ArrayExpression'][arguments.0.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ArrayExpression'][arguments.0.expression.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ArrayExpression'][arguments.0.expression.expression.elements.length=0]",
+    message:
+      "Do not use expect.arrayContaining([]). Assert exact emptiness or concrete elements instead.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='Literal'][arguments.0.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='Literal'][arguments.0.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='Literal'][arguments.0.expression.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='TemplateLiteral'][arguments.0.expressions.length=0][arguments.0.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='TemplateLiteral'][arguments.0.expression.expressions.length=0][arguments.0.expression.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='TemplateLiteral'][arguments.0.expression.expression.expressions.length=0][arguments.0.expression.expression.quasis.0.value.raw='']",
+    message:
+      'Do not use expect.stringContaining(""). Assert exact emptiness or concrete text instead.',
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='MemberExpression'][callee.object.property.name='not'][callee.object.object.type='CallExpression'][callee.object.object.callee.name='expect'][callee.object.object.arguments.0.type='CallExpression'][callee.object.object.arguments.0.callee.type='MemberExpression'][callee.object.object.arguments.0.callee.property.name='filter'][arguments.0.value=0]",
+    message:
+      "Avoid filter(...).not.toHaveLength(0). Assert the matched item or explicit filtered collection so failures show the missing behavior.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.property.name='filter'][arguments.0.type='MemberExpression'][arguments.0.property.name='length']",
+    message:
+      "Avoid filter(...).toHaveLength(items.length). Assert the mapped values or explicit filtered collection so failures show the mismatched behavior.",
+  },
+  {
+    selector:
+      "CallExpression:matches([arguments.0.value=true], [arguments.0.value=false])[callee.type='MemberExpression'][callee.computed=false][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.computed=false][callee.object.arguments.0.callee.property.name=/^(?:every|some)$/u]",
+    message:
+      "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
+  },
+  {
+    selector:
+      "CallExpression:matches([arguments.1.value=true], [arguments.1.value=false])[callee.type='MemberExpression'][callee.object.name='assert']:matches([callee.computed=false][callee.property.name='equal'], [callee.computed=true][callee.property.value='equal'])[arguments.0.type='CallExpression'][arguments.0.callee.type='MemberExpression'][arguments.0.callee.computed=false][arguments.0.callee.property.name=/^(?:every|some)$/u]",
+    message:
+      "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(?:fails|retry)$/u]",
+    message: "Do not commit retried or expected-failing tests.",
+  },
+];
+
+// Production-only bans: each pattern below is a shape that exists to satisfy a lint metric or a test double, not a consumer.
+const productionRestrictedSyntax = [
+  {
+    selector:
+      "TSTypeReference[typeName.name='Record'][typeArguments.params.0.type='TSStringKeyword'][typeArguments.params.1.type='TSUnknownKeyword']",
+    message:
+      "Parse untyped input into a declared type at the boundary instead of passing Record<string, unknown> through production code.",
+  },
+  {
+    selector:
+      "TSInterfaceDeclaration[id.name=/Dependenc(?:y|ies)$/u], TSTypeAliasDeclaration[id.name=/Dependenc(?:y|ies)$/u]",
+    message:
+      "An injectable dependency bag exists only to be mocked. Call the real API and test against real resources.",
+  },
+  {
+    selector: "TSPropertySignature[optional=true] > TSTypeAnnotation > TSTypeQuery",
+    message:
+      "An optional `typeof realFunction` slot is a mock seam. Call the real function directly.",
+  },
+  {
+    selector:
+      "AssignmentPattern[left.typeAnnotation.typeAnnotation.type='TSFunctionType'], AssignmentPattern[right.type='MemberExpression'][right.object.name='process'], AssignmentPattern[right.type='CallExpression'][right.callee.object.object.name='process']",
+    message:
+      "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
+  },
+];
+
 const noDependencyLoading: Rule.RuleModule = {
   meta: {
     type: "problem",
@@ -237,102 +363,7 @@ export default defineConfig(
         },
       ],
       "prefer-template": "error",
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "CallExpression[callee.name='Error']",
-          message: "Use `new Error(...)` instead of `Error(...)`.",
-        },
-        {
-          selector:
-            "TSAsExpression:not([typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const']), TSTypeAssertion",
-          message:
-            "Avoid type assertions. If this cast is justified, add a local ESLint disable with the reason.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='todo']",
-          message:
-            "Do not add placeholder tests. Delete the file or add a real assertion.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name=/^(?:assertions|hasAssertions)$/u]",
-          message:
-            "Do not use assertion-count placeholders. Add a concrete behavior assertion or an explicit assertion helper instead.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='anything'][arguments.length=0]",
-          message:
-            "Do not use expect.anything(). Assert a concrete value or behavior instead.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='any'][arguments.0.type='Identifier'][arguments.0.name=/^(?:Function|Object)$/u]",
-          message:
-            "Do not use expect.any(Object) or expect.any(Function). Assert a concrete value, shape, or behavior instead.",
-        },
-        {
-          selector:
-            "MethodDefinition[accessibility=private] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/]), MethodDefinition[key.type='PrivateIdentifier'] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/])",
-          message:
-            "Private protocol helpers should receive normalized CCC values, not broad CCC *Like inputs.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='toMatchObject'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0]",
-          message:
-            "Do not use toMatchObject({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ObjectExpression'][arguments.0.expression.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ObjectExpression'][arguments.0.expression.expression.properties.length=0]",
-          message:
-            "Do not use expect.objectContaining({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type='ArrayExpression'][arguments.0.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ArrayExpression'][arguments.0.expression.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ArrayExpression'][arguments.0.expression.expression.elements.length=0]",
-          message:
-            "Do not use expect.arrayContaining([]). Assert exact emptiness or concrete elements instead.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='Literal'][arguments.0.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='Literal'][arguments.0.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='Literal'][arguments.0.expression.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='TemplateLiteral'][arguments.0.expressions.length=0][arguments.0.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='TemplateLiteral'][arguments.0.expression.expressions.length=0][arguments.0.expression.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='TemplateLiteral'][arguments.0.expression.expression.expressions.length=0][arguments.0.expression.expression.quasis.0.value.raw='']",
-          message:
-            'Do not use expect.stringContaining(""). Assert exact emptiness or concrete text instead.',
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='MemberExpression'][callee.object.property.name='not'][callee.object.object.type='CallExpression'][callee.object.object.callee.name='expect'][callee.object.object.arguments.0.type='CallExpression'][callee.object.object.arguments.0.callee.type='MemberExpression'][callee.object.object.arguments.0.callee.property.name='filter'][arguments.0.value=0]",
-          message:
-            "Avoid filter(...).not.toHaveLength(0). Assert the matched item or explicit filtered collection so failures show the missing behavior.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.property.name='filter'][arguments.0.type='MemberExpression'][arguments.0.property.name='length']",
-          message:
-            "Avoid filter(...).toHaveLength(items.length). Assert the mapped values or explicit filtered collection so failures show the mismatched behavior.",
-        },
-        {
-          selector:
-            "CallExpression:matches([arguments.0.value=true], [arguments.0.value=false])[callee.type='MemberExpression'][callee.computed=false][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.computed=false][callee.object.arguments.0.callee.property.name=/^(?:every|some)$/u]",
-          message:
-            "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
-        },
-        {
-          selector:
-            "CallExpression:matches([arguments.1.value=true], [arguments.1.value=false])[callee.type='MemberExpression'][callee.object.name='assert']:matches([callee.computed=false][callee.property.name='equal'], [callee.computed=true][callee.property.value='equal'])[arguments.0.type='CallExpression'][arguments.0.callee.type='MemberExpression'][arguments.0.callee.computed=false][arguments.0.callee.property.name=/^(?:every|some)$/u]",
-          message:
-            "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(?:fails|retry)$/u]",
-          message: "Do not commit retried or expected-failing tests.",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...restrictedSyntax],
       "security/detect-object-injection": "off",
       "sonarjs/comment-regex": [
         "error",
@@ -450,6 +481,17 @@ export default defineConfig(
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.ts"],
+    ignores: ["packages/testkit/src/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...restrictedSyntax,
+        ...productionRestrictedSyntax,
+      ],
     },
   },
   {

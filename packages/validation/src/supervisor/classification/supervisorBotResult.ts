@@ -18,12 +18,12 @@ import type {
   PublicStateAssumption,
   RetryableFailureSummary,
 } from "../runtime/shared/supervisorTypes.ts";
+import { classifyRelevantBotTransactionFailure } from "./supervisorBotFailureClassification.ts";
 import {
   botBalanceAuditEvents,
   classifyBotCommit,
   classifyBotSkip,
-} from "./supervisorBotClassificationB.ts";
-import { classifyRelevantBotTransactionFailure } from "./supervisorBotFailureClassification.ts";
+} from "./supervisorBotOutcomes.ts";
 import {
   actionCounts,
   extractTxHashes,

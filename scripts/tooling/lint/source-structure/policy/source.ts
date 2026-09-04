@@ -78,6 +78,14 @@ function checkSourcePathPolicy(file: string, output: Failure[]): void {
   if (isOrdinalTestShardName(name)) {
     output.push({ rule: "ordinalTestShardName", file });
   }
+  if (isProductionSource(normalized) && isSizeSplitSourceName(name)) {
+    output.push({ rule: "sizeSplitSourceName", file });
+  }
+}
+
+// A trailing capital letter or Part suffix marks a file split by line count, not by concern.
+function isSizeSplitSourceName(name: string): boolean {
+  return /(?:[a-z][A-D]|[-_]?(?:[Pp]art|[Ss]hard|[Cc]hunk)\d*)\.tsx?$/u.test(name);
 }
 
 function isOrdinalTestShardName(name: string): boolean {

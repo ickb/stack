@@ -44,6 +44,30 @@ void test("accepts findCellsPaged only under the cursor-owning page collector", 
   );
 });
 
+void test("rejects production files split by letter or part suffix", () => {
+  for (const file of [
+    "packages/example/src/classificationA.ts",
+    "packages/example/src/classificationPart2.ts",
+    "apps/example/src/run_part.tsx",
+  ]) {
+    assert.deepEqual(ruleNamesFor(file), ["sizeSplitSourceName"]);
+  }
+  for (const file of [
+    "packages/example/src/base64.ts",
+    "packages/example/src/classification.ts",
+    "packages/example/test/classificationA.ts",
+    "packages/testkit/src/fakeA.ts",
+  ]) {
+    assert.deepEqual(ruleNamesFor(file), []);
+  }
+});
+
+function ruleNamesFor(file: string): string[] {
+  const failures: Failure[] = [];
+  checkSourcePolicyRules(new Map([[file, "export const value = 1;"]]), failures);
+  return failures.map((failure) => failure.rule);
+}
+
 function ruleNames(source: string): string[] {
   const failures: Failure[] = [];
   checkSourcePolicyRules(new Map([[sourceFile, source]]), failures);

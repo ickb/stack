@@ -39,6 +39,8 @@ const sourcePolicyFailureFormatters: Record<string, FailureFormatter> = {
     `${failure.file}:${requiredNumber(failure.line)} calls findCellsPaged without page-size and after-cursor named final arguments. Pass both values supplied by collectPagedScan so request size and cursor ownership stay explicit.`,
   publicApiDocumentation: (failure) =>
     `${failure.file}:${requiredNumber(failure.line)} public API ${requiredString(failure.apiName)} has no TSDoc. Public package APIs must document their contract at the declaration that produces the emitted .d.ts surface.`,
+  sizeSplitSourceName: (failure) =>
+    `${failure.file}: file name ends in a letter or part suffix, so it was split by size rather than by concern. Split by responsibility and name each file after it, or keep one file.`,
   scriptIdentityComparison: (failure) =>
     `${failure.file}:${requiredNumber(failure.line)} compares script.${requiredString(failure.field)} directly. Compare full scripts with .eq(...) or serialized full script identity; codeHash, hashType, and args are one trust boundary.`,
 };

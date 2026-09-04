@@ -12,8 +12,8 @@ import type {
   TesterEvidenceExpectation,
 } from "../runtime/shared/supervisorTypes.ts";
 import { classifyTesterResult } from "../tester/supervisorTesterClassification.ts";
-import { classifyBotResult } from "./supervisorBotClassificationA.ts";
-import { botBalanceAuditEvents } from "./supervisorBotClassificationB.ts";
+import { botBalanceAuditEvents } from "./supervisorBotOutcomes.ts";
+import { classifyBotResult } from "./supervisorBotResult.ts";
 import { extractTxHashes, isBotRecord } from "./supervisorClassifyUtils.ts";
 
 /**

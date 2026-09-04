@@ -1,0 +1,362 @@
+{
+  "apps/bot/src/index.ts": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "apps/sampler/src/index.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "apps/validation/src/liveBotStimulusTest.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "apps/validation/src/supervisor.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "apps/validation/src/tester.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/bot/src/bot/failure.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/bot/src/observability/artifacts.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/bot/src/observability/error.ts": {
+    "no-restricted-syntax": {
+      "count": 15
+    }
+  },
+  "packages/bot/src/observability/events.ts": {
+    "no-restricted-syntax": {
+      "count": 9
+    }
+  },
+  "packages/bot/src/observability/logValue.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/bot/src/observability/rbf.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/core/src/logic.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/core/src/owned_owner.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/core/src/udt.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/dao/src/dao.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/node-utils/src/errors.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/node-utils/src/logging.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/node-utils/src/path.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/node-utils/src/process.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/node-utils/src/runtime_config.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "packages/order/src/matching/order_matcher.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/order/src/model/cells.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/order/test/matching/support/order_match_helpers.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/src/estimate/sdk_estimate_core.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/src/sdk.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/src/withdrawal/withdrawal_best_fit.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/src/withdrawal/withdrawal_best_fit_support.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/conversion/planning/build_conversion_ready_withdrawal_nonready_anchors.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/conversion/planning/build_conversion_ready_withdrawal_required_anchors.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/conversion/withdrawal_quotes/build_conversion_ickb_to_ckb_dust_remainder_orders.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/conversion/withdrawal_quotes/support/sdk_cell_support.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/transaction/base/build_base_transaction_withdrawal_before_input_activity.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/supervisor/artifacts/supervisorArtifactCommandShape.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/supervisor/artifacts/supervisorArtifacts.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/validation/src/supervisor/classification/supervisorBotFailureClassification.ts": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "packages/validation/src/supervisor/classification/supervisorBotOutcomes.ts": {
+    "no-restricted-syntax": {
+      "count": 22
+    }
+  },
+  "packages/validation/src/supervisor/classification/supervisorBotResult.ts": {
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "packages/validation/src/supervisor/classification/supervisorClassifyUtils.ts": {
+    "no-restricted-syntax": {
+      "count": 10
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightBudget.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightFinish.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightRetry.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightRun.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightState.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "packages/validation/src/supervisor/preflight/supervisorPreflightStep.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/runtime/actor/supervisorActorCommand.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/supervisor/runtime/actor/supervisorActorRun.ts": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "packages/validation/src/supervisor/runtime/actor/supervisorCycleRun.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/supervisor/runtime/shared/supervisorEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "packages/validation/src/supervisor/runtime/shared/supervisorPublicState.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/validation/src/supervisor/runtime/shared/supervisorStops.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/runtime/shared/supervisorTypes.ts": {
+    "no-restricted-syntax": {
+      "count": 15
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/artifacts/liveBotStimulusArtifacts.ts": {
+    "no-restricted-syntax": {
+      "count": 8
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/preflight/liveBotStimulusPreflight.ts": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/preflight/liveBotStimulusPrepare.ts": {
+    "no-restricted-syntax": {
+      "count": 11
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusSession.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusTesterRun.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusWait.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusWaitAfter.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/selection/liveBotStimulusEventScan.ts": {
+    "no-restricted-syntax": {
+      "count": 30
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/selection/liveBotStimulusSelection.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/shared/liveBotStimulusTypes.ts": {
+    "no-restricted-syntax": {
+      "count": 20
+    }
+  },
+  "packages/validation/src/supervisor/stimulus/shared/liveBotStimulusUtils.ts": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "packages/validation/src/supervisor/tester/supervisorTesterClassification.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "packages/validation/src/supervisor/tester/supervisorTesterEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 11
+    }
+  },
+  "packages/validation/src/tester/evidence/testerAttemptEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/src/tester/evidence/testerEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 14
+    }
+  },
+  "packages/validation/src/tester/planning/testerConfig.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/tester/runtime/testerAttempt.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/tester/runtime/testerErrors.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "packages/validation/src/tester/runtime/testerLoop.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/validation/src/tester/runtime/testerTypes.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/validation/test/support/tester/testerOrderFixtures.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  }
+}

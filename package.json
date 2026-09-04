@@ -21,7 +21,7 @@
     "lint:coverage": "vitest run --coverage && node scripts/run-node-tests.ts",
     "lint:eslint:files": "eslint \"scripts/**/*.ts\" \"eslint.config.mts\" \"prettier.config.mts\" \"vitest.config.mts\" \"apps/*/vitest.config.mts\" \"packages/*/vitest.config.mts\" \"apps/interface/vite.config.ts\" \"apps/*/{src,test}/**/*.{ts,tsx}\" \"packages/*/{src,test}/**/*.{ts,tsx}\"",
     "lint:eslint": "pnpm lint:eslint:files --max-warnings=0",
-    "format": "pnpm lint:eslint:files --fix && prettier --write .",
+    "format": "pnpm lint:eslint:files --fix --prune-suppressions && prettier --write .",
     "test": "vitest",
     "test:ci": "vitest run && node scripts/run-node-tests.ts",
     "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
