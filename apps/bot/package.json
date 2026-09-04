@@ -27,7 +27,7 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "lint": "pnpm --workspace-root exec eslint --max-warnings=0 apps/bot/src apps/bot/test",
-    "start": "node ../../scripts/bot/launcher.ts"
+    "start": "node src/index.ts"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",

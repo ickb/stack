@@ -1,5 +1,4 @@
 import { spawn, type SpawnOptions } from "node:child_process";
-import { readFile } from "node:fs/promises";
 
 const DEFAULT_KILL_GRACE_MS = 5000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -41,11 +40,6 @@ export interface ProcessSignalContext {
 }
 
 /** Linux boot and process-start identity read from procfs. */
-export interface LinuxProcessIdentity {
-  bootId: string;
-  startTimeTicks: string;
-}
-
 export interface RunProcessOptions extends Omit<SpawnOptions, "stdio"> {
   captureOutput?: boolean;
   forwardSignals?: boolean;
@@ -66,50 +60,6 @@ export interface ProcessResult {
   timedOut: boolean;
   forwardedSignal?: "SIGINT" | "SIGTERM";
   error?: unknown;
-}
-
-/** Reads identity fields that distinguish a live Linux process from PID reuse. */
-export async function readLinuxProcessIdentity(
-  pid: number,
-  readText: (path: string, encoding: "utf8") => Promise<string> = readFile,
-): Promise<LinuxProcessIdentity> {
-  if (!Number.isSafeInteger(pid) || pid <= 0) {
-    throw new Error(`Invalid Linux process id: ${String(pid)}`);
-  }
-  const [bootIdText, stat] = await Promise.all([
-    readText("/proc/sys/kernel/random/boot_id", "utf8"),
-    readText(`/proc/${String(pid)}/stat`, "utf8"),
-  ]);
-  const bootId = bootIdText.trim();
-  if (bootId === "") {
-    throw new Error("Linux boot ID is empty");
-  }
-  return { bootId, startTimeTicks: linuxProcessStartTimeTicks(stat, pid) };
-}
-
-function linuxProcessStartTimeTicks(stat: string, expectedPid: number): string {
-  const commandStart = stat.indexOf(" (");
-  const commandEnd = stat.lastIndexOf(") ");
-  const pidText = commandStart === -1 ? "" : stat.slice(0, commandStart);
-  if (
-    commandStart < 1 ||
-    commandEnd <= commandStart + 1 ||
-    !/^\d+$/u.test(pidText) ||
-    Number(pidText) !== expectedPid
-  ) {
-    throw new Error(`Malformed Linux proc stat for process ${String(expectedPid)}`);
-  }
-  const fieldsFromState = stat
-    .slice(commandEnd + 2)
-    .trim()
-    .split(/\s+/u);
-  const startTimeTicks = fieldsFromState[19];
-  if (startTimeTicks === undefined || !/^[1-9]\d*$/u.test(startTimeTicks)) {
-    throw new Error(
-      `Linux proc stat lacks start time for process ${String(expectedPid)}`,
-    );
-  }
-  return startTimeTicks;
 }
 
 interface OutputCapture {

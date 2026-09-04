@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import type { Stats } from "node:fs";
 import {
-  appendFile as fsAppendFile,
   lstat as fsLstat,
   mkdir as fsMkdir,
   readdir as fsReaddir,
@@ -34,11 +33,11 @@ void test("systemd update accepts only the safe current and shared-log unit shap
   try {
     const unitPath = join(directory, "ickb-bot-testnet.service");
     await writeText(unitPath, unitText(directory));
-    const accepted = requireLauncherUnit(unitPath, directory);
+    const accepted = requireBotUnit(unitPath, directory);
     assert.equal(accepted.status, 0, accepted.stderr);
 
     await writeText(unitPath, `${unitText(directory)}WorkingDirectory=/tmp/override\n`);
-    const duplicate = requireLauncherUnit(unitPath, directory);
+    const duplicate = requireBotUnit(unitPath, directory);
     assert.equal(duplicate.status, 1);
 
     await writeText(
@@ -48,7 +47,7 @@ void test("systemd update accepts only the safe current and shared-log unit shap
         `WorkingDirectory=${directory}`,
       ),
     );
-    const refused = requireLauncherUnit(unitPath, directory);
+    const refused = requireBotUnit(unitPath, directory);
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /safe release layout/u);
   } finally {
@@ -86,148 +85,26 @@ void test("systemd update layout permits current but not shared-log symlinks", a
   }
 });
 
-void test("readiness accepts the new launch record and matching preflight", async () => {
-  const fixture = await readinessFixture();
-  try {
-    const beforeReplacement = readinessProbe(
-      fixture.launches,
-      fixture.release,
-      fixture.logRoot,
-    );
-    assert.equal(beforeReplacement.status, 1);
-
-    const releaseWithSeparator = `${fixture.release}${path.sep}`;
-    await writeText(
-      fixture.launches,
-      `${JSON.stringify({ ...fixture.launch, repoRoot: releaseWithSeparator })}\n`,
-    );
-    const ready = readinessProbe(fixture.launches, fixture.release, fixture.logRoot);
-    assert.equal(ready.status, 0, ready.stderr);
-
-    const wrongRelease = readinessProbe(
-      fixture.launches,
-      `${fixture.release}-other`,
-      fixture.logRoot,
-    );
-    assert.equal(wrongRelease.status, 1);
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
-});
-
-void test("readiness cannot use a stale expected release behind a newer launch", async () => {
-  const fixture = await readinessFixture();
-  try {
-    await writeText(fixture.launches, `${JSON.stringify(fixture.launch)}\n`);
-    const otherRelease = `${fixture.release}-other`;
-    await appendText(
-      fixture.launches,
-      `${JSON.stringify(launchRecord(otherRelease, fixture.logRoot, fixture.events, "run-other"))}\n`,
-    );
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot).status,
-      1,
-    );
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
-});
-
-void test("same-path readiness rejects the previous run id", async () => {
-  const fixture = await readinessFixture();
-  try {
-    const previous = launchRecord(
-      fixture.release,
-      fixture.logRoot,
-      fixture.events,
-      "run-old",
-    );
-    await writeText(fixture.launches, `${JSON.stringify(previous)}\n`);
-    await writeText(fixture.events, `${JSON.stringify(preflightEvent("run-old"))}\n`);
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot, {
-        previousRunId: "run-old",
-      }).status,
-      1,
-    );
-
-    await writeText(fixture.launches, `${JSON.stringify(fixture.launch)}\n`);
-    await writeText(fixture.events, `${JSON.stringify(preflightEvent("run-new"))}\n`);
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot, {
-        previousRunId: "run-old",
-      }).status,
-      0,
-    );
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
-});
-
-void test("readiness rejects a bot preflight mismatch", async () => {
-  const fixture = await readinessFixture({
-    matches: { genesisHash: true, addressPrefix: false },
-  });
-  try {
-    await writeText(fixture.launches, `${JSON.stringify(fixture.launch)}\n`);
-    const result = readinessProbe(fixture.launches, fixture.release, fixture.logRoot);
-    assert.equal(result.status, 1);
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
-});
-
-void test("readiness requires the requested network and production preflight matches", async () => {
-  const fixture = await readinessFixture();
-  try {
-    await writeText(fixture.launches, `${JSON.stringify(fixture.launch)}\n`);
-
-    await writeText(
-      fixture.events,
-      `${JSON.stringify(preflightEvent("run-new", undefined, "mainnet"))}\n`,
-    );
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot).status,
-      1,
-    );
-
-    await writeText(
-      fixture.events,
-      `${JSON.stringify(preflightEvent("run-new", { chain: true, genesis: true }))}\n`,
-    );
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot).status,
-      1,
-    );
-
-    const contradictory = preflightEvent("run-new");
-    const observed = contradictory["observed"];
-    assert.ok(observed !== null && typeof observed === "object");
-    contradictory["observed"] = { ...observed, genesisHash: "0xwrong" };
-    await writeText(fixture.events, `${JSON.stringify(contradictory)}\n`);
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot).status,
-      1,
-    );
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
-});
-
-void test("readiness rejects noncanonical preflight records", async () => {
-  const fixture = await readinessFixture();
-  try {
-    await writeText(fixture.launches, `${JSON.stringify(fixture.launch)}\n`);
-    const event = preflightEvent("run-new");
-    delete event["version"];
-    await writeText(fixture.events, `${JSON.stringify(event)}\n`);
-    assert.equal(
-      readinessProbe(fixture.launches, fixture.release, fixture.logRoot).status,
-      1,
-    );
-  } finally {
-    await rm(fixture.root, { force: true, recursive: true });
-  }
+void test("readiness accepts only a canonical bot preflight for the requested network", () => {
+  const ready = readinessProbe("testnet", [preflightEvent("run-1")]);
+  assert.equal(ready.status, 0, ready.stderr);
+  assert.equal(readinessProbe("mainnet", [preflightEvent("run-1")]).status, 1);
+  assert.equal(
+    readinessProbe("testnet", [
+      preflightEvent("run-1", { genesisHash: false, addressPrefix: true }),
+    ]).status,
+    1,
+  );
+  assert.equal(
+    readinessProbe("testnet", [{ ...preflightEvent("run-1"), timestamp: "yesterday" }])
+      .status,
+    1,
+  );
+  assert.equal(
+    readinessProbe("testnet", ["not json", { app: "bot", type: "bot.run.started" }])
+      .status,
+    1,
+  );
 });
 
 void test("atomic switch replaces current with a relative same-root release pointer", async () => {
@@ -254,7 +131,7 @@ void test("activation stops only after preparation and accepts evidence readines
     assert.deepEqual((await readText(logPath)).trim().split("\n"), [
       stopCommand,
       "systemctl start ickb.service",
-      `ready ${join(directory, "releases", "new")} prior -`,
+      "ready releases/new",
     ]);
     assert.equal(await readLink(join(directory, currentName)), newTarget);
     assert.equal(result.stdout.trim(), candidateRetained);
@@ -272,10 +149,10 @@ void test("failed new readiness atomically restores and verifies the previous re
     assert.deepEqual((await readText(logPath)).trim().split("\n"), [
       stopCommand,
       "systemctl start ickb.service",
-      `ready ${join(directory, "releases", "new")} prior -`,
+      "ready releases/new",
       stopCommand,
       "systemctl restart ickb.service",
-      `ready ${join(directory, "releases", "old")} prior run-candidate`,
+      "ready releases/old",
     ]);
     assert.equal(await readLink(join(directory, currentName)), oldTarget);
     assert.match(result.stderr, /Rollback release is ready/u);
@@ -351,68 +228,10 @@ void test("updater stages and validates before the final switch and never pulls 
   assert.match(text, /bot:install/u);
   assert.match(text, /bot:check/u);
   assert.match(text, /chmod -R a-w/u);
-  assert.match(text, /maxTailBytes/u);
   assert.doesNotMatch(text, /pull --ff-only/u);
   assert.doesNotMatch(text, /systemctl --no-pager --full status/u);
   assert.doesNotMatch(text, /launch_log_size|baselineText|subarray\(baseline/u);
 });
-
-interface ReadinessFixture {
-  events: string;
-  launch: Record<string, unknown>;
-  launches: string;
-  logRoot: string;
-  release: string;
-  root: string;
-}
-
-async function readinessFixture({
-  matches = { genesisHash: true, addressPrefix: true },
-}: {
-  matches?: Record<string, boolean>;
-} = {}): Promise<ReadinessFixture> {
-  const root = await mkdtemp(join(tmpdir(), "ickb-update-ready-"));
-  const release = join(root, "releases", "expected");
-  const logRoot = join(root, "log");
-  const botRoot = join(logRoot, "bot");
-  const launches = join(botRoot, "launches.ndjson");
-  const events = join(botRoot, "bot.events.slot-00.ndjson");
-  await makeDirectory(release);
-  await makeDirectory(botRoot);
-  const staleRecord = launchRecord(
-    join(root, "releases", "stale"),
-    logRoot,
-    events,
-    "run-stale",
-  );
-  await writeText(launches, `${JSON.stringify(staleRecord)}\n`);
-  await writeText(events, `${JSON.stringify(preflightEvent("run-new", matches))}\n`);
-  return {
-    events,
-    launch: launchRecord(release, logRoot, events, "run-new"),
-    launches,
-    logRoot,
-    release,
-    root,
-  };
-}
-
-function launchRecord(
-  release: string,
-  logRoot: string,
-  events: string,
-  runId: string,
-): Record<string, unknown> {
-  return {
-    version: 3,
-    type: "launcher.started",
-    repoRoot: release,
-    logRoot,
-    teeChildOutput: false,
-    runId,
-    logFiles: { events },
-  };
-}
 
 function preflightEvent(
   runId: string,
@@ -445,9 +264,9 @@ async function activationFixture(): Promise<string> {
 function unitText(deployRoot = "/opt/ickb-stack-testnet"): string {
   return `[Service]
 WorkingDirectory=${deployRoot}/current
-Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts BOT_ARTIFACT_REF_PREFIX=artifacts
 LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
-ExecStart=/usr/bin/node scripts/bot/launcher.ts --log-root ${deployRoot}/log --no-child-tee
+ExecStart=/usr/bin/node apps/bot/src/index.ts
 RestartSec=60
 RestartPreventExitStatus=2
 LimitCORE=0
@@ -458,10 +277,6 @@ ProtectSystem=strict
 ReadWritePaths=${deployRoot}/log
 ProtectHome=true
 `;
-}
-
-async function appendText(filePath: string, text: string): Promise<void> {
-  await fsAppendFile(filePath, text);
 }
 
 async function lstatPath(filePath: string): Promise<Stats> {
@@ -492,11 +307,8 @@ async function writeText(filePath: string, text: string): Promise<void> {
   await fsWriteFile(filePath, text);
 }
 
-function requireLauncherUnit(
-  unitPath: string,
-  deployRoot: string,
-): SpawnSyncReturns<string> {
-  return runShell('source "$1"; require_launcher_unit "$2" testnet "$3"', [
+function requireBotUnit(unitPath: string, deployRoot: string): SpawnSyncReturns<string> {
+  return runShell('source "$1"; require_bot_unit "$2" testnet "$3"', [
     unitPath,
     deployRoot,
   ]);
@@ -511,21 +323,21 @@ function requireReadinessTimeout(value: string): SpawnSyncReturns<string> {
 }
 
 function readinessProbe(
-  launches: string,
-  release: string,
-  logRoot: string,
-  options: {
-    network?: "testnet" | "mainnet";
-    previousRunId?: string;
-  } = {},
+  network: "testnet" | "mainnet",
+  lines: Array<Record<string, unknown> | string>,
 ): SpawnSyncReturns<string> {
-  return runShell('source "$1"; readiness_probe "$2" "$3" "$4" "$5" "$6"', [
-    launches,
-    release,
-    logRoot,
-    options.network ?? "testnet",
-    options.previousRunId ?? "",
-  ]);
+  const input = `${lines
+    .map((line) => (typeof line === "string" ? line : JSON.stringify(line)))
+    .join("\n")}\n`;
+  return spawnSync(
+    bashPath,
+    ["-c", 'source "$1"; readiness_probe "$2"', "bash", updateScript, network],
+    {
+      cwd: rootDir,
+      encoding: "utf8",
+      input,
+    },
+  );
 }
 
 function atomicSwitch(deployRoot: string, target: string): SpawnSyncReturns<string> {
@@ -541,16 +353,13 @@ function runActivation(
     failRollback?: boolean;
   },
 ): SpawnSyncReturns<string> {
-  const oldRelease = join(deployRoot, "releases", "old");
-  const newRelease = join(deployRoot, "releases", "new");
   return runShell(
     String.raw`source "$1"
 log_path=$2
 fail_new=$3
-fail_candidate_stop=$8
-fail_rollback=$9
-expected_new=$7
 deploy_root=$4
+fail_candidate_stop=$6
+fail_rollback=$7
 stop_count=0
 systemctl() {
   printf 'systemctl %s\n' "$*" >>"$log_path"
@@ -561,22 +370,14 @@ systemctl() {
     fi
   fi
 }
-latest_launch_run_id() {
-  if [[ $(readlink "$deploy_root/current") == releases/new ]]; then
-    printf 'run-candidate\n'
-  else
-    printf 'run-old\n'
-  fi
-}
 wait_for_readiness() {
-  prior=$6
-  [[ -n "$prior" ]] || prior=-
-  printf 'ready %s prior %s\n' "$3" "$prior" >>"$log_path"
-  [[ "$fail_new" != true || "$3" != "$expected_new" ]] &&
-    [[ "$fail_rollback" != true || "$3" == "$expected_new" ]]
+  release=$(readlink "$deploy_root/current")
+  printf 'ready %s\n' "$release" >>"$log_path"
+  [[ "$fail_new" != true || "$release" != releases/new ]] &&
+    [[ "$fail_rollback" != true || "$release" == releases/new ]]
 }
 set +e
-activate_release ickb.service "$4" "$5" releases/old "$6" "$4/log" testnet 5
+activate_release ickb.service "$4" "$5" releases/old testnet 5
 status=$?
 printf 'removable=%s\n' "$candidate_removable"
 exit "$status"`,
@@ -584,9 +385,7 @@ exit "$status"`,
       logPath,
       String(options.failNew),
       deployRoot,
-      newRelease,
-      oldRelease,
-      newRelease,
+      join(deployRoot, "releases", "new"),
       String(options.failCandidateStop ?? false),
       String(options.failRollback ?? false),
     ],

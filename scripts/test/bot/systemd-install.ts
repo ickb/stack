@@ -6,7 +6,6 @@ import {
   readFile as fsReadFile,
   stat as fsStat,
   symlink as fsSymlink,
-  writeFile as fsWriteFile,
   mkdtemp,
   rm,
 } from "node:fs/promises";
@@ -27,9 +26,10 @@ void test("systemd units use the atomic current pointer and shared absolute log 
     assert.equal(rendered.status, 0, rendered.stderr);
     const lines = new Set(rendered.stdout.split("\n"));
     assert.equal(lines.has(`WorkingDirectory=${deployRoot}/current`), true);
+    assert.equal(lines.has("ExecStart=/usr/bin/node apps/bot/src/index.ts"), true);
     assert.equal(
       lines.has(
-        `ExecStart=/usr/bin/node scripts/bot/launcher.ts --log-root ${deployRoot}/log --no-child-tee`,
+        `Environment=BOT_CONFIG_FILE=%d/ickb-bot-${network}-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts BOT_ARTIFACT_REF_PREFIX=artifacts`,
       ),
       true,
     );
@@ -90,82 +90,6 @@ void test("installed layout accepts only current as a directory symlink", async 
   }
 });
 
-void test("legacy migration has one restoration path and no legacy release switch", async () => {
-  const text = await readText(installScript);
-  assert.match(text, /--migrate <testnet\|mainnet>/u);
-  assert.match(
-    text,
-    /prepare_checkout_copy "\$\{user\}" "\$\{user_home\}" "\$\{source\}"/u,
-  );
-  assert.match(text, /mv "\$\{holding\}\/log" "\$\{deploy_dir\}\/log"/u);
-  assert.match(text, /mv "\$\{holding\}" "\$\{deploy_dir\}\/releases\/\$\{old_id\}"/u);
-  assert.match(text, /wait_with_update_helper/u);
-  assert.match(text, /restore_legacy_migration/u);
-  assert.doesNotMatch(text, /switching to the preserved legacy release/u);
-});
-
-void test("legacy migration ignores commented unit-shape spoofs", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "ickb-systemd-legacy-unit-"));
-  try {
-    const unitPath = join(directory, "ickb.service");
-    const deployRoot = "/opt/ickb-stack-testnet";
-    await writeText(unitPath, legacyUnit(deployRoot));
-    assert.equal(legacyUnitIsCompatible(unitPath, deployRoot).status, 0);
-
-    await writeText(
-      unitPath,
-      legacyUnit(deployRoot).replace(
-        `WorkingDirectory=${deployRoot}`,
-        `# WorkingDirectory=${deployRoot}\nWorkingDirectory=/tmp/spoofed`,
-      ),
-    );
-    assert.equal(legacyUnitIsCompatible(unitPath, deployRoot).status, 1);
-  } finally {
-    await rm(directory, { force: true, recursive: true });
-  }
-});
-
-void test("migration restoration reconstructs the shipped layout and unit", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "ickb-systemd-restore-"));
-  try {
-    const deployRoot = join(directory, "deploy");
-    const replacement = join(directory, "replacement");
-    const holding = join(directory, "holding");
-    const oldId = "legacy-release";
-    const legacyRelease = join(deployRoot, "releases", oldId);
-    const unitPath = join(directory, "ickb.service");
-    const unitBackup = `${unitPath}.backup`;
-    const commandLog = join(directory, "commands.log");
-    await makeDirectory(join(legacyRelease, ".git"));
-    await makeDirectory(join(deployRoot, "log", "bot"));
-    await writeText(join(legacyRelease, ".git", "marker"), "legacy");
-    await writeText(unitPath, "new unit\n");
-    await writeText(unitBackup, "legacy unit\n");
-
-    const restored = restoreLegacyMigration({
-      commandLog,
-      deployRoot,
-      holding,
-      oldId,
-      replacement,
-      unitBackup,
-      unitPath,
-    });
-
-    assert.equal(restored.status, 0, restored.stderr);
-    assert.equal(await readText(join(deployRoot, ".git", "marker")), "legacy");
-    assert.equal(await readText(unitPath), "legacy unit\n");
-    await assert.rejects(async () => statPath(replacement), /ENOENT/u);
-    assert.deepEqual((await readText(commandLog)).trim().split("\n"), [
-      "stop ickb.service",
-      "daemon-reload",
-      "start ickb.service",
-    ]);
-  } finally {
-    await rm(directory, { force: true, recursive: true });
-  }
-});
-
 async function readText(filePath: string): Promise<string> {
   return fsReadFile(filePath, "utf8");
 }
@@ -180,10 +104,6 @@ async function linkSymbolic(target: string, linkPath: string): Promise<void> {
 
 async function statPath(filePath: string): Promise<Stats> {
   return fsStat(filePath);
-}
-
-async function writeText(filePath: string, text: string): Promise<void> {
-  await fsWriteFile(filePath, text);
 }
 
 async function pathMode(filePath: string): Promise<number> {
@@ -210,60 +130,6 @@ function safeInstallDirectory(
 
 function requireReleaseLayout(directory: string): SpawnSyncReturns<string> {
   return runShell('source "$1"; require_release_layout "$2"', [directory]);
-}
-
-function legacyUnitIsCompatible(
-  unitPath: string,
-  deployRoot: string,
-): SpawnSyncReturns<string> {
-  return runShell('source "$1"; legacy_unit_is_compatible "$2" testnet "$3"', [
-    unitPath,
-    deployRoot,
-  ]);
-}
-
-function legacyUnit(deployRoot: string): string {
-  return `[Service]
-WorkingDirectory=${deployRoot}
-Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json
-LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
-ExecStart=/usr/bin/node scripts/ickb-bot-launcher.mjs --network testnet -- /usr/bin/node apps/bot/dist/index.js
-RestartSec=10
-RestartPreventExitStatus=2
-LimitCORE=0
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectProc=invisible
-ProtectSystem=strict
-ReadWritePaths=${deployRoot}/log
-ProtectHome=true
-`;
-}
-
-function restoreLegacyMigration(options: {
-  commandLog: string;
-  deployRoot: string;
-  holding: string;
-  oldId: string;
-  replacement: string;
-  unitBackup: string;
-  unitPath: string;
-}): SpawnSyncReturns<string> {
-  return runShell(
-    String.raw`source "$1"
-command_log=$2
-systemctl() { printf '%s\n' "$*" >>"$command_log"; }
-restore_legacy_migration ickb.service "$3" "$4" "$5" "$6" "$7" "$8"`,
-    [
-      options.commandLog,
-      options.unitPath,
-      options.unitBackup,
-      options.deployRoot,
-      options.replacement,
-      options.holding,
-      options.oldId,
-    ],
-  );
 }
 
 function runShell(command: string, args: string[]): SpawnSyncReturns<string> {

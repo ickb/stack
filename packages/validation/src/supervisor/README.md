@@ -14,19 +14,19 @@ If either key or `ICKB_TESTNET_RPC_URL` is absent or empty, stop. Generated conf
 
 The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json`, plus unbounded `config/bot-live-testnet.json`. Bounded actor configs used by Supervisor must set `maxIterations: 1`; preflight rejects any actor config that is not bounded to exactly one iteration. Unless explicitly capped, the live config omits `maxIterations` and `maxRetryableAttempts`. An unexpected live cap or missing bounded one-iteration contract indicates stale output; rebuild the set rather than hand-editing one generated file. The default sleep interval is 60 seconds unless `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` intentionally overrides it.
 
-Runtime config is the sole chain authority. The bot reads `BOT_CONFIG_FILE`, constructs the CCC client from `config.chain`, and verifies public chain identity. Launchers, stimulus tools, collectors, and log paths must not introduce separate network authority.
+Runtime config is the sole chain authority. The bot reads `BOT_CONFIG_FILE`, constructs the CCC client from `config.chain`, and verifies public chain identity. Tools and log paths must not introduce separate network authority.
 
 Private keys are for signing only. Never pass them to logs, events, telemetry, error formatters, redaction or masking helpers, generic guards, callbacks, production hooks, command text, or output. Credentialed RPC URLs and secret-bearing environment or config dumps have the same boundary. Public chain identity, transactions, witnesses, scripts, cells, hashes, counts, and summaries may be inspected. If secret material reaches any output stream, stop and repair the producing boundary; do not mask it and continue.
 
 ## Live Bot Watch
 
-Start continuous matching with the source-owned launcher and unbounded config:
+Run continuous matching from an unbounded config, sending stdout to journald through a unit or to a file:
 
 ```bash
-BOT_CONFIG_FILE=config/bot-live-testnet.json node --experimental-default-type=module scripts/bot/launcher.ts --no-child-tee
+BOT_CONFIG_FILE=config/bot-live-testnet.json node apps/bot/src/index.ts > log/bot/events.ndjson
 ```
 
-Keep process supervision outside `log/`. The launcher writes bot output under `log/bot/` and large artifacts under `log/bot/artifacts/<slot>/`. Its version 3 launch record binds the launcher run ID and child PIDs to the Linux boot ID and each process's proc start-time ticks. The live stimulus workflow proves that identity before preflight and again immediately before tester stimulus. Version 2, legacy, malformed, exited, rebooted, or restarted identities fail closed; restart an older launcher before using this workflow.
+Process supervision belongs to systemd. The bot writes content-addressed artifacts under `BOT_ARTIFACT_ROOT` and nothing else to disk.
 
 ## Bounded Supervisor Runs
 
@@ -52,11 +52,10 @@ Align actor `--command-timeout-seconds`, supervisor `--max-wall-clock-seconds`, 
 
 Audit a live watch every 30 minutes:
 
-1. Prove both the launcher and its child still match the version 3 run ID, boot ID, PID, and proc start-time identity. PID-only, version 2, or legacy records are insufficient; if either process is absent or changed, the audit fails immediately and tester stimulus must not run.
-2. Read `log/bot/launches.ndjson` and select the latest `launcher.started` record.
-3. Inspect its current `logFiles.events`, `logFiles.stderr`, and referenced files under `log/bot/artifacts/<slot>/`.
-4. Check for exit records, missing recent `bot.iteration.started` or `bot.state.read`, chain identity mismatch, terminal errors, retry exhaustion, transaction failure, unresolved post-broadcast state, repeated unexplained no-action decisions, and secret leakage.
-5. When diagnosing a bounded run, inspect `summary.json` first, then supervisor events, `*.command.json`, actor output, decisions, transactions, witnesses, scripts, config paths, and the non-secret environment shape.
+1. Prove the bot is still running: `systemctl is-active` for a unit, or the PID for a foreground run. If it is absent, the audit fails before interpreting stale events.
+2. Read the event stream: `journalctl -u <unit> -o cat` or the redirected file.
+3. Check for missing recent `bot.iteration.started` or `bot.state.read`, chain identity mismatch, terminal errors, retry exhaustion, transaction failure, unresolved post-broadcast state, repeated unexplained no-action decisions, and secret leakage.
+4. When diagnosing a bounded run, inspect `summary.json` first, then supervisor events, `*.command.json`, actor output, decisions, transactions, witnesses, scripts, config paths, and the non-secret environment shape.
 
 Relaunch only after an explained environmental interruption or an intentional restart. Do not relaunch an unresolved incident or secret-boundary failure. Bounded pulses are for specific validation or fresh stimulus, not a substitute for the long-running launcher.
 

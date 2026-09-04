@@ -86,7 +86,7 @@
   },
   "packages/node-utils/src/process.ts": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/node-utils/src/runtime_config.ts": {

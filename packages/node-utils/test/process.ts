@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   firstSymlinkInPath,
   minimalProcessEnv,
-  readLinuxProcessIdentity,
   runProcess,
   signalExitCode,
   timerDelayMs,
@@ -254,70 +253,6 @@ describe("process signal outcomes", () => {
   });
 });
 
-describe("Linux process identity", () => {
-  it("parses start ticks after command names containing spaces and parentheses", async () => {
-    const identity = await readLinuxProcessIdentity(42, async (filePath) => {
-      await Promise.resolve();
-      return filePath.endsWith("boot_id")
-        ? "boot-1\n"
-        : procStat({ command: "bot worker (live)", startTimeTicks: "987654" });
-    });
-
-    expect(identity).toEqual({ bootId: "boot-1", startTimeTicks: "987654" });
-  });
-
-  it("rejects malformed proc identity data", async () => {
-    await expect(
-      readLinuxProcessIdentity(42, async (filePath) => {
-        await Promise.resolve();
-        return filePath.endsWith("boot_id") ? "\n" : "malformed";
-      }),
-    ).rejects.toThrow("Linux boot ID is empty");
-    await expect(readLinuxProcessIdentity(0)).rejects.toThrow("Invalid Linux process id");
-  });
-
-  it.each([
-    ["PID mismatch", procStat({ pid: 43 }), "Malformed Linux proc stat"],
-    [
-      "malformed command boundary",
-      procStat({ command: "bot worker" }).replace(" (bot worker) ", " bot worker "),
-      "Malformed Linux proc stat",
-    ],
-    ["missing start ticks", procStat({ startTimeTicks: null }), "lacks start time"],
-    ["zero start ticks", procStat({ startTimeTicks: "0" }), "lacks start time"],
-  ])("rejects %s", async (_variant, stat, message) => {
-    await expect(
-      readLinuxProcessIdentity(42, async (filePath) => {
-        await Promise.resolve();
-        return filePath.endsWith("boot_id") ? "boot-1\n" : stat;
-      }),
-    ).rejects.toThrow(message);
-  });
-});
-
-function procStat({
-  command = "bot",
-  pid = 42,
-  startTimeTicks = "987654",
-}: {
-  command?: string;
-  pid?: number;
-  startTimeTicks?: string | null;
-} = {}): string {
-  const fieldsBeforeStart = Array.from({ length: 18 }, (_, index) => String(index + 1));
-  const startFields = startTimeTicks === null ? "" : ` ${startTimeTicks} 20`;
-  return `${String(pid)} (${command}) S ${fieldsBeforeStart.join(" ")}${startFields}\n`;
-}
-
-function processExists(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 describe("symlink path traversal", () => {
   it("finds symlinks and accepts missing descendants", async () => {
     const root = await mkdtemp(join(tmpdir(), "ickb-node-path-"));
@@ -345,3 +280,12 @@ describe("symlink path traversal", () => {
     }
   });
 });
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

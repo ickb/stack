@@ -33,14 +33,12 @@ export { firstSymlinkInPath } from "./path.ts";
 export type { SymlinkPathDependencies } from "./path.ts";
 export {
   minimalProcessEnv,
-  readLinuxProcessIdentity,
   runProcess,
   signalExitCode,
   timerDelayMs,
   withProcessSignalForwarding,
 } from "./process.ts";
 export type {
-  LinuxProcessIdentity,
   ProcessChild,
   ProcessResult,
   ProcessRunnerDependencies,

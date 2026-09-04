@@ -188,7 +188,7 @@ unit_has_environment_name() {
   return 1
 }
 
-require_launcher_unit() {
+require_bot_unit() {
   local unit_path=$1
   local network=$2
   local deploy_dir=$3
@@ -207,7 +207,8 @@ require_launcher_unit() {
      ! unit_has_directive "${unit_text}" WorkingDirectory "${current_path}" ||
      ! unit_has_directive "${unit_text}" Environment "BOT_CONFIG_FILE=%d/${credential_name}" ||
      ! unit_has_directive "${unit_text}" LoadCredentialEncrypted "${credential_name}:${credential}" ||
-     ! unit_has_directive "${unit_text}" ExecStart "/usr/bin/node scripts/bot/launcher.ts --log-root ${log_root} --no-child-tee" ||
+     ! unit_has_directive "${unit_text}" Environment "BOT_ARTIFACT_ROOT=${log_root}/bot/artifacts" ||
+     ! unit_has_directive "${unit_text}" ExecStart "/usr/bin/node apps/bot/src/index.ts" ||
      ! unit_has_directive "${unit_text}" RestartPreventExitStatus 2 ||
      ! unit_has_directive "${unit_text}" RestartSec 60 ||
      ! unit_has_directive "${unit_text}" LimitCORE 0 ||
@@ -314,97 +315,19 @@ prepare_release() {
   prepared_release=${release}
 }
 
-launch_evidence() {
-  local mode=$1
-  local launches=$2
-  local expected_release=${3:-}
-  local expected_log_root=${4:-}
-  local previous_run_id=${5:-}
-  local expected_network=${6:-}
-  node - "${mode}" "${launches}" "${expected_release}" "${expected_log_root}" "${previous_run_id}" "${expected_network}" <<'NODE'
+# Readiness: the running invocation's journal carries a canonical bot.chain.preflight for the network.
+readonly READINESS_PROBE_JS='
 const fs = require("node:fs");
-const path = require("node:path");
-
-const [mode, launches, expectedRelease, expectedLogRoot, previousRunId, expectedNetwork] = process.argv.slice(2);
-const launch = latestLaunchRecord(launches);
-if (launch === undefined || launch.version !== 3 || typeof launch.runId !== "string" || launch.runId === "") {
-  process.exit(1);
-}
-if (mode === "latest-run-id") {
-  process.stdout.write(`${launch.runId}\n`);
-  process.exit(0);
-}
-if (mode !== "ready" ||
-    canonicalPath(launch.repoRoot) !== canonicalPath(expectedRelease) ||
-    canonicalPath(launch.logRoot) !== canonicalPath(expectedLogRoot) ||
-    launch.teeChildOutput !== false || (previousRunId !== "" && launch.runId === previousRunId)) {
-  process.exit(1);
-}
-const botRoot = path.join(expectedLogRoot, "bot");
-const eventFile = launch?.logFiles?.events;
-if (typeof eventFile !== "string" || !contained(botRoot, eventFile)) process.exit(1);
-let events;
-try {
-  const stat = fs.lstatSync(eventFile);
-  if (!stat.isFile() || stat.isSymbolicLink()) process.exit(1);
-  events = fs.readFileSync(eventFile, "utf8").split("\n");
-} catch {
-  process.exit(1);
-}
-for (const eventLine of events) {
+const expectedNetwork = process.argv[1];
+for (const line of fs.readFileSync(0, "utf8").split("\n")) {
   let event;
-  try { event = JSON.parse(eventLine); } catch { continue; }
-  if (canonicalPreflight(event, launch.runId, expectedNetwork)) process.exit(0);
+  try { event = JSON.parse(line); } catch { continue; }
+  if (canonicalPreflight(event)) process.exit(0);
 }
 process.exit(1);
-
-function latestLaunchRecord(filePath) {
-  const maxTailBytes = 1024 * 1024;
-  try {
-    const stat = fs.lstatSync(filePath);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size === 0) return undefined;
-    const start = Math.max(0, stat.size - maxTailBytes);
-    const length = stat.size - start;
-    const buffer = Buffer.alloc(length);
-    const descriptor = fs.openSync(filePath, "r");
-    let bytesRead = 0;
-    try {
-      while (bytesRead < length) {
-        const count = fs.readSync(descriptor, buffer, bytesRead, length - bytesRead, start + bytesRead);
-        if (count === 0) break;
-        bytesRead += count;
-      }
-    } finally {
-      fs.closeSync(descriptor);
-    }
-    let text = buffer.subarray(0, bytesRead).toString("utf8");
-    if (start > 0) {
-      const firstNewline = text.indexOf("\n");
-      if (firstNewline === -1) return undefined;
-      text = text.slice(firstNewline + 1);
-    }
-    let latest;
-    for (const line of text.split("\n")) {
-      let record;
-      try { record = JSON.parse(line); } catch { continue; }
-      if (record?.type === "launcher.started") latest = record;
-    }
-    return latest;
-  } catch {
-    return undefined;
-  }
-}
-function contained(root, candidate) {
-  const relative = path.relative(root, candidate);
-  return relative !== "" && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-}
-function canonicalPath(value) {
-  if (typeof value !== "string" || value === "") return undefined;
-  try { return fs.realpathSync(value); } catch { return undefined; }
-}
-function canonicalPreflight(event, runId, expectedNetwork) {
+function canonicalPreflight(event) {
   return event?.version === 1 && event?.app === "bot" && event?.type === "bot.chain.preflight" &&
-    event?.chain === expectedNetwork && event?.runId === runId &&
+    event?.chain === expectedNetwork && typeof event?.runId === "string" && event.runId !== "" &&
     event?.iterationId === 0 && typeof event?.timestamp === "string" && isIsoTimestamp(event.timestamp) &&
     event?.expected?.chain === expectedNetwork &&
     typeof event?.expected?.genesisHash === "string" && event.expected.genesisHash !== "" &&
@@ -417,30 +340,29 @@ function isIsoTimestamp(value) {
   const timestamp = new Date(value);
   return !Number.isNaN(timestamp.getTime()) && timestamp.toISOString() === value;
 }
-NODE
-}
-
-latest_launch_run_id() {
-  launch_evidence latest-run-id "$1"
-}
+'
 
 readiness_probe() {
-  launch_evidence ready "$1" "$2" "$3" "${5:-}" "$4"
+  node -e "${READINESS_PROBE_JS}" "$1"
+}
+
+invocation_journal() {
+  local service=$1
+  local invocation
+  invocation=$(systemctl show -p InvocationID --value "${service}") || return 1
+  [[ -n ${invocation} ]] || return 1
+  journalctl --no-pager -o cat "_SYSTEMD_INVOCATION_ID=${invocation}"
 }
 
 wait_for_readiness() {
   local service=$1
-  local launches=$2
-  local expected_release=$3
-  local log_root=$4
-  local network=$5
-  local previous_run_id=$6
-  local timeout_seconds=$7
+  local network=$2
+  local timeout_seconds=$3
   local deadline=$((SECONDS + timeout_seconds))
 
   while (( SECONDS < deadline )); do
     if systemctl is-active --quiet "${service}" &&
-       readiness_probe "${launches}" "${expected_release}" "${log_root}" "${network}" "${previous_run_id}"; then
+       invocation_journal "${service}" | readiness_probe "${network}"; then
       return 0
     fi
     sleep 1
@@ -464,11 +386,8 @@ activate_release() {
   local deploy_dir=$2
   local new_release=$3
   local previous_target=$4
-  local previous_release=$5
-  local log_root=$6
-  local network=$7
-  local timeout_seconds=$8
-  local launches="${log_root}/bot/launches.ndjson"
+  local network=$5
+  local timeout_seconds=$6
   local new_target="releases/${new_release##*/}"
 
   candidate_removable=1
@@ -477,15 +396,9 @@ activate_release() {
     printf 'Service stop failed before the release switch; the previous current target was retained.\n' >&2
     return 1
   fi
-  local previous_run_id
-  if ! previous_run_id=$(latest_launch_run_id "${launches}"); then
-    systemctl start "${service}" || true
-    printf 'Cannot identify the stopped launcher run; the previous current target was retained.\n' >&2
-    return 1
-  fi
   if ! atomic_switch "${deploy_dir}" "${new_target}"; then
     if ! systemctl start "${service}" ||
-       ! wait_for_readiness "${service}" "${launches}" "${previous_release}" "${log_root}" "${network}" "${previous_run_id}" "${timeout_seconds}"; then
+       ! wait_for_readiness "${service}" "${network}" "${timeout_seconds}"; then
       printf 'Atomic release switch failed and previous-release readiness could not be restored.\n' >&2
       return 1
     fi
@@ -494,7 +407,7 @@ activate_release() {
   fi
   candidate_removable=0
   if systemctl start "${service}" &&
-      wait_for_readiness "${service}" "${launches}" "${new_release}" "${log_root}" "${network}" "" "${timeout_seconds}"; then
+      wait_for_readiness "${service}" "${network}" "${timeout_seconds}"; then
     return 0
   fi
 
@@ -503,14 +416,12 @@ activate_release() {
     printf 'Candidate stop failed; current remains on the candidate and its release was retained for operator recovery.\n' >&2
     return 1
   fi
-  local rollback_previous_run_id
-  rollback_previous_run_id=$(latest_launch_run_id "${launches}") || rollback_previous_run_id=${previous_run_id}
   if ! atomic_switch "${deploy_dir}" "${previous_target}"; then
     printf 'Rollback switch failed; service remains stopped for operator recovery.\n' >&2
     return 1
   fi
   if ! systemctl restart "${service}" ||
-     ! wait_for_readiness "${service}" "${launches}" "${previous_release}" "${log_root}" "${network}" "${rollback_previous_run_id}" "${timeout_seconds}"; then
+     ! wait_for_readiness "${service}" "${network}" "${timeout_seconds}"; then
     printf 'Rollback release did not become ready; immediate operator intervention is required.\n' >&2
     return 1
   fi
@@ -588,13 +499,12 @@ main() {
   local deploy_dir
   deploy_dir=$(deployment_root "${network}")
   local releases_dir="${deploy_dir}/releases"
-  local log_root="${deploy_dir}/log"
   local user="ickb-bot-${network}"
   local service="ickb-bot-${network}.service"
   local unit_path="/etc/systemd/system/${service}"
   local user_home
   user_home=$(service_user_home "${user}")
-  require_launcher_unit "${unit_path}" "${network}" "${deploy_dir}"
+  require_bot_unit "${unit_path}" "${network}" "${deploy_dir}"
   local previous_release
   previous_release=$(require_deployment_layout "${deploy_dir}")
   local previous_target
@@ -630,7 +540,7 @@ main() {
   fi
 
   candidate_removable=0
-  if ! activate_release "${service}" "${deploy_dir}" "${new_release}" "${previous_target}" "${previous_release}" "${log_root}" "${network}" "${timeout_seconds}"; then
+  if ! activate_release "${service}" "${deploy_dir}" "${new_release}" "${previous_target}" "${network}" "${timeout_seconds}"; then
     if (( candidate_removable == 1 )) && [[ $(readlink "${deploy_dir}/current") == "${previous_target}" ]]; then
       rm -rf -- "${new_release}"
     fi
@@ -638,7 +548,7 @@ main() {
   fi
 
   prune_releases "${releases_dir}" "releases/${new_release##*/}" "${previous_target}"
-  printf 'Activated %s for %s; readiness was proved from new launcher and bot preflight evidence.\n' "${new_commit}" "${network}"
+  printf 'Activated %s for %s; readiness was proved from the bot preflight journal entry of the new invocation.\n' "${new_commit}" "${network}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

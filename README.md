@@ -55,16 +55,17 @@ CCC packages are normal package dependencies resolved through `pnpm-workspace.ya
 
 ## Live Testnet Bot Watch
 
-Run continuous matching with the production-style bot launcher and an unbounded bot config:
+Run the bot as a long-lived process with an unbounded config. Its stdout is the NDJSON event stream: hand it to journald through a systemd unit, or redirect it to a file:
 
 ```bash
 pnpm live:config-from-env -- --force
-BOT_CONFIG_FILE=config/bot-live-testnet.json node scripts/bot/launcher.ts --no-child-tee
+mkdir -p log/bot
+BOT_CONFIG_FILE=config/bot-live-testnet.json node apps/bot/src/index.ts > log/bot/events.ndjson
 ```
 
-Every 30-minute watch audit must first prove the bot launcher and child are still running. Only then inspect `log/bot/launches.ndjson`, the current `logFiles.events` and `logFiles.stderr` from the latest `launcher.started` record, and any referenced files under `log/bot/artifacts/<slot>/` for recent `bot.iteration.started`, `bot.state.read`, chain preflight matches, terminal failures, retry-budget exhaustion, transaction failures, or exit records. If the bot is not running, the audit fails before interpreting stale logs.
+The watch is operator-driven. Between checks, read the event stream, place a tester order with `pnpm live:supervisor --scenario tester-only` when the bot should be exercised, and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. There is no launcher, launch record, or automated cadence.
 
-Generated live configs default to `sleepIntervalSeconds: 60`; override with `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` only when the operator deliberately wants a different cadence. Bounded supervisor/tester configs default to `maxRetryableAttempts: 10`; the unbounded live launcher config omits `maxRetryableAttempts` unless `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is set intentionally.
+Generated live configs default to `sleepIntervalSeconds: 60`; override with `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` only when the operator deliberately wants a different cadence. Bounded supervisor/tester configs default to `maxRetryableAttempts: 10`; the unbounded live config omits `maxRetryableAttempts` unless `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is set intentionally.
 
 ## Live Testnet Supervisor
 
@@ -76,7 +77,7 @@ pnpm live:supervisor
 
 By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `log/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only.
 
-Rebuild disposable live configs from required `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL` values with `pnpm live:config-from-env -- --force` when they are missing or stale. The RPC URL is exclusive (no CCC public fallbacks), and omission or an empty value fails. The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json` for supervisor/tester runs, plus unbounded `config/bot-live-testnet.json` for the production-style bot launcher. When `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` is unset, all generated configs use `sleepIntervalSeconds: 60`. When `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is unset, bounded configs use `10` and the live launcher config remains unbounded. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+Rebuild disposable live configs from required `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL` values with `pnpm live:config-from-env -- --force` when they are missing or stale. The RPC URL is exclusive (no CCC public fallbacks), and omission or an empty value fails. The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json` for supervisor/tester runs, plus unbounded `config/bot-live-testnet.json` for the long-running bot. When `ICKB_TESTNET_SLEEP_INTERVAL_SECONDS` is unset, all generated configs use `sleepIntervalSeconds: 60`. When `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is unset, bounded configs use `10` and the live config remains unbounded. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
 
 `pnpm live:preflight -- --config config/bot-testnet.json` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`. For machine-readable JSON without package-manager output, run `pnpm -s live:preflight -- --config config/bot-testnet.json`.
 
