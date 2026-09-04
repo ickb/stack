@@ -47,9 +47,17 @@ try {
 }
 process.exitCode ??= 0;
 // CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would keep
-// this finished turn alive. Pipes and sockets are asynchronous on POSIX, so exit only once stdout
-// has drained; a bare process.exit() truncates the event stream under load.
-process.stdout.write("", () => {
-  // eslint-disable-next-line unicorn/no-process-exit -- The turn is over and its output is flushed.
-  process.exit();
-});
+// this finished turn alive. Pipes and sockets are asynchronous on POSIX, so exit only once both
+// output streams have drained; a bare process.exit() truncates pending output.
+await Promise.all(
+  [process.stdout, process.stderr].map(
+    async (stream) =>
+      new Promise<void>((resolve) => {
+        stream.write("", () => {
+          resolve();
+        });
+      }),
+  ),
+);
+// eslint-disable-next-line unicorn/no-process-exit -- The turn is over and its output is flushed.
+process.exit();
