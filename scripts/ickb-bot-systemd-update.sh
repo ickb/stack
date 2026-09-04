@@ -326,9 +326,9 @@ for (const line of fs.readFileSync(0, "utf8").split("\n")) {
 }
 process.exit(1);
 function canonicalPreflight(event) {
-  return event?.version === 1 && event?.app === "bot" && event?.type === "bot.chain.preflight" &&
+  return event?.type === "bot.chain.preflight" &&
     event?.chain === expectedNetwork && typeof event?.runId === "string" && event.runId !== "" &&
-    event?.iterationId === 0 && typeof event?.timestamp === "string" && isIsoTimestamp(event.timestamp) &&
+    typeof event?.timestamp === "string" && isIsoTimestamp(event.timestamp) &&
     event?.expected?.chain === expectedNetwork &&
     typeof event?.expected?.genesisHash === "string" && event.expected.genesisHash !== "" &&
     typeof event?.expected?.addressPrefix === "string" && event.expected.addressPrefix !== "" &&

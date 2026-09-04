@@ -101,8 +101,7 @@ void test("readiness accepts only a canonical bot preflight for the requested ne
     1,
   );
   assert.equal(
-    readinessProbe("testnet", ["not json", { app: "bot", type: "bot.run.started" }])
-      .status,
+    readinessProbe("testnet", ["not json", { type: "bot.run.started" }]).status,
     1,
   );
 });
@@ -239,12 +238,9 @@ function preflightEvent(
   chain: "testnet" | "mainnet" = "testnet",
 ): Record<string, unknown> {
   return {
-    version: 1,
-    app: "bot",
     type: "bot.chain.preflight",
     chain,
     runId,
-    iterationId: 0,
     timestamp: "2026-07-22T00:00:00.000Z",
     expected: { chain, genesisHash: "0xgenesis", addressPrefix: "ckt" },
     observed: { genesisHash: "0xgenesis", addressPrefix: "ckt" },

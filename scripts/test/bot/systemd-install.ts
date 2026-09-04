@@ -34,6 +34,8 @@ void test("systemd units use the atomic current pointer and shared absolute log 
       true,
     );
     assert.equal(lines.has(`ReadWritePaths=${deployRoot}/log`), true);
+    assert.match(rendered.stdout, /^Restart=always$/mu);
+    assert.match(rendered.stdout, /^RestartPreventExitStatus=2$/mu);
     assert.match(rendered.stdout, /^ProtectSystem=strict$/mu);
     assert.match(rendered.stdout, /^ProtectHome=true$/mu);
     assert.match(rendered.stdout, /^NoNewPrivileges=true$/mu);
