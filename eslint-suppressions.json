@@ -9,11 +9,6 @@
       "count": 2
     }
   },
-  "apps/validation/src/liveBotStimulusTest.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "apps/validation/src/supervisor.ts": {
     "no-restricted-syntax": {
       "count": 3
@@ -252,61 +247,6 @@
   "packages/validation/src/supervisor/runtime/shared/supervisorTypes.ts": {
     "no-restricted-syntax": {
       "count": 8
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/artifacts/liveBotStimulusArtifacts.ts": {
-    "no-restricted-syntax": {
-      "count": 8
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/preflight/liveBotStimulusPreflight.ts": {
-    "no-restricted-syntax": {
-      "count": 7
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/preflight/liveBotStimulusPrepare.ts": {
-    "no-restricted-syntax": {
-      "count": 11
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusSession.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusTesterRun.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusWait.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/runtime/liveBotStimulusWaitAfter.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/selection/liveBotStimulusEventScan.ts": {
-    "no-restricted-syntax": {
-      "count": 30
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/selection/liveBotStimulusSelection.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/shared/liveBotStimulusTypes.ts": {
-    "no-restricted-syntax": {
-      "count": 20
-    }
-  },
-  "packages/validation/src/supervisor/stimulus/shared/liveBotStimulusUtils.ts": {
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "packages/validation/src/supervisor/tester/supervisorTesterClassification.ts": {

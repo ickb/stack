@@ -31,9 +31,6 @@
     "live:config-from-env": "node scripts/live/config-from-env.ts",
     "live:preflight": "node scripts/live/preflight.ts",
     "live:supervisor": "node apps/validation/src/supervisor.ts",
-    "live:supervisor:bot-stimulus-test": "node apps/validation/src/liveBotStimulusTest.ts",
-    "live:supervisor:loop": "node scripts/supervisor/loop-cli.ts",
-    "live:supervisor:dynamic-loop": "node scripts/supervisor/dynamic-loop-cli.ts",
     "lint:probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts && node scripts/tooling/probes/treeshake/run.ts"
   },
   "engines": {

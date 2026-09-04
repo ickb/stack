@@ -3,13 +3,6 @@ import { getConfig, IckbSdk } from "@ickb/sdk";
 import { TESTER_OWNED_TX_HASH_FLAG } from "@ickb/validation";
 import { describe, expect, it, vi } from "vitest";
 import {
-  actorEntrypoints as liveBotActorEntrypoints,
-  runLiveBotStimulusCli,
-  runLiveBotStimulusEntrypoint,
-  type LiveBotStimulusMain,
-  type RunSupervisorMain,
-} from "../src/liveBotStimulusTest.ts";
-import {
   runSupervisorCli,
   runSupervisorEntrypoint,
   actorEntrypoints as supervisorActorEntrypoints,
@@ -23,7 +16,6 @@ import {
 
 const privateKey = `0x${"11".repeat(32)}` as const;
 const testerScenario = "sdk-conversion";
-const liveStimulusArgv = ["--log-root", "log"];
 const ownedTxHash = `0x${"AB".repeat(32)}` as const;
 type TesterRuntimeConfig = Awaited<
   ReturnType<TesterCliDependencies["readTesterRuntimeConfig"]>
@@ -267,85 +259,6 @@ describe("validation tester CLI provenance", () => {
     expect(() => parseOwnedTxHash(argv)).toThrow(message);
   });
 });
-
-describe("validation live stimulus entrypoints", () => {
-  it("wires live stimulus through the supervisor dependency", async () => {
-    const runSupervisorMain: RunSupervisorMain = vi.fn(async (): Promise<number> => {
-      await Promise.resolve();
-      return 9;
-    });
-    const io = { stdout: writable(), stderr: writable() };
-    const liveBotStimulusCalls: Array<Parameters<LiveBotStimulusMain>> = [];
-    const liveBotStimulusMain: LiveBotStimulusMain = async (
-      argv,
-      dependencies,
-    ): Promise<number> => {
-      await Promise.resolve();
-      liveBotStimulusCalls.push([argv, dependencies]);
-      const result = await dependencies.runSupervisor(
-        ["--scenario", "standard-cycle"],
-        io,
-      );
-      return result + 1;
-    };
-
-    await expect(
-      runLiveBotStimulusCli(liveStimulusArgv, {
-        liveBotStimulusMain,
-        runSupervisorMain,
-      }),
-    ).resolves.toBe(10);
-
-    expect(liveBotActorEntrypoints).toEqual(supervisorActorEntrypoints);
-    expect(liveBotStimulusCalls[0]?.[0]).toEqual(liveStimulusArgv);
-    expect(typeof liveBotStimulusCalls[0]?.[1].runSupervisor).toBe("function");
-    expect(runSupervisorMain).toHaveBeenCalledWith(
-      ["--scenario", "standard-cycle"],
-      { actorEntrypoints: liveBotActorEntrypoints },
-      io,
-    );
-  });
-
-  it("sets process exit code for the live stimulus entrypoint", async () => {
-    const originalExitCode = process.exitCode;
-    const run = vi.fn(async (): Promise<number> => {
-      await Promise.resolve();
-      return 8;
-    });
-    try {
-      const entrypoint = new URL("../src/liveBotStimulusTest.ts", import.meta.url);
-      process.exitCode = undefined;
-
-      await runLiveBotStimulusEntrypoint(
-        ["node", entrypoint.pathname, ...liveStimulusArgv],
-        entrypoint.href,
-        run,
-      );
-
-      expect(run).toHaveBeenCalledWith(liveStimulusArgv);
-      expect(process.exitCode).toBe(8);
-    } finally {
-      process.exitCode = originalExitCode;
-    }
-  });
-
-  it("skips live stimulus when imported without an entrypoint path", async () => {
-    const run = vi.fn(async (): Promise<number> => {
-      await Promise.resolve();
-      return 8;
-    });
-
-    await runLiveBotStimulusEntrypoint(["node"], import.meta.url, run);
-
-    expect(run).not.toHaveBeenCalled();
-  });
-});
-
-function writable(): { write: (chunk: string) => boolean } {
-  return {
-    write: () => true,
-  };
-}
 
 function testerRuntimeConfig(): TesterRuntimeConfig {
   return {

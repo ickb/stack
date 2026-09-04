@@ -28,49 +28,25 @@ BOT_CONFIG_FILE=config/bot-live-testnet.json node --experimental-default-type=mo
 
 Keep process supervision outside `log/`. The launcher writes bot output under `log/bot/` and large artifacts under `log/bot/artifacts/<slot>/`. Its version 3 launch record binds the launcher run ID and child PIDs to the Linux boot ID and each process's proc start-time ticks. The live stimulus workflow proves that identity before preflight and again immediately before tester stimulus. Version 2, legacy, malformed, exited, rebooted, or restarted identities fail closed; restart an older launcher before using this workflow.
 
-Use the source-owned live stimulus cadence only when the existing long-running launcher and child are healthy and continuous production-bot validation is required:
-
-```bash
-pnpm -s live:supervisor:bot-stimulus-test --keep-going --log-root log
-```
-
-Cycles never overlap. Each cycle proves the launcher, runs fresh bot and tester preflights, requires tester `inventory.matchableUserOrderCount === 0`, chooses from tester balances without predicting bot inventory, and creates exactly one bounded non-dust tester order. It waits for the correlated matched-order commit and a later `bot.decision.skipped` with zero market orders and receipts. The default wait has no deadline so bot reserve, partial-fill, ring, and maturity policy can run normally; `--wait-seconds` adds an explicit operator deadline. Tester CKB planning uses projected available CKB that the same transaction collects; the post-build plain-cell reserve check remains the broadcast safety boundary. Every actionable tester-owned mint is protected from collection for 180 blocks, including across tester restarts, while bot-updated or nonmatchable descendants remain immediately collectable. iCKB-to-CKB stimulus uses only `bounded-ickb-to-ckb-limit-order`, capped at `ICKB_DEPOSIT_CAP`; this command rejects unbounded `ickb-to-ckb-limit-order`. Every cycle has a distinct `log/validation/live-bot-stimulus-<time>-<pid>-cycle-<n>/` summary. Any bot or tester transaction failure, malformed event, launcher identity change, or explicit wait timeout stops the cadence. `SIGINT` and `SIGTERM` stop with conventional exit status. Omit `--keep-going` for one shot; do not combine it with `--session-root`.
-
 ## Bounded Supervisor Runs
 
-Bounded supervisor chunks are smoke tests or deliberate validation stimulus, not the production watch path. Verify `pnpm live:supervisor:loop --help` before running a short repair smoke:
+Bounded supervisor runs are smoke tests or deliberate validation stimulus, not the production watch path. Verify `pnpm live:supervisor --help` before running a short repair smoke:
 
 ```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 1260 -- --scenario standard-cycle --max-cycles 10 --max-wall-clock-seconds 1200 --stop-after-tx-count 1 --command-timeout-seconds 900
+pnpm live:supervisor --scenario standard-cycle --max-cycles 10 --max-wall-clock-seconds 1200 --stop-after-tx-count 1 --command-timeout-seconds 900
 ```
 
-Lengthen a run only after the short summary is understood:
-
-```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 --child-timeout-seconds 4260 -- --scenario standard-cycle --max-cycles 1000 --max-wall-clock-seconds 4200 --stop-after-tx-count 1 --command-timeout-seconds 3600
-```
-
-For bounded dynamic validation that does not test the already-running bot, verify `pnpm live:supervisor:dynamic-loop --help` and use the source-owned loop:
-
-```bash
-pnpm live:supervisor:dynamic-loop --keep-going --max-chunks 4 --chunk-max-runs 1 --stable-limit 999 --chunk-backoff-seconds 0 --between-chunks-seconds 0 --child-timeout-seconds 5460 --command-timeout-seconds 900 --log-root log -- --stop-after-tx-count 1
-```
-
-Keep dynamic runs bounded with `--max-chunks`; they are standalone validation, not the continuous production-bot tester cadence. Loop-owned options precede the first `--`; supervisor options follow it. The loop owns output directories. Do not pass supervisor `--out-dir`, and do not pass supervisor `--max-cycles` through the dynamic loop.
-
-The dynamic loop reads tester preflight balances and selects stimulus deterministically. It chooses `all-ckb-limit-order` when plain spendable CKB covers the tester reserve, all-CKB order overhead, and live fee-rate-derived maturity-fee threshold. Otherwise it chooses `ickb-to-ckb-limit-order` with `--tester-fee 1 --tester-fee-base 1000` when plain CKB is at least 2100 CKB and iCKB is at least 100 iCKB. Below those thresholds it leaves the scenario as `auto`. Inspect the selected scenario and balances before interpreting idle or no-progress outcomes.
+Lengthen a run only after the short summary is understood. Long-horizon testnet validation is operator-driven: the operator reads the bot journal and each run's `summary.json`, places tester orders with `--scenario tester-only`, and decides the next run; no script loops the supervisor.
 
 For deterministic non-dust iCKB-to-CKB stimulus, first verify that the current fee behavior still requires this shape:
 
 ```bash
-pnpm live:supervisor:loop --max-runs 1 --stable-limit 2 --backoff-seconds 0 -- --scenario standard-cycle --max-cycles 1 --command-timeout-seconds 240 --tester-scenario ickb-to-ckb-limit-order --tester-fee 1 --tester-fee-base 1000
+pnpm live:supervisor --scenario standard-cycle --max-cycles 1 --command-timeout-seconds 240 --tester-scenario ickb-to-ckb-limit-order --tester-fee 1 --tester-fee-base 1000
 ```
 
 ## Timeout Alignment
 
-Align actor `--command-timeout-seconds`, supervisor `--max-wall-clock-seconds`, loop `--child-timeout-seconds`, and the outer process or tool timeout. The supervisor wall clock must exceed the actor command timeout and include preflight time. The child timeout must cover the complete supervisor invocation and leave the supervisor alive long enough to perform process-group cleanup.
-
-For dynamic runs, `--child-timeout-seconds` must be at least six command-timeout windows plus 60 seconds. The dynamic loop derives its chunk timeout from the prebuild budget, child timeout, chunk run count, and backoff. A slow preflight can consume the actor-start budget; increase the aligned budgets rather than repeating an ineffective chunk unchanged.
+Align actor `--command-timeout-seconds`, supervisor `--max-wall-clock-seconds`, and the outer process or tool timeout. The supervisor wall clock must exceed the actor command timeout and include preflight time. A slow preflight can consume the actor-start budget; increase the aligned budgets rather than repeating an ineffective run unchanged.
 
 ## Audit Process
 
@@ -86,12 +62,12 @@ Relaunch only after an explained environmental interruption or an intentional re
 
 ## Stop Interpretation
 
-Never infer success from a bounded stop. Interpret `max_wall_clock_seconds`, `max_cycles`, `max_runs`, `stable_no_progress`, and `tx_observed` through `summary.json` and structured diagnostics.
+Never infer success from a bounded stop. Interpret `max_wall_clock_seconds`, `max_cycles`, `stable_no_progress`, and `tx_observed` through `summary.json` and structured diagnostics.
 
 - Treat a nonzero status, `decision=incident`, missing or invalid summary, malformed evidence, secret-leak sentinel, timeout, nonzero actor exit, chain rejection, confirmation timeout, or unresolved post-broadcast state as unexpected. Diagnose it before continuing.
 - Treat `decision=tx_observed` and `decision=new_outcome` as inspection stops. For tester transactions, inspect the scenario, new and cancelled orders, and fee fields. A committed tester order can still be dust or economically unactionable.
-- Treat stable no-progress, max-runs, max-cycles, and max-wall-clock stops as unexplained until parsed actor decisions establish the reason.
-- After a shell or tool timeout, inspect loop output, `summary.json`, supervisor events, and `*.command.json` before deciding whether an in-flight run was killed. Resume with smaller chunks or a longer aligned timeout.
+- Treat max-cycles and max-wall-clock stops as unexplained until parsed actor decisions establish the reason.
+- After a shell or tool timeout, inspect `summary.json`, supervisor events, and `*.command.json` before deciding whether an in-flight run was killed. Resume with a shorter run or a longer aligned timeout.
 - Outcomes such as `tester_fresh_order_skip`, `tester_estimated_too_small_skip`, and `bot_no_action_skip` are expected only after inspection rules out hidden failures and explains the state.
 
 ## Operational Diagnostics
@@ -110,7 +86,7 @@ After a successful stimulus cycle, inspect built actions, projected balances, th
 
 1. Stop the affected watch or bounded run.
 2. Diagnose from `summary.json` and structured evidence, then use targeted source reads. Transaction and witness data may be inspected; private-key material must never be printed.
-3. Fix the smallest owning layer: validation core, validation CLI, bot core, bot CLI/startup, source-owned loop policy, documentation/tests, or build/runtime wiring.
+3. Fix the smallest owning layer: validation core, validation CLI, bot core, bot CLI/startup, documentation/tests, or build/runtime wiring.
 4. Add or strengthen a focused regression test. Put broadly reusable support in `packages/testkit`; keep domain fixture language local.
 5. Run focused tests and builds, review the repair, address material findings, and resume with a new ignored output directory.
 
@@ -123,7 +99,6 @@ Verify current package and script names before selecting checks:
 - Bot core: `pnpm --filter @ickb/bot test:ci`; add `pnpm bot:check` for runtime and type wiring.
 - Bot CLI/startup: `pnpm --filter @ickb/bot-cli test:ci`; add `pnpm bot:check`.
 - Config helper: run its current focused tests and prove `pnpm live:config-from-env -- --help` reaches the CLI.
-- Loop changes: run the current loop and dynamic-loop tests and, when practical, `node scripts/run-node-tests.ts`.
 - Root wiring: run the smallest top-level check that covers the changed surface.
 
 Runtime packages and apps must retain the repository's current full-coverage policy; `packages/testkit` may remain test infrastructure.

@@ -98,11 +98,6 @@ void test("local CLIs execute from source with native Node", () => {
   const cases: Array<[string, string]> = [
     ["apps/validation/src/supervisor.ts", "Usage: supervisor [options]"],
     ["scripts/live/preflight.ts", "Usage: node scripts/live/preflight.ts"],
-    ["scripts/supervisor/loop-cli.ts", "Usage: node scripts/supervisor/loop-cli.ts"],
-    [
-      "scripts/supervisor/dynamic-loop-cli.ts",
-      "Usage: node scripts/supervisor/dynamic-loop-cli.ts",
-    ],
   ];
 
   for (const [scriptPath, expected] of cases) {

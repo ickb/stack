@@ -32,7 +32,6 @@ export type { JsonLogValue } from "./logging.ts";
 export { firstSymlinkInPath } from "./path.ts";
 export type { SymlinkPathDependencies } from "./path.ts";
 export {
-  ProcessSignalError,
   minimalProcessEnv,
   readLinuxProcessIdentity,
   runProcess,

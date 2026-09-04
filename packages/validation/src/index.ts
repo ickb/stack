@@ -1,5 +1,4 @@
 export { main } from "./supervisor/args/supervisorCli.ts";
-export { liveBotStimulusMain } from "./supervisor/stimulus/shared/liveBotStimulusTest.ts";
 export {
   readTesterFeePolicy,
   readTesterRuntimeConfig,

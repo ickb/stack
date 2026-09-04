@@ -68,16 +68,6 @@ export interface ProcessResult {
   error?: unknown;
 }
 
-export class ProcessSignalError extends Error {
-  public readonly signal: "SIGINT" | "SIGTERM";
-
-  constructor(signal: "SIGINT" | "SIGTERM", options?: ErrorOptions) {
-    super(`Process interrupted by ${signal}`, options);
-    this.name = "ProcessSignalError";
-    this.signal = signal;
-  }
-}
-
 /** Reads identity fields that distinguish a live Linux process from PID reuse. */
 export async function readLinuxProcessIdentity(
   pid: number,
