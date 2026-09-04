@@ -189,7 +189,11 @@ class TestCache extends ccc.ClientCache {
 describe("StubClient network boundary", () => {
   it("refuses paged cell scans when no handler was configured", async () => {
     const client = new StubClient({});
-    const searchKey = { script: script("11"), scriptType: "lock" } as const;
+    const searchKey = {
+      script: script("11"),
+      scriptType: "lock",
+      scriptSearchMode: "exact",
+    } as const;
 
     await expect(client.findCellsPaged(searchKey, "asc", 1)).rejects.toThrow(
       "StubClient has no cell scan handler",

@@ -46,7 +46,10 @@ try {
   logExecution(executionLog, new Date());
 }
 process.exitCode ??= 0;
-// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would
-// keep this finished turn alive; stdout is synchronous on Linux pipes and sockets, so exit now.
-// eslint-disable-next-line unicorn/no-process-exit -- The turn is over and nothing else is pending.
-process.exit();
+// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would keep
+// this finished turn alive. Pipes and sockets are asynchronous on POSIX, so exit only once stdout
+// has drained; a bare process.exit() truncates the event stream under load.
+process.stdout.write("", () => {
+  // eslint-disable-next-line unicorn/no-process-exit -- The turn is over and its output is flushed.
+  process.exit();
+});
