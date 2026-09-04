@@ -27,7 +27,7 @@ export function recordExecutionError(
 ): boolean {
   const log = executionLog;
   log["error"] = errorToLog(error);
-  if (shouldStopAfterError(error)) {
+  if (isUnresolvedBroadcast(error)) {
     process.exitCode = STOP_EXIT_CODE;
     return true;
   }
@@ -205,11 +205,21 @@ function objectEntriesLogValue(
   return jsonValue;
 }
 
-function shouldStopAfterError(error: unknown): boolean {
+/**
+ * The transaction may already be accepted while its outcome stayed unresolved, so a fresh
+ * turn could resend funds. A node hash mismatch is such an outcome: the node answered the
+ * send RPC about a transaction this attempt cannot bind. So is any confirmation failure:
+ * one broadcast gets one finite observation window.
+ */
+export function isUnresolvedBroadcast(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "TransactionBroadcastError") {
+    return "nodeTxHash" in error && error.nodeTxHash !== undefined;
+  }
   return (
-    error instanceof Error &&
-    error.name === "TransactionConfirmationError" &&
-    "isTimeout" in error &&
-    error.isTimeout === true
+    error.name === "TransactionConfirmationError" ||
+    error.name === "BotTransactionConfirmationError"
   );
 }

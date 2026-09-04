@@ -2,6 +2,7 @@ import {
   isRetryableCkbStateRaceError,
   isRetryableRpcResponseShapeError,
   isRetryableRpcTransportError,
+  isUnresolvedBroadcast,
   STOP_EXIT_CODE,
 } from "@ickb/node-utils";
 import { TransactionBroadcastError } from "@ickb/sdk";
@@ -30,16 +31,6 @@ export function handleTurnFailure(events: FailureEvents, error: unknown): void {
     terminal: !retryable,
   });
   process.exitCode = retryable || !isUnresolvedBroadcast(error) ? 1 : STOP_EXIT_CODE;
-}
-
-// The transaction may already be accepted while its outcome stayed unresolved, so a
-// fresh turn could resend funds. A node hash mismatch is such an outcome: the node
-// answered the send RPC about a transaction this attempt cannot bind.
-function isUnresolvedBroadcast(error: unknown): boolean {
-  return (
-    (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined) ||
-    (error instanceof Error && isTransactionConfirmationErrorLike(error))
-  );
 }
 
 /**

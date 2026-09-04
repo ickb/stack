@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { OrderConversionRepresentabilityError } from "@ickb/order";
-import { IckbSdk } from "@ickb/sdk";
+import { IckbSdk, TransactionBroadcastError } from "@ickb/sdk";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -111,6 +111,27 @@ describe("handleTesterAttemptError", () => {
       expect(executionLog["error"]).toMatchObject({
         message: "SDK conversion failed: deterministic fixture",
       });
+    } finally {
+      process.exitCode = originalExitCode;
+    }
+  });
+});
+
+describe("handleTesterAttemptError holds", () => {
+  // The node answered about a transaction this attempt cannot bind, so the local one may
+  // already be accepted: hold instead of letting a fresh turn resend.
+  it("holds after a node transaction hash mismatch", () => {
+    const originalExitCode = process.exitCode;
+    try {
+      process.exitCode = undefined;
+      handleTesterAttemptError(
+        new TransactionBroadcastError(byte32FromByte("13"), {
+          nodeTxHash: byte32FromByte("14"),
+          cause: new Error("hash mismatch"),
+        }),
+        {},
+      );
+      expect(process.exitCode).toBe(2);
     } finally {
       process.exitCode = originalExitCode;
     }

@@ -60,13 +60,30 @@ describe("loop error logging", () => {
     });
   });
 
-  it("stops after broadcast confirmation timeouts", () => {
+  it("holds after any confirmation failure or node hash mismatch, not other errors", () => {
     expect(STOP_EXIT_CODE).toBe(2);
     expect(recordExecutionError({}, transactionError(true))).toBe(true);
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
     process.exitCode = undefined;
-    expect(recordExecutionError({}, transactionError(false))).toBe(false);
+    expect(recordExecutionError({}, transactionError(false))).toBe(true);
+    process.exitCode = undefined;
+    class TransactionBroadcastError extends Error {
+      public override readonly name = "TransactionBroadcastError";
+      public readonly nodeTxHash: string | undefined;
+      constructor(nodeTxHash: string | undefined, options?: ErrorOptions) {
+        super("broadcast failed", options);
+        this.nodeTxHash = nodeTxHash;
+      }
+    }
+    expect(
+      recordExecutionError({}, new TransactionBroadcastError(byte32FromByte("44"))),
+    ).toBe(true);
+    process.exitCode = undefined;
+    expect(recordExecutionError({}, new TransactionBroadcastError(undefined))).toBe(
+      false,
+    );
     expect(recordExecutionError({}, new Error("failed"))).toBe(false);
+    expect(process.exitCode).toBeUndefined();
   });
 });
 
@@ -93,8 +110,9 @@ describe("loop transaction error logging", () => {
     const executionLog: Record<string, unknown> = { txHash };
 
     expect(recordExecutionError(executionLog, transactionError(false, txHash))).toBe(
-      false,
+      true,
     );
+    process.exitCode = undefined;
     expect(executionLog["error"]).toMatchObject({
       name: "TransactionConfirmationError",
       message: TRANSACTION_CONFIRMATION_TIMEOUT_MESSAGE,
