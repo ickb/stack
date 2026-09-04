@@ -1,17 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, StubClient } from "@ickb/testkit";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSamplerClient, main, samples } from "../src/sampler.ts";
+import { describe, expect, it } from "vitest";
+import { sampleRows, samples } from "../src/sampler.ts";
 
 const SAMPLER_MODULE_SUITE = "sampler module";
 const SAMPLE_GENESIS_ISO = "2024-09-12T00:00:00.000Z";
 const SAMPLE_LAUNCH_ISO = "2024-09-12T15:13:19.574Z";
 const SAMPLE_TIP_ISO = "2024-09-13T00:00:00.000Z";
 const APPROXIMATE_SAMPLE = "Approximate timestamp sample";
-
-beforeEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe(SAMPLER_MODULE_SUITE, () => {
   it("samples each covered UTC year", () => {
@@ -38,66 +34,19 @@ describe(SAMPLER_MODULE_SUITE, () => {
 });
 
 describe(SAMPLER_MODULE_SUITE, () => {
-  it("defaults to stdout logging", async () => {
-    const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
-    const tip = sampleHeader(1n, SAMPLE_TIP_ISO);
-    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    await main({
-      client: sampleClient(
-        new Map([
-          [0, genesis],
-          [1, tip],
-        ]),
-        tip,
-      ),
-      samplesPerYear: 1,
-    });
-
-    expect(write).toHaveBeenCalledWith("BlockNumber, Date, CkbPerIckb, Note\n");
-  });
-
-  it("constructs a mainnet public client by default", async () => {
-    const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
-    const tip = sampleHeader(1n, SAMPLE_TIP_ISO);
-    const client = sampleClient(
-      new Map([
-        [0, genesis],
-        [1, tip],
-      ]),
-      tip,
-    );
-    const createClient = vi.fn((): ccc.Client => client);
-
-    await main({ createClient, log: noopLog, samplesPerYear: 1 });
-
-    expect(createClient).toHaveBeenCalledTimes(1);
-    expect(createClient).toHaveBeenCalledWith();
-    const samplerClient = createSamplerClient();
-    expect(samplerClient).toBeInstanceOf(ccc.ClientPublicMainnet);
-    expect(samplerClient.url).toBe("https://mainnet.ckb.dev/");
-  });
-});
-
-describe(SAMPLER_MODULE_SUITE, () => {
   it("throws when the genesis header is missing", async () => {
     await expect(
-      main({
-        client: sampleClient(new Map(), sampleHeader(1n, SAMPLE_TIP_ISO)),
-        log: noopLog,
-        samplesPerYear: 1,
-      }),
+      rows(sampleClient(new Map(), sampleHeader(1n, SAMPLE_TIP_ISO)), 1),
     ).rejects.toThrow("Genesis block not found");
   });
 
-  it("logs sampled rows from an injected client", async () => {
+  it("yields sampled rows from the client", async () => {
     const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
     const launch = sampleHeader(1n, SAMPLE_LAUNCH_ISO);
     const tip = sampleHeader(2n, SAMPLE_TIP_ISO);
-    const lines: string[] = [];
 
-    await main({
-      client: sampleClient(
+    const lines = await rows(
+      sampleClient(
         new Map([
           [0, genesis],
           [1, launch],
@@ -105,11 +54,8 @@ describe(SAMPLER_MODULE_SUITE, () => {
         ]),
         tip,
       ),
-      log: (line) => {
-        lines.push(line);
-      },
-      samplesPerYear: 1,
-    });
+      1,
+    );
 
     expect(lines.map((line) => line.split(", ").slice(0, 2))).toEqual([
       ["BlockNumber", "Date"],
@@ -127,20 +73,16 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const tipIso = "2024-03-01T00:00:00.000Z";
     const genesis = sampleHeader(0n, genesisIso);
     const tip = sampleHeader(1n, tipIso);
-    const lines: string[] = [];
 
-    await main({
-      client: sampleClient(
+    const lines = await rows(
+      sampleClient(
         new Map([
           [0, genesis],
           [1, tip],
         ]),
         tip,
       ),
-      log: (line) => {
-        lines.push(line);
-      },
-    });
+    );
 
     expect(lines).toHaveLength(4);
     expect(lines[2]?.startsWith(`0, ${genesisIso}`)).toBe(true);
@@ -161,10 +103,9 @@ describe(SAMPLER_MODULE_SUITE, () => {
     ]);
     const reads = new Map<number, number>();
     const inconsistent = sampleHeader(99n, "2024-09-14T00:00:00.000Z");
-    const lines: string[] = [];
 
-    await main({
-      client: new StubClient({
+    const lines = await rows(
+      new StubClient({
         getHeaderByNumber: async (
           blockNumber,
         ): Promise<ccc.ClientBlockHeader | undefined> => {
@@ -179,11 +120,8 @@ describe(SAMPLER_MODULE_SUITE, () => {
           return tip;
         },
       }),
-      log: (line) => {
-        lines.push(line);
-      },
-      samplesPerYear: 1,
-    });
+      1,
+    );
 
     expect(Object.fromEntries(reads)).toEqual({ 0: 1, 1: 1, 2: 1 });
     expect(lines.map((line) => line.split(", ").slice(0, 2))).toEqual([
@@ -199,21 +137,17 @@ describe(SAMPLER_MODULE_SUITE, () => {
   it("does not sample iCKB launch after the current tip", async () => {
     const genesis = sampleHeader(0n, "2024-09-11T00:00:00.000Z");
     const tip = sampleHeader(1n, "2024-09-12T00:00:00.000Z");
-    const lines: string[] = [];
 
-    await main({
-      client: sampleClient(
+    const lines = await rows(
+      sampleClient(
         new Map([
           [0, genesis],
           [1, tip],
         ]),
         tip,
       ),
-      log: (line) => {
-        lines.push(line);
-      },
-      samplesPerYear: 1,
-    });
+      1,
+    );
 
     expect(lines.join("\n")).not.toContain("iCKB Launch");
     expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
@@ -236,15 +170,11 @@ describe(SAMPLER_MODULE_SUITE, () => {
       ]),
     );
     const tip = headers.get(5);
-    const lines: string[] = [];
 
-    await main({
-      client: sampleClient(headers, tip ?? sampleHeader(5n, SAMPLE_TIP_ISO)),
-      log: (line) => {
-        lines.push(line);
-      },
-      samplesPerYear: 4,
-    });
+    const lines = await rows(
+      sampleClient(headers, tip ?? sampleHeader(5n, SAMPLE_TIP_ISO)),
+      4,
+    );
 
     expect(lines.slice(1).map((line) => line.split(", ", 4)[3])).toEqual([
       "Genesis",
@@ -257,27 +187,23 @@ describe(SAMPLER_MODULE_SUITE, () => {
     ]);
   });
 
-  it("logs the exact tip header without searching for it", async () => {
+  it("yields the exact tip header without searching for it", async () => {
     const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
     const launch = sampleHeader(1n, SAMPLE_LAUNCH_ISO);
     const tip = sampleHeader(2n, SAMPLE_TIP_ISO);
-    const lines: string[] = [];
 
-    await main({
-      // The tip block is unreachable by number, so only the fetched tip header
-      // can produce an exact tip row.
-      client: sampleClient(
+    // The tip block is unreachable by number, so only the fetched tip header
+    // can produce an exact tip row.
+    const lines = await rows(
+      sampleClient(
         new Map([
           [0, genesis],
           [1, launch],
         ]),
         tip,
       ),
-      log: (line) => {
-        lines.push(line);
-      },
-      samplesPerYear: 1,
-    });
+      1,
+    );
 
     expect(lines.at(-1)?.startsWith(`2, ${SAMPLE_TIP_ISO}`)).toBe(true);
     expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
@@ -288,8 +214,8 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const tip = sampleHeader(1_500_000_000n, SAMPLE_TIP_ISO);
     const requests: bigint[] = [];
 
-    await main({
-      client: new StubClient({
+    await rows(
+      new StubClient({
         getHeaderByNumber: async (
           blockNumber,
         ): ReturnType<ccc.Client["getHeaderByNumber"]> => {
@@ -302,9 +228,8 @@ describe(SAMPLER_MODULE_SUITE, () => {
           return tip;
         },
       }),
-      log: noopLog,
-      samplesPerYear: 1,
-    });
+      1,
+    );
 
     const positiveRequest = requests.find((blockNumber) => blockNumber > 0n);
     expect(positiveRequest).toBeGreaterThan(0n);
@@ -316,13 +241,9 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
     const tip = sampleHeader(2n ** 52n, SAMPLE_TIP_ISO);
 
-    await expect(
-      main({
-        client: sampleClient(new Map([[0, genesis]]), tip),
-        log: noopLog,
-        samplesPerYear: 1,
-      }),
-    ).rejects.toThrow("Tip block number exceeds sampler search range");
+    await expect(rows(sampleClient(new Map([[0, genesis]]), tip), 1)).rejects.toThrow(
+      "Tip block number exceeds sampler search range",
+    );
   });
 
   it("throws when the selected sample header is missing", async () => {
@@ -330,20 +251,27 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const tip = sampleHeader(2n, SAMPLE_TIP_ISO);
 
     await expect(
-      main({
-        client: sampleClient(
+      rows(
+        sampleClient(
           new Map([
             [0, genesis],
             [2, tip],
           ]),
           tip,
         ),
-        log: noopLog,
-        samplesPerYear: 1,
-      }),
+        1,
+      ),
     ).rejects.toThrow("Header not found");
   });
 });
+
+async function rows(client: ccc.Client, samplesPerYear?: number): Promise<string[]> {
+  const lines: string[] = [];
+  for await (const line of sampleRows(client, samplesPerYear)) {
+    lines.push(line);
+  }
+  return lines;
+}
 
 function sampleHeader(number: bigint, isoTimestamp: string): ccc.ClientBlockHeader {
   return headerLike({
@@ -351,10 +279,6 @@ function sampleHeader(number: bigint, isoTimestamp: string): ccc.ClientBlockHead
     timestamp: BigInt(Date.parse(isoTimestamp)),
     dao: { ar: 10000000000000000n, c: 0n, s: 0n, u: 0n },
   });
-}
-
-function noopLog(): void {
-  // Intentionally empty test logger.
 }
 
 function sampleClient(

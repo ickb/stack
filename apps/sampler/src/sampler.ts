@@ -1,23 +1,10 @@
 /**
  * @packageDocumentation
  *
- * Samples block headers from a CKB mainnet public client,
- * or an injected compatible client, and prints a CSV report (BlockNumber, Date,
- * CkbPerIckb, Note).
- *
- * Summary of behavior:
- * - Uses an injected client when provided, otherwise constructs `ccc.ClientPublicMainnet`.
- * - Queries the genesis and tip headers.
- * - Logs genesis separately, then builds a set of Date samples between genesis
- *   and tip, adding "iCKB Launch" only when it falls in range.
- * - For each historical sample date, performs a bounded binary search over block
- *   numbers and labels the result approximate because block timestamps may decrease.
- * - Logs the fetched tip header last; like genesis it is exact, not searched.
- * - Logs CSV lines with block number, ISO timestamp, CKB per 1 iCKB, and an optional note.
- *
- * Remarks:
- * - The sampling functions accept timestamps as bigint millisecond values.
- * - Failures in fetching blocks will throw.
+ * Samples block headers from a CKB client into CSV rows (BlockNumber, Date,
+ * CkbPerIckb, Note): the exact genesis and tip headers, plus evenly spaced dates
+ * between them located by a bounded binary search over block numbers. Those rows
+ * are approximate because consensus permits block timestamps to decrease.
  *
  * Example output (CSV):
  * BlockNumber, Date, CkbPerIckb, Note
@@ -30,51 +17,20 @@ import { ccc } from "@ckb-ccc/core";
 import { convert, ickbExchangeRatio } from "@ickb/core";
 import { asyncBinarySearch } from "@ickb/utils";
 
-interface MainOptions {
-  /** Optional client override for tests or alternate mainnet RPC providers. */
-  client?: ccc.Client;
-
-  /** Optional default-client factory for tests. */
-  createClient?: () => ccc.Client;
-
-  /** Optional line logger; defaults to stdout. */
-  log?: (line: string) => void;
-
-  /** Number of evenly spaced timestamp positions to consider per covered UTC year. */
-  samplesPerYear?: number;
-}
-
 /**
- * Main program that orchestrates sampling and logging.
+ * Yields the CSV header, the genesis row, one approximate row per sample date
+ * (`samplesPerYear` evenly spaced positions per covered UTC year plus the iCKB
+ * launch when in range), and the exact tip row.
  *
- * - Uses an injected client when provided, otherwise constructs a public mainnet client.
- * - Fetches genesis and tip headers (throws if genesis is missing).
- * - Computes a power-of-two search bound from the bit-length of tip.number.
- * - Generates date samples using `samplesPerYear` and adds "iCKB Launch" when in range.
- * - For each historical date sample, uses `asyncBinarySearch` to select an
- *   approximate block and marks that limitation in the CSV note.
- * - Logs the sampled tip header itself as the exact final row.
- *
- * @remarks The tip is sampled once at startup and used as the upper bound for
- * every search in this run.
- *
- * Notes on error handling:
- * - Missing probed headers move binary search left; a missing selected result
- *   header causes this function to throw.
- *
- * @returns Promise<void> that resolves when sampling and logging complete.
+ * @remarks The tip is read once and bounds every search. A missing probed header
+ * moves the search left; a missing genesis or selected header throws.
  *
  * @public
  */
-export async function main(options: MainOptions = {}): Promise<void> {
-  // Create a public mainnet client (network I/O happens on method calls).
-  const createClient = options.createClient ?? createSamplerClient;
-  const client = options.client ?? createClient();
-  const log =
-    options.log ??
-    ((line: string): void => {
-      process.stdout.write(`${line}\n`);
-    });
+export async function* sampleRows(
+  client: ccc.Client,
+  samplesPerYear?: number,
+): AsyncGenerator<string> {
   const headers = new Map<number, ccc.ClientBlockHeader | undefined>();
   const getHeader = async (
     blockNumber: number,
@@ -100,11 +56,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
   }
   const n = Number(searchBound);
 
-  const dates = sampleTargets(genesis.timestamp, tip.timestamp, options.samplesPerYear);
+  const dates = sampleTargets(genesis.timestamp, tip.timestamp, samplesPerYear);
 
-  // Emit CSV header and the genesis row.
-  log(["BlockNumber", "Date", "CkbPerIckb", "Note"].join(", "));
-  logRow(genesis, "Genesis", log);
+  yield ["BlockNumber", "Date", "CkbPerIckb", "Note"].join(", ");
+  yield row(genesis, "Genesis");
 
   // Consensus permits timestamp decreases, so binary-search rows are approximate.
   for (const [date, note] of dates) {
@@ -130,18 +85,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
       throw new Error("Header not found");
     }
 
-    logRow(header, note, log);
+    yield row(header, note);
   }
 
-  // The tip header is already exact, so it is logged directly like genesis.
-  logRow(tip, "Tip", log);
-}
-
-export function createSamplerClient(): ccc.Client {
-  return new ccc.ClientPublicMainnet({
-    url: "https://mainnet.ckb.dev/",
-    fallbacks: [],
-  });
+  // The tip header is already exact, so it is emitted directly like genesis.
+  yield row(tip, "Tip");
 }
 
 function sampleTargets(startMs: bigint, endMs: bigint, n = 4): Array<[Date, string]> {
@@ -158,35 +106,16 @@ function sampleTargets(startMs: bigint, endMs: bigint, n = 4): Array<[Date, stri
   return dates;
 }
 
-/**
- * Log a CSV row for a header.
- *
- * Behavior:
- * - Converts 1 iCKB via `convert(false, ccc.One, ickbExchangeRatio(header))`,
- *   formats it with `ccc.fixedPointToString`, and writes a CSV line.
- * - This helper is intentionally lightweight and will throw only on programmer errors
- *   (e.g. unexpected undefined header when called).
- *
- * @param header - Block header to log.
- * @param note - Optional short note to include in the CSV row (e.g. "Genesis"...).
- *
- * @internal
- */
-function logRow(
-  header: ccc.ClientBlockHeader,
-  note: string,
-  log: (line: string) => void,
-): void {
-  // Compute ISO timestamp from header timestamp (milliseconds).
+/** CSV row: block number, ISO date, CKB per 1 iCKB at that header, note. */
+function row(header: ccc.ClientBlockHeader, note: string): string {
   const date = new Date(Number(header.timestamp));
-  // Include the recoverable occupied capacity of a standard deposit.
   const val = convert(false, ccc.One, ickbExchangeRatio(header));
-  // Emit CSV row: blockNumber, ISO date, formatted value, note.
-  log(
-    [String(header.number), date.toISOString(), ccc.fixedPointToString(val), note].join(
-      ", ",
-    ),
-  );
+  return [
+    String(header.number),
+    date.toISOString(),
+    ccc.fixedPointToString(val),
+    note,
+  ].join(", ");
 }
 
 /**
