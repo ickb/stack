@@ -1,10 +1,10 @@
 # Current Bot Rebalancing Policy
 
-This document describes the behavior implemented by `packages/bot/src/bot/loop.ts`, `packages/bot/src/runtime/`, `packages/bot/src/policy.ts`, and the `apps/bot/src/index.ts` CLI adapter.
+This document describes the behavior implemented by `packages/bot/src/bot/turn.ts`, `packages/bot/src/runtime/`, `packages/bot/src/policy.ts`, and the `apps/bot/src/index.ts` script.
 
 ## Goal
 
-The bot keeps enough liquid iCKB for order matching and withdrawals while leaving as much capital as practical in CKB. Each loop builds at most one completed transaction, sends it, and waits until the transaction is committed before starting the next loop.
+The bot keeps enough liquid iCKB for order matching and withdrawals while leaving as much capital as practical in CKB. Each turn builds at most one completed transaction, sends it, and waits until the transaction is committed before the process exits; the service manager starts the next turn.
 
 The bot exits when its total CKB-equivalent capital is less than or equal to `21 / 20 * depositCapacity`, where `depositCapacity` is recalculated from the live exchange ratio.
 
@@ -48,7 +48,7 @@ One direct deposit or withdrawal request uses two output slots. The bot computes
 
 Runtime transaction construction applies the chosen action after order matching. For `withdraw`, the withdrawal request is passed into `sdk.buildBaseTransaction(...)`. For `deposit`, `logic.deposit(...)` adds the fresh deposit. The bot completes iCKB UDT balance, CKB capacity, fees, and the DAO output-limit check through `sdk.completeTransaction(...)` before signing.
 
-The final CKB reserve guard uses projected `availableCkbBalance + match.ckbDelta - rebalance costs - fee`. It blocks transactions that would end below `CKB_RESERVE`, except withdrawal requests with non-negative match CKB delta. Withdrawal requests spend CKB now to restore CKB later, including ordinary `excess_ickb_balance`; they must not hide an unrelated CKB-spending match below reserve. Pending CKB from withdrawal requests still is not liquid in the current loop.
+The final CKB reserve guard uses projected `availableCkbBalance + match.ckbDelta - rebalance costs - fee`. It blocks transactions that would end below `CKB_RESERVE`, except withdrawal requests with non-negative match CKB delta. Withdrawal requests spend CKB now to restore CKB later, including ordinary `excess_ickb_balance`; they must not hide an unrelated CKB-spending match below reserve. Pending CKB from withdrawal requests still is not liquid in the current turn.
 
 The direct-deposit fee headroom is a fixed prebuild margin. Exact fee remains a runtime completion concern because it depends on selected inputs, change, and witness size.
 
@@ -89,7 +89,7 @@ Normal candidates come only from ready deposits that are ring surplus in the con
 
 When ordinary excess withdrawal does not build, the policy-owned no-op reason distinguishes the cause: `no_ready_withdrawal_selection` for no ready withdrawal selection at all, `no_ring_surplus_ready_deposits` when ready deposits exist but all are ring anchors, and `ring_surplus_withdrawal_over_budget` when ring-surplus ready deposits exist but none fit the withdrawable iCKB budget.
 
-Pending CKB from an excess withdrawal request is not treated as liquid until a later loop reads it from account state.
+Pending CKB from an excess withdrawal request is not treated as liquid until a later turn reads it from account state.
 
 ## Reserve Recovery
 
@@ -113,9 +113,9 @@ Normal ready withdrawals never spend ring anchors. The only path that can break 
 
 Withdrawal count is capped by `min(MAX_WITHDRAWAL_REQUESTS, floor(outputSlots / 2))`.
 
-## Send Loop
+## Send Turn
 
-The bot validates JSON `sleepIntervalSeconds` as a finite number of seconds greater than or equal to one. The first iteration starts immediately. Between attempts, the bot sleeps for a triangular-jittered duration from `0` up to but not including `2 * sleepIntervalSeconds`, centered on `sleepIntervalSeconds`. Each iteration builds at most one transaction, sends it through the initialization-owned signer closure, and calls the SDK transaction waiter with a 10-minute timeout and 10-second polling interval. Rejections and confirmation failures are reported as versioned events with the broadcast hash. A broadcast transaction gets that one observation window: confirmation timeout is terminal and exits with code `2`, stopping the service rather than rebuilding and resending the intent. Only an RBF-replaced rejection is retryable, because the sent transaction can then never confirm. Large numeric values are logged as strings to preserve bigint precision.
+Each process runs one turn: it builds at most one transaction, sends it through the initialization-owned signer closure, and calls the SDK transaction waiter with a 10-minute timeout and 10-second polling interval. There is no inner loop, retry budget, or sleep; the systemd unit (`Restart=always`, `RestartSec=60`) or the operator starts the next turn. Rejections and confirmation failures are reported as `bot.transaction.failed` and `bot.turn.failed` events with the broadcast hash. A broadcast transaction gets that one observation window: a confirmation failure or a node hash mismatch exits with code `2`, which `RestartPreventExitStatus=2` turns into a hold rather than a rebuild and resend of the intent. Only an RBF-replaced rejection exits `1`, because the sent transaction can then never confirm. Large numeric values are logged as strings to preserve bigint precision.
 
 ## Non-Goals
 
