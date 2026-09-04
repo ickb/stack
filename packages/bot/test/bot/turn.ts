@@ -1,23 +1,35 @@
 import { ccc } from "@ckb-ccc/core";
+import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { STOP_EXIT_CODE } from "@ickb/node-utils";
-import { TransactionBroadcastError, TransactionWaitError } from "@ickb/sdk";
+import { OrderManager } from "@ickb/order";
+import { TransactionBroadcastError } from "@ickb/sdk";
+import {
+  chainState,
+  FakeClient,
+  headerLike,
+  type ChainState,
+  type FakeClientOverrides,
+} from "@ickb/testkit";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
   runBotTurn,
   type BotTurnContext,
-  type BotTurnOperations,
 } from "../../src/bot/turn.ts";
 import { BotEventEmitter } from "../../src/observability/events.ts";
-import type { BuildTransactionResult, Runtime } from "../../src/runtime/types.ts";
+import type { Runtime } from "../../src/runtime/types.ts";
 import {
-  noActionDecisionTranscript,
-  noActions,
-} from "../observability/fixtures/observability.ts";
-import { botRuntime, botState, hash } from "./fixtures/bot.ts";
+  botRuntime,
+  completeSearchResult,
+  hash,
+  l1AccountState,
+  matchDiagnostics,
+  TARGET_ICKB_BALANCE,
+  testWithdrawal,
+  type L1AccountState,
+} from "./fixtures/bot.ts";
 
-const TX_HASH = hash("ab");
 const BOT_TURN_STARTED = "bot.turn.started";
 const BOT_STATE_READ = "bot.state.read";
 const BOT_TURN_FAILED = "bot.turn.failed";
@@ -33,16 +45,12 @@ const RBF_REJECTED_REASON = JSON.stringify({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   process.exitCode = undefined;
 });
 
 it("stops with event-only low-capital evidence", async () => {
-  const harness = turnHarness({
-    readBotState: async () => {
-      await Promise.resolve();
-      return botState({ minCkbBalance: 1n });
-    },
-  });
+  const harness = turnHarness({ account: l1AccountState() });
 
   await runBotTurn(harness.context);
 
@@ -54,13 +62,13 @@ it("stops with event-only low-capital evidence", async () => {
   ]);
   expect(harness.events.at(-1)).toMatchObject({
     reason: "capital_below_minimum",
-    deficit: "1",
-    actions: noActions,
+    deficit: String((21n * ICKB_DEPOSIT_CAP) / 20n),
   });
-  expect(harness.operations.buildTransaction).not.toHaveBeenCalled();
+  expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
 it("records skipped terminal iterations without legacy execution logs", async () => {
+  noMatch();
   const harness = turnHarness();
 
   await runBotTurn(harness.context);
@@ -72,38 +80,22 @@ it("records skipped terminal iterations without legacy execution logs", async ()
     "bot.rebalance.evaluated",
     "bot.decision.skipped",
   ]);
-  expect(harness.operations.waitTransaction).not.toHaveBeenCalled();
+  expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
 it("sends explicitly and waits with the finite production policy", async () => {
-  const tx = ccc.Transaction.from({
-    outputs: [{ capacity: 0n, lock: emptyScript("22") }],
-  });
+  // A CKB-rich, iCKB-poor account under a useful iCKB floor plans a direct deposit,
+  // the one rebalance kind that carries no ring diagnostics.
+  noMatch(matchDiagnostics({ ckbValue: ccc.fixedPointFrom(2000), udtValue: 99n }));
   vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(7n);
-  const sendTransaction = vi.fn<Runtime["sendTransaction"]>(async () => {
-    await Promise.resolve();
-    return TX_HASH;
-  });
   const harness = turnHarness({
-    buildTransaction: async () => {
-      await Promise.resolve();
-      return builtResult(tx);
-    },
-    sendTransaction,
+    account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
   });
 
   await runBotTurn(harness.context);
 
-  const recordTxHash = sendTransaction.mock.calls[0]?.[1];
+  const recordTxHash = harness.sendTransaction.mock.calls[0]?.[1];
   expect(typeof recordTxHash).toBe("function");
-  expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
-    harness.context.runtime.client,
-    TX_HASH,
-    {
-      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-    },
-  );
   expect(eventTypes(harness.events)).toEqual([
     BOT_TURN_STARTED,
     BOT_STATE_READ,
@@ -114,19 +106,25 @@ it("sends explicitly and waits with the finite production policy", async () => {
     BOT_TRANSACTION_CONFIRMATION,
     BOT_TRANSACTION_COMMITTED,
   ]);
+  expect(harness.events[4]).toMatchObject({
+    decision: { rebalance: { kind: "deposit", reason: "low_ickb_balance" } },
+  });
   expect(harness.events[5]).toMatchObject({
-    txHash: TX_HASH,
+    txHash: harness.sentHash(),
     transaction: { fee: "7", feeRate: "1" },
+  });
+  expect(harness.events[6]).toMatchObject({
+    txHash: harness.sentHash(),
+    status: "committed",
+    timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
+    intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
 });
 
 it("reports broadcast failures with send-phase evidence", async () => {
-  const tx = ccc.Transaction.default();
+  noMatch();
   const harness = turnHarness({
-    buildTransaction: async () => {
-      await Promise.resolve();
-      return builtResult(tx);
-    },
+    account: fundedAccount({ withdrawal: true }),
     sendTransaction: async () => {
       await Promise.resolve();
       throw new Error("transaction broadcast failed");
@@ -148,57 +146,46 @@ it("reports broadcast failures with send-phase evidence", async () => {
 });
 
 it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
-  const tx = ccc.Transaction.default();
-  const sendTransaction = vi.fn<Runtime["sendTransaction"]>(async (_tx, recordTxHash) => {
-    await Promise.resolve();
-    recordTxHash?.(TX_HASH);
-    throw new TransactionBroadcastError(TX_HASH, {
-      cause: new TypeError(FETCH_FAILED),
-    });
-  });
+  noMatch();
+  const chain = chainState();
   const harness = turnHarness({
-    buildTransaction: async () => {
+    account: fundedAccount({ withdrawal: true }),
+    chain,
+    sendTransaction: async (txLike, recordTxHash) => {
       await Promise.resolve();
-      return builtResult(tx);
+      const txHash = commitTransaction(chain, txLike);
+      recordTxHash?.(txHash);
+      throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
     },
-    sendTransaction,
   });
 
   await runBotTurn(harness.context);
 
-  expect(sendTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
-    harness.context.runtime.client,
-    TX_HASH,
-    {
-      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-    },
-  );
+  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
   expect(harness.events).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         type: BOT_TRANSACTION_SENT,
-        txHash: TX_HASH,
+        txHash: harness.sentHash(),
         outcome: "broadcast_ambiguous",
       }),
       expect.objectContaining({
         type: BOT_TRANSACTION_COMMITTED,
-        txHash: TX_HASH,
+        txHash: harness.sentHash(),
       }),
     ]),
   );
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
+  noMatch();
+  const chain = chainState();
   const harness = turnHarness({
-    buildTransaction: async () => {
+    account: fundedAccount({ withdrawal: true }),
+    chain,
+    sendTransaction: async (txLike) => {
       await Promise.resolve();
-      return builtResult(ccc.Transaction.default());
-    },
-    sendTransaction: async () => {
-      await Promise.resolve();
-      throw new TransactionBroadcastError(TX_HASH, {
+      throw new TransactionBroadcastError(commitTransaction(chain, txLike), {
         cause: new TypeError(FETCH_FAILED),
       });
     },
@@ -206,81 +193,79 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
 
   await runBotTurn(harness.context);
 
-  expect(harness.operations.waitTransaction).toHaveBeenCalledWith(
-    harness.context.runtime.client,
-    TX_HASH,
-    {
-      timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-      interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-    },
-  );
-  expect(harness.events).toContainEqual(
-    expect.objectContaining({
-      type: BOT_TRANSACTION_SENT,
-      txHash: TX_HASH,
-      outcome: "broadcast_ambiguous",
-    }),
+  expect(harness.events).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: BOT_TRANSACTION_SENT,
+        txHash: harness.sentHash(),
+        outcome: "broadcast_ambiguous",
+      }),
+      expect.objectContaining({
+        type: BOT_TRANSACTION_COMMITTED,
+        txHash: harness.sentHash(),
+      }),
+    ]),
   );
 });
 
 it("fails closed on a node hash mismatch without waiting or retrying its cause", async () => {
+  noMatch();
   const nodeTxHash = hash("ac");
-  const sendTransaction = vi.fn<Runtime["sendTransaction"]>(async (_tx, recordTxHash) => {
-    await Promise.resolve();
-    recordTxHash?.(TX_HASH);
-    throw new TransactionBroadcastError(TX_HASH, {
-      nodeTxHash,
-      cause: new TypeError(FETCH_FAILED),
-    });
-  });
+  const getTransactionNoCache =
+    vi.fn<NonNullable<FakeClientOverrides["getTransactionNoCache"]>>();
   const harness = turnHarness({
-    buildTransaction: async () => {
+    account: fundedAccount({ withdrawal: true }),
+    client: { getTransactionNoCache },
+    sendTransaction: async (txLike, recordTxHash) => {
       await Promise.resolve();
-      return builtResult(ccc.Transaction.default());
+      const txHash = ccc.Transaction.from(txLike).hash();
+      recordTxHash?.(txHash);
+      throw new TransactionBroadcastError(txHash, {
+        nodeTxHash,
+        cause: new TypeError(FETCH_FAILED),
+      });
     },
-    sendTransaction,
   });
 
   await runBotTurn(harness.context);
 
   // The node answered about a transaction this attempt cannot bind, so the local
   // one may already be accepted and a restart could resend it.
+  const txHash = harness.sentHash();
   expect(process.exitCode).toBe(STOP_EXIT_CODE);
-  expect(sendTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.waitTransaction).not.toHaveBeenCalled();
+  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
+  expect(getTransactionNoCache).not.toHaveBeenCalled();
   expect(
     harness.events.find((event) => event.type === BOT_TRANSACTION_FAILED),
   ).toMatchObject({
-    txHash: TX_HASH,
+    txHash,
     nodeTxHash,
     phase: "broadcast",
     outcome: "send_failed",
     retryable: false,
     terminal: true,
-    error: { txHash: TX_HASH, nodeTxHash },
+    error: { txHash, nodeTxHash },
   });
   expect(harness.events.at(-1)).toMatchObject({
     type: BOT_TURN_FAILED,
     retryable: false,
     terminal: true,
-    error: { txHash: TX_HASH, nodeTxHash },
+    error: { txHash, nodeTxHash },
   });
 });
 
 it("normalizes confirmation error fields from public errors", async () => {
-  const tx = ccc.Transaction.default();
+  noMatch();
   const harness = turnHarness({
-    buildTransaction: async () => {
-      await Promise.resolve();
-      return builtResult(tx);
-    },
-    waitTransaction: async () => {
-      await Promise.resolve();
-      throw Object.assign(new Error("transaction confirmation failed"), {
-        reason: "node rejected transaction",
-        status: 503,
-      });
+    account: fundedAccount({ withdrawal: true }),
+    client: {
+      getTransactionNoCache: async () => {
+        await Promise.resolve();
+        throw Object.assign(new Error("transaction confirmation failed"), {
+          reason: "node rejected transaction",
+          status: 503,
+        });
+      },
     },
   });
 
@@ -291,7 +276,7 @@ it("normalizes confirmation error fields from public errors", async () => {
   expect(
     harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
   ).toMatchObject({
-    txHash: TX_HASH,
+    txHash: harness.sentHash(),
     outcome: "confirmation_failed",
     status: "unresolved",
     reason: "node rejected transaction",
@@ -309,25 +294,28 @@ it.each([
 ])(
   "exits for the next turn only after RBF rejection: $reason",
   async ({ reason, expectedExitCode }) => {
+    noMatch();
+    const chain = chainState();
     const harness = turnHarness({
-      buildTransaction: async () => {
+      account: fundedAccount({ withdrawal: true }),
+      chain,
+      sendTransaction: async (txLike) => {
         await Promise.resolve();
-        return builtResult(ccc.Transaction.default());
-      },
-      waitTransaction: async () => {
-        await Promise.resolve();
-        throw new TransactionWaitError(TX_HASH, { status: "rejected", reason });
+        const transaction = ccc.Transaction.from(txLike);
+        chain.tx({ transaction, status: "rejected", reason });
+        return transaction.hash();
       },
     });
 
     await runBotTurn(harness.context);
 
-    expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
+    expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(expectedExitCode);
   },
 );
 
 it("tolerates confirmation fields disappearing during inspection", async () => {
+  noMatch();
   let statusChecks = 0;
   const error = new Proxy(
     Object.assign(new Error("transaction confirmation failed"), {
@@ -344,13 +332,12 @@ it("tolerates confirmation fields disappearing during inspection", async () => {
     },
   );
   const harness = turnHarness({
-    buildTransaction: async () => {
-      await Promise.resolve();
-      return builtResult(ccc.Transaction.default());
-    },
-    waitTransaction: async () => {
-      await Promise.resolve();
-      throw error;
+    account: fundedAccount({ withdrawal: true }),
+    client: {
+      getTransactionNoCache: async () => {
+        await Promise.resolve();
+        throw error;
+      },
     },
   });
 
@@ -362,30 +349,28 @@ it("tolerates confirmation fields disappearing during inspection", async () => {
 });
 
 it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
-  const tx = ccc.Transaction.default();
-  const timeout = new ccc.ErrorClientWaitTransactionTimeout(
-    BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-  );
+  noMatch();
+  vi.useFakeTimers();
+  const chain = chainState();
   const harness = turnHarness({
-    buildTransaction: async () => {
+    account: fundedAccount({ withdrawal: true }),
+    chain,
+    sendTransaction: async (txLike) => {
       await Promise.resolve();
-      return builtResult(tx);
+      const transaction = ccc.Transaction.from(txLike);
+      chain.tx({ transaction, status: "pending" });
+      return transaction.hash();
     },
-    waitTransaction: vi.fn().mockRejectedValue(timeout),
-    sendTransaction: vi.fn(async () => {
-      await Promise.resolve();
-      return TX_HASH;
-    }),
   });
 
-  await runBotTurn(harness.context);
+  const turn = runBotTurn(harness.context);
+  await vi.advanceTimersByTimeAsync(BOT_TRANSACTION_WAIT_TIMEOUT_MS);
+  await turn;
 
   expect(process.exitCode).toBe(2);
-  expect(harness.context.runtime.sendTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.operations.waitTransaction).toHaveBeenCalledTimes(1);
+  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
   const timeoutFailure = {
-    txHash: TX_HASH,
+    txHash: harness.sentHash(),
     outcome: "timeout",
     isTimeout: true,
     retryable: false,
@@ -404,7 +389,7 @@ it("ends the attempt after one confirmation window without resending or rebuildi
 
 it("exits 1 with retryable metadata so the next turn can retry", async () => {
   const harness = turnHarness({
-    buildTransaction: async () => {
+    getL1AccountState: async () => {
       await Promise.resolve();
       throw new TypeError(FETCH_FAILED);
     },
@@ -413,7 +398,7 @@ it("exits 1 with retryable metadata so the next turn can retry", async () => {
   await runBotTurn(harness.context);
 
   expect(process.exitCode).toBe(1);
-  expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
+  expect(harness.sendTransaction).not.toHaveBeenCalled();
   expect(harness.events.at(-1)).toMatchObject({
     type: BOT_TURN_FAILED,
     retryable: true,
@@ -424,12 +409,10 @@ it("exits 1 with retryable metadata so the next turn can retry", async () => {
 });
 
 it("stops non-retryable failures with structured event evidence", async () => {
-  const harness = turnHarness({
-    buildTransaction: async () => {
-      await Promise.resolve();
-      throw new Error("deterministic build failure");
-    },
+  vi.spyOn(OrderManager, "bestMatch").mockImplementation(() => {
+    throw new Error("deterministic build failure");
   });
+  const harness = turnHarness();
 
   await runBotTurn(harness.context);
 
@@ -443,28 +426,42 @@ it("stops non-retryable failures with structured event evidence", async () => {
 });
 
 function turnHarness(
-  overrides: Partial<BotTurnOperations> & {
+  options: {
+    account?: L1AccountState;
+    chain?: ChainState;
+    client?: FakeClientOverrides;
+    getL1AccountState?: Runtime["sdk"]["getL1AccountState"];
     sendTransaction?: Runtime["sendTransaction"];
   } = {},
 ): {
   context: BotTurnContext;
   events: Array<Record<string, unknown> & { type: string }>;
-  operations: BotTurnOperations;
+  sendTransaction: ReturnType<typeof vi.fn<Runtime["sendTransaction"]>>;
+  sentHash: () => ccc.Hex;
 } {
-  const { sendTransaction, ...operationOverrides } = overrides;
+  const chain = options.chain ?? chainState();
+  const account = options.account ?? fundedAccount();
   const events: Array<Record<string, unknown> & { type: string }> = [];
-  const runtime = botRuntime();
-  runtime.sendTransaction =
-    sendTransaction ??
-    (async (): Promise<ccc.Hex> => {
-      await Promise.resolve();
-      return TX_HASH;
-    });
-  const operations: BotTurnOperations = {
-    buildTransaction: vi.fn(operationOverrides.buildTransaction ?? defaultBuild),
-    readBotState: vi.fn(operationOverrides.readBotState ?? defaultReadState),
-    waitTransaction: vi.fn(operationOverrides.waitTransaction ?? asyncCommitted),
-  };
+  // The default fake node accepts and commits whatever the bot sends.
+  const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
+    options.sendTransaction ??
+      (async (txLike): Promise<ccc.Hex> => {
+        await Promise.resolve();
+        return commitTransaction(chain, txLike);
+      }),
+  );
+  const runtime = botRuntime({
+    client: new FakeClient(chain, options.client),
+    sdk: {
+      getL1AccountState:
+        options.getL1AccountState ??
+        (async (): Promise<L1AccountState> => {
+          await Promise.resolve();
+          return account;
+        }),
+    },
+    sendTransaction,
+  });
   return {
     context: {
       events: new BotEventEmitter({
@@ -475,59 +472,63 @@ function turnHarness(
         },
       }),
       runtime,
-      operations,
     },
     events,
-    operations,
+    sendTransaction,
+    sentHash: (): ccc.Hex => {
+      const txLike = sendTransaction.mock.calls[0]?.[0];
+      if (txLike === undefined) {
+        throw new Error("Nothing was sent");
+      }
+      return ccc.Transaction.from(txLike).hash();
+    },
   };
 }
 
-async function defaultBuild(): Promise<ReturnType<typeof skippedResult>> {
-  await Promise.resolve();
-  return skippedResult();
+/** By default enough CKB and target iCKB that no policy action is due. */
+function fundedAccount(
+  options: { ckb?: bigint; ickb?: bigint; withdrawal?: boolean } = {},
+): L1AccountState {
+  const ickb = options.ickb ?? TARGET_ICKB_BALANCE;
+  return l1AccountState({
+    capacityCells: [
+      ccc.Cell.from({
+        outPoint: { txHash: hash("aa"), index: 0n },
+        cellOutput: {
+          capacity: options.ckb ?? ccc.fixedPointFrom(2000),
+          lock: hashScript("11"),
+        },
+        outputData: "0x",
+      }),
+    ],
+    nativeUdtCells: [
+      ccc.Cell.from({
+        outPoint: { txHash: hash("ab"), index: 0n },
+        cellOutput: { capacity: 0n, lock: hashScript("11") },
+        outputData: ccc.numLeToBytes(ickb, 16),
+      }),
+    ],
+    nativeUdtBalance: ickb,
+    withdrawalGroups: options.withdrawal === true ? [testWithdrawal("62")] : [],
+  });
 }
 
-async function defaultReadState(): Promise<ReturnType<typeof botState>> {
-  await Promise.resolve();
-  return botState({ availableCkbBalance: 1n, totalCkbBalance: 1n });
-}
-
-async function asyncCommitted(): Promise<ccc.ClientTransactionResponse> {
-  await Promise.resolve();
-  return new ccc.ClientTransactionResponse(
-    ccc.Transaction.default(),
-    "committed",
-    undefined,
-    hash("cd"),
-    10n,
+function noMatch(diagnostics?: ReturnType<typeof matchDiagnostics>): void {
+  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
+    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [], diagnostics }),
   );
 }
 
-function skippedResult(): BuildTransactionResult {
-  return {
-    kind: "skipped" as const,
-    reason: "no_actions" as const,
-    actions: noActions,
-    decision: noActionDecisionTranscript(),
-  };
+function commitTransaction(chain: ChainState, txLike: ccc.TransactionLike): ccc.Hex {
+  const transaction = ccc.Transaction.from(txLike);
+  chain.committedTx(transaction, headerLike({ number: 1n }));
+  return transaction.hash();
 }
 
-function builtResult(tx: ccc.Transaction): BuildTransactionResult {
-  return {
-    kind: "built" as const,
-    tx,
-    actions: { ...noActions, completedDeposits: 1 },
-    decision: {
-      ...noActionDecisionTranscript(),
-      actions: { ...noActions, completedDeposits: 1 },
-    },
-  };
+function hashScript(byte: string): ccc.Script {
+  return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
 }
 
 function eventTypes(events: Array<{ type: string }>): string[] {
   return events.map((event) => event.type);
-}
-
-function emptyScript(byte: string): ccc.ScriptLike {
-  return { codeHash: hash(byte), hashType: "type", args: "0x" };
 }

@@ -3,7 +3,7 @@ import { readRuntimeConfigEnv, type RuntimeConfig } from "@ickb/node-utils";
 export { handleTurnFailure, isRetryableBotError } from "./bot/failure.ts";
 export { readBotState } from "./bot/state.ts";
 export { runBotTurn } from "./bot/turn.ts";
-export type { BotTurnContext, BotTurnOperations } from "./bot/turn.ts";
+export type { BotTurnContext } from "./bot/turn.ts";
 export { BotEventEmitter, createRunId } from "./observability/events.ts";
 export type { Runtime } from "./runtime/types.ts";
 

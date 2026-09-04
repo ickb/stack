@@ -9,6 +9,7 @@ import {
   botRuntime,
   botState,
   completeSearchResult,
+  matchDiagnostics,
   TARGET_ICKB_BALANCE,
   testMatch,
 } from "../bot/fixtures/bot.ts";
@@ -176,41 +177,3 @@ describe("buildTransaction post-match direct deposit refill", () => {
     expect(deposit).toHaveBeenCalledTimes(1);
   });
 });
-
-function matchDiagnostics({
-  ckbValue,
-  udtValue,
-  positiveGain = 0,
-}: {
-  ckbValue: bigint;
-  udtValue: bigint;
-  positiveGain?: number;
-}): ReturnType<typeof OrderManager.bestMatch>["match"]["diagnostics"] {
-  return {
-    orderCount: 1,
-    allowance: { ckbValue, udtValue },
-    ckbAllowanceStep: 100n,
-    udtAllowanceStep: 100n,
-    ckbMiningFee: 1n,
-    candidateBudget: 100_000,
-    workCount: 1,
-    generatedStates: { ckbToUdt: 1, udtToCkb: 0 },
-    directions: {
-      ckbToUdt: { matchableCount: 1, minAllowance: 100n, maxMatch: 1000n },
-      udtToCkb: { matchableCount: 0 },
-    },
-    candidates: {
-      total: 1,
-      viable: 1,
-      positiveGain,
-      rejected: {
-        maxPartials: 0,
-        duplicateOrder: 0,
-        insufficientCkbAllowance: 0,
-        insufficientUdtAllowance: positiveGain === 0 ? 1 : 0,
-        nonPositiveGain: 0,
-      },
-      bestGain: BigInt(positiveGain),
-    },
-  };
-}

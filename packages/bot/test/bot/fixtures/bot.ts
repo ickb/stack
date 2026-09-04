@@ -13,15 +13,25 @@ import {
   Ratio,
   type Match,
   type MatchSearchResult,
+  type OrderManager,
 } from "@ickb/order";
 import { getConfig, IckbSdk } from "@ickb/sdk";
-import { byte32FromByte, headerLike, outPoint, script } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  chainState,
+  FakeClient,
+  headerLike,
+  outPoint,
+  script,
+} from "@ickb/testkit";
 import type { BotState, Runtime } from "../../../src/runtime/types.ts";
 
 type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0];
 
 export interface BotRuntimeOptions {
+  client?: ccc.Client;
   completeTransaction?: Runtime["completeTransaction"];
+  sendTransaction?: Runtime["sendTransaction"];
   sdk?: Partial<{
     buildBaseTransaction: IckbSdk["buildBaseTransaction"];
     getL1AccountState: IckbSdk["getL1AccountState"];
@@ -119,9 +129,7 @@ export function testWithdrawal(byte: string): WithdrawalGroup {
 }
 
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
-  const client = new ccc.ClientPublicTestnet({
-    url: "https://example.invalid",
-  });
+  const client = overrides.client ?? new FakeClient(chainState());
   const config = getConfig("testnet");
   const sdk = botSdk(config, overrides.sdk);
 
@@ -137,10 +145,12 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
         await Promise.resolve();
         return ccc.Transaction.from(tx);
       }),
-    sendTransaction: async (): Promise<ccc.Hex> => {
-      await Promise.resolve();
-      return hash("ff");
-    },
+    sendTransaction:
+      overrides.sendTransaction ??
+      (async (): Promise<ccc.Hex> => {
+        await Promise.resolve();
+        return hash("ff");
+      }),
   };
 }
 
@@ -212,7 +222,7 @@ function botSdk(
       ccc.Transaction.from(txLike),
     getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
       await Promise.resolve();
-      return emptyL1AccountState();
+      return l1AccountState();
     },
     ...overrides,
   });
@@ -263,7 +273,11 @@ function testOrderGroup(byte: string): OrderGroup {
   );
 }
 
-function emptyL1AccountState(): Awaited<ReturnType<IckbSdk["getL1AccountState"]>> {
+export type L1AccountState = Awaited<ReturnType<IckbSdk["getL1AccountState"]>>;
+
+export function l1AccountState(
+  account: Partial<L1AccountState["account"]> = {},
+): L1AccountState {
   return {
     system: {
       tip: headerLike(),
@@ -282,6 +296,7 @@ function emptyL1AccountState(): Awaited<ReturnType<IckbSdk["getL1AccountState"]>
       nativeUdtBalance: 0n,
       receipts: [],
       withdrawalGroups: [],
+      ...account,
     },
   };
 }
@@ -319,4 +334,43 @@ interface TestDepositCell {
 
 function isDepositFixture(value: unknown): value is IckbDepositCell {
   return typeof value === "object" && value !== null && "cell" in value;
+}
+
+/** Complete-match diagnostics whose ckbToUdt side leaves a useful iCKB floor. */
+export function matchDiagnostics({
+  ckbValue,
+  udtValue,
+  positiveGain = 0,
+}: {
+  ckbValue: bigint;
+  udtValue: bigint;
+  positiveGain?: number;
+}): ReturnType<typeof OrderManager.bestMatch>["match"]["diagnostics"] {
+  return {
+    orderCount: 1,
+    allowance: { ckbValue, udtValue },
+    ckbAllowanceStep: 100n,
+    udtAllowanceStep: 100n,
+    ckbMiningFee: 1n,
+    candidateBudget: 100_000,
+    workCount: 1,
+    generatedStates: { ckbToUdt: 1, udtToCkb: 0 },
+    directions: {
+      ckbToUdt: { matchableCount: 1, minAllowance: 100n, maxMatch: 1000n },
+      udtToCkb: { matchableCount: 0 },
+    },
+    candidates: {
+      total: 1,
+      viable: 1,
+      positiveGain,
+      rejected: {
+        maxPartials: 0,
+        duplicateOrder: 0,
+        insufficientCkbAllowance: 0,
+        insufficientUdtAllowance: positiveGain === 0 ? 1 : 0,
+        nonPositiveGain: 0,
+      },
+      bestGain: BigInt(positiveGain),
+    },
+  };
 }

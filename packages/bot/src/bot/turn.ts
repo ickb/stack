@@ -17,48 +17,29 @@ import { readBotState } from "./state.ts";
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 type BotStateDecision = ReturnType<typeof summarizeBotState>;
 
-export interface BotTurnOperations {
-  buildTransaction: typeof buildTransaction;
-  readBotState: typeof readBotState;
-  waitTransaction: typeof waitTransaction;
-}
-
 export interface BotTurnContext {
   /** Event emitter scoped to this bot run. */
   events: BotEventEmitter;
 
   /** Runtime clients, signer, SDK, managers, and primary lock. */
   runtime: Runtime;
-
-  /** Optional effect overrides. Production callers use the defaults. */
-  operations?: Partial<BotTurnOperations>;
 }
-
-const defaultBotTurnOperations: BotTurnOperations = {
-  buildTransaction,
-  readBotState,
-  waitTransaction,
-};
 
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 600_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /** Runs one bot turn: read state, decide, and at most one broadcast with its confirmation wait. */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
-  const operations = { ...defaultBotTurnOperations, ...context.operations };
   context.events.emit("bot.turn.started");
   try {
-    await executeBotWork(context, operations);
+    await executeBotWork(context);
   } catch (error) {
     handleTurnFailure(context.events, error);
   }
 }
 
-async function executeBotWork(
-  context: BotTurnContext,
-  operations: BotTurnOperations,
-): Promise<void> {
-  const state = await operations.readBotState(context.runtime);
+async function executeBotWork(context: BotTurnContext): Promise<void> {
+  const state = await readBotState(context.runtime);
   const stateDecision = summarizeBotState(state);
   emitBotStateRead(context.events, stateDecision);
 
@@ -70,15 +51,10 @@ async function executeBotWork(
     return;
   }
 
-  const result = await operations.buildTransaction(context.runtime, state);
+  const result = await buildTransaction(context.runtime, state);
   await emitDecisionEvents(context.events, result);
   if (result.kind === "built") {
-    await sendBuiltTransaction({
-      context,
-      operations,
-      state,
-      result,
-    });
+    await sendBuiltTransaction({ context, state, result });
   }
 }
 
@@ -112,12 +88,10 @@ function stopForLowCapital({
 
 async function sendBuiltTransaction({
   context,
-  operations,
   state,
   result,
 }: {
   context: BotTurnContext;
-  operations: BotTurnOperations;
   state: BotState;
   result: BuiltTransactionResult;
 }): Promise<void> {
@@ -130,7 +104,7 @@ async function sendBuiltTransaction({
     feeRate: state.system.feeRate,
     startedAt,
   });
-  await confirmTransaction({ context, operations, txHash, startedAt });
+  await confirmTransaction({ context, txHash, startedAt });
 }
 
 async function broadcastTransaction({
@@ -190,17 +164,15 @@ async function broadcastTransaction({
 
 async function confirmTransaction({
   context,
-  operations,
   txHash,
   startedAt,
 }: {
   context: BotTurnContext;
-  operations: BotTurnOperations;
   txHash: ccc.Hex;
   startedAt: number;
 }): Promise<void> {
   try {
-    const committed = await operations.waitTransaction(context.runtime.client, txHash, {
+    const committed = await waitTransaction(context.runtime.client, txHash, {
       timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
       interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
     });
