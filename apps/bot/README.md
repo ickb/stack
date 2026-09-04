@@ -72,7 +72,7 @@ The start script runs the bot once from source. Stdout is the NDJSON event strea
 
 ## Structured Events
 
-Every stdout line is one JSON object with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and a `bot.*` type. These versioned events are the sole bot stdout contract.
+Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and a `bot.*` type. These events are the sole bot stdout contract.
 
 The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `app: "bot"` and `bot.*` event types, not supervisor/tester output or log locations.
 
@@ -80,7 +80,7 @@ Stable event types:
 
 - `bot.run.started`
 - `bot.chain.preflight`
-- `bot.iteration.started`
+- `bot.turn.started`
 - `bot.state.read`
 - `bot.match.evaluated`
 - `bot.rebalance.evaluated`
@@ -90,7 +90,7 @@ Stable event types:
 - `bot.transaction.confirmation`
 - `bot.transaction.committed`
 - `bot.transaction.failed`
-- `bot.iteration.failed`
+- `bot.turn.failed`
 
 `bot.chain.preflight` emits credential-free RPC endpoint identity (protocol, hostname, port, and pathname), expected chain identity, observed genesis hash/address prefix/tip, and match booleans before signing starts. It never prints the full RPC URL, query, or fragment. No-action iterations emit `bot.decision.skipped` with `reason` and evidence. Build-time skip reasons `no_actions`, `match_value_not_above_fee`, and `post_tx_ckb_reserve` include a `decision` transcript. Reserve skips report zero committed `actions`, keep attempted action counts under `decision.skip.attemptedActions`, and keep reserve arithmetic under `decision.audit.reserveCheck` because the transaction was not broadcast. Bot reserve arithmetic is projected available CKB, not actual plain-cell accounting; withdrawal requests with non-negative match CKB delta are staged CKB recovery actions and bypass the immediate reserve skip. The pre-build safety skip `capital_below_minimum` exits with code `2` and includes zero `actions`, `deficit`, and `state` evidence instead of a `decision` transcript because match, rebalance, fee, and transaction shape were not evaluated. `bot.iteration.failed` includes an `error` summary plus `retryable` and `terminal` booleans from the bot retry policy. Rebalance decisions include normalized `reason`; no-op reasons remain policy-owned strings such as `insufficient_output_slots`, `low_ickb_ckb_reserve_unavailable`, `no_withdrawable_ickb`, `no_ring_surplus_ready_deposits`, `ring_surplus_withdrawal_over_budget`, and `no_ready_withdrawal_selection`, while action reasons include `low_ickb_balance`, `ring_inventory`, `excess_ickb_balance`, and `reserve_recovery`.
 
@@ -108,14 +108,13 @@ Bot-only log queries over a saved bot stdout NDJSON stream, or over `journalctl 
 
 ```bash
 EVENT_FILE=log/bot/events.ndjson
-jq -c 'select(.app == "bot")' "$EVENT_FILE"
-jq -r 'select(.app == "bot") | .type' "$EVENT_FILE" | sort | uniq -c
-jq -c 'select(.app == "bot" and .type == "bot.chain.preflight") | {timestamp, chain, rpcConfigured, expected, observed, matches}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and .type == "bot.decision.skipped") | {timestamp, chain, runId, iterationId, reason, actions, deficit, state, skip: .decision.skip}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and .type == "bot.match.evaluated") | {timestamp, iterationId, reason: .match.reason, orders, diagnostics: .match.diagnostics}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and .type == "bot.rebalance.evaluated") | {timestamp, iterationId, rebalance, poolDeposits}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and (.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, iterationId, reason, actions, reserve: .decision.audit.reserveCheck, ring: .decision.audit.selectedRing}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and (.type == "bot.transaction.failed" or .type == "bot.iteration.failed")) | {timestamp, chain, runId, iterationId, type, phase, outcome, retryable, terminal, txHash, status, elapsedMs, timeoutMs, intervalMs, error}' "$EVENT_FILE"
+jq -r '.type' "$EVENT_FILE" | sort | uniq -c
+jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, expected, observed, matches}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions, deficit, state, skip: .decision.skip}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.match.evaluated") | {timestamp, reason: .match.reason, orders, diagnostics: .match.diagnostics}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.rebalance.evaluated") | {timestamp, rebalance, poolDeposits}' "$EVENT_FILE"
+jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions, reserve: .decision.audit.reserveCheck, ring: .decision.audit.selectedRing}' "$EVENT_FILE"
+jq -c 'select((.type == "bot.transaction.failed" or .type == "bot.turn.failed")) | {timestamp, chain, runId, type, phase, outcome, retryable, terminal, txHash, status, elapsedMs, timeoutMs, intervalMs, error}' "$EVENT_FILE"
 ```
 
 ## Ubuntu systemd Deployment
@@ -201,7 +200,7 @@ Readiness is bounded to 120 seconds by default: the service must be active and t
 Exit code `2` is an intentional safety stop, including low capital and a nonretryable post-broadcast confirmation failure. `RestartPreventExitStatus=2` keeps systemd from relaunching immediately. Before restarting, inspect the journal for the terminal event and the exit status:
 
 ```bash
-sudo journalctl -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | jq -c 'select(.app == "bot" and (.terminal == true or .type == "bot.decision.skipped" or .type == "bot.transaction.failed" or .type == "bot.iteration.failed"))'
+sudo journalctl -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | jq -c 'select((.terminal == true or .type == "bot.decision.skipped" or .type == "bot.transaction.failed" or .type == "bot.turn.failed"))'
 sudo systemctl status ickb-bot-testnet.service --no-pager
 ```
 

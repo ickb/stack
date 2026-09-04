@@ -26,7 +26,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       },
     });
 
-    const event = emitter.emit(7, BOT_DECISION_SKIPPED, {
+    const event = emitter.emit(BOT_DECISION_SKIPPED, {
       reason: "no_actions",
       amount: 9007199254740993n,
       witnesses: [`0x${"11".repeat(80)}`],
@@ -49,11 +49,8 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     expect(written).toHaveLength(1);
     expect(event).toBe(written[0]);
     expect(written[0]).toMatchObject({
-      version: 1,
-      app: "bot",
       chain: "testnet",
       runId: "run-1",
-      iterationId: 7,
       type: BOT_DECISION_SKIPPED,
       reason: "no_actions",
       amount: "9007199254740993",
@@ -79,7 +76,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     const circular: Record<string, unknown> = { label: "root" };
     circular["self"] = circular;
 
-    emitter.emit(7, BOT_DECISION_SKIPPED, {
+    emitter.emit(BOT_DECISION_SKIPPED, {
       evidence: {
         toJSON: (): Record<string, string> => ({ ignored: "custom serializer" }),
         circular,
@@ -108,7 +105,6 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     });
     try {
       new BotEventEmitter({ chain: "testnet", runId: "run-1" }).emit(
-        7,
         BOT_DECISION_SKIPPED,
         { amount: 1n },
       );
@@ -162,7 +158,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     });
     const blockHash = `0x${"11".repeat(32)}`;
 
-    emitter.emit(1, "bot.state.read", {
+    emitter.emit("bot.state.read", {
       chainTip: {
         blockNumber: 123n,
         blockHash,
@@ -190,22 +186,16 @@ it("keeps stable event identity when payload fields collide", () => {
     },
   });
 
-  emitter.emit(7, BOT_DECISION_SKIPPED, {
-    version: 999,
-    app: "wrong",
+  emitter.emit(BOT_DECISION_SKIPPED, {
     chain: "mainnet",
     runId: "wrong",
-    iterationId: 999,
     timestamp: "not-iso",
     type: "wrong",
   });
 
   expect(written[0]).toMatchObject({
-    version: 1,
-    app: "bot",
     chain: "testnet",
     runId: "run-1",
-    iterationId: 7,
     type: BOT_DECISION_SKIPPED,
   });
   expect(record(written[0], "written event")["timestamp"]).not.toBe("not-iso");
@@ -225,14 +215,11 @@ it("ignores custom serializers before adding event identity", () => {
     hidden: "ignored",
   };
 
-  emitter.emit(7, BOT_DECISION_SKIPPED, value);
+  emitter.emit(BOT_DECISION_SKIPPED, value);
 
   expect(written[0]).toMatchObject({
-    version: 1,
-    app: "bot",
     chain: "testnet",
     runId: "run-1",
-    iterationId: 7,
     type: BOT_DECISION_SKIPPED,
   });
   expect(written[0]).toMatchObject({
@@ -251,12 +238,12 @@ it("treats non-record payloads from JS callers as empty fields", () => {
     },
   });
 
-  emitMalformedFields(emitter, 7, "not a record");
-  emitMalformedFields(emitter, 8, []);
+  emitMalformedFields(emitter, "not a record");
+  emitMalformedFields(emitter, []);
 
   expect(written).toMatchObject([
-    { iterationId: 7, type: BOT_DECISION_SKIPPED },
-    { iterationId: 8, type: BOT_DECISION_SKIPPED },
+    { runId: "run-1", type: BOT_DECISION_SKIPPED },
+    { runId: "run-1", type: BOT_DECISION_SKIPPED },
   ]);
 });
 
@@ -272,7 +259,7 @@ it("emits public chain preflight evidence", () => {
   const genesisHash = `0x${"11".repeat(32)}`;
   const tipHash = `0x${"22".repeat(32)}`;
 
-  emitter.emit(0, "bot.chain.preflight", {
+  emitter.emit("bot.chain.preflight", {
     rpcConfigured: true,
     expected: { chain: "testnet", genesisHash, addressPrefix: "ckt" },
     observed: {
@@ -305,42 +292,18 @@ it("emits run context without private key material", () => {
     },
   });
 
-  emitter.emit(0, "bot.run.started", {
-    maxIterations: 1,
-    bounded: true,
-    runtime: {
-      maxIterations: 1,
-      bounded: true,
-      sleepIntervalMs: 60000,
-      rpcConfigured: true,
-    },
+  emitter.emit("bot.run.started", {
     config: { chain: "testnet" },
     rpcHost: "testnet.example",
   });
 
   expect(written[0]).toMatchObject({
     type: "bot.run.started",
-    maxIterations: 1,
-    bounded: true,
-    runtime: {
-      maxIterations: 1,
-      bounded: true,
-      sleepIntervalMs: 60000,
-      rpcConfigured: true,
-    },
     config: { chain: "testnet" },
     rpcHost: "testnet.example",
   });
 });
 
-function emitMalformedFields(
-  emitter: BotEventEmitter,
-  iterationId: number,
-  fields: unknown,
-): void {
-  Reflect.apply(emitter.emit.bind(emitter), emitter, [
-    iterationId,
-    BOT_DECISION_SKIPPED,
-    fields,
-  ]);
+function emitMalformedFields(emitter: BotEventEmitter, fields: unknown): void {
+  Reflect.apply(emitter.emit.bind(emitter), emitter, [BOT_DECISION_SKIPPED, fields]);
 }

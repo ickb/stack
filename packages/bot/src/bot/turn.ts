@@ -11,7 +11,7 @@ import {
 import { summarizeBotState } from "../runtime/support.ts";
 import { buildTransaction } from "../runtime/transaction.ts";
 import type { BotState, BuildTransactionResult, Runtime } from "../runtime/types.ts";
-import { handleIterationFailure, isRetryableBotError } from "./failure.ts";
+import { handleTurnFailure, isRetryableBotError } from "./failure.ts";
 import { readBotState } from "./state.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
@@ -40,48 +40,42 @@ const defaultBotTurnOperations: BotTurnOperations = {
   waitTransaction,
 };
 
-// One process is one turn; the event contract still numbers it as iteration 1.
-const TURN_ITERATION_ID = 1;
-
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 600_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /** Runs one bot turn: read state, decide, and at most one broadcast with its confirmation wait. */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const operations = { ...defaultBotTurnOperations, ...context.operations };
-  context.events.emit(TURN_ITERATION_ID, "bot.iteration.started");
+  context.events.emit("bot.turn.started");
   try {
-    await executeBotWork(context, operations, TURN_ITERATION_ID);
+    await executeBotWork(context, operations);
   } catch (error) {
-    handleIterationFailure(context.events, TURN_ITERATION_ID, error);
+    handleTurnFailure(context.events, error);
   }
 }
 
 async function executeBotWork(
   context: BotTurnContext,
   operations: BotTurnOperations,
-  iterationId: number,
 ): Promise<void> {
   const state = await operations.readBotState(context.runtime);
   const stateDecision = summarizeBotState(state);
-  emitBotStateRead(context.events, iterationId, stateDecision);
+  emitBotStateRead(context.events, stateDecision);
 
   if (stateDecision.balances.totalEquivalentCkb <= state.minCkbBalance) {
     stopForLowCapital({
       events: context.events,
-      iterationId,
       stateDecision,
     });
     return;
   }
 
   const result = await operations.buildTransaction(context.runtime, state);
-  await emitDecisionEvents(context.events, iterationId, result);
+  await emitDecisionEvents(context.events, result);
   if (result.kind === "built") {
     await sendBuiltTransaction({
       context,
       operations,
-      iterationId,
       state,
       result,
     });
@@ -90,10 +84,9 @@ async function executeBotWork(
 
 function emitBotStateRead(
   events: BotEventEmitter,
-  iterationId: number,
   stateDecision: BotStateDecision,
 ): void {
-  events.emit(iterationId, "bot.state.read", {
+  events.emit("bot.state.read", {
     chainTip: stateDecision.chainTip,
     balances: stateDecision.balances,
     orders: stateDecision.orders,
@@ -107,28 +100,24 @@ function emitBotStateRead(
 
 function stopForLowCapital({
   events,
-  iterationId,
   stateDecision,
 }: {
   events: BotEventEmitter;
-  iterationId: number;
   stateDecision: BotStateDecision;
 }): void {
   const skip = lowCapitalSkipDecision(stateDecision);
-  events.emit(iterationId, "bot.decision.skipped", skip);
+  events.emit("bot.decision.skipped", skip);
   process.exitCode = STOP_EXIT_CODE;
 }
 
 async function sendBuiltTransaction({
   context,
   operations,
-  iterationId,
   state,
   result,
 }: {
   context: BotTurnContext;
   operations: BotTurnOperations;
-  iterationId: number;
   state: BotState;
   result: BuiltTransactionResult;
 }): Promise<void> {
@@ -136,25 +125,22 @@ async function sendBuiltTransaction({
   const startedAt = Date.now();
   const txHash = await broadcastTransaction({
     context,
-    iterationId,
     result,
     fee,
     feeRate: state.system.feeRate,
     startedAt,
   });
-  await confirmTransaction({ context, operations, iterationId, txHash, startedAt });
+  await confirmTransaction({ context, operations, txHash, startedAt });
 }
 
 async function broadcastTransaction({
   context,
-  iterationId,
   result,
   fee,
   feeRate,
   startedAt,
 }: {
   context: BotTurnContext;
-  iterationId: number;
   result: BuiltTransactionResult;
   fee: bigint;
   feeRate: ccc.Num;
@@ -165,7 +151,7 @@ async function broadcastTransaction({
     const txHash = await context.runtime.sendTransaction(result.tx, (hash) => {
       recordedHash = hash;
     });
-    context.events.emit(iterationId, "bot.transaction.sent", {
+    context.events.emit("bot.transaction.sent", {
       txHash,
       phase: "broadcast",
       outcome: "broadcasted",
@@ -176,7 +162,7 @@ async function broadcastTransaction({
   } catch (error) {
     if (error instanceof TransactionBroadcastError && error.nodeTxHash === undefined) {
       const txHash = recordedHash ?? error.txHash;
-      context.events.emit(iterationId, "bot.transaction.sent", {
+      context.events.emit("bot.transaction.sent", {
         txHash,
         phase: "broadcast",
         outcome: "broadcast_ambiguous",
@@ -189,7 +175,7 @@ async function broadcastTransaction({
     const hashMismatch =
       error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined;
     const retryable = isRetryableBotError(error);
-    context.events.emit(iterationId, "bot.transaction.failed", {
+    context.events.emit("bot.transaction.failed", {
       ...(hashMismatch ? { txHash: error.txHash, nodeTxHash: error.nodeTxHash } : {}),
       phase: "broadcast",
       outcome: "send_failed",
@@ -205,13 +191,11 @@ async function broadcastTransaction({
 async function confirmTransaction({
   context,
   operations,
-  iterationId,
   txHash,
   startedAt,
 }: {
   context: BotTurnContext;
   operations: BotTurnOperations;
-  iterationId: number;
   txHash: ccc.Hex;
   startedAt: number;
 }): Promise<void> {
@@ -229,12 +213,12 @@ async function confirmTransaction({
       timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
       intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
     };
-    context.events.emit(iterationId, "bot.transaction.confirmation", {
+    context.events.emit("bot.transaction.confirmation", {
       ...confirmation,
       retryable: false,
       terminal: true,
     });
-    context.events.emit(iterationId, "bot.transaction.committed", confirmation);
+    context.events.emit("bot.transaction.committed", confirmation);
   } catch (error) {
     const confirmationError = postBroadcastError(txHash, error);
     const retryable = isRetryableBotError(confirmationError);
@@ -254,8 +238,8 @@ async function confirmTransaction({
       intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
       error: errorSummary(confirmationError, { includeStack: !retryable }),
     };
-    context.events.emit(iterationId, "bot.transaction.confirmation", failure);
-    context.events.emit(iterationId, "bot.transaction.failed", failure);
+    context.events.emit("bot.transaction.confirmation", failure);
+    context.events.emit("bot.transaction.failed", failure);
     throw confirmationError;
   }
 }

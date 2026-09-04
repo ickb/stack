@@ -21,7 +21,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
   it("emits compact rebalance events with full ring artifacts", async () => {
     const { artifacts, emitter, events } = artifactCapturingEmitter();
 
-    await emitDecisionEvents(emitter, 1, NO_ACTION_SKIP_RESULT);
+    await emitDecisionEvents(emitter, NO_ACTION_SKIP_RESULT);
 
     expectCompactRingEvents(events);
     expectRingArtifact(artifacts);
@@ -39,7 +39,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       },
     });
 
-    await emitDecisionEvents(emitter, 1, NO_ACTION_SKIP_RESULT);
+    await emitDecisionEvents(emitter, NO_ACTION_SKIP_RESULT);
 
     const rebalance = record(
       record(events[1], REBALANCE_EVENT)["rebalance"],
@@ -57,7 +57,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       throw new Error("disk full");
     };
 
-    await emitDecisionEvents(emitter, 1, NO_ACTION_SKIP_RESULT);
+    await emitDecisionEvents(emitter, NO_ACTION_SKIP_RESULT);
 
     const rebalance = record(
       record(events[1], REBALANCE_EVENT)["rebalance"],
@@ -77,7 +77,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       throw new Error("unreachable");
     };
 
-    await emitDecisionEvents(emitter, 1, NO_ACTION_SKIP_RESULT);
+    await emitDecisionEvents(emitter, NO_ACTION_SKIP_RESULT);
 
     const rebalance = record(
       record(events[1], REBALANCE_EVENT)["rebalance"],

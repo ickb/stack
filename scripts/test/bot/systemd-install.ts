@@ -29,7 +29,7 @@ void test("systemd units use the atomic current pointer and shared absolute log 
     assert.equal(lines.has("ExecStart=/usr/bin/node apps/bot/src/index.ts"), true);
     assert.equal(
       lines.has(
-        `Environment=BOT_CONFIG_FILE=%d/ickb-bot-${network}-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts BOT_ARTIFACT_REF_PREFIX=artifacts`,
+        `Environment=BOT_CONFIG_FILE=%d/ickb-bot-${network}-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts`,
       ),
       true,
     );

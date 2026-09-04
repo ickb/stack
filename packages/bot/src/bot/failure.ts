@@ -15,24 +15,16 @@ interface TransactionConfirmationErrorLike extends Error {
 }
 
 interface FailureEvents {
-  emit: (
-    iterationId: number,
-    type: "bot.iteration.failed",
-    fields?: Record<string, unknown>,
-  ) => unknown;
+  emit: (type: "bot.turn.failed", fields?: Record<string, unknown>) => unknown;
 }
 
 /**
  * Emits the failure event and sets the exit code that tells the service manager what to do:
  * 1 lets it start another turn, STOP_EXIT_CODE holds it because a broadcast outcome is unresolved.
  */
-export function handleIterationFailure(
-  events: FailureEvents,
-  iterationId: number,
-  error: unknown,
-): void {
+export function handleTurnFailure(events: FailureEvents, error: unknown): void {
   const retryable = isRetryableBotError(error);
-  events.emit(iterationId, "bot.iteration.failed", {
+  events.emit("bot.turn.failed", {
     error: errorSummary(error, { includeStack: !retryable }),
     retryable,
     terminal: !retryable,

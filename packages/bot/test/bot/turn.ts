@@ -18,9 +18,9 @@ import {
 import { botRuntime, botState, hash } from "./fixtures/bot.ts";
 
 const TX_HASH = hash("ab");
-const BOT_ITERATION_STARTED = "bot.iteration.started";
+const BOT_TURN_STARTED = "bot.turn.started";
 const BOT_STATE_READ = "bot.state.read";
-const BOT_ITERATION_FAILED = "bot.iteration.failed";
+const BOT_TURN_FAILED = "bot.turn.failed";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
 const BOT_TRANSACTION_CONFIRMATION = "bot.transaction.confirmation";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
@@ -48,7 +48,7 @@ it("stops with event-only low-capital evidence", async () => {
 
   expect(process.exitCode).toBe(2);
   expect(eventTypes(harness.events)).toEqual([
-    BOT_ITERATION_STARTED,
+    BOT_TURN_STARTED,
     BOT_STATE_READ,
     "bot.decision.skipped",
   ]);
@@ -66,7 +66,7 @@ it("records skipped terminal iterations without legacy execution logs", async ()
   await runBotTurn(harness.context);
 
   expect(eventTypes(harness.events)).toEqual([
-    BOT_ITERATION_STARTED,
+    BOT_TURN_STARTED,
     BOT_STATE_READ,
     "bot.match.evaluated",
     "bot.rebalance.evaluated",
@@ -105,7 +105,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
     },
   );
   expect(eventTypes(harness.events)).toEqual([
-    BOT_ITERATION_STARTED,
+    BOT_TURN_STARTED,
     BOT_STATE_READ,
     "bot.match.evaluated",
     "bot.rebalance.evaluated",
@@ -261,7 +261,7 @@ it("fails closed on a node hash mismatch without waiting or retrying its cause",
     error: { txHash: TX_HASH, nodeTxHash },
   });
   expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_ITERATION_FAILED,
+    type: BOT_TURN_FAILED,
     retryable: false,
     terminal: true,
     error: { txHash: TX_HASH, nodeTxHash },
@@ -415,7 +415,7 @@ it("exits 1 with retryable metadata so the next turn can retry", async () => {
   expect(process.exitCode).toBe(1);
   expect(harness.operations.buildTransaction).toHaveBeenCalledTimes(1);
   expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_ITERATION_FAILED,
+    type: BOT_TURN_FAILED,
     retryable: true,
     terminal: false,
     error: { name: "TypeError", message: FETCH_FAILED },
@@ -435,7 +435,7 @@ it("stops non-retryable failures with structured event evidence", async () => {
 
   expect(process.exitCode).toBe(1);
   expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_ITERATION_FAILED,
+    type: BOT_TURN_FAILED,
     retryable: false,
     terminal: true,
     error: { message: "deterministic build failure" },

@@ -264,7 +264,7 @@ async function activationFixture(): Promise<string> {
 function unitText(deployRoot = "/opt/ickb-stack-testnet"): string {
   return `[Service]
 WorkingDirectory=${deployRoot}/current
-Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts BOT_ARTIFACT_REF_PREFIX=artifacts
+Environment=BOT_CONFIG_FILE=%d/ickb-bot-testnet-config.json BOT_ARTIFACT_ROOT=${deployRoot}/log/bot/artifacts
 LoadCredentialEncrypted=ickb-bot-testnet-config.json:/etc/ickb/credentials/ickb-bot-testnet-config.cred
 ExecStart=/usr/bin/node apps/bot/src/index.ts
 RestartSec=60

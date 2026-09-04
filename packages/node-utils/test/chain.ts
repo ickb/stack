@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createPublicClient,
   isRetryableRpcTransportError,
   publicRpcEndpointIdentity,
-  runProcess,
   verifyChainPreflight,
 } from "../src/index.ts";
 import {
@@ -95,18 +95,13 @@ describe("public clients and preflight identity", () => {
   });
 });
 describe("finite public clients", () => {
-  it("lets a process exit naturally after a real HTTP client request", async () => {
-    await expect(
-      runProcess(process.execPath, [HTTP_CLIENT_PROCESS], {
-        forwardSignals: false,
-        timeoutMs: 5_000,
-      }),
-    ).resolves.toMatchObject({
-      status: 0,
-      stdout: "completed\n",
-      stderr: "",
-      timedOut: false,
+  it("lets a process exit naturally after a real HTTP client request", () => {
+    const result = spawnSync(process.execPath, [HTTP_CLIENT_PROCESS], {
+      encoding: "utf8",
+      timeout: 5_000,
     });
+
+    expect(result).toMatchObject({ status: 0, stdout: "completed\n", stderr: "" });
   });
 });
 

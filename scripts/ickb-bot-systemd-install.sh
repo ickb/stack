@@ -131,7 +131,7 @@ Type=simple
 User=${user}
 Group=${user}
 WorkingDirectory=${deploy_dir}/current
-Environment=BOT_CONFIG_FILE=%d/${credential_name} BOT_ARTIFACT_ROOT=${log_root_path}/bot/artifacts BOT_ARTIFACT_REF_PREFIX=artifacts
+Environment=BOT_CONFIG_FILE=%d/${credential_name} BOT_ARTIFACT_ROOT=${log_root_path}/bot/artifacts
 LoadCredentialEncrypted=${credential_name}:${credential}
 ExecStart=/usr/bin/node apps/bot/src/index.ts
 Restart=on-failure

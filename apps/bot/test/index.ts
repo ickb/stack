@@ -43,10 +43,7 @@ describe("bot CLI runtime wiring", () => {
     const dependencies = botDependencies({ client, config, events });
 
     const context = await initializeBot(
-      {
-        BOT_ARTIFACT_REF_PREFIX: "artifacts/slot-00",
-        BOT_ARTIFACT_ROOT: "log/bot/artifacts/slot-00",
-      },
+      { BOT_ARTIFACT_ROOT: "log/bot/artifacts" },
       dependencies,
     );
 
@@ -151,47 +148,6 @@ describe("bot CLI public identity", () => {
       rpcEndpoint: publicRpcEndpointIdentity(TESTNET_RPC_URL),
     });
   });
-
-  it("uses a valid launcher run ID without calling the direct-run fallback", async () => {
-    const events: Array<Record<string, unknown>> = [];
-    const dependencies = botDependencies({ events });
-    const createRunId = vi.fn(() => "fallback-run");
-    const parentRunId = "parent:2026.01";
-    dependencies.createRunId = createRunId;
-
-    await initializeBot({ BOT_RUN_ID: parentRunId }, dependencies);
-
-    expect(createRunId).not.toHaveBeenCalled();
-    expect(events).toMatchObject([{ runId: parentRunId }, { runId: parentRunId }]);
-  });
-
-  it("falls back to a locally created run ID for direct runs", async () => {
-    const events: Array<Record<string, unknown>> = [];
-    const dependencies = botDependencies({ events });
-    const directRunId = "direct-run";
-    const createRunId = vi.fn(() => directRunId);
-    dependencies.createRunId = createRunId;
-
-    await initializeBot({}, dependencies);
-
-    expect(createRunId).toHaveBeenCalledTimes(1);
-    expect(events).toMatchObject([{ runId: directRunId }, { runId: directRunId }]);
-  });
-
-  it.each(["", "bad run", "bad/run", "x".repeat(129)])(
-    "rejects malformed inherited run ID %j",
-    async (runId) => {
-      const dependencies = botDependencies();
-      const createEvents = vi.fn(dependencies.createEvents);
-      dependencies.createEvents = createEvents;
-
-      await expect(initializeBot({ BOT_RUN_ID: runId }, dependencies)).rejects.toThrow(
-        "Invalid env BOT_RUN_ID",
-      );
-
-      expect(createEvents).not.toHaveBeenCalled();
-    },
-  );
 });
 
 describe("bot CLI runtime boundaries", () => {
@@ -201,7 +157,7 @@ describe("bot CLI runtime boundaries", () => {
     const canaryRpcUrl = "https://testnet.example/rpc?token=canary";
 
     await initializeBot(
-      { BOT_RUN_ID: "canary-boundary" },
+      {},
       botDependencies({
         events,
         runtimeConfig: { privateKey: canaryPrivateKey, rpcUrl: canaryRpcUrl },

@@ -1,7 +1,7 @@
 import { STOP_EXIT_CODE } from "@ickb/node-utils";
 import { TransactionBroadcastError } from "@ickb/sdk";
 import { afterEach, describe, expect, it } from "vitest";
-import { handleIterationFailure } from "../../src/bot/failure.ts";
+import { handleTurnFailure } from "../../src/bot/failure.ts";
 import { isRetryableBotError } from "../../src/index.ts";
 
 const FETCH_FAILED = "fetch failed";
@@ -123,7 +123,7 @@ describe("bot failure exit codes", () => {
     // A restart would rebuild and resend a transaction that may still commit.
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
     expect(events.at(-1)).toMatchObject({
-      type: "bot.iteration.failed",
+      type: "bot.turn.failed",
       fields: { retryable: false, terminal: true },
     });
   });
@@ -198,17 +198,12 @@ function handleFailure(
   error: unknown,
 ): Array<{ type: string; fields: Record<string, unknown> | undefined }> {
   const events: Array<{ type: string; fields: Record<string, unknown> | undefined }> = [];
-  handleIterationFailure(
+  handleTurnFailure(
     {
-      emit: (
-        _iterationId: number,
-        type: "bot.iteration.failed",
-        fields?: Record<string, unknown>,
-      ): void => {
+      emit: (type: "bot.turn.failed", fields?: Record<string, unknown>): void => {
         events.push({ type, fields });
       },
     },
-    1,
     error,
   );
   return events;

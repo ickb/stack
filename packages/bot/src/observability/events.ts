@@ -16,12 +16,10 @@ import {
 } from "./artifacts.ts";
 import { logValue } from "./logValue.ts";
 
-const BOT_EVENT_VERSION = 1;
-
 export type BotEventType =
   | "bot.run.started"
   | "bot.chain.preflight"
-  | "bot.iteration.started"
+  | "bot.turn.started"
   | "bot.state.read"
   | "bot.match.evaluated"
   | "bot.rebalance.evaluated"
@@ -31,14 +29,11 @@ export type BotEventType =
   | "bot.transaction.confirmation"
   | "bot.transaction.committed"
   | "bot.transaction.failed"
-  | "bot.iteration.failed";
+  | "bot.turn.failed";
 
 interface BotEventIdentity {
-  version: typeof BOT_EVENT_VERSION;
-  app: "bot";
   chain: SupportedChain;
   runId: string;
-  iterationId: number;
   timestamp: string;
   type: BotEventType;
 }
@@ -47,12 +42,11 @@ export type BotEvent = BotEventIdentity & Record<string, unknown>;
 export type { BotArtifactRef } from "./artifacts.ts";
 
 /**
- * Emits versioned bot events as JSON-safe records.
+ * Emits bot events as JSON-safe records, one per line.
  */
 export class BotEventEmitter {
   private readonly context: {
     chain: SupportedChain;
-    artifactRefPrefix?: string;
     artifactRoot?: string;
     runId: string;
     write?: (event: BotEvent) => void;
@@ -60,7 +54,6 @@ export class BotEventEmitter {
 
   constructor(context: {
     chain: SupportedChain;
-    artifactRefPrefix?: string;
     artifactRoot?: string;
     runId: string;
     write?: (event: BotEvent) => void;
@@ -68,18 +61,11 @@ export class BotEventEmitter {
     this.context = context;
   }
 
-  public emit(
-    iterationId: number,
-    type: BotEventType,
-    fields: Record<string, unknown> = {},
-  ): BotEvent {
+  public emit(type: BotEventType, fields: Record<string, unknown> = {}): BotEvent {
     const event: BotEvent = {
       ...jsonSafeEventFields(fields),
-      version: BOT_EVENT_VERSION,
-      app: "bot",
       chain: this.context.chain,
       runId: this.context.runId,
-      iterationId,
       timestamp: new Date().toISOString(),
       type,
     };
@@ -96,16 +82,11 @@ export class BotEventEmitter {
     kind: string,
     payload: Record<string, unknown>,
   ): Promise<BotArtifactRef | undefined> {
-    const { artifactRoot, artifactRefPrefix } = this.context;
-    if (artifactRoot === undefined || artifactRefPrefix === undefined) {
+    const { artifactRoot } = this.context;
+    if (artifactRoot === undefined) {
       return undefined;
     }
-    return writeBotArtifact({
-      artifactRefPrefix,
-      artifactRoot,
-      kind,
-      payload,
-    });
+    return writeBotArtifact({ artifactRoot, kind, payload });
   }
 }
 
@@ -121,23 +102,22 @@ export function createRunId(): string {
  */
 export async function emitDecisionEvents(
   emitter: BotEventEmitter,
-  iterationId: number,
   result: BuildTransactionResult,
 ): Promise<void> {
   const { decision } = result;
   const finalDecision = finalDecisionTranscript(decision);
-  emitter.emit(iterationId, "bot.match.evaluated", {
+  emitter.emit("bot.match.evaluated", {
     match: decision.match,
     orders: decision.orders,
   });
   const rebalance = await artifactedRebalance(decision.rebalance, emitter);
-  emitter.emit(iterationId, "bot.rebalance.evaluated", {
+  emitter.emit("bot.rebalance.evaluated", {
     rebalance,
     poolDeposits: decision.poolDeposits,
   });
 
   if (result.kind === "skipped") {
-    emitter.emit(iterationId, "bot.decision.skipped", {
+    emitter.emit("bot.decision.skipped", {
       reason: result.reason,
       actions: result.actions,
       decision: finalDecision,
@@ -145,7 +125,7 @@ export async function emitDecisionEvents(
     return;
   }
 
-  emitter.emit(iterationId, "bot.transaction.built", {
+  emitter.emit("bot.transaction.built", {
     actions: result.actions,
     fee: decision.fee,
     transactionShape: decision.transactionShape,

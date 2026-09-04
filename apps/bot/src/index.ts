@@ -18,12 +18,9 @@ import { pathToFileURL } from "node:url";
 
 type BotRuntimeConfig = Awaited<ReturnType<typeof readBotRuntimeConfig>>;
 type IckbConfig = ReturnType<typeof getConfig>;
-const BOT_RUN_ID_PATTERN = /^[\w.:-]+$/u;
-const BOT_RUN_ID_MAX_LENGTH = 128;
 
 export interface BotCliDependencies {
   createEvents: (context: {
-    artifactRefPrefix?: string;
     artifactRoot?: string;
     chain: BotRuntimeConfig["chain"];
     runId: string;
@@ -76,16 +73,14 @@ export async function initializeBot(
 ): Promise<BotTurnContext> {
   const runtimeConfig = await dependencies.readBotRuntimeConfig(env);
   const { chain, privateKey, rpcUrl } = runtimeConfig;
-  const runId = botRunId(env, dependencies.createRunId);
+  const runId = dependencies.createRunId();
   const artifactRoot = env["BOT_ARTIFACT_ROOT"];
-  const artifactRefPrefix = env["BOT_ARTIFACT_REF_PREFIX"];
   const events = dependencies.createEvents({
     chain,
     runId,
     ...(artifactRoot === undefined ? {} : { artifactRoot }),
-    ...(artifactRefPrefix === undefined ? {} : { artifactRefPrefix }),
   });
-  events.emit(0, "bot.run.started");
+  events.emit("bot.run.started");
   const client = dependencies.createPublicClient(chain, rpcUrl);
   const preflight = await dependencies.verifyChainPreflight(client, chain);
   const config = dependencies.getConfig(chain);
@@ -97,7 +92,7 @@ export async function initializeBot(
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const recommendedAddress = await signer.getRecommendedAddressObj();
   const primaryLock = recommendedAddress.script;
-  events.emit(0, "bot.chain.preflight", {
+  events.emit("bot.chain.preflight", {
     identity: {
       chain,
       primaryLock: {
@@ -126,19 +121,6 @@ export async function initializeBot(
   };
 
   return { events, runtime };
-}
-
-function botRunId(env: NodeJS.ProcessEnv, fallback: () => string): string {
-  const runId = env["BOT_RUN_ID"];
-  if (runId === undefined) {
-    return fallback();
-  }
-  if (runId.length > BOT_RUN_ID_MAX_LENGTH || !BOT_RUN_ID_PATTERN.test(runId)) {
-    throw new Error(
-      "Invalid env BOT_RUN_ID: expected 1-128 characters matching [A-Za-z0-9._:-]+",
-    );
-  }
-  return runId;
 }
 
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- CLI module runs only when imported as the process entrypoint.

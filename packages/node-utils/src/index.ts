@@ -19,6 +19,7 @@ export type {
   PublicRpcEndpointIdentity,
   SupportedChain,
 } from "./chain.ts";
+export { minimalProcessEnv } from "./env.ts";
 export { errnoCode, errorMessage, isRecord } from "./errors.ts";
 export { formatCkb } from "./format.ts";
 export {
@@ -30,21 +31,6 @@ export {
 } from "./logging.ts";
 export type { JsonLogValue } from "./logging.ts";
 export { firstSymlinkInPath } from "./path.ts";
-export type { SymlinkPathDependencies } from "./path.ts";
-export {
-  minimalProcessEnv,
-  runProcess,
-  signalExitCode,
-  timerDelayMs,
-  withProcessSignalForwarding,
-} from "./process.ts";
-export type {
-  ProcessChild,
-  ProcessResult,
-  ProcessRunnerDependencies,
-  ProcessSignalContext,
-  RunProcessOptions,
-} from "./process.ts";
 export {
   isRetryableCkbStateRaceError,
   isRetryableRpcResponseShapeError,

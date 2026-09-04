@@ -74,16 +74,6 @@
       "count": 2
     }
   },
-  "packages/node-utils/src/path.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/node-utils/src/process.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "packages/node-utils/src/runtime_config.ts": {
     "no-restricted-syntax": {
       "count": 2

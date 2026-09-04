@@ -8,12 +8,7 @@ export interface ResolvedConfigPath {
   relativePath: string;
 }
 
-interface StatLike {
-  isSymbolicLink: () => boolean;
-}
-
 export interface ConfigPathDependencies {
-  lstat?: (path: string) => Promise<StatLike>;
   realpath?: (path: string) => Promise<string>;
 }
 
@@ -55,9 +50,7 @@ export async function assertReadableConfigPath(
   configPath: string,
   dependencies: ConfigPathDependencies = {},
 ): Promise<void> {
-  const symlink = await firstSymlinkInPath(configPath, root, {
-    ...(dependencies.lstat === undefined ? {} : { lstat: dependencies.lstat }),
-  });
+  const symlink = await firstSymlinkInPath(configPath, root);
   if (symlink !== undefined) {
     if (symlink === configPath) {
       throw new Error("Refusing to read symlink config path");

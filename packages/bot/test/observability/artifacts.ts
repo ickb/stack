@@ -17,7 +17,6 @@ import * as artifacts from "../../src/observability/artifacts.ts";
 import { BotEventEmitter } from "../../src/observability/events.ts";
 import { BOT_OBSERVABILITY_SUITE } from "./fixtures/observability.ts";
 
-const artifactPrefix = "artifacts/slot-00";
 const artifactKind = "bot.ringSegments";
 const artifactDirectory = "ringSegments";
 const artifactPayload = { ring: { totalPoolUdt: 1n, segments: [] } };
@@ -38,9 +37,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
     try {
       const ref = await writeArtifact(artifactRoot, "ring/segments.v2", artifactPayload);
 
-      expect(ref.path).toMatch(
-        /^artifacts\/slot-00\/ring-segments-v2\/sha256-[\da-f]+\.json$/u,
-      );
+      expect(ref.path).toMatch(/^ring-segments-v2\/sha256-[\da-f]+\.json$/u);
     } finally {
       await rm(artifactRoot, { force: true, recursive: true });
     }
@@ -55,7 +52,7 @@ describe(BOT_OBSERVABILITY_SUITE, () => {
       const hash = ref.hash.slice("sha256:".length);
 
       await expect(readArtifactFile(artifactFilePath(artifactRoot, hash))).resolves.toBe(
-        '{"kind":"bot.ringSegments","ring":{"rows":[[{"totalPoolUdt":"1"}]]},"version":1}\n',
+        '{"kind":"bot.ringSegments","ring":{"rows":[[{"totalPoolUdt":"1"}]]}}\n',
       );
     } finally {
       await rm(artifactRoot, { force: true, recursive: true });
@@ -161,7 +158,6 @@ async function writeArtifact(
   payload: Record<string, unknown>,
 ): Promise<artifacts.BotArtifactRef> {
   return artifacts.writeBotArtifact({
-    artifactRefPrefix: artifactPrefix,
     artifactRoot,
     kind,
     payload,
@@ -179,7 +175,7 @@ async function expectContentAddressedArtifact(artifactRoot: string): Promise<voi
   expect(ref).toMatchObject({
     kind: artifactKind,
     hash: `sha256:${hash}`,
-    path: `${artifactPrefix}/${artifactDirectory}/sha256-${hash}.json`,
+    path: `${artifactDirectory}/sha256-${hash}.json`,
   });
   const artifactPath = artifactFilePath(artifactRoot, hash);
   const text = await readArtifactFile(artifactPath);
@@ -187,7 +183,6 @@ async function expectContentAddressedArtifact(artifactRoot: string): Promise<voi
   expect(JSON.parse(text)).toEqual({
     kind: artifactKind,
     ring: { segments: [], totalPoolUdt: "1" },
-    version: 1,
   });
   expect((await statArtifactFile(artifactPath)).mode & 0o777).toBe(0o600);
 }
@@ -219,7 +214,6 @@ async function expectSymlinkedArtifactRefusal(artifactRoot: string): Promise<voi
 
 function artifactEmitter(artifactRoot: string): BotEventEmitter {
   return new BotEventEmitter({
-    artifactRefPrefix: artifactPrefix,
     artifactRoot,
     chain: "testnet",
     runId: "run-1",

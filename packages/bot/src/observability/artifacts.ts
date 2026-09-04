@@ -5,7 +5,6 @@ import pathModule from "node:path";
 import type { RingDiagnostics, RingSegmentDiagnostics } from "../policy/types.ts";
 import { logValue } from "./logValue.ts";
 
-const BOT_ARTIFACT_VERSION = 1;
 const { join } = pathModule;
 const noFollow = constants.O_NOFOLLOW;
 const readArtifactFlags = constants.O_RDONLY | noFollow;
@@ -20,21 +19,16 @@ export interface BotArtifactRef {
   /** Content hash of the canonical artifact payload. */
   hash: string;
 
-  /** Public reference path built from the configured artifact prefix. */
+  /** Path relative to the artifact root. */
   path: string;
 }
 
 export async function writeBotArtifact(options: {
-  artifactRefPrefix: string;
   artifactRoot: string;
   kind: string;
   payload: Record<string, unknown>;
 }): Promise<BotArtifactRef> {
-  const text = `${canonicalJson({
-    version: BOT_ARTIFACT_VERSION,
-    kind: options.kind,
-    ...options.payload,
-  })}\n`;
+  const text = `${canonicalJson({ kind: options.kind, ...options.payload })}\n`;
   const hash = createHash("sha256").update(text).digest("hex");
   const fileName = `sha256-${hash}.json`;
   const kindDir = artifactKindDirectory(options.kind);
@@ -45,7 +39,7 @@ export async function writeBotArtifact(options: {
   return {
     kind: options.kind,
     hash: `sha256:${hash}`,
-    path: `${options.artifactRefPrefix}/${kindDir}/${fileName}`,
+    path: `${kindDir}/${fileName}`,
   };
 }
 

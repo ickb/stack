@@ -2,11 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { handleIterationFailure } from "../../src/bot/failure.ts";
+import { handleTurnFailure } from "../../src/bot/failure.ts";
 import { BotEventEmitter, readBotRuntimeConfig } from "../../src/index.ts";
 
 describe("bot private key output boundary", () => {
-  it("does not expose the configured key through versioned failure events", async () => {
+  it("does not expose the configured key through failure events", async () => {
     const privateKey = `0x${"42".repeat(32)}`;
     const dir = await mkdtemp(path.join(tmpdir(), "ickb-bot-private-key-boundary-"));
     const output: string[] = [];
@@ -30,13 +30,16 @@ describe("bot private key output boundary", () => {
         },
       });
 
-      emitter.emit(0, "bot.run.started");
-      handleIterationFailure(emitter, 1, new TypeError("fetch failed"));
+      emitter.emit("bot.run.started");
+      handleTurnFailure(emitter, new TypeError("fetch failed"));
 
       expect(config.privateKey).toBe(privateKey);
       expect(output.join("\n")).not.toContain(privateKey);
       for (const line of output) {
-        expect(JSON.parse(line)).toMatchObject({ app: "bot", version: 1 });
+        expect(JSON.parse(line)).toMatchObject({
+          chain: "testnet",
+          runId: "run-canary-test",
+        });
       }
     } finally {
       process.exitCode = undefined;
