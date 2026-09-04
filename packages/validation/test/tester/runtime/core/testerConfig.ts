@@ -8,7 +8,7 @@ import {
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
-} from "../../../../src/tester/index.ts";
+} from "../../../../src/tester/planning/testerConfig.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,

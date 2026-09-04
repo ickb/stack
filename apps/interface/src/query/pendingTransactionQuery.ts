@@ -29,13 +29,6 @@ export function pendingTransactionQueryKey(
   return [walletConfig.chain, walletConfig.address, "pendingTransactionConfirmation"];
 }
 
-export function pendingTransactionHash(
-  walletConfig: PendingTransactionCache,
-): ccc.Hex | undefined {
-  const state = pendingTransactionState(walletConfig);
-  return state?.status === "pending" ? state.txHash : undefined;
-}
-
 export function pendingTransactionState(
   walletConfig: PendingTransactionCache,
 ): PendingTransactionState | undefined {

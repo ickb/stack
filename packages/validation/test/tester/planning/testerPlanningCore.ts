@@ -4,8 +4,8 @@ import {
   hasActionableTesterScenarioEstimate,
   planTesterTransaction,
   resolveTesterScenario,
-  TesterTerminalError,
-} from "../../../src/tester/index.ts";
+} from "../../../src/tester/planning/testerPlanning.ts";
+import { TesterTerminalError } from "../../../src/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,

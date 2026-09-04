@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { resolveTesterScenario } from "../../../src/tester/index.ts";
+import { resolveTesterScenario } from "../../../src/tester/planning/testerPlanning.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,

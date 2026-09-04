@@ -128,7 +128,6 @@ export {
   estimateRawOrder,
   isActionableEstimatedRawOrder,
   isSdkConversionScenario,
-  isUnrepresentableTesterEstimateError,
   plannedRawOrders,
 } from "./testerOrderPlanning.ts";
 export { planTesterTransaction } from "./testerScenarioPlans.ts";

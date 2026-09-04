@@ -3,13 +3,13 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransactionHash,
-  pendingTransactionHash,
   pendingTransactionQueryKey,
   pendingTransactionState,
   submitPendingTransaction,
   type PendingTransactionState,
 } from "../../src/query/pendingTransactionQuery.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
+import { pendingTransactionHash } from "./fixtures/query.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const walletRejected = "wallet rejected";

@@ -3,15 +3,15 @@ import { OrderConversionRepresentabilityError } from "@ickb/order";
 import { IckbSdk, TransactionBroadcastError } from "@ickb/sdk";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
+import { transactionShape } from "../../../src/tester/evidence/testerEvidence.ts";
+import { isUnrepresentableTesterEstimateError } from "../../../src/tester/planning/testerOrderPlanning.ts";
+import { hasActionableTesterScenarioEstimate } from "../../../src/tester/planning/testerPlanning.ts";
+import { MissingFreshOrderOriginError } from "../../../src/tester/runtime/freshMatchableOrderSkip.ts";
 import {
   handleTesterAttemptError,
-  hasActionableTesterScenarioEstimate,
   isRetryableTesterError,
-  isUnrepresentableTesterEstimateError,
-  stopForLowTesterCapital,
-  transactionShape,
-} from "../../../src/tester/index.ts";
-import { MissingFreshOrderOriginError } from "../../../src/tester/runtime/freshMatchableOrderSkip.ts";
+} from "../../../src/tester/runtime/testerErrors.ts";
+import { stopForLowTesterCapital } from "../../../src/tester/runtime/testerStop.ts";
 import {
   DUPLICATED_TX_ERROR_MESSAGE,
   FETCH_FAILED_MESSAGE,

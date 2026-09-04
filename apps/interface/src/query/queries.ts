@@ -10,8 +10,6 @@ import { l1StateQueryKey } from "./l1StateQueryKey.ts";
 import { buildStateId } from "./queryStateId.ts";
 import { rootConfigQueryKey } from "./rootConfigQueryKey.ts";
 
-export { l1StateQueryKey } from "./l1StateQueryKey.ts";
-
 interface QuoteStateConfig {
   chain: RootConfig["chain"];
   cccClient: RootConfig["cccClient"];

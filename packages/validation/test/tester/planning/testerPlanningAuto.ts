@@ -2,12 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import { OrderManager, Ratio } from "@ickb/order";
 import { IckbSdk } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
+import { testerNoActionableAutoScenarioSkip } from "../../../src/tester/evidence/testerEvidence.ts";
 import {
   hasActionableTesterScenarioEstimate,
   planTesterTransaction,
   resolveTesterScenario,
-  testerNoActionableAutoScenarioSkip,
-} from "../../../src/tester/index.ts";
+} from "../../../src/tester/planning/testerPlanning.ts";
 import {
   BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
   CKB_TO_ICKB_DIRECTION,

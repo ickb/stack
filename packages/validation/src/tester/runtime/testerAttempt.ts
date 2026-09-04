@@ -25,8 +25,6 @@ import {
   type TesterFeePolicy,
   type TesterScenarioSelection,
 } from "./testerTypes.ts";
-export { stopForLowTesterCapital } from "./testerStop.ts";
-
 const VALIDATION_TRANSACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**

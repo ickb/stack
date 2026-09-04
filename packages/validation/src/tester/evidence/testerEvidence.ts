@@ -14,11 +14,6 @@ import {
   type TesterScenarioSelection,
 } from "../runtime/testerTypes.ts";
 
-export {
-  enforceTesterPlainCkbReserve,
-  postTransactionPlainCkbBalance,
-  testerReserveSkip,
-} from "./testerReserve.ts";
 /**
  * Builds the public action summary for one tester transaction attempt.
  */

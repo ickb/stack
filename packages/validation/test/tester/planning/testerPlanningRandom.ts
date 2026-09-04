@@ -2,15 +2,15 @@ import { ccc } from "@ckb-ccc/core";
 import { IckbSdk } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
-  hasActionableTesterScenarioEstimate,
-  planTesterTransaction,
-  resolveTesterScenario,
-} from "../../../src/tester/index.ts";
-import {
   isBuildableSdkConversionOrder,
   plannedRawOrders,
   sampleRatio,
 } from "../../../src/tester/planning/testerOrderPlanning.ts";
+import {
+  hasActionableTesterScenarioEstimate,
+  planTesterTransaction,
+  resolveTesterScenario,
+} from "../../../src/tester/planning/testerPlanning.ts";
 import { hasBuildableSdkConversionEstimate } from "../../../src/tester/planning/testerSdkPlanning.ts";
 import {
   CKB_TO_ICKB_DIRECTION,

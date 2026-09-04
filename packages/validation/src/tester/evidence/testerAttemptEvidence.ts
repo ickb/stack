@@ -5,11 +5,11 @@ import type { TesterState } from "../runtime/runtime.ts";
 import type { TesterScenarioSelection } from "../runtime/testerTypes.ts";
 import {
   attemptedOrderEvidence,
-  enforceTesterPlainCkbReserve,
   testerAttemptedTransactionEvidence,
   testerExecutionActions,
   transactionShape,
 } from "./testerEvidence.ts";
+import { enforceTesterPlainCkbReserve } from "./testerReserve.ts";
 
 export function testerAttemptLogFields(
   testerScenario: TesterScenarioSelection,

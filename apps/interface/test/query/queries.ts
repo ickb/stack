@@ -3,10 +3,10 @@ import { Ratio } from "@ickb/order";
 import { byte32FromByte, headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
+import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
   getL1State,
   l1StateOptions,
-  l1StateQueryKey,
   quoteStateOptions,
 } from "../../src/query/queries.ts";
 import {

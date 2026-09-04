@@ -3,12 +3,7 @@ import { canFundDirectDeposit, evaluateRingCoverage } from "./policy/ring.ts";
 import type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
 import { planRebalanceWithdrawal } from "./policy/withdrawal.ts";
 
-export {
-  CKB,
-  CKB_RESERVE,
-  POOL_MAX_LOCK_UP,
-  POOL_MIN_LOCK_UP,
-} from "./policy/constants.ts";
+export { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy/constants.ts";
 export type {
   PlanRebalanceOptions,
   RebalanceDiagnostics,

@@ -38,8 +38,6 @@ export const TESTER_SCENARIO_SELECTIONS = [
   ...TESTER_SCENARIOS,
 ] as const;
 
-const TESTER_SCENARIO_VALUES: ReadonlySet<string> = new Set<string>(TESTER_SCENARIOS);
-
 const TESTER_SCENARIO_SELECTION_VALUES: ReadonlySet<string> = new Set<string>(
   TESTER_SCENARIO_SELECTIONS,
 );
@@ -55,27 +53,6 @@ export const MULTI_ORDER_SCENARIOS = [
   TWO_CKB_TO_ICKB_LIMIT_ORDERS_SCENARIO,
   TWO_ICKB_TO_CKB_LIMIT_ORDERS_SCENARIO,
 ] as const satisfies readonly TesterScenario[];
-
-const ICKB_TO_CKB_TESTER_SCENARIOS: ReadonlySet<TesterScenario> = new Set<TesterScenario>(
-  [
-    ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
-    BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
-    TWO_ICKB_TO_CKB_LIMIT_ORDERS_SCENARIO,
-    DUST_ICKB_CONVERSION_SCENARIO,
-  ],
-);
-
-export function testerScenarioSelectionListText(
-  scenarios: readonly TesterScenarioSelection[] = TESTER_SCENARIO_SELECTIONS,
-): string {
-  return scenarios.join("|");
-}
-
-export function testerScenarioSelectionErrorText(
-  scenarios: readonly TesterScenarioSelection[] = TESTER_SCENARIO_SELECTIONS,
-): string {
-  return scenarios.join(", ");
-}
 
 const TESTER_FEE = 1n;
 const TESTER_FEE_BASE = 100000n;
@@ -101,20 +78,8 @@ export type TesterDirection = "ckb-to-ickb" | "ickb-to-ckb";
 export const CKB_TO_ICKB: TesterDirection = "ckb-to-ickb";
 export const ICKB_TO_CKB: TesterDirection = "ickb-to-ckb";
 
-export function isTesterScenario(value: string): value is TesterScenario {
-  return TESTER_SCENARIO_VALUES.has(value);
-}
-
 export function isTesterScenarioSelection(
   value: string,
 ): value is TesterScenarioSelection {
   return TESTER_SCENARIO_SELECTION_VALUES.has(value);
-}
-
-export function isIckbToCkbTesterScenario(scenario: TesterScenario): boolean {
-  return ICKB_TO_CKB_TESTER_SCENARIOS.has(scenario);
-}
-
-export function isSdkConversionTesterScenario(scenario: TesterScenario): boolean {
-  return scenario === SDK_CONVERSION_SCENARIO;
 }

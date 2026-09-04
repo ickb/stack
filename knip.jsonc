@@ -3,19 +3,31 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/{lint-source-structure,run-node-tests,tooling/build/rewrite-dts-imports,live/{config-from-env,preflight}}.ts",
+        "scripts/{lint-source-structure,run-node-tests,tooling/build/rewrite-dts-imports,live/{config-from-env,preflight}}.ts!",
         "scripts/test/**/*.ts",
         "!scripts/test/**/*support.ts",
       ],
       "includeEntryExports": true,
-      "project": ["scripts/**/*.ts", "*.config.{ts,mts}"],
+      "project": ["scripts/**/*.ts", "!scripts/test/**!", "*.config.{ts,mts}"],
+    },
+    // `!` marks production entries and files: `knip --production` runs in the gate.
+    "apps/*": {
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+    },
+    "packages/*": {
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "apps/validation": {
-      "entry": ["src/tester.ts"],
+      "entry": ["src/tester.ts!"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "apps/interface": {
       "ignoreDependencies": ["tailwindcss"],
+      "project": ["src/**/*.{ts,tsx,css}!", "test/**/*.{ts,tsx}"],
     },
   },
   "ignoreUnresolved": ["/favicon.png?url"],
+  // Production mode reports exports only tests import. A helper that its own file
+  // calls is not a mock seam, so keep the lane for dead code and test-only barrels.
+  "ignoreExportsUsedInFile": true,
 }

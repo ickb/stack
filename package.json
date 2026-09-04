@@ -14,7 +14,7 @@
     "lint:format": "prettier --check .",
     "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript apps packages scripts",
     "lint:structure": "node scripts/lint-source-structure.ts",
-    "lint:knip": "knip --no-progress",
+    "lint:knip": "knip --no-progress && knip --production --no-progress",
     "lint:architecture": "depcruise --config .dependency-cruiser.jsonc apps packages scripts",
     "lint:api": "pnpm build && pnpm -r --filter './packages/*' lint:api",
     "lint:publish": "pnpm -r --if-present --filter './packages/*' lint:publish",

@@ -16,11 +16,11 @@ import {
 } from "../../src/action/actionTransaction.ts";
 import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
-  pendingTransactionHash,
   submitPendingTransaction,
   type PendingTransactionState,
 } from "../../src/query/pendingTransactionQuery.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import { pendingTransactionHash } from "../query/fixtures/query.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 

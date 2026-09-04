@@ -1,11 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "@ickb/core";
 import { headerLike } from "@ickb/testkit";
-import {
-  CKB,
-  CKB_RESERVE,
-  planRebalance as planRebalanceImpl,
-} from "../../../src/policy.ts";
+import { planRebalance as planRebalanceImpl } from "../../../src/policy.ts";
+import { CKB, CKB_RESERVE } from "../../../src/policy/constants.ts";
 
 export { CKB, CKB_RESERVE, ICKB_DEPOSIT_CAP };
 

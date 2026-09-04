@@ -2,11 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { OrderManager } from "@ickb/order";
 import { byte32FromByte, headerLike } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isRetryableTesterError } from "../../../../src/tester/index.ts";
 import {
   freshMatchableOrderSkip,
   MissingFreshOrderOriginError,
 } from "../../../../src/tester/runtime/freshMatchableOrderSkip.ts";
+import { isRetryableTesterError } from "../../../../src/tester/runtime/testerErrors.ts";
 import {
   FRESH_MATCHABLE_ORDER_REASON,
   FRESH_MATCHABLE_ORDER_SKIP,

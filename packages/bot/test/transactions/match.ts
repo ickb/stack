@@ -2,12 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import { OrderManager, Ratio, type MatchDiagnostics } from "@ickb/order";
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CKB_RESERVE,
-  type RebalanceDiagnostics,
-  type RebalancePlan,
-  type RingSegmentDiagnostics,
+import type {
+  RebalanceDiagnostics,
+  RebalancePlan,
+  RingSegmentDiagnostics,
 } from "../../src/policy.ts";
+import { CKB_RESERVE } from "../../src/policy/constants.ts";
 import { buildDecisionTranscript } from "../../src/runtime/decision.ts";
 import { MAX_OUTPUTS_BEFORE_CHANGE } from "../../src/runtime/support.ts";
 import { buildTransaction } from "../../src/runtime/transaction.ts";

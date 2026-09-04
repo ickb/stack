@@ -1,13 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { attemptedOrderEvidence } from "../../../src/tester/evidence/testerEvidence.ts";
 import {
+  attemptedOrderEvidence,
   testerAttemptedTransactionEvidence,
   testerEstimatedTooSmallSkip,
   testerExecutionActions,
   testerSdkConversionNoticeSkip,
-} from "../../../src/tester/index.ts";
+} from "../../../src/tester/evidence/testerEvidence.ts";
 import {
   CKB_TO_ICKB_DIRECTION,
   DIRECT_PLUS_ORDER_CONVERSION,

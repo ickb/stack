@@ -5,8 +5,8 @@ import {
   enforceTesterPlainCkbReserve,
   postTransactionPlainCkbBalance,
   testerReserveSkip,
-  TesterTerminalError,
-} from "../../../src/tester/index.ts";
+} from "../../../src/tester/evidence/testerReserve.ts";
+import { TesterTerminalError } from "../../../src/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,

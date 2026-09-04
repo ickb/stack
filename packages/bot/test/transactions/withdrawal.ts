@@ -3,7 +3,7 @@ import { OrderManager, Ratio } from "@ickb/order";
 import type { IckbSdk } from "@ickb/sdk";
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE } from "../../src/policy.ts";
+import { CKB_RESERVE } from "../../src/policy/constants.ts";
 import { buildTransaction } from "../../src/runtime/transaction.ts";
 import {
   botRuntime,

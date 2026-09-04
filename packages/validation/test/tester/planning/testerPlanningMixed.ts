@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { planTesterTransaction, TesterTerminalError } from "../../../src/tester/index.ts";
+import { planTesterTransaction } from "../../../src/tester/planning/testerPlanning.ts";
+import { TesterTerminalError } from "../../../src/tester/runtime/testerTypes.ts";
 import {
   CKB_TO_ICKB_DIRECTION,
   DUST_CKB_CONVERSION_SCENARIO,
