@@ -124,13 +124,17 @@ export async function planTesterAttempt({
   });
   if (built.conversionNotice?.kind === "dust-ickb-to-ckb") {
     executionLogWriter.record({
-      skip: testerSdkConversionNoticeSkip(
-        testerScenario,
-        effectiveTesterScenario,
-        built.conversion,
-        built.conversionNotice,
-        attemptedOrderEvidence(rawOrders, estimatedOrders, effectiveFeePolicy),
-      ),
+      skip: testerSdkConversionNoticeSkip({
+        requestedScenario: testerScenario,
+        effectiveScenario: effectiveTesterScenario,
+        conversion: built.conversion,
+        conversionNotice: built.conversionNotice,
+        orderEvidence: attemptedOrderEvidence(
+          rawOrders,
+          estimatedOrders,
+          effectiveFeePolicy,
+        ),
+      }),
     });
     return undefined;
   }
@@ -198,13 +202,13 @@ function recordTesterEstimatedTooSmallSkip({
   feePolicy: TesterFeePolicy;
 }): void {
   executionLogWriter.record({
-    skip: testerEstimatedTooSmallSkip(
+    skip: testerEstimatedTooSmallSkip({
       requestedScenario,
       effectiveScenario,
       rawOrders,
       estimatedOrders,
       feePolicy,
-    ),
+    }),
   });
 }
 function skipUnfundedAutoScenario({

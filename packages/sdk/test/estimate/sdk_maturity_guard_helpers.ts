@@ -54,22 +54,16 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       ),
     ).toBe(600100n);
     expect(
-      estimateConversionOrder(
-        true,
-        { ckbValue: 0n, udtValue: 0n },
-        highFeeSystem,
-        0n,
-        100000n,
-      ),
+      estimateConversionOrder(true, { ckbValue: 0n, udtValue: 0n }, highFeeSystem, {
+        fee: 0n,
+        feeBase: 100000n,
+      }),
     ).toBeUndefined();
     expect(() =>
-      estimateConversionOrder(
-        true,
-        { ckbValue: -1n, udtValue: 0n },
-        highFeeSystem,
-        0n,
-        100000n,
-      ),
+      estimateConversionOrder(true, { ckbValue: -1n, udtValue: 0n }, highFeeSystem, {
+        fee: 0n,
+        feeBase: 100000n,
+      }),
     ).toThrow("Order conversion amounts cannot be negative");
   });
 

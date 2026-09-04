@@ -160,13 +160,13 @@ class TestSdk extends IckbSdk {
     } = {},
   ) {
     const config = getConfig("testnet");
-    super(
-      config.managers.ickbUdt,
-      config.managers.ownedOwner,
-      config.managers.logic,
-      config.managers.order,
-      config.bots,
-    );
+    super({
+      ickbUdt: config.managers.ickbUdt,
+      ownedOwner: config.managers.ownedOwner,
+      ickbLogic: config.managers.logic,
+      order: config.managers.order,
+      bots: config.bots,
+    });
     this.buildConversionTransaction =
       options.buildConversionTransaction ??
       vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue({

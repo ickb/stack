@@ -3,32 +3,18 @@ import { compareBigInt } from "@ickb/utils";
 import type { OrderCell, OrderGroup } from "../model/cells.ts";
 import type { Match } from "./match_types.ts";
 
-type OrderMatcherParameters = [
-  aScale: ccc.Num,
-  bScale: ccc.Num,
-  aIn: ccc.FixedPoint,
-  bIn: ccc.FixedPoint,
-  aMin: ccc.FixedPoint,
-  bMinMatch: ccc.FixedPoint,
-  bMaxMatch: ccc.FixedPoint,
-  bMaxOut: ccc.FixedPoint,
-  realRatioNumerator: ccc.FixedPoint,
-  realRatioDenominator: ccc.FixedPoint,
-];
-
-type OrderMatcherConstructorArgs = [
-  group: OrderGroup,
-  isCkb2Udt: boolean,
-  ...parameters: OrderMatcherParameters,
-];
-
-type NonDecreasingArgs = [
-  aScale: ccc.Num,
-  bScale: ccc.Num,
-  aIn: ccc.FixedPoint,
-  bIn: ccc.FixedPoint,
-  aOut: ccc.FixedPoint,
-];
+export interface OrderMatcherParameters {
+  aScale: ccc.Num;
+  bScale: ccc.Num;
+  aIn: ccc.FixedPoint;
+  bIn: ccc.FixedPoint;
+  aMin: ccc.FixedPoint;
+  bMinMatch: ccc.FixedPoint;
+  bMaxMatch: ccc.FixedPoint;
+  bMaxOut: ccc.FixedPoint;
+  realRatioNumerator: ccc.FixedPoint;
+  realRatioDenominator: ccc.FixedPoint;
+}
 
 interface OrderMatcherValues {
   aScale: ccc.Num;
@@ -55,10 +41,9 @@ export class OrderMatcher {
   public readonly realRatioNumerator: ccc.FixedPoint;
   public readonly realRatioDenominator: ccc.FixedPoint;
 
-  constructor(
-    ...[
-      group,
-      isCkb2Udt,
+  constructor(group: OrderGroup, isCkb2Udt: boolean, parameters: OrderMatcherParameters) {
+    assertOrderMatcherParameters(parameters);
+    const {
       aScale,
       bScale,
       aIn,
@@ -69,20 +54,7 @@ export class OrderMatcher {
       bMaxOut,
       realRatioNumerator,
       realRatioDenominator,
-    ]: OrderMatcherConstructorArgs
-  ) {
-    assertOrderMatcherParameters({
-      aScale,
-      bScale,
-      aIn,
-      bIn,
-      aMin,
-      bMinMatch,
-      bMaxMatch,
-      bMaxOut,
-      realRatioNumerator,
-      realRatioDenominator,
-    });
+    } = parameters;
     this.group = group;
     this.isCkb2Udt = isCkb2Udt;
     this.aScale = aScale;
@@ -112,7 +84,7 @@ export class OrderMatcher {
     const parameters = orderMatcherParameters(group.order, isCkb2Udt, ckbMiningFee);
     return parameters === undefined
       ? undefined
-      : new OrderMatcher(group, isCkb2Udt, ...parameters);
+      : new OrderMatcher(group, isCkb2Udt, parameters);
   }
 
   public match(bAllowance: ccc.FixedPoint): Match {
@@ -125,7 +97,13 @@ export class OrderMatcher {
     }
 
     const bOut = this.bIn + bAllowance;
-    const aOut = nonDecreasing(this.bScale, this.aScale, this.bIn, this.aIn, bOut);
+    const aOut = nonDecreasing({
+      aScale: this.bScale,
+      bScale: this.aScale,
+      aIn: this.bIn,
+      bIn: this.aIn,
+      aOut: bOut,
+    });
 
     if (
       !this.isCkb2Udt &&
@@ -179,7 +157,7 @@ function orderMatcherParameters(
     return undefined;
   }
 
-  const bMaxOut = nonDecreasing(aScale, bScale, aIn, bIn, aMin);
+  const bMaxOut = nonDecreasing({ aScale, bScale, aIn, bIn, aOut: aMin });
   const bMaxMatch = bMaxOut - bIn;
   const realRatioNumerator = aIn - aMin - aMiningFee;
   const realRatioDenominator = bMaxMatch + bMiningFee;
@@ -187,18 +165,18 @@ function orderMatcherParameters(
     return undefined;
   }
 
-  return [
+  return {
     aScale,
     bScale,
     aIn,
     bIn,
     aMin,
-    minBigInt(bMinMatch, bMaxMatch),
+    bMinMatch: minBigInt(bMinMatch, bMaxMatch),
     bMaxMatch,
     bMaxOut,
     realRatioNumerator,
     realRatioDenominator,
-  ];
+  };
 }
 
 function orderMatcherValues(
@@ -240,9 +218,19 @@ function orderMatcherValues(
   };
 }
 
-function nonDecreasing(
-  ...[aScale, bScale, aIn, bIn, aOut]: NonDecreasingArgs
-): ccc.FixedPoint {
+function nonDecreasing({
+  aScale,
+  bScale,
+  aIn,
+  bIn,
+  aOut,
+}: {
+  aScale: ccc.Num;
+  bScale: ccc.Num;
+  aIn: ccc.FixedPoint;
+  bIn: ccc.FixedPoint;
+  aOut: ccc.FixedPoint;
+}): ccc.FixedPoint {
   return (aScale * (aIn - aOut) + bScale * (bIn + 1n) - 1n) / bScale;
 }
 

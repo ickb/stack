@@ -151,14 +151,12 @@ export class DaoManager implements ScriptDeps {
    * @throws Error if the withdrawal request lock args have a different size from the deposit.
    */
   public requestWithdrawal(
-    ...[txLike, deposits, lock, options]: [
-      txLike: ccc.TransactionLike | ccc.Transaction,
-      deposits: DaoDepositCell[],
-      lock: ccc.Script,
-      options?: {
-        isReadyOnly?: boolean;
-      },
-    ]
+    txLike: ccc.TransactionLike | ccc.Transaction,
+    deposits: DaoDepositCell[],
+    lock: ccc.Script,
+    options?: {
+      isReadyOnly?: boolean;
+    },
   ): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
     const selectedDeposits =

@@ -28,12 +28,12 @@ import {
 
 describe(`${PLAN_TESTER_TRANSACTION} raw order evidence`, () => {
   it("reports total collected owned orders separately from matchable cancelled orders", async () => {
-    const actions = testerExecutionActions(
-      "auto",
-      ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
-      undefined,
-      undefined,
-      [
+    const actions = testerExecutionActions({
+      requestedScenario: "auto",
+      effectiveScenario: ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
+      conversion: undefined,
+      conversionNotice: undefined,
+      estimatedOrders: [
         estimatedOrder(
           ICKB_TO_CKB_DIRECTION,
           ccc.fixedPointFrom(12),
@@ -42,15 +42,15 @@ describe(`${PLAN_TESTER_TRANSACTION} raw order evidence`, () => {
           ccc.fixedPointFrom(1),
         ),
       ],
-      { fee: 1n, feeBase: 1000n },
-      testerState({
+      feePolicy: { fee: 1n, feeBase: 1000n },
+      state: testerState({
         availableCkbBalance: ccc.fixedPointFrom(100),
         userOrders: [
           await matchableOrder(byte32FromByte("10")),
           await nonMatchableOrder(byte32FromByte("11")),
         ],
       }),
-    );
+    });
 
     expect(actions).toEqual({
       requestedTesterScenario: "auto",
@@ -118,15 +118,15 @@ describe(`${PLAN_TESTER_TRANSACTION} grouped raw order evidence`, () => {
     );
 
     expect(
-      testerExecutionActions(
-        "auto",
-        ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
-        undefined,
-        undefined,
-        [first, second],
+      testerExecutionActions({
+        requestedScenario: "auto",
+        effectiveScenario: ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
+        conversion: undefined,
+        conversionNotice: undefined,
+        estimatedOrders: [first, second],
         feePolicy,
-        testerState({ availableCkbBalance: ccc.fixedPointFrom(100) }),
-      ),
+        state: testerState({ availableCkbBalance: ccc.fixedPointFrom(100) }),
+      }),
     ).toMatchObject({
       requestedTesterScenario: "auto",
       newOrders: [
@@ -163,12 +163,12 @@ describe(`${PLAN_TESTER_TRANSACTION} grouped raw order evidence`, () => {
 });
 describe(`${PLAN_TESTER_TRANSACTION} SDK action evidence`, () => {
   it("does not claim exact SDK conversion order evidence", () => {
-    const actions = testerExecutionActions(
-      SDK_CONVERSION_SCENARIO,
-      SDK_CONVERSION_SCENARIO,
-      { kind: "order" },
-      undefined,
-      [
+    const actions = testerExecutionActions({
+      requestedScenario: SDK_CONVERSION_SCENARIO,
+      effectiveScenario: SDK_CONVERSION_SCENARIO,
+      conversion: { kind: "order" },
+      conversionNotice: undefined,
+      estimatedOrders: [
         estimatedOrder(
           CKB_TO_ICKB_DIRECTION,
           ccc.fixedPointFrom(12),
@@ -177,9 +177,9 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK action evidence`, () => {
           ccc.fixedPointFrom(1),
         ),
       ],
-      { fee: 1n, feeBase: 1000n },
-      testerState({ availableCkbBalance: ccc.fixedPointFrom(3000) }),
-    );
+      feePolicy: { fee: 1n, feeBase: 1000n },
+      state: testerState({ availableCkbBalance: ccc.fixedPointFrom(3000) }),
+    });
 
     expect(actions).toEqual({
       testerScenario: SDK_CONVERSION_SCENARIO,
@@ -190,18 +190,18 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK action evidence`, () => {
   });
 
   it("keeps SDK conversion notices in action evidence", () => {
-    const actions = testerExecutionActions(
-      SDK_CONVERSION_SCENARIO,
-      SDK_CONVERSION_SCENARIO,
-      { kind: DIRECT_PLUS_ORDER_CONVERSION },
-      {
+    const actions = testerExecutionActions({
+      requestedScenario: SDK_CONVERSION_SCENARIO,
+      effectiveScenario: SDK_CONVERSION_SCENARIO,
+      conversion: { kind: DIRECT_PLUS_ORDER_CONVERSION },
+      conversionNotice: {
         kind: "maturity-unavailable",
         inputIckb: 12n,
         outputCkb: 10n,
         incentiveCkb: 1n,
         maturityEstimateUnavailable: true,
       },
-      [
+      estimatedOrders: [
         estimatedOrder(
           ICKB_TO_CKB_DIRECTION,
           ccc.fixedPointFrom(12),
@@ -210,9 +210,9 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK action evidence`, () => {
           ccc.fixedPointFrom(1),
         ),
       ],
-      { fee: 1n, feeBase: 1000n },
-      testerState({ availableCkbBalance: ccc.fixedPointFrom(3000) }),
-    );
+      feePolicy: { fee: 1n, feeBase: 1000n },
+      state: testerState({ availableCkbBalance: ccc.fixedPointFrom(3000) }),
+    });
 
     expect(actions).toEqual({
       testerScenario: SDK_CONVERSION_SCENARIO,
@@ -231,18 +231,18 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK action evidence`, () => {
 });
 describe(`${PLAN_TESTER_TRANSACTION} SDK skip evidence`, () => {
   it("reports SDK dust conversion notices as attempted skip evidence", () => {
-    const skip = testerSdkConversionNoticeSkip(
-      "auto",
-      SDK_CONVERSION_SCENARIO,
-      { kind: DIRECT_PLUS_ORDER_CONVERSION },
-      {
+    const skip = testerSdkConversionNoticeSkip({
+      requestedScenario: "auto",
+      effectiveScenario: SDK_CONVERSION_SCENARIO,
+      conversion: { kind: DIRECT_PLUS_ORDER_CONVERSION },
+      conversionNotice: {
         kind: DUST_ICKB_TO_CKB_NOTICE,
         inputIckb: 12n,
         outputCkb: 10n,
         incentiveCkb: 1n,
         maturityEstimateUnavailable: false,
       },
-      {
+      orderEvidence: {
         attemptedOrder: {
           giveIckb: "0.00000012",
           takeCkb: "0.0000001",
@@ -251,7 +251,7 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK skip evidence`, () => {
           feeBase: "100000",
         },
       },
-    );
+    });
 
     expect(skip).toEqual({
       reason: ESTIMATED_TOO_SMALL_REASON,
@@ -277,13 +277,15 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK skip evidence`, () => {
 
   it("omits non-record SDK conversion notice details", () => {
     expect(
-      testerSdkConversionNoticeSkip(
-        SDK_CONVERSION_SCENARIO,
-        SDK_CONVERSION_SCENARIO,
-        undefined,
-        undefined,
-        { attemptedOrder: { giveIckb: "1", feeNumerator: "1", feeBase: "100000" } },
-      ),
+      testerSdkConversionNoticeSkip({
+        requestedScenario: SDK_CONVERSION_SCENARIO,
+        effectiveScenario: SDK_CONVERSION_SCENARIO,
+        conversion: undefined,
+        conversionNotice: undefined,
+        orderEvidence: {
+          attemptedOrder: { giveIckb: "1", feeNumerator: "1", feeBase: "100000" },
+        },
+      }),
     ).toEqual({
       reason: ESTIMATED_TOO_SMALL_REASON,
       testerScenario: SDK_CONVERSION_SCENARIO,
@@ -308,19 +310,19 @@ describe(`${PLAN_TESTER_TRANSACTION} attempted transaction evidence`, () => {
 });
 describe(`${PLAN_TESTER_TRANSACTION} estimated skip evidence`, () => {
   it("keeps attempted order evidence available for unbuildable estimates", () => {
-    const skip = testerEstimatedTooSmallSkip(
-      "auto",
-      DUST_CKB_CONVERSION_SCENARIO,
-      [
+    const skip = testerEstimatedTooSmallSkip({
+      requestedScenario: "auto",
+      effectiveScenario: DUST_CKB_CONVERSION_SCENARIO,
+      rawOrders: [
         {
           direction: CKB_TO_ICKB_DIRECTION,
           amount: 1n,
           amounts: { ckbValue: 1n, udtValue: 0n },
         },
       ],
-      [],
-      { fee: 1n, feeBase: 100000n },
-    );
+      estimatedOrders: [],
+      feePolicy: { fee: 1n, feeBase: 100000n },
+    });
 
     expect(skip).toEqual({
       reason: ESTIMATED_TOO_SMALL_REASON,
@@ -335,19 +337,19 @@ describe(`${PLAN_TESTER_TRANSACTION} estimated skip evidence`, () => {
   });
 
   it("keeps converted attempted order evidence for zero estimates", () => {
-    const skip = testerEstimatedTooSmallSkip(
-      DUST_ICKB_CONVERSION_SCENARIO,
-      DUST_ICKB_CONVERSION_SCENARIO,
-      [
+    const skip = testerEstimatedTooSmallSkip({
+      requestedScenario: DUST_ICKB_CONVERSION_SCENARIO,
+      effectiveScenario: DUST_ICKB_CONVERSION_SCENARIO,
+      rawOrders: [
         {
           direction: ICKB_TO_CKB_DIRECTION,
           amount: 1n,
           amounts: { ckbValue: 0n, udtValue: 1n },
         },
       ],
-      [estimatedOrder(ICKB_TO_CKB_DIRECTION, 1n, 0n, 1n, 0n)],
-      { fee: 1n, feeBase: 100000n },
-    );
+      estimatedOrders: [estimatedOrder(ICKB_TO_CKB_DIRECTION, 1n, 0n, 1n, 0n)],
+      feePolicy: { fee: 1n, feeBase: 100000n },
+    });
 
     expect(skip).toEqual({
       reason: ESTIMATED_TOO_SMALL_REASON,
@@ -364,19 +366,19 @@ describe(`${PLAN_TESTER_TRANSACTION} estimated skip evidence`, () => {
 
   it("formats unestimated iCKB raw orders without converted fields", () => {
     expect(
-      testerEstimatedTooSmallSkip(
-        DUST_ICKB_CONVERSION_SCENARIO,
-        DUST_ICKB_CONVERSION_SCENARIO,
-        [
+      testerEstimatedTooSmallSkip({
+        requestedScenario: DUST_ICKB_CONVERSION_SCENARIO,
+        effectiveScenario: DUST_ICKB_CONVERSION_SCENARIO,
+        rawOrders: [
           {
             direction: ICKB_TO_CKB_DIRECTION,
             amount: 1n,
             amounts: { ckbValue: 0n, udtValue: 1n },
           },
         ],
-        [],
-        { fee: 1n, feeBase: 100000n },
-      ),
+        estimatedOrders: [],
+        feePolicy: { fee: 1n, feeBase: 100000n },
+      }),
     ).toMatchObject({
       attemptedOrder: {
         giveIckb: ONE_SHANNON_TEXT,

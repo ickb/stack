@@ -25,18 +25,11 @@ export function estimate(
   system: SystemState,
   options?: { fee?: ccc.Num; feeBase?: ccc.Num },
 ): ConversionOrderEstimate {
-  const estimateOptions = {
+  const conversion = estimateConversionOrder(isCkb2Udt, amounts, system, {
     fee: DEFAULT_ORDER_FEE,
     feeBase: DEFAULT_ORDER_FEE_BASE,
     ...options,
-  };
-  const conversion = estimateConversionOrder(
-    isCkb2Udt,
-    amounts,
-    system,
-    estimateOptions.fee,
-    estimateOptions.feeBase,
-  );
+  });
   if (conversion === undefined) {
     throw new OrderConversionRepresentabilityError();
   }
@@ -88,13 +81,10 @@ function estimateIckbToCkbOrderDefaultFee(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  return estimateConversionOrder(
-    false,
-    amounts,
-    system,
-    DEFAULT_ORDER_FEE,
-    DEFAULT_ORDER_FEE_BASE,
-  );
+  return estimateConversionOrder(false, amounts, system, {
+    fee: DEFAULT_ORDER_FEE,
+    feeBase: DEFAULT_ORDER_FEE_BASE,
+  });
 }
 
 function dustIckbToCkbOrderEstimate(
@@ -121,13 +111,10 @@ function estimateDustIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  const baseEstimate = estimateConversionOrder(
-    false,
-    amounts,
-    system,
-    0n,
-    DEFAULT_ORDER_FEE_BASE,
-  );
+  const baseEstimate = estimateConversionOrder(false, amounts, system, {
+    fee: 0n,
+    feeBase: DEFAULT_ORDER_FEE_BASE,
+  });
   if (baseEstimate === undefined) {
     return undefined;
   }
@@ -137,7 +124,7 @@ function estimateDustIckbToCkbOrder(
     return baseEstimate;
   }
   const estimateWithFee = (fee: bigint): ConversionOrderEstimate | undefined =>
-    estimateConversionOrder(false, amounts, system, fee, feeBase);
+    estimateConversionOrder(false, amounts, system, { fee, feeBase });
   return lowestFeeEstimateAtThreshold(estimateWithFee, feeBase - 1n, targetFee);
 }
 

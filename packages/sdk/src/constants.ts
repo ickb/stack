@@ -178,16 +178,16 @@ export function getConfig(
 
   const dao = new DaoManager(deployment.dao.script, deployment.dao.cellDeps);
 
-  const ickbUdt = new IckbUdt(
-    ccc.OutPoint.from(deployment.udt.codeOutPoint),
-    IckbUdt.typeScriptFrom(
+  const ickbUdt = new IckbUdt({
+    code: ccc.OutPoint.from(deployment.udt.codeOutPoint),
+    script: IckbUdt.typeScriptFrom(
       ccc.Script.from(deployment.udt.script),
       ccc.Script.from(deployment.logic.script),
     ),
-    ccc.OutPoint.from(deployment.logic.codeOutPoint),
-    deployment.logic.script,
-    dao,
-  );
+    logicCode: ccc.OutPoint.from(deployment.logic.codeOutPoint),
+    logicScript: deployment.logic.script,
+    daoManager: dao,
+  });
   const logic = new LogicManager(deployment.logic.script, deployment.logic.cellDeps, dao);
   const ownedOwner = new OwnedOwnerManager(
     deployment.ownedOwner.script,

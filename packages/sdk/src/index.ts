@@ -42,6 +42,7 @@ export type {
   MaturityOrderInput,
   PoolDepositRangeOptions,
   PoolDepositState,
+  SdkManagers,
   SystemState,
   WaitTransactionArguments,
   WaitTransactionOptions,

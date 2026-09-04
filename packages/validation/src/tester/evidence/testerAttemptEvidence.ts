@@ -23,15 +23,15 @@ export function testerAttemptLogFields(
   const { built, effectiveFeePolicy, effectiveTesterScenario, estimatedOrders } = planned;
   const txFee = built.tx.estimateFee(state.system.feeRate);
   return {
-    actions: testerExecutionActions(
-      testerScenario,
-      effectiveTesterScenario,
-      built.conversion,
-      built.conversionNotice,
+    actions: testerExecutionActions({
+      requestedScenario: testerScenario,
+      effectiveScenario: effectiveTesterScenario,
+      conversion: built.conversion,
+      conversionNotice: built.conversionNotice,
       estimatedOrders,
-      effectiveFeePolicy,
+      feePolicy: effectiveFeePolicy,
       state,
-    ),
+    }),
     transactionShape: transactionShape(built.tx),
     txFeeLog: { fee: formatCkb(txFee), feeRate: state.system.feeRate },
   };

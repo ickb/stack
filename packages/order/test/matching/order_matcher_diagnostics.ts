@@ -298,14 +298,14 @@ describe(ORDER_MATCHER_SUITE, () => {
     const { order } = group;
     const projected = new OrderGroup(
       group.master,
-      new OrderCell(
-        order.cell,
-        order.data,
-        order.ckbUnoccupied,
-        order.absTotal,
-        order.absProgress,
-        123n,
-      ),
+      new OrderCell({
+        cell: order.cell,
+        data: order.data,
+        ckbUnoccupied: order.ckbUnoccupied,
+        absTotal: order.absTotal,
+        absProgress: order.absProgress,
+        maturity: 123n,
+      }),
       group.origin,
     );
 

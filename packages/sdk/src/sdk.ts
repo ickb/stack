@@ -1,6 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
-import type { Info, OrderGroup, OrderManager } from "@ickb/order";
+import type { Info, OrderGroup } from "@ickb/order";
 import type { ValueComponents } from "@ickb/utils";
 import { IckbSdkL1 } from "./client/sdk_l1_class.ts";
 import type {
@@ -15,6 +14,7 @@ import type {
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
   PoolDepositState,
+  SdkManagers,
   SystemState,
 } from "./client/sdk_types.ts";
 import type { getConfig } from "./constants.ts";
@@ -45,6 +45,7 @@ export type {
   MaturityOrderInput,
   PoolDepositRangeOptions,
   PoolDepositState,
+  SdkManagers,
   SystemState,
 } from "./client/sdk_types.ts";
 export {
@@ -129,25 +130,6 @@ export interface IckbSdk {
 
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
-  /** Creates an SDK from resolved protocol managers and bot lock scripts. */
-  constructor(
-    ...[ickbUdt, ownedOwner, ickbLogic, order, bots]: [
-      ickbUdt: IckbUdt,
-      ownedOwner: OwnedOwnerManager,
-      ickbLogic: LogicManager,
-      order: OrderManager,
-      bots: ccc.Script[],
-    ]
-  ) {
-    super({
-      ickbUdt,
-      ownedOwner,
-      ickbLogic,
-      order,
-      bots,
-    });
-  }
-
   /** Estimates one conversion order against the sampled system state. */
   public static estimate(
     isCkb2Udt: boolean,
@@ -175,7 +157,7 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
       bots,
     } = config;
 
-    return new IckbSdk(ickbUdt, ownedOwner, logic, order, bots);
+    return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order, bots });
   }
 
   /** Estimates maturity for an order input from the sampled system state. */
@@ -187,13 +169,7 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
 /** Concrete iCKB SDK constructor and static estimators. @public */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const IckbSdk: {
-  new (
-    ickbUdt: IckbUdt,
-    ownedOwner: OwnedOwnerManager,
-    ickbLogic: LogicManager,
-    order: OrderManager,
-    bots: ccc.Script[],
-  ): IckbSdk;
+  new (managers: SdkManagers): IckbSdk;
   estimate: (
     isCkb2Udt: boolean,
     amounts: ValueComponents,

@@ -247,13 +247,13 @@ function registerCompleteByPrefixTests(): void {
     const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
     const outputData = receiptOutputData(3, ccc.fixedPointFrom(100000));
     const cell = receiptCell(outputData, logic);
-    const ickbUdt = new IckbUdt(
-      { txHash: byte32FromByte("44"), index: 0n },
-      type,
-      { txHash: byte32FromByte("66"), index: 0n },
-      logic,
-      new DaoManager(script("77"), []),
-    );
+    const ickbUdt = new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 0n },
+      script: type,
+      logicCode: { txHash: byte32FromByte("66"), index: 0n },
+      logicScript: logic,
+      daoManager: new DaoManager(script("77"), []),
+    });
     const tx = ccc.Transaction.from({
       outputs: [{ lock: script("22"), type }],
       outputsData: [
@@ -282,13 +282,13 @@ function registerConcurrentHeaderTests(): void {
       outputData: "0x0000000000000000",
     });
     const type = script("55");
-    const ickbUdt = new IckbUdt(
-      { txHash: byte32FromByte("44"), index: 0n },
-      type,
-      { txHash: byte32FromByte("66"), index: 0n },
-      logic,
-      new DaoManager(dao, []),
-    );
+    const ickbUdt = new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 0n },
+      script: type,
+      logicCode: { txHash: byte32FromByte("66"), index: 0n },
+      logicScript: logic,
+      daoManager: new DaoManager(dao, []),
+    });
     const { promise: receiptFetch, resolve: resolveReceipt } =
       Promise.withResolvers<
         Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
@@ -354,13 +354,13 @@ function registerRepeatedHeaderTests(): void {
       cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao },
       outputData: "0x0000000000000000",
     });
-    const ickbUdt = new IckbUdt(
-      { txHash: byte32FromByte("44"), index: 0n },
-      script("55"),
-      { txHash: byte32FromByte("66"), index: 0n },
-      logic,
-      new DaoManager(dao, []),
-    );
+    const ickbUdt = new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 0n },
+      script: script("55"),
+      logicCode: { txHash: byte32FromByte("66"), index: 0n },
+      logicScript: logic,
+      daoManager: new DaoManager(dao, []),
+    });
 
     const tx = ccc.Transaction.default();
     tx.addInput(receipt);

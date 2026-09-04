@@ -22,34 +22,30 @@ describe(ORDER_MATCHER_SUITE, () => {
     const order = makeUdtToCkbOrder({ udtValue: 100n });
     const group = resolvedOrderGroup(order);
     const scale = 2n ** 60n;
-    const better = new OrderMatcher(
-      group,
-      true,
-      1n,
-      1n,
-      0n,
-      0n,
-      0n,
-      0n,
-      0n,
-      0n,
-      scale + 1n,
-      scale,
-    );
-    const worse = new OrderMatcher(
-      group,
-      true,
-      1n,
-      1n,
-      0n,
-      0n,
-      0n,
-      0n,
-      0n,
-      0n,
-      scale,
-      scale,
-    );
+    const better = new OrderMatcher(group, true, {
+      aScale: 1n,
+      bScale: 1n,
+      aIn: 0n,
+      bIn: 0n,
+      aMin: 0n,
+      bMinMatch: 0n,
+      bMaxMatch: 0n,
+      bMaxOut: 0n,
+      realRatioNumerator: scale + 1n,
+      realRatioDenominator: scale,
+    });
+    const worse = new OrderMatcher(group, true, {
+      aScale: 1n,
+      bScale: 1n,
+      aIn: 0n,
+      bIn: 0n,
+      aMin: 0n,
+      bMinMatch: 0n,
+      bMaxMatch: 0n,
+      bMaxOut: 0n,
+      realRatioNumerator: scale,
+      realRatioDenominator: scale,
+    });
 
     expect(Number(scale + 1n) / Number(scale)).toBe(1);
     expect(OrderMatcher.compareRealRatioDesc(better, worse)).toBeLessThan(0);
@@ -231,16 +227,32 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("rejects invalid direct matcher construction", () => {
     const order = makeUdtToCkbOrder();
     const group = resolvedOrderGroup(order);
+    const valid = {
+      aScale: 1n,
+      bScale: 1n,
+      aIn: 0n,
+      bIn: 0n,
+      aMin: 0n,
+      bMinMatch: 0n,
+      bMaxMatch: 0n,
+      bMaxOut: 0n,
+      realRatioNumerator: 1n,
+      realRatioDenominator: 1n,
+    };
+    const rejections: Array<[Partial<typeof valid>, string]> = [
+      [{ aScale: 0n }, "OrderMatcher scales must be positive"],
+      [
+        { bMinMatch: 2n, bMaxMatch: 1n },
+        "OrderMatcher maximum match must be at least the minimum match",
+      ],
+      [{ realRatioNumerator: 0n }, "OrderMatcher real ratio terms must be positive"],
+    ];
 
-    expect(
-      () => new OrderMatcher(group, true, 0n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 1n, 1n),
-    ).toThrow("OrderMatcher scales must be positive");
-    expect(
-      () => new OrderMatcher(group, true, 1n, 1n, 0n, 0n, 0n, 2n, 1n, 0n, 1n, 1n),
-    ).toThrow("OrderMatcher maximum match must be at least the minimum match");
-    expect(
-      () => new OrderMatcher(group, true, 1n, 1n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 1n),
-    ).toThrow("OrderMatcher real ratio terms must be positive");
+    for (const [overrides, message] of rejections) {
+      expect(() => new OrderMatcher(group, true, { ...valid, ...overrides })).toThrow(
+        message,
+      );
+    }
   });
 
   it("rejects orders whose fee leaves no spendable input", () => {

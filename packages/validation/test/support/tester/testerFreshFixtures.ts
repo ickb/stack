@@ -12,7 +12,9 @@ import {
 
 export type FreshOrderRuntime = Parameters<typeof freshMatchableOrderSkip>[0];
 export type { TransactionResponse } from "./testerTransactionFixtures.ts";
-export type EstimatedOrder = Parameters<typeof testerExecutionActions>[4][number];
+export type EstimatedOrder = Parameters<
+  typeof testerExecutionActions
+>[0]["estimatedOrders"][number];
 export function freshOrderRuntime(
   options: {
     cachedBlockNumber?: bigint;

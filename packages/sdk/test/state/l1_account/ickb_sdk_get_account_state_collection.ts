@@ -49,13 +49,13 @@ describe("IckbSdk.getAccountState", () => {
     vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() =>
       once(withdrawal),
     );
-    const sdk = new IckbSdk(
+    const sdk = new IckbSdk({
       ickbUdt,
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(script("55"), [], udt),
-      [],
-    );
+      ownedOwner: ownedOwnerManager,
+      ickbLogic: logicManager,
+      order: new OrderManager(script("55"), [], udt),
+      bots: [],
+    });
     const client = new StubClient({
       async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         yield capacityCell;

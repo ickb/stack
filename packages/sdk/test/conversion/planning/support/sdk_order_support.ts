@@ -28,13 +28,13 @@ class ProjectionOrderGroup extends OrderGroup {
   private readonly projection: ProjectionOrderOptions;
 
   constructor(projection: ProjectionOrderOptions) {
-    const order = new OrderCell(
-      ccc.Cell.from({
+    const order = new OrderCell({
+      cell: ccc.Cell.from({
         outPoint: { txHash: hash("77"), index: 0n },
         cellOutput: { capacity: projection.ckbValue, lock: script("55") },
         outputData: "0x",
       }),
-      OrderData.from({
+      data: OrderData.from({
         udtValue: projection.udtValue,
         master: {
           type: "relative",
@@ -42,11 +42,13 @@ class ProjectionOrderGroup extends OrderGroup {
         },
         info: Info.create(!projection.isDualRatio, ratio),
       }),
-      projection.ckbValue,
-      projection.ckbValue + projection.udtValue,
-      projection.isMatchable ? 0n : projection.ckbValue + projection.udtValue,
-      undefined,
-    );
+      ckbUnoccupied: projection.ckbValue,
+      absTotal: projection.ckbValue + projection.udtValue,
+      absProgress: projection.isMatchable
+        ? 0n
+        : projection.ckbValue + projection.udtValue,
+      maturity: undefined,
+    });
     super(
       new MasterCell(
         ccc.Cell.from({

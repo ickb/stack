@@ -26,13 +26,13 @@ describe(L1_STATE_SUITE, () => {
     const ownedOwner = script("44");
     const order = script("55");
     const udt = script("66");
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
-      new LogicManager(logic, [], new DaoManager(dao, [])),
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
+    const sdk = new IckbSdk({
+      ickbUdt: fakeIckbUdt(udt),
+      ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+      ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
+      order: new OrderManager(order, [], udt),
+      bots: [botLock],
+    });
     const fakeAlignedData = ccc.hexFrom(new Uint8Array(128).fill(0xaa));
     const header = headerLike(1n);
     const botCells = [

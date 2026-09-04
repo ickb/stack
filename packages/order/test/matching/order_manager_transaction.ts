@@ -284,18 +284,18 @@ function registerMatchPartialValidationTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
       outPoint: { txHash: byte32FromByte("56"), index: 0n },
     });
-    const mismatched = new OrderCell(
-      order.cell,
-      OrderData.from({
+    const mismatched = new OrderCell({
+      cell: order.cell,
+      data: OrderData.from({
         udtValue: 11n,
         master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
         info: order.data.info,
       }),
-      order.ckbUnoccupied,
-      order.absTotal,
-      order.absProgress,
-      order.maturity,
-    );
+      ckbUnoccupied: order.ckbUnoccupied,
+      absTotal: order.absTotal,
+      absProgress: order.absProgress,
+      maturity: order.maturity,
+    });
     const group = resolvedOrderGroup(order);
     const foreignGroup = resolvedOrderGroup(foreign);
     const mismatchedGroup = new OrderGroup(group.master, mismatched, group.origin);
@@ -461,20 +461,18 @@ function registerMatcherConstructorValidationTests(): void {
       outPoint: { txHash: byte32FromByte("59"), index: 0n },
     });
     const constructMatcher = (): OrderMatcher =>
-      new OrderMatcher(
-        resolvedOrderGroup(order),
-        true,
-        1n,
-        1n,
-        -1n,
-        0n,
-        0n,
-        0n,
-        0n,
-        0n,
-        1n,
-        1n,
-      );
+      new OrderMatcher(resolvedOrderGroup(order), true, {
+        aScale: 1n,
+        bScale: 1n,
+        aIn: -1n,
+        bIn: 0n,
+        aMin: 0n,
+        bMinMatch: 0n,
+        bMaxMatch: 0n,
+        bMaxOut: 0n,
+        realRatioNumerator: 1n,
+        realRatioDenominator: 1n,
+      });
 
     expect(constructMatcher).toThrow("OrderMatcher aIn must be non-negative");
   });

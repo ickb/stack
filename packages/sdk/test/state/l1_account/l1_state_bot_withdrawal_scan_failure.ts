@@ -45,13 +45,13 @@ describe(L1_STATE_SUITE, () => {
         throw new Error(WITHDRAWAL_FAILED);
       },
     );
-    const sdk = new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      new LogicManager(logic, [], new DaoManager(dao, [])),
-      new OrderManager(order, [], udt),
-      [botLock],
-    );
+    const sdk = new IckbSdk({
+      ickbUdt: fakeIckbUdt(udt),
+      ownedOwner: ownedOwnerManager,
+      ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
+      order: new OrderManager(order, [], udt),
+      bots: [botLock],
+    });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(headerLike(1n)),
       async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {

@@ -52,24 +52,20 @@ export class IckbUdt extends udt.Udt {
   /** DAO helper used to recognize iCKB DAO deposit inputs during completion. */
   public readonly daoManager: DaoManager;
 
-  /**
-   * Creates an instance of IckbUdt.
-   *
-   * @param code - The xUDT code cell OutPoint (passed to base Udt/Trait).
-   * @param script - The iCKB UDT type script (token identity via args).
-   * @param logicCode - The iCKB Logic code cell OutPoint.
-   * @param logicScript - The iCKB Logic script.
-   * @param daoManager - The DAO manager instance for deposit cell identification.
-   */
-  constructor(
-    ...[code, script, logicCode, logicScript, daoManager]: [
-      code: ccc.OutPointLike,
-      script: ccc.ScriptLike,
-      logicCode: ccc.OutPointLike,
-      logicScript: ccc.ScriptLike,
-      daoManager: DaoManager,
-    ]
-  ) {
+  /** Creates an instance of IckbUdt from its code and script references. */
+  constructor({
+    code,
+    script,
+    logicCode,
+    logicScript,
+    daoManager,
+  }: {
+    code: ccc.OutPointLike;
+    script: ccc.ScriptLike;
+    logicCode: ccc.OutPointLike;
+    logicScript: ccc.ScriptLike;
+    daoManager: DaoManager;
+  }) {
     super(code, script);
     this.udtCode = ccc.OutPoint.from(code);
     this.logicCode = ccc.OutPoint.from(logicCode);

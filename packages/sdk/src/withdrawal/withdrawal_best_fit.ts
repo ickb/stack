@@ -56,13 +56,12 @@ export function selectReadyDeposits<T extends { udtValue: bigint }>(
     maxCount,
     ...(score === undefined ? {} : { score }),
   });
-  const greedy = selectGreedyDeposits(
-    deposits,
+  const greedy = selectGreedyDeposits(deposits, {
     maxAmount,
     maxCount,
-    requiredCount,
+    minCount: requiredCount,
     score,
-  );
+  });
 
   return pickBetterSelection(deposits, bestFit, greedy, score);
 }
@@ -114,7 +113,12 @@ export function prepareReadyDepositExactCountSelector<T extends { udtValue: bigi
       const greedy =
         maxAmount <= 0n
           ? []
-          : selectGreedyDeposits(deposits, maxAmount, count, count, score);
+          : selectGreedyDeposits(deposits, {
+              maxAmount,
+              maxCount: count,
+              minCount: count,
+              score,
+            });
       selections.set(count, pickBetterSelection(deposits, bestFit, greedy, score));
     }
     return selections;
@@ -199,34 +203,26 @@ function enumeratePartialSelections<T extends { udtValue: bigint }>(
   scoreOf: (item: T) => bigint,
 ): PartialSelection[][] {
   const groups = Array.from({ length: items.length + 1 }, (): PartialSelection[] => []);
-  const search = (
-    ...[index, mask, count, total, score]: [
-      index: number,
-      mask: number,
-      count: number,
-      total: bigint,
-      score: bigint,
-    ]
-  ): void => {
+  const search = (index: number, partial: PartialSelection & { count: number }): void => {
     if (index === items.length) {
+      const { count, ...selection } = partial;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- count ranges from 0 to items.length.
-      groups[count]!.push({ mask, total, score });
+      groups[count]!.push(selection);
       return;
     }
 
-    search(index + 1, mask, count, total, score);
+    search(index + 1, partial);
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- index is checked against items.length above.
     const item = items[index]!;
-    search(
-      index + 1,
-      mask | (1 << index),
-      count + 1,
-      total + item.udtValue,
-      score + scoreOf(item),
-    );
+    search(index + 1, {
+      mask: partial.mask | (1 << index),
+      count: partial.count + 1,
+      total: partial.total + item.udtValue,
+      score: partial.score + scoreOf(item),
+    });
   };
 
-  search(0, 0, 0, 0n, 0n);
+  search(0, { mask: 0, count: 0, total: 0n, score: 0n });
   return groups;
 }
 

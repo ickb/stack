@@ -14,15 +14,6 @@ import {
   type TesterScenarioSelection,
 } from "../runtime/testerTypes.ts";
 
-type OrderLogParameters = [
-  isCkb2Udt: boolean,
-  ckbAmount: bigint,
-  udtAmount: bigint,
-  convertedAmount: bigint,
-  ckbFee: bigint,
-  feePolicy: TesterFeePolicy,
-];
-
 export {
   enforceTesterPlainCkbReserve,
   postTransactionPlainCkbBalance,
@@ -31,26 +22,23 @@ export {
 /**
  * Builds the public action summary for one tester transaction attempt.
  */
-type TesterExecutionActionsParameters = [
-  requestedScenario: TesterScenarioSelection,
-  effectiveScenario: TesterScenario,
-  conversion: unknown,
-  conversionNotice: unknown,
-  estimatedOrders: EstimatedRawOrder[],
-  feePolicy: TesterFeePolicy,
-  state: TesterState,
-];
-export function testerExecutionActions(
-  ...[
-    requestedScenario,
-    effectiveScenario,
-    conversion,
-    conversionNotice,
-    estimatedOrders,
-    feePolicy,
-    state,
-  ]: TesterExecutionActionsParameters
-): TesterExecutionActions {
+export function testerExecutionActions({
+  requestedScenario,
+  effectiveScenario,
+  conversion,
+  conversionNotice,
+  estimatedOrders,
+  feePolicy,
+  state,
+}: {
+  requestedScenario: TesterScenarioSelection;
+  effectiveScenario: TesterScenario;
+  conversion: unknown;
+  conversionNotice: unknown;
+  estimatedOrders: EstimatedRawOrder[];
+  feePolicy: TesterFeePolicy;
+  state: TesterState;
+}): TesterExecutionActions {
   const conversionRecord = isRecord(conversion) ? conversion : undefined;
   const noticeRecord = isRecord(conversionNotice) ? conversionNotice : undefined;
   const collectedOrders = state.userOrders.length;
@@ -69,22 +57,19 @@ export function testerExecutionActions(
 /**
  * Builds skip evidence for an SDK conversion estimate that is too small to send.
  */
-type TesterSdkConversionNoticeSkipParameters = [
-  requestedScenario: TesterScenarioSelection,
-  effectiveScenario: TesterScenario,
-  conversion: unknown,
-  conversionNotice: unknown,
-  orderEvidence: Record<string, unknown>,
-];
-export function testerSdkConversionNoticeSkip(
-  ...[
-    requestedScenario,
-    effectiveScenario,
-    conversion,
-    conversionNotice,
-    orderEvidence,
-  ]: TesterSdkConversionNoticeSkipParameters
-): Record<string, unknown> {
+export function testerSdkConversionNoticeSkip({
+  requestedScenario,
+  effectiveScenario,
+  conversion,
+  conversionNotice,
+  orderEvidence,
+}: {
+  requestedScenario: TesterScenarioSelection;
+  effectiveScenario: TesterScenario;
+  conversion: unknown;
+  conversionNotice: unknown;
+  orderEvidence: Record<string, unknown>;
+}): Record<string, unknown> {
   const conversionRecord = isRecord(conversion) ? conversion : undefined;
   const noticeRecord = isRecord(conversionNotice) ? conversionNotice : undefined;
   return {
@@ -98,22 +83,19 @@ export function testerSdkConversionNoticeSkip(
 /**
  * Builds skip evidence when estimated raw limit orders are too small to send.
  */
-type TesterEstimatedTooSmallSkipParameters = [
-  requestedScenario: TesterScenarioSelection,
-  effectiveScenario: TesterScenario,
-  rawOrders: PlannedRawOrder[],
-  estimatedOrders: EstimatedRawOrder[],
-  feePolicy: TesterFeePolicy,
-];
-export function testerEstimatedTooSmallSkip(
-  ...[
-    requestedScenario,
-    effectiveScenario,
-    rawOrders,
-    estimatedOrders,
-    feePolicy,
-  ]: TesterEstimatedTooSmallSkipParameters
-): Record<string, unknown> {
+export function testerEstimatedTooSmallSkip({
+  requestedScenario,
+  effectiveScenario,
+  rawOrders,
+  estimatedOrders,
+  feePolicy,
+}: {
+  requestedScenario: TesterScenarioSelection;
+  effectiveScenario: TesterScenario;
+  rawOrders: PlannedRawOrder[];
+  estimatedOrders: EstimatedRawOrder[];
+  feePolicy: TesterFeePolicy;
+}): Record<string, unknown> {
   return {
     reason: ESTIMATED_CONVERSION_TOO_SMALL,
     ...testerScenarioEvidence(requestedScenario, effectiveScenario),
@@ -175,16 +157,7 @@ function orderEvidence(
   orders: EstimatedRawOrder[],
   feePolicy: TesterFeePolicy,
 ): Record<string, unknown> {
-  const logs = orders.map((order) =>
-    orderLog(
-      order.direction === CKB_TO_ICKB,
-      order.amounts.ckbValue,
-      order.amounts.udtValue,
-      order.estimate.convertedAmount,
-      order.estimate.ckbFee,
-      feePolicy,
-    ),
-  );
+  const logs = orders.map((order) => orderLog(order, feePolicy));
   const [first] = logs;
   return logs.length === 1 && first !== undefined
     ? { newOrder: first }
@@ -209,42 +182,28 @@ function attemptedOrderLog(
   feePolicy: TesterFeePolicy,
 ): PlannedOrderLog {
   if (estimatedOrder !== undefined) {
-    return orderLog(
-      estimatedOrder.direction === CKB_TO_ICKB,
-      estimatedOrder.amounts.ckbValue,
-      estimatedOrder.amounts.udtValue,
-      estimatedOrder.estimate.convertedAmount,
-      estimatedOrder.estimate.ckbFee,
-      feePolicy,
-    );
+    return orderLog(estimatedOrder, feePolicy);
   }
   const feeFields = feePolicyLog(feePolicy);
   return order.direction === CKB_TO_ICKB
     ? { giveCkb: formatCkb(order.amounts.ckbValue), ...feeFields }
     : { giveIckb: formatCkb(order.amounts.udtValue), ...feeFields };
 }
-function orderLog(
-  ...[
-    isCkb2Udt,
-    ckbAmount,
-    udtAmount,
-    convertedAmount,
-    ckbFee,
-    feePolicy,
-  ]: OrderLogParameters
-): PlannedOrderLog {
+function orderLog(order: EstimatedRawOrder, feePolicy: TesterFeePolicy): PlannedOrderLog {
   const feeFields = feePolicyLog(feePolicy);
-  return isCkb2Udt
+  const converted = formatCkb(order.estimate.convertedAmount);
+  const fee = formatCkb(order.estimate.ckbFee);
+  return order.direction === CKB_TO_ICKB
     ? {
-        giveCkb: formatCkb(ckbAmount),
-        takeIckb: formatCkb(convertedAmount),
-        fee: formatCkb(ckbFee),
+        giveCkb: formatCkb(order.amounts.ckbValue),
+        takeIckb: converted,
+        fee,
         ...feeFields,
       }
     : {
-        giveIckb: formatCkb(udtAmount),
-        takeCkb: formatCkb(convertedAmount),
-        fee: formatCkb(ckbFee),
+        giveIckb: formatCkb(order.amounts.udtValue),
+        takeCkb: converted,
+        fee,
         ...feeFields,
       };
 }

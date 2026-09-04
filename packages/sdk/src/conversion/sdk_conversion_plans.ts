@@ -123,13 +123,10 @@ function ckbToIckbConversionPlan(
 
   if (remainder > 0n) {
     const amounts = { ckbValue: remainder, udtValue: 0n };
-    const estimate = estimateConversionOrder(
-      true,
-      amounts,
-      context.system,
-      DEFAULT_ORDER_FEE,
-      DEFAULT_ORDER_FEE_BASE,
-    );
+    const estimate = estimateConversionOrder(true, amounts, context.system, {
+      fee: DEFAULT_ORDER_FEE,
+      feeBase: DEFAULT_ORDER_FEE_BASE,
+    });
     if (estimate?.maturity === undefined) {
       return undefined;
     }

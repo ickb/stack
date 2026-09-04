@@ -90,10 +90,17 @@ describe("withdrawal best-fit concrete selection support", () => {
     expect(pickBetterSelection(deposits, [a], [b])).toEqual([b]);
     expect(pickBetterSelection(deposits, [b], [c])).toEqual([b]);
     expect(pickBetterSelection(deposits, [c], [b])).toEqual([b]);
-    expect(selectGreedyDeposits(deposits, 5n, 2, 1, (deposit) => deposit.score)).toEqual([
-      b,
-    ]);
-    expect(selectGreedyDeposits(deposits, 1n, 2, 1)).toEqual([]);
+    expect(
+      selectGreedyDeposits(deposits, {
+        maxAmount: 5n,
+        maxCount: 2,
+        minCount: 1,
+        score: (deposit) => deposit.score,
+      }),
+    ).toEqual([b]);
+    expect(
+      selectGreedyDeposits(deposits, { maxAmount: 1n, maxCount: 2, minCount: 1 }),
+    ).toEqual([]);
   });
 });
 

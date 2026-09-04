@@ -9,14 +9,14 @@ export function orderGroupWithMaturity(
   const { order } = group;
   return new OrderGroup(
     group.master,
-    new OrderCell(
-      order.cell,
-      order.data,
-      order.ckbUnoccupied,
-      order.absTotal,
-      order.absProgress,
-      maturity(order, system),
-    ),
+    new OrderCell({
+      cell: order.cell,
+      data: order.data,
+      ckbUnoccupied: order.ckbUnoccupied,
+      absTotal: order.absTotal,
+      absProgress: order.absProgress,
+      maturity: maturity(order, system),
+    }),
     group.origin,
   );
 }

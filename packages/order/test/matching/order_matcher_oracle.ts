@@ -117,20 +117,18 @@ describe("defense-in-depth guard on direct construction", () => {
     // The public from() path derives bMinMatch = 16 from the info; a direct
     // construction may desync them, which is exactly what the entry.rs:116
     // mirror defends against: an admitted 4-UDT allowance moves only 2 CKB.
-    const desynced = new OrderMatcher(
-      sound.group,
-      true,
-      sound.aScale,
-      sound.bScale,
-      sound.aIn,
-      sound.bIn,
-      sound.aMin,
-      1n,
-      sound.bMaxMatch,
-      sound.bMaxOut,
-      sound.realRatioNumerator,
-      sound.realRatioDenominator,
-    );
+    const desynced = new OrderMatcher(sound.group, true, {
+      aScale: sound.aScale,
+      bScale: sound.bScale,
+      aIn: sound.aIn,
+      bIn: sound.bIn,
+      aMin: sound.aMin,
+      bMinMatch: 1n,
+      bMaxMatch: sound.bMaxMatch,
+      bMaxOut: sound.bMaxOut,
+      realRatioNumerator: sound.realRatioNumerator,
+      realRatioDenominator: sound.realRatioDenominator,
+    });
     expect(desynced.match(4n).partials).toHaveLength(0);
     expect(sound.match(16n).partials).toHaveLength(1);
   });

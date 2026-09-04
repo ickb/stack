@@ -352,11 +352,17 @@ export interface CkbCumulative {
   maturity: ccc.Num;
 }
 
+/** Manager set that builds one iCKB SDK instance. @public */
 export interface SdkManagers {
+  /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
   ickbUdt: IckbUdt;
+  /** Owned-owner manager for withdrawal request and claim cells. */
   ownedOwner: OwnedOwnerManager;
+  /** iCKB Logic manager for deposits and receipts. */
   ickbLogic: LogicManager;
+  /** Limit order manager. */
   order: OrderManager;
+  /** Bot lock scripts whose CKB balances and withdrawals count as bot liquidity. */
   bots: ccc.Script[];
 }
 

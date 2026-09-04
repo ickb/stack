@@ -72,15 +72,13 @@ export class OwnedOwnerManager implements ScriptDeps {
    * via `ickbUdt.addCellDeps(tx)`.
    */
   public requestWithdrawal(
-    ...[txLike, deposits, lock, options]: [
-      txLike: ccc.TransactionLike | ccc.Transaction,
-      deposits: IckbDepositCell[],
-      lock: ccc.Script,
-      options?: {
-        isReadyOnly?: boolean;
-        requiredLiveDeposits?: IckbDepositCell[];
-      },
-    ]
+    txLike: ccc.TransactionLike | ccc.Transaction,
+    deposits: IckbDepositCell[],
+    lock: ccc.Script,
+    options?: {
+      isReadyOnly?: boolean;
+      requiredLiveDeposits?: IckbDepositCell[];
+    },
   ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     const selectedDeposits =

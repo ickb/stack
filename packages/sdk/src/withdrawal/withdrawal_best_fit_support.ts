@@ -132,13 +132,18 @@ export function pickBetterSelection<T extends { udtValue: bigint }>(
 }
 
 export function selectGreedyDeposits<T extends { udtValue: bigint }>(
-  ...[deposits, maxAmount, maxCount, minCount, score]: [
-    deposits: readonly T[],
-    maxAmount: bigint,
-    maxCount: number,
-    minCount: number,
-    score?: (deposit: T) => bigint,
-  ]
+  deposits: readonly T[],
+  {
+    maxAmount,
+    maxCount,
+    minCount,
+    score,
+  }: {
+    maxAmount: bigint;
+    maxCount: number;
+    minCount: number;
+    score?: (deposit: T) => bigint;
+  },
 ): T[] {
   const selected: T[] = [];
   const candidates =

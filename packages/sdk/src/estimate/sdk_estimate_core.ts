@@ -4,13 +4,10 @@ import type { ConversionOrderEstimate, SystemState } from "../client/sdk_types.t
 import { maturity } from "./sdk_maturity.ts";
 
 export function estimateConversionOrder(
-  ...[isCkb2Udt, amounts, system, fee, feeBase]: [
-    isCkb2Udt: boolean,
-    amounts: ValueComponents,
-    system: SystemState,
-    fee: bigint,
-    feeBase: bigint,
-  ]
+  isCkb2Udt: boolean,
+  amounts: ValueComponents,
+  system: SystemState,
+  { fee, feeBase }: { fee: bigint; feeBase: bigint },
 ): ConversionOrderEstimate | undefined {
   let quote: ReturnType<typeof OrderManager.convert>;
   try {

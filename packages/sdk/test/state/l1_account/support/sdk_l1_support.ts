@@ -55,13 +55,13 @@ export function defaultL1Sdk(): IckbSdk {
   const ownedOwner = script("44");
   const order = script("55");
   const udt = script("66");
-  return new IckbSdk(
-    fakeIckbUdt(udt),
-    new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
-    new LogicManager(logic, [], new DaoManager(dao, [])),
-    new OrderManager(order, [], udt),
-    [],
-  );
+  return new IckbSdk({
+    ickbUdt: fakeIckbUdt(udt),
+    ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
+    ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
+    order: new OrderManager(order, [], udt),
+    bots: [],
+  });
 }
 
 export function l1SdkWithManagers(options: {
@@ -79,11 +79,11 @@ export function l1SdkWithManagers(options: {
   const logicManager =
     options.logicManager ?? new LogicManager(script("22"), [], new DaoManager(dao, []));
   const orderManager = options.orderManager ?? new OrderManager(script("55"), [], udt);
-  return new IckbSdk(
-    fakeIckbUdt(udt),
-    ownedOwnerManager,
-    logicManager,
-    orderManager,
-    options.botLock === undefined ? [] : [options.botLock],
-  );
+  return new IckbSdk({
+    ickbUdt: fakeIckbUdt(udt),
+    ownedOwner: ownedOwnerManager,
+    ickbLogic: logicManager,
+    order: orderManager,
+    bots: options.botLock === undefined ? [] : [options.botLock],
+  });
 }

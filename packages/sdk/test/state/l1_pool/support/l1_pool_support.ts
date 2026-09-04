@@ -27,12 +27,12 @@ export function directDepositPageSizeFixture(): {
   return {
     logicManager,
     ownedOwnerManager,
-    sdk: new IckbSdk(
-      fakeIckbUdt(udt),
-      ownedOwnerManager,
-      logicManager,
-      new OrderManager(order, [], udt),
-      [botLock],
-    ),
+    sdk: new IckbSdk({
+      ickbUdt: fakeIckbUdt(udt),
+      ownedOwner: ownedOwnerManager,
+      ickbLogic: logicManager,
+      order: new OrderManager(order, [], udt),
+      bots: [botLock],
+    }),
   };
 }

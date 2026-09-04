@@ -437,37 +437,33 @@ function budgetExtensionProbe(masterByte: string, outPointByte: string): OrderCe
 }
 
 function budgetExtensionMatcher(order: OrderCell): OrderMatcher {
-  return new OrderMatcher(
-    resolvedOrderGroup(order),
-    true,
-    1n,
-    1n,
-    0n,
-    0n,
-    0n,
-    0n,
-    1n,
-    0n,
-    1n,
-    1n,
-  );
+  return new OrderMatcher(resolvedOrderGroup(order), true, {
+    aScale: 1n,
+    bScale: 1n,
+    aIn: 0n,
+    bIn: 0n,
+    aMin: 0n,
+    bMinMatch: 0n,
+    bMaxMatch: 1n,
+    bMaxOut: 0n,
+    realRatioNumerator: 1n,
+    realRatioDenominator: 1n,
+  });
 }
 
 function zeroAllowanceMatcher(order: OrderCell, isCkb2Udt: boolean): OrderMatcher {
-  return new OrderMatcher(
-    resolvedOrderGroup(order),
-    isCkb2Udt,
-    1n,
-    1n,
-    1n,
-    0n,
-    0n,
-    0n,
-    0n,
-    0n,
-    1n,
-    1n,
-  );
+  return new OrderMatcher(resolvedOrderGroup(order), isCkb2Udt, {
+    aScale: 1n,
+    bScale: 1n,
+    aIn: 1n,
+    bIn: 0n,
+    aMin: 0n,
+    bMinMatch: 0n,
+    bMaxMatch: 0n,
+    bMaxOut: 0n,
+    realRatioNumerator: 1n,
+    realRatioDenominator: 1n,
+  });
 }
 
 function boundedSearchContext(

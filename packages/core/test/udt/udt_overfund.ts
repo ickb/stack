@@ -160,13 +160,13 @@ function testIckbUdt(): {
   const xudtCode = { txHash: byte32FromByte("44"), index: 1n };
   const logicCode = { txHash: byte32FromByte("66"), index: 2n };
   return {
-    ickbUdt: new IckbUdt(
-      xudtCode,
-      type,
+    ickbUdt: new IckbUdt({
+      code: xudtCode,
+      script: type,
       logicCode,
-      logic,
-      new DaoManager(script("77"), []),
-    ),
+      logicScript: logic,
+      daoManager: new DaoManager(script("77"), []),
+    }),
     logic,
     logicCode,
     type,

@@ -87,12 +87,10 @@ export class LogicManager implements ScriptDeps {
    * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   public deposit(
-    ...[txLike, depositQuantity, depositCapacity, lock]: [
-      txLike: ccc.TransactionLike,
-      depositQuantity: number,
-      depositCapacity: ccc.FixedPoint,
-      lock: ccc.Script,
-    ]
+    txLike: ccc.TransactionLike,
+    depositQuantity: number,
+    depositCapacity: ccc.FixedPoint,
+    lock: ccc.Script,
   ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     if (depositQuantity <= 0) {

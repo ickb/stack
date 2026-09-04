@@ -35,29 +35,25 @@ export class OrderCell implements ValueComponents {
   public maturity: bigint | undefined;
 
   /**
-   * Creates an instance of OrderCell.
-   *
-   * @param cell - The raw cell fetched from the chain.
-   * @param data - Decoded order data with parameters (rates, directions, etc.).
-   * @param ckbUnoccupied - Amount of CKB in this cell not used in state rent.
-   * @param absTotal - Absolute total value of this order (in base units).
-   * @param absProgress - Absolute amount filled so far (in base units).
-   * @param maturity - Estimated completion time supplied by higher-level state:
-   *   - `bigint` Unix timestamp in milliseconds when estimated,
-   *   - `0n` when already completed,
-   *   - `undefined` when no estimate is available. Core parsing uses
-   *     `undefined` for in-progress or dual orders and `0n` for completed directional orders.
+   * Creates an instance of OrderCell. Core parsing sets `maturity` to `undefined` for
+   * in-progress or dual orders and `0n` for completed directional orders; higher-level
+   * state may replace it with an estimated Unix timestamp in milliseconds.
    */
-  constructor(
-    ...[cell, data, ckbUnoccupied, absTotal, absProgress, maturity]: [
-      cell: ccc.Cell,
-      data: OrderData,
-      ckbUnoccupied: ccc.FixedPoint,
-      absTotal: ccc.Num,
-      absProgress: ccc.Num,
-      maturity: bigint | undefined,
-    ]
-  ) {
+  constructor({
+    cell,
+    data,
+    ckbUnoccupied,
+    absTotal,
+    absProgress,
+    maturity,
+  }: {
+    cell: ccc.Cell;
+    data: OrderData;
+    ckbUnoccupied: ccc.FixedPoint;
+    absTotal: ccc.Num;
+    absProgress: ccc.Num;
+    maturity: bigint | undefined;
+  }) {
     this.cell = cell;
     this.data = data;
     this.ckbUnoccupied = ckbUnoccupied;
@@ -149,7 +145,7 @@ export class OrderCell implements ValueComponents {
     // Maturity: undefined if in-progress or dual; zero if complete
     const maturity = isDualRatio || absTotal !== absProgress ? undefined : 0n;
 
-    return new OrderCell(cell, data, ckbUnoccupied, absTotal, absProgress, maturity);
+    return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress, maturity });
   }
 
   /**

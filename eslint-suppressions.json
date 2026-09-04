@@ -29,26 +29,6 @@
       "count": 1
     }
   },
-  "packages/core/src/logic.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/core/src/owned_owner.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/core/src/udt.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/dao/src/dao.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "packages/node-utils/src/errors.ts": {
     "no-restricted-syntax": {
       "count": 1
@@ -64,37 +44,7 @@
       "count": 2
     }
   },
-  "packages/order/src/matching/order_matcher.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/order/src/model/cells.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "packages/order/test/matching/support/order_match_helpers.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/sdk/src/estimate/sdk_estimate_core.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/sdk/src/sdk.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/sdk/src/withdrawal/withdrawal_best_fit.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/sdk/src/withdrawal/withdrawal_best_fit_support.ts": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -131,7 +81,7 @@
   },
   "packages/validation/src/tester/evidence/testerEvidence.ts": {
     "no-restricted-syntax": {
-      "count": 14
+      "count": 10
     }
   },
   "packages/validation/src/tester/runtime/testerAttempt.ts": {

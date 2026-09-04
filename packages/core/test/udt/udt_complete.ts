@@ -329,13 +329,13 @@ function registerCompleteByProtocolInputTests(): void {
       cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao },
       outputData: "0x0000000000000000",
     });
-    const ickbUdt = new IckbUdt(
-      { txHash: byte32FromByte("44"), index: 1n },
-      type,
-      { txHash: byte32FromByte("66"), index: 2n },
-      logic,
-      new DaoManager(dao, []),
-    );
+    const ickbUdt = new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 1n },
+      script: type,
+      logicCode: { txHash: byte32FromByte("66"), index: 2n },
+      logicScript: logic,
+      daoManager: new DaoManager(dao, []),
+    });
     const tx = ccc.Transaction.from({
       outputs: [{ lock: script("22"), type }],
       outputsData: [ccc.numLeToBytes(50n, 16)],
@@ -357,13 +357,13 @@ function testIckbUdt(): { ickbUdt: IckbUdt; logic: ccc.Script; type: ccc.Script 
   const logic = script("33");
   const type = script("55");
   return {
-    ickbUdt: new IckbUdt(
-      { txHash: byte32FromByte("44"), index: 1n },
-      type,
-      { txHash: byte32FromByte("66"), index: 2n },
-      logic,
-      new DaoManager(script("77"), []),
-    ),
+    ickbUdt: new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 1n },
+      script: type,
+      logicCode: { txHash: byte32FromByte("66"), index: 2n },
+      logicScript: logic,
+      daoManager: new DaoManager(script("77"), []),
+    }),
     logic,
     type,
   };

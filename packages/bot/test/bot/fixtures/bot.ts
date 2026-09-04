@@ -219,13 +219,13 @@ function botSdk(
 }
 
 function testOrderCell(byte: string): OrderCell {
-  return new OrderCell(
-    ccc.Cell.from({
+  return new OrderCell({
+    cell: ccc.Cell.from({
       outPoint: { txHash: hash(byte), index: 1n },
       cellOutput: { capacity: 0n, lock: script("55") },
       outputData: "0x",
     }),
-    OrderData.from({
+    data: OrderData.from({
       udtValue: 0n,
       master: {
         type: "relative",
@@ -237,11 +237,11 @@ function testOrderCell(byte: string): OrderCell {
         ckbMinMatchLog: 0,
       },
     }),
-    0n,
-    0n,
-    0n,
-    undefined,
-  );
+    ckbUnoccupied: 0n,
+    absTotal: 0n,
+    absProgress: 0n,
+    maturity: undefined,
+  });
 }
 
 function testOrderGroup(byte: string): OrderGroup {

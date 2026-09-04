@@ -65,9 +65,13 @@ export function baseTransactionFixture(
     orderManager,
     ownedOwner,
     ownedOwnerManager,
-    sdk: new IckbSdk(fakeIckbUdt(udt), ownedOwnerManager, logicManager, orderManager, [
-      botLock,
-    ]),
+    sdk: new IckbSdk({
+      ickbUdt: fakeIckbUdt(udt),
+      ownedOwner: ownedOwnerManager,
+      ickbLogic: logicManager,
+      order: orderManager,
+      bots: [botLock],
+    }),
     udt,
   };
 }
@@ -100,7 +104,13 @@ export function testSdk(): SdkFixture {
   const orderManager = new OrderManager(script("55"), [], script("66"));
   const ickbUdt = fakeIckbUdt();
   return {
-    sdk: new IckbSdk(ickbUdt, ownedOwnerManager, logicManager, orderManager, []),
+    sdk: new IckbSdk({
+      ickbUdt,
+      ownedOwner: ownedOwnerManager,
+      ickbLogic: logicManager,
+      order: orderManager,
+      bots: [],
+    }),
     ickbUdt,
     logicManager,
     ownedOwnerManager,
@@ -216,13 +226,13 @@ class TestIckbUdt extends IckbUdt {
   );
 
   constructor(udt: ccc.Script) {
-    super(
-      { txHash: hash("a1"), index: 0n },
-      udt,
-      { txHash: hash("a2"), index: 0n },
-      script("a3"),
-      new DaoManager(script("a4"), []),
-    );
+    super({
+      code: { txHash: hash("a1"), index: 0n },
+      script: udt,
+      logicCode: { txHash: hash("a2"), index: 0n },
+      logicScript: script("a3"),
+      daoManager: new DaoManager(script("a4"), []),
+    });
   }
 
   public override isUdt(cell: ccc.Cell): boolean {
