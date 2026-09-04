@@ -1,19 +1,4 @@
 {
-  "apps/bot/src/index.ts": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "apps/sampler/src/index.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "apps/validation/src/tester.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
   "packages/bot/src/bot/failure.ts": {
     "no-restricted-syntax": {
       "count": 1
@@ -147,11 +132,6 @@
   "packages/validation/src/tester/evidence/testerEvidence.ts": {
     "no-restricted-syntax": {
       "count": 14
-    }
-  },
-  "packages/validation/src/tester/planning/testerConfig.ts": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "packages/validation/src/tester/runtime/testerAttempt.ts": {

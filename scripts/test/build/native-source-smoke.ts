@@ -74,7 +74,8 @@ void test("native source imports do not load deprecated builtin punycode", async
     await importFromRoot("packages/core/src/index.ts");
     requireFromCore("@ckb-ccc/core");
     requireFromCccCore("@joyid/ckb");
-    await importFromRoot("apps/bot/src/index.ts");
+    await importFromRoot("packages/bot/src/index.ts");
+    await importFromRoot("apps/sampler/src/sampler.ts");
   } finally {
     Reflect.set(Module, "_load", originalLoad);
   }
@@ -82,14 +83,18 @@ void test("native source imports do not load deprecated builtin punycode", async
   assert.deepEqual(requests, []);
 });
 
-// eslint-disable-next-line sonarjs/assertions-in-tests -- Asserts via node:assert deepEqual on the collected punycode-require list; sonarjs does not track it through the loop.
-void test("Node app entrypoints import directly from TypeScript source", async () => {
-  for (const modulePath of [
-    "apps/bot/src/index.ts",
-    "apps/sampler/src/index.ts",
-    "apps/validation/src/tester.ts",
-  ]) {
-    await importFromRoot(modulePath);
+void test("Node app entrypoints run from TypeScript source and fail fast without config", () => {
+  for (const [modulePath, envName] of [
+    ["apps/bot/src/index.ts", "BOT_CONFIG_FILE"],
+    ["apps/validation/src/tester.ts", "TESTER_CONFIG_FILE"],
+  ] as const) {
+    const result = spawnSync(process.execPath, [modulePath], {
+      cwd: rootDir,
+      encoding: "utf8",
+      env: { ...process.env, NODE_OPTIONS: "" },
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr.includes(`Empty env ${envName}`), true, result.stderr);
   }
 });
 

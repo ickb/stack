@@ -10,6 +10,9 @@
       "includeEntryExports": true,
       "project": ["scripts/**/*.ts", "*.config.{ts,mts}"],
     },
+    "apps/validation": {
+      "entry": ["src/tester.ts"],
+    },
     "apps/interface": {
       "ignoreDependencies": ["tailwindcss"],
     },

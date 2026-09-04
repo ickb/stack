@@ -30,7 +30,6 @@
     "start": "node src/index.ts"
   },
   "devDependencies": {
-    "@ickb/testkit": "workspace:*",
     "@types/node": "catalog:"
   },
   "dependencies": {

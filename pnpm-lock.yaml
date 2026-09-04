@@ -147,9 +147,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/sdk
     devDependencies:
-      '@ickb/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.1

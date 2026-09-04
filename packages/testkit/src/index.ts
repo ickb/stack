@@ -142,7 +142,8 @@ export class StubClient extends ccc.ClientPublicTestnet {
       return this.findCellsPagedHandler(...args);
     }
     if (this.legacyCellScanHandler === undefined) {
-      return super.findCellsPaged(...args);
+      // A test double must never fall through to the real network.
+      throw new Error("StubClient has no cell scan handler");
     }
 
     const [key, order, limit = 10, after] = args;

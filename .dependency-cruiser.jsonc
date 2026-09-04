@@ -15,6 +15,7 @@
           "^scripts/tooling/eslint/plugins[.]ts$",
           "^scripts/tooling/probes/treeshake/run[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
+          "^apps/(?:bot|validation)/test/.+[.]ts$",
           "^(?:apps|packages)/[^/]+/vitest[.]config[.]mts$",
           "^apps/interface/vite[.]config[.]ts$",
           "^apps/interface/eslint[.]config[.]mts$",

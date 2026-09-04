@@ -7,6 +7,10 @@ export default defineConfig({
       reporter: ["text"],
       include: ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"],
       exclude: [
+        // Process entrypoints are exercised by spawning them, which V8 coverage cannot see.
+        "apps/bot/src/index.ts",
+        "apps/sampler/src/index.ts",
+        "apps/validation/src/tester.ts",
         "**/test/**",
         "**/*.test.{ts,tsx}",
         "**/*TestFixtures.{ts,tsx}",

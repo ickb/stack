@@ -1,12 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, StubClient } from "@ickb/testkit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createSamplerClient,
-  main,
-  runSamplerEntrypoint,
-  samples,
-} from "../src/index.ts";
+import { createSamplerClient, main, samples } from "../src/sampler.ts";
 
 const SAMPLER_MODULE_SUITE = "sampler module";
 const SAMPLE_GENESIS_ISO = "2024-09-12T00:00:00.000Z";
@@ -81,32 +76,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const samplerClient = createSamplerClient();
     expect(samplerClient).toBeInstanceOf(ccc.ClientPublicMainnet);
     expect(samplerClient.url).toBe("https://mainnet.ckb.dev/");
-  });
-
-  it("skips the CLI body when the module is imported", async () => {
-    const run = vi.fn(async (): Promise<void> => {
-      await Promise.resolve();
-    });
-
-    await expect(
-      runSamplerEntrypoint(
-        ["node", new URL("../src/other.ts", import.meta.url).pathname],
-        import.meta.url,
-        run,
-      ),
-    ).resolves.toBeUndefined();
-    expect(run).not.toHaveBeenCalled();
-  });
-
-  it("runs the CLI body when invoked as the entrypoint", async () => {
-    const run = vi.fn(async (): Promise<void> => {
-      await Promise.resolve();
-    });
-    const entrypoint = new URL("../src/index.ts", import.meta.url);
-
-    await runSamplerEntrypoint(["node", entrypoint.pathname], entrypoint.href, run);
-
-    expect(run).toHaveBeenCalledTimes(1);
   });
 });
 

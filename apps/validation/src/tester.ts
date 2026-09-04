@@ -1,94 +1,52 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   createPublicClient,
+  logExecution,
   signerAccountLocks,
   verifyChainPreflight,
 } from "@ickb/node-utils";
 import { getConfig, IckbSdk } from "@ickb/sdk";
 import {
+  handleTesterAttemptError,
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
   runTesterTurn,
   type Runtime,
 } from "@ickb/validation";
-import { pathToFileURL } from "node:url";
 
-type IckbConfig = ReturnType<typeof getConfig>;
-
-export interface TesterCliDependencies {
-  createPublicClient: typeof createPublicClient;
-  createSdk: (config: IckbConfig) => IckbSdk;
-  getConfig: typeof getConfig;
-  readTesterFeePolicy: typeof readTesterFeePolicy;
-  readTesterRuntimeConfig: typeof readTesterRuntimeConfig;
-  readTesterScenario: typeof readTesterScenario;
-  runTesterTurn: typeof runTesterTurn;
-  signerAccountLocks: typeof signerAccountLocks;
-  verifyChainPreflight: typeof verifyChainPreflight;
+// One process is one tester turn: read config, connect, place at most one order, exit.
+if (process.argv.length > 2) {
+  throw new Error(`Unknown argument: ${String(process.argv[2])}`);
 }
-
-const defaultDependencies: TesterCliDependencies = {
-  createPublicClient,
-  createSdk: (config) => IckbSdk.fromConfig(config),
-  getConfig,
-  readTesterFeePolicy,
-  readTesterRuntimeConfig,
-  readTesterScenario,
-  runTesterTurn,
-  signerAccountLocks,
-  verifyChainPreflight,
-};
-
-export async function runTesterEntrypoint(
-  argv: string[] = process.argv,
-  moduleUrl: string = import.meta.url,
-  run: (args: string[]) => Promise<void> = runTesterCli,
-): Promise<void> {
-  if (argv[1] === undefined || moduleUrl !== pathToFileURL(argv[1]).href) {
-    return;
-  }
-
-  await run(argv.slice(2));
-  process.exitCode ??= 0;
-}
-
-export async function runTesterCli(
-  argv: string[] = process.argv.slice(2),
-  env: NodeJS.ProcessEnv = process.env,
-  dependencies: Partial<TesterCliDependencies> = {},
-): Promise<void> {
-  if (argv.length > 0) {
-    throw new Error(`Unknown argument: ${String(argv[0])}`);
-  }
-  const resolved = { ...defaultDependencies, ...dependencies };
-  const { chain, privateKey, rpcUrl } = await resolved.readTesterRuntimeConfig(env);
-  const testerScenario = resolved.readTesterScenario(env);
-  const feePolicy = resolved.readTesterFeePolicy(env);
-  const client = resolved.createPublicClient(chain, rpcUrl);
-  await resolved.verifyChainPreflight(client, chain);
-  const config = resolved.getConfig(chain);
+const { chain, privateKey, rpcUrl } = await readTesterRuntimeConfig(process.env);
+const testerScenario = readTesterScenario(process.env);
+const feePolicy = readTesterFeePolicy(process.env);
+try {
+  const client = createPublicClient(chain, rpcUrl);
+  await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
   // - FAILURE MODE: passing keys to logs, errors, telemetry, redaction, masking, or test hooks leaks signing authority.
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
-  const recommendedAddress = await signer.getRecommendedAddressObj();
-  const primaryLock = recommendedAddress.script;
+  const primaryLock = (await signer.getRecommendedAddressObj()).script;
   const runtime: Runtime = {
     client,
     signer,
-    sdk: resolved.createSdk(config),
+    sdk: IckbSdk.fromConfig(getConfig(chain)),
     primaryLock,
-    accountLocks: await resolved.signerAccountLocks(signer, primaryLock),
+    accountLocks: await signerAccountLocks(signer, primaryLock),
   };
-
-  await resolved.runTesterTurn({
-    runtime,
-    testerScenario,
-    feePolicy,
-  });
+  await runTesterTurn({ runtime, testerScenario, feePolicy });
+} catch (error) {
+  // Connection and preflight failures get the same log line and exit code as attempt failures.
+  const executionLog = {};
+  handleTesterAttemptError(error, executionLog);
+  logExecution(executionLog, new Date());
 }
-
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- CLI module runs only when imported as the process entrypoint.
-await runTesterEntrypoint();
+process.exitCode ??= 0;
+// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would
+// keep this finished turn alive; stdout is synchronous on Linux pipes and sockets, so exit now.
+// eslint-disable-next-line unicorn/no-process-exit -- The turn is over and nothing else is pending.
+process.exit();

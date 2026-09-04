@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import {
   BotEventEmitter,
   createRunId,
+  handleTurnFailure,
   readBotRuntimeConfig,
   runBotTurn,
-  type BotTurnContext,
   type Runtime,
 } from "@ickb/bot";
 import {
@@ -14,84 +14,26 @@ import {
   verifyChainPreflight,
 } from "@ickb/node-utils";
 import { getConfig, IckbSdk, signAndSendTransaction } from "@ickb/sdk";
-import { pathToFileURL } from "node:url";
 
-type BotRuntimeConfig = Awaited<ReturnType<typeof readBotRuntimeConfig>>;
-type IckbConfig = ReturnType<typeof getConfig>;
-
-export interface BotCliDependencies {
-  createEvents: (context: {
-    artifactRoot?: string;
-    chain: BotRuntimeConfig["chain"];
-    runId: string;
-  }) => BotEventEmitter;
-  createPublicClient: typeof createPublicClient;
-  createRunId: typeof createRunId;
-  createSdk: (config: IckbConfig) => IckbSdk;
-  getConfig: typeof getConfig;
-  readBotRuntimeConfig: typeof readBotRuntimeConfig;
-  runBotTurn: typeof runBotTurn;
-  verifyChainPreflight: typeof verifyChainPreflight;
-}
-
-const defaultDependencies: BotCliDependencies = {
-  createEvents: (context) => new BotEventEmitter(context),
-  createPublicClient,
-  createRunId,
-  createSdk: (config) => IckbSdk.fromConfig(config),
-  getConfig,
-  readBotRuntimeConfig,
-  runBotTurn,
-  verifyChainPreflight,
-};
-
-export async function runBotEntrypoint(
-  argv: string[] = process.argv,
-  moduleUrl: string = import.meta.url,
-  run: () => Promise<void> = runBotCli,
-): Promise<void> {
-  if (argv[1] === undefined || moduleUrl !== pathToFileURL(argv[1]).href) {
-    return;
-  }
-
-  await run();
-  process.exitCode ??= 0;
-}
-
-export async function runBotCli(
-  env: NodeJS.ProcessEnv = process.env,
-  dependencies: Partial<BotCliDependencies> = {},
-): Promise<void> {
-  const resolved = { ...defaultDependencies, ...dependencies };
-  const context = await initializeBot(env, resolved);
-  await resolved.runBotTurn(context);
-}
-
-export async function initializeBot(
-  env: NodeJS.ProcessEnv,
-  dependencies: BotCliDependencies = defaultDependencies,
-): Promise<BotTurnContext> {
-  const runtimeConfig = await dependencies.readBotRuntimeConfig(env);
-  const { chain, privateKey, rpcUrl } = runtimeConfig;
-  const runId = dependencies.createRunId();
-  const artifactRoot = env["BOT_ARTIFACT_ROOT"];
-  const events = dependencies.createEvents({
-    chain,
-    runId,
-    ...(artifactRoot === undefined ? {} : { artifactRoot }),
-  });
-  events.emit("bot.run.started");
-  const client = dependencies.createPublicClient(chain, rpcUrl);
-  const preflight = await dependencies.verifyChainPreflight(client, chain);
-  const config = dependencies.getConfig(chain);
-  const { managers } = config;
+// One process is one bot turn: read config, connect, act at most once, exit.
+const { chain, privateKey, rpcUrl } = await readBotRuntimeConfig(process.env);
+const artifactRoot = process.env["BOT_ARTIFACT_ROOT"];
+const events = new BotEventEmitter({
+  chain,
+  runId: createRunId(),
+  ...(artifactRoot === undefined ? {} : { artifactRoot }),
+});
+events.emit("bot.run.started");
+try {
+  const client = createPublicClient(chain, rpcUrl);
+  const preflight = await verifyChainPreflight(client, chain);
+  const config = getConfig(chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
-  // - FAILURE MODE: passing keys to logs, errors, telemetry, redaction, masking, or test hooks leaks signing authority.
+  // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
-  const recommendedAddress = await signer.getRecommendedAddressObj();
-  const primaryLock = recommendedAddress.script;
+  const primaryLock = (await signer.getRecommendedAddressObj()).script;
   events.emit("bot.chain.preflight", {
     identity: {
       chain,
@@ -106,22 +48,24 @@ export async function initializeBot(
     observed: preflight.observed,
     matches: preflight.matches,
   });
-  const accountLocks = await signerAccountLocks(signer, primaryLock);
-  const sdk = dependencies.createSdk(config);
+  const sdk = IckbSdk.fromConfig(config);
   const runtime: Runtime = {
     client,
     sdk,
-    managers,
+    managers: config.managers,
     primaryLock,
-    accountLocks,
+    accountLocks: await signerAccountLocks(signer, primaryLock),
     completeTransaction: async (tx, feeRate) =>
       sdk.completeTransaction(tx, { signer, feeRate }),
     sendTransaction: async (tx, recordTxHash) =>
       signAndSendTransaction(signer, tx, recordTxHash),
   };
-
-  return { events, runtime };
+  await runBotTurn({ events, runtime });
+} catch (error) {
+  handleTurnFailure(events, error);
 }
-
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- CLI module runs only when imported as the process entrypoint.
-await runBotEntrypoint();
+process.exitCode ??= 0;
+// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would
+// keep this finished turn alive; stdout is synchronous on Linux pipes and sockets, so exit now.
+// eslint-disable-next-line unicorn/no-process-exit -- The turn is over and nothing else is pending.
+process.exit();

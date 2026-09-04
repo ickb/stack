@@ -65,7 +65,7 @@ export function readTesterFeePolicy(env: NodeJS.ProcessEnv): TesterFeePolicy {
  * Selects a tester scenario using the supplied random source.
  */
 export function randomTesterScenario(
-  random: () => number = Math.random,
+  random: () => number,
   scenarios: readonly TesterScenario[] = TESTER_SCENARIOS,
 ): TesterScenario {
   const index = Math.floor(random() * scenarios.length);
