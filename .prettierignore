@@ -10,3 +10,4 @@ log/
 apps/*/log_*.json
 apps/sampler/rate.csv
 pnpm-lock.yaml
+eslint-suppressions.json
