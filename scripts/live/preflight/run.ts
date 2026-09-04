@@ -103,7 +103,7 @@ async function readRuntimeConfig(
     return await nodeUtils.readRuntimeConfigEnv(configPath, "LIVE_PREFLIGHT_CONFIG_FILE");
   } catch (cause) {
     throw new Error(
-      "Invalid live preflight config: expected exact JSON with chain, privateKey, rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts",
+      "Invalid live preflight config: expected exact JSON with chain, privateKey, and rpcUrl",
       { cause },
     );
   }

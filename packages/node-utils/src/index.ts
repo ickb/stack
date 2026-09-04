@@ -23,9 +23,9 @@ export { errnoCode, errorMessage, isRecord } from "./errors.ts";
 export { formatCkb } from "./format.ts";
 export {
   STOP_EXIT_CODE,
-  handleLoopError,
   jsonLogReplacer,
   logExecution,
+  recordExecutionError,
   writeJsonLine,
 } from "./logging.ts";
 export type { JsonLogValue } from "./logging.ts";
@@ -50,11 +50,5 @@ export {
   isRetryableRpcResponseShapeError,
   isRetryableRpcTransportError,
 } from "./retryable.ts";
-export {
-  parseRuntimeConfig,
-  randomSleepIntervalMs,
-  reachedMaxIterations,
-  readRuntimeConfigEnv,
-  sleep,
-} from "./runtime_config.ts";
+export { parseRuntimeConfig, readRuntimeConfigEnv } from "./runtime_config.ts";
 export type { RuntimeConfig } from "./runtime_config.ts";

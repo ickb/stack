@@ -1,10 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  randomSleepIntervalMs,
-  reachedMaxIterations,
-  sleep,
-  STOP_EXIT_CODE,
-} from "@ickb/node-utils";
+import { STOP_EXIT_CODE } from "@ickb/node-utils";
 import { TransactionBroadcastError, waitTransaction } from "@ickb/sdk";
 import { errorSummary } from "../observability/error.ts";
 import {
@@ -21,122 +16,52 @@ import { readBotState } from "./state.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 type BotStateDecision = ReturnType<typeof summarizeBotState>;
-type IterationWorkStatus = "completed" | "stopped";
 
-interface BotIterationResult {
-  countsAsTerminalIteration: boolean;
-  retryableAttempts: number;
-  shouldStop: boolean;
-}
-
-export interface BotLoopOperations {
+export interface BotTurnOperations {
   buildTransaction: typeof buildTransaction;
   readBotState: typeof readBotState;
-  sleep: typeof sleep;
-  sleepInterval: typeof randomSleepIntervalMs;
   waitTransaction: typeof waitTransaction;
 }
 
-export interface BotLoopContext {
+export interface BotTurnContext {
   /** Event emitter scoped to this bot run. */
   events: BotEventEmitter;
 
   /** Runtime clients, signer, SDK, managers, and primary lock. */
   runtime: Runtime;
 
-  /** Delay between loop iterations. */
-  sleepIntervalMs: number;
-
-  /** Optional maximum completed loop iterations. */
-  maxIterations: number | undefined;
-
-  /** Optional maximum retryable failures before stopping. */
-  maxRetryableAttempts: number | undefined;
-
-  /** Optional loop-owned effect overrides. Production callers use the defaults. */
-  operations?: Partial<BotLoopOperations>;
+  /** Optional effect overrides. Production callers use the defaults. */
+  operations?: Partial<BotTurnOperations>;
 }
 
-const defaultBotLoopOperations: BotLoopOperations = {
+const defaultBotTurnOperations: BotTurnOperations = {
   buildTransaction,
   readBotState,
-  sleep,
-  sleepInterval: randomSleepIntervalMs,
   waitTransaction,
 };
+
+// One process is one turn; the event contract still numbers it as iteration 1.
+const TURN_ITERATION_ID = 1;
 
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 600_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
-export async function runBotLoop(context: BotLoopContext): Promise<void> {
-  const operations = { ...defaultBotLoopOperations, ...context.operations };
-  let completedIterations = 0;
-  let retryableAttempts = 0;
-  let iterationId = 0;
-  for (;;) {
-    iterationId += 1;
-    const result = await runBotIteration(
-      context,
-      operations,
-      iterationId,
-      retryableAttempts,
-    );
-    retryableAttempts = result.retryableAttempts;
-    if (result.countsAsTerminalIteration) {
-      // Retryable failures do not consume bounded iterations; successful and
-      // terminal non-retryable attempts reset the retry budget.
-      retryableAttempts = 0;
-      completedIterations += 1;
-      if (
-        result.shouldStop ||
-        reachedMaxIterations(completedIterations, context.maxIterations)
-      ) {
-        return;
-      }
-    }
-
-    if (result.shouldStop) {
-      return;
-    }
-    await operations.sleep(operations.sleepInterval(context.sleepIntervalMs));
-  }
-}
-
-async function runBotIteration(
-  context: BotLoopContext,
-  operations: BotLoopOperations,
-  iterationId: number,
-  retryableAttempts: number,
-): Promise<BotIterationResult> {
-  context.events.emit(iterationId, "bot.iteration.started");
-
+/** Runs one bot turn: read state, decide, and at most one broadcast with its confirmation wait. */
+export async function runBotTurn(context: BotTurnContext): Promise<void> {
+  const operations = { ...defaultBotTurnOperations, ...context.operations };
+  context.events.emit(TURN_ITERATION_ID, "bot.iteration.started");
   try {
-    const status = await executeBotWork(context, operations, iterationId);
-    return {
-      countsAsTerminalIteration: status === "completed",
-      retryableAttempts,
-      shouldStop: status === "stopped",
-    };
+    await executeBotWork(context, operations, TURN_ITERATION_ID);
   } catch (error) {
-    const failure = handleIterationFailure({
-      context,
-      iterationId,
-      error,
-      retryableAttempts,
-    });
-    return {
-      countsAsTerminalIteration: !failure.retryableAttempt,
-      retryableAttempts: failure.retryableAttempts,
-      shouldStop: failure.stopAfterLog,
-    };
+    handleIterationFailure(context.events, TURN_ITERATION_ID, error);
   }
 }
 
 async function executeBotWork(
-  context: BotLoopContext,
-  operations: BotLoopOperations,
+  context: BotTurnContext,
+  operations: BotTurnOperations,
   iterationId: number,
-): Promise<IterationWorkStatus> {
+): Promise<void> {
   const state = await operations.readBotState(context.runtime);
   const stateDecision = summarizeBotState(state);
   emitBotStateRead(context.events, iterationId, stateDecision);
@@ -147,7 +72,7 @@ async function executeBotWork(
       iterationId,
       stateDecision,
     });
-    return "stopped";
+    return;
   }
 
   const result = await operations.buildTransaction(context.runtime, state);
@@ -161,7 +86,6 @@ async function executeBotWork(
       result,
     });
   }
-  return "completed";
 }
 
 function emitBotStateRead(
@@ -202,8 +126,8 @@ async function sendBuiltTransaction({
   state,
   result,
 }: {
-  context: BotLoopContext;
-  operations: BotLoopOperations;
+  context: BotTurnContext;
+  operations: BotTurnOperations;
   iterationId: number;
   state: BotState;
   result: BuiltTransactionResult;
@@ -229,7 +153,7 @@ async function broadcastTransaction({
   feeRate,
   startedAt,
 }: {
-  context: BotLoopContext;
+  context: BotTurnContext;
   iterationId: number;
   result: BuiltTransactionResult;
   fee: bigint;
@@ -285,8 +209,8 @@ async function confirmTransaction({
   txHash,
   startedAt,
 }: {
-  context: BotLoopContext;
-  operations: BotLoopOperations;
+  context: BotTurnContext;
+  operations: BotTurnOperations;
   iterationId: number;
   txHash: ccc.Hex;
   startedAt: number;

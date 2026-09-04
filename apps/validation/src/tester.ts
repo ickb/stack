@@ -9,7 +9,7 @@ import {
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
-  runTesterLoop,
+  runTesterTurn,
   type Runtime,
 } from "@ickb/validation";
 import { pathToFileURL } from "node:url";
@@ -23,7 +23,7 @@ export interface TesterCliDependencies {
   readTesterFeePolicy: typeof readTesterFeePolicy;
   readTesterRuntimeConfig: typeof readTesterRuntimeConfig;
   readTesterScenario: typeof readTesterScenario;
-  runTesterLoop: typeof runTesterLoop;
+  runTesterTurn: typeof runTesterTurn;
   signerAccountLocks: typeof signerAccountLocks;
   verifyChainPreflight: typeof verifyChainPreflight;
 }
@@ -35,7 +35,7 @@ const defaultDependencies: TesterCliDependencies = {
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
-  runTesterLoop,
+  runTesterTurn,
   signerAccountLocks,
   verifyChainPreflight,
 };
@@ -62,14 +62,7 @@ export async function runTesterCli(
     throw new Error(`Unknown argument: ${String(argv[0])}`);
   }
   const resolved = { ...defaultDependencies, ...dependencies };
-  const {
-    chain,
-    privateKey,
-    rpcUrl,
-    sleepIntervalMs,
-    maxIterations,
-    maxRetryableAttempts,
-  } = await resolved.readTesterRuntimeConfig(env);
+  const { chain, privateKey, rpcUrl } = await resolved.readTesterRuntimeConfig(env);
   const testerScenario = resolved.readTesterScenario(env);
   const feePolicy = resolved.readTesterFeePolicy(env);
   const client = resolved.createPublicClient(chain, rpcUrl);
@@ -90,13 +83,10 @@ export async function runTesterCli(
     accountLocks: await resolved.signerAccountLocks(signer, primaryLock),
   };
 
-  await resolved.runTesterLoop({
+  await resolved.runTesterTurn({
     runtime,
     testerScenario,
     feePolicy,
-    sleepIntervalMs,
-    maxIterations,
-    maxRetryableAttempts,
   });
 }
 

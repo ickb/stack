@@ -1,11 +1,8 @@
 import { STOP_EXIT_CODE } from "@ickb/node-utils";
 import { TransactionBroadcastError } from "@ickb/sdk";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  handleIterationFailure,
-  type FailureHandlingResult,
-} from "../../src/bot/failure.ts";
-import { isRetryableBotError, iterationFailureEventFields } from "../../src/index.ts";
+import { handleIterationFailure } from "../../src/bot/failure.ts";
+import { isRetryableBotError } from "../../src/index.ts";
 
 const FETCH_FAILED = "fetch failed";
 const DETERMINISTIC_BUILD_FAILURE = "deterministic build failure";
@@ -117,23 +114,22 @@ describe("bot post-broadcast confirmation outcomes", () => {
   });
 });
 
-describe("bot post-broadcast confirmation exit codes", () => {
-  it("stops the deployed service after a confirmation timeout", () => {
-    const { result, events } = handleFailure(
+describe("bot failure exit codes", () => {
+  it("holds the service after a confirmation timeout", () => {
+    const events = handleFailure(
       confirmationError({ reason: undefined, status: "pending", isTimeout: true }),
     );
 
     // A restart would rebuild and resend a transaction that may still commit.
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
-    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
     expect(events.at(-1)).toMatchObject({
       type: "bot.iteration.failed",
       fields: { retryable: false, terminal: true },
     });
   });
 
-  it("stops the deployed service when transport hid the confirmation outcome", () => {
-    const { result } = handleFailure(
+  it("holds the service when transport hid the confirmation outcome", () => {
+    handleFailure(
       confirmationError({
         reason: undefined,
         status: "unresolved",
@@ -142,18 +138,30 @@ describe("bot post-broadcast confirmation exit codes", () => {
     );
 
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
-    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
   });
 
-  it("keeps an RBF confirmation rejection retryable and running", () => {
-    const { result } = handleFailure(rbfConfirmationError());
+  it("lets the next turn rebuild after an RBF confirmation rejection", () => {
+    const events = handleFailure(rbfConfirmationError());
 
-    expect(process.exitCode).toBeUndefined();
-    expect(result).toMatchObject({ retryableAttempt: true, stopAfterLog: false });
+    expect(process.exitCode).toBe(1);
+    expect(events.at(-1)).toMatchObject({
+      fields: {
+        retryable: true,
+        terminal: false,
+        error: {
+          name: TRANSACTION_CONFIRMATION_ERROR,
+          txHash: TX_HASH,
+          status: REJECTED_STATUS,
+          isTimeout: false,
+          reason: RBF_REJECTED_REASON,
+        },
+      },
+    });
+    expect(events.at(-1)?.fields?.["error"]).not.toHaveProperty("stack");
   });
 
-  it("stops the deployed service after a node transaction hash mismatch", () => {
-    const { result } = handleFailure(
+  it("holds the service after a node transaction hash mismatch", () => {
+    handleFailure(
       new TransactionBroadcastError(`0x${"11".repeat(32)}`, {
         nodeTxHash: `0x${"22".repeat(32)}`,
         cause: new TypeError(FETCH_FAILED),
@@ -163,112 +171,47 @@ describe("bot post-broadcast confirmation exit codes", () => {
     // The node accepted something under a hash this attempt cannot bind, so the
     // local transaction may already be in the pool.
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
-    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
   });
 
-  it("keeps unrelated non-retryable failures at exit code 1", () => {
-    const { result } = handleFailure(new Error(DETERMINISTIC_BUILD_FAILURE));
-
+  it("exits 1 for transient failures without a stack and for deterministic ones with", () => {
+    const transient = handleFailure(wrappedTransactionHeaderFetchFailure());
     expect(process.exitCode).toBe(1);
-    expect(result).toMatchObject({ retryableAttempt: false, stopAfterLog: true });
-  });
-});
-
-describe("bot retryable iteration failures", () => {
-  it("emits retryability metadata from the same retry decision", () => {
-    expect(iterationFailureEventFields(new TypeError(FETCH_FAILED))).toMatchObject({
-      retryable: true,
-      terminal: false,
-      error: { name: "TypeError", message: FETCH_FAILED },
+    expect(transient.at(-1)).toMatchObject({
+      fields: { retryable: true, terminal: false },
     });
-    expect(
-      iterationFailureEventFields(new TypeError(FETCH_FAILED)).error,
-    ).not.toHaveProperty("stack");
+    expect(transient.at(-1)?.fields?.["error"]).not.toHaveProperty("stack");
 
-    const responseShapeFailure = iterationFailureEventFields(
-      new Error("Id mismatched, got null, expected 319"),
-    );
-    expect(responseShapeFailure).toMatchObject({ retryable: true, terminal: false });
-    expect(responseShapeFailure.error).not.toHaveProperty("stack");
-
-    const wrappedTransportFailure = iterationFailureEventFields(
-      wrappedTransactionHeaderFetchFailure(),
-    );
-    expect(wrappedTransportFailure).toMatchObject({ retryable: true, terminal: false });
-    expect(wrappedTransportFailure.error).not.toHaveProperty("stack");
-
-    const exhaustedFailure = iterationFailureEventFields(new TypeError(FETCH_FAILED), {
-      retryableAttempts: 3,
-      maxRetryableAttempts: 3,
-    });
-    expect(exhaustedFailure).toMatchObject({
-      retryable: true,
-      terminal: true,
-      retryableAttempts: 3,
-      maxRetryableAttempts: 3,
-      retryBudgetExhausted: true,
-    });
-    expect(exhaustedFailure.error).not.toHaveProperty("stack");
-
-    expect(
-      iterationFailureEventFields(new TypeError(FETCH_FAILED), {
-        retryableAttempts: 3,
-        maxRetryableAttempts: undefined,
-      }),
-    ).toMatchObject({ retryable: true, terminal: false, retryableAttempts: 3 });
-
-    const terminalFailure = iterationFailureEventFields(
-      new Error(DETERMINISTIC_BUILD_FAILURE),
-    );
-    expect(terminalFailure).toMatchObject({
-      retryable: false,
-      terminal: true,
-      error: { name: "Error", message: DETERMINISTIC_BUILD_FAILURE },
-    });
-    expect(terminalFailure.error).toHaveProperty("stack");
-  });
-
-  it("emits retryable metadata for post-broadcast RBF confirmation rejection", () => {
-    const rbfConfirmationFailure = iterationFailureEventFields(rbfConfirmationError());
-
-    expect(rbfConfirmationFailure).toMatchObject({
-      retryable: true,
-      terminal: false,
-      error: {
-        name: TRANSACTION_CONFIRMATION_ERROR,
-        txHash: TX_HASH,
-        status: REJECTED_STATUS,
-        isTimeout: false,
-        reason: RBF_REJECTED_REASON,
+    const deterministic = handleFailure(new Error(DETERMINISTIC_BUILD_FAILURE));
+    expect(process.exitCode).toBe(1);
+    expect(deterministic.at(-1)).toMatchObject({
+      fields: {
+        retryable: false,
+        terminal: true,
+        error: { name: "Error", message: DETERMINISTIC_BUILD_FAILURE },
       },
     });
-    expect(rbfConfirmationFailure.error).not.toHaveProperty("stack");
+    expect(deterministic.at(-1)?.fields?.["error"]).toHaveProperty("stack");
   });
 });
 
-function handleFailure(error: unknown): {
-  result: FailureHandlingResult;
-  events: Array<{ type: string; fields: Record<string, unknown> | undefined }>;
-} {
+function handleFailure(
+  error: unknown,
+): Array<{ type: string; fields: Record<string, unknown> | undefined }> {
   const events: Array<{ type: string; fields: Record<string, unknown> | undefined }> = [];
-  const result = handleIterationFailure({
-    context: {
-      events: {
-        emit: (
-          _iterationId: number,
-          type: "bot.iteration.failed",
-          fields?: Record<string, unknown>,
-        ): void => {
-          events.push({ type, fields });
-        },
+  handleIterationFailure(
+    {
+      emit: (
+        _iterationId: number,
+        type: "bot.iteration.failed",
+        fields?: Record<string, unknown>,
+      ): void => {
+        events.push({ type, fields });
       },
-      maxRetryableAttempts: undefined,
     },
-    iterationId: 1,
+    1,
     error,
-    retryableAttempts: 0,
-  });
-  return { result, events };
+  );
+  return events;
 }
 
 function rbfConfirmationError(): Error {

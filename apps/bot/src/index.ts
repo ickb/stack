@@ -3,8 +3,8 @@ import {
   BotEventEmitter,
   createRunId,
   readBotRuntimeConfig,
-  runBotLoop,
-  type BotLoopContext,
+  runBotTurn,
+  type BotTurnContext,
   type Runtime,
 } from "@ickb/bot";
 import {
@@ -33,7 +33,7 @@ export interface BotCliDependencies {
   createSdk: (config: IckbConfig) => IckbSdk;
   getConfig: typeof getConfig;
   readBotRuntimeConfig: typeof readBotRuntimeConfig;
-  runBotLoop: typeof runBotLoop;
+  runBotTurn: typeof runBotTurn;
   verifyChainPreflight: typeof verifyChainPreflight;
 }
 
@@ -44,7 +44,7 @@ const defaultDependencies: BotCliDependencies = {
   createSdk: (config) => IckbSdk.fromConfig(config),
   getConfig,
   readBotRuntimeConfig,
-  runBotLoop,
+  runBotTurn,
   verifyChainPreflight,
 };
 
@@ -67,22 +67,15 @@ export async function runBotCli(
 ): Promise<void> {
   const resolved = { ...defaultDependencies, ...dependencies };
   const context = await initializeBot(env, resolved);
-  await resolved.runBotLoop(context);
+  await resolved.runBotTurn(context);
 }
 
 export async function initializeBot(
   env: NodeJS.ProcessEnv,
   dependencies: BotCliDependencies = defaultDependencies,
-): Promise<BotLoopContext> {
+): Promise<BotTurnContext> {
   const runtimeConfig = await dependencies.readBotRuntimeConfig(env);
-  const {
-    chain,
-    privateKey,
-    rpcUrl,
-    sleepIntervalMs,
-    maxIterations,
-    maxRetryableAttempts,
-  } = runtimeConfig;
+  const { chain, privateKey, rpcUrl } = runtimeConfig;
   const runId = botRunId(env, dependencies.createRunId);
   const artifactRoot = env["BOT_ARTIFACT_ROOT"];
   const artifactRefPrefix = env["BOT_ARTIFACT_REF_PREFIX"];
@@ -92,17 +85,7 @@ export async function initializeBot(
     ...(artifactRoot === undefined ? {} : { artifactRoot }),
     ...(artifactRefPrefix === undefined ? {} : { artifactRefPrefix }),
   });
-  events.emit(0, "bot.run.started", {
-    maxIterations,
-    bounded: maxIterations !== undefined,
-    runtime: {
-      maxIterations,
-      bounded: maxIterations !== undefined,
-      sleepIntervalMs,
-      maxRetryableAttempts,
-      rpcConfigured: true,
-    },
-  });
+  events.emit(0, "bot.run.started");
   const client = dependencies.createPublicClient(chain, rpcUrl);
   const preflight = await dependencies.verifyChainPreflight(client, chain);
   const config = dependencies.getConfig(chain);
@@ -122,10 +105,6 @@ export async function initializeBot(
         hashType: primaryLock.hashType,
         args: primaryLock.args,
       },
-      bounded: maxIterations !== undefined,
-      ...(maxIterations === undefined ? {} : { maxIterations }),
-      ...(maxRetryableAttempts === undefined ? {} : { maxRetryableAttempts }),
-      sleepIntervalMs,
       rpcEndpoint: publicRpcEndpointIdentity(rpcUrl),
     },
     expected: preflight.expected,
@@ -146,13 +125,7 @@ export async function initializeBot(
       signAndSendTransaction(signer, tx, recordTxHash),
   };
 
-  return {
-    events,
-    runtime,
-    sleepIntervalMs,
-    maxIterations,
-    maxRetryableAttempts,
-  };
+  return { events, runtime };
 }
 
 function botRunId(env: NodeJS.ProcessEnv, fallback: () => string): string {

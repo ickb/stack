@@ -16,7 +16,7 @@
   },
   "packages/bot/src/bot/failure.ts": {
     "no-restricted-syntax": {
-      "count": 5
+      "count": 1
     }
   },
   "packages/bot/src/observability/artifacts.ts": {
@@ -86,7 +86,7 @@
   },
   "packages/node-utils/src/runtime_config.ts": {
     "no-restricted-syntax": {
-      "count": 3
+      "count": 2
     }
   },
   "packages/order/src/matching/order_matcher.ts": {
@@ -170,11 +170,6 @@
     }
   },
   "packages/validation/src/tester/runtime/testerErrors.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "packages/validation/src/tester/runtime/testerLoop.ts": {
     "no-restricted-syntax": {
       "count": 1
     }

@@ -7,7 +7,6 @@ import {
   absoluteConfigPath,
   botConfigFile,
   botConfigPath,
-  botLiveConfigPath,
   botPrivateKey,
   botPrivateKeyEnv,
   checkConfigIgnored,
@@ -99,11 +98,7 @@ void test("live env config helper restores previous configs after forced replace
     );
     assert.deepEqual(
       await readJson(absoluteConfigPath(dir, botConfigFile)),
-      expectedConfig({
-        privateKey: botPrivateKey,
-        maxIterations: 1,
-        maxRetryableAttempts: 10,
-      }),
+      expectedConfig(botPrivateKey),
     );
     const names = await readdir(join(dir, configDir));
     assert.deepEqual(
@@ -139,7 +134,7 @@ void test("live env config helper accepts absolute outputs through a symlinked r
     assert("written" in result);
     assert.deepEqual(
       result.written.map((entry) => entry.outputPath),
-      [botConfigPath, testerConfigPath, botLiveConfigPath],
+      [botConfigPath, testerConfigPath],
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

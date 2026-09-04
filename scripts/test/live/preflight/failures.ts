@@ -20,8 +20,6 @@ void test("preflight preserves parse failure cause without leaking config conten
       chain: "testnet",
       privateKey,
       rpcUrl: "not-a-url",
-      sleepIntervalSeconds: 1,
-      maxIterations: 1,
     },
     async ({ configPath, dir }: ConfigDirContext) => {
       const dependencies = mockDependencies();
@@ -61,8 +59,6 @@ void test("preflight marks retryable transport failures without leaking RPC URLs
       chain: "testnet",
       privateKey,
       rpcUrl: "https://testnet.example/path?token=secret",
-      sleepIntervalSeconds: 1,
-      maxIterations: 1,
     },
     async ({ configPath, dir }: ConfigDirContext) => {
       const dependencies = mockDependencies();
@@ -136,17 +132,13 @@ void test("preflight preserves public wrong-chain evidence", async () => {
 
 function baseConfig(privateKey: string): {
   chain: string;
-  maxIterations: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 } {
   return {
     chain: "testnet",
     privateKey,
     rpcUrl: "https://testnet.example/",
-    sleepIntervalSeconds: 1,
-    maxIterations: 1,
   };
 }
 

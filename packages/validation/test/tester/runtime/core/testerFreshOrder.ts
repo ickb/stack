@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { OrderManager } from "@ickb/order";
 import { byte32FromByte, headerLike } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  isRetryableTesterError,
-  isTerminalTesterError,
-} from "../../../../src/tester/index.ts";
+import { isRetryableTesterError } from "../../../../src/tester/index.ts";
 import {
   freshMatchableOrderSkip,
   MissingFreshOrderOriginError,
@@ -50,7 +47,6 @@ describe(FRESH_MATCHABLE_ORDER_SKIP, () => {
       "Missing origin transaction block number for fresh-order guard",
     );
     expect(isRetryableTesterError(thrown)).toBe(false);
-    expect(isTerminalTesterError(thrown)).toBe(true);
   });
 
   it("explains skips caused by fresh matchable orders", async () => {

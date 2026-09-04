@@ -1,6 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { BotEventEmitter, type BotLoopContext } from "@ickb/bot";
-import type { ChainPreflightEvidence, RuntimeConfig } from "@ickb/node-utils";
+import { BotEventEmitter, type BotTurnContext } from "@ickb/bot";
+import {
+  publicRpcEndpointIdentity,
+  type ChainPreflightEvidence,
+  type RuntimeConfig,
+} from "@ickb/node-utils";
 import { getConfig, IckbSdk } from "@ickb/sdk";
 import { StubClient } from "@ickb/testkit";
 import { spawnSync } from "node:child_process";
@@ -46,9 +50,6 @@ describe("bot CLI runtime wiring", () => {
       dependencies,
     );
 
-    expect(context.sleepIntervalMs).toBe(60_000);
-    expect(context.maxIterations).toBe(1);
-    expect(context.maxRetryableAttempts).toBe(2);
     expect(context.runtime.client).toBe(client);
     expect(context.runtime.managers).toBe(config.managers);
     expect(context.runtime.accountLocks).toHaveLength(1);
@@ -72,7 +73,7 @@ describe("bot CLI runtime wiring", () => {
     expect(signer).toBeInstanceOf(ccc.SignerCkbPrivateKey);
     assertSent();
     expect(events).toMatchObject([
-      { type: "bot.run.started", runId: "run-1", bounded: true },
+      { type: "bot.run.started", runId: "run-1" },
       { type: "bot.chain.preflight", runId: "run-1", chain: "testnet" },
     ]);
     const preflight = eventAt(events, 1);
@@ -96,10 +97,6 @@ describe("bot CLI runtime wiring", () => {
         hashType: context.runtime.primaryLock.hashType,
         args: context.runtime.primaryLock.args,
       },
-      bounded: true,
-      maxIterations: 1,
-      maxRetryableAttempts: 2,
-      sleepIntervalMs: 60_000,
       rpcEndpoint: {
         mode: "exclusive",
         protocol: "https:",
@@ -128,41 +125,31 @@ function wireSendSpies(client: StubClient, tx: ccc.Transaction): () => void {
 }
 
 describe("bot CLI public identity", () => {
-  it("uses the explicit RPC URL for bounded and unbounded bot processes", async () => {
-    const bounded = botDependencies();
-    const createBoundedClient = vi.fn(bounded.createPublicClient);
-    bounded.createPublicClient = createBoundedClient;
-    const live = botDependencies({ runtimeConfig: { maxIterations: undefined } });
-    const createLiveClient = vi.fn(live.createPublicClient);
-    live.createPublicClient = createLiveClient;
-
-    await initializeBot({}, bounded);
-    await initializeBot({}, live);
-
-    expect(createBoundedClient).toHaveBeenCalledWith("testnet", TESTNET_RPC_URL);
-    expect(createLiveClient).toHaveBeenCalledWith("testnet", TESTNET_RPC_URL);
-  });
-
-  it("omits undefined optional bounds from canonical live identity", async () => {
+  it("uses the explicit RPC URL and publishes only chain, lock, and endpoint identity", async () => {
     const events: Array<Record<string, unknown>> = [];
-    await initializeBot(
-      {},
-      botDependencies({
-        events,
-        runtimeConfig: {
-          maxIterations: undefined,
-          maxRetryableAttempts: undefined,
-        },
-      }),
-    );
+    const dependencies = botDependencies({ events });
+    const createPublicClient = vi.fn(dependencies.createPublicClient);
+    dependencies.createPublicClient = createPublicClient;
 
+    await initializeBot({}, dependencies);
+
+    expect(createPublicClient).toHaveBeenCalledWith("testnet", TESTNET_RPC_URL);
     const identity = eventAt(events, 1)["identity"];
-    expect(identity).toMatchObject({
-      bounded: false,
-      rpcEndpoint: { mode: "exclusive" },
+    const primaryLock = (
+      await new ccc.SignerCkbPrivateKey(
+        new StubClient(),
+        privateKey,
+      ).getRecommendedAddressObj()
+    ).script;
+    expect(identity).toEqual({
+      chain: "testnet",
+      primaryLock: {
+        codeHash: primaryLock.codeHash,
+        hashType: primaryLock.hashType,
+        args: primaryLock.args,
+      },
+      rpcEndpoint: publicRpcEndpointIdentity(TESTNET_RPC_URL),
     });
-    expect(identity).not.toHaveProperty("maxIterations");
-    expect(identity).not.toHaveProperty("maxRetryableAttempts");
   });
 
   it("uses a valid launcher run ID without calling the direct-run fallback", async () => {
@@ -228,14 +215,14 @@ describe("bot CLI runtime boundaries", () => {
   });
 
   it("runs the loop with the initialized context", async () => {
-    const runBotLoop = vi.fn(async (): Promise<void> => {
+    const runBotTurn = vi.fn(async (): Promise<void> => {
       await Promise.resolve();
     });
-    const dependencies = botDependencies({ runBotLoop });
+    const dependencies = botDependencies({ runBotTurn });
 
     await runBotCli({}, dependencies);
 
-    expect(runBotLoop).toHaveBeenCalledTimes(1);
+    expect(runBotTurn).toHaveBeenCalledTimes(1);
   });
 
   it("uses the default event and SDK factories", async () => {
@@ -243,7 +230,7 @@ describe("bot CLI runtime boundaries", () => {
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const dependencies: Partial<BotCliDependencies> = botDependencies({
       config,
-      runBotLoop: async (context): Promise<void> => {
+      runBotTurn: async (context): Promise<void> => {
         expect(context.events).toBeInstanceOf(BotEventEmitter);
         expect(context.runtime.sdk).toBeInstanceOf(IckbSdk);
         expect(context.runtime.managers).toBe(config.managers);
@@ -336,7 +323,7 @@ function botDependencies({
   config = getConfig("testnet"),
   events = [],
   runtimeConfig = {},
-  runBotLoop = vi.fn(async (): Promise<void> => {
+  runBotTurn = vi.fn(async (): Promise<void> => {
     await Promise.resolve();
   }),
 }: {
@@ -344,7 +331,7 @@ function botDependencies({
   config?: ReturnType<typeof getConfig>;
   events?: Array<Record<string, unknown>>;
   runtimeConfig?: Partial<RuntimeConfig>;
-  runBotLoop?: (context: BotLoopContext) => Promise<void>;
+  runBotTurn?: (context: BotTurnContext) => Promise<void>;
 } = {}): BotCliDependencies {
   return {
     createEvents: (context) =>
@@ -364,15 +351,12 @@ function botDependencies({
       await Promise.resolve();
       return {
         chain: "testnet",
-        maxIterations: 1,
-        maxRetryableAttempts: 2,
         privateKey,
         rpcUrl: TESTNET_RPC_URL,
-        sleepIntervalMs: 60_000,
         ...runtimeConfig,
       };
     },
-    runBotLoop,
+    runBotTurn,
     verifyChainPreflight: async (): Promise<ChainPreflightEvidence> => {
       await Promise.resolve();
       return chainPreflightEvidence();

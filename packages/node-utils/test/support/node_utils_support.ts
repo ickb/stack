@@ -17,11 +17,6 @@ export const TRANSACTION_FAILED_TO_RESOLVE_MESSAGE =
 export const TRANSACTION_CONFIRMATION_TIMEOUT_MESSAGE =
   "Transaction confirmation timed out";
 
-export function sequence(...values: number[]): () => number {
-  let index = 0;
-  return () => values[index++] ?? 0;
-}
-
 export function transactionError(
   isTimeout: boolean,
   txHash = byte32FromByte("11"),

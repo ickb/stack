@@ -22,9 +22,6 @@ describe("readBotRuntimeConfig", () => {
           chain: "testnet",
           privateKey,
           rpcUrl: "http://127.0.0.1:8114/",
-          sleepIntervalSeconds: 60,
-          maxIterations: 1,
-          maxRetryableAttempts: 3,
         }),
         { mode: 0o600 },
       );
@@ -35,9 +32,6 @@ describe("readBotRuntimeConfig", () => {
         chain: "testnet",
         privateKey,
         rpcUrl: "http://127.0.0.1:8114/",
-        sleepIntervalMs: 60000,
-        maxIterations: 1,
-        maxRetryableAttempts: 3,
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -54,8 +48,6 @@ describe("readBotRuntimeConfig", () => {
         JSON.stringify({
           chain: "testnet",
           privateKey,
-          sleepIntervalSeconds: 60,
-          maxIterations: 1,
         }),
         { mode: 0o600 },
       );

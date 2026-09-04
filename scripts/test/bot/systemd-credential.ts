@@ -34,8 +34,6 @@ void test("credential helper validation uses the shared runtime parser", () => {
     chain: "testnet",
     privateKey,
     rpcUrl,
-    sleepIntervalSeconds: 60,
-    maxRetryableAttempts: 10,
   });
 
   const valid = validateConfig("testnet", config);
@@ -45,22 +43,10 @@ void test("credential helper validation uses the shared runtime parser", () => {
   const missingRpcConfig = JSON.stringify({
     chain: "testnet",
     privateKey,
-    sleepIntervalSeconds: 60,
-    maxRetryableAttempts: 10,
   });
   const invalidMissingRpc = validateConfig("testnet", missingRpcConfig);
   assert.equal(invalidMissingRpc.status, 1);
   assert.match(invalidMissingRpc.stderr, /Invalid bot config/u);
-
-  const unboundedRetryConfig = JSON.stringify({
-    chain: "testnet",
-    privateKey,
-    rpcUrl,
-    sleepIntervalSeconds: 60,
-  });
-  const validUnboundedRetry = validateConfig("testnet", unboundedRetryConfig);
-  assert.equal(validUnboundedRetry.status, 0, validUnboundedRetry.stderr);
-  assert.equal(validUnboundedRetry.stdout, unboundedRetryConfig);
 
   const wrongChain = validateConfig("mainnet", config);
   assert.equal(wrongChain.status, 1);
@@ -72,7 +58,6 @@ void test("credential helper validation uses the shared runtime parser", () => {
       chain: "testnet",
       privateKey: `${privateKey}\n`,
       rpcUrl,
-      sleepIntervalSeconds: 60,
     }),
   );
   assert.equal(invalidKey.status, 1);
@@ -85,14 +70,6 @@ void test("credential helper does not echo RPC URL input", async () => {
   assert.doesNotMatch(text, /systemd-ask-password --echo=yes/u);
   assert.match(text, /RPC URL:/u);
   assert.doesNotMatch(text, /empty for CCC default/u);
-});
-
-void test("credential helper prompts for retryable-attempt budget", async () => {
-  const text = await readScript();
-
-  assert.match(text, /max retryable attempts/u);
-  assert.match(text, /empty for unbounded/u);
-  assert.match(text, /maxRetryableAttempts/u);
 });
 
 void test("candidate validation failure preserves the existing credential", async () => {
@@ -181,7 +158,6 @@ async function withInstallFixture(
             chain: "testnet",
             privateKey,
             rpcUrl,
-            sleepIntervalSeconds: 60,
           }),
       "utf8",
     );

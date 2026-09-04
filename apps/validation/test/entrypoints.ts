@@ -79,7 +79,7 @@ describe("validation tester CLI runtime", () => {
       fee: 1n,
       feeBase: 1000n,
     };
-    const runTesterLoop = vi.fn<TesterCliDependencies["runTesterLoop"]>(async () => {
+    const runTesterTurn = vi.fn<TesterCliDependencies["runTesterTurn"]>(async () => {
       await Promise.resolve();
     });
 
@@ -102,7 +102,7 @@ describe("validation tester CLI runtime", () => {
         readTesterScenario: vi.fn(
           (): ReturnType<TesterCliDependencies["readTesterScenario"]> => testerScenario,
         ),
-        runTesterLoop,
+        runTesterTurn,
         signerAccountLocks: vi.fn(
           async (): ReturnType<TesterCliDependencies["signerAccountLocks"]> => {
             await Promise.resolve();
@@ -118,25 +118,22 @@ describe("validation tester CLI runtime", () => {
       } satisfies Partial<TesterCliDependencies>,
     );
 
-    expect(runTesterLoop).toHaveBeenCalledTimes(1);
+    expect(runTesterTurn).toHaveBeenCalledTimes(1);
     expect(createPublicClient).toHaveBeenCalledWith("testnet", "http://127.0.0.1:8114");
-    const testerLoopCall = runTesterLoop.mock.calls[0]?.[0];
-    if (testerLoopCall === undefined) {
+    const testerTurnCall = runTesterTurn.mock.calls[0]?.[0];
+    if (testerTurnCall === undefined) {
       throw new Error("expected tester loop call");
     }
     const expectedPrimaryLock = (
-      await testerLoopCall.runtime.signer.getRecommendedAddressObj()
+      await testerTurnCall.runtime.signer.getRecommendedAddressObj()
     ).script;
-    expect(testerLoopCall.runtime.client).toBe(client);
-    expect(testerLoopCall.runtime.signer).toBeInstanceOf(ccc.SignerCkbPrivateKey);
-    expect(testerLoopCall.runtime.sdk).toBeInstanceOf(IckbSdk);
-    expect(testerLoopCall.runtime.primaryLock).toEqual(expectedPrimaryLock);
-    expect(testerLoopCall.runtime.accountLocks).toBe(accountLocks);
-    expect(testerLoopCall.testerScenario).toBe(testerScenario);
-    expect(testerLoopCall.feePolicy).toBe(feePolicy);
-    expect(testerLoopCall.sleepIntervalMs).toBe(4);
-    expect(testerLoopCall.maxIterations).toBe(2);
-    expect(testerLoopCall.maxRetryableAttempts).toBe(3);
+    expect(testerTurnCall.runtime.client).toBe(client);
+    expect(testerTurnCall.runtime.signer).toBeInstanceOf(ccc.SignerCkbPrivateKey);
+    expect(testerTurnCall.runtime.sdk).toBeInstanceOf(IckbSdk);
+    expect(testerTurnCall.runtime.primaryLock).toEqual(expectedPrimaryLock);
+    expect(testerTurnCall.runtime.accountLocks).toBe(accountLocks);
+    expect(testerTurnCall.testerScenario).toBe(testerScenario);
+    expect(testerTurnCall.feePolicy).toBe(feePolicy);
   });
 });
 
@@ -151,11 +148,8 @@ describe("validation tester CLI arguments", () => {
 function testerRuntimeConfig(): TesterRuntimeConfig {
   return {
     chain: "testnet",
-    maxIterations: 2,
-    maxRetryableAttempts: 3,
     privateKey,
     rpcUrl: "http://127.0.0.1:8114",
-    sleepIntervalMs: 4,
   };
 }
 

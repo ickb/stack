@@ -42,11 +42,8 @@ export interface L1AccountState {
 
 export interface RuntimeConfigLike {
   chain: string;
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalMs: number;
 }
 
 interface RpcEndpointIdentity {
@@ -117,16 +114,12 @@ export interface CoreLike {
 
 export interface PreflightReport {
   balances: BalanceReport;
-  bounded: boolean;
   capital: CapitalReport;
   chain: string;
   chainIdentity: ChainIdentity;
   inventory: InventoryReport;
   key: KeyReport;
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
   rpcEndpoint: RpcEndpointIdentity;
-  sleepIntervalSeconds: number;
   system: SystemReport;
 }
 
@@ -215,10 +208,6 @@ export async function buildPreflightReport({
 
   return {
     chain: runtimeConfig.chain,
-    bounded: runtimeConfig.maxIterations !== undefined,
-    maxIterations: runtimeConfig.maxIterations,
-    maxRetryableAttempts: runtimeConfig.maxRetryableAttempts,
-    sleepIntervalSeconds: runtimeConfig.sleepIntervalMs / 1000,
     rpcEndpoint: nodeUtils.publicRpcEndpointIdentity(runtimeConfig.rpcUrl),
     chainIdentity: chain,
     key: {

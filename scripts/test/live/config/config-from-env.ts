@@ -11,19 +11,13 @@ import {
 import { defaultCheckIgnored } from "../../../live/config/git.ts";
 import {
   absoluteConfigPath,
-  assertWrittenResult,
   botConfigFile,
   botConfigPath,
-  botLiveConfigFile,
-  botLiveConfigPath,
   botPrivateKey,
   botPrivateKeyEnv,
-  boundedMaxIterations,
   checkConfigIgnored,
   configFileMode,
   configSecretPattern,
-  configuredRpcOptions,
-  defaultMaxRetryableAttempts,
   expectedConfig,
   expectedWritten,
   hasMessage,
@@ -31,11 +25,9 @@ import {
   liveEnv,
   modeOf,
   readJson,
-  retryableAttemptsEnv,
   rpcSecretPattern,
   rpcUrlEnv,
   runLiveConfig,
-  sleepIntervalEnv,
   tempPrefix,
   testerConfigFile,
   testerConfigPath,
@@ -58,7 +50,6 @@ void test("live env config helper parses CLI arguments", () => {
   const usageText = usage();
   assert.equal(usageText.includes(botPrivateKeyEnv), true);
   assert.equal(usageText.includes(rpcUrlEnv), true);
-  assert.equal(usageText.includes(retryableAttemptsEnv), true);
 });
 
 void test("live config git ignore guard runs with an allowlisted environment", () => {
@@ -89,58 +80,14 @@ void test("live config git ignore guard runs with an allowlisted environment", (
 });
 
 void test("live env config helper builds configs with a required RPC URL", () => {
-  assert.deepEqual(
-    buildRuntimeConfig({
-      privateKey: botPrivateKey,
-      rpcUrl: testnetRpcUrl,
-      sleepIntervalSeconds: 1,
-      maxIterations: undefined,
-      maxRetryableAttempts: undefined,
-    }),
-    {
-      chain: testnetChain,
-      privateKey: botPrivateKey,
-      rpcUrl: testnetRpcUrl,
-      sleepIntervalSeconds: 1,
-    },
-  );
-  assert.deepEqual(
-    buildRuntimeConfig({
-      privateKey: botPrivateKey,
-      rpcUrl: testnetRpcUrl,
-      sleepIntervalSeconds: 1,
-      maxIterations: boundedMaxIterations,
-      maxRetryableAttempts: defaultMaxRetryableAttempts,
-    }),
-    {
-      chain: testnetChain,
-      privateKey: botPrivateKey,
-      rpcUrl: testnetRpcUrl,
-      sleepIntervalSeconds: 1,
-      maxIterations: boundedMaxIterations,
-      maxRetryableAttempts: defaultMaxRetryableAttempts,
-    },
-  );
-  assert.deepEqual(
-    buildRuntimeConfig({
-      privateKey: botPrivateKey,
-      rpcUrl: "https://testnet.example/",
-      sleepIntervalSeconds: 2,
-      maxIterations: 3,
-      maxRetryableAttempts: 4,
-    }),
-    {
-      chain: testnetChain,
-      privateKey: botPrivateKey,
-      rpcUrl: "https://testnet.example/",
-      sleepIntervalSeconds: 2,
-      maxIterations: 3,
-      maxRetryableAttempts: 4,
-    },
-  );
+  assert.deepEqual(buildRuntimeConfig({ privateKey: botPrivateKey, rpcUrl: testnetRpcUrl }), {
+    chain: testnetChain,
+    privateKey: botPrivateKey,
+    rpcUrl: testnetRpcUrl,
+  });
 });
 
-void test("live env config helper writes ignored bounded and live testnet configs from env", async () => {
+void test("live env config helper writes ignored bot and tester configs from env", async () => {
   const dir = await mkdtemp(join(tmpdir(), tempPrefix));
   try {
     const result = await runLiveConfig(dir, {
@@ -149,78 +96,19 @@ void test("live env config helper writes ignored bounded and live testnet config
 
     assert.deepEqual(result, {
       written: [
-        expectedWritten("bot", botConfigPath, boundedMaxIterations),
-        expectedWritten("tester", testerConfigPath, boundedMaxIterations),
-        expectedWritten("bot-live", botLiveConfigPath, undefined),
+        expectedWritten("bot", botConfigPath),
+        expectedWritten("tester", testerConfigPath),
       ],
     });
     assert.doesNotMatch(jsonText(result), configSecretPattern);
+    assert.doesNotMatch(jsonText(result), rpcSecretPattern);
 
     const botPath = absoluteConfigPath(dir, botConfigFile);
     const testerPath = absoluteConfigPath(dir, testerConfigFile);
-    const botLivePath = absoluteConfigPath(dir, botLiveConfigFile);
-    assert.deepEqual(
-      await readJson(botPath),
-      expectedConfig({
-        privateKey: botPrivateKey,
-        maxIterations: boundedMaxIterations,
-        maxRetryableAttempts: defaultMaxRetryableAttempts,
-      }),
-    );
-    assert.deepEqual(
-      await readJson(testerPath),
-      expectedConfig({
-        privateKey: testerPrivateKey,
-        maxIterations: boundedMaxIterations,
-        maxRetryableAttempts: defaultMaxRetryableAttempts,
-      }),
-    );
-    assert.deepEqual(
-      await readJson(botLivePath),
-      expectedConfig({ privateKey: botPrivateKey }),
-    );
+    assert.deepEqual(await readJson(botPath), expectedConfig(botPrivateKey));
+    assert.deepEqual(await readJson(testerPath), expectedConfig(testerPrivateKey));
     assert.equal(await modeOf(botPath), configFileMode);
     assert.equal(await modeOf(testerPath), configFileMode);
-    assert.equal(await modeOf(botLivePath), configFileMode);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
-void test("live env config helper reports configured RPC URLs without exposing them and preserves fixed iteration bounds", async () => {
-  const dir = await mkdtemp(join(tmpdir(), tempPrefix));
-  try {
-    const result = await runLiveConfig(dir, {
-      env: liveEnv({
-        [rpcUrlEnv]: testnetRpcUrl,
-        [sleepIntervalEnv]: "10",
-        [retryableAttemptsEnv]: "3",
-      }),
-      dependencies: { checkIgnored: checkConfigIgnored },
-    });
-
-    assert.deepEqual(
-      await Promise.all([
-        readJson(absoluteConfigPath(dir, botConfigFile)),
-        readJson(absoluteConfigPath(dir, testerConfigFile)),
-        readJson(absoluteConfigPath(dir, botLiveConfigFile)),
-      ]),
-      [
-        expectedConfig(configuredRpcOptions(botPrivateKey, boundedMaxIterations)),
-        expectedConfig(configuredRpcOptions(testerPrivateKey, boundedMaxIterations)),
-        expectedConfig(configuredRpcOptions(botPrivateKey, undefined)),
-      ],
-    );
-    assertWrittenResult(result);
-    assert.deepEqual(
-      result.written.map((entry) => entry.rpcConfigured),
-      [true, true, true],
-    );
-    assert.deepEqual(
-      result.written.map((entry) => entry.maxRetryableAttempts),
-      [3, 3, 3],
-    );
-    assert.doesNotMatch(jsonText(result), rpcSecretPattern);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -244,14 +132,6 @@ void test("live env config helper validates env before writing", async () => {
     {
       env: liveEnv({ [rpcUrlEnv]: "https://user@testnet.example/" }),
       message: `Invalid env ${rpcUrlEnv}`,
-    },
-    {
-      env: liveEnv({ [retryableAttemptsEnv]: "0" }),
-      message: `Invalid env ${retryableAttemptsEnv}`,
-    },
-    {
-      env: liveEnv({ [sleepIntervalEnv]: "1073742" }),
-      message: `Invalid env ${sleepIntervalEnv}`,
     },
   ];
   try {

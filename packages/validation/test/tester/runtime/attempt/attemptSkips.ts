@@ -10,7 +10,6 @@ import {
   matchableOrder,
   runTesterAttempt,
   runtimeWithSdk,
-  startTime,
   systemState,
   withdrawal,
   type TransactionResponse,
@@ -41,15 +40,12 @@ describe("runTesterAttempt skip outcomes", () => {
       });
       const executionLog: Record<string, unknown> = {};
 
-      const result = await runTesterAttempt({
+      await runTesterAttempt({
         runtime,
         testerScenario: "auto",
         feePolicy: { fee: 1n, feeBase: 100000n },
         executionLog,
-        startTime,
       });
-
-      expect(result).toBe("stop");
       expect(process.exitCode).toBe(2);
       expect(executionLog["error"]).toBe(LOW_CAPITAL_MESSAGE);
     } finally {
@@ -84,15 +80,12 @@ describe("runTesterAttempt pending-capital outcomes", () => {
       });
       const executionLog: Record<string, unknown> = {};
 
-      const result = await runTesterAttempt({
+      await runTesterAttempt({
         runtime,
         testerScenario: "auto",
         feePolicy: { fee: 1n, feeBase: 100000n },
         executionLog,
-        startTime,
       });
-
-      expect(result).toBe("completed");
       expect(process.exitCode).toBeUndefined();
       expect(executionLog["skip"]).toMatchObject({
         reason: ESTIMATED_TOO_SMALL_REASON,
@@ -159,15 +152,12 @@ describe("runTesterAttempt fresh-order outcomes", () => {
       };
     const executionLog: Record<string, unknown> = {};
 
-    const result = await runTesterAttempt({
+    await runTesterAttempt({
       runtime,
       testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
       feePolicy: { fee: 1n, feeBase: 100000n },
       executionLog,
-      startTime,
     });
-
-    expect(result).toBe("completed");
     expect(executionLog["skip"]).toMatchObject({
       reason: "fresh-matchable-order",
       txHash,

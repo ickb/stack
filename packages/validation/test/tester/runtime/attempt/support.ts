@@ -8,7 +8,7 @@ export { planTesterAttempt } from "../../../../src/tester/planning/testerAttempt
 export { buildSdkConversionTransaction } from "../../../../src/tester/runtime/runtime.ts";
 export { runTesterAttempt } from "../../../../src/tester/runtime/testerAttempt.ts";
 export { isRetryableTesterError } from "../../../../src/tester/runtime/testerErrors.ts";
-export { runTesterLoop } from "../../../../src/tester/runtime/testerLoop.ts";
+export { runTesterTurn } from "../../../../src/tester/runtime/testerTurn.ts";
 export {
   buildBaseTransactionMock,
   completeTransactionMock,
@@ -32,7 +32,6 @@ export {
   type TransactionResponse,
 } from "../../../support/tester/index.ts";
 
-export const startTime = new Date("2024-01-01T00:00:00.000Z");
 export const LOW_CAPITAL_MESSAGE =
   "Not enough funds to continue testing, shutting down...";
 

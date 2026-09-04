@@ -138,16 +138,12 @@ async function linkSymbolic(
 
 function baseConfig(privateKey: string): {
   chain: string;
-  maxIterations: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 } {
   return {
     chain: "testnet",
     privateKey,
     rpcUrl: "https://testnet.example/",
-    sleepIntervalSeconds: 1,
-    maxIterations: 1,
   };
 }

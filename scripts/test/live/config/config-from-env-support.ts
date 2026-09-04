@@ -13,22 +13,16 @@ const { join } = path;
 export const botPrivateKeyEnv = "ICKB_TESTNET_BOT_PRIVATE_KEY";
 export const testerPrivateKeyEnv = "ICKB_TESTNET_TESTER_PRIVATE_KEY";
 export const rpcUrlEnv = "ICKB_TESTNET_RPC_URL";
-export const sleepIntervalEnv = "ICKB_TESTNET_SLEEP_INTERVAL_SECONDS";
-export const retryableAttemptsEnv = "ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS";
 export const botPrivateKey = `0x${"11".repeat(32)}`;
 export const testerPrivateKey = `0x${"22".repeat(32)}`;
 export const configDir = "config";
 export const botConfigFile = "bot-testnet.json";
 export const testerConfigFile = "tester-testnet.json";
-export const botLiveConfigFile = "bot-live-testnet.json";
 export const botConfigPath = `config/${botConfigFile}`;
 export const testerConfigPath = `config/${testerConfigFile}`;
-export const botLiveConfigPath = `config/${botLiveConfigFile}`;
 export const tempPrefix = "ickb-live-config-env-";
 export const rootTempPrefix = "ickb-live-config-env-root-";
 export const testnetChain = "testnet";
-export const defaultMaxRetryableAttempts = 10;
-export const boundedMaxIterations = 1;
 export const configFileMode = 0o600;
 export const testnetRpcUrl = "https://testnet.example/path?token=secret";
 export const configSecretPattern = /0x11|0x22/u;
@@ -36,7 +30,6 @@ export const rpcSecretPattern = /0x11|0x22|token=secret/u;
 
 const configPathPrefix = `${configDir}/`;
 const privateKeyPlaceholder = "<written-to-config-file>";
-const defaultSleepIntervalSeconds = 60;
 
 type RunOptions = Parameters<typeof runLiveConfigFromEnv>[0];
 export type LiveConfigDependencies = NonNullable<RunOptions["dependencies"]>;
@@ -45,41 +38,19 @@ export type LiveConfigResult = Awaited<ReturnType<typeof runLiveConfigFromEnv>>;
 
 interface ExpectedConfig {
   chain: "testnet";
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 }
 
 type ConfigJson = Record<string, boolean | number | string>;
 
-interface ExpectedConfigOptions {
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
-  privateKey: string;
-  rpcUrl?: string;
-  sleepIntervalSeconds?: number;
-}
-
 interface ExpectedWrittenConfig {
   chain: "testnet";
-  maxIterations: number | undefined;
-  maxRetryableAttempts: number | undefined;
   outputPath: string;
   privateKey: string;
   role: string;
   rpcConfigured: boolean;
-  sleepIntervalSeconds: number;
 }
-
-interface ExpectedWrittenOptions {
-  maxRetryableAttempts?: number;
-  rpcConfigured?: boolean;
-  sleepIntervalSeconds?: number;
-}
-
-type WrittenLiveConfigResult = Extract<LiveConfigResult, { written: unknown[] }>;
 
 export async function runLiveConfig(
   root: string,
@@ -106,59 +77,18 @@ export function liveEnv(overrides: LiveConfigEnv = {}): LiveConfigEnv {
   };
 }
 
-export function expectedConfig(options: ExpectedConfigOptions): ExpectedConfig {
-  const config: ExpectedConfig = {
-    chain: testnetChain,
-    privateKey: options.privateKey,
-    rpcUrl: options.rpcUrl ?? testnetRpcUrl,
-    sleepIntervalSeconds: options.sleepIntervalSeconds ?? defaultSleepIntervalSeconds,
-  };
-  if (options.maxIterations !== undefined) {
-    config.maxIterations = options.maxIterations;
-  }
-  if (options.maxRetryableAttempts !== undefined) {
-    config.maxRetryableAttempts = options.maxRetryableAttempts;
-  }
-  return config;
+export function expectedConfig(privateKey: string, rpcUrl = testnetRpcUrl): ExpectedConfig {
+  return { chain: testnetChain, privateKey, rpcUrl };
 }
 
-export function configuredRpcOptions(
-  privateKey: string,
-  maxIterations: number | undefined,
-): ExpectedConfigOptions {
-  return {
-    privateKey,
-    rpcUrl: testnetRpcUrl,
-    sleepIntervalSeconds: 10,
-    maxIterations,
-    maxRetryableAttempts: 3,
-  };
-}
-
-export function expectedWritten(
-  role: string,
-  outputPath: string,
-  maxIterations: number | undefined,
-  options: ExpectedWrittenOptions = {},
-): ExpectedWrittenConfig {
+export function expectedWritten(role: string, outputPath: string): ExpectedWrittenConfig {
   return {
     role,
     outputPath,
     chain: testnetChain,
-    rpcConfigured: options.rpcConfigured ?? true,
-    sleepIntervalSeconds: options.sleepIntervalSeconds ?? defaultSleepIntervalSeconds,
-    maxIterations,
-    maxRetryableAttempts:
-      options.maxRetryableAttempts ??
-      (maxIterations === undefined ? undefined : defaultMaxRetryableAttempts),
+    rpcConfigured: true,
     privateKey: privateKeyPlaceholder,
   };
-}
-
-export function assertWrittenResult(
-  result: LiveConfigResult,
-): asserts result is WrittenLiveConfigResult {
-  assert("written" in result);
 }
 
 export function hasMessage(expected: string): (error: unknown) => boolean {

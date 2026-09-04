@@ -6,7 +6,7 @@ const CIRCULAR_LOG_VALUE = "[Circular]";
 const UNSAFE_LOG_VALUE = "[Unsupported log value]";
 const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
 
-/** Process exit code used when a loop stops after a confirmation timeout. */
+/** Exit code for a stop that must not be retried by a restart: the broadcast outcome is unresolved. */
 export const STOP_EXIT_CODE = 2;
 
 type JsonLogPrimitive = string | number | boolean | symbol | null | undefined;
@@ -19,9 +19,9 @@ interface JsonLogRecord {
 }
 
 /**
- * Records a JSON-safe error on the execution log and returns true when the loop should stop.
+ * Records a JSON-safe error on the execution log and returns true when the run must not be retried.
  */
-export function handleLoopError(
+export function recordExecutionError(
   executionLog: Record<string, unknown>,
   error: unknown,
 ): boolean {

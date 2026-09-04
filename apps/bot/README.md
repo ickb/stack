@@ -18,14 +18,11 @@ The bot reads one strict JSON config file named by `BOT_CONFIG_FILE`:
 {
   "chain": "testnet",
   "privateKey": "0x...",
-  "rpcUrl": "http://127.0.0.1:8114/",
-  "sleepIntervalSeconds": 60,
-  "maxIterations": 1,
-  "maxRetryableAttempts": 10
+  "rpcUrl": "http://127.0.0.1:8114/"
 }
 ```
 
-The JSON config accepts exactly `chain`, `privateKey`, `rpcUrl`, `sleepIntervalSeconds`, optional `maxIterations`, and optional `maxRetryableAttempts`. `rpcUrl` is required and exclusive: the client does not keep CCC public fallbacks beside that URL. Unknown keys, wrong types, omitted/empty/non-HTTP(S) RPC URLs, URL userinfo, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
+The JSON config accepts exactly `chain`, `privateKey`, and `rpcUrl`. `rpcUrl` is required and exclusive: the client does not keep CCC public fallbacks beside that URL. Unknown keys, wrong types, omitted/empty/non-HTTP(S) RPC URLs, URL userinfo, whitespace/control characters in `rpcUrl`, and non-canonical private keys are rejected. The private key must be exactly lowercase `0x` plus 64 lowercase hex characters, with no newline, spaces, tabs, or comments. Local config files under `config/` are ignored by git.
 
 For local testnet live supervision, keep funded identities in external environment variables and rebuild disposable ignored configs when needed:
 
@@ -33,14 +30,13 @@ For local testnet live supervision, keep funded identities in external environme
 export ICKB_TESTNET_BOT_PRIVATE_KEY='0x...'
 export ICKB_TESTNET_TESTER_PRIVATE_KEY='0x...'
 export ICKB_TESTNET_RPC_URL='https://testnet.ckb.dev/'
-# Optional: export ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS=10 to cap all generated configs
 pnpm live:config-from-env -- --force
 ```
 
-The helper writes bounded `config/bot-testnet.json` and `config/tester-testnet.json` for supervisor/tester runs, plus unbounded `config/bot-live-testnet.json` for a production-like long-running bot. Bounded configs default to `maxRetryableAttempts: 10`; the live config omits `maxRetryableAttempts` unless `ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS` is set intentionally. Use the live config when the goal is continuous matching:
+The helper writes `config/bot-testnet.json` and `config/tester-testnet.json`. Each bot process runs one turn and exits, so continuous matching is a loop around this command, a systemd unit with `Restart=always`, or the operator between reads:
 
 ```bash
-BOT_CONFIG_FILE=config/bot-live-testnet.json node src/index.ts
+BOT_CONFIG_FILE=config/bot-testnet.json node src/index.ts
 ```
 
 Current network support:
@@ -104,7 +100,7 @@ Transaction events summarize action counts, fee, fee rate, tx hash, phase, outco
 
 Observed testnet full-node send rejection signatures for generic stale-state races are: in-pool same-input conflict can return `code:-1111` with `data:"RBFRejected(...)"` and CCC fields `currentFee`/`leastFee`; a post-commit spent input returns `code:-301` with `data:"Resolve(Unknown(OutPoint(...)))"` and CCC field `outPoint`; resending the same tx returns `code:-1107` with `data:"Duplicated(Byte32(...))"` and CCC field `txHash`. CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC response id mismatch errors such as `Id mismatched, got null, expected 319` are also retry candidates because the bot discards the failed state read and rebuilds from fresh state. Treat these as retry candidates only when the bot discards the transaction or read state and rebuilds from fresh state, not by blindly resending the same transaction.
 
-JSON `"maxIterations":1` makes `pnpm --filter ./apps/bot start` exit with code `0` after one completed iteration: a skipped decision or committed transaction. Nonretryable iteration failures exit with code `1`. One broadcast gets one observation window: no confirmation outcome other than an RBF replacement rebuilds and resends, and a nonretryable post-broadcast confirmation failure, including the finite 10-minute confirmation timeout, exits with code `2` so systemd stops the unit instead of restarting a turn that would resend the intent. Retryable iteration failures do not count toward `maxIterations`; set `maxRetryableAttempts` to stop repeated fresh-state retries with exit code `2` after that many consecutive retryable failures. Low capital also exits with code `2`. Omitting `maxIterations` keeps the default infinite loop; omitting `maxRetryableAttempts` leaves retryable attempts unbounded.
+One process is one turn: `pnpm --filter ./apps/bot start` exits with code `0` after a skipped decision or a committed transaction, and with code `1` after a failure that a fresh turn may retry, which is the restart policy's cue. One broadcast gets one observation window: no confirmation outcome other than an RBF replacement rebuilds and resends, and a nonretryable post-broadcast confirmation failure, including the finite 10-minute confirmation timeout, exits with code `2` so systemd stops the unit instead of restarting a turn that would resend the intent. Low capital also exits with code `2`.
 
 Structured events contain the evidence needed to understand bot behavior. The bot must not print its configured private key to events, errors, stdout, or stderr. Private keys are for signing only: logger, event, error, and test-hook APIs must not receive private keys, signers, secret contexts, masking callbacks, redaction parameters, or guard inputs. Tests use a configured canary private key from outside the production path and verify produced output cannot reveal it. Secrets, credentialed RPC URLs, tokens, passwords, API keys, and secret-bearing config/env dumps must not be logged or passed to logging, redaction, masking, or guard helpers.
 
@@ -119,7 +115,7 @@ jq -c 'select(.app == "bot" and .type == "bot.decision.skipped") | {timestamp, c
 jq -c 'select(.app == "bot" and .type == "bot.match.evaluated") | {timestamp, iterationId, reason: .match.reason, orders, diagnostics: .match.diagnostics}' "$EVENT_FILE"
 jq -c 'select(.app == "bot" and .type == "bot.rebalance.evaluated") | {timestamp, iterationId, rebalance, poolDeposits}' "$EVENT_FILE"
 jq -c 'select(.app == "bot" and (.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, iterationId, reason, actions, reserve: .decision.audit.reserveCheck, ring: .decision.audit.selectedRing}' "$EVENT_FILE"
-jq -c 'select(.app == "bot" and (.type == "bot.transaction.failed" or .type == "bot.iteration.failed")) | {timestamp, chain, runId, iterationId, type, phase, outcome, retryable, terminal, retryableAttempts, maxRetryableAttempts, retryBudgetExhausted, txHash, status, elapsedMs, timeoutMs, intervalMs, error}' "$EVENT_FILE"
+jq -c 'select(.app == "bot" and (.type == "bot.transaction.failed" or .type == "bot.iteration.failed")) | {timestamp, chain, runId, iterationId, type, phase, outcome, retryable, terminal, txHash, status, elapsedMs, timeoutMs, intervalMs, error}' "$EVENT_FILE"
 ```
 
 ## Ubuntu systemd Deployment
@@ -161,7 +157,7 @@ sudo scripts/ickb-bot-systemd-install.sh all
 
 The installer copies Git metadata into a staging directory, checks out `HEAD`, and runs `pnpm bot:install` and `pnpm bot:check` as the matching service user before publishing the release. It refuses a dirty source checkout. Existing release-layout installs are validated and their units can be regenerated without replacing `current`; the validator permits the intentional `current` code symlink but rejects symlinks in the deployment root, `releases`, shared `log`, or `log/bot` paths.
 
-Create encrypted config credentials on the VM. The helper prompts for the private key, required RPC URL, sleep interval, optional max iterations, and optional max retryable attempts. Leaving the RPC URL empty fails validation; leaving the retryable-attempt prompt empty keeps retryable attempts unbounded. The helper validates the bot JSON config and encrypts it as one systemd credential. Private keys and sensitive RPC URLs must stay inside the encrypted credential and must not appear in logs, unit text, environment dumps, incident bundles, or diagnostic output.
+Create encrypted config credentials on the VM. The helper prompts for the private key and the required RPC URL; leaving the RPC URL empty fails validation. The helper validates the bot JSON config and encrypts it as one systemd credential. Private keys and sensitive RPC URLs must stay inside the encrypted credential and must not appear in logs, unit text, environment dumps, incident bundles, or diagnostic output.
 
 ```bash
 sudo systemd-creds setup
@@ -202,7 +198,7 @@ The updater requires the service to be active and serializes each network with `
 
 Readiness is bounded to 120 seconds by default: the service must be active and the journal of its current invocation must contain a canonical successful `bot.chain.preflight` for the network. A rollback is proved the same way.
 
-Exit code `2` is an intentional safety stop, including low capital, exhausted retryable-failure budget, and a nonretryable post-broadcast confirmation failure. `RestartPreventExitStatus=2` keeps systemd from relaunching immediately. Before restarting, inspect the journal for the terminal event and the exit status:
+Exit code `2` is an intentional safety stop, including low capital and a nonretryable post-broadcast confirmation failure. `RestartPreventExitStatus=2` keeps systemd from relaunching immediately. Before restarting, inspect the journal for the terminal event and the exit status:
 
 ```bash
 sudo journalctl -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | jq -c 'select(.app == "bot" and (.terminal == true or .type == "bot.decision.skipped" or .type == "bot.transaction.failed" or .type == "bot.iteration.failed"))'

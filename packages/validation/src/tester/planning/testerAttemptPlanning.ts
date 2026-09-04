@@ -59,12 +59,10 @@ interface PlanTesterAttemptOptions {
   totalEquivalentCkb: bigint;
   executionLog: ExecutionLog;
   executionLogWriter?: ExecutionLogWriter;
-  startTime: Date;
 }
 interface CapitalSkipOptions {
   executionLog: ExecutionLog;
   executionLogWriter: ExecutionLogWriter;
-  startTime: Date;
   totalEquivalentCkb: bigint;
   depositCapacity: bigint;
 }
@@ -77,12 +75,10 @@ export async function planTesterAttempt({
   totalEquivalentCkb,
   executionLog,
   executionLogWriter = createExecutionLogWriter(executionLog),
-  startTime,
-}: PlanTesterAttemptOptions): Promise<PlannedTesterAttempt | "stop" | undefined> {
+}: PlanTesterAttemptOptions): Promise<PlannedTesterAttempt | undefined> {
   const capitalSkipOptions = {
     executionLog,
     executionLogWriter,
-    startTime,
     totalEquivalentCkb,
     depositCapacity,
   };
@@ -214,13 +210,12 @@ function recordTesterEstimatedTooSmallSkip({
 function skipUnfundedAutoScenario({
   executionLog,
   executionLogWriter,
-  startTime,
   totalEquivalentCkb,
   depositCapacity,
-}: CapitalSkipOptions): "stop" | undefined {
+}: CapitalSkipOptions): PlannedTesterAttempt | undefined {
   if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
-    stopForLowTesterCapital(executionLog, startTime);
-    return "stop";
+    stopForLowTesterCapital(executionLog);
+    return undefined;
   }
   executionLogWriter.record({ skip: testerNoActionableAutoScenarioSkip() });
   return undefined;
@@ -228,13 +223,12 @@ function skipUnfundedAutoScenario({
 function skipEmptyRawOrders({
   executionLog,
   executionLogWriter,
-  startTime,
   totalEquivalentCkb,
   depositCapacity,
-}: CapitalSkipOptions): "stop" | undefined {
+}: CapitalSkipOptions): PlannedTesterAttempt | undefined {
   if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
-    stopForLowTesterCapital(executionLog, startTime);
-    return "stop";
+    stopForLowTesterCapital(executionLog);
+    return undefined;
   }
   executionLogWriter.record({ skip: { reason: "sampled-amount-too-small" } });
   return undefined;

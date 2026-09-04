@@ -1,4 +1,4 @@
-import { handleLoopError, logExecution } from "@ickb/node-utils";
+import { logExecution, recordExecutionError } from "@ickb/node-utils";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -45,9 +45,6 @@ describe("readTesterRuntimeConfig", () => {
           chain: TESTNET_CHAIN,
           privateKey,
           rpcUrl: LOCAL_RPC_URL,
-          sleepIntervalSeconds: 10,
-          maxIterations: 1,
-          maxRetryableAttempts: 3,
         }),
         { mode: 0o600 },
       );
@@ -58,9 +55,6 @@ describe("readTesterRuntimeConfig", () => {
         chain: TESTNET_CHAIN,
         privateKey,
         rpcUrl: LOCAL_RPC_URL,
-        sleepIntervalMs: 10000,
-        maxIterations: 1,
-        maxRetryableAttempts: 3,
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -150,8 +144,6 @@ describe("tester private key output boundary", () => {
           chain: TESTNET_CHAIN,
           privateKey,
           rpcUrl: rpcUrlCanary,
-          sleepIntervalSeconds: 10,
-          maxIterations: 1,
         }),
         { mode: 0o600 },
       );
@@ -160,11 +152,10 @@ describe("tester private key output boundary", () => {
       });
       const executionLog: Record<string, unknown> = {
         chain: runtimeConfig.chain,
-        maxIterations: runtimeConfig.maxIterations,
         startTime: "fixture",
       };
 
-      handleLoopError(executionLog, new Error("tester deterministic crash"));
+      recordExecutionError(executionLog, new Error("tester deterministic crash"));
       logExecution(executionLog, new Date());
 
       expect(runtimeConfig.privateKey).toBe(privateKey);

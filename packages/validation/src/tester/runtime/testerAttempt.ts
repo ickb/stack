@@ -29,9 +29,6 @@ export { stopForLowTesterCapital } from "./testerStop.ts";
 
 const VALIDATION_TRANSACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
-/** Outcome returned by one tester attempt. */
-export type TesterAttemptResult = "completed" | "retry" | "stop";
-
 /**
  * Reads state, plans one tester action, applies reserve checks, and sends when actionable.
  */
@@ -40,14 +37,12 @@ export async function runTesterAttempt({
   testerScenario,
   feePolicy,
   executionLog,
-  startTime,
 }: {
   runtime: Runtime;
   testerScenario: TesterScenarioSelection;
   feePolicy: TesterFeePolicy;
   executionLog: ExecutionLog;
-  startTime: Date;
-}): Promise<TesterAttemptResult> {
+}): Promise<void> {
   const state = await readTesterState(runtime);
   const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, state.system.exchangeRatio);
   const totalEquivalentCkb =
@@ -66,7 +61,7 @@ export async function runTesterAttempt({
   );
   if (skip !== undefined) {
     executionLogWriter.record({ skip });
-    return "completed";
+    return;
   }
   const planned = await planTesterAttempt({
     runtime,
@@ -77,13 +72,9 @@ export async function runTesterAttempt({
     totalEquivalentCkb,
     executionLog,
     executionLogWriter,
-    startTime,
   });
-  if (planned === "stop") {
-    return "stop";
-  }
   if (planned === undefined) {
-    return "completed";
+    return;
   }
   await sendTesterAttempt({
     runtime,
@@ -92,7 +83,6 @@ export async function runTesterAttempt({
     planned,
     executionLogWriter,
   });
-  return "completed";
 }
 function testerBalanceLog(
   state: TesterState,

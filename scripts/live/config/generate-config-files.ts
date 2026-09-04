@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { link, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
+import {lstat, mkdir, open, realpath, unlink} from "node:fs/promises";
 import pathModule from "node:path";
 import { defaultCheckIgnored, type CheckIgnored } from "./git.ts";
 
@@ -95,32 +95,6 @@ async function missingAncestors(
   return missing;
 }
 
-export async function writeStagedConfigFile(
-  filePath: string,
-  text: string,
-  force: boolean,
-  dependencies: ConfigFileDependencies,
-): Promise<void> {
-  const tempPath = tempConfigPath(filePath);
-  let caught: unknown;
-  try {
-    await writeConfigFile(tempPath, text, false, dependencies);
-    await installStagedConfig(tempPath, filePath, force, dependencies);
-  } catch (error) {
-    caught = error;
-  }
-  try {
-    await cleanupPath(tempPath, dependencies);
-  } catch (error) {
-    if (caught === undefined) {
-      throw error;
-    }
-  }
-  if (caught !== undefined) {
-    throwAsError(caught, "Config write failed");
-  }
-}
-
 function isInsideRelativePath(relativePath: string): boolean {
   return !relativePath.startsWith("..") && !isAbsolute(relativePath);
 }
@@ -152,28 +126,6 @@ export async function writeConfigFile(
   }
 }
 
-async function installStagedConfig(
-  tempPath: string,
-  targetPath: string,
-  force: boolean,
-  dependencies: ConfigFileDependencies,
-): Promise<void> {
-  await assertNoSymlinkTarget(targetPath, dependencies);
-  if (force) {
-    await (dependencies.rename ?? rename)(tempPath, targetPath);
-    return;
-  }
-  try {
-    await (dependencies.link ?? link)(tempPath, targetPath);
-  } catch (error) {
-    if (isAlreadyExistsError(error)) {
-      throw new Error("Config already exists; rerun with --force to overwrite", {
-        cause: error,
-      });
-    }
-    throw error;
-  }
-}
 
 export async function cleanupPath(
   filePath: string,
@@ -231,13 +183,4 @@ export function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-function isAlreadyExistsError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
-}
 
-function throwAsError(caught: unknown, message: string): never {
-  if (caught instanceof Error) {
-    throw caught;
-  }
-  throw new Error(message, { cause: caught });
-}

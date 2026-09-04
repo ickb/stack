@@ -39,11 +39,8 @@ export interface PublicClientCall {
 
 interface RuntimeConfigJson {
   chain: string;
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 }
 
 interface MockOptions {
@@ -120,13 +117,7 @@ function mockNodeUtils(
 ): NodeUtilsRuntimeLike {
   return {
     readRuntimeConfigEnv: async (configPath: string): Promise<RuntimeConfigLike> => {
-      const parsed = parseRuntimeConfigJson(await readText(configPath));
-      return {
-        ...parsed,
-        rpcUrl: parsed.rpcUrl,
-        sleepIntervalMs: parsed.sleepIntervalSeconds * 1000,
-        maxRetryableAttempts: parsed.maxRetryableAttempts,
-      };
+      return parseRuntimeConfigJson(await readText(configPath));
     },
     createPublicClient: (chain: string, rpcUrl: string): MockPublicClient => {
       options.createPublicClientCalls?.push({ chain, rpcUrl });
@@ -246,15 +237,8 @@ function isRuntimeConfigJson(value: unknown): value is RuntimeConfigJson {
     isRecord(value) &&
     typeof value["chain"] === "string" &&
     typeof value["privateKey"] === "string" &&
-    typeof value["sleepIntervalSeconds"] === "number" &&
-    optionalNumber(value["maxIterations"]) &&
-    optionalNumber(value["maxRetryableAttempts"]) &&
     typeof value["rpcUrl"] === "string"
   );
-}
-
-function optionalNumber(value: unknown): boolean {
-  return value === undefined || typeof value === "number";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -11,7 +11,6 @@ import {
   planTesterAttempt,
   requestMock,
   runtimeWithSdk,
-  startTime,
   testerState,
 } from "./support.ts";
 
@@ -33,7 +32,6 @@ describe("planTesterAttempt transaction building", () => {
       depositCapacity: ccc.fixedPointFrom(1000),
       totalEquivalentCkb: ccc.fixedPointFrom(3000),
       executionLog: {},
-      startTime,
     });
 
     expect(result).toMatchObject({
@@ -88,7 +86,6 @@ describe("planTesterAttempt transaction building", () => {
       depositCapacity: ccc.fixedPointFrom(1000),
       totalEquivalentCkb: ccc.fixedPointFrom(2000),
       executionLog,
-      startTime,
     });
 
     expect(result).toBeUndefined();

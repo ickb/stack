@@ -3,7 +3,6 @@ import {
   isRetryableRpcResponseShapeError,
   isRetryableRpcTransportError,
   STOP_EXIT_CODE,
-  type RuntimeConfig,
 } from "@ickb/node-utils";
 import { TransactionBroadcastError } from "@ickb/sdk";
 import { errorSummary } from "../observability/error.ts";
@@ -15,158 +14,40 @@ interface TransactionConfirmationErrorLike extends Error {
   reason: unknown;
 }
 
-export interface FailureHandlingResult {
-  retryableAttempt: boolean;
-  retryableAttempts: number;
-  stopAfterLog: boolean;
-}
-
-interface IterationFailureFields extends Record<string, unknown> {
-  error: Record<string, unknown> | string;
-  retryable: boolean;
-  terminal: boolean;
-  retryBudgetExhausted?: boolean;
-}
-
-interface FailureHandlingContext {
-  events: {
-    emit: (
-      iterationId: number,
-      type: "bot.iteration.failed",
-      fields?: Record<string, unknown>,
-    ) => unknown;
-  };
-  maxRetryableAttempts: RuntimeConfig["maxRetryableAttempts"];
-}
-
-export function handleIterationFailure({
-  context,
-  iterationId,
-  error,
-  retryableAttempts,
-}: {
-  context: FailureHandlingContext;
-  iterationId: number;
-  error: unknown;
-  retryableAttempts: number;
-}): FailureHandlingResult {
-  const retryable = isRetryableBotError(error);
-  const nextRetryableAttempts = retryable ? retryableAttempts + 1 : retryableAttempts;
-  const failure = retryable
-    ? iterationFailureEventFields(error, {
-        retryableAttempts: nextRetryableAttempts,
-        maxRetryableAttempts: context.maxRetryableAttempts,
-      })
-    : iterationFailureEventFields(error);
-  context.events.emit(iterationId, "bot.iteration.failed", failure);
-  if (failure.retryable) {
-    return handleRetryableFailure(failure, nextRetryableAttempts);
-  }
-  return handleNonRetryableFailure(error, nextRetryableAttempts);
+interface FailureEvents {
+  emit: (
+    iterationId: number,
+    type: "bot.iteration.failed",
+    fields?: Record<string, unknown>,
+  ) => unknown;
 }
 
 /**
- * Builds public failure fields for bot loop events.
+ * Emits the failure event and sets the exit code that tells the service manager what to do:
+ * 1 lets it start another turn, STOP_EXIT_CODE holds it because a broadcast outcome is unresolved.
  */
-export function iterationFailureEventFields(error: unknown): {
-  error: Record<string, unknown> | string;
-  retryable: boolean;
-  terminal: boolean;
-  retryableAttempts?: number;
-  maxRetryableAttempts?: number;
-  retryBudgetExhausted?: boolean;
-};
-export function iterationFailureEventFields(
+export function handleIterationFailure(
+  events: FailureEvents,
+  iterationId: number,
   error: unknown,
-  retryBudget: {
-    retryableAttempts: number;
-    maxRetryableAttempts: number | undefined;
-  },
-): {
-  error: Record<string, unknown> | string;
-  retryable: boolean;
-  terminal: boolean;
-  retryableAttempts: number;
-  maxRetryableAttempts?: number;
-  retryBudgetExhausted: boolean;
-};
-export function iterationFailureEventFields(
-  error: unknown,
-  retryBudget?: {
-    retryableAttempts: number;
-    maxRetryableAttempts: number | undefined;
-  },
-): {
-  error: Record<string, unknown> | string;
-  retryable: boolean;
-  terminal: boolean;
-  retryableAttempts?: number;
-  maxRetryableAttempts?: number;
-  retryBudgetExhausted?: boolean;
-} {
+): void {
   const retryable = isRetryableBotError(error);
-  const retryBudgetExhausted =
-    retryable &&
-    retryBudget !== undefined &&
-    reachedMaxRetryableAttempts(
-      retryBudget.retryableAttempts,
-      retryBudget.maxRetryableAttempts,
-    );
-  return {
+  events.emit(iterationId, "bot.iteration.failed", {
     error: errorSummary(error, { includeStack: !retryable }),
     retryable,
-    terminal: !retryable || retryBudgetExhausted,
-    ...(retryBudget === undefined
-      ? {}
-      : {
-          retryableAttempts: retryBudget.retryableAttempts,
-          ...(retryBudget.maxRetryableAttempts === undefined
-            ? {}
-            : { maxRetryableAttempts: retryBudget.maxRetryableAttempts }),
-          retryBudgetExhausted,
-        }),
-  };
+    terminal: !retryable,
+  });
+  process.exitCode = retryable || !isUnresolvedBroadcast(error) ? 1 : STOP_EXIT_CODE;
 }
 
-function handleRetryableFailure(
-  failure: IterationFailureFields,
-  retryableAttempts: number,
-): FailureHandlingResult {
-  if (failure.retryBudgetExhausted === true) {
-    process.exitCode = STOP_EXIT_CODE;
-    return { retryableAttempt: true, retryableAttempts, stopAfterLog: true };
-  }
-  return { retryableAttempt: true, retryableAttempts, stopAfterLog: false };
-}
-
-function handleNonRetryableFailure(
-  error: unknown,
-  retryableAttempts: number,
-): FailureHandlingResult {
-  // The transaction may already be accepted and its outcome stayed unresolved,
-  // so a restart could resend funds: stop the service instead of letting the
-  // supervisor relaunch the turn. A node hash mismatch is such an outcome, since
-  // the node answered the send RPC about a transaction this attempt cannot bind.
-  process.exitCode =
+// The transaction may already be accepted while its outcome stayed unresolved, so a
+// fresh turn could resend funds. A node hash mismatch is such an outcome: the node
+// answered the send RPC about a transaction this attempt cannot bind.
+function isUnresolvedBroadcast(error: unknown): boolean {
+  return (
     (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined) ||
     (error instanceof Error && isTransactionConfirmationErrorLike(error))
-      ? STOP_EXIT_CODE
-      : 1;
-  return {
-    retryableAttempt: false,
-    retryableAttempts,
-    stopAfterLog: true,
-  };
-}
-
-/**
- * Reports whether retryable failures have consumed the configured retry budget.
- */
-export function reachedMaxRetryableAttempts(
-  retryableAttempts: number,
-  maxRetryableAttempts: number | undefined,
-): boolean {
-  return maxRetryableAttempts !== undefined && retryableAttempts >= maxRetryableAttempts;
+  );
 }
 
 /**

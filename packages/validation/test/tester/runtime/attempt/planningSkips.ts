@@ -6,7 +6,6 @@ import {
   ccc,
   planTesterAttempt,
   runtimeWithSdk,
-  startTime,
   testerState,
 } from "./support.ts";
 
@@ -21,7 +20,6 @@ describe("planTesterAttempt", () => {
       depositCapacity: ccc.fixedPointFrom(1000),
       totalEquivalentCkb: ccc.fixedPointFrom(1000) + 1n,
       executionLog,
-      startTime,
     });
 
     expect(result).toBeUndefined();
@@ -46,10 +44,8 @@ describe("planTesterAttempt", () => {
         depositCapacity: ccc.fixedPointFrom(1000),
         totalEquivalentCkb: 1n,
         executionLog,
-        startTime,
       });
-
-      expect(result).toBe("stop");
+      expect(result).toBeUndefined();
       expect(process.exitCode).toBe(2);
       expect(executionLog["error"]).toBe(LOW_CAPITAL_MESSAGE);
     } finally {
@@ -69,7 +65,6 @@ describe("planTesterAttempt", () => {
       depositCapacity: ccc.fixedPointFrom(1000),
       totalEquivalentCkb: ccc.fixedPointFrom(2000),
       executionLog,
-      startTime,
     });
 
     expect(result).toBeUndefined();

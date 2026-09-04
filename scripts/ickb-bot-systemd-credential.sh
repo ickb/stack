@@ -43,7 +43,7 @@ if (config.chain !== expectedChain) fail();
 process.stdout.write(JSON.stringify(config));
 })();
 function fail() {
-  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, rpcUrl, sleepIntervalSeconds, optional maxIterations, and optional maxRetryableAttempts.\n");
+  process.stderr.write("Invalid bot config: expected exact JSON with matching chain, privateKey, and rpcUrl.\n");
   process.exit(1);
 }
 ' "${repo_root}" "${expected_chain}"
@@ -127,34 +127,12 @@ main() {
   umask 077
   local private_key
   local rpc_url
-  local sleep_interval
-  local max_iterations
-  local retryable_prompt
-  local max_retryable_attempts
   private_key=$(systemd-ask-password -n "iCKB ${network} bot private key:")
   rpc_url=$(systemd-ask-password -n "iCKB ${network} RPC URL:")
-  read -r -p "iCKB ${network} bot sleep interval seconds [60]: " sleep_interval
-  sleep_interval=${sleep_interval:-60}
-  read -r -p "iCKB ${network} bot max iterations [empty for unbounded]: " max_iterations
-  retryable_prompt="iCKB ${network} bot max retryable attempts [empty for unbounded]: "
-  read -r -p "${retryable_prompt}" max_retryable_attempts
-  printf '%s\0%s\0%s\0%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" "${sleep_interval}" "${max_iterations}" "${max_retryable_attempts}" |
+  printf '%s\0%s\0%s' "${network}" "${private_key}" "${rpc_url}" |
   node -e '
-const input = require("node:fs").readFileSync(0).toString("utf8").split("\0");
-const [chain, privateKey, rpcUrl, sleepIntervalSeconds, maxIterations, maxRetryableAttempts] = input;
-const config = {
-  chain,
-  privateKey,
-  rpcUrl,
-  sleepIntervalSeconds: Number(sleepIntervalSeconds),
-};
-if (maxIterations !== "") {
-  config.maxIterations = Number(maxIterations);
-}
-if (maxRetryableAttempts !== "") {
-  config.maxRetryableAttempts = Number(maxRetryableAttempts);
-}
-process.stdout.write(JSON.stringify(config));
+const [chain, privateKey, rpcUrl] = require("node:fs").readFileSync(0).toString("utf8").split("\0");
+process.stdout.write(JSON.stringify({ chain, privateKey, rpcUrl }));
 ' |
     validate_config "${network}" "${repo_root}" |
     systemd-creds encrypt --with-key=host --name="${credential_name}" - "${tmp}"

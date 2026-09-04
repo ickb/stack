@@ -65,7 +65,7 @@ BOT_CONFIG_FILE=config/bot-testnet.json node apps/bot/src/index.ts >> log/bot/ev
 TESTER_CONFIG_FILE=config/tester-testnet.json TESTER_SCENARIO=auto node apps/validation/src/tester.ts
 ```
 
-The config helper needs `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL`; it writes ignored `config/bot-testnet.json`, `config/tester-testnet.json`, and the unbounded `config/bot-live-testnet.json`. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
+The config helper needs `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL`; it writes ignored `config/bot-testnet.json` and `config/tester-testnet.json`. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
 
 To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd the bot's stream is the unit's journal; see `apps/bot/README.md`.
 

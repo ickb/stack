@@ -27,8 +27,5 @@ export { stopForLowTesterCapital } from "./runtime/testerAttempt.ts";
 export {
   handleTesterAttemptError,
   isRetryableTesterError,
-  isTerminalTesterError,
-  testerRetryableFailureFields,
 } from "./runtime/testerErrors.ts";
-export { shouldSleepBeforeTesterAttempt } from "./runtime/testerLoop.ts";
 export { TesterTerminalError } from "./runtime/testerTypes.ts";

@@ -29,7 +29,6 @@ import {
   runTesterAttempt,
   runtimeWithSdk,
   script,
-  startTime,
   systemState,
 } from "./support.ts";
 
@@ -57,15 +56,12 @@ describe("runTesterAttempt send outcomes", () => {
     waitTransactionMock.mockResolvedValueOnce(committedResponse());
     const executionLog: Record<string, unknown> = {};
 
-    const result = await runTesterAttempt({
+    await runTesterAttempt({
       runtime,
       testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
       feePolicy: { fee: 1n, feeBase: 100000n },
       executionLog,
-      startTime,
     });
-
-    expect(result).toBe("completed");
     expect(sendTransaction).toHaveBeenCalledTimes(1);
     expect(waitTransactionMock).toHaveBeenCalledWith(runtime.client, txHash, {
       timeout: 600_000,
@@ -172,7 +168,7 @@ describe("runTesterAttempt send ambiguity", () => {
     waitTransactionMock.mockResolvedValueOnce(committedResponse());
     const executionLog: Record<string, unknown> = {};
 
-    await expect(runFundedSendAttempt(runtime, executionLog)).resolves.toBe("completed");
+    await expect(runFundedSendAttempt(runtime, executionLog)).resolves.toBeUndefined();
 
     expect(signAndSendTransactionMock).toHaveBeenCalledTimes(1);
     expect(waitTransactionMock).toHaveBeenCalledTimes(1);
@@ -257,15 +253,12 @@ describe("runTesterAttempt reserve outcomes", () => {
     runtime.accountLocks = [lock];
     const executionLog: Record<string, unknown> = {};
 
-    const result = await runTesterAttempt({
+    await runTesterAttempt({
       runtime,
       testerScenario: ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
       feePolicy: { fee: 1n, feeBase: 100000n },
       executionLog,
-      startTime,
     });
-
-    expect(result).toBe("completed");
     expect(waitTransactionMock).not.toHaveBeenCalled();
     expect(executionLog["skip"]).toMatchObject({
       reason: "post-tx-ckb-reserve",
@@ -315,7 +308,6 @@ async function runFundedSendAttempt(
     testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
     feePolicy: { fee: 1n, feeBase: 100000n },
     executionLog,
-    startTime,
   });
 }
 

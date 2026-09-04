@@ -19,31 +19,12 @@ const rootDir = fileURLToPath(new URL("../../..", import.meta.url));
 const { resolve } = pathModule;
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
-const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
-const MAX_SLEEP_INTERVAL_SECONDS = Math.floor(2_147_483_647 / 2 / 1000);
-const DEFAULT_SLEEP_INTERVAL_SECONDS = 60;
-const DEFAULT_BOUNDED_MAX_RETRYABLE_ATTEMPTS = 10;
 const OUTPUTS: readonly LiveConfigOutput[] = [
-  {
-    role: "bot",
-    envName: "ICKB_TESTNET_BOT_PRIVATE_KEY",
-    out: "config/bot-testnet.json",
-    maxIterations: 1,
-    defaultMaxRetryableAttempts: DEFAULT_BOUNDED_MAX_RETRYABLE_ATTEMPTS,
-  },
+  { role: "bot", envName: "ICKB_TESTNET_BOT_PRIVATE_KEY", out: "config/bot-testnet.json" },
   {
     role: "tester",
     envName: "ICKB_TESTNET_TESTER_PRIVATE_KEY",
     out: "config/tester-testnet.json",
-    maxIterations: 1,
-    defaultMaxRetryableAttempts: DEFAULT_BOUNDED_MAX_RETRYABLE_ATTEMPTS,
-  },
-  {
-    role: "bot-live",
-    envName: "ICKB_TESTNET_BOT_PRIVATE_KEY",
-    out: "config/bot-live-testnet.json",
-    maxIterations: undefined,
-    defaultMaxRetryableAttempts: undefined,
   },
 ];
 
@@ -55,19 +36,14 @@ interface LiveConfigArgs {
 type LiveConfigEnv = Record<string, string | undefined>;
 
 interface LiveConfigOutput {
-  defaultMaxRetryableAttempts: number | undefined;
   envName: "ICKB_TESTNET_BOT_PRIVATE_KEY" | "ICKB_TESTNET_TESTER_PRIVATE_KEY";
-  maxIterations: number | undefined;
   out: string;
   role: string;
 }
 
 interface RuntimeConfigInput {
-  maxIterations?: number;
-  maxRetryableAttempts?: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 }
 
 type RuntimeConfig = RuntimeConfigInput & { chain: "testnet" };
@@ -90,13 +66,10 @@ interface LiveConfigRunOptions {
 
 interface WrittenConfig {
   chain: "testnet";
-  maxIterations: number | undefined;
-  maxRetryableAttempts: number | undefined;
   outputPath: string;
   privateKey: string;
   role: string;
   rpcConfigured: boolean;
-  sleepIntervalSeconds: number;
 }
 
 type LiveConfigResult = { help: string } | { written: WrittenConfig[] };
@@ -124,8 +97,7 @@ export function usage(): string {
   return [
     "Usage: node scripts/live/config-from-env.ts [--force]",
     "Required env: ICKB_TESTNET_BOT_PRIVATE_KEY, ICKB_TESTNET_TESTER_PRIVATE_KEY, ICKB_TESTNET_RPC_URL",
-    "Optional env: ICKB_TESTNET_SLEEP_INTERVAL_SECONDS, ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS",
-    "Writes ignored bounded bot/tester configs plus unbounded config/bot-live-testnet.json without printing secrets. The RPC URL is used exclusively without fallbacks.",
+    "Writes ignored config/bot-testnet.json and config/tester-testnet.json without printing secrets. The RPC URL is used exclusively without fallbacks.",
   ].join("\n");
 }
 
@@ -141,7 +113,7 @@ export async function runLiveConfigFromEnv({
   }
   const originalRoot = resolve(root);
   const resolvedRoot = await (dependencies.realpath ?? realpath)(originalRoot);
-  const envConfig = parseLiveConfigEnv(env);
+  const rpcUrl = parseRequiredRpcUrl(env["ICKB_TESTNET_RPC_URL"], "ICKB_TESTNET_RPC_URL");
   const outputs = resolveLiveConfigOutputs(originalRoot, resolvedRoot, env, dependencies);
   if (!args.force) {
     await assertNoExistingTargets(
@@ -158,14 +130,7 @@ export async function runLiveConfigFromEnv({
   let caught: unknown;
   try {
     for (const [index, output] of outputs.entries()) {
-      const config = buildRuntimeConfig({
-        privateKey: output.privateKey,
-        rpcUrl: envConfig.rpcUrl,
-        sleepIntervalSeconds: envConfig.sleepIntervalSeconds,
-        maxIterations: output.maxIterations,
-        maxRetryableAttempts:
-          envConfig.maxRetryableAttempts ?? output.defaultMaxRetryableAttempts,
-      });
+      const config = buildRuntimeConfig({ privateKey: output.privateKey, rpcUrl });
       const tempPath = tempConfigPath(output.target.absolutePath, "tmp", index);
       staged.push({ target: output.target, tempPath });
       await writeConfigFile(tempPath, `${JSON.stringify(config)}\n`, false, dependencies);
@@ -194,31 +159,8 @@ export async function runLiveConfigFromEnv({
       outputPath: output.target.relativePath,
       chain: "testnet",
       rpcConfigured: true,
-      sleepIntervalSeconds: envConfig.sleepIntervalSeconds,
-      maxIterations: output.maxIterations,
-      maxRetryableAttempts:
-        envConfig.maxRetryableAttempts ?? output.defaultMaxRetryableAttempts,
       privateKey: "<written-to-config-file>",
     })),
-  };
-}
-
-function parseLiveConfigEnv(env: LiveConfigEnv): Pick<
-  WrittenConfig,
-  "maxRetryableAttempts" | "sleepIntervalSeconds"
-> & { rpcUrl: string } {
-  return {
-    sleepIntervalSeconds:
-      parseOptionalPositiveInteger(
-        env["ICKB_TESTNET_SLEEP_INTERVAL_SECONDS"],
-        "ICKB_TESTNET_SLEEP_INTERVAL_SECONDS",
-        { max: MAX_SLEEP_INTERVAL_SECONDS },
-      ) ?? DEFAULT_SLEEP_INTERVAL_SECONDS,
-    maxRetryableAttempts: parseOptionalPositiveInteger(
-      env["ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS"],
-      "ICKB_TESTNET_MAX_RETRYABLE_ATTEMPTS",
-    ),
-    rpcUrl: parseRequiredRpcUrl(env["ICKB_TESTNET_RPC_URL"], "ICKB_TESTNET_RPC_URL"),
   };
 }
 
@@ -247,21 +189,8 @@ function resolveLiveConfigOutputs(
   return outputs;
 }
 
-export function buildRuntimeConfig({
-  privateKey,
-  rpcUrl,
-  sleepIntervalSeconds,
-  maxIterations,
-  maxRetryableAttempts,
-}: RuntimeConfigInput): RuntimeConfig {
-  return {
-    chain: "testnet",
-    privateKey,
-    rpcUrl,
-    sleepIntervalSeconds,
-    ...(maxIterations === undefined ? {} : { maxIterations }),
-    ...(maxRetryableAttempts === undefined ? {} : { maxRetryableAttempts }),
-  };
+export function buildRuntimeConfig({ privateKey, rpcUrl }: RuntimeConfigInput): RuntimeConfig {
+  return { chain: "testnet", privateKey, rpcUrl };
 }
 
 async function commitStagedConfigs(
@@ -396,31 +325,6 @@ function parsePrivateKey(value: string | undefined, envName: string): string {
     throw new Error(`Invalid env ${envName}`);
   }
   return value;
-}
-
-function parseOptionalPositiveInteger(
-  value: string | undefined,
-  envName: string,
-  options: { max?: number } = {},
-): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string") {
-    throw new TypeError(`Invalid env ${envName}`);
-  }
-  if (!/^[1-9]\d*$/u.test(value)) {
-    throw new Error(`Invalid env ${envName}`);
-  }
-  const parsed = BigInt(value);
-  if (parsed > MAX_SAFE_INTEGER) {
-    throw new Error(`Invalid env ${envName}: expected a safe integer`);
-  }
-  const number = Number(parsed);
-  if (options.max !== undefined && number > options.max) {
-    throw new Error(`Invalid env ${envName}`);
-  }
-  return number;
 }
 
 function parseRequiredRpcUrl(value: string | undefined, envName: string): string {

@@ -1,9 +1,9 @@
 import process from "node:process";
 import { describe, expect, it, vi } from "vitest";
 import {
-  handleLoopError,
   jsonLogReplacer,
   logExecution,
+  recordExecutionError,
   STOP_EXIT_CODE,
   writeJsonLine,
 } from "../src/index.ts";
@@ -21,11 +21,11 @@ describe("loop error logging", () => {
   it("serializes error-like values for JSON logs", () => {
     const executionLog: Record<string, unknown> = {};
 
-    expect(handleLoopError(executionLog, new Error("failed"))).toBe(false);
+    expect(recordExecutionError(executionLog, new Error("failed"))).toBe(false);
     expect(executionLog["error"]).toMatchObject({ name: "Error", message: "failed" });
     expect(executionLog["error"]).toHaveProperty("stack");
     const emptyLog: Record<string, unknown> = {};
-    expect(handleLoopError(emptyLog, undefined)).toBe(false);
+    expect(recordExecutionError(emptyLog, undefined)).toBe(false);
     expect(emptyLog["error"]).toBe("Empty Error");
   });
 
@@ -37,7 +37,7 @@ describe("loop error logging", () => {
   it("serializes functions as unsupported log values", () => {
     const executionLog: Record<string, unknown> = {};
 
-    expect(handleLoopError(executionLog, unsupportedLogValue)).toBe(false);
+    expect(recordExecutionError(executionLog, unsupportedLogValue)).toBe(false);
 
     expect(executionLog["error"]).toBe("[Unsupported log value]");
   });
@@ -50,7 +50,7 @@ describe("loop error logging", () => {
       outPoint: { txHash: `0x${"11".repeat(32)}`, index: 0n },
     });
 
-    expect(handleLoopError(executionLog, error)).toBe(false);
+    expect(recordExecutionError(executionLog, error)).toBe(false);
     expect(executionLog["error"]).toMatchObject({
       name: "Error",
       message: TRANSACTION_FAILED_TO_RESOLVE_MESSAGE,
@@ -62,11 +62,11 @@ describe("loop error logging", () => {
 
   it("stops after broadcast confirmation timeouts", () => {
     expect(STOP_EXIT_CODE).toBe(2);
-    expect(handleLoopError({}, transactionError(true))).toBe(true);
+    expect(recordExecutionError({}, transactionError(true))).toBe(true);
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
     process.exitCode = undefined;
-    expect(handleLoopError({}, transactionError(false))).toBe(false);
-    expect(handleLoopError({}, new Error("failed"))).toBe(false);
+    expect(recordExecutionError({}, transactionError(false))).toBe(false);
+    expect(recordExecutionError({}, new Error("failed"))).toBe(false);
   });
 });
 
@@ -75,7 +75,7 @@ describe("loop transaction error logging", () => {
     const txHash = byte32FromByte("33");
     const executionLog: Record<string, unknown> = { txHash };
 
-    expect(handleLoopError(executionLog, transactionError(true, txHash))).toBe(true);
+    expect(recordExecutionError(executionLog, transactionError(true, txHash))).toBe(true);
     expect(process.exitCode).toBe(STOP_EXIT_CODE);
     expect(executionLog["txHash"]).toBe(txHash);
     expect(executionLog["error"]).toMatchObject({
@@ -92,7 +92,9 @@ describe("loop transaction error logging", () => {
     const txHash = byte32FromByte("34");
     const executionLog: Record<string, unknown> = { txHash };
 
-    expect(handleLoopError(executionLog, transactionError(false, txHash))).toBe(false);
+    expect(recordExecutionError(executionLog, transactionError(false, txHash))).toBe(
+      false,
+    );
     expect(executionLog["error"]).toMatchObject({
       name: "TransactionConfirmationError",
       message: TRANSACTION_CONFIRMATION_TIMEOUT_MESSAGE,
@@ -108,7 +110,7 @@ describe("loop error shape logging", () => {
     const executionLog: Record<string, unknown> = {};
     const error = { stack: "stack", message: 1 };
 
-    expect(handleLoopError(executionLog, error)).toBe(false);
+    expect(recordExecutionError(executionLog, error)).toBe(false);
 
     expect(executionLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
@@ -116,14 +118,14 @@ describe("loop error shape logging", () => {
     });
 
     const missingMessageLog: Record<string, unknown> = {};
-    expect(handleLoopError(missingMessageLog, { stack: "stack" })).toBe(false);
+    expect(recordExecutionError(missingMessageLog, { stack: "stack" })).toBe(false);
     expect(missingMessageLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
       stack: "stack",
     });
 
     const nonStringStackLog: Record<string, unknown> = {};
-    expect(handleLoopError(nonStringStackLog, { stack: 1 })).toBe(false);
+    expect(recordExecutionError(nonStringStackLog, { stack: 1 })).toBe(false);
     expect(nonStringStackLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
       stack: "",
@@ -135,7 +137,7 @@ describe("loop error shape logging", () => {
     const error = new Error("failed");
     Object.defineProperty(error, "cause", { value: error });
 
-    expect(handleLoopError(executionLog, error)).toBe(false);
+    expect(recordExecutionError(executionLog, error)).toBe(false);
 
     expect(executionLog["error"]).toMatchObject({
       message: "failed",
@@ -151,7 +153,7 @@ describe("non-Error loop failure logging", () => {
     const circular: Record<string, unknown> = {};
     circular["self"] = circular;
 
-    expect(handleLoopError(executionLog, loopFailure(rpcUrl, circular))).toBe(false);
+    expect(recordExecutionError(executionLog, loopFailure(rpcUrl, circular))).toBe(false);
     const serialized = JSON.stringify(executionLog);
     expect(serialized).toContain(rpcUrl);
     expect(executionLog["error"]).toMatchObject({

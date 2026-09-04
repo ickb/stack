@@ -7,11 +7,8 @@ import {
   handleTesterAttemptError,
   hasActionableTesterScenarioEstimate,
   isRetryableTesterError,
-  isTerminalTesterError,
   isUnrepresentableTesterEstimateError,
-  shouldSleepBeforeTesterAttempt,
   stopForLowTesterCapital,
-  testerRetryableFailureFields,
   transactionShape,
 } from "../../../src/tester/index.ts";
 import { MissingFreshOrderOriginError } from "../../../src/tester/runtime/freshMatchableOrderSkip.ts";
@@ -21,9 +18,6 @@ import {
   RANDOM_ORDER_SCENARIO,
   testerState,
 } from "../../support/tester/index.ts";
-
-const RETRYABLE_ATTEMPTS = 2;
-const RETRYABLE_TESTER_ERROR = "Retryable tester error";
 
 describe("isRetryableTesterError", () => {
   it("recognizes live retryable CKB state races", () => {
@@ -59,187 +53,90 @@ describe("isRetryableTesterError", () => {
     expect(isRetryableTesterError(new Error(FETCH_FAILED_MESSAGE))).toBe(false);
   });
 });
-describe("isTerminalTesterError", () => {
-  it("stops the tester loop for missing fresh-order provenance", () => {
-    const error = new MissingFreshOrderOriginError(byte32FromByte("11"));
+describe("handleTesterAttemptError", () => {
+  it("records retryable failures and exits 1 so the next turn can retry", () => {
+    const originalExitCode = process.exitCode;
+    try {
+      process.exitCode = undefined;
+      const executionLog: Record<string, unknown> = { startTime: "fixture" };
 
-    expect(isRetryableTesterError(error)).toBe(false);
-    expect(isTerminalTesterError(error)).toBe(true);
-  });
-});
-describe("testerRetryableFailureFields", () => {
-  it("marks retryable failures terminal only when the retry budget is exhausted", () => {
-    const transportError = new TypeError(FETCH_FAILED_MESSAGE);
-    expect(testerRetryableFailureFields(transportError, 1, 2)).toMatchObject({
-      message: RETRYABLE_TESTER_ERROR,
-      retryable: true,
-      terminal: false,
-      retryableAttempts: 1,
-      maxRetryableAttempts: 2,
-      retryBudgetExhausted: false,
-      error: {
-        name: "TypeError",
-        message: transportError.message,
-      },
-    });
-
-    expect(
-      testerRetryableFailureFields(
+      handleTesterAttemptError(
         Object.assign(new Error(DUPLICATED_TX_ERROR_MESSAGE), {
           code: -1107,
           data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
           txHash: byte32FromByte("22"),
         }),
-        RETRYABLE_ATTEMPTS,
-        RETRYABLE_ATTEMPTS,
-      ),
-    ).toMatchObject({
-      message: `${RETRYABLE_TESTER_ERROR} budget exhausted`,
-      retryable: true,
-      terminal: true,
-      retryableAttempts: RETRYABLE_ATTEMPTS,
-      maxRetryableAttempts: RETRYABLE_ATTEMPTS,
-      retryBudgetExhausted: true,
-      error: {
-        name: "Error",
-        message: DUPLICATED_TX_ERROR_MESSAGE,
-        code: -1107,
-        data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
-        txHash: byte32FromByte("22"),
-      },
-    });
-  });
-
-  it("formats non-Error retryable evidence without a max budget", () => {
-    expect(testerRetryableFailureFields("transport", 1, undefined)).toEqual({
-      message: RETRYABLE_TESTER_ERROR,
-      error: { message: RETRYABLE_TESTER_ERROR },
-      retryable: true,
-      terminal: false,
-      retryableAttempts: 1,
-      retryBudgetExhausted: false,
-    });
-  });
-});
-describe("handleTesterAttemptError", () => {
-  it("stops on deterministic non-retryable errors", () => {
-    const originalExitCode = process.exitCode;
-    const output: string[] = [];
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output.push(String(chunk));
-      return true;
-    });
-    try {
-      process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
-
-      const result = handleTesterAttemptError(
-        new Error("SDK conversion failed: deterministic fixture"),
         executionLog,
-        new Date(),
-        0,
-        RETRYABLE_ATTEMPTS,
       );
 
-      expect(result).toEqual({ result: "stop", retryableAttempts: 0 });
       expect(process.exitCode).toBe(1);
-      expect(output.join("\n")).toContain("SDK conversion failed: deterministic fixture");
+      expect(executionLog["error"]).toEqual({
+        message: "Retryable tester error",
+        retryable: true,
+        error: {
+          name: "Error",
+          message: DUPLICATED_TX_ERROR_MESSAGE,
+          code: -1107,
+          data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
+          txHash: byte32FromByte("22"),
+        },
+      });
+
+      const plainLog: Record<string, unknown> = {};
+      handleTesterAttemptError(
+        { code: -301, data: `Resolve(Dead(OutPoint(0x${"11".repeat(32)}00000000)))` },
+        plainLog,
+      );
+      expect(plainLog["error"]).toMatchObject({
+        retryable: true,
+        error: { message: "Retryable tester error" },
+      });
     } finally {
-      stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
     }
   });
 
-  it("sets a failing exit code for generic loop errors", () => {
+  it("records deterministic failures with exit 1", () => {
     const originalExitCode = process.exitCode;
-    const output: string[] = [];
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output.push(String(chunk));
-      return true;
-    });
     try {
       process.exitCode = 2;
       const executionLog: Record<string, unknown> = { startTime: "fixture" };
 
-      const result = handleTesterAttemptError(
-        new Error("already stopped"),
+      handleTesterAttemptError(
+        new Error("SDK conversion failed: deterministic fixture"),
         executionLog,
-        new Date(),
-        0,
-        RETRYABLE_ATTEMPTS,
       );
 
-      expect(result).toEqual({ result: "stop", retryableAttempts: 0 });
       expect(process.exitCode).toBe(1);
-      expect(output.join("\n")).toContain("already stopped");
+      expect(executionLog["error"]).toMatchObject({
+        message: "SDK conversion failed: deterministic fixture",
+      });
     } finally {
-      stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
     }
   });
-});
 
-describe("handleTesterAttemptError stop errors", () => {
-  it("preserves stop exit code from confirmation timeout errors", () => {
+  it("holds after a confirmation timeout and for missing fresh-order provenance", () => {
     const originalExitCode = process.exitCode;
-    const output: string[] = [];
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output.push(String(chunk));
-      return true;
-    });
     try {
-      process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
       class TransactionConfirmationError extends Error {
         public readonly isTimeout = true;
 
         public override readonly name = "TransactionConfirmationError";
       }
-      const timeoutError = new TransactionConfirmationError("confirmation timed out");
-
-      const result = handleTesterAttemptError(
-        timeoutError,
-        executionLog,
-        new Date(),
-        0,
-        RETRYABLE_ATTEMPTS,
-      );
-
-      expect(result).toEqual({ result: "stop", retryableAttempts: 0 });
-      expect(process.exitCode).toBe(2);
-      expect(output.join("\n")).toContain("confirmation timed out");
-    } finally {
-      stdoutWrite.mockRestore();
-      process.exitCode = originalExitCode;
-    }
-  });
-});
-
-describe("handleTesterAttemptError terminal errors", () => {
-  it("stops terminal tester errors without retrying", () => {
-    const originalExitCode = process.exitCode;
-    const output: string[] = [];
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output.push(String(chunk));
-      return true;
-    });
-    try {
       process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
-
-      const result = handleTesterAttemptError(
-        new MissingFreshOrderOriginError(byte32FromByte("12")),
-        executionLog,
-        new Date(),
-        3,
-        4,
+      handleTesterAttemptError(
+        new TransactionConfirmationError("confirmation timed out"),
+        {},
       );
+      expect(process.exitCode).toBe(2);
 
-      expect(result).toEqual({ result: "stop", retryableAttempts: 3 });
+      process.exitCode = undefined;
+      const missingOrigin = new MissingFreshOrderOriginError(byte32FromByte("12"));
+      expect(isRetryableTesterError(missingOrigin)).toBe(false);
+      handleTesterAttemptError(missingOrigin, {});
       expect(process.exitCode).toBe(1);
-      expect(output.join("\n")).toContain("Missing origin transaction block number");
     } finally {
-      stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
     }
   });
@@ -282,12 +179,6 @@ describe("transactionShape", () => {
     });
   });
 });
-describe("shouldSleepBeforeTesterAttempt", () => {
-  it("runs the first attempt immediately and sleeps before later attempts", () => {
-    expect(shouldSleepBeforeTesterAttempt(0)).toBe(false);
-    expect(shouldSleepBeforeTesterAttempt(1)).toBe(true);
-  });
-});
 describe("random planning edge cases", () => {
   it("throws non-terminal estimator failures instead of treating them as unfunded", () => {
     const estimate = vi.spyOn(IckbSdk, "estimate").mockImplementation(() => {
@@ -307,26 +198,19 @@ describe("random planning edge cases", () => {
   });
 });
 describe("stopForLowTesterCapital", () => {
-  it("logs the low-capital stop as an intentional safety stop", () => {
+  it("records the low-capital stop as an intentional safety stop", () => {
     const originalExitCode = process.exitCode;
-    const output: string[] = [];
-    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output.push(String(chunk));
-      return true;
-    });
     try {
       process.exitCode = undefined;
       const executionLog: Record<string, unknown> = { startTime: "fixture" };
 
-      stopForLowTesterCapital(executionLog, new Date());
+      stopForLowTesterCapital(executionLog);
 
       expect(process.exitCode).toBe(2);
       expect(executionLog["error"]).toBe(
         "Not enough funds to continue testing, shutting down...",
       );
-      expect(output.join("\n")).toContain("Not enough funds to continue testing");
     } finally {
-      stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
     }
   });

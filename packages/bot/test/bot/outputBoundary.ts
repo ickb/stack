@@ -2,11 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  BotEventEmitter,
-  iterationFailureEventFields,
-  readBotRuntimeConfig,
-} from "../../src/index.ts";
+import { handleIterationFailure } from "../../src/bot/failure.ts";
+import { BotEventEmitter, readBotRuntimeConfig } from "../../src/index.ts";
 
 describe("bot private key output boundary", () => {
   it("does not expose the configured key through versioned failure events", async () => {
@@ -21,8 +18,6 @@ describe("bot private key output boundary", () => {
           chain: "testnet",
           privateKey,
           rpcUrl: "https://testnet.example/",
-          sleepIntervalSeconds: 60,
-          maxIterations: 1,
         }),
         { mode: 0o600 },
       );
@@ -35,18 +30,8 @@ describe("bot private key output boundary", () => {
         },
       });
 
-      emitter.emit(0, "bot.run.started", {
-        runtime: {
-          maxIterations: config.maxIterations,
-          sleepIntervalMs: config.sleepIntervalMs,
-          rpcConfigured: true,
-        },
-      });
-      emitter.emit(
-        1,
-        "bot.iteration.failed",
-        iterationFailureEventFields(new TypeError("fetch failed")),
-      );
+      emitter.emit(0, "bot.run.started");
+      handleIterationFailure(emitter, 1, new TypeError("fetch failed"));
 
       expect(config.privateKey).toBe(privateKey);
       expect(output.join("\n")).not.toContain(privateKey);
@@ -54,6 +39,7 @@ describe("bot private key output boundary", () => {
         expect(JSON.parse(line)).toMatchObject({ app: "bot", version: 1 });
       }
     } finally {
+      process.exitCode = undefined;
       vi.restoreAllMocks();
       await rm(dir, { recursive: true, force: true });
     }

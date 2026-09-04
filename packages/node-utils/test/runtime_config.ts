@@ -4,12 +4,9 @@ import process from "node:process";
 import { describe, expect, it } from "vitest";
 import {
   parseRuntimeConfig,
-  randomSleepIntervalMs,
-  reachedMaxIterations,
   readRuntimeConfigEnv,
   type RuntimeConfig,
 } from "../src/index.ts";
-import { sequence } from "./support/node_utils_support.ts";
 
 const VALID_PRIVATE_KEY = `0x${"11".repeat(32)}`;
 const CONFIG_FILE_NAME = "config.json";
@@ -21,66 +18,6 @@ const RUNTIME_CONFIG_TEST_DIR = join(
   "../../../.scratch/node-utils-runtime-config",
 );
 const RUNTIME_CONFIG_FILE_PATH = join(RUNTIME_CONFIG_TEST_DIR, CONFIG_FILE_NAME);
-
-describe("runtime config intervals", () => {
-  it("parses positive sleep intervals as milliseconds", async () => {
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: 1 })),
-    ).resolves.toMatchObject({ sleepIntervalMs: 1000 });
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: 2.5 })),
-    ).resolves.toMatchObject({ sleepIntervalMs: 2500 });
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: 1073741 })),
-    ).resolves.toMatchObject({ sleepIntervalMs: 1073741000 });
-  });
-
-  it("rejects missing and sub-second sleep intervals", async () => {
-    for (const value of [undefined, NaN, Infinity, 0, 0.5, 1073741.824, 9007199254741]) {
-      await expect(
-        readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: value })),
-      ).rejects.toThrow(INVALID_CONFIG_ENV_ERROR);
-    }
-  });
-
-  it("parses bounded-run iteration limits", async () => {
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ maxIterations: undefined })),
-    ).resolves.toMatchObject({ maxIterations: undefined });
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ maxIterations: 1 })),
-    ).resolves.toMatchObject({ maxIterations: 1 });
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ maxIterations: 2 })),
-    ).resolves.toMatchObject({ maxIterations: 2 });
-    expect(reachedMaxIterations(0, 1)).toBe(false);
-    expect(reachedMaxIterations(1, 1)).toBe(true);
-    expect(reachedMaxIterations(10, undefined)).toBe(false);
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ maxIterations: 0 })),
-    ).rejects.toThrow(INVALID_CONFIG_ENV_ERROR);
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ maxIterations: 1.5 })),
-    ).rejects.toThrow(INVALID_CONFIG_ENV_ERROR);
-  });
-
-  it("randomizes sleep with triangular jitter centered on the interval", () => {
-    expect(randomSleepIntervalMs(1000, sequence(0, 0))).toBe(0);
-    expect(randomSleepIntervalMs(1000, sequence(0.5, 0.5))).toBe(1000);
-    expect(randomSleepIntervalMs(1000, sequence(0.999, 0.999))).toBe(1998);
-    expect(randomSleepIntervalMs(1000, sequence(0.5))).toBe(500);
-    const samples = Array.from({ length: 1000 }, (_, index) => index / 1000);
-    const average =
-      samples.reduce(
-        (sum, first) => sum + randomSleepIntervalMs(1000, sequence(first, 1 - first)),
-        0,
-      ) / samples.length;
-    expect(average).toBe(1000);
-    expect(
-      randomSleepIntervalMs(1073741823, sequence(0.999999, 0.999999)),
-    ).toBeLessThanOrEqual(2147483647);
-  });
-});
 
 describe("runtime config JSON", () => {
   it("parses private keys as exact 0x-prefixed lowercase hex", async () => {
@@ -114,9 +51,11 @@ describe("runtime config JSON", () => {
 describe("runtime config JSON shape", () => {
   it("parses exact runtime JSON config", async () => {
     const privateKey = `0x${"11".repeat(32)}`;
-    expect(
-      parseRuntimeConfig(runtimeConfigText({ sleepIntervalSeconds: 5 }), CONFIG_ENV_NAME),
-    ).toMatchObject({ chain: "testnet", sleepIntervalMs: 5000 });
+    expect(parseRuntimeConfig(runtimeConfigText({}), CONFIG_ENV_NAME)).toEqual({
+      chain: "testnet",
+      privateKey,
+      rpcUrl: "https://testnet.example/",
+    });
 
     await expect(
       readRuntimeConfigText(
@@ -124,43 +63,22 @@ describe("runtime config JSON shape", () => {
           chain: "testnet",
           privateKey,
           rpcUrl: "https://rpc.example/path?token=abc",
-          sleepIntervalSeconds: 60,
-          maxIterations: 2,
         }),
       ),
     ).resolves.toEqual({
       chain: "testnet",
       privateKey,
       rpcUrl: "https://rpc.example/path?token=abc",
-      sleepIntervalMs: 60000,
-      maxIterations: 2,
-      maxRetryableAttempts: undefined,
     });
     await expect(
       readRuntimeConfigText(
-        runtimeConfigText({
-          chain: "mainnet",
-          rpcUrl: "https://mainnet.example/",
-          sleepIntervalSeconds: 1,
-        }),
+        runtimeConfigText({ chain: "mainnet", rpcUrl: "https://mainnet.example/" }),
       ),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       chain: "mainnet",
+      privateKey,
       rpcUrl: "https://mainnet.example/",
-      sleepIntervalMs: 1000,
     });
-    await expect(
-      readRuntimeConfigText(runtimeConfigText({ sleepIntervalSeconds: 5 })),
-    ).resolves.toMatchObject({
-      rpcUrl: "https://testnet.example/",
-      sleepIntervalMs: 5000,
-      maxRetryableAttempts: undefined,
-    });
-    await expect(
-      readRuntimeConfigText(
-        runtimeConfigText({ sleepIntervalSeconds: 5, maxRetryableAttempts: 3 }),
-      ),
-    ).resolves.toMatchObject({ maxRetryableAttempts: 3 });
   });
 
   it("rejects invalid runtime JSON config without exposing contents", async () => {
@@ -211,14 +129,13 @@ describe("runtime config file path resolution", () => {
   it("uses the current working directory for relative config paths without INIT_CWD", async () => {
     const originalInitCwd = process.env["INIT_CWD"];
     const relativeConfigPath = path.relative(process.cwd(), RUNTIME_CONFIG_FILE_PATH);
-    await writeRuntimeConfigFile(runtimeConfigText({ sleepIntervalSeconds: 5 }));
+    await writeRuntimeConfigFile(runtimeConfigText({}));
     try {
       delete process.env["INIT_CWD"];
       await expect(
         readRuntimeConfigEnv(relativeConfigPath, CONFIG_ENV_NAME),
       ).resolves.toMatchObject({
         chain: "testnet",
-        sleepIntervalMs: 5000,
       });
     } finally {
       if (originalInitCwd === undefined) {
@@ -240,7 +157,6 @@ describe("runtime config file env", () => {
         chain: "testnet",
         privateKey,
         rpcUrl: "http://127.0.0.1:8114/",
-        sleepIntervalSeconds: 60,
       }),
     );
     try {
@@ -250,9 +166,6 @@ describe("runtime config file env", () => {
         chain: "testnet",
         privateKey,
         rpcUrl: "http://127.0.0.1:8114/",
-        sleepIntervalMs: 60000,
-        maxIterations: undefined,
-        maxRetryableAttempts: undefined,
       });
       await expect(readRuntimeConfigEnv(undefined, CONFIG_ENV_NAME)).rejects.toThrow(
         `Empty env ${CONFIG_ENV_NAME}`,
@@ -315,11 +228,6 @@ function invalidRuntimeConfigTexts(): string[] {
     runtimeConfigText({ rpcUrl: "https://[bad" }),
     runtimeConfigText({ rpcUrl: "https://rpc.example/ bad" }),
     runtimeConfigText({ rpcUrl: 8114 }),
-    runtimeConfigText({ sleepIntervalSeconds: "60" }),
-    runtimeConfigText({ sleepIntervalSeconds: 0 }),
-    runtimeConfigText({ maxIterations: "1" }),
-    runtimeConfigText({ maxRetryableAttempts: "1" }),
-    runtimeConfigText({ maxRetryableAttempts: 0 }),
   ];
 }
 
@@ -328,7 +236,6 @@ function runtimeConfigText(overrides: Record<string, unknown>): string {
     chain: "testnet",
     privateKey: VALID_PRIVATE_KEY,
     rpcUrl: "https://testnet.example/",
-    sleepIntervalSeconds: 60,
     ...overrides,
   };
   return JSON.stringify(

@@ -21,9 +21,6 @@ void test("preflight run reports public evidence for a generated unfunded key", 
       chain: "testnet",
       privateKey,
       rpcUrl: rawRpcUrl,
-      sleepIntervalSeconds: 1,
-      maxIterations: 1,
-      maxRetryableAttempts: 3,
     },
     async ({ configPath, dir }: ConfigDirContext) => {
       const report = await runPreflight({
@@ -37,9 +34,6 @@ void test("preflight run reports public evidence for a generated unfunded key", 
       const json = JSON.stringify(report, bigintReplacer);
 
       assert.equal(report.chain, "testnet");
-      assert.equal(report.bounded, true);
-      assert.equal(report.maxIterations, 1);
-      assert.equal(report.maxRetryableAttempts, 3);
       assert.deepEqual(report.rpcEndpoint, {
         mode: "exclusive",
         protocol: "https:",
@@ -175,16 +169,12 @@ void test("preflight run uses the required explicit RPC URL", async () => {
 
 function baseConfig(): {
   chain: string;
-  maxIterations: number;
   privateKey: string;
   rpcUrl: string;
-  sleepIntervalSeconds: number;
 } {
   return {
     chain: "testnet",
     privateKey: randomPrivateKey(),
     rpcUrl: "https://testnet.example/",
-    sleepIntervalSeconds: 1,
-    maxIterations: 1,
   };
 }
