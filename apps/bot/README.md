@@ -78,7 +78,7 @@ The start script runs the source-owned launcher once. It validates child stdout 
 
 Every child stdout line is one JSON object with `version`, `app: "bot"`, `chain`, `runId`, `iterationId`, ISO `timestamp`, and a `bot.*` type. These versioned events are the sole bot stdout contract.
 
-The stable event contract is the bot NDJSON object stream, not a particular file path. The source-owned production launcher keeps bot logs under the repo-root `log/` tree by default and records the current event file in `launches.ndjson`. Consumers should depend on records with `app: "bot"` and `bot.*` event types, not supervisor/tester output, launcher metadata, slot layout, incident bundles, `/var/log`, or validation log directories.
+The stable event contract is the bot NDJSON object stream, not a particular file path. The source-owned production launcher keeps bot logs under the repo-root `log/` tree by default and records the current event file in `launches.ndjson`. Consumers should depend on records with `app: "bot"` and `bot.*` event types, not supervisor/tester output, launcher metadata, slot layout, `/var/log`, or validation log directories.
 
 Stable event types:
 
@@ -232,46 +232,9 @@ sudo journalctl -u ickb-bot-testnet.service -n 200 --no-pager
 
 The generated units set `LimitCORE=0`, so crash diagnosis should use bot logs, launcher exit records, stderr, journald, and the bundled systemd unit properties rather than expecting a core file.
 
-### Incident Bundles
-
-Use `scripts/bot/collect-incident.ts` before restarting after exit code `2` or any unexpected production behavior. The collector reads only bot production sources: event slot files, stderr slot files, legacy flat files when present, `launches.ndjson`, referenced bot artifacts, and version metadata. It keeps those sources separated and writes a restricted incident directory under the selected bot log directory:
-
-```text
-<log-root>/bot/incidents/<incident-id>/
-  README.txt
-  bot.events.slot-00.ndjson
-  bot.stderr.slot-00.log
-  artifacts/slot-00/ringSegments/sha256-<hash>.json
-  launches.ndjson
-  summary.json
-  version.json
-```
-
-The log root resolves the same way as the launcher: explicit `--log-root`, then runtime `ICKB_BOT_LOG_ROOT`, then `<deploy-checkout>/log`. Production systemd units use `<deploy-checkout>/log`, so the default selected bot log directory is `<log-root>/bot`. `--log-dir <path>` may be used for copied logs or a custom contained bot log directory when the resolved path stays inside the resolved log root. The collector refuses empty paths, paths outside the resolved log root, symlinked log directories, symlinked incident parents, symlinked source log files, and symlinked artifact path components. Referenced artifacts must be under `artifacts/`, use `sha256-<hash>.json` filenames, and match the referenced hash before they are bundled; missing or mismatched artifact refs are reported in `summary.json`.
-
-Examples from the deployed checkout:
-
-```bash
-sudo -u ickb-bot-testnet node scripts/bot/collect-incident.ts --since 2h --until now
-sudo -u ickb-bot-mainnet node scripts/bot/collect-incident.ts --since 2026-05-25T10:00:00Z --until 2026-05-25T11:00:00Z
-sudo -u ickb-bot-testnet node scripts/bot/collect-incident.ts --log-root log --since 30m --until now
-```
-
-The collector does not include runtime config files, environment dumps, systemd output, or raw unit text because they can contain private keys, credentialed RPC URLs, tokens, passwords, or API keys. Selected source logs are bundled as public producer-owned evidence; if a private key or other secret reaches those sources, fix the producer that wrote it before sharing or archiving the bundle.
-
-Inspect `summary.json` first. It includes selected source files, malformed/undated/out-of-window line counts, first/last timestamps, event counts by type, transaction hashes by outcome, skip/failure reasons, launcher exit codes, artifact refs included/missing/mismatched, package version, git commit, Node version, and the collector script version. Bot stderr files are raw child stderr, so undated stack-trace lines after an in-window timestamped stderr line are kept with that timestamped line; when stderr has no timestamps at all, the collector includes the last 200 non-empty stderr lines and marks that in `summary.json`. For exit code `2`, review the `launcher.child.exited` record, terminal bot events (`bot.decision.skipped`, `bot.transaction.failed`, `bot.iteration.failed`, or records with `terminal:true`), stderr, and referenced artifacts before deciding whether the restart is safe.
-
-The collector writes the incident directory directly and prints a portable compression command instead of assuming `tar`, `gzip`, or `zstd` are present. On a host with `tar` and gzip, run the printed command or equivalently:
-
-```bash
-tar -czf /opt/ickb-stack-testnet/log/bot/incidents/<incident-id>.tar.gz -C /opt/ickb-stack-testnet/log/bot/incidents <incident-id>
-```
-
-Retain incident bundles long enough to cover your operational review and postmortem window, then remove them with the same sensitivity as production logs. A practical default is to keep testnet bundles for 14 days and mainnet bundles for 30 days, matching the rotation examples below unless an active incident review requires longer retention.
-
 ### Retention
 
-The launcher keeps 16 fixed run slots. Reusing a slot truncates its event and stderr files and resets its artifact directory, while the active run remains complete. Storage is count-rotated rather than byte-bounded, so monitor available disk space for long-running deployments and remove old incident bundles according to the retention policy above.
+The launcher keeps 16 fixed run slots. Reusing a slot truncates its event and stderr files and resets its artifact directory, while the active run remains complete. Storage is count-rotated rather than byte-bounded, so monitor available disk space for long-running deployments.
 
 ## Notes
 
