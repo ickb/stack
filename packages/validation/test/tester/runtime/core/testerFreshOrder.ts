@@ -147,55 +147,36 @@ describe(`${FRESH_MATCHABLE_ORDER_SKIP} incomplete search`, () => {
   });
 });
 describe(`${FRESH_MATCHABLE_ORDER_SKIP} opposite-direction orders`, () => {
-  it("blocks new tester stimulus on fresh opposite-direction CKB-to-iCKB orders", async () => {
-    const txHash = byte32FromByte("34");
-    const { runtime, getTransactionResponse, getTransaction } = freshOrderRuntime({
-      rpcBlockNumber: 100000n,
-      tracked: true,
-    });
+  it.each([
+    ["CKB-to-iCKB", "34", matchableOrder],
+    ["iCKB-to-CKB", "35", udtToCkbOrder],
+  ] as const)(
+    "blocks new tester stimulus on fresh opposite-direction %s orders",
+    async (_direction, txHashByte, order) => {
+      const txHash = byte32FromByte(txHashByte);
+      const { runtime, getTransactionResponse, getTransaction } = freshOrderRuntime({
+        rpcBlockNumber: 100000n,
+        tracked: true,
+      });
 
-    await expect(
-      freshMatchableOrderSkip(
-        runtime,
-        [await matchableOrder(txHash)],
-        headerLike({ number: 100180n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
-        { feeRate: 0n },
-      ),
-    ).resolves.toEqual({
-      reason: FRESH_MATCHABLE_ORDER_REASON,
-      txHash,
-      blockNumber: 100000n,
-      tipNumber: 100180n,
-      maxElapsedBlocks: 180n,
-    });
-    expect(getTransactionResponse).toHaveBeenCalledWith(txHash);
-    expect(getTransaction).toHaveBeenCalledWith(txHash);
-  });
-
-  it("blocks new tester stimulus on fresh opposite-direction iCKB-to-CKB orders", async () => {
-    const txHash = byte32FromByte("35");
-    const { runtime, getTransactionResponse, getTransaction } = freshOrderRuntime({
-      rpcBlockNumber: 100000n,
-      tracked: true,
-    });
-
-    await expect(
-      freshMatchableOrderSkip(
-        runtime,
-        [await udtToCkbOrder(txHash)],
-        headerLike({ number: 100180n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
-        { feeRate: 0n },
-      ),
-    ).resolves.toEqual({
-      reason: FRESH_MATCHABLE_ORDER_REASON,
-      txHash,
-      blockNumber: 100000n,
-      tipNumber: 100180n,
-      maxElapsedBlocks: 180n,
-    });
-    expect(getTransactionResponse).toHaveBeenCalledWith(txHash);
-    expect(getTransaction).toHaveBeenCalledWith(txHash);
-  });
+      await expect(
+        freshMatchableOrderSkip(
+          runtime,
+          [await order(txHash)],
+          headerLike({ number: 100180n, epoch: ccc.Epoch.from([0n, 0n, 1n]) }),
+          { feeRate: 0n },
+        ),
+      ).resolves.toEqual({
+        reason: FRESH_MATCHABLE_ORDER_REASON,
+        txHash,
+        blockNumber: 100000n,
+        tipNumber: 100180n,
+        maxElapsedBlocks: 180n,
+      });
+      expect(getTransactionResponse).toHaveBeenCalledWith(txHash);
+      expect(getTransaction).toHaveBeenCalledWith(txHash);
+    },
+  );
 });
 describe(`${FRESH_MATCHABLE_ORDER_SKIP} marketability`, () => {
   it("does not skip fresh owned orders that are not marketable at the midpoint", async () => {

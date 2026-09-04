@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { FakeCkbSigner } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
@@ -515,60 +516,21 @@ function emptyPageSignerScan(lockCount: number): {
   });
   const scan = collect(
     findSignerCellsPagedNoCache(
-      new ManyLockSigner(client, lockCount),
-      {},
-      { pageSize: defaultCellPageSize },
-    ),
-  );
-  return { pages: (): number => pages, scan };
-}
-
-/** Signer owning many distinct locks, one per component scan of a signer read. */
-class ManyLockSigner extends ccc.Signer {
-  private readonly lockCount: number;
-
-  constructor(client: ccc.Client, lockCount: number) {
-    super(client);
-    this.lockCount = lockCount;
-  }
-
-  public override get type(): ccc.SignerType {
-    return ccc.SignerType.CKB;
-  }
-
-  public override get signType(): ccc.SignerSignType {
-    return ccc.SignerSignType.CkbSecp256k1;
-  }
-
-  public override async connect(): Promise<void> {
-    await Promise.resolve();
-  }
-
-  public override async isConnected(): Promise<boolean> {
-    await Promise.resolve();
-    return true;
-  }
-
-  public override async getInternalAddress(): Promise<string> {
-    await Promise.resolve();
-    return "ckt1test";
-  }
-
-  public override async getAddressObjs(): Promise<ccc.Address[]> {
-    await Promise.resolve();
-    return Array.from(
-      { length: this.lockCount },
-      (_unused, index) =>
-        new ccc.Address(
+      new FakeCkbSigner(
+        client,
+        Array.from({ length: lockCount }, (_unused, index) =>
           ccc.Script.from({
             codeHash: `0x${"22".repeat(32)}`,
             hashType: "type",
             args: ccc.numToHex(index),
           }),
-          "ckt",
         ),
-    );
-  }
+      ),
+      {},
+      { pageSize: defaultCellPageSize },
+    ),
+  );
+  return { pages: (): number => pages, scan };
 }
 
 function testCell({

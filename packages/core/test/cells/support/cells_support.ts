@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
+  FakeCkbSigner,
   script,
   StubClient,
   headerLike as testHeaderLike,
@@ -100,47 +101,11 @@ export function signerWithCells(cells: ccc.Cell[], client: ccc.Client): ccc.Sign
       writable: true,
     },
   });
-  return new TestSigner(client, cells);
-}
-
-class TestSigner extends ccc.Signer {
-  private readonly cells: ccc.Cell[];
-
-  constructor(client: ccc.Client, cells: ccc.Cell[]) {
-    super(client);
-    this.cells = cells;
-  }
-
-  public override get type(): ccc.SignerType {
-    return ccc.SignerType.CKB;
-  }
-
-  public override get signType(): ccc.SignerSignType {
-    return ccc.SignerSignType.CkbSecp256k1;
-  }
-
-  public override async connect(): Promise<void> {
-    await Promise.resolve();
-  }
-
-  public override async isConnected(): Promise<boolean> {
-    await Promise.resolve();
-    return true;
-  }
-
-  public override async getInternalAddress(): Promise<string> {
-    await Promise.resolve();
-    return "ckt1test";
-  }
-
-  public override async getAddressObjs(): Promise<ccc.Address[]> {
-    await Promise.resolve();
-    const locks = [script("22"), ...this.cells.map((cell) => cell.cellOutput.lock)];
-    return Array.from(
-      new Map(locks.map((lock) => [lock.toHex(), lock])).values(),
-      (lock) => new ccc.Address(lock, "ckt"),
-    );
-  }
+  const locks = [script("22"), ...cells.map((cell) => cell.cellOutput.lock)];
+  return new FakeCkbSigner(
+    client,
+    Array.from(new Map(locks.map((lock) => [lock.toHex(), lock])).values()),
+  );
 }
 
 export { byte32FromByte, script, StubClient, transactionWithHeader };

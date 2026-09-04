@@ -21,6 +21,7 @@ export {
   type OrderState,
 } from "./contract_oracle.ts";
 export { FakeClient, FakeClientError, type FakeClientOverrides } from "./fake_client.ts";
+export { FakeCkbSigner } from "./fake_signer.ts";
 
 type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],

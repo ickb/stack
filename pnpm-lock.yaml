@@ -388,6 +388,10 @@ importers:
       '@ckb-ccc/core':
         specifier: 'catalog:'
         version: 1.19.1(typescript@6.0.3)(zod@3.25.76)
+    devDependencies:
+      '@ickb/testkit':
+        specifier: workspace:*
+        version: link:../testkit
 
   packages/validation:
     dependencies:
