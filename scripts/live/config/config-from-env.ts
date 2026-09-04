@@ -20,7 +20,11 @@ const { resolve } = pathModule;
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const OUTPUTS: readonly LiveConfigOutput[] = [
-  { role: "bot", envName: "ICKB_TESTNET_BOT_PRIVATE_KEY", out: "config/bot-testnet.json" },
+  {
+    role: "bot",
+    envName: "ICKB_TESTNET_BOT_PRIVATE_KEY",
+    out: "config/bot-testnet.json",
+  },
   {
     role: "tester",
     envName: "ICKB_TESTNET_TESTER_PRIVATE_KEY",
@@ -189,7 +193,10 @@ function resolveLiveConfigOutputs(
   return outputs;
 }
 
-export function buildRuntimeConfig({ privateKey, rpcUrl }: RuntimeConfigInput): RuntimeConfig {
+export function buildRuntimeConfig({
+  privateKey,
+  rpcUrl,
+}: RuntimeConfigInput): RuntimeConfig {
   return { chain: "testnet", privateKey, rpcUrl };
 }
 

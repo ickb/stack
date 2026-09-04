@@ -80,11 +80,14 @@ void test("live config git ignore guard runs with an allowlisted environment", (
 });
 
 void test("live env config helper builds configs with a required RPC URL", () => {
-  assert.deepEqual(buildRuntimeConfig({ privateKey: botPrivateKey, rpcUrl: testnetRpcUrl }), {
-    chain: testnetChain,
-    privateKey: botPrivateKey,
-    rpcUrl: testnetRpcUrl,
-  });
+  assert.deepEqual(
+    buildRuntimeConfig({ privateKey: botPrivateKey, rpcUrl: testnetRpcUrl }),
+    {
+      chain: testnetChain,
+      privateKey: botPrivateKey,
+      rpcUrl: testnetRpcUrl,
+    },
+  );
 });
 
 void test("live env config helper writes ignored bot and tester configs from env", async () => {

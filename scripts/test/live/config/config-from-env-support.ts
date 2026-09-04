@@ -77,7 +77,10 @@ export function liveEnv(overrides: LiveConfigEnv = {}): LiveConfigEnv {
   };
 }
 
-export function expectedConfig(privateKey: string, rpcUrl = testnetRpcUrl): ExpectedConfig {
+export function expectedConfig(
+  privateKey: string,
+  rpcUrl = testnetRpcUrl,
+): ExpectedConfig {
   return { chain: testnetChain, privateKey, rpcUrl };
 }
 

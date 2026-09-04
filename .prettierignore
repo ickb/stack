@@ -5,8 +5,8 @@
 coverage/
 .git/
 .scratch/
-config/
-log/
+/config/
+/log/
 apps/*/log_*.json
 apps/sampler/rate.csv
 pnpm-lock.yaml

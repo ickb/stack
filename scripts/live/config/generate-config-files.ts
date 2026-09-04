@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import {lstat, mkdir, open, realpath, unlink} from "node:fs/promises";
+import { lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
 import pathModule from "node:path";
 import { defaultCheckIgnored, type CheckIgnored } from "./git.ts";
 
@@ -126,7 +126,6 @@ export async function writeConfigFile(
   }
 }
 
-
 export async function cleanupPath(
   filePath: string,
   dependencies: ConfigFileDependencies,
@@ -182,5 +181,3 @@ async function assertRealAncestor(
 export function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
-
-
