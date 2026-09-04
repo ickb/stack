@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
-  BOT_CONFIG_PATH,
   BOT_DECISION_SKIPPED,
   CLASSIFICATION_SUITE,
   INCIDENT_CLASSIFICATION,
@@ -9,10 +8,8 @@ import {
   PREFLIGHT_RETRYABLE_FAILURE,
   SCENARIO_FLAG,
   SUMMARY_AGGREGATE_COUNTS,
-  TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
   botEvent,
-  captureWrites,
   emptyActions,
   expectRetryablePreflightArtifacts,
   expectSupervisorSpawnCounts,
@@ -21,12 +18,9 @@ import {
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
-  pathToString,
-  realpathFixture,
+  readArtifacts,
   recordAt,
-  selectiveIgnoredChecker,
+  resolveTestPlan,
   spawnFixture,
   startHangingBotSupervisorRun,
 } from "../../support/supervisor/index.ts";
@@ -35,16 +29,18 @@ describe(CLASSIFICATION_SUITE, () => {
   it("keeps live-shaped hung commands classified as command timeouts", async () => {
     vi.useFakeTimers();
     try {
-      const { run, writes, kills } = startHangingBotSupervisorRun({
+      const { run, plan, started, kills } = startHangingBotSupervisorRun({
         outDir: "log/live-supervisor/live-shaped-timeout-test",
         maxWallClockSeconds: "3600",
         commandTimeoutSeconds: "3600",
         commandKillGraceMs: 10,
       });
 
+      await started;
       await vi.advanceTimersByTimeAsync(3_600_010);
 
       await expect(run).resolves.toBe(2);
+      const writes = readArtifacts(plan);
       expect(kills).toEqual([
         { pid: -1234, signal: "SIGTERM" },
         { pid: -1234, signal: "SIGKILL" },
@@ -64,7 +60,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("retries retryable preflight transport failures once before actor execution", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     let preflightRuns = 0;
     const args = parseArgs([
@@ -75,19 +70,10 @@ describe(CLASSIFICATION_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/preflight-retry-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         if (isPreflightCommand(commandArgs)) {
@@ -106,15 +92,15 @@ describe(CLASSIFICATION_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
-    expectRetryablePreflightArtifacts(spawned, writes);
+    expectRetryablePreflightArtifacts(
+      spawned,
+      writes,
+      "/repo/log/live-supervisor/preflight-retry-test",
+    );
     const summary = jsonArtifact(
       writes,
       "/repo/log/live-supervisor/preflight-retry-test/summary.json",
@@ -127,7 +113,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("writes retryable-looking preflight output as public producer artifacts", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const preflightOutput = JSON.stringify({
       diagnostic: "public preflight output",
@@ -140,30 +125,17 @@ describe(CLASSIFICATION_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/preflight-unsafe-retry-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeChild(preflightOutput, 1, PREFLIGHT_RETRYABLE_FAILURE);
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     expectSupervisorSpawnCounts(spawned, { preflight: 2, actor: 0 });

@@ -48,27 +48,19 @@ export async function stopForWallClockBudget(
     incidentCycleIndex,
     plan,
     state,
-    dependencies,
   );
   if (pendingAuditStop !== undefined) {
     return pendingAuditStop;
   }
-  await writeSummary(
-    plan,
-    state,
-    "max_wall_clock_seconds",
-    dependencies,
-    stopDiagnostics,
-  );
+  await writeSummary(plan, state, "max_wall_clock_seconds", stopDiagnostics);
   return 0;
 }
 
 export async function stopForPendingBotBalanceAudit(
-  ...[cycleIndex, plan, state, dependencies]: [
+  ...[cycleIndex, plan, state]: [
     cycleIndex: number,
     plan: SupervisorPlan,
     state: SupervisorRunState,
-    dependencies: Dependencies,
   ]
 ): Promise<number | undefined> {
   if (state.pendingBotBalanceAudit === undefined) {
@@ -106,8 +98,7 @@ export async function stopForPendingBotBalanceAudit(
       suggestedNextAction: suggestedNextAction(classification),
     },
     state.artifacts,
-    dependencies,
   );
-  await writeSummary(plan, state, classification.outcome, dependencies);
+  await writeSummary(plan, state, classification.outcome);
   return STOP_EXIT_CODE;
 }

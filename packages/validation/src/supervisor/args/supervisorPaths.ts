@@ -126,11 +126,8 @@ export async function assertNoSymlinkedConfigPath(
   rootDir: string,
   absolutePath: string,
   label: string,
-  dependencies: Dependencies,
 ): Promise<void> {
-  const symlink = await firstSymlinkInPath(absolutePath, rootDir, {
-    ...(dependencies.lstat === undefined ? {} : { lstat: dependencies.lstat }),
-  });
+  const symlink = await firstSymlinkInPath(absolutePath, rootDir);
   if (symlink !== undefined) {
     throw new Error(
       `Refusing to use ${label} through symlinked path: ${relative(rootDir, symlink)}`,

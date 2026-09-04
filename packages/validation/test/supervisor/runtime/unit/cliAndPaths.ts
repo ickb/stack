@@ -1,11 +1,10 @@
 import { minimalProcessEnv } from "@ickb/node-utils";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
 import {
-  assertBuiltRuntime,
   parseArgs,
   prepareOutputDirectory,
   resolvePlan,
@@ -14,26 +13,19 @@ import {
 import {
   BOT_DECISION_SKIPPED,
   botEvent,
-  captureWrites,
   emptyActions,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
-  lstatFixture,
-  missingStat,
-  mkdirFixture,
-  noopAsync,
-  pathToString,
-  realpathFixture,
   SCENARIO_FLAG,
   spawnFixture,
-  SYMBOLIC_LINK_STATS,
   TARGET_OUTCOME_FLAG,
 } from "../../support/supervisor/index.ts";
 import { supervisorDependencies, supervisorPlan, textWriter } from "./support.ts";
 
 const { join } = path;
+const CHUNK_DIRECTORY = "chunk-0001";
 
 it("covers CLI parsing errors and help", async () => {
   const sparseArgv = Array.from<string>({ length: 1 });
@@ -68,12 +60,13 @@ it("covers CLI parsing errors and help", async () => {
 it("reports the artifact directory after a completed run", async () => {
   const stdout = textWriter();
   const stderr = textWriter();
+  const root = await mkdtemp(join(tmpdir(), "ickb-supervisor-cli-"));
+  const outDir = join(root, "validation", "cli", "chunks", CHUNK_DIRECTORY, "run-0001");
   await expect(
     runSupervisorMain(
-      ["--out-dir", "log/live-supervisor/cli-success", SCENARIO_FLAG, "bot-only"],
+      ["--out-dir", outDir, SCENARIO_FLAG, "bot-only"],
       {
         ...supervisorDependencies(),
-        skipBuiltRuntimeCheck: true,
         spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
           isPreflightCommand(commandArgs)
             ? fakeSuccessfulPreflightChild()
@@ -87,18 +80,11 @@ it("reports the artifact directory after a completed run", async () => {
               ),
         ),
         spawnSyncCommand: ignoredChecker(true),
-        mkdir: noopAsync,
-        lstat: missingStat,
-        stat: missingStat,
-        realpath: realpathFixture((targetPath) => pathToString(targetPath)),
-        ...captureWrites(new Map()),
       },
       { stdout, stderr },
     ),
   ).resolves.toBe(0);
-  expect(stdout.text).toContain(
-    "live supervisor artifacts: log/live-supervisor/cli-success",
-  );
+  expect(stdout.text).toContain(`live supervisor artifacts: ${outDir}`);
 });
 
 it("covers resolved CLI failures and forwarded signals", async () => {
@@ -113,16 +99,14 @@ it("covers resolved CLI failures and forwarded signals", async () => {
   expect(stderr.text).toContain("Live supervisor failed");
 
   const removedSignals: NodeJS.Signals[] = [];
+  const root = await mkdtemp(join(tmpdir(), "ickb-supervisor-signal-"));
+  const outDir = join(root, "validation", "cli", "chunks", CHUNK_DIRECTORY, "run-0001");
   await expect(
     runSupervisorMain(
-      ["--out-dir", "log/live-supervisor/cli-signal"],
+      ["--out-dir", outDir],
       {
         ...supervisorDependencies(),
-        skipBuiltRuntimeCheck: true,
         spawnSyncCommand: ignoredChecker(true),
-        mkdir: noopAsync,
-        lstat: missingStat,
-        realpath: realpathFixture((targetPath) => pathToString(targetPath)),
         processOn: (signal, handler) => {
           if (signal === "SIGINT") {
             handler();
@@ -131,7 +115,6 @@ it("covers resolved CLI failures and forwarded signals", async () => {
         processOff: (signal) => {
           removedSignals.push(signal);
         },
-        ...captureWrites(new Map()),
       },
       { stdout, stderr },
     ),
@@ -156,46 +139,29 @@ it("covers supervisor path and output directory guards", async () => {
   ).toThrow("must stay inside");
   expect(minimalProcessEnv({ PATH: "/bin" })).toEqual({ PATH: "/bin" });
 
-  const plan = supervisorPlan({ outDir: "/repo/log/live-supervisor/output" });
   const defaultOutputRoot = await mkdtemp(join(tmpdir(), "ickb-supervisor-real-output-"));
+  const outputPlan = supervisorPlan({
+    rootDir: defaultOutputRoot,
+    outDir: join(defaultOutputRoot, "run"),
+  });
+  await prepareOutputDirectory(outputPlan);
+  await expect(prepareOutputDirectory(outputPlan)).rejects.toThrow(
+    "Output directory already exists",
+  );
+
+  const externalRoot = await mkdtemp(join(tmpdir(), "ickb-supervisor-external-"));
   await prepareOutputDirectory(
     supervisorPlan({
       rootDir: defaultOutputRoot,
-      outDir: join(defaultOutputRoot, "run"),
+      outDir: join(
+        externalRoot,
+        "validation",
+        "run",
+        "chunks",
+        CHUNK_DIRECTORY,
+        "run-0001",
+      ),
     }),
-    {},
-  );
-  await expect(
-    prepareOutputDirectory(plan, {
-      mkdir: mkdirFixture(() => {
-        throw new Error("mkdir failed");
-      }),
-      lstat: missingStat,
-    }),
-  ).rejects.toThrow("mkdir failed");
-  await expect(
-    prepareOutputDirectory(plan, {
-      mkdir: noopAsync,
-      lstat: missingStat,
-      realpath: realpathFixture(() => {
-        throw new Error("realpath failed");
-      }),
-    }),
-  ).rejects.toThrow("realpath failed");
-  expect(() => {
-    assertBuiltRuntime(plan, {});
-  }).toThrow("Missing built live preflight script");
-  expect(() => {
-    assertBuiltRuntime(plan, { existsSync: () => true });
-  }).not.toThrow();
-
-  await prepareOutputDirectory(
-    supervisorPlan({ outDir: "/external/validation/run/chunks/chunk-0001/run-0001" }),
-    {
-      lstat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((targetPath) => pathToString(targetPath)),
-    },
   );
   expect(() =>
     resolvePlan({
@@ -206,9 +172,16 @@ it("covers supervisor path and output directory guards", async () => {
   expect(() => resolvePlan({ ...parseArgs([]), outDir: "validation/run" })).toThrow(
     "Supervisor output directory must be under",
   );
+  const symlinkRoot = await mkdtemp(join(tmpdir(), "ickb-supervisor-symlink-"));
+  const targetRoot = await mkdtemp(join(tmpdir(), "ickb-supervisor-target-"));
+  await mkdir(join(symlinkRoot, "log"));
+  await symlink(targetRoot, join(symlinkRoot, "log", "linked"));
   await expect(
-    prepareOutputDirectory(plan, {
-      lstat: lstatFixture(() => SYMBOLIC_LINK_STATS),
-    }),
+    prepareOutputDirectory(
+      supervisorPlan({
+        rootDir: symlinkRoot,
+        outDir: join(symlinkRoot, "log", "linked", "run"),
+      }),
+    ),
   ).rejects.toThrow("symlinked path");
 });

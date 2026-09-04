@@ -98,12 +98,6 @@ export function textWriter(): { text: string; write: (chunk: string) => true } {
   };
 }
 
-export function errno(message: string, code: string): NodeJS.ErrnoException {
-  const error: NodeJS.ErrnoException = new Error(message);
-  error.code = code;
-  return error;
-}
-
 export class PipeChild extends ChildProcess {
   public override stdout = new Readable({ read: noopVoid });
   public override stderr = new Readable({ read: noopVoid });

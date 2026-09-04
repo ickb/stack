@@ -1,3 +1,4 @@
+import { isRecord } from "@ickb/node-utils";
 import {
   classifyTesterTransactionFailure,
   extractTxHashes,
@@ -13,7 +14,6 @@ import {
 } from "../runtime/shared/supervisorConstants.ts";
 import {
   booleanField,
-  isRecord,
   recordField,
   stringField,
 } from "../runtime/shared/supervisorEvidence.ts";

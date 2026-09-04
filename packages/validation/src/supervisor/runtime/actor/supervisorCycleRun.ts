@@ -45,11 +45,7 @@ export async function runSupervisorCycle(
     return cycleWallClockStop;
   }
   const scenario = scenarioForCycle(args, state);
-  await appendSupervisorEvent(
-    plan,
-    { type: "cycle.started", cycleIndex, scenario },
-    dependencies,
-  );
+  await appendSupervisorEvent(plan, { type: "cycle.started", cycleIndex, scenario });
   return (
     (await runPreflightSteps(
       cycleIndex,

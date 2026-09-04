@@ -236,7 +236,7 @@
   },
   "packages/validation/src/supervisor/runtime/shared/supervisorEvidence.ts": {
     "no-restricted-syntax": {
-      "count": 12
+      "count": 11
     }
   },
   "packages/validation/src/supervisor/runtime/shared/supervisorPublicState.ts": {
@@ -251,7 +251,7 @@
   },
   "packages/validation/src/supervisor/runtime/shared/supervisorTypes.ts": {
     "no-restricted-syntax": {
-      "count": 15
+      "count": 8
     }
   },
   "packages/validation/src/supervisor/stimulus/artifacts/liveBotStimulusArtifacts.ts": {

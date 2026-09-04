@@ -1,14 +1,5 @@
 import type { ProcessSignalContext } from "@ickb/node-utils";
 import type { spawn, spawnSync } from "node:child_process";
-import type { existsSync } from "node:fs";
-import type {
-  appendFile,
-  lstat,
-  mkdir,
-  realpath,
-  stat,
-  writeFile,
-} from "node:fs/promises";
 import type {
   Actor,
   OutcomeKind,
@@ -238,14 +229,6 @@ export interface Dependencies {
   spawnCommand?: typeof spawn;
   spawnSyncCommand?: typeof spawnSync;
   now?: () => number;
-  writeFile?: typeof writeFile;
-  appendFile?: typeof appendFile;
-  mkdir?: typeof mkdir;
-  lstat?: typeof lstat;
-  realpath?: typeof realpath;
-  stat?: typeof stat;
-  existsSync?: typeof existsSync;
-  skipBuiltRuntimeCheck?: boolean;
   maxOutputBytes?: number;
   commandKillGraceMs?: number;
   killProcess?: (pid: number, signal: NodeJS.Signals) => void;

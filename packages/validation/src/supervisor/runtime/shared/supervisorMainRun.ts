@@ -1,10 +1,6 @@
 import { writeSummary } from "../../artifacts/supervisorArtifacts.ts";
 import { runSupervisorCycle } from "../actor/supervisorCycleRun.ts";
-import {
-  assertBuiltRuntime,
-  now,
-  prepareOutputDirectory,
-} from "../command/supervisorCommandRun.ts";
+import { now, prepareOutputDirectory } from "../command/supervisorCommandRun.ts";
 import {
   stopForPendingBotBalanceAudit,
   stopForWallClockBudget,
@@ -32,10 +28,7 @@ export async function supervise(
     args.maxWallClockSeconds === undefined
       ? undefined
       : startedAt + args.maxWallClockSeconds * 1000;
-  if (dependencies.skipBuiltRuntimeCheck !== true) {
-    assertBuiltRuntime(plan, dependencies);
-  }
-  await prepareOutputDirectory(plan, dependencies);
+  await prepareOutputDirectory(plan);
 
   const state: SupervisorRunState = {
     classifications: [],
@@ -80,12 +73,11 @@ export async function supervise(
     args.maxCycles,
     plan,
     state,
-    dependencies,
   );
   if (pendingAuditStop !== undefined) {
     return pendingAuditStop;
   }
 
-  await writeSummary(plan, state, "max_cycles", dependencies);
+  await writeSummary(plan, state, "max_cycles");
   return 0;
 }

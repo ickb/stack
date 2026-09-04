@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { chmod, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -10,19 +10,8 @@ import {
   writeCommandArtifacts,
   writeJsonArtifact,
 } from "../../../../src/supervisor/index.ts";
-import {
-  captureWrites,
-  missingStat,
-  mkdirFixture,
-  spawnFixture,
-} from "../../support/supervisor/index.ts";
-import {
-  PipeChild,
-  commandResult,
-  commandSpec,
-  errno,
-  supervisorPlan,
-} from "./support.ts";
+import { readArtifacts, spawnFixture } from "../../support/supervisor/index.ts";
+import { PipeChild, commandResult, commandSpec, supervisorPlan } from "./support.ts";
 
 const { join } = path;
 const ALREADY_ARTIFACT = "log/live-supervisor/run/already.json";
@@ -117,9 +106,7 @@ it("covers artifacts, command shapes, output capture, and dry IO defaults", asyn
   const outDir = join(tmpRoot, "log", "live-supervisor", "run");
   const plan = supervisorPlan({ rootDir: tmpRoot, outDir });
   const artifacts = [ALREADY_ARTIFACT];
-  const writes = new Map<string, string>();
-  const writeDependencies = captureWrites(writes);
-  await prepareOutputDirectory(plan, {});
+  await prepareOutputDirectory(plan);
 
   await expect(
     writeCommandArtifacts(
@@ -127,44 +114,45 @@ it("covers artifacts, command shapes, output capture, and dry IO defaults", asyn
       1,
       "shape",
       commandResult("tester", "text", { args: [plan.testerConfigPath] }),
-      writeDependencies,
     ),
   ).resolves.toEqual([
     "log/live-supervisor/run/cycle-0001-shape.stdout.ndjson",
     "log/live-supervisor/run/cycle-0001-shape.stderr.log",
     "log/live-supervisor/run/cycle-0001-shape.command.json",
   ]);
-  expect(writes.get(join(outDir, "cycle-0001-shape.command.json"))).toContain(
-    "<tester-config-path>",
-  );
+  expect(
+    readArtifacts(plan).get(
+      "/repo/log/live-supervisor/run/cycle-0001-shape.command.json",
+    ),
+  ).toContain("<tester-config-path>");
   await writeCommandArtifacts(
     plan,
     1,
     "shell",
     commandResult("bot", "text", { command: "sh" }),
-    writeDependencies,
   );
-  expect(writes.get(join(outDir, "cycle-0001-shell.command.json"))).toContain('"sh"');
+  expect(
+    readArtifacts(plan).get(
+      "/repo/log/live-supervisor/run/cycle-0001-shell.command.json",
+    ),
+  ).toContain('"sh"');
   await expect(
-    writeJsonArtifact(plan, "already.json", { value: 1n }, artifacts, writeDependencies),
+    writeJsonArtifact(plan, "already.json", { value: 1n }, artifacts),
   ).resolves.toBe(ALREADY_ARTIFACT);
   expect(artifacts).toEqual([ALREADY_ARTIFACT]);
-  await appendSupervisorEvent(plan, { type: "default" }, writeDependencies);
-  await writeCommandArtifacts(plan, 2, "default", commandResult("bot", "text"), {});
-  await writeJsonArtifact(plan, "default.json", { ok: true }, [], {});
-  await appendSupervisorEvent(plan, { type: "default-fs" }, {});
+  await appendSupervisorEvent(plan, { type: "default" });
+  await writeCommandArtifacts(plan, 2, "default", commandResult("bot", "text"));
+  await writeJsonArtifact(plan, "default.json", { ok: true }, []);
+  await appendSupervisorEvent(plan, { type: "default-fs" });
 
-  await expect(
-    prepareOutputDirectory(
-      supervisorPlan({ rootDir: tmpRoot, outDir: join(outDir, "mkdir-error") }),
-      {
-        mkdir: mkdirFixture((targetPath) => {
-          if (targetPath === join(outDir, "mkdir-error")) {
-            throw errno("permission", "EACCES");
-          }
-        }),
-        lstat: missingStat,
-      },
-    ),
-  ).rejects.toThrow("permission");
+  await chmod(outDir, 0o500);
+  try {
+    await expect(
+      prepareOutputDirectory(
+        supervisorPlan({ rootDir: tmpRoot, outDir: join(outDir, "mkdir-error") }),
+      ),
+    ).rejects.toThrow("EACCES");
+  } finally {
+    await chmod(outDir, 0o700);
+  }
 });

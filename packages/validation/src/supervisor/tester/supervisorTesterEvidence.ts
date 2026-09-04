@@ -1,3 +1,4 @@
+import { isRecord } from "@ickb/node-utils";
 import {
   CKB_TO_ICKB,
   GIVE_CKB_FIELD,
@@ -19,7 +20,6 @@ import {
   type TesterScenario,
 } from "../runtime/shared/supervisorConstants.ts";
 import {
-  isRecord,
   numberField,
   recordField,
   stringField,

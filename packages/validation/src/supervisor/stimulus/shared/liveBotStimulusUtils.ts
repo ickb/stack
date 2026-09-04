@@ -1,4 +1,4 @@
-import { minimalProcessEnv, ProcessSignalError } from "@ickb/node-utils";
+import { errnoCode, minimalProcessEnv, ProcessSignalError } from "@ickb/node-utils";
 import pathModule from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Dependencies } from "./liveBotStimulusTypes.ts";
@@ -94,11 +94,11 @@ export function numberField(
 }
 
 export function isNotFoundError(error: unknown): boolean {
-  return isRecord(error) && error["code"] === "ENOENT";
+  return errnoCode(error) === "ENOENT";
 }
 
 export function isAlreadyExistsError(error: unknown): boolean {
-  return isRecord(error) && error["code"] === "EEXIST";
+  return errnoCode(error) === "EEXIST";
 }
 
 export function now(dependencies: Dependencies): number {

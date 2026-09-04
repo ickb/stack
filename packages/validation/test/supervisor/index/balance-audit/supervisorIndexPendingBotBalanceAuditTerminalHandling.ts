@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOT_CONFIG_PATH,
@@ -9,14 +9,13 @@ import {
   TESTER_CONFIG_FLAG,
   TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
-  captureWrites,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
+  readArtifacts,
+  resolveTestPlan,
   spawnFixture,
   txHash,
 } from "../../support/supervisor/index.ts";
@@ -24,7 +23,6 @@ import { botCommitThenTerminalFailureStdout } from "./support.ts";
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("does not open a pending audit when commit evidence is classified terminal", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -37,23 +35,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(botCommitThenTerminalFailureStdout()),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(

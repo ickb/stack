@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOT_CONFIG_PATH,
@@ -16,16 +16,14 @@ import {
   TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
   botEvent,
-  captureWrites,
   emptyActions,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
-  selectiveIgnoredChecker,
+  readArtifacts,
+  resolveTestPlan,
   spawnFixture,
 } from "../../support/supervisor/index.ts";
 
@@ -45,7 +43,6 @@ const botNoActionSkipSpawnCommand = (): ReturnType<typeof spawnFixture> =>
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("does not start another command after the wall-clock budget expires mid-cycle", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       BOT_CONFIG_FLAG,
@@ -63,24 +60,21 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
     const clock = [0, 0, 0, 0, 0, 2000];
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 2000,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeSuccessfulPreflightChild();
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(spawned).toHaveLength(1);
@@ -99,7 +93,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("echoes requested target outcomes once in the summary", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -118,19 +111,16 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: botNoActionSkipSpawnCommand(),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(
@@ -147,7 +137,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("keeps successful preflight probes out of aggregate outcome counts", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       "--out-dir",
       "log/live-supervisor/preflight-summary-test",
@@ -158,25 +147,16 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/preflight-summary-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
+    const plan = resolveTestPlan(args, {
+      spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: botNoActionSkipSpawnCommand(),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(

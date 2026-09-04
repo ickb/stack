@@ -19,15 +19,7 @@ export function isRetryablePreflight(classification: Classification): boolean {
 }
 
 export async function preparePreflightRetry(
-  ...[
-    cycleIndex,
-    step,
-    plan,
-    state,
-    firstResult,
-    stopForUnavailableWallClockBudget,
-    dependencies,
-  ]: [
+  ...[cycleIndex, step, plan, state, firstResult, stopForUnavailableWallClockBudget]: [
     cycleIndex: number,
     step: ScenarioStep,
     plan: SupervisorPlan,
@@ -37,7 +29,6 @@ export async function preparePreflightRetry(
       incidentCycleIndex: number,
       stage: string,
     ) => Promise<number | undefined>,
-    dependencies: Dependencies,
   ]
 ): Promise<number | undefined> {
   state.artifacts.push(
@@ -46,7 +37,6 @@ export async function preparePreflightRetry(
       cycleIndex,
       `${stepLabel(step)}-preflight-attempt-1`,
       firstResult,
-      dependencies,
     )),
   );
   return stopForUnavailableWallClockBudget(cycleIndex, "preflight_retry_start");
@@ -97,7 +87,6 @@ export async function retryPreflight(
       cycleIndex,
       `${stepLabel(step)}-preflight-attempt-2`,
       result,
-      dependencies,
     )),
   );
   return { result, classification: classifyActorResult("preflight", result) };

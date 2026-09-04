@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_PATH,
   BOT_DECISION_SKIPPED,
@@ -15,7 +15,6 @@ import {
   TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
   botEvent,
-  captureWrites,
   emptyActions,
   expectedTesterPreflightState,
   fakeChild,
@@ -24,9 +23,9 @@ import {
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
+  readArtifacts,
   recordAt,
+  resolveTestPlan,
   safePreflightBalances,
   selectiveIgnoredChecker,
   spawnFixture,
@@ -38,7 +37,6 @@ import {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("summarizes retryable bot failures hidden by later skips", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       "--out-dir",
       "log/live-supervisor/retryable-failure-summary-test",
@@ -47,7 +45,7 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([
           "log/live-supervisor/retryable-failure-summary-test",
@@ -81,17 +79,14 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(stdout),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(
@@ -118,7 +113,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("summarizes safe preflight balances and selected tester scenario", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       "--out-dir",
       "log/live-supervisor/preflight-state-summary-test",
@@ -131,7 +125,7 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([
           "log/live-supervisor/preflight-state-summary-test",
@@ -144,7 +138,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
     let testerRuns = 0;
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         if (isPreflightCommand(commandArgs)) {
           return fakePreflightChild({
@@ -162,10 +155,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(

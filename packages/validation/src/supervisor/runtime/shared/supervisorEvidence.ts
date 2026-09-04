@@ -1,3 +1,4 @@
+import { isRecord } from "@ickb/node-utils";
 import type { ParsedEvidence } from "./supervisorTypes.ts";
 
 const OUTPUT_INDEX_PATTERN = /^(?:0|[1-9]\d*)$/u;
@@ -147,28 +148,6 @@ export function boundedText(text: string, limit: number): string {
 
 function truncationMarker(omittedBytes: number): string {
   return `\n<truncated ${String(omittedBytes)} bytes>`;
-}
-
-export function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "Unknown error";
-}
-
-export function isNotFoundError(error: unknown): boolean {
-  return isRecord(error) && error["code"] === "ENOENT";
-}
-
-export function isAlreadyExistsError(error: unknown): boolean {
-  return isRecord(error) && error["code"] === "EEXIST";
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export type JsonReplacerInput =

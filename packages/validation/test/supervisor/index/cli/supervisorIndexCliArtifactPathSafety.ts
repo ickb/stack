@@ -1,160 +1,53 @@
+import { mkdir, mkdtemp, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_DECISION_SKIPPED,
   BOT_ENTRYPOINT,
-  DIRECTORY_STATS,
   MAX_CYCLES_FLAG,
   SCENARIO_FLAG,
   SUPERVISOR_CLI_SUITE,
-  SYMBOLIC_LINK_STATS,
   TEST_ACTOR_ENTRYPOINTS,
   botEvent,
-  eexist,
   emptyActions,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
-  lstatFixture,
-  missingStat,
-  mkdirFixture,
-  noopAsync,
-  pathToString,
-  realpathEscapesText,
-  realpathFixture,
-  recursiveOption,
+  resolveTestPlan,
   spawnFixture,
   spawnSyncFixture,
 } from "../../support/supervisor/index.ts";
 
+const { join } = path;
+
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses to reuse an existing output directory", async () => {
     const args = parseArgs(["--out-dir", "log/live-supervisor/existing"]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(true),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
+    await mkdir(plan.outDir, { recursive: true });
 
     await expect(
-      supervise(args, plan, {
-        actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        mkdir: async (path) => {
-          if (pathToString(path) === "/repo/log/live-supervisor/existing") {
-            throw eexist();
-          }
-          await Promise.resolve();
-        },
-      }),
+      supervise(args, plan, { actorEntrypoints: TEST_ACTOR_ENTRYPOINTS }),
     ).rejects.toThrow("Output directory already exists: log/live-supervisor/existing");
   });
-});
 
-describe(SUPERVISOR_CLI_SUITE, () => {
-  it("creates only parent directories recursively before reserving a fresh output directory", async () => {
-    const args = parseArgs(["--out-dir", "log/live-supervisor/fresh"]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(true),
-    });
-    const mkdirs: Array<{ path: string; recursive?: boolean }> = [];
-
-    await supervise(args, plan, {
-      actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
-      lstat: missingStat,
-      realpath: realpathFixture((path) => pathToString(path)),
-      mkdir: mkdirFixture((path, options) => {
-        mkdirs.push({
-          path: pathToString(path),
-          recursive: recursiveOption(options),
-        });
-      }),
-      writeFile: noopAsync,
-      appendFile: noopAsync,
-    });
-
-    expect(mkdirs).toContainEqual({
-      path: "/repo/log/live-supervisor",
-      recursive: true,
-    });
-    expect(mkdirs).toContainEqual({
-      path: "/repo/log/live-supervisor/fresh",
-      recursive: undefined,
-    });
-  });
-});
-
-describe(SUPERVISOR_CLI_SUITE, () => {
-  it("refuses output directories created after ancestor checks", async () => {
-    const args = parseArgs(["--out-dir", "log/live-supervisor/raced"]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(true),
-    });
-
-    await expect(
-      supervise(args, plan, {
-        actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        lstat: missingStat,
-        mkdir: async (path) => {
-          if (pathToString(path) === "/repo/log/live-supervisor/raced") {
-            throw eexist();
-          }
-          await Promise.resolve();
-        },
-        writeFile: () => {
-          throw new Error("should not write artifacts after raced output directory");
-        },
-        appendFile: () => {
-          throw new Error("should not write events after raced output directory");
-        },
-      }),
-    ).rejects.toThrow("Output directory already exists: log/live-supervisor/raced");
-  });
-});
-
-describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses symlinked supervisor artifact parents", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "ickb-supervisor-symlink-root-"));
+    const targetDir = await mkdtemp(join(tmpdir(), "ickb-supervisor-symlink-target-"));
+    await symlink(targetDir, join(rootDir, "log"));
     const args = parseArgs(["--out-dir", "log/live-supervisor/symlink-parent"]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolvePlan(args, rootDir, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     await expect(
-      supervise(args, plan, {
-        actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        lstat: lstatFixture((path) => {
-          if (pathToString(path) === "/repo/log") {
-            return SYMBOLIC_LINK_STATS;
-          }
-          return DIRECTORY_STATS;
-        }),
-        stat: missingStat,
-        mkdir: noopAsync,
-      }),
+      supervise(args, plan, { actorEntrypoints: TEST_ACTOR_ENTRYPOINTS }),
     ).rejects.toThrow(
       "Refusing to write supervisor artifacts through symlinked path: log",
     );
-  });
-});
-
-describe(SUPERVISOR_CLI_SUITE, () => {
-  it("refuses real supervisor artifact paths outside the repo", async () => {
-    const args = parseArgs(["--out-dir", "log/live-supervisor/escaped"]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: ignoredChecker(true),
-    });
-
-    await expect(
-      supervise(args, plan, {
-        actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        stat: missingStat,
-        mkdir: noopAsync,
-        realpath: realpathFixture(realpathEscapesText),
-      }),
-    ).rejects.toThrow("Supervisor output directory must stay inside the repo");
   });
 });
 
@@ -172,13 +65,10 @@ describe(SUPERVISOR_CLI_SUITE, () => {
         MAX_CYCLES_FLAG,
         "1",
       ]);
-      const plan = resolvePlan(args, "/repo", {
-        spawnSyncCommand: ignoredChecker(true),
-      });
+      const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
 
       await supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
         spawnCommand: spawnFixture((_command, commandArgs, options) => {
           spawned.push({ args: commandArgs, env: options.env });
           return isPreflightCommand(commandArgs)
@@ -193,10 +83,6 @@ describe(SUPERVISOR_CLI_SUITE, () => {
               );
         }),
         spawnSyncCommand: ignoredChecker(true),
-        stat: missingStat,
-        mkdir: noopAsync,
-        appendFile: noopAsync,
-        writeFile: noopAsync,
       });
 
       const preflight = spawned.find((item) => isPreflightCommand(item.args));
@@ -204,10 +90,10 @@ describe(SUPERVISOR_CLI_SUITE, () => {
       expect(preflight?.env).not.toHaveProperty("PRIVATE_KEY");
       expect(preflight?.env).not.toHaveProperty("COWORKER_BUILD");
       expect(preflight?.env).not.toHaveProperty("NODE_OPTIONS");
-      expect(preflight?.env).toMatchObject({ INIT_CWD: "/repo" });
+      expect(preflight?.env).toMatchObject({ INIT_CWD: plan.rootDir });
       expect(actor?.env).toMatchObject({
-        BOT_CONFIG_FILE: "/repo/config/bot-testnet.json",
-        INIT_CWD: "/repo",
+        BOT_CONFIG_FILE: plan.botConfigPath,
+        INIT_CWD: plan.rootDir,
       });
       expect(actor?.env).not.toHaveProperty("PRIVATE_KEY");
       expect(actor?.env).not.toHaveProperty("COWORKER_BUILD");

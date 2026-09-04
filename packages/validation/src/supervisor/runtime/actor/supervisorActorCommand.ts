@@ -22,12 +22,7 @@ export async function runActor(
 ): Promise<CommandResult> {
   const actor = step.actor;
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
-  await assertNoSymlinkedConfigPath(
-    plan.rootDir,
-    configPath,
-    `${actor} config path`,
-    dependencies,
-  );
+  await assertNoSymlinkedConfigPath(plan.rootDir, configPath, `${actor} config path`);
   const entrypoint = dependencies.actorEntrypoints[actor];
   const configEnvName = actor === "bot" ? "BOT_CONFIG_FILE" : "TESTER_CONFIG_FILE";
   return runCommand(

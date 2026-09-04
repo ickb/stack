@@ -23,7 +23,6 @@ import { parseJsonEvidence, recordField } from "../shared/supervisorEvidence.ts"
 import type {
   Classification,
   CommandResult,
-  Dependencies,
   ParsedArgs,
   ScenarioStep,
   SupervisorDependencies,
@@ -163,7 +162,6 @@ async function runActorStep(
     state,
     result,
     provenance,
-    dependencies,
   );
 
   if (run.classification.terminal) {
@@ -175,7 +173,6 @@ async function runActorStep(
       state,
       run.classification,
       result,
-      dependencies,
     );
   }
   if (
@@ -183,7 +180,7 @@ async function runActorStep(
     state.pendingBotBalanceAudit === undefined &&
     state.txCount >= args.stopAfterTxCount
   ) {
-    return stopAfterTxCount(plan, state, dependencies);
+    return stopAfterTxCount(plan, state);
   }
   return run;
 }
@@ -207,26 +204,19 @@ async function runActorCommandAndRecordArtifacts(
     dependencies,
   );
   state.artifacts.push(
-    ...(await writeCommandArtifacts(
-      plan,
-      cycleIndex,
-      stepLabel(step),
-      result,
-      dependencies,
-    )),
+    ...(await writeCommandArtifacts(plan, cycleIndex, stepLabel(step), result)),
   );
   return result;
 }
 
 async function classifyAndRecordActorStep(
-  ...[cycleIndex, step, plan, state, result, provenance, dependencies]: [
+  ...[cycleIndex, step, plan, state, result, provenance]: [
     cycleIndex: number,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
     result: CommandResult,
     provenance: FreshSkipProvenance | undefined,
-    dependencies: SupervisorDependencies,
   ]
 ): Promise<ClassifiedActorStep> {
   const classified = classifyActorResult(
@@ -242,13 +232,7 @@ async function classifyAndRecordActorStep(
     state,
     classifiedStep.classification,
   );
-  await appendClassificationEvent(
-    plan,
-    cycleIndex,
-    step,
-    recordedClassification,
-    dependencies,
-  );
+  await appendClassificationEvent(plan, cycleIndex, step, recordedClassification);
   return { ...classifiedStep, classification: recordedClassification };
 }
 
@@ -330,7 +314,7 @@ function correlateFreshSkipProvenance(
 }
 
 async function stopForTerminalActor(
-  ...[cycleIndex, scenario, step, plan, state, classification, result, dependencies]: [
+  ...[cycleIndex, scenario, step, plan, state, classification, result]: [
     cycleIndex: number,
     scenario: ScenarioName,
     step: ScenarioStep,
@@ -338,7 +322,6 @@ async function stopForTerminalActor(
     state: SupervisorRunState,
     classification: Classification,
     result: CommandResult,
-    dependencies: Dependencies,
   ]
 ): Promise<number> {
   const incident = await writeIncident(
@@ -349,42 +332,35 @@ async function stopForTerminalActor(
     classification,
     result,
     state.artifacts,
-    dependencies,
   );
-  await writeSummary(plan, state, incident.classification.outcome, dependencies);
+  await writeSummary(plan, state, incident.classification.outcome);
   return classification.outcome === "nonzero_exit" ? 1 : STOP_EXIT_CODE;
 }
 
 async function stopAfterTxCount(
   plan: SupervisorPlan,
   state: SupervisorRunState,
-  dependencies: Dependencies,
 ): Promise<number> {
-  await writeSummary(plan, state, "stop_after_tx_count", dependencies);
+  await writeSummary(plan, state, "stop_after_tx_count");
   return 0;
 }
 
 async function appendClassificationEvent(
-  ...[plan, cycleIndex, step, classification, dependencies]: [
+  ...[plan, cycleIndex, step, classification]: [
     plan: SupervisorPlan,
     cycleIndex: number,
     step: ScenarioStep,
     classification: Classification,
-    dependencies: Dependencies,
   ]
 ): Promise<void> {
-  await appendSupervisorEvent(
-    plan,
-    {
-      type: "actor.classified",
-      cycleIndex,
-      actor: step.actor,
-      step: stepLabel(step),
-      outcome: classification.outcome,
-      terminal: classification.terminal,
-      reason: classification.reason,
-      txHashes: classification.txHashes,
-    },
-    dependencies,
-  );
+  await appendSupervisorEvent(plan, {
+    type: "actor.classified",
+    cycleIndex,
+    actor: step.actor,
+    step: stepLabel(step),
+    outcome: classification.outcome,
+    terminal: classification.terminal,
+    reason: classification.reason,
+    txHashes: classification.txHashes,
+  });
 }

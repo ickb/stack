@@ -10,10 +10,7 @@ import type {
   RunCommandSpec,
 } from "../shared/supervisorTypes.ts";
 
-export {
-  assertBuiltRuntime,
-  prepareOutputDirectory,
-} from "../../artifacts/supervisorOutputDirectory.ts";
+export { prepareOutputDirectory } from "../../artifacts/supervisorOutputDirectory.ts";
 
 export async function runCommand(
   spec: RunCommandSpec,

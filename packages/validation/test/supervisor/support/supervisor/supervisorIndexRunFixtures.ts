@@ -1,11 +1,16 @@
 import type { ChildProcess } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   parseArgs,
   resolvePlan,
   supervise,
   type Dependencies,
+  type ParsedArgs,
+  type SupervisorPlan,
 } from "../../../../src/supervisor/index.ts";
-import { captureWrites, pathToString } from "./supervisorIndexAssertions.ts";
+import { readArtifacts } from "./supervisorIndexAssertions.ts";
 import {
   BOT_CONFIG_PATH,
   BOT_MATCH_COMMITTED,
@@ -22,17 +27,23 @@ import {
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
-  missingStat,
-  noopAsync,
-  realpathFixture,
   selectiveIgnoredChecker,
   spawnFixture,
   type TestSpawnOptions,
 } from "./supervisorIndexProcessFixtures.ts";
 
+const { join } = path;
+
 export interface RecordedSupervisorSpawn {
   args: string[];
   env?: NodeJS.ProcessEnv;
+}
+
+export function resolveTestPlan(
+  args: ParsedArgs,
+  dependencies: Dependencies = {},
+): SupervisorPlan {
+  return resolvePlan(args, mkdtempSync(join(tmpdir(), "ickb-supervisor-")), dependencies);
 }
 
 export async function runSupervisorFixture(
@@ -45,32 +56,26 @@ export async function runSupervisorFixture(
   dependencies: Dependencies = {},
 ): Promise<{
   exitCode: number;
+  plan: SupervisorPlan;
   spawned: RecordedSupervisorSpawn[];
   writes: Map<string, string>;
 }> {
-  const writes = new Map<string, string>();
   const spawned: RecordedSupervisorSpawn[] = [];
   const args = parseArgs(argv);
-  const plan = resolvePlan(args, "/repo", {
+  const plan = resolveTestPlan(args, {
     spawnSyncCommand: ignoredChecker(true),
   });
   const exitCode = await supervise(args, plan, {
     actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-    skipBuiltRuntimeCheck: true,
     spawnCommand: spawnFixture((command, commandArgs, options) => {
       spawned.push({ args: commandArgs, env: options.env });
       return handler(commandArgs, options, command);
     }),
     spawnSyncCommand: ignoredChecker(true),
-    lstat: missingStat,
-    stat: missingStat,
-    mkdir: noopAsync,
-    realpath: realpathFixture((path) => pathToString(path)),
-    ...captureWrites(writes),
     ...dependencies,
   });
 
-  return { exitCode, spawned, writes };
+  return { exitCode, plan, spawned, writes: readArtifacts(plan) };
 }
 
 export function startHangingBotSupervisorRun({
@@ -85,10 +90,10 @@ export function startHangingBotSupervisorRun({
   maxWallClockSeconds?: string;
 }): {
   run: Promise<number>;
-  writes: Map<string, string>;
+  plan: SupervisorPlan;
+  started: Promise<void>;
   kills: Array<{ pid: number; signal: NodeJS.Signals }>;
 } {
-  const writes = new Map<string, string>();
   const kills: Array<{ pid: number; signal: NodeJS.Signals }> = [];
   const args = parseArgs([
     "--out-dir",
@@ -105,16 +110,16 @@ export function startHangingBotSupervisorRun({
     COMMAND_TIMEOUT_SECONDS_FLAG,
     commandTimeoutSeconds,
   ]);
-  const plan = resolvePlan(args, "/repo", {
+  const plan = resolveTestPlan(args, {
     spawnSyncCommand: selectiveIgnoredChecker(
       new Set([outDir, BOT_CONFIG_PATH, TESTER_CONFIG_PATH]),
     ),
   });
   const child = fakeHangingChild();
+  const { promise: started, resolve: markStarted } = Promise.withResolvers<undefined>();
 
   const run = supervise(args, plan, {
     actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-    skipBuiltRuntimeCheck: true,
     commandKillGraceMs,
     killProcess: (pid: number, signal: NodeJS.Signals) => {
       kills.push({ pid, signal });
@@ -124,16 +129,15 @@ export function startHangingBotSupervisorRun({
         });
       }
     },
-    spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
-      isPreflightCommand(commandArgs) ? fakeSuccessfulPreflightChild() : child,
-    ),
+    spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
+      if (isPreflightCommand(commandArgs)) {
+        return fakeSuccessfulPreflightChild();
+      }
+      markStarted(undefined);
+      return child;
+    }),
     spawnSyncCommand: ignoredChecker(true),
-    lstat: missingStat,
-    stat: missingStat,
-    mkdir: noopAsync,
-    realpath: realpathFixture((path) => pathToString(path)),
-    ...captureWrites(writes),
   });
 
-  return { run, writes, kills };
+  return { run, plan, started, kills };
 }

@@ -1,5 +1,3 @@
-import { lstatSync } from "node:fs";
-
 import type { Dependencies } from "../../../../src/supervisor/index.ts";
 
 export const SUPERVISOR_CLI_SUITE = "supervisor CLI";
@@ -15,9 +13,6 @@ export const EXTERNAL_VALIDATION_PARENT =
   "/workspaces/research/forks/ickb_stack/repo/.scratch/ickb-log/validation";
 
 export const EXTERNAL_VALIDATION_RUN_DIR = `${EXTERNAL_VALIDATION_PARENT}/dynamic-test/chunks/chunk-0001/run-0001`;
-
-export const ESCAPED_REALPATH =
-  "/workspaces/research/forks/ickb_stack/repo/.scratch/escaped";
 
 export const BOT_CONFIG_FLAG = "--bot-config";
 
@@ -130,21 +125,9 @@ export const TESTER_ONLY_SCENARIO = "tester-only";
 
 export const SUMMARY_TX_HASHES = "summary tx hashes";
 
-export const SYMBOLIC_LINK_STATS = lstatSync("/proc/self/exe");
-
-export const DIRECTORY_STATS = lstatSync("/");
-
 export type SupervisorSpawn = NonNullable<Dependencies["spawnCommand"]>;
 
 export type SupervisorSpawnSync = NonNullable<Dependencies["spawnSyncCommand"]>;
-
-export type SupervisorMkdir = NonNullable<Dependencies["mkdir"]>;
-
-export type SupervisorLstat = NonNullable<Dependencies["lstat"]>;
-
-export type SupervisorRealpath = NonNullable<Dependencies["realpath"]>;
-
-export type CapturedWriteDependencies = Pick<Dependencies, "appendFile" | "writeFile">;
 
 export function txHash(byte: string): string {
   return `0x${byte.repeat(32)}`;

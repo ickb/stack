@@ -4,18 +4,9 @@ import {
   spawn,
   spawnSync,
 } from "node:child_process";
-import type { PathLike } from "node:fs";
-import { lstat, mkdir, realpath } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { isTestRecord, pathToString } from "./supervisorIndexAssertions.ts";
-import {
-  ESCAPED_REALPATH,
-  type SupervisorLstat,
-  type SupervisorMkdir,
-  type SupervisorRealpath,
-  type SupervisorSpawn,
-  type SupervisorSpawnSync,
-} from "./supervisorIndexConstants.ts";
+import { isTestRecord } from "./supervisorIndexAssertions.ts";
+import type { SupervisorSpawn, SupervisorSpawnSync } from "./supervisorIndexConstants.ts";
 
 export function ignoredChecker(ignored: boolean): SupervisorSpawnSync {
   return spawnSyncFixture(() => (ignored ? 0 : 1));
@@ -30,41 +21,6 @@ export function spawnFixture(handler: TestSpawnHandler): SupervisorSpawn {
       const commandArgs = optionalStringArray(argArray[1]);
       const options = spawnOptions(argArray[2]);
       return handler(command, commandArgs, options);
-    },
-  });
-}
-export function lstatFixture(
-  statForPath: (path: PathLike) => Awaited<ReturnType<SupervisorLstat>>,
-): SupervisorLstat {
-  return new Proxy(lstat, {
-    async apply(
-      _target,
-      _thisArg,
-      argArray: unknown[],
-    ): Promise<Awaited<ReturnType<SupervisorLstat>>> {
-      await Promise.resolve();
-      return statForPath(pathLikeValue(argArray[0]));
-    },
-  });
-}
-export function realpathFixture(
-  pathForPath: (path: PathLike) => string,
-): SupervisorRealpath {
-  return new Proxy(realpath, {
-    async apply(_target, _thisArg, argArray: unknown[]): Promise<string> {
-      await Promise.resolve();
-      return pathForPath(pathLikeValue(argArray[0]));
-    },
-  });
-}
-export function mkdirFixture(
-  onMkdir: (path: PathLike, options: unknown) => void,
-): SupervisorMkdir {
-  return new Proxy(mkdir, {
-    async apply(_target, _thisArg, argArray: unknown[]): Promise<void> {
-      onMkdir(pathLikeValue(argArray[0]), argArray[1]);
-      await Promise.resolve();
-      return undefined;
     },
   });
 }
@@ -132,25 +88,6 @@ export function fakeHangingChild(): FakeChild {
   };
   return child;
 }
-export function missingStat(): never {
-  throw errno("missing", "ENOENT");
-}
-export function eexist(message = "exists"): NodeJS.ErrnoException {
-  return errno(message, "EEXIST");
-}
-export function realpathEscapesText(path: PathLike): string {
-  return pathToString(path) === "/repo" ? "/repo" : ESCAPED_REALPATH;
-}
-export function recursiveOption(value: unknown): boolean | undefined {
-  if (isTestRecord(value) && typeof value["recursive"] === "boolean") {
-    return value["recursive"];
-  }
-  return undefined;
-}
-export async function noopAsync(): Promise<undefined> {
-  await Promise.resolve();
-  return undefined;
-}
 export function spawnSyncFixture(
   statusForArgs: (args: string[], command: string, options?: TestSpawnOptions) => number,
 ): SupervisorSpawnSync {
@@ -165,18 +102,6 @@ export function spawnSyncFixture(
       );
     },
   });
-}
-function pathLikeValue(value: unknown): PathLike {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (Buffer.isBuffer(value)) {
-    return value.toString("utf8");
-  }
-  if (value instanceof URL) {
-    return value.toString();
-  }
-  return "";
 }
 function stringValue(value: unknown): string {
   if (typeof value === "string") {
@@ -242,11 +167,6 @@ function noopRead(): void {
 }
 export function noopVoid(): void {
   // Intentionally empty fixture hook.
-}
-function errno(message: string, code: string): NodeJS.ErrnoException {
-  const error: NodeJS.ErrnoException = new Error(message);
-  error.code = code;
-  return error;
 }
 export interface TestSpawnOptions {
   env?: NodeJS.ProcessEnv;

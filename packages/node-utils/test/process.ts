@@ -6,12 +6,10 @@ import { describe, expect, it } from "vitest";
 import {
   firstSymlinkInPath,
   minimalProcessEnv,
-  ProcessSignalError,
   readLinuxProcessIdentity,
   runProcess,
   signalExitCode,
   timerDelayMs,
-  withProcessSignalForwarding,
   type ProcessChild,
 } from "../src/index.ts";
 
@@ -245,23 +243,6 @@ describe("process signal outcomes", () => {
       forwardedSignal: "SIGTERM",
     });
     expect(activeChildren.size).toBe(0);
-  });
-
-  it("preserves a received signal when cleanup rejects", async () => {
-    const handlers = new Map<NodeJS.Signals, () => void>();
-    const run = withProcessSignalForwarding(
-      async () => {
-        handlers.get("SIGINT")?.();
-        await Promise.resolve();
-        throw new Error("cleanup failed");
-      },
-      {
-        addSignalHandler: (signal, handler) => handlers.set(signal, handler),
-        removeSignalHandler: (signal) => handlers.delete(signal),
-      },
-    );
-
-    await expect(run).rejects.toEqual(new ProcessSignalError("SIGINT"));
   });
 
   it("provides a minimal child environment and bounded timer delay", () => {

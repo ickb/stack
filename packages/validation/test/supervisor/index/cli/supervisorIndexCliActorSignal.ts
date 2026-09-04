@@ -1,3 +1,6 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { main } from "../../../../src/supervisor/index.ts";
 import {
@@ -6,16 +9,14 @@ import {
   ignoredChecker,
   isPreflightCommand,
   MAX_CYCLES_FLAG,
-  missingStat,
-  noopAsync,
   noopVoid,
-  pathToString,
-  realpathFixture,
   SCENARIO_FLAG,
   spawnFixture,
   SUPERVISOR_CLI_SUITE,
   TEST_ACTOR_ENTRYPOINTS,
 } from "../../support/supervisor/index.ts";
+
+const { join } = path;
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it.each([
@@ -25,13 +26,13 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     "preserves %s while cleaning up the active actor",
     async (expectedSignal, exitCode) => {
       let signalHandler: (() => void) | undefined;
-      let signaled = false;
       const kills: Array<{ pid: number; signal: NodeJS.Signals }> = [];
       const child = fakeHangingChild();
+      const root = await mkdtemp(join(tmpdir(), "ickb-supervisor-signal-"));
       const run = main(
         [
           "--out-dir",
-          "log/live-supervisor/signal-forwarding-test",
+          join(root, "validation", "signal", "chunks", "chunk-0001", "run-0001"),
           SCENARIO_FLAG,
           "bot-only",
           MAX_CYCLES_FLAG,
@@ -39,11 +40,9 @@ describe(SUPERVISOR_CLI_SUITE, () => {
         ],
         {
           actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-          skipBuiltRuntimeCheck: true,
           processOn: (signal, listener) => {
             if (signal === expectedSignal) {
               signalHandler = (): void => {
-                signaled = true;
                 listener();
               };
             }
@@ -65,17 +64,6 @@ describe(SUPERVISOR_CLI_SUITE, () => {
             return child;
           }),
           spawnSyncCommand: ignoredChecker(true),
-          lstat: missingStat,
-          stat: missingStat,
-          mkdir: noopAsync,
-          realpath: realpathFixture((path) => pathToString(path)),
-          appendFile: noopAsync,
-          writeFile: async () => {
-            await Promise.resolve();
-            if (signaled) {
-              throw new Error("cleanup artifact failed");
-            }
-          },
         },
       );
 

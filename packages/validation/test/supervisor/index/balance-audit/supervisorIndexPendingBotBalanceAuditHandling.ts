@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOT_CONFIG_PATH,
@@ -15,15 +15,14 @@ import {
   TESTER_CONFIG_PATH,
   TESTER_ENTRYPOINT,
   TEST_ACTOR_ENTRYPOINTS,
-  captureWrites,
   expectNoIncident,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
+  readArtifacts,
+  resolveTestPlan,
   spawnFixture,
   testerOrderStdout,
   txHash,
@@ -38,7 +37,6 @@ import {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("waits for the next bot state read before stop-after-tx-count", async () => {
-    const writes = new Map<string, string>();
     let botRuns = 0;
     const args = parseArgs([
       BOT_CONFIG_FLAG,
@@ -54,13 +52,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "2",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         if (isPreflightCommand(commandArgs)) {
           return fakeSuccessfulPreflightChild();
@@ -73,10 +70,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(botRuns).toBe(2);
@@ -96,7 +91,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("uses a bot-only audit cycle after stop-after-tx-count in standard-cycle", async () => {
-    const writes = new Map<string, string>();
     const actorEntrypoints: string[] = [];
     let botRuns = 0;
     const args = parseArgs([
@@ -113,13 +107,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "2",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         if (isPreflightCommand(commandArgs)) {
           return fakeSuccessfulPreflightChild();
@@ -136,10 +129,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(actorEntrypoints).toEqual([TESTER_ENTRYPOINT, BOT_ENTRYPOINT, BOT_ENTRYPOINT]);
@@ -163,7 +154,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("fails wall-clock stop with a committed bot transaction pending balance audit", async () => {
-    const writes = new Map<string, string>();
     const nowValues = [0, 0, 0, 0, 0, 0, 0, 0, 200];
     let nowIndex = 0;
     const args = parseArgs([
@@ -182,13 +172,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => nowValues[Math.min(nowIndex++, nowValues.length - 1)] ?? 200,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
@@ -196,10 +185,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
           : fakeChild(botCommitWithoutPostStateStdout("95")),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(
@@ -227,7 +214,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("fails max-cycles with a committed bot transaction pending balance audit", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -240,23 +226,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(botCommitWithoutPostStateStdout("91")),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(
@@ -283,7 +266,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("fails pending bot balance audit on incomplete next state read", async () => {
-    const writes = new Map<string, string>();
     let botRuns = 0;
     const args = parseArgs([
       BOT_CONFIG_FLAG,
@@ -297,13 +279,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "2",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         if (isPreflightCommand(commandArgs)) {
           return fakeSuccessfulPreflightChild();
@@ -316,10 +297,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(
@@ -337,7 +316,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("fails when one bot run commits again before auditing the prior commit", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -350,23 +328,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(botDoubleCommitStdout("96", "97")),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(
@@ -385,7 +360,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("fails when a terminal bot stop happens while balance audit is pending", async () => {
-    const writes = new Map<string, string>();
     let botRuns = 0;
     const args = parseArgs([
       BOT_CONFIG_FLAG,
@@ -399,13 +373,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "2",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         if (isPreflightCommand(commandArgs)) {
           return fakeSuccessfulPreflightChild();
@@ -416,10 +389,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
         );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(

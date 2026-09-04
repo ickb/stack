@@ -119,7 +119,6 @@ async function runPreflightStep(
         state,
         firstResult,
         stopForUnavailableWallClockBudget,
-        dependencies,
       )
     : undefined;
   if (retryWallClockStop !== undefined) {
@@ -137,5 +136,5 @@ async function runPreflightStep(
         dependencies,
       )
     : { result: firstResult, classification: firstClassification };
-  return finishPreflightRun(cycleIndex, scenario, step, plan, state, run, dependencies);
+  return finishPreflightRun(cycleIndex, scenario, step, plan, state, run);
 }

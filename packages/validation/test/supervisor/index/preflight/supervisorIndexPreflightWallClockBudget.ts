@@ -15,7 +15,6 @@ import {
   TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
   botEvent,
-  captureWrites,
   emptyActions,
   expectSupervisorSpawnCounts,
   fakeChild,
@@ -24,11 +23,9 @@ import {
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
-  pathToString,
-  realpathFixture,
+  readArtifacts,
   recordAt,
+  resolveTestPlan,
   selectiveIgnoredChecker,
   spawnFixture,
 } from "../../support/supervisor/index.ts";
@@ -67,7 +64,6 @@ it("rejects a wall-clock stop race without finalized evidence", async () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("does not spend tiny positive wall-clock remainders on short-timeout commands", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -83,7 +79,7 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([
           "log/live-supervisor/tiny-tail-test",
@@ -96,19 +92,14 @@ describe(CLASSIFICATION_SUITE, () => {
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 999,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeHangingChild();
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
@@ -122,7 +113,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("stops before preflight when remaining wall-clock cannot fund another command", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -136,7 +126,7 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "3600",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([
           "log/live-supervisor/wall-clock-tail-test",
@@ -149,7 +139,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => (commandCount < 2 ? 0 : 3_585_000),
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
@@ -166,12 +155,8 @@ describe(CLASSIFICATION_SUITE, () => {
             );
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expectSupervisorSpawnCounts(spawned, { preflight: 1, actor: 1 });
@@ -193,7 +178,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("explains when preflight consumes the actor wall-clock start budget", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -207,7 +191,7 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "900",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([
           "log/live-supervisor/wall-clock-preflight-budget-test",
@@ -220,7 +204,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 65_000,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
@@ -229,12 +212,8 @@ describe(CLASSIFICATION_SUITE, () => {
           : fakeChild("should not run");
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expectSupervisorSpawnCounts(spawned, { preflight: 1, actor: 0 });

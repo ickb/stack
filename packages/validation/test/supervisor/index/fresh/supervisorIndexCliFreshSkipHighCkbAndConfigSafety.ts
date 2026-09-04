@@ -1,9 +1,11 @@
+import { mkdtemp, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOUNDED_ICKB_TO_CKB_SCENARIO,
-  DIRECTORY_STATS,
   FRESH_MATCHABLE_ORDER,
   FRESH_SKIP_TWO_PASS_SCENARIO,
   LIVE_SUPERVISOR_TEST_DIR,
@@ -14,7 +16,6 @@ import {
   RANDOM_ORDER_SCENARIO,
   SCENARIO_FLAG,
   SUPERVISOR_CLI_SUITE,
-  SYMBOLIC_LINK_STATS,
   TARGET_OUTCOME_FLAG,
   TESTER_CONFIG_FLAG,
   TESTER_CONFIG_PATH,
@@ -29,14 +30,12 @@ import {
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  lstatFixture,
-  missingStat,
-  noopAsync,
-  pathToString,
   runSupervisorFixture,
   selectiveIgnoredChecker,
   txHash,
 } from "../../support/supervisor/index.ts";
+
+const { join } = path;
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("uses raw-order first-pass fresh-skip stimulus when plain CKB is high", async () => {
@@ -234,6 +233,9 @@ function pass1OrderStdout(
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses live config paths through symlinked parents", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "ickb-supervisor-config-root-"));
+    const configTarget = await mkdtemp(join(tmpdir(), "ickb-supervisor-config-target-"));
+    await symlink(configTarget, join(rootDir, "config"));
     const args = parseArgs([
       "--out-dir",
       "log/live-supervisor/config-symlink-test",
@@ -242,25 +244,14 @@ describe(SUPERVISOR_CLI_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolvePlan(args, rootDir, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        lstat: lstatFixture((path) => {
-          if (pathToString(path) === "/repo/config") {
-            return SYMBOLIC_LINK_STATS;
-          }
-          return DIRECTORY_STATS;
-        }),
         spawnSyncCommand: ignoredChecker(true),
-        stat: missingStat,
-        mkdir: noopAsync,
-        appendFile: noopAsync,
-        writeFile: noopAsync,
       }),
     ).rejects.toThrow("Refusing to use bot config path through symlinked path: config");
   });

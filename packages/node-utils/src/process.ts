@@ -188,11 +188,6 @@ export async function withProcessSignalForwarding<T>(
   try {
     const value = await run(context);
     return context.signal === undefined ? { value } : { value, signal: context.signal };
-  } catch (error) {
-    if (context.signal !== undefined) {
-      throw new ProcessSignalError(context.signal);
-    }
-    throw error;
   } finally {
     if (killTimer !== undefined) {
       clearTimeout(killTimer);

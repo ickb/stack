@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOT_CONFIG_PATH,
@@ -18,16 +18,15 @@ import {
   TESTER_ONLY_SCENARIO,
   TESTER_SCENARIO_FLAG,
   TEST_ACTOR_ENTRYPOINTS,
-  captureWrites,
   expectNoIncident,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
+  readArtifacts,
   recordAt,
+  resolveTestPlan,
   spawnFixture,
   testerOrderStdout,
   testerSkipStdout,
@@ -36,7 +35,6 @@ import {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("treats stop-after-tx-count as a successful operator stop", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -53,23 +51,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(testerOrderStdout({ txByte: "44" })),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expectNoIncident(writes);
@@ -104,7 +99,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("stops on dust tester txs without satisfying non-dust order targets", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -123,13 +117,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
@@ -142,10 +135,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
             ),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(
@@ -182,7 +173,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("does not count skip reference hashes toward stop-after-tx-count", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -199,23 +189,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(testerSkipStdout(FRESH_MATCHABLE_ORDER, "44")),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(

@@ -1,12 +1,11 @@
 import {
-  ProcessSignalError,
+  errorMessage,
   signalExitCode,
   withProcessSignalForwarding,
 } from "@ickb/node-utils";
 import process from "node:process";
 import { processRunnerDependencies } from "../runtime/command/supervisorCommandRun.ts";
 import { repoRoot } from "../runtime/shared/supervisorConstants.ts";
-import { errorMessage } from "../runtime/shared/supervisorEvidence.ts";
 import { supervise } from "../runtime/shared/supervisorMainRun.ts";
 import type {
   ParsedArgs,
@@ -19,9 +18,8 @@ import { resolvePlan } from "./supervisorPaths.ts";
  * Runs the live supervisor CLI and returns its process exit code.
  *
  * @remarks
- * `io` and `dependencies` are injectable so tests can exercise parsing,
- * filesystem checks, process execution, and signal forwarding without using the
- * host process directly.
+ * `io` and `dependencies` isolate process execution and signal forwarding from
+ * the host process in tests.
  */
 export async function main(
   argv: string[],
@@ -59,9 +57,6 @@ export async function main(
     stdout.write(`live supervisor artifacts: ${plan.relativeOutDir}\n`);
     return execution.value;
   } catch (error) {
-    if (error instanceof ProcessSignalError) {
-      return signalExitCode(error.signal);
-    }
     stderr.write(`Live supervisor failed: ${errorMessage(error)}\n`);
     return 1;
   }

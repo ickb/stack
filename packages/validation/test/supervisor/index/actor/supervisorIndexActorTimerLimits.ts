@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
-  BOT_CONFIG_PATH,
   BOT_MATCH_COMMITTED,
   CLASSIFICATION_SUITE,
   COMMAND_TIMEOUT_SECONDS_FLAG,
@@ -10,25 +9,19 @@ import {
   PREFLIGHT_RETRYABLE_FAILURE,
   SCENARIO_FLAG,
   TARGET_OUTCOME_FLAG,
-  TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
-  captureWrites,
   expectSupervisorSpawnCounts,
   fakeChild,
   ignoredChecker,
   jsonArtifact,
-  missingStat,
-  noopAsync,
-  pathToString,
-  realpathFixture,
-  selectiveIgnoredChecker,
+  readArtifacts,
+  resolveTestPlan,
   spawnFixture,
   startHangingBotSupervisorRun,
 } from "../../support/supervisor/index.ts";
 
 describe(CLASSIFICATION_SUITE, () => {
   it("does not retry preflight after the wall-clock budget expires", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -44,32 +37,19 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/preflight-retry-wall-clock-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
     const clock = [0, 0, 0, 0, 2000];
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 2000,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeChild("", 1, PREFLIGHT_RETRYABLE_FAILURE);
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expectSupervisorSpawnCounts(spawned, { preflight: 1, actor: 0 });
@@ -91,13 +71,13 @@ describe(CLASSIFICATION_SUITE, () => {
     vi.useFakeTimers();
     try {
       const maxTimerDelayMs = 2_147_483_647;
-      const { run, writes, kills } = startHangingBotSupervisorRun({
+      const { run, plan, started, kills } = startHangingBotSupervisorRun({
         outDir: "log/live-supervisor/timeout-cap-test",
         commandTimeoutSeconds: String(maxTimerDelayMs),
         commandKillGraceMs: maxTimerDelayMs + 10,
       });
 
-      await vi.advanceTimersByTimeAsync(0);
+      await started;
       await vi.advanceTimersByTimeAsync(maxTimerDelayMs - 1);
       expect(kills).toEqual([]);
       await vi.advanceTimersByTimeAsync(1);
@@ -105,6 +85,7 @@ describe(CLASSIFICATION_SUITE, () => {
       await vi.advanceTimersByTimeAsync(maxTimerDelayMs);
 
       await expect(run).resolves.toBe(2);
+      const writes = readArtifacts(plan);
       expect(kills).toEqual([
         { pid: -1234, signal: "SIGTERM" },
         { pid: -1234, signal: "SIGKILL" },

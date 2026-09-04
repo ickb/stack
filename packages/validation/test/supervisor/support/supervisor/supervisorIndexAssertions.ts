@@ -1,21 +1,18 @@
+import { readdirSync, readFileSync } from "node:fs";
+import pathModule from "node:path";
 import { expect } from "vitest";
-import {
-  INCIDENT_JSON_SUFFIX,
-  type CapturedWriteDependencies,
-} from "./supervisorIndexConstants.ts";
+import type { SupervisorPlan } from "../../../../src/supervisor/index.ts";
+import { INCIDENT_JSON_SUFFIX } from "./supervisorIndexConstants.ts";
 
-export function captureWrites(writes: Map<string, string>): CapturedWriteDependencies {
-  return {
-    appendFile: async (path, text): Promise<void> => {
-      const key = pathToString(path);
-      writes.set(key, `${writes.get(key) ?? ""}${textToString(text)}`);
-      await Promise.resolve();
-    },
-    writeFile: async (path, text): Promise<void> => {
-      writes.set(pathToString(path), textToString(text));
-      await Promise.resolve();
-    },
-  };
+const { join, relative } = pathModule;
+
+export function readArtifacts(plan: SupervisorPlan): Map<string, string> {
+  return new Map(
+    readdirSync(plan.outDir).map((fileName) => {
+      const path = join(plan.outDir, fileName);
+      return [join("/repo", relative(plan.rootDir, path)), readFileSync(path, "utf8")];
+    }),
+  );
 }
 export function expectNoIncident(writes: Map<string, string>): void {
   expect(
@@ -25,33 +22,24 @@ export function expectNoIncident(writes: Map<string, string>): void {
 export function expectRetryablePreflightArtifacts(
   spawned: string[][],
   writes: Map<string, string>,
+  outDir: string,
 ): void {
   expect(spawned.filter((args) => isPreflightCommand(args))).toHaveLength(2);
   expect(spawned.filter((args) => !isPreflightCommand(args))).toHaveLength(1);
+  expect(writes.has(join(outDir, "cycle-0001-bot-preflight-attempt-1.stdout.json"))).toBe(
+    true,
+  );
   expect(
-    writes.has(
-      "/repo/log/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.stdout.json",
-    ),
-  ).toBe(true);
-  expect(
-    writes.has(
-      "/repo/log/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.stdout.ndjson",
-    ),
+    writes.has(join(outDir, "cycle-0001-bot-preflight-attempt-1.stdout.ndjson")),
   ).toBe(false);
+  expect(writes.has(join(outDir, "cycle-0001-bot-preflight-attempt-2.stdout.json"))).toBe(
+    true,
+  );
   expect(
-    writes.has(
-      "/repo/log/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-2.stdout.json",
-    ),
+    writes.has(join(outDir, "cycle-0001-bot-preflight-attempt-1.command.json")),
   ).toBe(true);
   expect(
-    writes.has(
-      "/repo/log/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-1.command.json",
-    ),
-  ).toBe(true);
-  expect(
-    writes.has(
-      "/repo/log/live-supervisor/preflight-retry-test/cycle-0001-bot-preflight-attempt-2.command.json",
-    ),
+    writes.has(join(outDir, "cycle-0001-bot-preflight-attempt-2.command.json")),
   ).toBe(true);
 }
 export function expectSupervisorSpawnCounts(
@@ -84,27 +72,6 @@ export function stringArrayAt(value: unknown, label: string): string[] {
     return value;
   }
   throw new Error(`Expected string array: ${label}`);
-}
-export function pathToString(path: unknown): string {
-  if (typeof path === "string") {
-    return path;
-  }
-  if (Buffer.isBuffer(path)) {
-    return path.toString("utf8");
-  }
-  if (path instanceof URL) {
-    return path.toString();
-  }
-  throw new TypeError("Unexpected artifact path type");
-}
-function textToString(text: unknown): string {
-  if (typeof text === "string") {
-    return text;
-  }
-  if (ArrayBuffer.isView(text)) {
-    return Buffer.from(text.buffer, text.byteOffset, text.byteLength).toString("utf8");
-  }
-  throw new TypeError("Unexpected artifact text type");
 }
 export function isTestRecord(value: unknown): value is TestRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);

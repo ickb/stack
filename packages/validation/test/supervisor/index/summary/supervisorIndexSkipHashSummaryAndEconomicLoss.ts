@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
   BOT_CONFIG_FLAG,
   BOT_CONFIG_PATH,
@@ -17,16 +17,15 @@ import {
   TEST_ACTOR_ENTRYPOINTS,
   botActions,
   botCommitStdout,
-  captureWrites,
   fakeChild,
   fakeSuccessfulPreflightChild,
   ignoredChecker,
   isPreflightCommand,
   jsonArtifact,
-  missingStat,
-  noopAsync,
   profitableBotMatchDecision,
+  readArtifacts,
   recordAt,
+  resolveTestPlan,
   spawnFixture,
   testerSkipStdout,
   txHash,
@@ -34,7 +33,6 @@ import {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("summarizes repeated skip reference hashes separately from unique hashes", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -49,23 +47,20 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "2",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
           : fakeChild(testerSkipStdout(FRESH_MATCHABLE_ORDER, "45")),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(
@@ -85,7 +80,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("counts matching top-level and nested transaction hashes once in summaries", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -100,13 +94,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
@@ -120,10 +113,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
             ),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     const summary = jsonArtifact(
@@ -144,7 +135,6 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
 
 describe(DETERMINISTIC_INCIDENT_SUITE, () => {
   it("stops live supervisor chunks on bot economic loss", async () => {
-    const writes = new Map<string, string>();
     const args = parseArgs([
       BOT_CONFIG_FLAG,
       BOT_CONFIG_PATH,
@@ -159,13 +149,12 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
       MAX_CYCLES_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
+    const plan = resolveTestPlan(args, {
       spawnSyncCommand: ignoredChecker(true),
     });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) =>
         isPreflightCommand(commandArgs)
           ? fakeSuccessfulPreflightChild()
@@ -182,10 +171,8 @@ describe(DETERMINISTIC_INCIDENT_SUITE, () => {
             ),
       ),
       spawnSyncCommand: ignoredChecker(true),
-      stat: missingStat,
-      mkdir: noopAsync,
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(2);
     const incident = jsonArtifact(

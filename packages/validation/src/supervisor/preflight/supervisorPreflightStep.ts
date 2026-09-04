@@ -56,12 +56,7 @@ export async function runPreflight(
   ]
 ): Promise<CommandResult> {
   const configPath = actor === "bot" ? plan.botConfigPath : plan.testerConfigPath;
-  await assertNoSymlinkedConfigPath(
-    plan.rootDir,
-    configPath,
-    `${actor} config path`,
-    dependencies,
-  );
+  await assertNoSymlinkedConfigPath(plan.rootDir, configPath, `${actor} config path`);
   return runCommand(
     {
       actor: "preflight",

@@ -1,7 +1,9 @@
 import { main, TESTER_OWNED_TX_HASH_FLAG } from "@ickb/validation";
 import { ChildProcess, spawn, spawnSync, type SpawnOptions } from "node:child_process";
 import { once } from "node:events";
-import { appendFile, lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -18,10 +20,11 @@ describe("validation tester process provenance", () => {
   it("transfers one pass-one order hash into the pass-two tester runtime", async () => {
     const actorArgs: string[][] = [];
     const stderr: string[] = [];
+    const root = await mkdtemp(path.join(tmpdir(), "ickb-validation-process-"));
     const exitCode = await main(
       [
         "--out-dir",
-        "log/live-supervisor/process-boundary-test",
+        path.join(root, "validation", "process", "chunks", "chunk-0001", "run-0001"),
         "--scenario",
         "tester-fresh-skip-two-pass",
         "--target-outcome",
@@ -33,28 +36,12 @@ describe("validation tester process provenance", () => {
       ],
       {
         actorEntrypoints: { bot: "unused", tester: testerEntrypoint },
-        skipBuiltRuntimeCheck: true,
         spawnCommand: processSpawn(actorArgs),
         spawnSyncCommand: new Proxy(spawnSync, {
           apply(): { status: number } {
             return { status: 0 };
           },
         }),
-        lstat: rejectingFileOperation(lstat),
-        stat: rejectingFileOperation(stat),
-        mkdir: resolvingFileOperation(mkdir),
-        realpath: new Proxy(realpath, {
-          async apply(
-            _target,
-            _thisArg,
-            argArray: Parameters<typeof realpath>,
-          ): Promise<string> {
-            await Promise.resolve();
-            return String(argArray[0]);
-          },
-        }),
-        appendFile: resolvingFileOperation(appendFile),
-        writeFile: resolvingFileOperation(writeFile),
       },
       {
         stdout: { write: () => true },
@@ -152,25 +139,6 @@ function isProcessEnv(value: unknown): value is NodeJS.ProcessEnv {
     !Array.isArray(value) &&
     Object.values(value).every((item) => item === undefined || typeof item === "string")
   );
-}
-
-function rejectingFileOperation<T extends (...args: never[]) => unknown>(target: T): T {
-  return new Proxy(target, {
-    async apply(): Promise<never> {
-      await Promise.resolve();
-      const error: NodeJS.ErrnoException = new Error("missing");
-      error.code = "ENOENT";
-      throw error;
-    },
-  });
-}
-
-function resolvingFileOperation<T extends (...args: never[]) => unknown>(target: T): T {
-  return new Proxy(target, {
-    async apply(): Promise<void> {
-      await Promise.resolve();
-    },
-  });
 }
 
 class FixtureChild extends ChildProcess {

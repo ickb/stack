@@ -8,7 +8,6 @@ import type {
   Classification,
   ClassifiedCommandRun,
   CommandResult,
-  Dependencies,
   ScenarioStep,
   SupervisorPlan,
   SupervisorRunState,
@@ -16,29 +15,20 @@ import type {
 import { preflightStateSummary } from "./supervisorPreflightState.ts";
 
 export async function finishPreflightRun(
-  ...[cycleIndex, scenario, step, plan, state, run, dependencies]: [
+  ...[cycleIndex, scenario, step, plan, state, run]: [
     cycleIndex: number,
     scenario: ScenarioName,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
     run: ClassifiedCommandRun | { stop: number },
-    dependencies: Dependencies,
   ]
 ): Promise<number | undefined> {
   if ("stop" in run) {
     return run.stop;
   }
   if (run.classification.terminal) {
-    return stopForTerminalPreflight(
-      cycleIndex,
-      scenario,
-      step,
-      plan,
-      state,
-      run,
-      dependencies,
-    );
+    return stopForTerminalPreflight(cycleIndex, scenario, step, plan, state, run);
   }
   const report = parsePreflightEvidence(run.result.stdout).records[0];
   if (report !== undefined) {
@@ -48,14 +38,13 @@ export async function finishPreflightRun(
 }
 
 async function stopForTerminalPreflight(
-  ...[cycleIndex, scenario, step, plan, state, run, dependencies]: [
+  ...[cycleIndex, scenario, step, plan, state, run]: [
     cycleIndex: number,
     scenario: ScenarioName,
     step: ScenarioStep,
     plan: SupervisorPlan,
     state: SupervisorRunState,
     run: { result: CommandResult; classification: Classification },
-    dependencies: Dependencies,
   ]
 ): Promise<number> {
   state.classifications.push(run.classification);
@@ -67,8 +56,7 @@ async function stopForTerminalPreflight(
     run.classification,
     run.result,
     state.artifacts,
-    dependencies,
   );
-  await writeSummary(plan, state, run.classification.outcome, dependencies);
+  await writeSummary(plan, state, run.classification.outcome);
   return STOP_EXIT_CODE;
 }

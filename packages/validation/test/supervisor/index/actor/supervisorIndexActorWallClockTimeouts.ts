@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseArgs, resolvePlan, supervise } from "../../../../src/supervisor/index.ts";
+import { parseArgs, supervise } from "../../../../src/supervisor/index.ts";
 import {
-  BOT_CONFIG_PATH,
   BOT_MATCH_COMMITTED,
   CLASSIFICATION_SUITE,
   COMMAND_TIMEOUT_SECONDS_FLAG,
@@ -9,19 +8,14 @@ import {
   MAX_WALL_CLOCK_SECONDS_FLAG,
   SCENARIO_FLAG,
   TARGET_OUTCOME_FLAG,
-  TESTER_CONFIG_PATH,
   TEST_ACTOR_ENTRYPOINTS,
-  captureWrites,
   fakeChild,
   fakeHangingChild,
   ignoredChecker,
   jsonArtifact,
-  missingStat,
-  noopAsync,
-  pathToString,
-  realpathFixture,
+  readArtifacts,
   recordAt,
-  selectiveIgnoredChecker,
+  resolveTestPlan,
   spawnFixture,
   startHangingBotSupervisorRun,
 } from "../../support/supervisor/index.ts";
@@ -30,15 +24,17 @@ describe(CLASSIFICATION_SUITE, () => {
   it("kills timed-out actor commands after the grace period", async () => {
     vi.useFakeTimers();
     try {
-      const { run, writes, kills } = startHangingBotSupervisorRun({
+      const { run, plan, started, kills } = startHangingBotSupervisorRun({
         outDir: "log/live-supervisor/timeout-kill-test",
         commandTimeoutSeconds: "1",
         commandKillGraceMs: 10,
       });
 
+      await started;
       await vi.advanceTimersByTimeAsync(1010);
 
       await expect(run).resolves.toBe(2);
+      const writes = readArtifacts(plan);
       expect(kills).toEqual([
         { pid: -1234, signal: "SIGTERM" },
         { pid: -1234, signal: "SIGKILL" },
@@ -63,7 +59,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("does not spawn commands when the remaining wall-clock budget is too small", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -79,31 +74,18 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "900",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/wall-clock-timeout-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => 0,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeHangingChild();
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
@@ -123,7 +105,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("does not spawn actor commands when wall-clock expires at the command boundary", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -137,32 +118,19 @@ describe(CLASSIFICATION_SUITE, () => {
       MAX_WALL_CLOCK_SECONDS_FLAG,
       "1",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/wall-clock-boundary-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
     const clock = [0, 999, 1000, 1000];
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 1000,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeChild("should not run");
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);
@@ -176,7 +144,6 @@ describe(CLASSIFICATION_SUITE, () => {
 
 describe(CLASSIFICATION_SUITE, () => {
   it("finalizes the same wall-clock decision when the clock moves backwards", async () => {
-    const writes = new Map<string, string>();
     const spawned: string[][] = [];
     const args = parseArgs([
       "--out-dir",
@@ -192,32 +159,19 @@ describe(CLASSIFICATION_SUITE, () => {
       COMMAND_TIMEOUT_SECONDS_FLAG,
       "900",
     ]);
-    const plan = resolvePlan(args, "/repo", {
-      spawnSyncCommand: selectiveIgnoredChecker(
-        new Set([
-          "log/live-supervisor/non-monotonic-wall-clock-test",
-          BOT_CONFIG_PATH,
-          TESTER_CONFIG_PATH,
-        ]),
-      ),
-    });
+    const plan = resolveTestPlan(args, { spawnSyncCommand: ignoredChecker(true) });
     const clock = [0, 0, 200_000, 0];
 
     const exitCode = await supervise(args, plan, {
       actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-      skipBuiltRuntimeCheck: true,
       now: () => clock.shift() ?? 0,
       spawnCommand: spawnFixture((_command: string, commandArgs: string[]) => {
         spawned.push(commandArgs);
         return fakeChild("should not run");
       }),
       spawnSyncCommand: ignoredChecker(true),
-      lstat: missingStat,
-      stat: missingStat,
-      mkdir: noopAsync,
-      realpath: realpathFixture((path) => pathToString(path)),
-      ...captureWrites(writes),
     });
+    const writes = readArtifacts(plan);
 
     expect(exitCode).toBe(0);
     expect(spawned).toEqual([]);

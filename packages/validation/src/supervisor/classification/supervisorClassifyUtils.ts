@@ -1,4 +1,4 @@
-import { minimalProcessEnv } from "@ickb/node-utils";
+import { isRecord, minimalProcessEnv } from "@ickb/node-utils";
 import process from "node:process";
 import {
   BOT_ITERATION_FAILED_EVENT,
@@ -8,7 +8,6 @@ import {
 import {
   isNonNegativeSafeInteger,
   isOutputIndex,
-  isRecord,
   numberField,
   optionalRecordField,
   recordField,

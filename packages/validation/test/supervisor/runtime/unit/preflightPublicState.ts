@@ -5,7 +5,6 @@ import {
   botNoActionReason,
   classifyPreflightResult,
   commandTimeoutOrStop,
-  errorMessage,
   finishPreflightRun,
   latestPublicState,
   preflightStateSummary,
@@ -46,34 +45,20 @@ it("covers preflight classification and finish helper edge branches", async () =
 
   const state = runState();
   await expect(
-    finishPreflightRun(
-      1,
-      "bot-only",
-      { actor: "bot" },
-      supervisorPlan(),
-      state,
-      { stop: 9 },
-      {},
-    ),
+    finishPreflightRun(1, "bot-only", { actor: "bot" }, supervisorPlan(), state, {
+      stop: 9,
+    }),
   ).resolves.toBe(9);
   await expect(
-    finishPreflightRun(
-      1,
-      "bot-only",
-      { actor: "bot" },
-      supervisorPlan(),
-      state,
-      {
-        result: commandResult("preflight", ""),
-        classification: {
-          ...classificationBase("preflight"),
-          outcome: "unknown",
-          terminal: false,
-          reason: "test",
-        },
+    finishPreflightRun(1, "bot-only", { actor: "bot" }, supervisorPlan(), state, {
+      result: commandResult("preflight", ""),
+      classification: {
+        ...classificationBase("preflight"),
+        outcome: "unknown",
+        terminal: false,
+        reason: "test",
       },
-      {},
-    ),
+    }),
   ).resolves.toBeUndefined();
   await expect(
     retryPreflight(1, { actor: "bot" }, supervisorPlan(), state, asyncValue(7), 0, {}),
@@ -157,6 +142,4 @@ it("covers public state recommendations and wait summary fallbacks", () => {
   ).toBeUndefined();
   expect(booleanField(undefined, "ok")).toBeUndefined();
   expect(stringField(undefined, "value")).toBeUndefined();
-  expect(errorMessage("plain")).toBe("plain");
-  expect(errorMessage({})).toBe("Unknown error");
 });

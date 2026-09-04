@@ -20,7 +20,6 @@ import {
 import type {
   Classification,
   CommandResult,
-  Dependencies,
   IncidentArtifact,
   StopDiagnostics,
   SupervisorPlan,
@@ -35,16 +34,7 @@ import { commandShape } from "./supervisorArtifactCommandShape.ts";
  * The incident JSON path is appended to `artifacts` by `writeJsonArtifact`.
  */
 export async function writeIncident(
-  ...[
-    plan,
-    cycleIndex,
-    actor,
-    scenario,
-    classification,
-    result,
-    artifacts,
-    dependencies,
-  ]: [
+  ...[plan, cycleIndex, actor, scenario, classification, result, artifacts]: [
     plan: SupervisorPlan,
     cycleIndex: number,
     actor: Actor,
@@ -52,7 +42,6 @@ export async function writeIncident(
     classification: Classification,
     result: CommandResult,
     artifacts: string[],
-    dependencies: Dependencies,
   ]
 ): Promise<IncidentArtifact> {
   const relativePath = await writeJsonArtifact(
@@ -80,7 +69,6 @@ export async function writeIncident(
       suggestedNextAction: suggestedNextAction(classification),
     },
     artifacts,
-    dependencies,
   );
   return { relativePath, classification };
 }
@@ -93,11 +81,10 @@ export async function writeIncident(
  * already present.
  */
 export async function writeSummary(
-  ...[plan, state, stopReason, dependencies, stopDiagnostics]: [
+  ...[plan, state, stopReason, stopDiagnostics]: [
     plan: SupervisorPlan,
     state: SupervisorRunState,
     stopReason: string,
-    dependencies: Dependencies,
     stopDiagnostics?: StopDiagnostics,
   ]
 ): Promise<string> {
@@ -126,7 +113,6 @@ export async function writeSummary(
       publicVsOwnedStateAssumptions: latestPublicState ?? null,
     },
     artifacts,
-    dependencies,
   );
 }
 
@@ -136,12 +122,11 @@ export async function writeSummary(
  * @returns Repo-display paths for callers to record in run state.
  */
 export async function writeCommandArtifacts(
-  ...[plan, cycleIndex, label, result, dependencies]: [
+  ...[plan, cycleIndex, label, result]: [
     plan: SupervisorPlan,
     cycleIndex: number,
     label: string,
     result: CommandResult,
-    dependencies: Dependencies,
   ]
 ): Promise<string[]> {
   const base = `cycle-${padCycle(cycleIndex)}-${label}`;
@@ -150,14 +135,8 @@ export async function writeCommandArtifacts(
     plan,
     `${base}.stdout.${stdoutExtension}`,
     result.stdout,
-    dependencies,
   );
-  const stderrPath = await writeTextArtifact(
-    plan,
-    `${base}.stderr.log`,
-    result.stderr,
-    dependencies,
-  );
+  const stderrPath = await writeTextArtifact(plan, `${base}.stderr.log`, result.stderr);
   const commandPath = await writeJsonArtifact(
     plan,
     `${base}.command.json`,
@@ -174,7 +153,6 @@ export async function writeCommandArtifacts(
       },
     },
     [],
-    dependencies,
   );
   return [stdoutPath, stderrPath, commandPath];
 }
@@ -183,11 +161,10 @@ async function writeTextArtifact(
   plan: SupervisorPlan,
   fileName: string,
   text: string,
-  dependencies: Dependencies,
 ): Promise<string> {
-  const writeFileFn = dependencies.writeFile ?? writeFile;
   const artifactPath = join(plan.outDir, fileName);
-  await writeFileFn(artifactPath, text);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The output directory is validated once before deterministic artifact names are written.
+  await writeFile(artifactPath, text);
   return displayPath(plan.rootDir, artifactPath);
 }
 
@@ -195,17 +172,16 @@ async function writeTextArtifact(
  * Writes JSON and records its display path in `artifacts` when new.
  */
 export async function writeJsonArtifact(
-  ...[plan, fileName, value, artifacts, dependencies]: [
+  ...[plan, fileName, value, artifacts]: [
     plan: SupervisorPlan,
     fileName: string,
     value: unknown,
     artifacts: string[],
-    dependencies: Dependencies,
   ]
 ): Promise<string> {
-  const writeFileFn = dependencies.writeFile ?? writeFile;
   const artifactPath = join(plan.outDir, fileName);
-  await writeFileFn(artifactPath, `${JSON.stringify(value, jsonReplacer, 2)}\n`);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The output directory is validated once before deterministic artifact names are written.
+  await writeFile(artifactPath, `${JSON.stringify(value, jsonReplacer, 2)}\n`);
   const relativePath = displayPath(plan.rootDir, artifactPath);
   if (!artifacts.includes(relativePath)) {
     artifacts.push(relativePath);
@@ -219,10 +195,9 @@ export async function writeJsonArtifact(
 export async function appendSupervisorEvent(
   plan: SupervisorPlan,
   fields: Record<string, unknown>,
-  dependencies: Dependencies,
 ): Promise<void> {
-  const appendFileFn = dependencies.appendFile ?? appendFile;
-  await appendFileFn(
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The output directory is validated once before the fixed event-log name is written.
+  await appendFile(
     join(plan.outDir, "supervisor.ndjson"),
     `${JSON.stringify(
       {

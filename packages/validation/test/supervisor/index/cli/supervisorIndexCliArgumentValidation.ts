@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   parseArgs,
@@ -11,8 +14,6 @@ import {
   BOT_MATCH_COMMITTED,
   BOUNDED_ICKB_TO_CKB_SCENARIO,
   COMMAND_TIMEOUT_SECONDS_FLAG,
-  DIRECTORY_STATS,
-  EXTERNAL_VALIDATION_PARENT,
   EXTERNAL_VALIDATION_RUN_DIR,
   FRESH_SKIP_TWO_PASS_SCENARIO,
   INVALID_OUT_DIR_MESSAGE,
@@ -24,7 +25,6 @@ import {
   SDK_CONVERSION_SCENARIO,
   STOP_AFTER_TX_COUNT_FLAG,
   SUPERVISOR_CLI_SUITE,
-  SYMBOLIC_LINK_STATS,
   TARGET_OUTCOME_FLAG,
   TESTER_CONFIG_FLAG,
   TESTER_CONFIG_PATH,
@@ -36,12 +36,11 @@ import {
   TWO_ICKB_TO_CKB_SCENARIO,
   VALIDATION_RUN_DIR,
   ignoredChecker,
-  lstatFixture,
-  missingStat,
-  noopAsync,
-  pathToString,
   selectiveIgnoredChecker,
 } from "../../support/supervisor/index.ts";
+
+const { join } = path;
+const CHUNK_DIRECTORY = "chunk-0001";
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("parses bounded live supervisor arguments", () => {
@@ -239,7 +238,13 @@ describe(SUPERVISOR_CLI_SUITE, () => {
 
 describe(SUPERVISOR_CLI_SUITE, () => {
   it("refuses symlinked explicit validation parents outside the repo", async () => {
-    const args = parseArgs(["--out-dir", EXTERNAL_VALIDATION_RUN_DIR]);
+    const root = await mkdtemp(join(tmpdir(), "ickb-supervisor-external-link-"));
+    const target = await mkdtemp(join(tmpdir(), "ickb-supervisor-external-target-"));
+    const parent = join(root, "validation", "run", "chunks");
+    await mkdir(parent, { recursive: true });
+    await symlink(target, join(parent, CHUNK_DIRECTORY));
+    const outDir = join(parent, CHUNK_DIRECTORY, "run-0001");
+    const args = parseArgs(["--out-dir", outDir]);
     const plan = resolvePlan(args, "/repo", {
       spawnSyncCommand: selectiveIgnoredChecker(
         new Set([BOT_CONFIG_PATH, TESTER_CONFIG_PATH]),
@@ -249,17 +254,9 @@ describe(SUPERVISOR_CLI_SUITE, () => {
     await expect(
       supervise(args, plan, {
         actorEntrypoints: TEST_ACTOR_ENTRYPOINTS,
-        skipBuiltRuntimeCheck: true,
-        lstat: lstatFixture((path) =>
-          pathToString(path) === EXTERNAL_VALIDATION_PARENT
-            ? SYMBOLIC_LINK_STATS
-            : DIRECTORY_STATS,
-        ),
-        stat: missingStat,
-        mkdir: noopAsync,
       }),
     ).rejects.toThrow(
-      `Refusing to write supervisor artifacts through symlinked path: ${EXTERNAL_VALIDATION_PARENT}`,
+      `Refusing to write supervisor artifacts through symlinked path: ${join(parent, CHUNK_DIRECTORY)}`,
     );
   });
 });
