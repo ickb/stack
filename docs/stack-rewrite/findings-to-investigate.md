@@ -11,8 +11,6 @@ The authority review used Stack branch `wip` at commit `d38532248c8ed1e573bebea2
 
 That review was read-only. Later maintainer decisions superseded its signed-store, replay, pending-overlay, global-fence, and rollback-store proposals. The review remains evidence for defects in those rejected designs, not authority to rebuild them.
 
-## Questions with competing evidence
-
 ## Additional follow-ups
 
 - Verify the golden-vector generator commit against the deployed ELF fixture authority. Current documentation cites contracts commit `ae8a11f` and deployed `ickb_logic` commit `454cfa96` for different evidence roles.
