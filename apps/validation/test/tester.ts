@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 describe("tester process", () => {
-  it("rejects arguments and fails fast without a config file", () => {
+  it("rejects arguments and fails fast without config", () => {
     const withArgument = runTester({}, ["--unknown"]);
     expect(withArgument.status).toBe(1);
     expect(withArgument.stderr).toContain("Unknown argument: --unknown");
@@ -26,20 +26,19 @@ describe("tester process", () => {
     const withoutConfig = runTester({});
     expect(withoutConfig.status).toBe(1);
     expect(withoutConfig.stdout).toBe("");
-    expect(withoutConfig.stderr).toContain("Empty env TESTER_CONFIG_FILE");
+    expect(withoutConfig.stderr).toContain("Empty env TESTER_CHAIN");
   });
 
   it("logs one retryable failure line when the RPC is unreachable", async () => {
-    const configPath = path.join(dir, "config.json");
-    await writeFile(
-      configPath,
-      JSON.stringify({ chain: "testnet", privateKey, rpcUrl }),
-      {
-        mode: 0o600,
-      },
-    );
+    const keyPath = path.join(dir, "testnet.key");
+    await writeFile(keyPath, privateKey, { mode: 0o600 });
 
-    const result = runTester({ TESTER_CONFIG_FILE: configPath, TESTER_SCENARIO: "auto" });
+    const result = runTester({
+      TESTER_CHAIN: "testnet",
+      TESTER_RPC_URL: rpcUrl,
+      TESTER_PRIVATE_KEY_FILE: keyPath,
+      TESTER_SCENARIO: "auto",
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");

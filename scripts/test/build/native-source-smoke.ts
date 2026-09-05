@@ -85,8 +85,8 @@ void test("native source imports do not load deprecated builtin punycode", async
 
 void test("Node app entrypoints run from TypeScript source and fail fast without config", () => {
   for (const [modulePath, envName] of [
-    ["apps/bot/src/index.ts", "BOT_CONFIG_FILE"],
-    ["apps/validation/src/tester.ts", "TESTER_CONFIG_FILE"],
+    ["apps/bot/src/index.ts", "BOT_CHAIN"],
+    ["apps/validation/src/tester.ts", "TESTER_CHAIN"],
   ] as const) {
     const result = spawnSync(process.execPath, [modulePath], {
       cwd: rootDir,

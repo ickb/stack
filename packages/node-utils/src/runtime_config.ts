@@ -2,16 +2,10 @@ import path from "node:path";
 import process from "node:process";
 import type { SupportedChain } from "./chain.ts";
 
-const { isAbsolute, resolve: resolvePath } = path;
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
-const INVALID_ENV_MESSAGE = "Invalid env ";
-const CHAIN_KEY = "chain";
-const PRIVATE_KEY_KEY = "privateKey";
-const RPC_URL_KEY = "rpcUrl";
-const RUNTIME_CONFIG_KEYS = new Set([CHAIN_KEY, PRIVATE_KEY_KEY, RPC_URL_KEY]);
 
-/** Runtime configuration loaded from a secret-backed JSON file. */
+/** Runtime configuration read from one prefix of environment variables. */
 export interface RuntimeConfig {
   /** Public CKB chain expected by the app. */
   chain: SupportedChain;
@@ -24,137 +18,105 @@ export interface RuntimeConfig {
 }
 
 /**
- * Reads and validates a JSON runtime config from the file named by an environment value.
+ * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private key held in the
+ * file named by `<prefix>_PRIVATE_KEY_FILE`.
  *
  * @remarks
- * Relative file paths resolve against `INIT_CWD` when present, otherwise
- * `process.cwd()`. Invalid file contents throw generic env-name errors so config
- * values and signing material are not copied into logs.
+ * The key lives in a file rather than a variable so it never sits in a unit file, an
+ * inherited environment, or `systemctl show` output. A relative file path resolves against
+ * `INIT_CWD` when present, otherwise `process.cwd()`. Errors name only the variable so
+ * config values and signing material are not copied into logs.
  */
 export async function readRuntimeConfigEnv(
-  fileEnvValue: string | undefined,
-  fileEnvName: string,
+  env: NodeJS.ProcessEnv,
+  prefix: string,
 ): Promise<RuntimeConfig> {
-  if (fileEnvValue === undefined || fileEnvValue === "") {
-    throw new Error(`Empty env ${fileEnvName}`);
-  }
-
-  return parseRuntimeConfig(await readFileEnv(fileEnvValue, fileEnvName), fileEnvName);
+  const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
+  const rpcUrl = parseRpcUrl(requireEnv(env, `${prefix}_RPC_URL`));
+  const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
+  const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
+  return { chain, privateKey, rpcUrl };
 }
 
-async function readFileEnv(fileEnvValue: string, fileEnvName: string): Promise<string> {
-  const secretPath = isAbsolute(fileEnvValue)
-    ? fileEnvValue
-    : resolvePath(process.env["INIT_CWD"] ?? process.cwd(), fileEnvValue);
+interface EnvValue {
+  name: string;
+  value: string;
+}
+
+function requireEnv(env: NodeJS.ProcessEnv, name: string): EnvValue {
+  const value = env[name];
+  if (value === undefined || value === "") {
+    throw new Error(`Empty env ${name}`);
+  }
+  return { name, value };
+}
+
+async function readFileEnv(
+  env: NodeJS.ProcessEnv,
+  { name, value }: EnvValue,
+): Promise<EnvValue> {
+  const secretPath = path.isAbsolute(value)
+    ? value
+    : path.resolve(env["INIT_CWD"] ?? process.cwd(), value);
   let fileSecret: string;
   try {
     const fileSystem = await import("node:fs/promises");
     fileSecret = await fileSystem.readFile(secretPath, "utf8");
   } catch (cause) {
-    throw new Error(`Invalid file from env ${fileEnvName}`, { cause });
+    throw new Error(`Invalid file from env ${name}`, { cause });
   }
-  if (fileSecret === "") {
-    throw new Error(`Empty file from env ${fileEnvName}`);
-  }
-  return fileSecret;
+  // Editors end the file with a newline; the key itself still has to be exact.
+  return { name, value: fileSecret.trim() };
 }
 
-export function parseRuntimeConfig(configText: string, envName: string): RuntimeConfig {
-  const record = parseRuntimeConfigRecord(configText, envName);
-  assertKnownRuntimeConfigKeys(record, envName);
-  const chain = parseSupportedChain(record[CHAIN_KEY], envName);
-  const privateKey = parseRequiredString(record[PRIVATE_KEY_KEY], envName);
-  const rpcUrl = parseRpcUrl(parseRequiredString(record[RPC_URL_KEY], envName), envName);
-
-  return { chain, privateKey: parsePrivateKey(privateKey, envName), rpcUrl };
-}
-
-function parseRuntimeConfigRecord(
-  configText: string,
-  envName: string,
-): Record<string, unknown> {
-  let config: unknown;
-  try {
-    config = JSON.parse(configText);
-  } catch {
-    throw invalidEnvError(envName);
-  }
-  if (typeof config !== "object" || config === null || Array.isArray(config)) {
-    throw invalidEnvError(envName);
-  }
-  return Object.fromEntries(Object.entries(config));
-}
-
-function assertKnownRuntimeConfigKeys(
-  record: Record<string, unknown>,
-  envName: string,
-): void {
-  for (const key of Object.keys(record)) {
-    if (!RUNTIME_CONFIG_KEYS.has(key)) {
-      throw invalidEnvError(envName);
-    }
-  }
-}
-
-function parseSupportedChain(value: unknown, envName: string): SupportedChain {
+function parseSupportedChain({ name, value }: EnvValue): SupportedChain {
   if (value !== "mainnet" && value !== "testnet") {
-    throw invalidEnvError(envName);
+    throw invalidEnvError(name);
   }
   return value;
 }
 
-function parseRequiredString(value: unknown, envName: string): string {
-  if (typeof value !== "string") {
-    throw invalidEnvError(envName);
-  }
-  return value;
-}
-
-function parsePrivateKey(privateKey: string, envName: string): `0x${string}` {
-  if (isPrivateKeyHex(privateKey)) {
-    const value = BigInt(privateKey);
-    if (value > 0n && value < SECP256K1_ORDER) {
-      return privateKey;
+function parsePrivateKey({ name, value }: EnvValue): `0x${string}` {
+  if (isPrivateKeyHex(value)) {
+    const key = BigInt(value);
+    if (key > 0n && key < SECP256K1_ORDER) {
+      return value;
     }
   }
-
-  throw invalidEnvError(envName);
+  throw invalidEnvError(name);
 }
 
-function parseRpcUrl(rpcUrl: string, envName: string): string {
-  for (let index = 0; index < rpcUrl.length; index += 1) {
-    const code = rpcUrl.codePointAt(index);
+function parseRpcUrl({ name, value }: EnvValue): string {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.codePointAt(index);
     if (
       code === undefined ||
-      /\s/u.test(rpcUrl[index] ?? "") ||
+      /\s/u.test(value[index] ?? "") ||
       code < 0x20 ||
       code === 0x7f
     ) {
-      throw invalidEnvError(envName);
+      throw invalidEnvError(name);
     }
-  }
-  if (rpcUrl === "") {
-    throw invalidEnvError(envName);
   }
   let url: URL;
   try {
-    url = new URL(rpcUrl);
+    url = new URL(value);
   } catch {
-    throw invalidEnvError(envName);
+    throw invalidEnvError(name);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw invalidEnvError(envName);
+    throw invalidEnvError(name);
   }
   if (url.username !== "" || url.password !== "") {
-    throw invalidEnvError(envName);
+    throw invalidEnvError(name);
   }
-  return rpcUrl;
+  return value;
 }
 
 function isPrivateKeyHex(value: string): value is `0x${string}` {
   return /^0x[\da-f]{64}$/u.test(value);
 }
 
-function invalidEnvError(envName: string): Error {
-  return new Error(INVALID_ENV_MESSAGE + envName);
+function invalidEnvError(name: string): Error {
+  return new Error(`Invalid env ${name}`);
 }

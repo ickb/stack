@@ -11,7 +11,8 @@ import {
 } from "../runtime/testerTypes.ts";
 
 /**
- * Reads tester runtime config from `TESTER_CONFIG_FILE`.
+ * Reads tester runtime config from `TESTER_CHAIN`, `TESTER_RPC_URL`, and the
+ * `TESTER_PRIVATE_KEY_FILE` key file.
  *
  * @remarks The underlying parser keeps invalid config errors generic so secrets
  * and signing material are not copied into logs.
@@ -19,7 +20,7 @@ import {
 export async function readTesterRuntimeConfig(
   env: NodeJS.ProcessEnv,
 ): Promise<RuntimeConfig> {
-  return readRuntimeConfigEnv(env["TESTER_CONFIG_FILE"], "TESTER_CONFIG_FILE");
+  return readRuntimeConfigEnv(env, "TESTER");
 }
 /**
  * Reads and validates the tester scenario selector from environment.

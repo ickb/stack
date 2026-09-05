@@ -27,30 +27,21 @@ import {
 } from "../../../support/tester/index.ts";
 
 describe("readTesterRuntimeConfig", () => {
-  it("requires a JSON config file", async () => {
-    await expect(readTesterRuntimeConfig({})).rejects.toThrow(
-      "Empty env TESTER_CONFIG_FILE",
-    );
-  });
+  it("reads the TESTER_ variables and key file", async () => {
+    await expect(readTesterRuntimeConfig({})).rejects.toThrow("Empty env TESTER_CHAIN");
 
-  it("reads JSON config files", async () => {
     const privateKey = `0x${"11".repeat(32)}`;
     const dir = await mkdtemp(path.join(tmpdir(), "ickb-tester-config-"));
     try {
-      const configPath = path.join(dir, "config.json");
-
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          chain: TESTNET_CHAIN,
-          privateKey,
-          rpcUrl: LOCAL_RPC_URL,
-        }),
-        { mode: 0o600 },
-      );
+      const keyPath = path.join(dir, "testnet.key");
+      await writeFile(keyPath, privateKey, { mode: 0o600 });
 
       await expect(
-        readTesterRuntimeConfig({ TESTER_CONFIG_FILE: configPath }),
+        readTesterRuntimeConfig({
+          TESTER_CHAIN: TESTNET_CHAIN,
+          TESTER_RPC_URL: LOCAL_RPC_URL,
+          TESTER_PRIVATE_KEY_FILE: keyPath,
+        }),
       ).resolves.toEqual({
         chain: TESTNET_CHAIN,
         privateKey,
@@ -136,19 +127,12 @@ describe("tester private key output boundary", () => {
       return true;
     });
     try {
-      const configPath = path.join(dir, "config.json");
-
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          chain: TESTNET_CHAIN,
-          privateKey,
-          rpcUrl: rpcUrlCanary,
-        }),
-        { mode: 0o600 },
-      );
+      const keyPath = path.join(dir, "testnet.key");
+      await writeFile(keyPath, privateKey, { mode: 0o600 });
       const runtimeConfig = await readTesterRuntimeConfig({
-        TESTER_CONFIG_FILE: configPath,
+        TESTER_CHAIN: TESTNET_CHAIN,
+        TESTER_RPC_URL: rpcUrlCanary,
+        TESTER_PRIVATE_KEY_FILE: keyPath,
       });
       const executionLog: Record<string, unknown> = {
         chain: runtimeConfig.chain,

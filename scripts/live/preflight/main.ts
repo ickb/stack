@@ -31,7 +31,7 @@ export async function main(
   }
 
   try {
-    const report = await runPreflight(args);
+    const report = await runPreflight({ env: process.env, prefix: args.prefix });
     stdout.write(`${JSON.stringify(report, jsonLogReplacer, 2)}\n`);
     return 0;
   } catch (error) {

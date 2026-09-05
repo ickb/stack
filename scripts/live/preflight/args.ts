@@ -1,49 +1,23 @@
-export type PreflightArgs =
-  { configPath?: string; help: true } | { configPath: string; help?: false };
+export type PreflightArgs = { help: true } | { help?: false; prefix: "BOT" | "TESTER" };
 
 export function parseArgs(argv: readonly string[]): PreflightArgs {
-  const args: { configPath?: string; help?: true } = {};
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === undefined) {
-      throw new Error("Missing argument");
-    }
+  let prefix: "BOT" | "TESTER" | undefined;
+  for (const arg of argv) {
     if (arg === "--") {
       continue;
     }
     if (arg === "-h" || arg === "--help") {
-      args.help = true;
-      continue;
+      return { help: true };
     }
-    if (arg === "--config") {
-      args.configPath = valueAfter(argv, ++index, arg);
+    if ((arg === "bot" || arg === "tester") && prefix === undefined) {
+      prefix = arg === "bot" ? "BOT" : "TESTER";
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
-
-  if (args.help) {
-    return {
-      ...(args.configPath === undefined ? {} : { configPath: args.configPath }),
-      help: true,
-    };
-  }
-
-  if (args.configPath === undefined) {
-    throw new Error("Missing required --config <path>");
-  }
-
-  return { configPath: args.configPath };
+  return { prefix: prefix ?? "BOT" };
 }
 
 export function usage(): string {
-  return "Usage: node scripts/live/preflight.ts --config <ignored-json-config>";
-}
-
-function valueAfter(argv: readonly string[], index: number, option: string): string {
-  const value = argv[index];
-  if (value === undefined || value.startsWith("--")) {
-    throw new Error(`Missing value for ${option}`);
-  }
-  return value;
+  return "Usage: node scripts/live/preflight.ts [bot|tester]\nReads <ROLE>_CHAIN, <ROLE>_RPC_URL, and the key file named by <ROLE>_PRIVATE_KEY_FILE.";
 }

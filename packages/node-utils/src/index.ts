@@ -37,5 +37,5 @@ export {
   isRetryableRpcResponseShapeError,
   isRetryableRpcTransportError,
 } from "./retryable.ts";
-export { parseRuntimeConfig, readRuntimeConfigEnv } from "./runtime_config.ts";
+export { readRuntimeConfigEnv } from "./runtime_config.ts";
 export type { RuntimeConfig } from "./runtime_config.ts";

@@ -39,11 +39,6 @@
       "count": 2
     }
   },
-  "packages/node-utils/src/runtime_config.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "packages/order/test/matching/support/order_match_helpers.ts": {
     "no-restricted-syntax": {
       "count": 1

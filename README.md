@@ -57,19 +57,21 @@ CCC packages are normal package dependencies resolved through `pnpm-workspace.ya
 
 Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the NDJSON events on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
 
-```bash
-pnpm live:config-from-env -- --force
-pnpm -s live:preflight -- --config config/bot-testnet.json
-mkdir -p log/bot
-BOT_CONFIG_FILE=config/bot-testnet.json node apps/bot/src/index.ts >> log/bot/events.ndjson
-TESTER_CONFIG_FILE=config/tester-testnet.json TESTER_SCENARIO=auto node apps/validation/src/tester.ts
-```
+The bot reads `BOT_CHAIN`, `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the tester reads the same three under `TESTER_`. Key files under the ignored `config/` directory hold one lowercase `0x` key each. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
 
-The config helper needs `ICKB_TESTNET_BOT_PRIVATE_KEY`, `ICKB_TESTNET_TESTER_PRIVATE_KEY`, and `ICKB_TESTNET_RPC_URL`; it writes ignored `config/bot-testnet.json` and `config/tester-testnet.json`. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
+```bash
+export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckb.dev/ BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
+export TESTER_CHAIN=testnet TESTER_RPC_URL=https://testnet.ckb.dev/ TESTER_PRIVATE_KEY_FILE=config/tester-testnet.key
+pnpm -s live:preflight
+pnpm -s live:preflight -- tester
+mkdir -p log/bot
+node apps/bot/src/index.ts >> log/bot/events.ndjson
+TESTER_SCENARIO=auto node apps/validation/src/tester.ts
+```
 
 To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd the bot's stream is the unit's journal; see `apps/bot/README.md`.
 
-`pnpm live:preflight -- --config config/bot-testnet.json` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`. For machine-readable JSON without package-manager output, run `pnpm -s live:preflight -- --config config/bot-testnet.json`.
+`pnpm -s live:preflight` prints public balance evidence for funding checks of the bot identity; `pnpm -s live:preflight -- tester` does the same for the tester identity. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`.
 
 ## Licensing
 

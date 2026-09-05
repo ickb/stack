@@ -1,17 +1,8 @@
-import { realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import * as coreSource from "../../../packages/core/src/index.ts";
 import * as nodeUtilsSource from "../../../packages/node-utils/src/index.ts";
 import * as sdkSource from "../../../packages/sdk/src/index.ts";
-import type { CheckIgnored } from "../config/git.ts";
 import { isPublicChainIdentityError, isRetryablePreflightError } from "./errors.ts";
-import {
-  assertReadableConfigPath,
-  type ConfigPathDependencies,
-  resolveConfigPath,
-} from "./paths.ts";
 import {
   buildPreflightReport,
   type CccLike,
@@ -22,7 +13,6 @@ import {
   type SdkLike,
 } from "./report.ts";
 
-const rootDir = fileURLToPath(new URL("../../..", import.meta.url));
 const requireFromCore = createRequire(
   new URL("../../../packages/core/package.json", import.meta.url),
 );
@@ -31,8 +21,8 @@ const cccSource: CccLike = requireFromCore("@ckb-ccc/core");
 
 export type NodeUtilsRuntimeLike = NodeUtilsLike & {
   readRuntimeConfigEnv: (
-    configPath: string,
-    envName: string,
+    env: NodeJS.ProcessEnv,
+    prefix: string,
   ) => Promise<RuntimeConfigLike>;
 };
 
@@ -41,18 +31,17 @@ const sourceNodeUtils = nodeUtilsSource as unknown as NodeUtilsRuntimeLike;
 // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/no-unsafe-type-assertion -- Source signatures are narrower than the injected test boundary.
 const sourceSdk = sdkSource as unknown as SdkLike;
 
-type PreflightDependencies = ConfigPathDependencies & {
+interface PreflightDependencies {
   ccc?: CccLike;
-  checkIgnored?: CheckIgnored;
   core?: CoreLike;
   nodeUtils?: NodeUtilsRuntimeLike;
   sdk?: SdkLike;
-};
+}
 
 interface RunPreflightOptions {
-  configPath: string;
   dependencies?: PreflightDependencies;
-  root?: string;
+  env: NodeJS.ProcessEnv;
+  prefix: string;
 }
 
 class RetryablePreflightError extends Error {
@@ -60,21 +49,12 @@ class RetryablePreflightError extends Error {
 }
 
 export async function runPreflight({
-  configPath,
-  root = rootDir,
+  env,
+  prefix,
   dependencies,
 }: RunPreflightOptions): Promise<PreflightReport> {
-  const originalRoot = path.resolve(root);
-  const resolvedRoot = await (dependencies?.realpath ?? realpath)(originalRoot);
-  const config = resolveConfigPath(
-    originalRoot,
-    resolvedRoot,
-    configPath,
-    dependencies?.checkIgnored,
-  );
-  await assertReadableConfigPath(resolvedRoot, config.absolutePath, dependencies);
   const nodeUtils = dependencies?.nodeUtils ?? sourceNodeUtils;
-  const runtimeConfig = await readRuntimeConfig(nodeUtils, config.absolutePath);
+  const runtimeConfig = await readRuntimeConfig(nodeUtils, env, prefix);
   const stack =
     dependencies?.ccc !== undefined &&
     dependencies.core !== undefined &&
@@ -97,13 +77,14 @@ export async function runPreflight({
 
 async function readRuntimeConfig(
   nodeUtils: NodeUtilsRuntimeLike,
-  configPath: string,
+  env: NodeJS.ProcessEnv,
+  prefix: string,
 ): Promise<RuntimeConfigLike> {
   try {
-    return await nodeUtils.readRuntimeConfigEnv(configPath, "LIVE_PREFLIGHT_CONFIG_FILE");
+    return await nodeUtils.readRuntimeConfigEnv(env, prefix);
   } catch (cause) {
     throw new Error(
-      "Invalid live preflight config: expected exact JSON with chain, privateKey, and rpcUrl",
+      `Invalid live preflight config: expected ${prefix}_CHAIN, ${prefix}_RPC_URL, and ${prefix}_PRIVATE_KEY_FILE`,
       { cause },
     );
   }

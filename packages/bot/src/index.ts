@@ -8,10 +8,10 @@ export { BotEventEmitter, createRunId } from "./observability/events.ts";
 export type { Runtime } from "./runtime/types.ts";
 
 /**
- * Reads bot runtime config from `BOT_CONFIG_FILE`.
+ * Reads bot runtime config from `BOT_CHAIN`, `BOT_RPC_URL`, and the `BOT_PRIVATE_KEY_FILE` key file.
  */
 export async function readBotRuntimeConfig(
   env: NodeJS.ProcessEnv,
 ): Promise<RuntimeConfig> {
-  return readRuntimeConfigEnv(env["BOT_CONFIG_FILE"], "BOT_CONFIG_FILE");
+  return readRuntimeConfigEnv(env, "BOT");
 }

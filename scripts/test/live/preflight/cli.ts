@@ -7,16 +7,15 @@ import {
 } from "../../../live/preflight/errors.ts";
 import { publicScript } from "../../../live/preflight/report.ts";
 
-void test("preflight CLI parses config arguments", () => {
-  assert.deepEqual(parseArgs(["--config", "config/bot-testnet.json"]), {
-    configPath: "config/bot-testnet.json",
-  });
+void test("preflight CLI selects the env prefix from the role argument", () => {
+  assert.deepEqual(parseArgs([]), { prefix: "BOT" });
+  assert.deepEqual(parseArgs(["--", "bot"]), { prefix: "BOT" });
+  assert.deepEqual(parseArgs(["tester"]), { prefix: "TESTER" });
   assert.deepEqual(parseArgs(["--", "--help"]), { help: true });
-  assert.deepEqual(parseArgs(["--help"]), { help: true });
-  assert.throws(() => parseArgs([]), /Missing required --config/u);
-  assert.throws(() => parseArgs(["--config", "x", "--role", "bot"]), /Unknown argument/u);
-  assert.match(usage(), /--config <ignored-json-config>/u);
-  assert.doesNotMatch(usage(), /--role/u);
+  assert.deepEqual(parseArgs(["-h"]), { help: true });
+  assert.throws(() => parseArgs(["bot", "tester"]), /Unknown argument: tester/u);
+  assert.throws(() => parseArgs(["--config", "x"]), /Unknown argument: --config/u);
+  assert.match(usage(), /\[bot\|tester\]/u);
 });
 
 void test("preflight CLI exposes public script shape only", () => {

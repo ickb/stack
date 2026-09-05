@@ -1,12 +1,4 @@
 import { randomBytes } from "node:crypto";
-import {
-  readFile as fsReadFile,
-  writeFile as fsWriteFile,
-  mkdtemp,
-  rm,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { publicRpcEndpointIdentity } from "../../../../packages/node-utils/src/index.ts";
 import type {
   AccountState,
@@ -21,11 +13,6 @@ import type {
 } from "../../../live/preflight/report.ts";
 import type { NodeUtilsRuntimeLike } from "../../../live/preflight/run.ts";
 
-export interface ConfigDirContext {
-  configPath: string;
-  dir: string;
-}
-
 export interface ProjectCall {
   account: AccountState;
   projectionOptions: { collectedOrdersAvailable: boolean };
@@ -34,12 +21,6 @@ export interface ProjectCall {
 
 export interface PublicClientCall {
   chain: string;
-  rpcUrl: string;
-}
-
-interface RuntimeConfigJson {
-  chain: string;
-  privateKey: string;
   rpcUrl: string;
 }
 
@@ -70,18 +51,13 @@ export interface MockDependencies {
   sdk: SdkLike;
 }
 
-export async function withConfigDir<T>(
-  config: unknown,
-  callback: (context: ConfigDirContext) => Promise<T>,
-): Promise<T> {
-  const dir = await mkdtemp(path.join(tmpdir(), "ickb-live-preflight-"));
-  try {
-    const configPath = path.join(dir, "config.json");
-    await writeText(configPath, JSON.stringify(config));
-    return await callback({ configPath, dir });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+/** Environment for the mocked config reader: the key is passed inline, not through a file. */
+export function configEnv(config: RuntimeConfigLike): NodeJS.ProcessEnv {
+  return {
+    BOT_CHAIN: config.chain,
+    BOT_RPC_URL: config.rpcUrl,
+    BOT_PRIVATE_KEY: config.privateKey,
+  };
 }
 
 export function randomPrivateKey(): string {
@@ -116,8 +92,16 @@ function mockNodeUtils(
   expectedGenesis: string,
 ): NodeUtilsRuntimeLike {
   return {
-    readRuntimeConfigEnv: async (configPath: string): Promise<RuntimeConfigLike> => {
-      return parseRuntimeConfigJson(await readText(configPath));
+    readRuntimeConfigEnv: async (
+      env: NodeJS.ProcessEnv,
+      prefix: string,
+    ): Promise<RuntimeConfigLike> => {
+      await Promise.resolve();
+      return {
+        chain: env[`${prefix}_CHAIN`] ?? "",
+        privateKey: env[`${prefix}_PRIVATE_KEY`] ?? "",
+        rpcUrl: env[`${prefix}_RPC_URL`] ?? "",
+      };
     },
     createPublicClient: (chain: string, rpcUrl: string): MockPublicClient => {
       options.createPublicClientCalls?.push({ chain, rpcUrl });
@@ -214,35 +198,6 @@ function mockSdk(options: MockOptions): SdkLike {
       return options.projection ?? emptyProjection();
     },
   };
-}
-
-async function readText(filePath: string): Promise<string> {
-  return fsReadFile(filePath, "utf8");
-}
-
-async function writeText(filePath: string, data: string): Promise<void> {
-  await fsWriteFile(filePath, data);
-}
-
-function parseRuntimeConfigJson(text: string): RuntimeConfigJson {
-  const parsed: unknown = JSON.parse(text);
-  if (isRuntimeConfigJson(parsed)) {
-    return parsed;
-  }
-  throw new Error("Expected runtime config JSON");
-}
-
-function isRuntimeConfigJson(value: unknown): value is RuntimeConfigJson {
-  return (
-    isRecord(value) &&
-    typeof value["chain"] === "string" &&
-    typeof value["privateKey"] === "string" &&
-    typeof value["rpcUrl"] === "string"
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function mockCore(): CoreLike {

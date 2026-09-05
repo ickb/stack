@@ -3,7 +3,7 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/{lint-source-structure,run-node-tests,tooling/build/rewrite-dts-imports,live/{config-from-env,preflight}}.ts!",
+        "scripts/{lint-source-structure,run-node-tests,tooling/build/rewrite-dts-imports,live/preflight}.ts!",
         "scripts/test/**/*.ts",
         "!scripts/test/**/*support.ts",
       ],

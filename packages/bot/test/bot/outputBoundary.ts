@@ -11,17 +11,13 @@ describe("bot private key output boundary", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "ickb-bot-private-key-boundary-"));
     const output: string[] = [];
     try {
-      const configPath = path.join(dir, "config.json");
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          chain: "testnet",
-          privateKey,
-          rpcUrl: "https://testnet.example/",
-        }),
-        { mode: 0o600 },
-      );
-      const config = await readBotRuntimeConfig({ BOT_CONFIG_FILE: configPath });
+      const keyPath = path.join(dir, "testnet.key");
+      await writeFile(keyPath, privateKey, { mode: 0o600 });
+      const config = await readBotRuntimeConfig({
+        BOT_CHAIN: "testnet",
+        BOT_RPC_URL: "https://testnet.example/",
+        BOT_PRIVATE_KEY_FILE: keyPath,
+      });
       const emitter = new BotEventEmitter({
         chain: config.chain,
         runId: "run-canary-test",

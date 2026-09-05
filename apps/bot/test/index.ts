@@ -18,25 +18,23 @@ afterEach(async () => {
 });
 
 describe("bot process", () => {
-  it("fails fast without a config file", () => {
+  it("fails fast without config", () => {
     const result = runBot({});
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("Empty env BOT_CONFIG_FILE");
+    expect(result.stderr).toContain("Empty env BOT_CHAIN");
   });
 
   it("emits run start then a retryable turn failure when the RPC is unreachable", async () => {
-    const configPath = path.join(dir, "config.json");
-    await writeFile(
-      configPath,
-      JSON.stringify({ chain: "testnet", privateKey, rpcUrl }),
-      {
-        mode: 0o600,
-      },
-    );
+    const keyPath = path.join(dir, "testnet.key");
+    await writeFile(keyPath, privateKey, { mode: 0o600 });
 
-    const result = runBot({ BOT_CONFIG_FILE: configPath });
+    const result = runBot({
+      BOT_CHAIN: "testnet",
+      BOT_RPC_URL: rpcUrl,
+      BOT_PRIVATE_KEY_FILE: keyPath,
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");

@@ -1,0 +1,27 @@
+# iCKB bot as a systemd user unit. The unit is the configuration: copy it to
+# ~/.config/systemd/user/, edit every path and value, then follow apps/bot/README.md.
+# systemd expands % specifiers in every value, so a literal % must be written %%.
+[Unit]
+Description=iCKB bot testnet
+
+[Service]
+# Type=exec makes `systemctl start` fail when the node binary cannot be executed.
+Type=exec
+WorkingDirectory=/home/user/Projects/ickb/stack
+# The user manager does not see the shell PATH, so name the node binary by absolute path.
+ExecStart=/home/user/.local/share/fnm/node-versions/v24.18.0/installation/bin/node apps/bot/src/index.ts
+Environment=BOT_CHAIN=testnet
+Environment="BOT_RPC_URL=https://testnet.ckb.dev/"
+# The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
+Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
+Environment=BOT_ARTIFACT_ROOT=/home/user/.local/state/ickb-bot/testnet/artifacts
+# Exit 0 and 1 start the next turn after a minute; exit 2 is a hold until the operator restarts the unit.
+Restart=always
+RestartSec=60s
+RestartPreventExitStatus=2
+NoNewPrivileges=yes
+# The process holds a private key, so never write a core file.
+LimitCORE=0
+
+[Install]
+WantedBy=default.target
