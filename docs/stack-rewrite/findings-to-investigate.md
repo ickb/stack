@@ -13,10 +13,6 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 
 ## Questions with competing evidence
 
-### Ring intervention
-
-The accepted one-window kernel uses hard selection filters. Later review argued that attacker-steerable deposits can delay the bot's own liquidity operations. A preference with bounded deferral may be safer, but it changes a confirmed product decision and needs explicit ratification.
-
 ## Additional follow-ups
 
 - Verify the golden-vector generator commit against the deployed ELF fixture authority. Current documentation cites contracts commit `ae8a11f` and deployed `ickb_logic` commit `454cfa96` for different evidence roles.
