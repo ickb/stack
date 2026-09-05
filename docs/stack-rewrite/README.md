@@ -25,7 +25,7 @@ The work started with a whole-repository review. That review found a small numbe
 | 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                                           |
 | 2. SDK reshape      | Active   | Delivered: plain sampled state, typed results and errors, bounded exact committed-cell scans, and hybrid completion. Remaining: the SDK-owned dependency resolver, pre-sign congruence enforcement, and the offline identity/debugger exit lane. |
 | 3. Repository shape | Planned  | Plain merge of the SDK packages and of each app with its package (amendment 35); the probes built for a packed-artifact gate retire with it.                                                                                                     |
-| 4. Runtime          | Active   | Delivered: single-turn bot and tester under a systemd user unit with env config (amendments 32-34). Remaining: minimal policy and typed event contracts.                                                                                        |
+| 4. Runtime          | Active   | Delivered: single-turn bot and tester under a systemd user unit with env config (amendments 32-34). Remaining: minimal policy and typed event contracts.                                                                                         |
 | 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice.                           |
 
 Every phase is expected to land through green slices. Required checks move with the code they protect; later CI reorganization cannot defer or weaken an earlier exit gate.
@@ -46,29 +46,17 @@ These are the rewrite's fund-safety requirements. Implementation proceeds only w
 
 ## Reading guide
 
-| Document                                                             | Status                  | Purpose                                                                                          |
-| -------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
-| [Stack rewrite decisions](decisions.md)                              | Current decision record | Target architecture, accepted product decisions, implementation sequence, and amendments.        |
-| [CCC integration constraints](ccc-integration.md)                    | Current companion       | Maps the external CKB/CCC audit findings onto concrete rewrite constraints.                      |
-| [NervDAO iCKB feature investigation](nervdao-feature-map.md)         | Design investigation    | Evaluates which NervDAO workflows justify inclusion in the new interface.                        |
-| [Wallet migration investigation](wallet-migration-investigation.md)  | Design investigation    | Records migration evidence, per-state constraints, and the selected connected-destination slice. |
-| [Findings to investigate](findings-to-investigate.md)                | Open, non-authoritative | Confirmed current-code gaps and questions that remain after the decision record.                 |
-| [Authority and enforcement review](reviews/authority-enforcement.md) | Review evidence         | Findings against a frozen working-tree version of the decision record and its enforcement gates. |
+| Document                                              | Status                  | Purpose                                                                                   |
+| ----------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| [Stack rewrite decisions](decisions.md)               | Current decision record | Target architecture, accepted product decisions, implementation sequence, and amendments. |
+| [CCC integration constraints](ccc-integration.md)     | Current companion       | Maps the external CKB/CCC audit findings onto concrete rewrite constraints.               |
+| [Findings to investigate](findings-to-investigate.md) | Open, non-authoritative | Confirmed current-code gaps and questions that remain after the decision record.          |
 
-The [history](history/) contains the design path that led to the current record:
-
-1. [Repository review](history/repository-review.md)
-2. [Rewrite design](history/rewrite-design.md)
-3. [Maintainer decisions](history/maintainer-decisions.md)
-4. [Simplification review](history/simplification-review.md)
-5. [Selected architecture](history/selected-architecture.md)
-
-Historical documents remain useful for rationale and evidence, but they do not override the current decision record. Later timestamps or folder order do not imply authority.
+The design passes that led to this record, the frozen-tree review of it, and the two interface investigations behind amendments 30 and 31 were deleted on 2026-09-05; git history keeps them, and the decision record carries their outcomes.
 
 ## Still open
 
 - npm version and registry handling, which blocks publication but not implementation.
-- Correction of the stale ICKB-017 integration-audit reproduction.
 - The current-code questions collected in [findings to investigate](findings-to-investigate.md), including ring intervention, generated-vector provenance, fee-safe CKB Max, and the deferred order-migration boundary.
 
 This documentation separates settled decisions from open review work so implementation can continue without presenting an unresolved proposal as shipped behavior.
