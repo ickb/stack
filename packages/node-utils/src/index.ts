@@ -24,7 +24,6 @@ export { errnoCode, errorMessage, isRecord } from "./errors.ts";
 export { formatCkb } from "./format.ts";
 export {
   STOP_EXIT_CODE,
-  isUnresolvedBroadcast,
   jsonLogReplacer,
   logExecution,
   recordExecutionError,

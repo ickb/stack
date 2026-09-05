@@ -1,25 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 
-/** Error from a broadcast whose locally computed transaction identity must be retained. @public */
+/** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. @public */
 export class TransactionBroadcastError extends Error {
   /** Chain transaction hash computed from the signed transaction before broadcast. */
   public readonly txHash: ccc.Hex;
-  /** Inconsistent hash returned by the node, when that was the failure. */
-  public readonly nodeTxHash: ccc.Hex | undefined;
 
   /** Creates a hash-preserving broadcast error. */
-  constructor(txHash: ccc.Hex, options: ErrorOptions & { nodeTxHash?: ccc.Hex }) {
-    const { nodeTxHash } = options;
-    super(
-      nodeTxHash === undefined
-        ? `Transaction ${txHash} broadcast outcome is unresolved`
-        : `Node returned transaction hash ${nodeTxHash}, expected ${txHash}`,
-      options,
-    );
+  constructor(txHash: ccc.Hex, options: ErrorOptions) {
+    super(`Transaction ${txHash} broadcast outcome is unresolved`, options);
     this.name = "TransactionBroadcastError";
     this.txHash = txHash;
-    this.nodeTxHash = nodeTxHash;
   }
 }
 
@@ -62,23 +53,19 @@ export async function signAndSendTransaction(
   }
   recordTxHash?.(txHash);
 
-  let nodeTxHash: ccc.Hex;
+  // The signature binds the bytes, so the node can only have accepted this exact
+  // transaction; its returned hash adds nothing and the local one stays the identity.
   try {
-    nodeTxHash = ccc.hexFrom(await signer.client.sendTransactionNoCache(signed));
+    await signer.client.sendTransactionNoCache(signed);
   } catch (cause) {
-    // A duplicate submission of this exact transaction is already accepted; a
-    // duplicate naming another transaction is the same fail-closed mismatch.
-    if (cause instanceof ccc.ErrorClientDuplicatedTransaction) {
-      if (cause.txHash === txHash) {
-        return txHash;
-      }
-      throw new TransactionBroadcastError(txHash, { nodeTxHash: cause.txHash, cause });
+    // A duplicate submission of this exact transaction is already accepted.
+    if (
+      cause instanceof ccc.ErrorClientDuplicatedTransaction &&
+      cause.txHash === txHash
+    ) {
+      return txHash;
     }
     throw new TransactionBroadcastError(txHash, { cause });
-  }
-
-  if (nodeTxHash !== txHash) {
-    throw new TransactionBroadcastError(txHash, { nodeTxHash });
   }
   return txHash;
 }

@@ -181,32 +181,14 @@ describe("runTesterAttempt send ambiguity", () => {
     expect(executionLog["txHash"]).toBe(txHash);
   });
 
-  it("fails closed on a node hash mismatch without waiting or retrying", async () => {
-    const { calls, runtime } = fundedSendRuntime();
-    const txHash = byte32FromByte("4c");
-    const nodeTxHash = byte32FromByte("4d");
-    signAndSendTransactionMock.mockImplementationOnce(
-      async (_signer, _tx, recordTxHash) => {
-        await Promise.resolve();
-        recordTxHash?.(txHash);
-        throw new TransactionBroadcastError(txHash, {
-          nodeTxHash,
-          cause: new TypeError(FETCH_FAILED),
-        });
-      },
-    );
+  it("rethrows a pre-broadcast failure without waiting for a confirmation", async () => {
+    const { runtime } = fundedSendRuntime();
+    const feeCeiling = new Error("fee rate above ceiling");
+    signAndSendTransactionMock.mockRejectedValueOnce(feeCeiling);
 
-    const error = await rejectionFrom(runFundedSendAttempt(runtime, {}));
+    await expect(runFundedSendAttempt(runtime, {})).rejects.toBe(feeCeiling);
 
-    expect(error).toMatchObject({
-      name: "TransactionBroadcastError",
-      txHash,
-      nodeTxHash,
-    });
-    expect(isRetryableTesterError(error)).toBe(false);
-    expect(signAndSendTransactionMock).toHaveBeenCalledTimes(1);
     expect(waitTransactionMock).not.toHaveBeenCalled();
-    expect(calls).toEqual(["base", "request", "complete"]);
   });
 });
 

@@ -145,7 +145,7 @@ async function sendTesterAttempt({
       });
     });
   } catch (error) {
-    if (!(error instanceof TransactionBroadcastError) || error.nodeTxHash !== undefined) {
+    if (!(error instanceof TransactionBroadcastError)) {
       throw error;
     }
     txHash = error.txHash;

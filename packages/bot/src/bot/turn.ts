@@ -134,7 +134,7 @@ async function broadcastTransaction({
     });
     return txHash;
   } catch (error) {
-    if (error instanceof TransactionBroadcastError && error.nodeTxHash === undefined) {
+    if (error instanceof TransactionBroadcastError) {
       const txHash = recordedHash ?? error.txHash;
       context.events.emit("bot.transaction.sent", {
         txHash,
@@ -146,11 +146,8 @@ async function broadcastTransaction({
       });
       return txHash;
     }
-    const hashMismatch =
-      error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined;
     const retryable = isRetryableBotError(error);
     context.events.emit("bot.transaction.failed", {
-      ...(hashMismatch ? { txHash: error.txHash, nodeTxHash: error.nodeTxHash } : {}),
       phase: "broadcast",
       outcome: "send_failed",
       retryable,

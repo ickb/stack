@@ -2,10 +2,7 @@ import {
   isRetryableCkbStateRaceError,
   isRetryableRpcResponseShapeError,
   isRetryableRpcTransportError,
-  isUnresolvedBroadcast,
-  STOP_EXIT_CODE,
 } from "@ickb/node-utils";
-import { TransactionBroadcastError } from "@ickb/sdk";
 import { errorSummary } from "../observability/error.ts";
 import { isRbfRejectedReason } from "../observability/rbf.ts";
 
@@ -20,8 +17,9 @@ interface FailureEvents {
 }
 
 /**
- * Emits the failure event and sets the exit code that tells the service manager what to do:
- * 1 lets it start another turn, STOP_EXIT_CODE holds it because a broadcast outcome is unresolved.
+ * Emits the failure event and exits 1 so the service manager starts another turn. Every
+ * failure is safe to follow with a fresh turn: it rebuilds from committed state, and a
+ * transaction still pending from this turn conflicts with the rebuilt one at the node.
  */
 export function handleTurnFailure(events: FailureEvents, error: unknown): void {
   const retryable = isRetryableBotError(error);
@@ -30,21 +28,16 @@ export function handleTurnFailure(events: FailureEvents, error: unknown): void {
     retryable,
     terminal: !retryable,
   });
-  process.exitCode = retryable || !isUnresolvedBroadcast(error) ? 1 : STOP_EXIT_CODE;
+  process.exitCode = 1;
 }
 
 /**
- * Identifies transient bot failures that can be retried without consuming a terminal iteration.
+ * Classifies transient bot failures for the failure events; it no longer decides the exit code.
  */
 export function isRetryableBotError(error: unknown): boolean {
-  if (error instanceof TransactionBroadcastError && error.nodeTxHash !== undefined) {
-    return false;
-  }
   if (error instanceof Error && isTransactionConfirmationErrorLike(error)) {
-    // The transaction is already broadcast, so no confirmation outcome may send
-    // a rebuilt intent: one broadcast gets one finite observation window. Only
-    // an RBF replacement makes the sent transaction permanently unconfirmable,
-    // so only it is worth rebuilding from committed state.
+    // Only an RBF replacement proves the sent transaction can never confirm; every
+    // other confirmation failure leaves its outcome unknown and is reported as such.
     return isRbfRejectedConfirmation(error);
   }
   let current = error;

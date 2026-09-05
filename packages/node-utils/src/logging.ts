@@ -6,7 +6,7 @@ const CIRCULAR_LOG_VALUE = "[Circular]";
 const UNSAFE_LOG_VALUE = "[Unsupported log value]";
 const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
 
-/** Exit code for a stop that must not be retried by a restart: the broadcast outcome is unresolved. */
+/** Exit code for a stop that a restart must not retry: the account is below the capital minimum. */
 export const STOP_EXIT_CODE = 2;
 
 type JsonLogPrimitive = string | number | boolean | symbol | null | undefined;
@@ -19,20 +19,14 @@ interface JsonLogRecord {
 }
 
 /**
- * Records a JSON-safe error on the execution log and returns true when the run must not be retried.
+ * Records a JSON-safe error on the execution log.
  */
 export function recordExecutionError(
   executionLog: Record<string, unknown>,
   error: unknown,
-): boolean {
+): void {
   const log = executionLog;
   log["error"] = errorToLog(error);
-  if (isUnresolvedBroadcast(error)) {
-    process.exitCode = STOP_EXIT_CODE;
-    return true;
-  }
-
-  return false;
 }
 
 /**
@@ -203,23 +197,4 @@ function objectEntriesLogValue(
     jsonValue[key] = convert(entry, seen);
   }
   return jsonValue;
-}
-
-/**
- * The transaction may already be accepted while its outcome stayed unresolved, so a fresh
- * turn could resend funds. A node hash mismatch is such an outcome: the node answered the
- * send RPC about a transaction this attempt cannot bind. So is any confirmation failure:
- * one broadcast gets one finite observation window.
- */
-export function isUnresolvedBroadcast(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  if (error.name === "TransactionBroadcastError") {
-    return "nodeTxHash" in error && error.nodeTxHash !== undefined;
-  }
-  return (
-    error.name === "TransactionConfirmationError" ||
-    error.name === "BotTransactionConfirmationError"
-  );
 }

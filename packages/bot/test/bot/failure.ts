@@ -1,5 +1,3 @@
-import { STOP_EXIT_CODE } from "@ickb/node-utils";
-import { TransactionBroadcastError } from "@ickb/sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleTurnFailure } from "../../src/bot/failure.ts";
 import { isRetryableBotError } from "../../src/index.ts";
@@ -115,20 +113,19 @@ describe("bot post-broadcast confirmation outcomes", () => {
 });
 
 describe("bot failure exit codes", () => {
-  it("holds the service after a confirmation timeout", () => {
+  it("exits 1 after a confirmation timeout so the next turn rebuilds from committed state", () => {
     const events = handleFailure(
       confirmationError({ reason: undefined, status: "pending", isTimeout: true }),
     );
 
-    // A restart would rebuild and resend a transaction that may still commit.
-    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    expect(process.exitCode).toBe(1);
     expect(events.at(-1)).toMatchObject({
       type: "bot.turn.failed",
       fields: { retryable: false, terminal: true },
     });
   });
 
-  it("holds the service when transport hid the confirmation outcome", () => {
+  it("exits 1 when transport hid the confirmation outcome", () => {
     handleFailure(
       confirmationError({
         reason: undefined,
@@ -137,7 +134,7 @@ describe("bot failure exit codes", () => {
       }),
     );
 
-    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    expect(process.exitCode).toBe(1);
   });
 
   it("lets the next turn rebuild after an RBF confirmation rejection", () => {
@@ -158,19 +155,6 @@ describe("bot failure exit codes", () => {
       },
     });
     expect(events.at(-1)?.fields?.["error"]).not.toHaveProperty("stack");
-  });
-
-  it("holds the service after a node transaction hash mismatch", () => {
-    handleFailure(
-      new TransactionBroadcastError(`0x${"11".repeat(32)}`, {
-        nodeTxHash: `0x${"22".repeat(32)}`,
-        cause: new TypeError(FETCH_FAILED),
-      }),
-    );
-
-    // The node accepted something under a hash this attempt cannot bind, so the
-    // local transaction may already be in the pool.
-    expect(process.exitCode).toBe(STOP_EXIT_CODE);
   });
 
   it("exits 1 for transient failures without a stack and for deterministic ones with", () => {

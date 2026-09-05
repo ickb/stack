@@ -162,10 +162,10 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     );
   });
 
-  it("fails closed on a duplicate submission naming another transaction", async () => {
+  it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {
     const { signer, send } = signerFixture();
-    const nodeTxHash = hash("82");
-    send.mockRejectedValueOnce(duplicatedTransaction(nodeTxHash));
+    const duplicate = duplicatedTransaction(hash("82"));
+    send.mockRejectedValueOnce(duplicate);
 
     await expect(
       signAndSendTransaction(signer, ccc.Transaction.default()),
@@ -173,7 +173,7 @@ describe("signAndSendTransaction broadcast outcomes", () => {
       expect.objectContaining({
         name: "TransactionBroadcastError",
         txHash: TX_HASH,
-        nodeTxHash,
+        cause: duplicate,
       }),
     );
   });
@@ -189,24 +189,17 @@ describe("signAndSendTransaction broadcast outcomes", () => {
       expect.objectContaining({
         name: "TransactionBroadcastError",
         txHash: TX_HASH,
-        nodeTxHash: undefined,
         cause: transportError,
       }),
     );
   });
 
-  it("preserves local identity when the node returns an inconsistent hash", async () => {
+  it("keeps the local hash as the identity whatever the node returns", async () => {
     const { signer, send } = signerFixture();
-    const nodeTxHash = hash("82");
-    send.mockResolvedValueOnce(nodeTxHash);
+    send.mockResolvedValueOnce(hash("82"));
 
-    await expect(
-      signAndSendTransaction(signer, ccc.Transaction.default()),
-    ).rejects.toEqual(
-      expect.objectContaining({
-        txHash: TX_HASH,
-        nodeTxHash,
-      }),
+    await expect(signAndSendTransaction(signer, ccc.Transaction.default())).resolves.toBe(
+      TX_HASH,
     );
   });
 });

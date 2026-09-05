@@ -8,8 +8,7 @@ import { TransactionBroadcastError } from "@ickb/sdk";
 import { createExecutionLogWriter, type ExecutionLog } from "./testerTypes.ts";
 
 /**
- * Records the failure and sets the exit code: 1 lets the operator or service manager run
- * another turn, STOP_EXIT_CODE holds because a broadcast outcome is unresolved.
+ * Records the failure and exits 1 so the operator or service manager runs another turn.
  */
 export function handleTesterAttemptError(
   error: unknown,
@@ -23,12 +22,10 @@ export function handleTesterAttemptError(
         retryable: true,
       },
     });
-    process.exitCode = 1;
-    return;
+  } else {
+    recordExecutionError(executionLog, error);
   }
-  if (!recordExecutionError(executionLog, error)) {
-    process.exitCode = 1;
-  }
+  process.exitCode = 1;
 }
 
 /**

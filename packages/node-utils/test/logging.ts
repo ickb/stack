@@ -4,7 +4,6 @@ import {
   jsonLogReplacer,
   logExecution,
   recordExecutionError,
-  STOP_EXIT_CODE,
   writeJsonLine,
 } from "../src/index.ts";
 import {
@@ -21,11 +20,11 @@ describe("loop error logging", () => {
   it("serializes error-like values for JSON logs", () => {
     const executionLog: Record<string, unknown> = {};
 
-    expect(recordExecutionError(executionLog, new Error("failed"))).toBe(false);
+    recordExecutionError(executionLog, new Error("failed"));
     expect(executionLog["error"]).toMatchObject({ name: "Error", message: "failed" });
     expect(executionLog["error"]).toHaveProperty("stack");
     const emptyLog: Record<string, unknown> = {};
-    expect(recordExecutionError(emptyLog, undefined)).toBe(false);
+    recordExecutionError(emptyLog, undefined);
     expect(emptyLog["error"]).toBe("Empty Error");
   });
 
@@ -37,7 +36,7 @@ describe("loop error logging", () => {
   it("serializes functions as unsupported log values", () => {
     const executionLog: Record<string, unknown> = {};
 
-    expect(recordExecutionError(executionLog, unsupportedLogValue)).toBe(false);
+    recordExecutionError(executionLog, unsupportedLogValue);
 
     expect(executionLog["error"]).toBe("[Unsupported log value]");
   });
@@ -50,7 +49,7 @@ describe("loop error logging", () => {
       outPoint: { txHash: `0x${"11".repeat(32)}`, index: 0n },
     });
 
-    expect(recordExecutionError(executionLog, error)).toBe(false);
+    recordExecutionError(executionLog, error);
     expect(executionLog["error"]).toMatchObject({
       name: "Error",
       message: TRANSACTION_FAILED_TO_RESOLVE_MESSAGE,
@@ -59,41 +58,15 @@ describe("loop error logging", () => {
       outPoint: { txHash: `0x${"11".repeat(32)}`, index: "0" },
     });
   });
-
-  it("holds after any confirmation failure or node hash mismatch, not other errors", () => {
-    expect(STOP_EXIT_CODE).toBe(2);
-    expect(recordExecutionError({}, transactionError(true))).toBe(true);
-    expect(process.exitCode).toBe(STOP_EXIT_CODE);
-    process.exitCode = undefined;
-    expect(recordExecutionError({}, transactionError(false))).toBe(true);
-    process.exitCode = undefined;
-    class TransactionBroadcastError extends Error {
-      public override readonly name = "TransactionBroadcastError";
-      public readonly nodeTxHash: string | undefined;
-      constructor(nodeTxHash: string | undefined, options?: ErrorOptions) {
-        super("broadcast failed", options);
-        this.nodeTxHash = nodeTxHash;
-      }
-    }
-    expect(
-      recordExecutionError({}, new TransactionBroadcastError(byte32FromByte("44"))),
-    ).toBe(true);
-    process.exitCode = undefined;
-    expect(recordExecutionError({}, new TransactionBroadcastError(undefined))).toBe(
-      false,
-    );
-    expect(recordExecutionError({}, new Error("failed"))).toBe(false);
-    expect(process.exitCode).toBeUndefined();
-  });
 });
 
 describe("loop transaction error logging", () => {
-  it("records timeout errors, preserves broadcast hash, and sets exit code 2", () => {
+  it("records timeout errors and preserves the broadcast hash without touching the exit code", () => {
     const txHash = byte32FromByte("33");
     const executionLog: Record<string, unknown> = { txHash };
 
-    expect(recordExecutionError(executionLog, transactionError(true, txHash))).toBe(true);
-    expect(process.exitCode).toBe(STOP_EXIT_CODE);
+    recordExecutionError(executionLog, transactionError(true, txHash));
+    expect(process.exitCode).toBeUndefined();
     expect(executionLog["txHash"]).toBe(txHash);
     expect(executionLog["error"]).toMatchObject({
       name: "TransactionConfirmationError",
@@ -102,17 +75,13 @@ describe("loop transaction error logging", () => {
       status: "sent",
       isTimeout: true,
     });
-    process.exitCode = undefined;
   });
 
   it("records non-timeout transaction confirmation failures distinctly", () => {
     const txHash = byte32FromByte("34");
     const executionLog: Record<string, unknown> = { txHash };
 
-    expect(recordExecutionError(executionLog, transactionError(false, txHash))).toBe(
-      true,
-    );
-    process.exitCode = undefined;
+    recordExecutionError(executionLog, transactionError(false, txHash));
     expect(executionLog["error"]).toMatchObject({
       name: "TransactionConfirmationError",
       message: TRANSACTION_CONFIRMATION_TIMEOUT_MESSAGE,
@@ -128,7 +97,7 @@ describe("loop error shape logging", () => {
     const executionLog: Record<string, unknown> = {};
     const error = { stack: "stack", message: 1 };
 
-    expect(recordExecutionError(executionLog, error)).toBe(false);
+    recordExecutionError(executionLog, error);
 
     expect(executionLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
@@ -136,14 +105,14 @@ describe("loop error shape logging", () => {
     });
 
     const missingMessageLog: Record<string, unknown> = {};
-    expect(recordExecutionError(missingMessageLog, { stack: "stack" })).toBe(false);
+    recordExecutionError(missingMessageLog, { stack: "stack" });
     expect(missingMessageLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
       stack: "stack",
     });
 
     const nonStringStackLog: Record<string, unknown> = {};
-    expect(recordExecutionError(nonStringStackLog, { stack: 1 })).toBe(false);
+    recordExecutionError(nonStringStackLog, { stack: 1 });
     expect(nonStringStackLog["error"]).toMatchObject({
       message: UNKNOWN_ERROR_MESSAGE,
       stack: "",
@@ -155,7 +124,7 @@ describe("loop error shape logging", () => {
     const error = new Error("failed");
     Object.defineProperty(error, "cause", { value: error });
 
-    expect(recordExecutionError(executionLog, error)).toBe(false);
+    recordExecutionError(executionLog, error);
 
     expect(executionLog["error"]).toMatchObject({
       message: "failed",
@@ -171,7 +140,7 @@ describe("non-Error loop failure logging", () => {
     const circular: Record<string, unknown> = {};
     circular["self"] = circular;
 
-    expect(recordExecutionError(executionLog, loopFailure(rpcUrl, circular))).toBe(false);
+    recordExecutionError(executionLog, loopFailure(rpcUrl, circular));
     const serialized = JSON.stringify(executionLog);
     expect(serialized).toContain(rpcUrl);
     expect(executionLog["error"]).toMatchObject({

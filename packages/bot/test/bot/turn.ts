@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "@ickb/core";
-import { STOP_EXIT_CODE } from "@ickb/node-utils";
 import { OrderManager } from "@ickb/order";
 import { TransactionBroadcastError } from "@ickb/sdk";
 import {
@@ -208,52 +207,6 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
   );
 });
 
-it("fails closed on a node hash mismatch without waiting or retrying its cause", async () => {
-  noMatch();
-  const nodeTxHash = hash("ac");
-  const getTransactionNoCache =
-    vi.fn<NonNullable<FakeClientOverrides["getTransactionNoCache"]>>();
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    client: { getTransactionNoCache },
-    sendTransaction: async (txLike, recordTxHash) => {
-      await Promise.resolve();
-      const txHash = ccc.Transaction.from(txLike).hash();
-      recordTxHash?.(txHash);
-      throw new TransactionBroadcastError(txHash, {
-        nodeTxHash,
-        cause: new TypeError(FETCH_FAILED),
-      });
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  // The node answered about a transaction this attempt cannot bind, so the local
-  // one may already be accepted and a restart could resend it.
-  const txHash = harness.sentHash();
-  expect(process.exitCode).toBe(STOP_EXIT_CODE);
-  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
-  expect(getTransactionNoCache).not.toHaveBeenCalled();
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_FAILED),
-  ).toMatchObject({
-    txHash,
-    nodeTxHash,
-    phase: "broadcast",
-    outcome: "send_failed",
-    retryable: false,
-    terminal: true,
-    error: { txHash, nodeTxHash },
-  });
-  expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_TURN_FAILED,
-    retryable: false,
-    terminal: true,
-    error: { txHash, nodeTxHash },
-  });
-});
-
 it("normalizes confirmation error fields from public errors", async () => {
   noMatch();
   const harness = turnHarness({
@@ -271,8 +224,8 @@ it("normalizes confirmation error fields from public errors", async () => {
 
   await runBotTurn(harness.context);
 
-  // A broadcast transaction with an unresolved outcome must not be resent.
-  expect(process.exitCode).toBe(2);
+  // The outcome is unknown; the next turn rebuilds from committed state.
+  expect(process.exitCode).toBe(1);
   expect(
     harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
   ).toMatchObject({
@@ -286,33 +239,31 @@ it("normalizes confirmation error fields from public errors", async () => {
   });
 });
 
-// Only an RBF replacement leaves the sent transaction permanently unconfirmable, so
-// only it may hand the next turn a rebuild (exit 1); any other rejection holds (exit 2).
+// Only an RBF replacement proves the sent transaction can never confirm, so only it is
+// classified retryable; either way the next turn rebuilds (exit 1).
 it.each([
-  { reason: RBF_REJECTED_REASON, expectedExitCode: 1 },
-  { reason: "Resolve failed Dead(OutPoint(...))", expectedExitCode: 2 },
-])(
-  "exits for the next turn only after RBF rejection: $reason",
-  async ({ reason, expectedExitCode }) => {
-    noMatch();
-    const chain = chainState();
-    const harness = turnHarness({
-      account: fundedAccount({ withdrawal: true }),
-      chain,
-      sendTransaction: async (txLike) => {
-        await Promise.resolve();
-        const transaction = ccc.Transaction.from(txLike);
-        chain.tx({ transaction, status: "rejected", reason });
-        return transaction.hash();
-      },
-    });
+  { reason: RBF_REJECTED_REASON, retryable: true },
+  { reason: "Resolve failed Dead(OutPoint(...))", retryable: false },
+])("exits 1 and classifies the rejection: $reason", async ({ reason, retryable }) => {
+  noMatch();
+  const chain = chainState();
+  const harness = turnHarness({
+    account: fundedAccount({ withdrawal: true }),
+    chain,
+    sendTransaction: async (txLike) => {
+      await Promise.resolve();
+      const transaction = ccc.Transaction.from(txLike);
+      chain.tx({ transaction, status: "rejected", reason });
+      return transaction.hash();
+    },
+  });
 
-    await runBotTurn(harness.context);
+  await runBotTurn(harness.context);
 
-    expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
-    expect(process.exitCode).toBe(expectedExitCode);
-  },
-);
+  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
+  expect(process.exitCode).toBe(1);
+  expect(harness.events.at(-1)).toMatchObject({ type: BOT_TURN_FAILED, retryable });
+});
 
 it("tolerates confirmation fields disappearing during inspection", async () => {
   noMatch();
@@ -367,7 +318,7 @@ it("ends the attempt after one confirmation window without resending or rebuildi
   await vi.advanceTimersByTimeAsync(BOT_TRANSACTION_WAIT_TIMEOUT_MS);
   await turn;
 
-  expect(process.exitCode).toBe(2);
+  expect(process.exitCode).toBe(1);
   expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
   const timeoutFailure = {
     txHash: harness.sentHash(),

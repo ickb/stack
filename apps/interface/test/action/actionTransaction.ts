@@ -233,26 +233,6 @@ describe("transact broadcast identity and rejection", () => {
     expect(waitTransaction).not.toHaveBeenCalled();
   });
 
-  it("retains pending identity when the node returns a different hash", async () => {
-    const nodeTxHash = `0x${"de".repeat(32)}` as const;
-    signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-      await Promise.resolve();
-      recordTxHash?.(txHash);
-      throw new TransactionBroadcastError(txHash, { nodeTxHash });
-    });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Node returned transaction hash ${nodeTxHash}, expected ${txHash}`,
-      freshStateId,
-    );
-    expect(waitTransaction).not.toHaveBeenCalled();
-  });
-
   it("releases a rejected send without resetting the form", async () => {
     waitTransaction.mockRejectedValueOnce(
       new TransactionWaitError(txHash, {

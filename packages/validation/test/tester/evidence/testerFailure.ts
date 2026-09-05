@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { OrderConversionRepresentabilityError } from "@ickb/order";
-import { IckbSdk, TransactionBroadcastError } from "@ickb/sdk";
+import { IckbSdk } from "@ickb/sdk";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { transactionShape } from "../../../src/tester/evidence/testerEvidence.ts";
@@ -117,27 +117,8 @@ describe("handleTesterAttemptError", () => {
   });
 });
 
-describe("handleTesterAttemptError holds", () => {
-  // The node answered about a transaction this attempt cannot bind, so the local one may
-  // already be accepted: hold instead of letting a fresh turn resend.
-  it("holds after a node transaction hash mismatch", () => {
-    const originalExitCode = process.exitCode;
-    try {
-      process.exitCode = undefined;
-      handleTesterAttemptError(
-        new TransactionBroadcastError(byte32FromByte("13"), {
-          nodeTxHash: byte32FromByte("14"),
-          cause: new Error("hash mismatch"),
-        }),
-        {},
-      );
-      expect(process.exitCode).toBe(2);
-    } finally {
-      process.exitCode = originalExitCode;
-    }
-  });
-
-  it("holds after a confirmation timeout and for missing fresh-order provenance", () => {
+describe("handleTesterAttemptError after a broadcast", () => {
+  it("lets the next turn rebuild after a confirmation timeout or missing provenance", () => {
     const originalExitCode = process.exitCode;
     try {
       class TransactionConfirmationError extends Error {
@@ -150,7 +131,7 @@ describe("handleTesterAttemptError holds", () => {
         new TransactionConfirmationError("confirmation timed out"),
         {},
       );
-      expect(process.exitCode).toBe(2);
+      expect(process.exitCode).toBe(1);
 
       process.exitCode = undefined;
       const missingOrigin = new MissingFreshOrderOriginError(byte32FromByte("12"));
