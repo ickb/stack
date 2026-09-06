@@ -156,9 +156,6 @@ vi.mock(
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/promise-function-async, no-restricted-syntax -- Query mock returns captured test state through React Query's overloaded hook type.
     const useQuery = ((options: unknown): unknown => {
       queryMock.options = options;
-      if (isPendingTransactionOptions(options)) {
-        return { data: options.queryFn() };
-      }
       return queryMock.result;
     }) as typeof ReactQueryModule.useQuery;
     return {
@@ -168,21 +165,6 @@ vi.mock(
     };
   },
 );
-
-function isPendingTransactionOptions(options: unknown): options is {
-  queryFn: () => unknown;
-  queryKey: readonly unknown[];
-} {
-  return (
-    typeof options === "object" &&
-    options !== null &&
-    "queryKey" in options &&
-    Array.isArray(options.queryKey) &&
-    options.queryKey.at(-1) === "pendingTransactionConfirmation" &&
-    "queryFn" in options &&
-    typeof options.queryFn === "function"
-  );
-}
 
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers CCC connector mocks before dynamic component imports.
 vi.mock(import("@ckb-ccc/connector-react"), async () => {

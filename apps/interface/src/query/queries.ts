@@ -10,8 +10,7 @@ import {
 } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 import { l1StateQueryKey } from "./l1StateQueryKey.ts";
-import { buildStateId } from "./queryStateId.ts";
-import { rootConfigQueryKey } from "./rootConfigQueryKey.ts";
+import { objectIdentityKey, rootConfigQueryKey } from "./rootConfigQueryKey.ts";
 
 interface QuoteStateConfig {
   chain: RootConfig["chain"];
@@ -37,11 +36,7 @@ export interface QuoteState {
   tipTimestamp?: bigint;
 }
 
-/**
- * Builds the L1 account query key for a wallet and its current lock set.
- *
- * @remarks The key is structural for chain, address, primary lock, and account locks, so replacing the wallet object alone does not invalidate the cache.
- */
+/** Builds the L1 account query options for one wallet config. */
 export function l1StateOptions(
   walletConfig: WalletConfig,
   isFrozen: boolean,
@@ -49,7 +44,7 @@ export function l1StateOptions(
   enabled: boolean;
   retry: number;
   refetchInterval: number;
-  queryKey: readonly [WalletConfig["chain"], string, string, "l1State"];
+  queryKey: readonly [WalletConfig["chain"], string, number, "l1State"];
   queryFn: () => Promise<L1StateType>;
 } {
   return {
@@ -89,9 +84,9 @@ export function quoteStateOptions(rootConfig: QuoteStateConfig): {
 /**
  * Loads L1 account state and prepares the transaction-preview context for the current wallet.
  *
- * @remarks The returned stateId covers the account, protocol, balance, and cell
- * inputs captured in the transaction context. The builder still closes over
- * the current wallet config, SDK, client, and signer supplied by the UI.
+ * @remarks The stateId is the identity of this fetch's sampled state, so every fetch
+ * gets a new preview (decisions amendment 38). The builder closes over the current
+ * wallet config, SDK, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
   const sdkState = await walletConfig.sdk.getL1AccountState(
@@ -104,16 +99,8 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     account,
     user.orders,
   );
-  const {
-    ckbNative,
-    ickbNative,
-    ckbBalance,
-    ickbBalance,
-    ckbAvailable,
-    ickbAvailable,
-    pendingWithdrawals,
-    pendingOrders,
-  } = projection;
+  const { ckbNative, ickbNative, ckbBalance, ickbBalance, ckbAvailable, ickbAvailable } =
+    projection;
 
   const txContext: TransactionContext = {
     ...conversionContext,
@@ -130,7 +117,7 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     ickbAvailable,
     tipTimestamp: system.tip.timestamp,
     system,
-    stateId: buildStateId(walletConfig, txContext, pendingWithdrawals, pendingOrders),
+    stateId: String(objectIdentityKey(sdkState)),
     txBuilder: async (isCkb2Udt, amount) =>
       buildTransactionPreview(txContext, isCkb2Udt, amount, walletConfig),
     hasCollectable:

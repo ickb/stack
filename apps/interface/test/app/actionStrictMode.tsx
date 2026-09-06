@@ -1,10 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, Fragment, StrictMode, type ReactElement } from "react";
+import { createElement, Fragment, StrictMode, useState, type ReactElement } from "react";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type * as TransactionModule from "../../src/action/actionTransaction.ts";
 import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
-import { submitPendingTransaction } from "../../src/query/pendingTransactionQuery.ts";
+import {
+  createPendingTransactionStore,
+  submitPendingTransaction,
+  type PendingTransactionState,
+  type PendingTransactionStore,
+} from "../../src/action/pendingTransaction.ts";
 import type { L1StateType } from "../../src/query/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { txWithInput } from "../action/fixtures/transaction.ts";
@@ -107,12 +112,12 @@ describe("Action StrictMode ownership", () => {
     expect(freeze).toHaveBeenCalledWith(false);
   });
 
-  it("uses the fresh controller generation for recovered confirmation retry", async () => {
+  it("uses the fresh controller generation for recovered confirmation retry", () => {
     const fixture = walletFixture();
-    await recordPending(fixture.config);
     const { controllers, root } = strictAction(
       fixture.config,
       vi.fn<(value: boolean) => void>(),
+      { status: "pending", txHash },
     );
 
     expect(currentLayout().action).toBe("retry confirmation");
@@ -140,7 +145,7 @@ async function stopAndRetry(): Promise<void> {
   mocks.transact.mockImplementationOnce(async (params) => {
     params.lockIntent();
     params.setIsConfirming(true);
-    submitted = recordPending(params.walletConfig);
+    submitted = recordPending(params.pendingStore);
     await submitted;
     await new Promise<void>((resolve) => {
       params.signal.addEventListener(
@@ -197,8 +202,8 @@ function flushScheduledRender(): void {
 }
 
 /** Establishes pending state exactly as a completed submission does. */
-async function recordPending(walletConfig: WalletConfig): Promise<void> {
-  await submitPendingTransaction(walletConfig, async (recordTxHash) => {
+async function recordPending(store: PendingTransactionStore): Promise<void> {
+  await submitPendingTransaction(store, async (recordTxHash) => {
     recordTxHash(txHash);
     await Promise.resolve();
     return txHash;
@@ -208,6 +213,7 @@ async function recordPending(walletConfig: WalletConfig): Promise<void> {
 function strictAction(
   config: WalletConfig,
   freeze: (value: boolean) => void,
+  initialPending?: PendingTransactionState,
 ): {
   controllers: AbortController[];
   root: ReturnType<typeof createRoot>;
@@ -238,7 +244,7 @@ function strictAction(
         createElement(
           QueryClientProvider,
           { client: config.queryClient },
-          actionElement(config, freeze),
+          createElement(PendingHost, { initialPending, walletConfig: config, freeze }),
         ),
       ),
     );
@@ -246,11 +252,24 @@ function strictAction(
   return { controllers, root: candidate };
 }
 
-function actionElement(
-  walletConfig: WalletConfig,
-  freeze: (value: boolean) => void,
-): ReactElement {
+/** Owns the pending record the way App does, so the action under test reads live state. */
+// eslint-disable-next-line react-refresh/only-export-components -- Test-local host component.
+function PendingHost({
+  initialPending,
+  walletConfig,
+  freeze,
+}: Readonly<{
+  initialPending: PendingTransactionState | undefined;
+  walletConfig: WalletConfig;
+  freeze: (value: boolean) => void;
+}>): ReactElement {
+  const [pendingTransaction, setPendingTransaction] = useState(initialPending);
+  const [store] = useState(() =>
+    createPendingTransactionStore(setPendingTransaction, initialPending),
+  );
   return createElement(actionComponent, {
+    pendingTransaction,
+    pendingStore: store,
     isCkb2Udt: true,
     amount: 1n,
     amountError: "",

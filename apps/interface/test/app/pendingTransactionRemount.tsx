@@ -4,10 +4,14 @@ import type {
   waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, Fragment, type ReactElement } from "react";
+import { createElement, Fragment, useState, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
+import {
+  createPendingTransactionStore,
+  type PendingTransactionState,
+} from "../../src/action/pendingTransaction.ts";
 import type { L1StateType } from "../../src/query/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { txWithInput } from "../action/fixtures/transaction.ts";
@@ -84,19 +88,15 @@ afterAll(async () => {
 });
 
 describe("pending transaction remount ownership", () => {
-  it("retries the recorded hash after a remount on the same QueryClient", async () => {
-    const queryClient = new QueryClient();
-    const { sent, root: firstRoot, send: firstSend } = await submittedAction(queryClient);
-    flushSync(() => {
-      firstRoot.unmount();
-    });
+  it("retries the recorded hash after the action remounts within the same wallet session", async () => {
+    const { sent, root, send: firstSend } = await submittedAction();
 
     const replacementSend = vi.fn(async () => {
       await Promise.resolve();
       return txHash;
     });
-    const replacementConfig = walletConfig(queryClient, replacementSend);
-    const replacementRoot = renderAction(replacementConfig);
+    const replacementConfig = walletConfig(new QueryClient(), replacementSend);
+    renderHost(root, replacementConfig, 1);
     expect(currentLayout().action).toBe("retry confirmation");
     expect(currentLayout().disabled).toBe(false);
 
@@ -112,21 +112,21 @@ describe("pending transaction remount ownership", () => {
     expect(waitOptions.signal).toBeInstanceOf(AbortSignal);
     sent.resolve(txHash);
     flushSync(() => {
-      replacementRoot.unmount();
+      root.unmount();
     });
   });
 
-  it("offers no recorded hash to a replacement QueryClient", async () => {
-    const {
-      freshAction,
-      sent,
-      root: firstRoot,
-    } = await submittedAction(new QueryClient());
+  it("offers no recorded hash to a replacement wallet session", async () => {
+    const { freshAction, sent, root: firstRoot } = await submittedAction();
     flushSync(() => {
       firstRoot.unmount();
     });
 
-    const replacementRoot = renderAction(walletConfig(new QueryClient(), vi.fn()));
+    const replacementRoot = renderHost(
+      createRootForTest(),
+      walletConfig(new QueryClient(), vi.fn()),
+      0,
+    );
 
     expect(currentLayout().action).toBe(freshAction);
     expect(mocks.waitTransaction).not.toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("pending transaction remount ownership", () => {
 });
 
 /** Renders an action, submits it, and leaves the broadcast unresolved with its hash recorded. */
-async function submittedAction(queryClient: QueryClient): Promise<{
+async function submittedAction(): Promise<{
   freshAction: string;
   root: ReturnType<typeof createRoot>;
   send: ReturnType<typeof vi.fn>;
@@ -146,7 +146,7 @@ async function submittedAction(queryClient: QueryClient): Promise<{
 }> {
   const sent = Promise.withResolvers<ccc.Hex>();
   const send = vi.fn(async () => sent.promise);
-  const root = renderAction(walletConfig(queryClient, send));
+  const root = renderHost(createRootForTest(), walletConfig(new QueryClient(), send), 0);
   const freshAction = currentLayout().action;
   expect(freshAction).not.toBe("retry confirmation");
 
@@ -157,26 +157,52 @@ async function submittedAction(queryClient: QueryClient): Promise<{
   return { freshAction, root, send, sent };
 }
 
-function renderAction(walletConfig: WalletConfig): ReturnType<typeof createRoot> {
+function createRootForTest(): ReturnType<typeof createRoot> {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React DOM owns this structural test container boundary.
+  return createRoot(fakeContainer(testDocument) as unknown as Element);
+}
+
+/** Renders the session host; a new generation remounts the action under the same host. */
+function renderHost(
+  root: ReturnType<typeof createRoot>,
+  walletConfig: WalletConfig,
+  generation: number,
+): ReturnType<typeof createRoot> {
   walletConfig.queryClient.setQueryData(
     [walletConfig.chain, walletConfig.address, "txInfo", "state", true, "1"],
     activeTxInfo(),
   );
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React DOM owns this structural test container boundary.
-  const root = createRoot(fakeContainer(testDocument) as unknown as Element);
   flushSync(() => {
     root.render(
       createElement(
         QueryClientProvider,
         { client: walletConfig.queryClient },
-        createElement(Action, actionProps(walletConfig)),
+        createElement(PendingHost, { walletConfig, generation }),
       ),
     );
   });
   return root;
 }
 
-function actionProps(walletConfig: WalletConfig): Parameters<typeof Action>[0] {
+/** Owns the pending record the way App does, so a remounted action sees the same store. */
+// eslint-disable-next-line react-refresh/only-export-components -- Test-local host component.
+function PendingHost({
+  walletConfig,
+  generation,
+}: Readonly<{ walletConfig: WalletConfig; generation: number }>): ReactElement {
+  const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
+  const [store] = useState(() => createPendingTransactionStore(setPendingTransaction));
+  return createElement(Action, {
+    key: generation,
+    ...actionProps(walletConfig),
+    pendingTransaction,
+    pendingStore: store,
+  });
+}
+
+function actionProps(
+  walletConfig: WalletConfig,
+): Omit<Parameters<typeof Action>[0], "pendingTransaction" | "pendingStore"> {
   return {
     isCkb2Udt: true,
     amount: 1n,

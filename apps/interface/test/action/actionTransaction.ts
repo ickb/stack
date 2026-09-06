@@ -14,13 +14,13 @@ import {
   type RefreshedTransactionPreview,
   type RefreshedTransactionState,
 } from "../../src/action/actionTransaction.ts";
-import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
+  createPendingTransactionStore,
   submitPendingTransaction,
-  type PendingTransactionState,
-} from "../../src/query/pendingTransactionQuery.ts";
+  type PendingTransactionStore,
+} from "../../src/action/pendingTransaction.ts";
+import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
-import { pendingTransactionHash } from "../query/fixtures/query.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 
@@ -28,6 +28,11 @@ const nothingToDo = "Nothing to do";
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
+
+/** The record has no owning component in these tests. */
+function ignoreChange(): void {
+  // Nothing renders the record here.
+}
 
 const { signAndSendTransaction, waitTransaction } = vi.hoisted(() => ({
   signAndSendTransaction: vi.fn<typeof sdkSignAndSendTransaction>(),
@@ -84,7 +89,7 @@ describe("finite-window confirmation", () => {
       freshStateId,
     );
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
   });
 });
 
@@ -127,7 +132,7 @@ describe("transact fresh preview boundary", () => {
       exact: true,
     });
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(pendingTransactionHash(calls.walletConfig)).toBeUndefined();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
   it("surfaces refresh failure and unlocks without sending", async () => {
@@ -140,7 +145,7 @@ describe("transact fresh preview boundary", () => {
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
     expect(calls.formReset).not.toHaveBeenCalled();
-    expect(pendingTransactionHash(calls.walletConfig)).toBeUndefined();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
   it.each([
@@ -175,7 +180,7 @@ describe("transact post-broadcast outcomes", () => {
       expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     });
 
-    await recordPending(calls.walletConfig);
+    await recordPending(calls.pendingStore);
     waitTransaction.mockResolvedValueOnce(committedResponse());
     releasePreview.resolve(undefined);
     await attempt;
@@ -198,7 +203,7 @@ describe("transact post-broadcast outcomes", () => {
       freshStateId,
     );
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     vi.useFakeTimers();
     waitTransaction.mockResolvedValueOnce(committedResponse());
@@ -224,7 +229,7 @@ describe("transact broadcast identity and rejection", () => {
 
     await transact(calls);
 
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     expect(calls.setFailure).toHaveBeenCalledWith(
       `Transaction ${txHash} broadcast outcome is unresolved`,
@@ -250,7 +255,7 @@ describe("transact broadcast identity and rejection", () => {
     );
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(calls.formReset).not.toHaveBeenCalled();
-    expect(pendingTransactionHash(calls.walletConfig)).toBeUndefined();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 });
 
@@ -258,7 +263,7 @@ describe("retryConfirmation", () => {
   it("silently ignores retry after its owner has already unmounted", async () => {
     const controller = new AbortController();
     const calls = transactionCalls(refreshedPreview(), undefined, controller);
-    await recordPending(calls.walletConfig);
+    await recordPending(calls.pendingStore);
     controller.abort();
 
     await retryConfirmation({ ...calls, txHash });
@@ -266,7 +271,7 @@ describe("retryConfirmation", () => {
     expect(waitTransaction).not.toHaveBeenCalled();
     expect(calls.setFailure).not.toHaveBeenCalled();
     expect(calls.setIsConfirming).not.toHaveBeenCalled();
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
   });
 
   it("releases a terminal rejection found while retrying", async () => {
@@ -277,7 +282,7 @@ describe("retryConfirmation", () => {
       }),
     );
     const calls = transactionCalls();
-    await recordPending(calls.walletConfig);
+    await recordPending(calls.pendingStore);
 
     await retryConfirmation({ ...calls, txHash });
 
@@ -286,7 +291,7 @@ describe("retryConfirmation", () => {
     );
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
-    expect(pendingTransactionHash(calls.walletConfig)).toBeUndefined();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
   it("falls back to terminal status when retry rejection has no reason", async () => {
@@ -403,7 +408,7 @@ describe("attempt ownership during send", () => {
     controller.abort();
     await attempt;
     await vi.waitFor(() => {
-      expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+      expect(pendingHash(calls.pendingStore)).toBe(txHash);
     });
 
     expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
@@ -436,7 +441,7 @@ describe("attempt ownership after broadcast", () => {
     await vi.waitFor(() => {
       expect(waitTransaction).toHaveBeenCalledTimes(1);
     });
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
     const callbackCounts = attemptCallbackCounts(calls);
 
     controller.abort();
@@ -450,7 +455,7 @@ describe("attempt ownership after broadcast", () => {
     expect(
       walletQueryClient(calls.walletConfig).invalidateQueries,
     ).not.toHaveBeenCalled();
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     const retryController = new AbortController();
     waitTransaction.mockResolvedValueOnce(committedResponse());
@@ -470,12 +475,16 @@ describe("attempt ownership after broadcast", () => {
 });
 
 /** Establishes pending state exactly as a completed submission does. */
-async function recordPending(walletConfig: WalletConfig): Promise<void> {
-  await submitPendingTransaction(walletConfig, async (recordTxHash) => {
+async function recordPending(store: PendingTransactionStore): Promise<void> {
+  await submitPendingTransaction(store, async (recordTxHash) => {
     recordTxHash(txHash);
     await Promise.resolve();
     return txHash;
   });
+}
+
+function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
+  return store.current?.status === "pending" ? store.current.txHash : undefined;
 }
 
 function committedResponse(): ccc.ClientTransactionResponse {
@@ -522,7 +531,7 @@ describe("attempt ownership during completion", () => {
 
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(calls.freezePreview).not.toHaveBeenCalledWith(undefined);
-    expect(pendingTransactionHash(calls.walletConfig)).toBe(txHash);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
   });
 });
 
@@ -557,6 +566,7 @@ function transactionCalls(
     setIsConfirming: vi.fn<(isConfirming: boolean) => void>(),
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
+    pendingStore: createPendingTransactionStore(ignoreChange),
     unavailableMessage: nothingToDo,
     signal: controller.signal,
   };
@@ -603,48 +613,18 @@ function walletConfig(): WalletConfig {
 }
 
 function walletQueryClient(config?: WalletConfig): {
-  getQueryData: ReturnType<typeof vi.fn>;
   invalidateQueries: ReturnType<typeof vi.fn>;
-  removeQueries: ReturnType<typeof vi.fn>;
-  setQueryData: ReturnType<typeof vi.fn>;
-  setQueryDefaults: ReturnType<typeof vi.fn>;
 } {
   if (config !== undefined) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Test wallet config stores the query client mock under the production field.
     return config.queryClient as unknown as {
-      getQueryData: ReturnType<typeof vi.fn>;
       invalidateQueries: ReturnType<typeof vi.fn>;
-      removeQueries: ReturnType<typeof vi.fn>;
-      setQueryData: ReturnType<typeof vi.fn>;
-      setQueryDefaults: ReturnType<typeof vi.fn>;
     };
   }
-  type CacheValue = PendingTransactionState | null;
-  const data = new Map<string, CacheValue>();
-  const cacheKey = (queryKey: readonly unknown[]): string => JSON.stringify(queryKey);
   return {
-    getQueryData: vi.fn((queryKey: readonly unknown[]) => data.get(cacheKey(queryKey))),
     invalidateQueries: vi.fn(async () => {
       await Promise.resolve();
     }),
-    removeQueries: vi.fn((filters: { queryKey: readonly unknown[] }) => {
-      data.delete(cacheKey(filters.queryKey));
-    }),
-    setQueryData: vi.fn(
-      (
-        queryKey: readonly unknown[],
-        updater:
-          CacheValue | ((cached: CacheValue | undefined) => CacheValue | undefined),
-      ) => {
-        const key = cacheKey(queryKey);
-        const value = typeof updater === "function" ? updater(data.get(key)) : updater;
-        if (value !== undefined) {
-          data.set(key, value);
-        }
-        return value;
-      },
-    ),
-    setQueryDefaults: vi.fn(),
   };
 }
 

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { Ratio } from "@ickb/sdk";
 
-import { byte32FromByte, headerLike, StubClient } from "@ickb/testkit";
+import { headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
@@ -20,29 +20,13 @@ import {
 } from "./fixtures/query.ts";
 
 function itKeysL1StateByAccountLocks(): void {
-  it("keys L1 state by account locks as well as address", () => {
-    const primaryLock = script("11");
-    const firstAccountLock = script("22");
-    const secondAccountLock = script("33");
-    const walletConfig = {
-      chain: "testnet",
-      address: "ckt1same",
-      primaryLock,
-      accountLocks: [firstAccountLock],
-    } satisfies Parameters<typeof l1StateQueryKey>[0];
+  it("keys L1 state by the wallet config object, not its shape", () => {
+    const walletConfig = { chain: "testnet", address: "ckt1same" } as const;
+    const key = l1StateQueryKey(walletConfig);
 
-    expect(l1StateQueryKey(walletConfig)).toEqual([
-      "testnet",
-      "ckt1same",
-      `primary=${primaryLock.toHex()};accounts=${firstAccountLock.toHex()}`,
-      "l1State",
-    ]);
-    expect(
-      l1StateQueryKey({
-        ...walletConfig,
-        accountLocks: [secondAccountLock],
-      }),
-    ).not.toEqual(l1StateQueryKey(walletConfig));
+    expect(key).toEqual(["testnet", "ckt1same", key[2], "l1State"]);
+    expect(l1StateQueryKey(walletConfig)).toEqual(key);
+    expect(l1StateQueryKey({ ...walletConfig })).not.toEqual(key);
   });
 }
 
@@ -186,89 +170,38 @@ it("loads display balances from an SDK account snapshot", async () => {
   expect(state.ickbAvailable).toBe(11n);
   expect(state.ckbBalance).toBe(nativeCapacity);
   expect(state.ickbBalance).toBe(11n);
-  expect(state.stateId).toBe(
-    [
-      "chain=testnet",
-      `locks=primary=${lock.toHex()};accounts=${lock.toHex()}`,
-      `tip=${tip.hash}/${String(tip.number)}/10`,
-      "fee=1",
-      "ratio=1/1",
-      "pool=0;;;deposits=",
-      `balances=${String(nativeCapacity)}/11`,
-      `capacityCells=${capacityCell.outPoint.toHex()}`,
-      `nativeUdtCells=${nativeUdtCell.outPoint.toHex()}`,
-      "maturity=10",
-      "receipts=",
-      "readyWithdrawals=",
-      "availableOrders=",
-      "pendingWithdrawals=",
-      "pendingOrders=",
-    ].join("|"),
-  );
+  expect(state.stateId).toMatch(/^\d+$/u);
   await expect(state.txBuilder(true, 1n)).resolves.toMatchObject({
     error: "No conversion request available for this amount",
     estimatedMaturity: 10n,
   });
 });
 
-it("changes stateId when transaction-preview inputs change without count changes", async () => {
+it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {
   const lock = script("11");
-  const tip = headerLike({ timestamp: 10n });
-  const stateIdFor = async (options?: {
-    feeRate?: bigint;
-    exchangeRatio?: Ratio;
-    nativeCapacity?: bigint;
-    nativeCapacityTxHashByte?: string;
-    nativeUdtTxHashByte?: string;
-    ckbMaturing?: Array<{ ckbCumulative: bigint; maturity: bigint }>;
-  }): Promise<string> => {
-    const capacityCell = cell(options?.nativeCapacity ?? ccc.fixedPointFrom(100), lock);
-    capacityCell.outPoint.txHash = byte32FromByte(
-      options?.nativeCapacityTxHashByte ?? "aa",
-    );
-    const nativeUdtCell = cell(1n, lock);
-    nativeUdtCell.outPoint.txHash = byte32FromByte(options?.nativeUdtTxHashByte ?? "bb");
-    const walletConfig = walletConfigForState(lock, {
-      system: {
-        feeRate: options?.feeRate ?? 1n,
-        tip,
-        exchangeRatio:
-          options?.exchangeRatio ?? Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        orderPool: [],
-        poolDeposits: { deposits: [], id: "" },
-        ckbAvailable: 0n,
-        ckbMaturing: options?.ckbMaturing ?? [],
-      },
-      user: { orders: [] },
-      account: {
-        capacityCells: [capacityCell],
-        nativeUdtCells: [nativeUdtCell],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 0n,
-        receipts: [],
-        withdrawalGroups: [],
-      },
-    });
+  const sampledState = (): Parameters<typeof walletConfigForState>[1] => ({
+    system: {
+      feeRate: 1n,
+      tip: headerLike({ timestamp: 10n }),
+      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+      orderPool: [],
+      poolDeposits: { deposits: [], id: "" },
+      ckbAvailable: 0n,
+      ckbMaturing: [],
+    },
+    user: { orders: [] },
+    account: {
+      capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
+      nativeUdtCells: [],
+      nativeUdtCapacity: 0n,
+      nativeUdtBalance: 0n,
+      receipts: [],
+      withdrawalGroups: [],
+    },
+  });
 
-    return (await getL1State(walletConfig)).stateId;
-  };
+  const first = await getL1State(walletConfigForState(lock, sampledState()));
+  const second = await getL1State(walletConfigForState(lock, sampledState()));
 
-  const base = await stateIdFor();
-
-  await expect(stateIdFor({ feeRate: 2n })).resolves.not.toBe(base);
-  await expect(
-    stateIdFor({
-      exchangeRatio: Ratio.from({ ckbScale: 2n, udtScale: 1n }),
-    }),
-  ).resolves.not.toBe(base);
-  await expect(stateIdFor({ nativeCapacity: ccc.fixedPointFrom(101) })).resolves.not.toBe(
-    base,
-  );
-  await expect(stateIdFor({ nativeCapacityTxHashByte: "ab" })).resolves.not.toBe(base);
-  await expect(stateIdFor({ nativeUdtTxHashByte: "bc" })).resolves.not.toBe(base);
-  await expect(
-    stateIdFor({
-      ckbMaturing: [{ ckbCumulative: 1n, maturity: 20n }],
-    }),
-  ).resolves.not.toBe(base);
+  expect(first.stateId).not.toBe(second.stateId);
 });

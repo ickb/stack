@@ -1,8 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  clearPendingTransactionHash,
-  submitPendingTransaction,
-} from "../../src/query/pendingTransactionQuery.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import {
   actionProps,
@@ -22,11 +18,14 @@ import {
   Action,
   App,
   CKB,
+  clearPendingTransaction,
   Dashboard,
   Form,
+  submitPendingTransaction,
   txInfoPadding,
   WalletAppView,
   type ActionLayout,
+  type PendingTransactionStore,
 } from "./fixtures/modules.ts";
 
 const requestConversion = "request conversion";
@@ -264,7 +263,7 @@ function registerActionRejectionTests(): void {
       const { build, ...state } = await params.refreshPreview();
       params.freezePreview({ ...state, txInfo: await build() });
       params.setFailure(failure, state.stateId);
-      clearPendingTransactionHash(params.walletConfig);
+      clearPendingTransaction(params.pendingStore);
       params.freezePreview(undefined);
       attempted.resolve(undefined);
     });
@@ -375,7 +374,7 @@ function registerActionConfirmationTests(): void {
       params.lockIntent();
       const { build, ...state } = await params.refreshPreview();
       params.freezePreview({ ...state, txInfo: await build() });
-      await recordPending(params.walletConfig, `0x${"ab".repeat(32)}`);
+      await recordPending(params.pendingStore, `0x${"ab".repeat(32)}`);
       params.setIsConfirming(true);
       waitingReady.resolve(undefined);
       await confirmation.promise;
@@ -388,7 +387,11 @@ function registerActionConfirmationTests(): void {
     await waitingReady.promise;
     hookState.index = 0;
     const waiting = elementProps<Parameters<typeof ActionLayout>[0]>(
-      Action({ ...base, l1State: l1State() }),
+      Action({
+        ...base,
+        pendingTransaction: base.pendingStore.current,
+        l1State: l1State(),
+      }),
     );
 
     expect(waiting.action).toBe("stop waiting");
@@ -404,7 +407,11 @@ function registerActionConfirmationTests(): void {
     await Promise.resolve();
     hookState.index = 0;
     const retry = elementProps<Parameters<typeof ActionLayout>[0]>(
-      Action({ ...base, l1State: l1State() }),
+      Action({
+        ...base,
+        pendingTransaction: base.pendingStore.current,
+        l1State: l1State(),
+      }),
     );
 
     expect(retry.action).toBe("retry confirmation");
@@ -416,10 +423,10 @@ function registerActionConfirmationTests(): void {
 
 /** Establishes pending state exactly as a completed submission does. */
 async function recordPending(
-  config: ReturnType<typeof walletConfig>,
+  store: PendingTransactionStore,
   txHash: `0x${string}`,
 ): Promise<void> {
-  await submitPendingTransaction(config, async (recordTxHash) => {
+  await submitPendingTransaction(store, async (recordTxHash) => {
     recordTxHash(txHash);
     await Promise.resolve();
     return txHash;
@@ -427,18 +434,17 @@ async function recordPending(
 }
 
 function registerPendingTransactionRecoveryTests(): void {
-  it("restores only the same account hash and aborts ownership on unmount", async () => {
+  it("restores the session's hash and aborts ownership on unmount", async () => {
     const txHash = `0x${"cd".repeat(32)}` as const;
-    const config = walletConfig();
-    clearPendingTransactionHash(config);
-    await recordPending(config, txHash);
+    const props = actionProps();
+    await recordPending(props.pendingStore, txHash);
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     const freeze = vi.fn<(value: boolean) => void>();
     const restored = elementProps<Parameters<typeof ActionLayout>[0]>(
       Action({
-        ...actionProps(),
+        ...props,
+        pendingTransaction: props.pendingStore.current,
         freeze,
-        walletConfig: config,
         l1State: l1State(),
       }),
     );
@@ -462,25 +468,28 @@ function registerPendingTransactionRecoveryTests(): void {
 
     resetHooks();
     queryMock.result = { data: activeTxInfo(), isFetching: false };
-    const otherAccount = elementProps<Parameters<typeof ActionLayout>[0]>(
-      Action({
-        ...actionProps(),
-        walletConfig: { ...config, address: "ckt1other" },
-        l1State: l1State(),
-      }),
+    // Another session has its own store and therefore no recorded hash.
+    const otherSession = elementProps<Parameters<typeof ActionLayout>[0]>(
+      Action({ ...actionProps(), l1State: l1State() }),
     );
-    expect(otherAccount.action).toBe(requestConversion);
-    clearPendingTransactionHash(config);
+    expect(otherSession.action).toBe(requestConversion);
   });
 
   it("does not start another action while wallet submission is owned", async () => {
-    const config = walletConfig();
+    const props = actionProps();
     const sent = Promise.withResolvers<`0x${string}`>();
-    const submission = submitPendingTransaction(config, async () => sent.promise);
+    const submission = submitPendingTransaction(
+      props.pendingStore,
+      async () => sent.promise,
+    );
     await Promise.resolve();
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     const action = elementProps<Parameters<typeof ActionLayout>[0]>(
-      Action({ ...actionProps(), walletConfig: config, l1State: l1State() }),
+      Action({
+        ...props,
+        pendingTransaction: props.pendingStore.current,
+        l1State: l1State(),
+      }),
     );
 
     action.onAction?.();
@@ -489,7 +498,6 @@ function registerPendingTransactionRecoveryTests(): void {
     expect(transactMock.retryConfirmation).not.toHaveBeenCalled();
     sent.resolve(`0x${"ef".repeat(32)}`);
     await submission;
-    clearPendingTransactionHash(config);
   });
 }
 

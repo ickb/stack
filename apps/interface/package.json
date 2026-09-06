@@ -35,17 +35,14 @@
     "clean": "rm -fr dist"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.7",
     "@ickb/testkit": "workspace:*",
-    "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/babel__core": "^7.20.5",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
-    "@vitejs/plugin-react": "^6.0.5",
-    "babel-plugin-react-compiler": "^1.0.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxc-transform-react": "^0.147.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^8.2.0"

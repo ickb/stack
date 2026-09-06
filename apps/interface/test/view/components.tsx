@@ -16,7 +16,6 @@ import {
   CkbSignerRequired,
   Dashboard,
   DisconnectedDashboard,
-  ErrorBoundary,
   Form,
   gridLine,
   PendingDashboard,
@@ -377,30 +376,6 @@ describe("view components", () => {
     expect(
       renderToStaticMarkup(<UnsupportedNetwork addressPrefix="ckb-dev" open={open} />),
     ).toContain("Unsupported CKB address prefix: ckb-dev");
-  });
-
-  it("renders and recovers the error boundary fallback", () => {
-    const onRetry = vi.fn<() => void>();
-    const boundary = new ErrorBoundary({ children: <span>Child</span>, onRetry });
-    const consoleError = vi
-      .spyOn(console, "error")
-      .mockImplementation((): undefined => undefined);
-
-    expect(renderToStaticMarkup(boundary.render())).toContain("Child");
-    expect(ErrorBoundary.getDerivedStateFromError(new Error("boom"))).toEqual({
-      error: new Error("boom"),
-    });
-    boundary.state = { error: new Error("boom") };
-    boundary.componentDidCatch(new Error("boom"), { componentStack: "stack" });
-    const fallback = boundary.render();
-    elementProps<{ onClick: () => void }>(
-      findElement(fallback, (node) => node.type === "button"),
-    ).onClick();
-
-    expect(renderToStaticMarkup(fallback)).toContain("Unable to render the wallet app.");
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(consoleError).toHaveBeenCalledWith(expect.any(Error), "stack");
-    consoleError.mockRestore();
   });
 });
 

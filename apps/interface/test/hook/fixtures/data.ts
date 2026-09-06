@@ -43,6 +43,9 @@ export function actionProps(): Parameters<typeof Action>[0] {
     freeze: vi.fn<(value: boolean) => void>(),
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
+    pendingTransaction: undefined,
+    // Built inline: this fixture loads before the React mock, so it must not import the hook module.
+    pendingStore: { current: undefined, onChange: (): undefined => undefined },
     l1State: l1State(),
     isStateFetching: false,
     stateError: null,

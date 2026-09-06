@@ -7,15 +7,16 @@ import {
 } from "@ickb/sdk";
 import { l1StateQueryKey } from "../query/l1StateQueryKey.ts";
 import {
-  clearPendingTransactionHash,
-  submitPendingTransaction,
-} from "../query/pendingTransactionQuery.ts";
-import {
   errorMessageOf,
   hasTransactionActivity,
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
+import {
+  clearPendingTransaction,
+  submitPendingTransaction,
+  type PendingTransactionStore,
+} from "./pendingTransaction.ts";
 
 export const confirmationWindowMs = 60_000;
 
@@ -41,6 +42,7 @@ interface TransactionCallbacks {
   readonly setIsConfirming: (isConfirming: boolean) => void;
   readonly formReset: () => void;
   readonly walletConfig: WalletConfig;
+  readonly pendingStore: PendingTransactionStore;
 }
 
 interface TransactParams extends TransactionCallbacks {
@@ -93,7 +95,7 @@ export async function transact({
     callbacks.setIsPreparing(false);
     callbacks.setIsConfirming(true);
     const sentHash = await abortable(
-      sendAndStoreTransaction(callbacks.walletConfig, txInfo),
+      sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
       signal,
     );
     assertCurrent(signal);
@@ -115,7 +117,7 @@ export async function transact({
     callbacks.setMessage("");
     if (error instanceof TransactionWaitError) {
       // A known rejection is final; the next action rebuilds from committed cells.
-      clearPendingTransactionHash(callbacks.walletConfig);
+      clearPendingTransaction(callbacks.pendingStore);
       releaseTransaction(callbacks);
     } else if (txHash === undefined) {
       releaseTransaction(callbacks);
@@ -130,11 +132,12 @@ export async function transact({
 
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the shared account submission promise through the broadcast boundary.
 function sendAndStoreTransaction(
+  pendingStore: PendingTransactionStore,
   walletConfig: WalletConfig,
   txInfo: TxInfo,
 ): Promise<ccc.Hex> {
   return submitPendingTransaction(
-    walletConfig,
+    pendingStore,
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
     (recordTxHash) =>
       signAndSendTransaction(walletConfig.signer, txInfo.tx, recordTxHash),
@@ -170,7 +173,7 @@ export async function retryConfirmation({
     callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
     if (error instanceof TransactionWaitError) {
-      clearPendingTransactionHash(callbacks.walletConfig);
+      clearPendingTransaction(callbacks.pendingStore);
       releaseTransaction(callbacks);
     }
   } finally {
@@ -207,7 +210,13 @@ function releaseTransaction({ freezePreview }: TransactionCallbacks): void {
 }
 
 async function completeConfirmedTransaction(
-  { freezePreview, formReset, setMessage, walletConfig }: TransactionCallbacks,
+  {
+    freezePreview,
+    formReset,
+    setMessage,
+    walletConfig,
+    pendingStore,
+  }: TransactionCallbacks,
   signal: AbortSignal,
 ): Promise<void> {
   assertCurrent(signal);
@@ -221,7 +230,7 @@ async function completeConfirmedTransaction(
   );
   assertCurrent(signal);
   formReset();
-  clearPendingTransactionHash(walletConfig);
+  clearPendingTransaction(pendingStore);
   freezePreview(undefined);
   setMessage("");
 }

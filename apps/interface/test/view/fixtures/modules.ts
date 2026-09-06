@@ -1,5 +1,4 @@
 export { ActionLayout } from "../../../src/action/ActionLayout.tsx";
-export { default as ErrorBoundary } from "../../../src/app/ErrorBoundary.tsx";
 export { default as RateChart } from "../../../src/chart/rateChart.tsx";
 export {
   gridLine,

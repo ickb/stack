@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/ccc";
 import { getConfig, IckbSdk } from "@ickb/sdk";
 import { byte32FromByte } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
-import { pendingTransactionState } from "../../../src/query/pendingTransactionQuery.ts";
 import type { getL1State } from "../../../src/query/queries.ts";
 import type { WalletConfig } from "../../../src/shared/utils.ts";
 
@@ -87,12 +86,4 @@ class StateSdk extends IckbSdk {
       estimatedMaturity: this.state.system.tip.timestamp,
     };
   }
-}
-
-/** The hash the cache currently reports as pending, if any. */
-export function pendingTransactionHash(
-  walletConfig: Parameters<typeof pendingTransactionState>[0],
-): ccc.Hex | undefined {
-  const state = pendingTransactionState(walletConfig);
-  return state?.status === "pending" ? state.txHash : undefined;
 }

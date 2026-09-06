@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
 import type { RefreshedTransactionState } from "../action/actionTransaction.ts";
+import {
+  createPendingTransactionStore,
+  type PendingTransactionState,
+} from "../action/pendingTransaction.ts";
 import { l1StateOptions, type L1StateType, type QuoteState } from "../query/queries.ts";
 import {
   direction2Symbol,
@@ -27,6 +31,12 @@ export default function App({
   quoteState?: QuoteState;
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
+  // The pending transaction lives with the wallet session: it survives the action
+  // remounting on a preview change and ends with this App (decisions amendment 46(i)).
+  const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
+  const [pendingStore] = useState(() =>
+    createPendingTransactionStore(setPendingTransaction),
+  );
   const l1StateQuery = useQuery<L1StateType>({
     ...l1StateOptions(walletConfig, isFrozen),
   });
@@ -91,6 +101,8 @@ export default function App({
         freeze,
         formReset,
         walletConfig,
+        pendingTransaction,
+        pendingStore,
         l1State,
         isStateFetching: l1StateQuery.isFetching,
         stateError: l1StateQuery.error,

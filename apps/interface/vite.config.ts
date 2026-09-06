@@ -1,9 +1,8 @@
-import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
-import { defineConfig, normalizePath, type AliasOptions } from "vite";
+import { defineConfig, type AliasOptions } from "vite";
 
 const workspacePackageSources = fileURLToPath(
   new URL("../../packages/*/src/**", import.meta.url),
@@ -17,17 +16,6 @@ const testnetWalletMode = "testnet-wallet";
 const testnetWalletGate = fileURLToPath(
   new URL("test/browser/LiveTestnetWalletHarness.tsx", import.meta.url),
 );
-const workspaceRoot = normalizePath(
-  fileURLToPath(new URL("../../", import.meta.url)),
-).replace(/\/$/u, "");
-export const reactCompilerPackageExclusions = [`${workspaceRoot}/packages/sdk/src/**`];
-const reactCompiler = reactCompilerPreset();
-reactCompiler.rolldown.filter = {
-  ...reactCompiler.rolldown.filter,
-  id: {
-    exclude: reactCompilerPackageExclusions,
-  },
-};
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -44,10 +32,10 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: isTestnetWallet ? "127.0.0.1" : true,
     },
+    // The React Compiler runs natively in the plugin over the app's JSX and TSX modules.
     plugins: [
       tailwindcss(),
-      react(),
-      babel({ presets: [reactCompiler] }),
+      react({ compiler: true }),
       ...(isTestnetWallet ? [] : [basicSsl()]),
     ],
     optimizeDeps: {

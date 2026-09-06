@@ -1,11 +1,6 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
-import {
-  pendingTransactionQueryKey,
-  pendingTransactionState,
-  type PendingTransactionState,
-} from "../query/pendingTransactionQuery.ts";
 import type { L1StateType } from "../query/queries.ts";
 import {
   errorMessageOf,
@@ -36,6 +31,10 @@ import {
   type RefreshedTransactionPreview,
   type RefreshedTransactionState,
 } from "./actionTransaction.ts";
+import type {
+  PendingTransactionState,
+  PendingTransactionStore,
+} from "./pendingTransaction.ts";
 
 export default function Action({
   isCkb2Udt,
@@ -45,6 +44,8 @@ export default function Action({
   freeze,
   formReset,
   walletConfig,
+  pendingTransaction,
+  pendingStore,
   l1State,
   isStateFetching,
   stateError,
@@ -60,6 +61,8 @@ export default function Action({
   freeze: (value: boolean) => void;
   formReset: () => void;
   walletConfig: WalletConfig;
+  pendingTransaction: PendingTransactionState | undefined;
+  pendingStore: PendingTransactionStore;
   l1State: L1StateType | undefined;
   isStateFetching: boolean;
   stateError: unknown;
@@ -97,16 +100,9 @@ export default function Action({
       message: failureMessage,
     });
   };
-  const transactionOwnerQuery = useQuery<PendingTransactionState | null>({
-    queryKey: pendingTransactionQueryKey(walletConfig),
-    queryFn: () => pendingTransactionState(walletConfig) ?? null,
-    enabled: false,
-    gcTime: Infinity,
-  });
-  const transactionOwner = transactionOwnerQuery.data ?? undefined;
   const transactionHash =
-    transactionOwner?.status === "pending" ? transactionOwner.txHash : undefined;
-  const isSubmitting = transactionOwner?.status === "submitting";
+    pendingTransaction?.status === "pending" ? pendingTransaction.txHash : undefined;
+  const isSubmitting = pendingTransaction?.status === "submitting";
   const txPreviewQuery = useQuery({
     queryKey: [
       walletConfig.chain,
@@ -184,6 +180,7 @@ export default function Action({
     setIsConfirming,
     formReset,
     walletConfig,
+    pendingStore,
   };
 
   return (
@@ -195,13 +192,13 @@ export default function Action({
         if (!mountedRef.current) {
           return;
         }
-        const cachedTransactionOwner = pendingTransactionState(walletConfig);
-        if (cachedTransactionOwner?.status === "submitting") {
+        const currentTransaction = pendingStore.current;
+        if (currentTransaction?.status === "submitting") {
           return;
         }
         const cachedTransactionHash =
-          cachedTransactionOwner?.status === "pending"
-            ? cachedTransactionOwner.txHash
+          currentTransaction?.status === "pending"
+            ? currentTransaction.txHash
             : undefined;
         if (cachedTransactionHash !== undefined && isConfirming) {
           attemptRef.current?.abort();

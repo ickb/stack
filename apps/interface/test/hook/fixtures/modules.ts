@@ -1,11 +1,14 @@
 import "./environment.ts";
 
 export type { ActionLayout } from "../../../src/action/ActionLayout.tsx";
+export type { PendingTransactionStore } from "../../../src/action/pendingTransaction.ts";
 export type { L1StateType, QuoteState } from "../../../src/query/queries.ts";
 export type { RootConfig, TxInfo, WalletConfig } from "../../../src/shared/utils.ts";
 export type { WalletAppShell } from "../../../src/view/staticWalletApp.tsx";
 
 const actionModule = await import("../../../src/action/Action.tsx");
+const pendingTransactionModule =
+  await import("../../../src/action/pendingTransaction.ts");
 const appModule = await import("../../../src/app/App.tsx");
 const interfaceModule = await import("../../../src/app/Interface.tsx");
 const interfaceConfigModule = await import("../../../src/app/interfaceConfig.ts");
@@ -23,6 +26,8 @@ const walletGateStateModule = await import("../../../src/wallet/walletGateState.
 const walletGateSupportModule = await import("../../../src/wallet/walletGateSupport.tsx");
 
 export const Action = actionModule.default;
+export const clearPendingTransaction = pendingTransactionModule.clearPendingTransaction;
+export const submitPendingTransaction = pendingTransactionModule.submitPendingTransaction;
 export const App = appModule.default;
 export const Interface = interfaceModule.default;
 export const Form = formModule.default;
