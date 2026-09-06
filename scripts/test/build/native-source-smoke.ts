@@ -6,7 +6,7 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const requireFromCore = Module.createRequire(`${rootDir}/packages/core/package.json`);
+const requireFromCore = Module.createRequire(`${rootDir}/packages/sdk/package.json`);
 const requireFromCccCore = Module.createRequire(
   requireFromCore.resolve("@ckb-ccc/core/package.json"),
 );
@@ -48,10 +48,6 @@ function punycodeGuardLoad(originalLoad: ModuleLoad, requests: string[]): Module
 // eslint-disable-next-line sonarjs/assertions-in-tests -- Asserts via node:assert deepEqual on the collected punycode-require list; sonarjs does not track it through the loop.
 void test("workspace packages import directly from TypeScript source", async () => {
   for (const modulePath of [
-    "packages/utils/src/index.ts",
-    "packages/dao/src/index.ts",
-    "packages/core/src/index.ts",
-    "packages/order/src/index.ts",
     "packages/sdk/src/index.ts",
     "packages/node-utils/src/index.ts",
     "packages/testkit/src/index.ts",
@@ -71,7 +67,7 @@ void test("native source imports do not load deprecated builtin punycode", async
   Reflect.set(Module, "_load", loadWithPunycodeGuard);
 
   try {
-    await importFromRoot("packages/core/src/index.ts");
+    await importFromRoot("packages/sdk/src/index.ts");
     requireFromCore("@ckb-ccc/core");
     requireFromCccCore("@joyid/ckb");
     await importFromRoot("packages/bot/src/index.ts");

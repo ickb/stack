@@ -1,7 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell, LogicManager, OwnedOwnerManager } from "@ickb/core";
-import type { OrderManager } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  IckbDepositCell,
+  LogicManager,
+  OwnedOwnerManager,
+} from "../../../src/core/index.ts";
+import type { OrderManager } from "../../../src/order/index.ts";
 import {
   baseTransactionFixture,
   BUILD_BASE_TRANSACTION_SUITE,

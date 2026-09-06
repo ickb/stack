@@ -1,11 +1,12 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/order";
 import {
-  getConfig,
-  IckbSdk,
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
+  getConfig,
+  IckbSdk,
+  Ratio,
 } from "@ickb/sdk";
+
 import { byte32FromByte, headerLike } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";

@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbUdt } from "@ickb/core";
 import { script as typeScript } from "@ickb/testkit";
-import { PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
+import type { IckbUdt } from "../src/core/index.ts";
 import { IckbSdk } from "../src/sdk.ts";
+import { PagedScanBudget } from "../src/utils/index.ts";
 
 function script(byte: string): ccc.Script {
   return ccc.Script.from({

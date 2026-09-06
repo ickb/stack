@@ -1,7 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
-import type { ReceiptCell, WithdrawalGroup } from "@ickb/core";
-import { Info, Ratio, type OrderGroup } from "@ickb/order";
-import type { SystemState } from "@ickb/sdk";
+import {
+  Info,
+  type OrderGroup,
+  Ratio,
+  type ReceiptCell,
+  type SystemState,
+  type WithdrawalGroup,
+} from "@ickb/sdk";
+
 import { byte32FromByte, script } from "@ickb/testkit";
 import { vi } from "vitest";
 import type { Runtime, TesterState } from "../../../src/tester/runtime/runtime.ts";

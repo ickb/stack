@@ -61,10 +61,7 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/core": "workspace:*",
-    "@ickb/dao": "workspace:*",
-    "@ickb/order": "workspace:*",
-    "@ickb/utils": "workspace:*"
+    "@ckb-ccc/udt": "catalog:"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*"

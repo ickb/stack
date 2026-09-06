@@ -1,7 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { convert, type IckbDepositCell, type WithdrawalGroup } from "@ickb/core";
-import type { Ratio } from "@ickb/order";
-import { compareBigInt } from "@ickb/utils";
 import {
   CONVERSION_MATURITY_BUCKET_MS,
   type CkbCumulative,
@@ -9,6 +6,9 @@ import {
   type MaturingCkb,
   type PoolDepositState,
 } from "../client/sdk_types.ts";
+import { convert, type IckbDepositCell, type WithdrawalGroup } from "../core/index.ts";
+import type { Ratio } from "../order/index.ts";
+import { compareBigInt } from "../utils/index.ts";
 
 export function mergeBotCkb(
   left: Map<string, ccc.FixedPoint>,

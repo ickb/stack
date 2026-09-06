@@ -1,19 +1,19 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  ICKB_DEPOSIT_CAP,
-  IckbUdt,
-  LogicManager,
-  OwnedOwnerManager,
-  type IckbDepositCell,
-} from "@ickb/core";
-import { DaoManager } from "@ickb/dao";
-import { OrderManager, type Ratio } from "@ickb/order";
-import {
   asyncPassthroughTransaction,
   passthroughTransaction,
   script,
 } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
+import {
+  ICKB_DEPOSIT_CAP,
+  IckbUdt,
+  LogicManager,
+  OwnedOwnerManager,
+  type IckbDepositCell,
+} from "../../../../src/core/index.ts";
+import { DaoManager } from "../../../../src/dao/index.ts";
+import { OrderManager, type Ratio } from "../../../../src/order/index.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import {
   baseClient,

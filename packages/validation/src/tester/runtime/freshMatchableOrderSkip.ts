@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { ickbExchangeRatio } from "@ickb/core";
-import { OrderManager, type OrderGroup } from "@ickb/order";
+import { ickbExchangeRatio, type OrderGroup, OrderManager } from "@ickb/sdk";
+
 import type { Runtime } from "./runtime.ts";
 
 const MAX_ELAPSED_BLOCKS = 180n;

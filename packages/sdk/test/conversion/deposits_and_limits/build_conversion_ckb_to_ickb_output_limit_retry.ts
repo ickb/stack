@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP } from "@ickb/core";
-import { DaoOutputLimitError } from "@ickb/dao";
 import { passthroughTransaction } from "@ickb/testkit";
-import { CheckedUint128LE } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
+import { DaoOutputLimitError } from "../../../src/dao/index.ts";
+import { CheckedUint128LE } from "../../../src/utils/index.ts";
 import {
   conversionContext,
   transactionWithOutputs,

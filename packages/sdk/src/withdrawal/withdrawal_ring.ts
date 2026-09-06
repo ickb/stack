@@ -1,4 +1,4 @@
-import type { IckbDepositCell } from "@ickb/core";
+import type { IckbDepositCell } from "../core/index.ts";
 import { ringAnchorDeposits, ringSegmentAnchor } from "./withdrawal_ring_anchor.ts";
 import {
   depositKey,

@@ -9,20 +9,7 @@ export const allowedMtsToolConfigNames = new Set([
   "prettier.config.mts",
   "vitest.config.mts",
 ]);
-export const publishablePackageRoots = [
-  "packages/core",
-  "packages/dao",
-  "packages/order",
-  "packages/sdk",
-  "packages/utils",
-];
-export const packageRoots = [
-  ...publishablePackageRoots,
-  "packages/bot",
-  "packages/node-utils",
-  "packages/testkit",
-  "packages/validation",
-];
+export const publishablePackageRoots = ["packages/sdk"];
 export const buildSurfaceForbiddenModules = new Set(["@ickb/testkit", "vitest"]);
 export const scriptIdentityFields = new Set(["args", "codeHash", "hashType"]);
 export const scriptEqualityOperators = new Set([

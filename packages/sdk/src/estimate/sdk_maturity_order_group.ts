@@ -1,5 +1,5 @@
-import { OrderCell, OrderGroup } from "@ickb/order";
 import type { SystemState } from "../client/sdk_types.ts";
+import { OrderCell, OrderGroup } from "../order/index.ts";
 import { maturity } from "./sdk_maturity.ts";
 
 export function orderGroupWithMaturity(

@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP } from "@ickb/core";
-import { OrderManager } from "@ickb/order";
-import { TransactionBroadcastError } from "@ickb/sdk";
+import { ICKB_DEPOSIT_CAP, OrderManager, TransactionBroadcastError } from "@ickb/sdk";
+
 import {
   chainState,
   FakeClient,

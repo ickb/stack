@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP } from "@ickb/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import {
   hash,
   system,

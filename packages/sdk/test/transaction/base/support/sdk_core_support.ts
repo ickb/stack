@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { Ratio } from "@ickb/order";
 import { byte32FromByte, StubClient, headerLike as testHeaderLike } from "@ickb/testkit";
+import { Ratio } from "../../../../src/order/index.ts";
 import type { ConversionTransactionContext, SystemState } from "../../../../src/sdk.ts";
 
 export const hash = byte32FromByte;

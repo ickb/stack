@@ -1,11 +1,12 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
 import {
+  type IckbDepositCell,
   MAX_WITHDRAWAL_REQUESTS,
   ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
 } from "@ickb/sdk";
+
 import type {
   RebalanceDiagnostics,
   RebalanceNoopReason,

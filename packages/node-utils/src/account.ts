@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import { unique } from "@ickb/utils";
+import { unique } from "@ickb/sdk";
 
 /**
  * Returns the primary lock plus all signer address locks, deduplicated by script hash.

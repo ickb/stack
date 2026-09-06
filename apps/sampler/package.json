@@ -35,7 +35,6 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/core": "workspace:*",
-    "@ickb/utils": "workspace:*"
+    "@ickb/sdk": "workspace:*"
   }
 }

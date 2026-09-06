@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbUdt, LogicManager, OwnedOwnerManager } from "@ickb/core";
-import { DaoManager } from "@ickb/dao";
-import { OrderManager } from "@ickb/order";
-import { unique, type ScriptDeps } from "@ickb/utils";
-
+import { IckbUdt, LogicManager, OwnedOwnerManager } from "./core/index.ts";
+import { DaoManager } from "./dao/index.ts";
+import { OrderManager } from "./order/index.ts";
+import { unique, type ScriptDeps } from "./utils/index.ts";
 /** Script deps plus the direct code out point for scripts used as direct code deps. */
 interface CodeScriptDeps extends ScriptDeps {
   codeOutPoint: ccc.OutPointLike;

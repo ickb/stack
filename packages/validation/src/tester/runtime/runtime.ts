@@ -1,14 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { accountPlainCkbBalance } from "@ickb/node-utils";
-import type { OrderGroup } from "@ickb/order";
 import {
-  projectConversionTransactionContext,
   type AccountState,
   type ConversionDirection,
   type ConversionMetadata,
   type ConversionNotice,
   type ConversionTransactionContext,
   type IckbSdk,
+  type OrderGroup,
+  projectConversionTransactionContext,
   type SystemState,
 } from "@ickb/sdk";
 

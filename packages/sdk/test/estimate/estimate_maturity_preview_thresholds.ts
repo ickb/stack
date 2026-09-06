@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Ratio } from "../../src/order/index.ts";
 import { estimateMaturityFeeThreshold, IckbSdk } from "../../src/sdk.ts";
 import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";

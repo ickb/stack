@@ -1,5 +1,5 @@
-import { OrderManager, Ratio } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OrderManager, Ratio } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";

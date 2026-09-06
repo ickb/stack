@@ -1,7 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-import { compareBigInt } from "@ickb/utils";
 import { MAX_WITHDRAWAL_REQUESTS } from "../client/sdk_types.ts";
+import type { IckbDepositCell } from "../core/index.ts";
+import { compareBigInt } from "../utils/index.ts";
 import {
   BEST_FIT_SEARCH_CANDIDATES,
   prepareReadyDepositExactCountSelector,

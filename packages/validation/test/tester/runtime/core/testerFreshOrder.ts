@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager } from "@ickb/order";
+import { OrderManager } from "@ickb/sdk";
+
 import { byte32FromByte, headerLike } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {

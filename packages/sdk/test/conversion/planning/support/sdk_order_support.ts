@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
 import {
   Info,
   MasterCell,
@@ -6,8 +7,7 @@ import {
   OrderData,
   OrderGroup,
   type OrderManager,
-} from "@ickb/order";
-import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
+} from "../../../../src/order/index.ts";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {

@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { Info } from "@ickb/order";
 import { describe, expect, it } from "vitest";
 import { estimateConversionOrder } from "../../src/estimate/sdk_estimate.ts";
 import { maturity } from "../../src/estimate/sdk_maturity.ts";
+import { Info } from "../../src/order/index.ts";
 import { ringTargetSegmentIndex } from "../../src/withdrawal/withdrawal_selection.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import { headerLike, ratio } from "../transaction/base/support/sdk_core_support.ts";

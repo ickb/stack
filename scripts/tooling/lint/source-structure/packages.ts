@@ -1,13 +1,8 @@
-import pathModule from "node:path";
 import type ts from "typescript";
 import {
   packageJsonFile,
-  packageRoots,
-  publishablePackageRoots,
   type Failure,
-  type JsonValue,
   type PackageJson,
-  type PackageMetadata,
   type PackageScriptMetadata,
   type SourcesByFile,
 } from "./model.ts";
@@ -16,15 +11,11 @@ import {
   isAllowedMtsToolConfig,
   isTestOnlySource,
   moduleSpecifierText,
-  normalizePath,
   packageRootFromFile,
   parseSource,
   readOptionalText,
   workspaceRootOfFile,
 } from "./repository.ts";
-
-const { sep } = pathModule;
-const requiredPublishablePackageScripts = ["build", "lint:api", "lint:publish"];
 
 export function checkPackageScriptReferences(
   packages: PackageScriptMetadata[],
@@ -112,24 +103,6 @@ function braceListItems(command: string): string[] {
     start = command.indexOf("{", end + 1);
   }
   return items;
-}
-
-export async function collectPackageMetadata(
-  files: string[],
-): Promise<PackageMetadata[]> {
-  const packages: PackageMetadata[] = [];
-  for (const file of files) {
-    if (!/^packages\/[^/]+\/package\.json$/u.test(file)) {
-      continue;
-    }
-    const text = await readOptionalText(file);
-    if (text === undefined) {
-      continue;
-    }
-    const root = file.split(sep).slice(0, 2).join(sep);
-    packages.push({ file, root, packageJson: parsePackageJson(text) });
-  }
-  return packages;
 }
 
 export async function collectPackageScripts(
@@ -264,55 +237,4 @@ function packageNameFromSpecifier(specifier: string): string | undefined {
     return specifier.split("/").slice(0, 2).join("/");
   }
   return undefined;
-}
-
-export function checkPackageRootCoverage(
-  packages: PackageMetadata[],
-  output: Failure[],
-): void {
-  const packageRootSet = new Set(packageRoots.map(normalizePath));
-  const publishablePackageRootSet = new Set(publishablePackageRoots.map(normalizePath));
-  for (const metadata of packages) {
-    const { packageJson, root } = metadata;
-    if (exportsSource(packageJson) && !packageRootSet.has(root)) {
-      output.push({ rule: "packageRootCoverage", file: metadata.file, root });
-    }
-    if (packageJson.private !== true && !publishablePackageRootSet.has(root)) {
-      output.push({ rule: "publishablePackageRootCoverage", file: metadata.file, root });
-    }
-    if (!publishablePackageRootSet.has(root)) {
-      continue;
-    }
-    for (const script of requiredPublishablePackageScripts) {
-      if (typeof packageJson.scripts?.[script] !== "string") {
-        output.push({
-          rule: "publishablePackageScript",
-          file: metadata.file,
-          root,
-          script,
-        });
-      }
-    }
-  }
-}
-
-function exportsSource(packageJson: PackageJson): boolean {
-  return sourceBackedPackageField(packageJson.main) ||
-    sourceBackedPackageField(packageJson.types) ||
-    sourceBackedPackageField(packageJson.exports)
-    ? true
-    : false;
-}
-
-function sourceBackedPackageField(value: JsonValue | undefined): boolean {
-  if (typeof value === "string") {
-    return /(?:^|\/)src\//u.test(value);
-  }
-  if (Array.isArray(value)) {
-    return value.some(sourceBackedPackageField);
-  }
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).some(sourceBackedPackageField);
-  }
-  return false;
 }

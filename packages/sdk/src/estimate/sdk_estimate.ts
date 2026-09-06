@@ -1,11 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
-import { OrderConversionRepresentabilityError } from "@ickb/order";
-import type { ValueComponents } from "@ickb/utils";
 import type {
   ConversionOrderEstimate,
   IckbToCkbOrderEstimate,
   SystemState,
 } from "../client/sdk_types.ts";
+import { OrderConversionRepresentabilityError } from "../order/index.ts";
+import type { ValueComponents } from "../utils/index.ts";
 import {
   estimateConversionOrder,
   estimateMaturityFeeThreshold,

@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import type { WithdrawalGroup } from "@ickb/core";
-import type { OrderGroup } from "@ickb/order";
 import type {
   AccountAvailabilityProjection,
   AccountState,
   ConversionTransactionContextProjection,
   SystemState,
 } from "../client/sdk_types.ts";
+import type { WithdrawalGroup } from "../core/index.ts";
+import type { OrderGroup } from "../order/index.ts";
 
 /**
  * Builds the conversion planner context from account and user-order state.

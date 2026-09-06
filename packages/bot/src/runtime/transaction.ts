@@ -1,6 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { receiptPhase2Capacity } from "@ickb/core";
-import { OrderManager, type Match, type MatchSearchResult } from "@ickb/order";
+import {
+  type Match,
+  type MatchSearchResult,
+  OrderManager,
+  receiptPhase2Capacity,
+} from "@ickb/sdk";
+
 import { planRebalance } from "../policy.ts";
 import { auditSummary } from "./audit.ts";
 import { buildDecisionTranscript } from "./decision.ts";

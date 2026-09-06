@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager, Ratio } from "@ickb/order";
-import type { IckbSdk } from "@ickb/sdk";
+import { type IckbSdk, OrderManager, Ratio } from "@ickb/sdk";
+
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../src/policy/constants.ts";

@@ -1,6 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-import { ringSegmentAnchor, ringSegments, ringTargetSegmentIndex } from "@ickb/sdk";
+import {
+  type IckbDepositCell,
+  ringSegmentAnchor,
+  ringSegments,
+  ringTargetSegmentIndex,
+} from "@ickb/sdk";
+
 import { CKB_RESERVE } from "./constants.ts";
 import type { RebalanceDiagnostics, RingSegmentDiagnostics } from "./types.ts";
 

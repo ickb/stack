@@ -1,4 +1,4 @@
-import { Ratio } from "@ickb/order";
+import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
 import { CKB } from "../../src/shared/utils.ts";
 import { amountQuoteText, formAssets } from "../../src/view/formState.ts";

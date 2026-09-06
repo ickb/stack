@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/order";
+import { Ratio } from "@ickb/sdk";
+
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { buildStateId, walletLocksKey } from "../../src/query/queryStateId.ts";

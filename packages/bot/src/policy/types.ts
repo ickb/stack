@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
+import type { IckbDepositCell } from "@ickb/sdk";
 
 /** Inputs for choosing the bot's post-match rebalance action. */
 export interface PlanRebalanceOptions {

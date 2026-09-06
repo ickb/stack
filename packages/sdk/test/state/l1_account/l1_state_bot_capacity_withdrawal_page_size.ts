@@ -1,10 +1,10 @@
 import type { ccc } from "@ckb-ccc/core";
-import { LogicManager, OwnedOwnerManager } from "@ickb/core";
-import { DaoManager } from "@ickb/dao";
-import { OrderManager } from "@ickb/order";
 import { capacityCell, script } from "@ickb/testkit";
-import { defaultCellPageSize } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LogicManager, OwnedOwnerManager } from "../../../src/core/index.ts";
+import { DaoManager } from "../../../src/dao/index.ts";
+import { OrderManager } from "../../../src/order/index.ts";
+import { defaultCellPageSize } from "../../../src/utils/index.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   FeeRateStubClient,

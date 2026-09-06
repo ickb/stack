@@ -1,4 +1,4 @@
-import { ICKB_DEPOSIT_CAP, convert } from "@ickb/core";
+import { convert, ICKB_DEPOSIT_CAP } from "@ickb/sdk";
 import type { TesterState } from "../runtime/runtime.ts";
 import {
   CKB_TO_ICKB,

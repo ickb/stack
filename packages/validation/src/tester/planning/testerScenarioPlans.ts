@@ -1,4 +1,4 @@
-import { ICKB_DEPOSIT_CAP } from "@ickb/core";
+import { ICKB_DEPOSIT_CAP } from "@ickb/sdk";
 import type { TesterState } from "../runtime/runtime.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,

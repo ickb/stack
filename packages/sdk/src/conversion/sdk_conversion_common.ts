@@ -1,6 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-import { DAO_OUTPUT_LIMIT, DaoOutputLimitError } from "@ickb/dao";
 import {
   NOTHING_TO_DO_REASON,
   ORDER_MINT_OUTPUTS,
@@ -11,6 +9,8 @@ import {
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
 } from "../client/sdk_types.ts";
+import type { IckbDepositCell } from "../core/index.ts";
+import { DAO_OUTPUT_LIMIT, DaoOutputLimitError } from "../dao/index.ts";
 
 export function conversionFailure(
   reason: ConversionTransactionFailureReason,

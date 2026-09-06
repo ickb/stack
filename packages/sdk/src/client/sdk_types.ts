@@ -6,10 +6,9 @@ import type {
   OwnedOwnerManager,
   ReceiptCell,
   WithdrawalGroup,
-} from "@ickb/core";
-import type { Info, OrderCell, OrderGroup, OrderManager, Ratio } from "@ickb/order";
-import type { ValueComponents } from "@ickb/utils";
-
+} from "../core/index.ts";
+import type { Info, OrderCell, OrderGroup, OrderManager, Ratio } from "../order/index.ts";
+import type { ValueComponents } from "../utils/index.ts";
 export const MAX_DIRECT_DEPOSITS = 60;
 /** Maximum withdrawal requests accepted by one SDK conversion. @public */
 export const MAX_WITHDRAWAL_REQUESTS = 30;

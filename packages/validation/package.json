@@ -23,9 +23,7 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/core": "workspace:*",
     "@ickb/node-utils": "workspace:*",
-    "@ickb/order": "workspace:*",
     "@ickb/sdk": "workspace:*"
   },
   "devDependencies": {

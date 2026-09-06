@@ -1,6 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
-import { ickbExchangeRatio } from "@ickb/core";
-import { Info, Ratio, type OrderGroup } from "@ickb/order";
+import {
+  addBotCkb,
+  botWithdrawalCkb,
+  cumulativeCkbMaturing,
+  mergeBotCkb,
+  poolDepositCkb,
+  poolDepositsKey,
+  positiveMapValueSum,
+} from "../conversion/sdk_value_helpers.ts";
+import { ickbExchangeRatio } from "../core/index.ts";
+import { orderGroupWithMaturity } from "../estimate/sdk_maturity_order_group.ts";
+import { Info, Ratio, type OrderGroup } from "../order/index.ts";
 import {
   collect,
   collectCellsPaged,
@@ -11,17 +21,7 @@ import {
   PagedScanCursorError,
   unique,
   type PagedScanBudget,
-} from "@ickb/utils";
-import {
-  addBotCkb,
-  botWithdrawalCkb,
-  cumulativeCkbMaturing,
-  mergeBotCkb,
-  poolDepositCkb,
-  poolDepositsKey,
-  positiveMapValueSum,
-} from "../conversion/sdk_value_helpers.ts";
-import { orderGroupWithMaturity } from "../estimate/sdk_maturity_order_group.ts";
+} from "../utils/index.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
 import { IckbError } from "./sdk_error.ts";
 import type {

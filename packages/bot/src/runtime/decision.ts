@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { Match, MatchDiagnostics } from "@ickb/order";
+import type { Match, MatchDiagnostics } from "@ickb/sdk";
+
 import type { RebalancePlan } from "../policy.ts";
 import { auditSummary } from "./audit.ts";
 import { summarizeBotState, transactionShape } from "./support.ts";

@@ -1,11 +1,9 @@
 import { assertNoFailures } from "./format.ts";
 import { publishablePackageRoots, type Failure, type SourcesByFile } from "./model.ts";
 import {
-  checkPackageRootCoverage,
   checkPackageScriptReferences,
   checkRootPackageManagerIntegrity,
   checkWorkspaceDependencyDeclarations,
-  collectPackageMetadata,
   collectPackageScripts,
 } from "./packages.ts";
 import { checkSourcePolicyRules } from "./policy/source.ts";
@@ -32,7 +30,6 @@ export async function runSourceStructureLint(): Promise<void> {
   const sources = await collectSources(files);
   const sourceFileSet = new Set(sources.keys());
   const packageScripts = await collectPackageScripts(files);
-  const packageMetadata = await collectPackageMetadata(files);
   const publicNamesByFile = collectPublicApiNames(
     sources,
     publishablePackageRoots,
@@ -46,7 +43,6 @@ export async function runSourceStructureLint(): Promise<void> {
   await checkWorkflowPolicy(workflows, output);
   checkPackageScriptReferences(packageScripts, output);
   checkRootPackageManagerIntegrity(packageScripts, output);
-  checkPackageRootCoverage(packageMetadata, output);
   checkWorkspaceDependencyDeclarations(packageScripts, sources, output);
   checkSourcePolicyRules(sources, output);
   checkTestPolicyRules(sources, output);

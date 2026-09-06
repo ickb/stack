@@ -1,8 +1,7 @@
 import { vi } from "vitest";
 
 export { ccc } from "@ckb-ccc/core";
-export { OrderConversionRepresentabilityError } from "@ickb/order";
-export { IckbSdk } from "@ickb/sdk";
+export { IckbSdk, OrderConversionRepresentabilityError } from "@ickb/sdk";
 export { byte32FromByte, capacityCell, headerLike, script } from "@ickb/testkit";
 export { planTesterAttempt } from "../../../../src/tester/planning/testerAttemptPlanning.ts";
 export { buildSdkConversionTransaction } from "../../../../src/tester/runtime/runtime.ts";

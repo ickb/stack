@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { script } from "@ickb/testkit";
 import {
   ickbDepositCellFrom,
   OwnerCell,
@@ -7,9 +8,8 @@ import {
   WithdrawalGroup,
   type IckbDepositCell,
   type ReceiptCell,
-} from "@ickb/core";
-import { DaoManager, type DaoWithdrawalRequestCell } from "@ickb/dao";
-import { script } from "@ickb/testkit";
+} from "../../../../src/core/index.ts";
+import { DaoManager, type DaoWithdrawalRequestCell } from "../../../../src/dao/index.ts";
 import { baseTip, hash } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function depositCell(

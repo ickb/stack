@@ -1,6 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoOutputLimitError } from "@ickb/dao";
-import { Info } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -8,6 +6,8 @@ import {
   conversionKind,
   plannedDaoOutputLimitError,
 } from "../../../src/conversion/sdk_conversion_common.ts";
+import { DaoOutputLimitError } from "../../../src/dao/index.ts";
+import { Info } from "../../../src/order/index.ts";
 import {
   conversionContext,
   ratio,

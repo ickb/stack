@@ -1,4 +1,4 @@
-import { Ratio } from "@ickb/order";
+import { Ratio } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 
 import {

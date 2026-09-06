@@ -1,13 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  type IckbSdk,
   MasterCell,
   OrderCell,
   OrderData,
+  type OrderGroup,
   OrderManager,
   Ratio,
-  type OrderGroup,
-} from "@ickb/order";
-import type { IckbSdk } from "@ickb/sdk";
+} from "@ickb/sdk";
+
 import {
   byte32FromByte,
   committedTransactionResponse,

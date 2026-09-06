@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager, Ratio } from "@ickb/order";
-import { IckbSdk } from "@ickb/sdk";
+import { IckbSdk, OrderManager, Ratio } from "@ickb/sdk";
+
 import { describe, expect, it, vi } from "vitest";
 import { testerNoActionableAutoScenarioSkip } from "../../../src/tester/evidence/testerEvidence.ts";
 import {

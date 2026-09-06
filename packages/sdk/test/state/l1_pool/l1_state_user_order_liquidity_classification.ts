@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OrderManager } from "../../../src/order/index.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {

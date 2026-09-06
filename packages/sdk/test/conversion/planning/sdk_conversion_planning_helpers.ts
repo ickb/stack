@@ -1,5 +1,3 @@
-import type { IckbDepositCell } from "@ickb/core";
-import { Ratio } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { errorOf } from "../../../src/client/sdk_error.ts";
@@ -7,6 +5,8 @@ import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
 } from "../../../src/conversion/sdk_conversion_plans.ts";
+import type { IckbDepositCell } from "../../../src/core/index.ts";
+import { Ratio } from "../../../src/order/index.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import { projectionReadyDeposit } from "../withdrawal_quotes/support/sdk_cell_support.ts";
 

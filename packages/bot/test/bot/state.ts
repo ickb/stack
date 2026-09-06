@@ -1,7 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-import { MasterCell, OrderGroup, Ratio } from "@ickb/order";
-import type { IckbSdk } from "@ickb/sdk";
+import {
+  type IckbDepositCell,
+  type IckbSdk,
+  MasterCell,
+  OrderGroup,
+  Ratio,
+} from "@ickb/sdk";
+
 import { headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { readBotState } from "../../src/index.ts";

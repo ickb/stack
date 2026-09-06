@@ -1,6 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { Info, OrderGroup } from "@ickb/order";
-import type { ValueComponents } from "@ickb/utils";
 import { IckbSdkL1 } from "./client/sdk_l1_class.ts";
 import type {
   AccountState,
@@ -20,6 +18,8 @@ import type {
 import type { getConfig } from "./constants.ts";
 import { estimate, estimateIckbToCkbOrder } from "./estimate/sdk_estimate.ts";
 import { maturity } from "./estimate/sdk_maturity.ts";
+import type { Info, OrderGroup } from "./order/index.ts";
+import type { ValueComponents } from "./utils/index.ts";
 export { IckbError, isIckbError } from "./client/sdk_error.ts";
 export type { IckbErrorCode } from "./client/sdk_error.ts";
 

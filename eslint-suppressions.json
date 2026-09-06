@@ -39,11 +39,6 @@
       "count": 2
     }
   },
-  "packages/order/test/matching/support/order_match_helpers.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "packages/sdk/test/conversion/planning/build_conversion_ready_withdrawal_nonready_anchors.ts": {
     "no-restricted-syntax": {
       "count": 1
@@ -60,6 +55,11 @@
     }
   },
   "packages/sdk/test/conversion/withdrawal_quotes/support/sdk_cell_support.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/sdk/test/order/matching/support/order_match_helpers.ts": {
     "no-restricted-syntax": {
       "count": 1
     }

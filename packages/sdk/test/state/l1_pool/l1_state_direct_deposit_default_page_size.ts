@@ -1,5 +1,5 @@
-import { defaultCellPageSize } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { defaultCellPageSize } from "../../../src/utils/index.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   emptyCellScan,

@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type IckbDepositCell,
   OwnerData,
   type ReceiptCell,
   type WithdrawalGroup,
-} from "@ickb/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+} from "../../../src/core/index.ts";
 import {
   baseTransactionFixture,
   BUILD_BASE_TRANSACTION_SUITE,

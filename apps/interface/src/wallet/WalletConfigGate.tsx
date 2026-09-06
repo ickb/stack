@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { unique } from "@ickb/utils";
+import { unique } from "@ickb/sdk";
+
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type JSX } from "react";
 import App from "../app/App.tsx";

@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
+import type { IckbDepositCell } from "../core/index.ts";
 import type { WithdrawalDepositCandidate } from "./withdrawal_selection_types.ts";
 
 const RING_EPOCHS = 180n;

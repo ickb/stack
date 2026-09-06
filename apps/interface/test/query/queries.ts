@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/order";
+import { Ratio } from "@ickb/sdk";
+
 import { byte32FromByte, headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";

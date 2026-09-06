@@ -1,5 +1,4 @@
-import { compareBigInt } from "@ickb/utils";
-
+import { compareBigInt } from "../utils/index.ts";
 export function prepareSelections(
   selections: Array<{ mask: number; total: bigint; score: bigint }>,
   length: number,

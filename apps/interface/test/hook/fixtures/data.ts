@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/order";
+import { Ratio } from "@ickb/sdk";
+
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
 import { txWithInput } from "../../action/fixtures/transaction.ts";

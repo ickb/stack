@@ -13,21 +13,6 @@ const packageFailureFormatters = new Map<string, FailureFormatter>([
     (failure): string =>
       `${failure.file}: script ${requiredString(failure.script)} references ${requiredString(failure.reference)} in ${JSON.stringify(requiredString(failure.command))}. Use .ts for scripts; reserve .mts for tool config files that require that extension.`,
   ],
-  [
-    "packageRootCoverage",
-    (failure): string =>
-      `${failure.file}: source-backed package ${requiredString(failure.root)} is missing from packageRoots in the source structure linter. Add it so public API and build-surface checks do not silently skip this package.`,
-  ],
-  [
-    "publishablePackageRootCoverage",
-    (failure): string =>
-      `${failure.file}: non-private package ${requiredString(failure.root)} is missing from publishablePackageRoots in the source structure linter. Add it so build-surface and public API checks cover published packages.`,
-  ],
-  [
-    "publishablePackageScript",
-    (failure): string =>
-      `${failure.file}: publishable package ${requiredString(failure.root)} must own a ${requiredString(failure.script)} script so recursive release gates cannot silently skip it.`,
-  ],
 ]);
 
 const sourcePolicyFailureFormatters: Record<string, FailureFormatter> = {

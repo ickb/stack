@@ -9,9 +9,7 @@ describe("interface Vite config", () => {
       normalizePath(
         fileURLToPath(new URL(`../../../../${relativePath}`, import.meta.url)),
       );
-    const packageIds = ["core", "dao", "order", "sdk", "utils"].map((name) =>
-      absoluteId(`packages/${name}/src/index.ts`),
-    );
+    const packageIds = [absoluteId("packages/sdk/src/index.ts")];
     const interfaceId = absoluteId("apps/interface/src/app/App.tsx");
     const entryIds = new Set([...packageIds, interfaceId]);
     const transformedIds: string[] = [];

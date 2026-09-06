@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { receiptPhase2Capacity } from "@ickb/core";
-import { OrderManager } from "@ickb/order";
+import { OrderManager, receiptPhase2Capacity } from "@ickb/sdk";
+
 import { passthroughTransaction, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../src/policy/constants.ts";

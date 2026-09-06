@@ -11,11 +11,7 @@ const workspacePackageSources = fileURLToPath(
 const workspacePackageSource = (name: string): string =>
   fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url));
 const workspaceAliases: AliasOptions = [
-  { find: "@ickb/core", replacement: workspacePackageSource("core") },
-  { find: "@ickb/dao", replacement: workspacePackageSource("dao") },
-  { find: "@ickb/order", replacement: workspacePackageSource("order") },
   { find: "@ickb/sdk", replacement: workspacePackageSource("sdk") },
-  { find: "@ickb/utils", replacement: workspacePackageSource("utils") },
 ];
 const testnetWalletMode = "testnet-wallet";
 const testnetWalletGate = fileURLToPath(
@@ -24,13 +20,7 @@ const testnetWalletGate = fileURLToPath(
 const workspaceRoot = normalizePath(
   fileURLToPath(new URL("../../", import.meta.url)),
 ).replace(/\/$/u, "");
-export const reactCompilerPackageExclusions = [
-  "core",
-  "dao",
-  "order",
-  "sdk",
-  "utils",
-].map((name) => `${workspaceRoot}/packages/${name}/src/**`);
+export const reactCompilerPackageExclusions = [`${workspaceRoot}/packages/sdk/src/**`];
 const reactCompiler = reactCompilerPreset();
 reactCompiler.rolldown.filter = {
   ...reactCompiler.rolldown.filter,
@@ -61,7 +51,7 @@ export default defineConfig(({ command, mode }) => {
       ...(isTestnetWallet ? [] : [basicSsl()]),
     ],
     optimizeDeps: {
-      exclude: ["@ickb/core", "@ickb/dao", "@ickb/order", "@ickb/sdk", "@ickb/utils"],
+      exclude: ["@ickb/sdk"],
     },
     build: {
       commonjsOptions: {

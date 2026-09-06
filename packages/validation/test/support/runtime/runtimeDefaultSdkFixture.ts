@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { Ratio } from "@ickb/order";
-import { getConfig, IckbSdk } from "@ickb/sdk";
+import { getConfig, IckbSdk, Ratio } from "@ickb/sdk";
+
 import type { Runtime, TesterState } from "../../../src/tester/runtime/runtime.ts";
 
 export function runtimeDefaultSdk(): Runtime["sdk"] {

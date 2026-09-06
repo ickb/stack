@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoOutputLimitError } from "@ickb/dao";
 import { script, StubClient } from "@ickb/testkit";
-import { defaultCellPageSize } from "@ickb/utils";
 import { describe, expect, it } from "vitest";
+import { DaoOutputLimitError } from "../../../src/dao/index.ts";
+import { defaultCellPageSize } from "../../../src/utils/index.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, transactionWithOutputs } from "../base/support/sdk_core_support.ts";
 import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";

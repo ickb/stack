@@ -307,6 +307,32 @@ const oracleIndependencePlugin: ESLint.Plugin = {
   },
 };
 
+// rollup deletes a `/* @__PURE__ */` call inside a class static block while keeping the
+// class, which silently breaks entities at runtime (decisions amendment 12). Comments are
+// not AST nodes, so a selector cannot express this; the rule reads the block's comments.
+const noPureInStaticBlock: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: { pure: "Do not use a @__PURE__ annotation inside a class static block." },
+  },
+  create(context): Rule.RuleListener {
+    return {
+      StaticBlock(node: Rule.Node): void {
+        for (const comment of context.sourceCode.getCommentsInside(node)) {
+          if (comment.value.includes("@__PURE__")) {
+            context.report({ messageId: "pure", node: comment });
+          }
+        }
+      },
+    };
+  },
+};
+
+const localPlugin: ESLint.Plugin = {
+  rules: { "no-pure-in-static-block": noPureInStaticBlock },
+};
+
 export default defineConfig(
   { ignores: ["**/dist/**"] },
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
@@ -322,6 +348,7 @@ export default defineConfig(
     files: ["**/*.{ts,tsx,mts}"],
     plugins: {
       "@eslint-community/eslint-comments": eslintComments,
+      local: localPlugin,
       tsdoc,
     },
     rules: {
@@ -364,6 +391,7 @@ export default defineConfig(
       ],
       "prefer-template": "error",
       "no-restricted-syntax": ["error", ...restrictedSyntax],
+      "local/no-pure-in-static-block": "error",
       "security/detect-object-injection": "off",
       "sonarjs/comment-regex": [
         "error",
@@ -495,7 +523,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["packages/order/src/io/**/*.ts"],
+    files: ["packages/sdk/src/order/io/**/*.ts"],
     rules: {
       "@typescript-eslint/no-restricted-types": [
         "error",
@@ -512,11 +540,11 @@ export default defineConfig(
   },
   {
     files: [
-      "packages/core/src/entities.ts",
-      "packages/order/src/model/info.ts",
-      "packages/order/src/model/order_data.ts",
-      "packages/order/src/model/ratio.ts",
-      "packages/order/src/model/relative.ts",
+      "packages/sdk/src/core/entities.ts",
+      "packages/sdk/src/order/model/info.ts",
+      "packages/sdk/src/order/model/order_data.ts",
+      "packages/sdk/src/order/model/ratio.ts",
+      "packages/sdk/src/order/model/relative.ts",
       "packages/sdk/src/sdk.ts",
     ],
     rules: {

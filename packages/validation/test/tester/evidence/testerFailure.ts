@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderConversionRepresentabilityError } from "@ickb/order";
-import { IckbSdk } from "@ickb/sdk";
+import { IckbSdk, OrderConversionRepresentabilityError } from "@ickb/sdk";
+
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { transactionShape } from "../../../src/tester/evidence/testerEvidence.ts";

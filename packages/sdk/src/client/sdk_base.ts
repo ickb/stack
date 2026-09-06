@@ -4,9 +4,9 @@ import type {
   IckbUdt,
   LogicManager,
   OwnedOwnerManager,
-} from "@ickb/core";
-import { assertDaoOutputLimit } from "@ickb/dao";
-import type { Info, OrderGroup, OrderManager } from "@ickb/order";
+} from "../core/index.ts";
+import { assertDaoOutputLimit } from "../dao/index.ts";
+import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
 import {
   defaultCellPageSize,
   defaultScanBudget,
@@ -16,7 +16,7 @@ import {
   PagedScanCursorError,
   type PagedScanBudget,
   type ValueComponents,
-} from "@ickb/utils";
+} from "../utils/index.ts";
 import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
 import { IckbError } from "./sdk_error.ts";
 import type {

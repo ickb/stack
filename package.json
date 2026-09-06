@@ -8,8 +8,8 @@
     "check": "CI=true pnpm check:base",
     "check:base": "pnpm clean:deep && pnpm install && pnpm audit && pnpm lint && pnpm --filter ./apps/interface build",
     "check:fresh": "rm -f pnpm-lock.yaml && pnpm check",
-    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:structure && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint && pnpm lint:probes",
-    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:structure lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint lint:probes; do pnpm \"$script\" || status=1; done; exit \"$status\"",
+    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:structure && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
+    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:structure lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint; do pnpm \"$script\" || status=1; done; exit \"$status\"",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./apps/interface lint:typecheck",
     "lint:format": "prettier --check .",
     "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript apps packages scripts",
@@ -27,8 +27,7 @@
     "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
     "clean:deep": "pnpm clean && rm -fr node_modules packages/*/node_modules apps/*/node_modules",
     "live:check:source": "tsgo --noEmit -p tsconfig.json",
-    "live:preflight": "node scripts/live/preflight.ts",
-    "lint:probes": "node scripts/tooling/probes/entity-api-probe/run.ts && node scripts/tooling/probes/root-export-floor/check.ts && node scripts/tooling/probes/treeshake/run.ts"
+    "live:preflight": "node scripts/live/preflight.ts"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -42,7 +41,6 @@
     "@vitest/coverage-v8": "4.1.10",
     "@vitest/eslint-plugin": "^1.6.25",
     "dependency-cruiser": "^18.1.1",
-    "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -59,7 +57,6 @@
     "prettier-plugin-organize-imports": "^4.3.0",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "publint": "^0.3.22",
-    "rollup": "^4.62.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10",

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { receiptPhase2Capacity } from "@ickb/core";
+import { receiptPhase2Capacity } from "@ickb/sdk";
+
 import type { RebalancePlan, RingSegmentDiagnostics } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import { DIRECT_DEPOSIT_FEE_HEADROOM, maxBigInt } from "./support.ts";

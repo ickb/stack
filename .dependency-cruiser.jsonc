@@ -13,7 +13,6 @@
           "^scripts/(?:run-node-tests|lint-source-structure)[.](?:mts|ts)$",
           "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
           "^scripts/tooling/eslint/plugins[.]ts$",
-          "^scripts/tooling/probes/treeshake/run[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
           "^apps/(?:bot|validation)/test/.+[.]ts$",
           "^(?:apps|packages)/[^/]+/vitest[.]config[.]mts$",

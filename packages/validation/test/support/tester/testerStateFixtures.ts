@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { Ratio, type OrderGroup } from "@ickb/order";
+import { type OrderGroup, Ratio } from "@ickb/sdk";
+
 import { headerLike } from "@ickb/testkit";
 import type { TesterState } from "../../../src/tester/runtime/runtime.ts";
 

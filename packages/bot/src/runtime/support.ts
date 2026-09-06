@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { convert } from "@ickb/core";
-import type { Match, MatchDiagnostics } from "@ickb/order";
+import { convert, type Match, type MatchDiagnostics } from "@ickb/sdk";
+
 import type { RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import type {

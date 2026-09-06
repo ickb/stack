@@ -1,9 +1,13 @@
 import type { ccc } from "@ckb-ccc/core";
-import { LogicManager, OwnedOwnerManager, type WithdrawalGroup } from "@ickb/core";
-import { DaoManager } from "@ickb/dao";
-import { OrderManager } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  LogicManager,
+  OwnedOwnerManager,
+  type WithdrawalGroup,
+} from "../../../src/core/index.ts";
+import { DaoManager } from "../../../src/dao/index.ts";
+import { OrderManager } from "../../../src/order/index.ts";
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";

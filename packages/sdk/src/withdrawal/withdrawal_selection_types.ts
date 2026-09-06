@@ -1,6 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "@ickb/core";
-
+import type { IckbDepositCell } from "../core/index.ts";
 /**
  * Minimal deposit shape accepted by withdrawal selection helpers.
  *

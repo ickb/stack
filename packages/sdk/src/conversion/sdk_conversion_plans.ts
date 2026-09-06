@@ -1,5 +1,3 @@
-import { ICKB_DEPOSIT_CAP, convert, type IckbDepositCell } from "@ickb/core";
-import { compareBigInt } from "@ickb/utils";
 import {
   MAX_DIRECT_DEPOSITS,
   MAX_WITHDRAWAL_REQUESTS,
@@ -10,6 +8,7 @@ import {
   type IckbToCkbConversionPlan,
   type PoolDepositState,
 } from "../client/sdk_types.ts";
+import { ICKB_DEPOSIT_CAP, convert, type IckbDepositCell } from "../core/index.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
@@ -17,6 +16,7 @@ import {
   estimateIckbToCkbOrder,
   maxMaturity,
 } from "../estimate/sdk_estimate.ts";
+import { compareBigInt } from "../utils/index.ts";
 import {
   ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,

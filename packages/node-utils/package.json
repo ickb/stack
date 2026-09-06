@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:",
-    "@ickb/utils": "workspace:*"
+    "@ickb/sdk": "workspace:*"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",

@@ -1,5 +1,9 @@
-import { OrderManager, type Ratio } from "@ickb/order";
-import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "@ickb/sdk";
+import {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
+  OrderManager,
+  type Ratio,
+} from "@ickb/sdk";
 import { direction2Symbol, parseAmountInput, toText } from "./utils.ts";
 
 interface QuoteDraft {

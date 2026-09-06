@@ -1,6 +1,6 @@
-import { OrderConversionRepresentabilityError, OrderManager } from "@ickb/order";
-import type { ValueComponents } from "@ickb/utils";
 import type { ConversionOrderEstimate, SystemState } from "../client/sdk_types.ts";
+import { OrderConversionRepresentabilityError, OrderManager } from "../order/index.ts";
+import type { ValueComponents } from "../utils/index.ts";
 import { maturity } from "./sdk_maturity.ts";
 
 export function estimateConversionOrder(

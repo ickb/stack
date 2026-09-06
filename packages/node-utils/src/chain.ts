@@ -1,15 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  expectedChainIdentity,
   type ChainIdentity,
+  expectedChainIdentity,
   type SupportedChain,
-} from "@ickb/utils";
+} from "@ickb/sdk";
+
 import { jsonLogReplacer, toJsonLogValue } from "./logging.ts";
 import { FETCH_FAILED_MESSAGE, isRetryableRpcTransportError } from "./retryable.ts";
 
 const UNKNOWN_ERROR_MESSAGE = "Unknown error";
 
-export type { SupportedChain } from "@ickb/utils";
+export type { SupportedChain } from "@ickb/sdk";
 
 /** Public, credential-free identity for one RPC endpoint policy. */
 export interface PublicRpcEndpointIdentity {

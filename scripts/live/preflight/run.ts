@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import * as coreSource from "../../../packages/core/src/index.ts";
 import * as nodeUtilsSource from "../../../packages/node-utils/src/index.ts";
 import * as sdkSource from "../../../packages/sdk/src/index.ts";
 import { isPublicChainIdentityError, isRetryablePreflightError } from "./errors.ts";
@@ -14,7 +13,7 @@ import {
 } from "./report.ts";
 
 const requireFromCore = createRequire(
-  new URL("../../../packages/core/package.json", import.meta.url),
+  new URL("../../../packages/sdk/package.json", import.meta.url),
 );
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Node's require API is untyped; package ownership and resolution are fixed here.
 const cccSource: CccLike = requireFromCore("@ckb-ccc/core");
@@ -60,7 +59,7 @@ export async function runPreflight({
     dependencies.core !== undefined &&
     dependencies.sdk !== undefined
       ? { ccc: dependencies.ccc, core: dependencies.core, sdk: dependencies.sdk }
-      : { ccc: cccSource, core: coreSource, sdk: sourceSdk };
+      : { ccc: cccSource, core: sdkSource, sdk: sourceSdk };
 
   try {
     return await buildPreflightReport({

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { Info } from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Info } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import {

@@ -1,8 +1,8 @@
-import type * as OrderModule from "@ickb/order";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as OrderModule from "../../src/order/index.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 
-const ORDER_PACKAGE = "@ickb/order";
+const ORDER_PACKAGE = "../../src/order/index.ts";
 const DUST_NOTICE = "dust-ickb-to-ckb";
 
 afterEach(() => {

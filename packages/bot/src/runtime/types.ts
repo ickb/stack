@@ -1,7 +1,16 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell, ReceiptCell, WithdrawalGroup } from "@ickb/core";
-import type { MatchDiagnostics, MatchSearchResult, OrderGroup } from "@ickb/order";
-import type { getConfig, IckbSdk, SystemState } from "@ickb/sdk";
+import type {
+  getConfig,
+  IckbDepositCell,
+  IckbSdk,
+  MatchDiagnostics,
+  MatchSearchResult,
+  OrderGroup,
+  ReceiptCell,
+  SystemState,
+  WithdrawalGroup,
+} from "@ickb/sdk";
+
 import type { RebalanceDiagnostics, RebalancePlan } from "../policy.ts";
 
 /** Runtime dependencies used by each bot loop iteration. */

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { StubClient } from "@ickb/testkit";
-import { defaultCellPageSize, PagedScanBudget } from "@ickb/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { defaultCellPageSize, PagedScanBudget } from "../../../src/utils/index.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
 import {

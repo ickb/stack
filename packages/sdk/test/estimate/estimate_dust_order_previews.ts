@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
-import { type Info, OrderData, OrderManager, Ratio } from "@ickb/order";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type Info, OrderData, OrderManager, Ratio } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import {
