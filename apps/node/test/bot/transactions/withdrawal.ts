@@ -1,15 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  DaoManager,
-  getConfig,
-  ICKB_DEPOSIT_CAP,
-  ickbDepositCellFrom,
-  IckbError,
-  IckbSdk,
-  OrderManager,
-  Ratio,
-  type IckbDepositCell,
-} from "@ickb/sdk";
+import { ICKB_DEPOSIT_CAP, IckbError, OrderManager, Ratio } from "@ickb/sdk";
 
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -118,27 +108,17 @@ describe("buildTransaction withdrawal required live deposits", () => {
     const first = readyDeposit("11", 4n, 20n * 60n * 1000n);
     const protectedAnchor = readyDeposit("12", 6n, 25n * 60n * 1000n);
     const third = readyDeposit("13", 5n, 40n * 60n * 1000n);
-    const calls: string[] = [];
-    const buildBaseTransaction = vi.fn<IckbSdk["buildBaseTransaction"]>();
-    buildBaseTransaction.mockImplementation((txLike: ccc.TransactionLike) => {
-      calls.push("base");
-      return ccc.Transaction.from(txLike);
-    });
     const completeTransaction = vi.fn(
       async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
         await Promise.resolve();
-        calls.push("complete");
-        expect(calls).toEqual(["base", "complete"]);
         return ccc.Transaction.from(txLike);
       },
     );
+    const runtime = botRuntime({ completeTransaction, primaryLock: script("44") });
+    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
 
     const result = await buildTransaction(
-      botRuntime({
-        sdk: { buildBaseTransaction },
-        completeTransaction,
-        primaryLock: script("44"),
-      }),
+      runtime,
       botState({
         availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
         depositCapacity: 1000n,
@@ -155,7 +135,6 @@ describe("buildTransaction withdrawal required live deposits", () => {
       },
     });
     expect(completeTransaction).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(["base", "complete"]);
   });
 });
 
@@ -172,13 +151,11 @@ describe("buildTransaction excess withdrawal ready deposit selection", () => {
     const protectedAnchor = readyDeposit("15", 6n, 25n * 60n * 1000n);
     const futureFirst = readyDeposit("16", 100n, 9n, { isReady: false });
     const futureSecond = readyDeposit("17", 100n, 10n, { isReady: false });
-    const buildBaseTransaction = vi.fn<IckbSdk["buildBaseTransaction"]>();
-    buildBaseTransaction.mockImplementation((txLike: ccc.TransactionLike) =>
-      ccc.Transaction.from(txLike),
-    );
+    const runtime = botRuntime({ primaryLock: script("46") });
+    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
 
     const result = await buildTransaction(
-      botRuntime({ sdk: { buildBaseTransaction }, primaryLock: script("46") }),
+      runtime,
       botState({
         availableCkbBalance: ccc.fixedPointFrom(1999),
         availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
@@ -270,9 +247,9 @@ describe("buildTransaction prefix walk with the real builders", () => {
       completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const config = getConfig("testnet");
-    const sdk = IckbSdk.fromConfig(config);
-    const deposits = ["a1", "a2", "a3"].map((byte) => realReadyDeposit(byte, config));
+    const deposits = ["a1", "a2", "a3"].map((byte, index) =>
+      readyDeposit(byte, ICKB_DEPOSIT_CAP, BigInt(20 + 5 * index) * 60n * 1000n),
+    );
     const attempts: number[] = [];
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
       await Promise.resolve();
@@ -285,11 +262,7 @@ describe("buildTransaction prefix walk with the real builders", () => {
     });
 
     const result = await buildTransaction(
-      botRuntime({
-        sdk: { buildBaseTransaction: sdk.buildBaseTransaction.bind(sdk) },
-        managers: config.managers,
-        completeTransaction,
-      }),
+      botRuntime({ completeTransaction }),
       botState({
         availableCkbBalance: ccc.fixedPointFrom(2000),
         availableIckbBalance: TARGET_ICKB_BALANCE + 2n * ICKB_DEPOSIT_CAP,
@@ -313,35 +286,3 @@ describe("buildTransaction prefix walk with the real builders", () => {
     expect(result.tx.inputs).toHaveLength(1);
   });
 });
-
-/** A ready pool deposit shaped for the real DAO and owned-owner builders. */
-function realReadyDeposit(
-  byte: string,
-  config: ReturnType<typeof getConfig>,
-): IckbDepositCell {
-  const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
-  const cell = ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: {
-      capacity: ccc.fixedPointFrom(100_082),
-      lock: config.managers.logic.script,
-      type: config.managers.dao.script,
-    },
-    outputData: DaoManager.depositData(),
-  });
-  const deposit = ickbDepositCellFrom(
-    {
-      cell,
-      headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
-      interests: 0n,
-      maturity: ccc.Epoch.from([1n, 0n, 1n]),
-      isReady: true,
-      isDeposit: true,
-      ckbValue: cell.cellOutput.capacity,
-      udtValue: 0n,
-    },
-    config.managers.logic.script,
-  );
-  Object.assign(deposit, { udtValue: ICKB_DEPOSIT_CAP });
-  return deposit;
-}

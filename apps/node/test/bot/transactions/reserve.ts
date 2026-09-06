@@ -1,10 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  type BuildBaseTransactionOptions,
-  IckbError,
-  OrderManager,
-  receiptPhase2Capacity,
-} from "@ickb/sdk";
+import { IckbError, OrderManager, receiptPhase2Capacity } from "@ickb/sdk";
 
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +10,7 @@ import {
   botState,
   completeSearchResult,
   readyDeposit,
+  searchResult,
   TARGET_ICKB_BALANCE,
   testMatch,
   testWithdrawal,
@@ -28,30 +24,12 @@ describe("buildTransaction reserve violation skip", () => {
   it("skips built transactions that would violate the bot available CKB reserve", async () => {
     const lock = script("11");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: -1n,
-        udtDelta: 0n,
-        partials: [testMatch("60")],
-      }),
+      searchResult("complete", [await testMatch("60", { ckbDelta: -1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const runtime = botRuntime({
-      primaryLock: lock,
-      managers: {
-        logic: {
-          deposit: (txLike: ccc.TransactionLike): ccc.Transaction =>
-            ccc.Transaction.from(txLike),
-        },
-      },
-      completeTransaction: async (
-        txLike: ccc.TransactionLike,
-      ): Promise<ccc.Transaction> => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      },
-    });
+    const runtime = botRuntime({ primaryLock: lock });
     const state = botState({
-      marketOrders: [testMatch("61").group],
+      marketOrders: [(await testMatch("61")).group],
       availableCkbBalance: CKB_RESERVE + 1n,
       availableIckbBalance: TARGET_ICKB_BALANCE,
       totalCkbBalance: CKB_RESERVE + 1n,
@@ -86,11 +64,7 @@ describe("buildTransaction CKB reserve recovery", () => {
   it("allows CKB-replenishing transactions even when available CKB remains below reserve", async () => {
     const lock = script("11");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 1n,
-        udtDelta: 0n,
-        partials: [],
-      }),
+      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const runtime = botRuntime({
@@ -130,10 +104,10 @@ describe("buildTransaction direct deposit audit", () => {
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const state = botState({
-      availableCkbBalance: ccc.fixedPointFrom(2000),
+      availableCkbBalance: ccc.fixedPointFrom(3000),
       availableIckbBalance: 0n,
-      depositCapacity: 100n,
-      totalCkbBalance: ccc.fixedPointFrom(2000),
+      depositCapacity: ccc.fixedPointFrom(1100),
+      totalCkbBalance: ccc.fixedPointFrom(3000),
     });
 
     const result = await buildTransaction(botRuntime({ primaryLock: lock }), state);
@@ -158,28 +132,16 @@ describe("buildTransaction reserve violation with withdrawals", () => {
   it("skips withdrawal requests mixed with CKB-spending matches that violate reserve", async () => {
     const lock = script("19");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: -1n,
-        udtDelta: 1n,
-        partials: [testMatch("63")],
-      }),
+      searchResult("complete", [await testMatch("63", { ckbDelta: -1n, udtDelta: 1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const runtime = botRuntime({
-      primaryLock: lock,
-      completeTransaction: async (
-        txLike: ccc.TransactionLike,
-      ): Promise<ccc.Transaction> => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      },
-    });
+    const runtime = botRuntime({ primaryLock: lock });
     const state = botState({
-      marketOrders: [testMatch("64").group],
+      marketOrders: [(await testMatch("64")).group],
       availableCkbBalance: CKB_RESERVE,
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       totalCkbBalance: CKB_RESERVE,
-      depositCapacity: ccc.fixedPointFrom(1000),
+      depositCapacity: ccc.fixedPointFrom(1100),
       poolDeposits: [
         readyDeposit("1b", 4n, 20n * 60n * 1000n),
         readyDeposit("1c", 6n, 25n * 60n * 1000n),
@@ -215,19 +177,15 @@ describe("buildTransaction reserve recovery with withdrawals", () => {
   it("allows reserve-recovery withdrawal requests mixed with CKB-replenishing matches", async () => {
     const lock = script("1e");
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 1n,
-        udtDelta: -1n,
-        partials: [testMatch("65")],
-      }),
+      searchResult("complete", [await testMatch("65", { ckbDelta: 1n, udtDelta: -1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const state = botState({
-      marketOrders: [testMatch("66").group],
+      marketOrders: [(await testMatch("66")).group],
       availableCkbBalance: CKB_RESERVE - 50n,
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       totalCkbBalance: CKB_RESERVE - 50n,
-      depositCapacity: ccc.fixedPointFrom(1000),
+      depositCapacity: ccc.fixedPointFrom(1100),
       poolDeposits: [
         readyDeposit("20", 4n, 20n * 60n * 1000n),
         readyDeposit("21", 6n, 25n * 60n * 1000n),
@@ -235,18 +193,7 @@ describe("buildTransaction reserve recovery with withdrawals", () => {
       ],
     });
 
-    const result = await buildTransaction(
-      botRuntime({
-        primaryLock: lock,
-        completeTransaction: async (
-          txLike: ccc.TransactionLike,
-        ): Promise<ccc.Transaction> => {
-          await Promise.resolve();
-          return ccc.Transaction.from(txLike);
-        },
-      }),
-      state,
-    );
+    const result = await buildTransaction(botRuntime({ primaryLock: lock }), state);
 
     expect(result).toMatchObject({
       kind: "built",
@@ -260,45 +207,40 @@ describe("buildTransaction reserve recovery with withdrawals", () => {
 describe("buildTransaction reserve recovery fallback", () => {
   it("withdraws any ready deposit when no ring-surplus prefix can be funded", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({ ckbDelta: 1n, udtDelta: -1n, partials: [testMatch("67")] }),
+      searchResult("complete", [await testMatch("67", { ckbDelta: 1n, udtDelta: -1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const anchor = readyDeposit("21", 6n, 25n * 60n * 1000n);
     const state = botState({
-      marketOrders: [testMatch("68").group],
+      marketOrders: [(await testMatch("68")).group],
       availableCkbBalance: CKB_RESERVE - 50n,
       availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
       totalCkbBalance: CKB_RESERVE - 50n,
-      depositCapacity: ccc.fixedPointFrom(1000),
+      depositCapacity: ccc.fixedPointFrom(1100),
       poolDeposits: [
         readyDeposit("20", 4n, 20n * 60n * 1000n),
         anchor,
         readyDeposit("22", 5n, 40n * 60n * 1000n),
       ],
     });
-    // The fixture SDK builds no inputs, so each attempt is keyed by whether it spends the anchor.
+    // Each attempt is keyed by whether the built transaction spends the anchor; only one that
+    // does can be funded, so every surplus prefix fails.
     const attempts: boolean[] = [];
-    const buildBaseTransaction = vi.fn(
-      (txLike: ccc.TransactionLike, options?: BuildBaseTransactionOptions) => {
-        attempts.push(options?.withdrawalRequest?.deposits.includes(anchor) ?? false);
-        return ccc.Transaction.from(txLike);
-      },
-    );
-    // Only a transaction that spends the anchor can be funded: every surplus prefix fails.
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
       await Promise.resolve();
-      if (attempts.at(-1) !== true) {
+      const tx = ccc.Transaction.from(txLike);
+      const spendsAnchor = tx.inputs.some((input) =>
+        input.previousOutput.eq(anchor.cell.outPoint),
+      );
+      attempts.push(spendsAnchor);
+      if (!spendsAnchor) {
         throw new IckbError("short", { code: "insufficient_capacity" });
       }
-      return ccc.Transaction.from(txLike);
+      return tx;
     });
 
     const result = await buildTransaction(
-      botRuntime({
-        primaryLock: script("1f"),
-        sdk: { buildBaseTransaction },
-        completeTransaction,
-      }),
+      botRuntime({ primaryLock: script("1f"), completeTransaction }),
       state,
     );
 

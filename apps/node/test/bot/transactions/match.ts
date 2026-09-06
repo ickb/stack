@@ -23,6 +23,7 @@ import {
   hash,
   incompleteSearchResult,
   readyDeposit,
+  searchResult,
   TARGET_ICKB_BALANCE,
   testMatch,
 } from "../fixtures/bot.ts";
@@ -83,22 +84,18 @@ describe("buildTransaction incomplete empty match maintenance", () => {
       incompleteSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const buildBaseTransaction = vi.fn((txLike: ccc.TransactionLike) =>
-      ccc.Transaction.from(txLike),
-    );
-    const deposit = vi.fn((txLike: ccc.TransactionLike) => ccc.Transaction.from(txLike));
+    const runtime = botRuntime();
+    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
     const result = await buildTransaction(
-      botRuntime({
-        sdk: { buildBaseTransaction },
-        managers: { logic: { deposit } },
-      }),
+      runtime,
       botState({
-        marketOrders: [testMatch("79").group],
-        userOrders: [testMatch("7a").group],
+        marketOrders: [(await testMatch("79")).group],
+        userOrders: [(await testMatch("7a")).group],
         availableCkbBalance: ccc.fixedPointFrom(3000),
         availableIckbBalance: TARGET_ICKB_BALANCE + CKB_RESERVE,
-        depositCapacity: ccc.fixedPointFrom(1000),
+        depositCapacity: ccc.fixedPointFrom(1100),
         totalCkbBalance: ccc.fixedPointFrom(3000),
       }),
     );
@@ -128,14 +125,13 @@ describe("buildTransaction incomplete empty match skip", () => {
       work: 7,
       truncation: { phase: "candidates", requiredWork: 8n },
     });
-    const buildBaseTransaction = vi.fn((txLike: ccc.TransactionLike) =>
-      ccc.Transaction.from(txLike),
-    );
     const completeTransaction = vi.fn();
+    const runtime = botRuntime({ completeTransaction });
+    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
 
     const result = await buildTransaction(
-      botRuntime({ sdk: { buildBaseTransaction }, completeTransaction }),
-      botState({ marketOrders: [testMatch("76").group] }),
+      runtime,
+      botState({ marketOrders: [(await testMatch("76")).group] }),
     );
 
     expect(result).toMatchObject({
@@ -179,16 +175,12 @@ describe("buildTransaction incomplete empty match skip", () => {
 describe("buildTransaction match-only fee profitability", () => {
   it("skips match-only transactions when the completed fee consumes the match value", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      incompleteSearchResult({
-        ckbDelta: 1n,
-        udtDelta: 0n,
-        partials: [testMatch("67")],
-      }),
+      searchResult("incomplete", [await testMatch("67", { ckbDelta: 1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const state = botState({
-      marketOrders: [testMatch("68").group],
+      marketOrders: [(await testMatch("68")).group],
       availableCkbBalance: CKB_RESERVE,
       availableIckbBalance: TARGET_ICKB_BALANCE,
       totalCkbBalance: CKB_RESERVE,
@@ -220,11 +212,7 @@ describe("buildTransaction match-only fee profitability", () => {
 describe("buildTransaction incomplete positive match", () => {
   it("executes an incomplete positive match through final profitability", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      incompleteSearchResult({
-        ckbDelta: 2n,
-        udtDelta: 0n,
-        partials: [testMatch("77")],
-      }),
+      searchResult("incomplete", [await testMatch("77", { ckbDelta: 2n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
     const completeTransaction = vi.fn(
@@ -237,7 +225,7 @@ describe("buildTransaction incomplete positive match", () => {
     const result = await buildTransaction(
       botRuntime({ completeTransaction, primaryLock: script("11") }),
       botState({
-        marketOrders: [testMatch("78").group],
+        marketOrders: [(await testMatch("78")).group],
         availableCkbBalance: CKB_RESERVE,
         availableIckbBalance: TARGET_ICKB_BALANCE,
         totalCkbBalance: CKB_RESERVE,
@@ -256,16 +244,12 @@ describe("buildTransaction incomplete positive match", () => {
 describe("buildTransaction exchange-ratio profitability", () => {
   it("uses the repo exchange-ratio scale when checking match-only profitability", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: -2n,
-        udtDelta: 2n,
-        partials: [testMatch("70")],
-      }),
+      searchResult("complete", [await testMatch("70", { ckbDelta: -2n, udtDelta: 2n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const state = botState({
-      marketOrders: [testMatch("71").group],
+      marketOrders: [(await testMatch("71")).group],
       availableCkbBalance: CKB_RESERVE + 3n,
       availableIckbBalance: TARGET_ICKB_BALANCE,
       totalCkbBalance: CKB_RESERVE + 3n,
@@ -292,20 +276,16 @@ describe("buildTransaction exchange-ratio profitability", () => {
 describe("buildTransaction match decision labels", () => {
   it("labels built match and deposit-rebalance decisions", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 1n,
-        partials: [testMatch("69")],
-      }),
+      searchResult("complete", [await testMatch("69", { udtDelta: 1n })]),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const state = botState({
-      marketOrders: [testMatch("6a").group],
-      availableCkbBalance: ccc.fixedPointFrom(2000),
+      marketOrders: [(await testMatch("6a")).group],
+      availableCkbBalance: ccc.fixedPointFrom(3000),
       availableIckbBalance: 0n,
-      depositCapacity: 100n,
-      totalCkbBalance: ccc.fixedPointFrom(2000),
+      depositCapacity: ccc.fixedPointFrom(1100),
+      totalCkbBalance: ccc.fixedPointFrom(3000),
     });
 
     await expect(
@@ -342,11 +322,11 @@ describe("buildDecisionTranscript match miss labels", () => {
     ["no_positive_gain", matchDiagnostics({ viable: 1 })],
   ] satisfies Array<[BotMatchReason, MatchDiagnostics | undefined]>)(
     "labels %s",
-    (reason, diagnostics) => {
+    async (reason, diagnostics) => {
       expect(
         buildDecisionTranscript({
           runtime: botRuntime(),
-          state: botState({ marketOrders: [testMatch("72").group] }),
+          state: botState({ marketOrders: [(await testMatch("72")).group] }),
           match: { ckbDelta: 0n, udtDelta: 0n, partials: [], diagnostics },
           rebalance: { kind: "none", reason: "no_withdrawable_ickb" },
           actions: {

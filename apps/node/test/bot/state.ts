@@ -72,8 +72,8 @@ describe("readBotState pool snapshot", () => {
 
 describe("readBotState", () => {
   it("excludes own orders from the market and projects account availability", async () => {
-    const ownOrder = testOrderGroup("46", 7n);
-    const marketOrder = testMatch("47").group;
+    const ownOrder = await testOrderGroup("46", 7n);
+    const marketOrder = (await testMatch("47")).group;
     const capacityCell = ccc.Cell.from({
       outPoint: { txHash: `0x${"44".repeat(32)}`, index: 0n },
       cellOutput: { capacity: 5n, lock: script("44") },
@@ -121,8 +121,8 @@ describe("readBotState", () => {
   });
 });
 
-function testOrderGroup(byte: string, ckbValue: bigint): OrderGroup {
-  const order = testMatch(byte).group.order;
+async function testOrderGroup(byte: string, ckbValue: bigint): Promise<OrderGroup> {
+  const order = (await testMatch(byte)).group.order;
   order.cell.cellOutput.capacity = ckbValue;
   return new OrderGroup(
     new MasterCell(

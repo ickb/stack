@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { OrderManager, receiptPhase2Capacity } from "@ickb/sdk";
 
-import { passthroughTransaction, script } from "@ickb/testkit";
+import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
@@ -10,6 +10,7 @@ import {
   botState,
   completeSearchResult,
   matchDiagnostics,
+  searchResult,
   TARGET_ICKB_BALANCE,
   testMatch,
 } from "../fixtures/bot.ts";
@@ -30,12 +31,12 @@ describe("buildTransaction direct deposit seeding", () => {
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
 
     const lock = script("45");
-    const deposit = vi.fn(passthroughTransaction);
-    const runtime = botRuntime({ primaryLock: lock, managers: { logic: { deposit } } });
+    const runtime = botRuntime({ primaryLock: lock });
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
     const state = botState({
       availableCkbBalance: ccc.fixedPointFrom(3000),
       availableIckbBalance: TARGET_ICKB_BALANCE + CKB_RESERVE,
-      depositCapacity: ccc.fixedPointFrom(1000),
+      depositCapacity: ccc.fixedPointFrom(1100),
       totalCkbBalance: ccc.fixedPointFrom(3000),
     });
 
@@ -45,11 +46,11 @@ describe("buildTransaction direct deposit seeding", () => {
       decision: {
         audit: {
           reserveCheck: {
-            directDepositCost: ccc.fixedPointFrom(1000) + receiptPhase2Capacity(lock),
+            directDepositCost: ccc.fixedPointFrom(1100) + receiptPhase2Capacity(lock),
             estimatedFee: 1n,
           },
           rebalanceCosts: {
-            directDepositCapacity: ccc.fixedPointFrom(1000) + receiptPhase2Capacity(lock),
+            directDepositCapacity: ccc.fixedPointFrom(1100) + receiptPhase2Capacity(lock),
             directDepositFeeHeadroom: ccc.fixedPointFrom(1),
           },
           selectedRing: {
@@ -79,17 +80,18 @@ describe("buildTransaction low iCKB direct deposit refill", () => {
       }),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const deposit = vi.fn(passthroughTransaction);
+    const runtime = botRuntime();
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
     await expect(
       buildTransaction(
-        botRuntime({ managers: { logic: { deposit } } }),
+        runtime,
         botState({
           availableCkbBalance: ccc.fixedPointFrom(3000),
           availableIckbBalance: 99n,
-          depositCapacity: ccc.fixedPointFrom(1000),
+          depositCapacity: ccc.fixedPointFrom(1100),
           totalCkbBalance: ccc.fixedPointFrom(3000),
-          marketOrders: [testMatch("6c").group],
+          marketOrders: [(await testMatch("6c")).group],
         }),
       ),
     ).resolves.toMatchObject({
@@ -112,18 +114,19 @@ describe("buildTransaction low iCKB direct deposit refill", () => {
         }),
       }),
     );
-    const deposit = vi.fn(passthroughTransaction);
     const completeTransaction = vi.fn();
+    const runtime = botRuntime({ completeTransaction });
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
     await expect(
       buildTransaction(
-        botRuntime({ managers: { logic: { deposit } }, completeTransaction }),
+        runtime,
         botState({
           availableCkbBalance: ccc.fixedPointFrom(1000) + CKB_RESERVE,
           availableIckbBalance: 99n,
-          depositCapacity: ccc.fixedPointFrom(1000),
+          depositCapacity: ccc.fixedPointFrom(1100),
           totalCkbBalance: ccc.fixedPointFrom(1000) + CKB_RESERVE,
-          marketOrders: [testMatch("6d").group],
+          marketOrders: [(await testMatch("6d")).group],
         }),
       ),
     ).resolves.toMatchObject({
@@ -141,29 +144,29 @@ describe("buildTransaction low iCKB direct deposit refill", () => {
 describe("buildTransaction post-match direct deposit refill", () => {
   it("refills iCKB in the same transaction when a match depletes it below the useful UDT floor", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 1n,
-        udtDelta: -60n,
-        partials: [testMatch("6e")],
-        diagnostics: matchDiagnostics({
+      searchResult(
+        "complete",
+        [await testMatch("6e", { ckbDelta: 1n, udtDelta: -60n })],
+        matchDiagnostics({
           ckbValue: ccc.fixedPointFrom(2000),
           udtValue: 150n,
           positiveGain: 1,
         }),
-      }),
+      ),
     );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const deposit = vi.fn(passthroughTransaction);
+    const runtime = botRuntime();
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
     await expect(
       buildTransaction(
-        botRuntime({ managers: { logic: { deposit } } }),
+        runtime,
         botState({
           availableCkbBalance: ccc.fixedPointFrom(3000),
           availableIckbBalance: 150n,
-          depositCapacity: ccc.fixedPointFrom(1000),
+          depositCapacity: ccc.fixedPointFrom(1100),
           totalCkbBalance: ccc.fixedPointFrom(3000),
-          marketOrders: [testMatch("6f").group],
+          marketOrders: [(await testMatch("6f")).group],
         }),
       ),
     ).resolves.toMatchObject({
