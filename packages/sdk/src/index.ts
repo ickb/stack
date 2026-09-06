@@ -44,7 +44,6 @@ export type {
   PoolDepositState,
   SdkManagers,
   SystemState,
-  WaitTransactionArguments,
   WaitTransactionOptions,
 } from "./sdk.ts";
 export { completeFirstFundable } from "./withdrawal/withdrawal_completion.ts";

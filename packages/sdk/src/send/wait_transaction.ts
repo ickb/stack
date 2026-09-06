@@ -30,14 +30,6 @@ export class TransactionWaitError extends Error {
 
 /** One bounded observation window for an already-broadcast transaction. @public */
 export interface WaitTransactionOptions {
-  /**
-   * Canonical depth below the tip required before returning. Defaults to 0.
-   *
-   * @remarks A positive depth fails closed: the inclusion recheck needs both the
-   * block number and the block hash, so a client whose committed response omits
-   * `blockHash` never confirms and the wait ends at its timeout.
-   */
-  confirmations?: number;
   /** Absolute budget in milliseconds for the whole wait. Defaults to 60000. */
   timeout?: number;
   /** Delay in milliseconds between polls. Defaults to 2000. */
@@ -47,43 +39,31 @@ export interface WaitTransactionOptions {
 }
 
 /**
- * Arguments accepted after the client and the transaction hash.
+ * Observes one already-broadcast transaction for a single bounded window and returns
+ * it once the node reports it committed.
  *
- * @remarks Exactly one call form per call: the options object, or the shipped
- * positional arguments. Mixing them is rejected at compile time.
- *
- * @public
- */
-export type WaitTransactionArguments =
-  | [options: WaitTransactionOptions]
-  | [confirmations?: number, timeout?: number, interval?: number, signal?: AbortSignal];
-
-/**
- * Observes one already-broadcast transaction for a single bounded window.
- *
- * @remarks Accepts `(client, txHash, options)` or the shipped positional
- * `(client, txHash, confirmations?, timeout?, interval?, signal?)`. JSON-RPC
- * clients poll `get_transaction` verbosity 1 directly so a status-only
- * rejection is not hidden by CCC's transaction cache, and every transaction
- * body read bypasses that cache. Timeout and abort also apply while awaiting
- * client operations, but CCC transports cannot be cancelled and may finish
- * after this function rejects. Nothing here mutates the client cache: later
- * attempts rebuild from exact committed reads.
+ * @remarks Every Stack caller waits at depth zero for one window and then rebuilds
+ * from committed state (decisions amendment 45); depth would be an additive option.
+ * JSON-RPC clients poll `get_transaction` verbosity 1 directly so a status-only
+ * rejection is not hidden by CCC's transaction cache, and every transaction body
+ * read bypasses that cache. Timeout and abort also apply while awaiting client
+ * operations, but CCC transports cannot be cancelled and may finish after this
+ * function rejects. Nothing here mutates the client cache: later attempts rebuild
+ * from exact committed reads.
  *
  * @public
  */
 export async function waitTransaction(
   client: ccc.Client,
   txHashLike: ccc.HexLike,
-  ...args: WaitTransactionArguments
+  options: WaitTransactionOptions = {},
 ): Promise<ccc.ClientTransactionResponse> {
   const {
-    confirmations = 0,
     timeout = DEFAULT_TIMEOUT_MS,
     interval = DEFAULT_INTERVAL_MS,
     signal,
-  } = waitOptions(args);
-  validateWaitOptions(confirmations, timeout, interval);
+  } = options;
+  validateWaitOptions(timeout, interval);
   // Normalized before the window opens so a malformed hash cannot leave a timer
   // or abort listener installed outside the try/finally that closes them.
   const txHash = ccc.hexFrom(txHashLike);
@@ -94,10 +74,7 @@ export async function waitTransaction(
   try {
     for (;;) {
       const committed = await readCommittedTransaction(poll);
-      if (
-        committed !== undefined &&
-        (confirmations === 0 || (await isConfirmed(poll, committed, confirmations)))
-      ) {
+      if (committed !== undefined) {
         // An abort synchronized into the gap between the last read and this
         // return must not resolve the wait successfully.
         budget.throwIfStopped();
@@ -133,28 +110,7 @@ interface TransactionStatus {
   response?: ccc.ClientTransactionResponse;
 }
 
-function waitOptions(args: WaitTransactionArguments): WaitTransactionOptions {
-  if (isOptionsForm(args)) {
-    return args[0];
-  }
-  const [confirmations, timeout, interval, signal] = args;
-  return { confirmations, timeout, interval, signal };
-}
-
-function isOptionsForm(
-  args: WaitTransactionArguments,
-): args is [options: WaitTransactionOptions] {
-  // The positional form is shipped public API, so anything that is not an
-  // options object is read as `confirmations` rather than defaulting to zero.
-  return typeof args[0] === "object";
-}
-
-function validateWaitOptions(
-  confirmations: number,
-  timeout: number,
-  interval: number,
-): void {
-  assertCount(confirmations, "confirmations");
+function validateWaitOptions(timeout: number, interval: number): void {
   assertCount(interval, "interval");
   assertCount(timeout, "timeout");
   // A single unarmed timer owns the whole window, so the budget must fit one.
@@ -310,32 +266,6 @@ function assertNotRejected(txHash: ccc.Hex, status: TransactionStatus): void {
       reason: status.reason,
     });
   }
-}
-
-async function isConfirmed(
-  poll: WaitPoll,
-  committed: ccc.ClientTransactionResponse,
-  confirmations: number,
-): Promise<boolean> {
-  const tip = await within(async () => poll.client.getTipHeader(), poll.budget);
-  if (
-    committed.blockNumber === undefined ||
-    tip.number - committed.blockNumber < confirmations
-  ) {
-    return false;
-  }
-
-  // Depth below a tip is not inclusion: re-read without cache so a reorg that
-  // moved or dropped the transaction cannot be reported as confirmed.
-  const current = await readCommittedTransaction(poll);
-  if (current === undefined) {
-    return false;
-  }
-  return (
-    committed.blockHash !== undefined &&
-    current.blockNumber === committed.blockNumber &&
-    current.blockHash === committed.blockHash
-  );
 }
 
 function rawTransactionStatus(response: unknown): TransactionStatus {

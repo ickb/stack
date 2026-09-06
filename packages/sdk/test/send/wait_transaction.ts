@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import { TransactionWaitError, waitTransaction } from "../../src/sdk.ts";
-import { hash, headerLike } from "../transaction/base/support/sdk_core_support.ts";
+import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("91");
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -244,128 +244,8 @@ describe("waitTransaction cache ownership", () => {
   });
 });
 
-describe("waitTransaction confirmation depth", () => {
-  it("rechecks inclusion without cache once the tip is deep enough", async () => {
-    const response = committedResponse(10n);
-    const { client, getTransactionNoCache, getTipHeader } = confirmationClient({
-      status: "committed",
-    });
-    getTransactionNoCache.mockResolvedValue(response);
-    getTipHeader
-      .mockResolvedValueOnce(headerLike(11n))
-      .mockResolvedValue(headerLike(12n));
-
-    await expect(
-      waitTransaction(client, TX_HASH, { confirmations: 2, timeout: 1_000, interval: 0 }),
-    ).resolves.toBe(response);
-
-    expect(getTipHeader).toHaveBeenCalledTimes(2);
-    // One body read per poll plus the recheck that confirmed the same inclusion.
-    expect(getTransactionNoCache).toHaveBeenCalledTimes(3);
-  });
-
-  it("does not confirm a transaction the recheck finds in another block", async () => {
-    const { client, getTransactionNoCache, getTipHeader } = confirmationClient({
-      status: "committed",
-    });
-    getTransactionNoCache
-      .mockResolvedValueOnce(committedResponse(10n, "92"))
-      .mockResolvedValueOnce(committedResponse(20n, "93"))
-      .mockResolvedValue(undefined);
-    getTipHeader.mockResolvedValue(headerLike(12n));
-
-    await expect(
-      waitTransaction(client, TX_HASH, { confirmations: 2, timeout: 100, interval: 10 }),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
-  });
-
-  it("does not confirm a transaction the recheck no longer finds committed", async () => {
-    const { client, getTransactionNoCache, getTipHeader } = confirmationClient(
-      { status: "committed" },
-      { status: "pending" },
-    );
-    getTransactionNoCache.mockResolvedValue(committedResponse(10n));
-    getTipHeader.mockResolvedValue(headerLike(12n));
-
-    await expect(
-      waitTransaction(client, TX_HASH, { confirmations: 2, timeout: 100, interval: 10 }),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
-    expect(getTransactionNoCache).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports a rejection discovered by the depth recheck", async () => {
-    const reason = "reorg conflict";
-    const { client, request, getTransactionNoCache, getTipHeader } = confirmationClient(
-      { status: "committed" },
-      { status: "rejected", reason },
-    );
-    getTransactionNoCache.mockResolvedValue(committedResponse(10n));
-    getTipHeader.mockResolvedValue(headerLike(12n));
-
-    await expect(
-      waitTransaction(client, TX_HASH, { confirmations: 2, timeout: 1_000, interval: 0 }),
-    ).rejects.toEqual(expect.objectContaining({ status: "rejected", reason }));
-
-    expect(request).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("waitTransaction call forms", () => {
-  it("enforces a positional confirmation depth instead of defaulting to zero", async () => {
-    const { client, getTransactionNoCache, getTipHeader } = confirmationClient({
-      status: "committed",
-    });
-    getTransactionNoCache.mockResolvedValue(committedResponse(10n));
-    getTipHeader.mockResolvedValue(headerLike(10n));
-
-    // A tip at the committed block is depth zero, so only a wait that read the
-    // positional depth keeps polling until its positional timeout.
-    await expect(waitTransaction(client, TX_HASH, 2, 100, 10)).rejects.toBeInstanceOf(
-      ccc.ErrorClientWaitTransactionTimeout,
-    );
-    expect(getTipHeader).toHaveBeenCalledWith();
-  });
-
-  it("shares the option domains with the positional form", async () => {
-    const { client, request } = jsonRpcClient({ status: "pending" });
-
-    await expect(waitTransaction(client, TX_HASH, 0, Infinity)).rejects.toBeInstanceOf(
-      RangeError,
-    );
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("rejects mixing the two call forms", async () => {
-    const { client } = jsonRpcClient({ status: "pending" });
-
-    await expect(
-      // @ts-expect-error The options form takes no trailing positional arguments.
-      waitTransaction(client, TX_HASH, { timeout: 1 }, 100),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
-  });
-
-  it("aborts through a positional signal", async () => {
-    const reason = new Error("positional stop");
-    const controller = new AbortController();
-    controller.abort(reason);
-    const { client } = jsonRpcClient({ status: "pending" });
-
-    await expect(
-      waitTransaction(client, TX_HASH, 0, 1_000, 10, controller.signal),
-    ).rejects.toBe(reason);
-  });
-});
-
 describe("waitTransaction option domains", () => {
   it.each([
-    { options: { confirmations: -1 }, name: "negative confirmations" },
-    { options: { confirmations: 0.5 }, name: "fractional confirmations" },
-    { options: { confirmations: NaN }, name: "NaN confirmations" },
-    { options: { confirmations: Infinity }, name: "infinite confirmations" },
-    {
-      options: { confirmations: Number.MAX_SAFE_INTEGER + 1 },
-      name: "unsafe confirmations",
-    },
     { options: { timeout: -1 }, name: "negative timeout" },
     { options: { timeout: 0.5 }, name: "fractional timeout" },
     { options: { timeout: NaN }, name: "NaN timeout" },
@@ -630,24 +510,22 @@ describe("waitTransaction absolute budget", () => {
     expect(getTransactionNoCache).toHaveBeenCalledTimes(1);
   });
 
-  it("aborts an unresolved tip read with its exact reason", async () => {
+  it("aborts an unresolved body read with its exact reason", async () => {
     vi.useFakeTimers();
-    const pending = Promise.withResolvers<ccc.ClientBlockHeader>();
+    const pending = Promise.withResolvers<ccc.ClientTransactionResponse | undefined>();
     const reason = new Error("confirmation stopped");
     const controller = new AbortController();
     const { client } = jsonRpcClient({ status: "committed" });
-    vi.spyOn(client, "getTransactionNoCache").mockResolvedValue(committedResponse(10n));
-    const getTipHeader = vi
-      .spyOn(client, "getTipHeader")
+    const getTransactionNoCache = vi
+      .spyOn(client, "getTransactionNoCache")
       .mockImplementation(async () => pending.promise);
     const waiting = waitTransaction(client, TX_HASH, {
-      confirmations: 1,
       timeout: 1_000,
       interval: 100,
       signal: controller.signal,
     });
     await vi.waitFor(() => {
-      expect(getTipHeader).toHaveBeenCalledTimes(1);
+      expect(getTransactionNoCache).toHaveBeenCalledTimes(1);
     });
 
     controller.abort(reason);
@@ -697,36 +575,6 @@ function nonJsonClient(): {
 type JsonRpcRequest = (
   payload: Parameters<ccc.RequestorJsonRpc["requestPayload"]>[0],
 ) => Promise<{ id: number; result: unknown; error: null }>;
-
-function confirmationClient(...txStatuses: unknown[]): {
-  client: ccc.ClientPublicTestnet;
-  request: Mock<JsonRpcRequest>;
-  getTransactionNoCache: Mock<ccc.ClientPublicTestnet["getTransactionNoCache"]>;
-  getTipHeader: Mock<ccc.ClientPublicTestnet["getTipHeader"]>;
-} {
-  const { client, request } = jsonRpcClient(txStatuses[0]);
-  request.mockImplementation(rpcStatuses(...txStatuses));
-  return {
-    client,
-    request,
-    getTransactionNoCache: vi.spyOn(client, "getTransactionNoCache"),
-    getTipHeader: vi.spyOn(client, "getTipHeader"),
-  };
-}
-
-function rpcStatuses(...txStatuses: unknown[]): JsonRpcRequest {
-  let index = 0;
-  return async (payload) => {
-    const txStatus = txStatuses[Math.min(index, txStatuses.length - 1)];
-    index += 1;
-    await Promise.resolve();
-    return {
-      id: payload.id,
-      result: { transaction: null, tx_status: txStatus },
-      error: null,
-    };
-  };
-}
 
 function jsonRpcClient(
   txStatus: unknown,

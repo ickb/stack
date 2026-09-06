@@ -62,10 +62,7 @@ export {
   TransactionBroadcastError,
 } from "./send/sign_and_send_transaction.ts";
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
-export type {
-  WaitTransactionArguments,
-  WaitTransactionOptions,
-} from "./send/wait_transaction.ts";
+export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 
 /** SDK for managing iCKB operations. @public */
 export interface IckbSdk {
