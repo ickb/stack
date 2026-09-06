@@ -64,7 +64,7 @@ node apps/node/src/bot.ts >> log/bot/events.ndjson
 TESTER_SCENARIO=auto node apps/node/src/tester.ts
 ```
 
-To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd the bot's stream is the unit's journal; see `apps/bot/README.md`.
+To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `apps/node/README.md`.
 
 `pnpm -s live:preflight` prints public balance evidence for funding checks of the bot identity; `pnpm -s live:preflight -- tester` does the same for the tester identity. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`.
 

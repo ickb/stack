@@ -1,6 +1,6 @@
-# iCKB Bot
+# iCKB Node Actors
 
-The bot is CCC-native. It reads market state from `@ickb/sdk`, matches profitable limit orders, collects the bot's own orders, completes receipts and ready withdrawals, optionally rebalances between CKB and iCKB, completes iCKB UDT balance, CKB capacity, and fees, then signs, sends, and waits for commit.
+`apps/node` holds three one-turn entrypoints that share chain preflight, config, and logging: the bot (`src/bot.ts`), the testnet tester (`src/tester.ts`), and the mainnet rate sampler (`src/sampler.ts`). The bot is CCC-native. It reads market state from `@ickb/sdk`, matches profitable limit orders, collects the bot's own orders, completes receipts and ready withdrawals, optionally rebalances between CKB and iCKB, completes iCKB UDT balance, CKB capacity, and fees, then signs, sends, and waits for commit.
 
 The bot minimizes excess iCKB holdings so more liquidity stays available in CKB during iCKB-to-CKB redemption pressure.
 
@@ -74,11 +74,24 @@ jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.commi
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
 ```
 
+## Tester
+
+The tester is the bot's testnet counterpart: each turn it places at most one order or SDK conversion from its own account, so the bot has something to match, and exits. It reads `TESTER_CHAIN`, `TESTER_RPC_URL`, and `TESTER_PRIVATE_KEY_FILE` like the bot, plus `TESTER_SCENARIO` (default `auto`) and an optional raw-order fee policy `TESTER_FEE`/`TESTER_FEE_BASE`.
+
+`auto` is the unsupervised mode: the turn draws uniformly among every named scenario the account can currently afford, so the tester self-balances as its balances swing between CKB and iCKB, and a tester unit with `Restart=always` produces the bulk of testnet stimulus. The two dust scenarios, whose order is rejected on purpose, are drawn at a quarter of the weight of an affordable scenario and record that rejection as an `estimated-conversion-too-small` skip. A composite draw such as `multi-order-limit-orders` resolves to the concrete scenario it would resolve to when named. Naming a scenario drives one hand-picked turn; the names are the values of `TESTER_SCENARIOS` in `src/tester/testerContract.ts`.
+
+Each turn writes one JSON line: `identity` first (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), then `startTime`, `balance`, `ratio`, and either a `skip` with its reason and evidence or the sent transaction's `actions`, `transactionShape`, `txFee`, and `txHash`, plus `error` when the turn failed. Exit codes follow the bot: `0` done, `1` failed, `2` capital too low to continue.
+
+```bash
+export TESTER_CHAIN=testnet TESTER_RPC_URL=https://testnet.ckb.dev/ TESTER_PRIVATE_KEY_FILE=config/tester-testnet.key
+pnpm --filter ./apps/node tester
+```
+
 ## systemd Deployment
 
-The bot runs as the operator's own user under the systemd user manager, from an ordinary git checkout, with Node wherever the operator installed it. The same steps apply to a developer desktop and a production VM; systemd 255 and later are supported. There is no root install, service user, release directory, encrypted credential, or update script: git owns revisions, the unit owns the process, and a `0600` key file owns the secret. That trades per-network user isolation and atomic updates for one concept fewer each; a single trusted operator on one host loses little.
+The bot and the tester run as the operator's own user under the systemd user manager, from an ordinary git checkout, with Node wherever the operator installed it. The same steps apply to a developer desktop and a production VM; systemd 255 and later are supported. There is no root install, service user, release directory, encrypted credential, or update script: git owns revisions, the unit owns the process, and a `0600` key file owns the secret. That trades per-network user isolation and atomic updates for one concept fewer each; a single trusted operator on one host loses little.
 
-The tracked example `apps/node/ickb-bot-testnet.service` is the whole configuration for one network. Copy it under a name per network, edit every path and the RPC URL, and keep the rest:
+The tracked examples `apps/node/ickb-bot-testnet.service` and `apps/node/ickb-tester-testnet.service` are the whole configuration for one network each. Copy one under a name per network, edit every path and the RPC URL, and keep the rest:
 
 ```bash
 pnpm node:install
@@ -93,7 +106,7 @@ systemctl --user enable --now ickb-bot-testnet.service
 journalctl --user -u ickb-bot-testnet.service -f -o cat
 ```
 
-`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet unit is the same file with `mainnet` values and its own key file.
+`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the tester unit is testnet only.
 
 Operate the unit as usual:
 

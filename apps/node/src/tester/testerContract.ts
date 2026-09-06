@@ -42,11 +42,11 @@ const TESTER_SCENARIO_SELECTION_VALUES: ReadonlySet<string> = new Set<string>(
   TESTER_SCENARIO_SELECTIONS,
 );
 
-export const AUTO_TESTER_SCENARIOS: readonly TesterScenario[] = [
-  RANDOM_ORDER_SCENARIO,
-  SDK_CONVERSION_SCENARIO,
-  BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
-];
+/** Scenarios whose order is rejected on purpose; `auto` draws them at a lower weight. */
+export const DUST_TESTER_SCENARIOS = [
+  DUST_CKB_CONVERSION_SCENARIO,
+  DUST_ICKB_CONVERSION_SCENARIO,
+] as const satisfies readonly TesterScenario[];
 
 export const MULTI_ORDER_SCENARIOS = [
   MIXED_DIRECTION_LIMIT_ORDERS_SCENARIO,

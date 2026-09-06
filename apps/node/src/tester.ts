@@ -3,6 +3,7 @@ import { getConfig, IckbSdk, signerAccountLocks } from "@ickb/sdk";
 import {
   createPublicClient,
   logExecution,
+  publicRpcEndpointIdentity,
   verifyChainPreflight,
 } from "./shared/index.ts";
 import {
@@ -22,13 +23,14 @@ const testerScenario = readTesterScenario(process.env);
 const feePolicy = readTesterFeePolicy(process.env);
 try {
   const client = createPublicClient(chain, rpcUrl);
-  await verifyChainPreflight(client, chain);
+  const preflight = await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
   // - FAILURE MODE: passing keys to logs, errors, telemetry, redaction, masking, or test hooks leaks signing authority.
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
-  const primaryLock = (await signer.getRecommendedAddressObj()).script;
+  const address = await signer.getRecommendedAddressObj();
+  const primaryLock = address.script;
   const runtime: Runtime = {
     client,
     signer,
@@ -36,7 +38,26 @@ try {
     primaryLock,
     accountLocks: await signerAccountLocks(signer, primaryLock),
   };
-  await runTesterTurn({ runtime, testerScenario, feePolicy });
+  await runTesterTurn({
+    runtime,
+    identity: {
+      chain,
+      address: address.toString(),
+      primaryLock: {
+        codeHash: primaryLock.codeHash,
+        hashType: primaryLock.hashType,
+        args: primaryLock.args,
+      },
+      rpcEndpoint: publicRpcEndpointIdentity(rpcUrl),
+      preflight: {
+        expected: preflight.expected,
+        observed: preflight.observed,
+        matches: preflight.matches,
+      },
+    },
+    testerScenario,
+    feePolicy,
+  });
 } catch (error) {
   // Connection and preflight failures get the same log line and exit code as attempt failures.
   const executionLog = {};

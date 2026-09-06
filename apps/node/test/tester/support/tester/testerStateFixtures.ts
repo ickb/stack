@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { type OrderGroup, Ratio } from "@ickb/sdk";
 
 import { headerLike } from "@ickb/testkit";
-import type { TesterState } from "../../../../src/tester/tester/runtime/runtime.ts";
+import type { TesterState } from "../../../../src/tester/runtime/runtime.ts";
 
 const testerClient = new ccc.ClientPublicTestnet({
   url: "https://example.invalid",

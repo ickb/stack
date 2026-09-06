@@ -10,10 +10,7 @@ import {
 
 import { byte32FromByte, script } from "@ickb/testkit";
 import { vi } from "vitest";
-import type {
-  Runtime,
-  TesterState,
-} from "../../../../src/tester/tester/runtime/runtime.ts";
+import type { Runtime, TesterState } from "../../../../src/tester/runtime/runtime.ts";
 import { runtimeDefaultSdk } from "./runtimeDefaultSdkFixture.ts";
 
 export type RequestInfo = Parameters<Runtime["sdk"]["request"]>[2];

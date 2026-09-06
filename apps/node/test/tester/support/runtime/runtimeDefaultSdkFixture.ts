@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig, IckbSdk, Ratio } from "@ickb/sdk";
 
-import type {
-  Runtime,
-  TesterState,
-} from "../../../../src/tester/tester/runtime/runtime.ts";
+import type { Runtime, TesterState } from "../../../../src/tester/runtime/runtime.ts";
 
 export function runtimeDefaultSdk(): Runtime["sdk"] {
   const system = defaultSystemState();

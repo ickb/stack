@@ -2,8 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import { getConfig, IckbSdk } from "@ickb/sdk";
 import { script } from "@ickb/testkit";
 import { vi } from "vitest";
-import type { testerExecutionActions } from "../../../../src/tester/tester/evidence/testerEvidence.ts";
-import type { freshMatchableOrderSkip } from "../../../../src/tester/tester/runtime/freshMatchableOrderSkip.ts";
+import type { testerExecutionActions } from "../../../../src/tester/evidence/testerEvidence.ts";
+import type { freshMatchableOrderSkip } from "../../../../src/tester/runtime/freshMatchableOrderSkip.ts";
 import { testerSigner } from "./testerStateFixtures.ts";
 import {
   transactionResponse,
