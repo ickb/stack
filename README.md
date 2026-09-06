@@ -50,23 +50,21 @@ CCC packages are normal package dependencies resolved through `pnpm-workspace.ya
 
 ## Live Testnet Validation
 
-Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the NDJSON events on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
+Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the JSON on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
 
 The bot reads `BOT_CHAIN`, `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the tester reads the same three under `TESTER_`. Key files under the ignored `config/` directory hold one lowercase `0x` key each. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
 
 ```bash
 export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckb.dev/ BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
 export TESTER_CHAIN=testnet TESTER_RPC_URL=https://testnet.ckb.dev/ TESTER_PRIVATE_KEY_FILE=config/tester-testnet.key
-pnpm -s live:preflight
-pnpm -s live:preflight -- tester
 mkdir -p log/bot
 node apps/node/src/bot.ts >> log/bot/events.ndjson
 TESTER_SCENARIO=auto node apps/node/src/tester.ts
 ```
 
-To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `apps/node/README.md`.
+Each turn identifies itself first: the bot's `bot.chain.preflight` event and the tester's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn stops before acting: the bot with `bot.decision.skipped` reason `capital_below_minimum` and its `deficit`, the tester with its low-capital error, both with exit code `2`; the turn's balances are in `bot.state.read` and the tester's `balance`.
 
-`pnpm -s live:preflight` prints public balance evidence for funding checks of the bot identity; `pnpm -s live:preflight -- tester` does the same for the tester identity. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.unavailable`, `balances.CKB.total`, `balances.ICKB.available`, `balances.ICKB.unavailable`, `balances.ICKB.total`, and `capital.minimumCkbCapital`. `CKB.available` and `CKB.spendable` are actual plain-cell values, `CKB.projectedAvailable` includes account sources the SDK can collect in the same transaction, `unavailable` is known locked or pending account value, and `total` is `projectedAvailable + unavailable`.
+To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `apps/node/README.md`.
 
 ## Licensing
 

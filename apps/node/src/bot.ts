@@ -32,10 +32,12 @@ try {
   // - INVARIANT: private keys pass only to signer construction and signing.
   // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
-  const primaryLock = (await signer.getRecommendedAddressObj()).script;
+  const address = await signer.getRecommendedAddressObj();
+  const primaryLock = address.script;
   events.emit({
     type: "bot.chain.preflight",
     identity: {
+      address: address.toString(),
       primaryLock: {
         codeHash: primaryLock.codeHash,
         hashType: primaryLock.hashType,

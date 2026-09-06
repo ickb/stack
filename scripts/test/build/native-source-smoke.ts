@@ -92,26 +92,3 @@ void test("Node app entrypoints run from TypeScript source and fail fast without
     assert.equal(result.stderr.includes(`Empty env ${envName}`), true, result.stderr);
   }
 });
-
-void test("local CLIs execute from source with native Node", () => {
-  const cases: Array<[string, string]> = [
-    ["scripts/live/preflight.ts", "Usage: node scripts/live/preflight.ts"],
-  ];
-
-  for (const [scriptPath, expected] of cases) {
-    const env = { ...process.env, NODE_OPTIONS: "" };
-    const result = spawnSync(
-      process.execPath,
-      ["--trace-deprecation", scriptPath, "--help"],
-      {
-        cwd: rootDir,
-        encoding: "utf8",
-        env,
-      },
-    );
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.ok(result.stdout.includes(expected));
-    assert.doesNotMatch(result.stderr, /DEP0040|node:punycode|`punycode`/u);
-  }
-});

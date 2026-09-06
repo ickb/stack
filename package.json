@@ -20,9 +20,7 @@
     "format": "pnpm lint:eslint:files --fix && prettier --write .",
     "test": "vitest",
     "test:ci": "vitest run && node scripts/run-node-tests.ts",
-    "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
-    "live:check:source": "tsgo --noEmit -p tsconfig.json",
-    "live:preflight": "node scripts/live/preflight.ts"
+    "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo"
   },
   "engines": {
     "node": ">=22.19.0"
