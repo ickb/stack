@@ -6,7 +6,6 @@ import {
 } from "../../../../../src/tester/tester/runtime/runtime.ts";
 import {
   buildConversionTransactionMock,
-  completeTransactionMock,
   emptyAccountState,
   orderGroup,
   receipt,
@@ -19,7 +18,6 @@ describe("buildSdkConversionTransaction", () => {
   it("delegates SDK conversion planning to the SDK", async () => {
     const calls: string[] = [];
     const buildConversionTransaction = buildConversionTransactionMock(calls);
-    const completeTransaction = completeTransactionMock(calls);
     const state: TesterState = {
       system: systemState(),
       account: emptyAccountState(),
@@ -42,10 +40,7 @@ describe("buildSdkConversionTransaction", () => {
       totalIckbBalance: 0n,
     };
     const primaryLock = script("11");
-    const runtime = runtimeWithSdk({
-      buildConversionTransaction,
-      completeTransaction,
-    });
+    const runtime = runtimeWithSdk({ buildConversionTransaction });
     runtime.primaryLock = primaryLock;
 
     const result = await buildSdkConversionTransaction(
@@ -67,12 +62,9 @@ describe("buildSdkConversionTransaction", () => {
       direction: "ckb-to-ickb",
       amount: 500n,
       lock: primaryLock,
+      signer: runtime.signer,
       context: state.conversionContext,
     });
-    expect(completeTransaction.mock.calls[0]?.[1]).toEqual({
-      signer: runtime.signer,
-      feeRate: 42n,
-    });
-    expect(calls).toEqual(["conversion", "complete"]);
+    expect(calls).toEqual(["conversion"]);
   });
 });

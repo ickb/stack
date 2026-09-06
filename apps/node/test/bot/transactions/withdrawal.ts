@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { type IckbSdk, OrderManager, Ratio } from "@ickb/sdk";
+import { IckbError, type IckbSdk, OrderManager, Ratio } from "@ickb/sdk";
 
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -209,3 +209,45 @@ function systemState(hashByte: string): Parameters<typeof botState>[0]["system"]
     }),
   };
 }
+
+describe("buildTransaction excess withdrawal without a fundable prefix", () => {
+  it("proceeds without withdrawals when completion can fund no prefix", async () => {
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
+      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
+    );
+    const state = botState({
+      availableCkbBalance: ccc.fixedPointFrom(2000),
+      availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
+      totalCkbBalance: ccc.fixedPointFrom(2000),
+      depositCapacity: 1000n,
+      poolDeposits: [
+        readyDeposit("82", 4n, 20n * 60n * 1000n),
+        readyDeposit("83", 6n, 25n * 60n * 1000n),
+        readyDeposit("84", 5n, 40n * 60n * 1000n),
+      ],
+    });
+    const completeTransaction = vi.fn(async () => {
+      await Promise.resolve();
+      throw new IckbError("short", { code: "insufficient_capacity" });
+    });
+
+    const result = await buildTransaction(
+      botRuntime({ primaryLock: script("11"), completeTransaction }),
+      state,
+    );
+
+    // Excess withdrawals have no any-deposit fallback; the turn ends with nothing to do.
+    expect(result).toMatchObject({
+      kind: "skipped",
+      reason: "no_actions",
+      decision: {
+        rebalance: {
+          kind: "none",
+          reason: "no_fundable_withdrawal_prefix",
+          withdrawalCandidateCount: 2,
+        },
+      },
+    });
+    expect(completeTransaction).toHaveBeenCalledTimes(2);
+  });
+});

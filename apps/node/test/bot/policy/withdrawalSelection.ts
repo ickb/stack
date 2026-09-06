@@ -18,7 +18,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 5n,
         ckbBalance: 2000n * CKB,
@@ -40,7 +39,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP - CKB,
         ckbBalance: 2000n * CKB,
@@ -62,7 +60,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const crowdedExtra = readyDeposit(5n, 25n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + 5n,
       ckbBalance: 2000n * CKB,
@@ -84,7 +81,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 9n,
         ckbBalance: 2000n * CKB,
@@ -107,7 +103,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + 9n,
         ckbBalance: 2000n * CKB,
@@ -131,7 +126,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 4n,
         ckbBalance: 2000n * CKB,
@@ -142,7 +136,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
       }),
     ).toMatchObject({
       kind: "withdraw",
-      deposits: [highExtra],
+      deposits: [lowExtra],
       requiredLiveDeposits: [lowProtected],
     });
   });
@@ -155,7 +149,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 6n,
         ckbBalance: 2000n * CKB,
@@ -177,7 +170,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 3n,
         ckbBalance: 2000n * CKB,
@@ -199,7 +191,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 5n,
         ckbBalance: 2000n * CKB,

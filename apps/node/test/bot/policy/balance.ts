@@ -13,25 +13,9 @@ import {
 } from "./fixtures/policy.ts";
 
 describe(PLAN_REBALANCE_SUITE, () => {
-  it("does nothing when fewer than two output slots remain", () => {
-    expect(
-      planRebalance({
-        outputSlots: 1,
-        tip: TIP,
-        ickbBalance: 0n,
-        ckbBalance: 2000n * 100000000n,
-        depositCapacity: 1000n * 100000000n,
-        ickbRefillThreshold: 1n,
-        readyDeposits: [],
-        poolDepositsRest: NO_POOL_REST,
-      }),
-    ).toEqual({ kind: "none", reason: "insufficient_output_slots" });
-  });
-
   it("requests one deposit when iCKB is too low and CKB reserve is available", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 0n,
         ckbBalance: 2000n * 100000000n,
@@ -46,7 +30,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not deposit at the reserve boundary when fee headroom is required", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 0n,
         ckbBalance: 1000n * CKB + CKB_RESERVE,
@@ -62,7 +45,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("requests one deposit when CKB covers reserve and fee headroom", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 0n,
         ckbBalance: 1000n * CKB + CKB_RESERVE + 1n,
@@ -78,7 +60,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does nothing when iCKB is too low but the CKB reserve is unavailable", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 0n,
         ckbBalance: 1999n * 100000000n,
@@ -95,7 +76,6 @@ describe(`${PLAN_REBALANCE_SUITE} iCKB refill`, () => {
   it("seeds ring inventory when iCKB is at the refill floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 100n,
         ckbBalance: 2000n * CKB,
@@ -110,7 +90,6 @@ describe(`${PLAN_REBALANCE_SUITE} iCKB refill`, () => {
   it("refills iCKB below the useful match floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 99n,
         ckbBalance: 2000n * CKB,
@@ -125,7 +104,6 @@ describe(`${PLAN_REBALANCE_SUITE} iCKB refill`, () => {
   it("does not refill iCKB at the useful match floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: 100n,
         ckbBalance: 2000n * CKB,
@@ -142,7 +120,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready deposits`, () => {
   it("treats sparse next-hour near-ready deposits as ring coverage", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -157,7 +134,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready deposits`, () => {
   it("does not treat pending future withdrawal value as liquid CKB for ring seeding", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -178,7 +154,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready deposits`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: 2000n * CKB,
@@ -201,7 +176,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready ring selection`, () => {
     const poolNearReadyRefill = readyDeposit(3n, 105n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + 4n,
       ckbBalance: 2000n * CKB,
@@ -221,7 +195,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready ring selection`, () => {
     const atCutoff = readyDeposit(4n, 120n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
       ckbBalance: 2000n * CKB,
@@ -244,7 +217,6 @@ describe(`${PLAN_REBALANCE_SUITE} near-ready ring selection`, () => {
     const outsideLookahead = readyDeposit(4n, 121n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
       ckbBalance: 2000n * CKB,
@@ -268,7 +240,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup bait`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 1n,
         ckbBalance: 2000n * CKB,
@@ -288,7 +259,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup bait`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: 2000n * CKB,
@@ -305,7 +275,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup bait`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 1n,
         ckbBalance: 2000n * CKB,
@@ -323,7 +292,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup bait`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: 2000n * CKB,
@@ -343,7 +311,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup withdrawal floor`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: 2000n * CKB,
@@ -358,7 +325,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup withdrawal floor`, () => {
   it("does not request a full withdrawal that would cut below the withdrawal floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + CKB,
         ckbBalance: 2000n * CKB,
@@ -378,7 +344,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup withdrawal floor`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + CKB,
         ckbBalance: CKB_RESERVE,
@@ -398,7 +363,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup near-ready isolation`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: CKB_RESERVE,
@@ -415,7 +379,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup near-ready isolation`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + CKB,
         ckbBalance: CKB_RESERVE,
@@ -435,7 +398,6 @@ describe(`${PLAN_REBALANCE_SUITE} cleanup near-ready isolation`, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP - 1n,
         ckbBalance: CKB_RESERVE,

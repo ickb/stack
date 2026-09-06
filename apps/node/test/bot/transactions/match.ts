@@ -10,7 +10,6 @@ import type {
   RingSegmentDiagnostics,
 } from "../../../src/bot/policy/types.ts";
 import { buildDecisionTranscript } from "../../../src/bot/runtime/decision.ts";
-import { MAX_OUTPUTS_BEFORE_CHANGE } from "../../../src/bot/runtime/support.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
 import type {
   BotActions,
@@ -325,52 +324,6 @@ describe("buildTransaction match decision labels", () => {
   });
 });
 
-describe("buildTransaction output boundary", () => {
-  it("skips candidates whose actual pre-change outputs exceed the output limit", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    const buildBaseTransaction = vi.fn((txLike: ccc.TransactionLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      for (let index = 0; index <= MAX_OUTPUTS_BEFORE_CHANGE; index += 1) {
-        tx.addOutput({ capacity: 0n, lock: script("44") }, "0x");
-      }
-      return tx;
-    });
-    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
-      await Promise.resolve();
-      return ccc.Transaction.from(txLike);
-    });
-
-    const result = await buildTransaction(
-      botRuntime({ sdk: { buildBaseTransaction }, completeTransaction }),
-      botState({
-        availableCkbBalance: ccc.fixedPointFrom(2000),
-        availableIckbBalance: 0n,
-        depositCapacity: 100n,
-        totalCkbBalance: ccc.fixedPointFrom(2000),
-      }),
-    );
-
-    expect(result).toMatchObject({
-      kind: "skipped",
-      reason: "output_limit",
-      actions: { deposits: 0 },
-      decision: {
-        skip: {
-          reason: "output_limit",
-          attemptedActions: { deposits: 1 },
-        },
-      },
-    });
-    expect(completeTransaction).not.toHaveBeenCalled();
-  });
-});
-
 describe("buildDecisionTranscript match miss labels", () => {
   it.each([
     ["no_matchable_orders", matchDiagnostics({ ckbMatchable: 0, udtMatchable: 0 })],
@@ -396,7 +349,6 @@ describe("buildDecisionTranscript match miss labels", () => {
           state: botState({ marketOrders: [testMatch("72").group] }),
           match: { ckbDelta: 0n, udtDelta: 0n, partials: [], diagnostics },
           rebalance: { kind: "none", reason: "no_withdrawable_ickb" },
-          outputSlots: 58,
           actions: {
             collectedOrders: 0,
             completedDeposits: 0,
@@ -424,6 +376,7 @@ describe("buildDecisionTranscript withdrawal summaries", () => {
           reason: "excess_ickb_balance",
           deposits: [selected],
           requiredLiveDeposits: [requiredLive],
+          ringSafe: true,
         },
         { withdrawalRequests: 1 },
       ).rebalance,
@@ -442,6 +395,7 @@ describe("buildDecisionTranscript withdrawal summaries", () => {
           kind: "withdraw",
           reason: "excess_ickb_balance",
           deposits: [selected],
+          ringSafe: true,
         },
         { withdrawalRequests: 1 },
       ).rebalance,
@@ -490,7 +444,6 @@ function transcriptForRebalance(
     state: botState({}),
     match: { ckbDelta: 0n, udtDelta: 0n, partials: [] },
     rebalance,
-    outputSlots: 58,
     actions: {
       collectedOrders: 0,
       completedDeposits: 0,

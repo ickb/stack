@@ -15,7 +15,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("seeds ring inventory when one more deposit would cross the withdrawal floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP + 1n,
         ckbBalance: 2000n * CKB,
@@ -29,7 +28,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("keeps direct seeding when future crowding has only deposit output slots", () => {
     expect(
       planRebalance({
-        outputSlots: 3,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -43,7 +41,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("keeps direct seeding when removing a future source would leave the source segment below the preservation floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -62,7 +59,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("keeps direct seeding when density improvement would be too small", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -86,7 +82,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("returns none, not a withdrawal, when dust crowds the future pool without deposit budget", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -104,7 +99,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not reserve withdrawals when public drain leaves the future target under-covered", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -120,7 +114,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not expand future horizon or remove a farther source", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -139,7 +132,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("returns none when a raced future-removal source disappears", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -153,7 +145,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does nothing instead of withdrawing for cosmetic future smoothing", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,

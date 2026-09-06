@@ -4,6 +4,7 @@ import { Ratio } from "../../../src/order/index.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
+  stubSigner,
   testSdk,
 } from "./support/sdk_fixture_support.ts";
 
@@ -24,6 +25,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,
+        signer: stubSigner,
         context: conversionContext({
           system: {
             exchangeRatio: Ratio.from({

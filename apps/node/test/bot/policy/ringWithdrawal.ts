@@ -19,7 +19,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const sparseReady = readyDeposit(5n, 40n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + 9n,
       ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -46,7 +45,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const sparseReady = readyDeposit(5n, 40n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + 9n,
       ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -68,7 +66,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -82,7 +79,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not withdraw for excess withdrawal below the withdrawal floor", () => {
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -102,7 +98,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not withdraw from a duplicate dense future segment to fill an empty target segment", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -121,7 +116,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -140,7 +134,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("uses the full ring instead of future-only anchors", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,

@@ -87,13 +87,6 @@ class StateSdk extends IckbSdk {
       estimatedMaturity: this.state.system.tip.timestamp,
     };
   }
-
-  public override async completeTransaction(
-    txLike: ccc.TransactionLike,
-  ): ReturnType<WalletConfig["sdk"]["completeTransaction"]> {
-    await Promise.resolve();
-    return ccc.Transaction.from(txLike);
-  }
 }
 
 /** The hash the cache currently reports as pending, if any. */

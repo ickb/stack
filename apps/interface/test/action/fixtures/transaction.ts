@@ -19,9 +19,6 @@ import type { WalletConfig } from "../../../src/shared/utils.ts";
 type BuildConversionTransactionMock = ReturnType<
   typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
 >;
-type CompleteTransactionMock = ReturnType<
-  typeof vi.fn<WalletConfig["sdk"]["completeTransaction"]>
->;
 type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
 type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
@@ -34,8 +31,6 @@ export function walletConfigWith(
       buildConversionTransaction:
         overrides.sdk?.buildConversionTransaction ??
         base.sdk.buildConversionTransaction.bind(base.sdk),
-      completeTransaction:
-        overrides.sdk?.completeTransaction ?? base.sdk.completeTransaction.bind(base.sdk),
     }),
   });
 }
@@ -78,12 +73,6 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     conversion: { kind: "order" },
     ...overrides,
   };
-}
-
-export function completeTransactionMock(): CompleteTransactionMock {
-  return vi
-    .fn<WalletConfig["sdk"]["completeTransaction"]>()
-    .mockImplementation(resolvedTx);
 }
 
 export function failedPlan(
@@ -129,11 +118,6 @@ export function context(overrides: Partial<TransactionContext> = {}): Transactio
   };
 }
 
-async function resolvedTx(txLike: ccc.TransactionLike): Promise<ccc.Transaction> {
-  await Promise.resolve();
-  return ccc.Transaction.from(txLike);
-}
-
 function testClient(): ccc.Client {
   return new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
 }
@@ -152,12 +136,10 @@ function script(codeHashByte: string): ccc.Script {
 
 class TestSdk extends IckbSdk {
   public override buildConversionTransaction: WalletConfig["sdk"]["buildConversionTransaction"];
-  public override completeTransaction: WalletConfig["sdk"]["completeTransaction"];
 
   constructor(
     options: {
       buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-      completeTransaction?: WalletConfig["sdk"]["completeTransaction"];
     } = {},
   ) {
     const config = getConfig("testnet");
@@ -176,18 +158,11 @@ class TestSdk extends IckbSdk {
         estimatedMaturity: 0n,
         conversion: { kind: "order" },
       });
-    this.completeTransaction =
-      options.completeTransaction ??
-      (async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
   }
 }
 
 interface WalletConfigTestOverrides {
   sdk?: {
     buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-    completeTransaction?: WalletConfig["sdk"]["completeTransaction"];
   };
 }

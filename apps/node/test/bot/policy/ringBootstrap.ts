@@ -15,7 +15,6 @@ import {
 describe(PLAN_REBALANCE_SUITE, () => {
   it("seeds one future deposit when no future anchors exist", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -36,7 +35,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
   it("seeds ring inventory even when liquid iCKB is above the withdrawal floor", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + CKB,
       ckbBalance: 2000n * CKB,
@@ -55,7 +53,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
   it("carries ring diagnostics on ring-inventory deposits", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: 100n,
       ckbBalance: 2000n * CKB,
@@ -77,7 +74,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const loneDeposit = futureDeposit(9n);
 
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -105,7 +101,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const secondDuplicate = futureDeposit(10n);
 
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -128,7 +123,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
   it("does not seed when two future deposits already span both adaptive segments", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -151,7 +145,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 describe(PLAN_REBALANCE_SUITE, () => {
   it("seeds when the coarse target segment is under-covered by udt per meter", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -172,7 +165,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
   it("seeds an empty target segment in high-count pools", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 2000n * CKB,
@@ -196,7 +188,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not seed when the coarse target segment meets the density threshold", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -214,7 +205,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not seed from zero-total future coverage", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 2000n * CKB,
@@ -227,7 +217,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
   it("does not seed future shaping when the reserve gate fails", () => {
     const plan = planRebalance({
-      outputSlots: 4,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
       ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,

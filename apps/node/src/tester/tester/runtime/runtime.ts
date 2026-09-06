@@ -136,7 +136,7 @@ export async function buildRawOrderTransaction(
 }
 
 /**
- * Builds and completes a tester transaction through the public SDK conversion path.
+ * Builds a tester transaction through the public SDK conversion path, which completes it.
  *
  * @throws Error when the SDK reports an expected conversion planning failure.
  */
@@ -154,18 +154,15 @@ export async function buildSdkConversionTransaction(
     direction,
     amount,
     lock: runtime.primaryLock,
+    signer: runtime.signer,
     context: state.conversionContext,
   });
   if (!result.ok) {
     throw new Error(`SDK conversion failed: ${result.reason}`);
   }
 
-  const tx = await runtime.sdk.completeTransaction(result.tx, {
-    signer: runtime.signer,
-    feeRate: state.system.feeRate,
-  });
   return {
-    tx,
+    tx: result.tx,
     conversion: result.conversion,
     ...(result.conversionNotice === undefined
       ? {}

@@ -1,0 +1,208 @@
+import { ccc } from "@ckb-ccc/core";
+import { script } from "@ickb/testkit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
+import { DaoOutputLimitError } from "../../../src/dao/index.ts";
+import { completeFirstFundable } from "../../../src/withdrawal/withdrawal_completion.ts";
+import {
+  baseTip,
+  conversionContext,
+  transactionWithOutputs,
+} from "../../transaction/base/support/sdk_core_support.ts";
+import {
+  baseTransactionFixture,
+  fundedSigner,
+  type BaseTransactionFixture,
+} from "../deposits_and_limits/support/sdk_fixture_support.ts";
+import {
+  depositCell,
+  plainCapacityCell,
+} from "../withdrawal_quotes/support/sdk_cell_support.ts";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+const ICKB_TO_CKB = "ickb-to-ckb";
+const DEPOSIT = ICKB_DEPOSIT_CAP;
+// Measured with the real managers: one owner marker for the fixture lock, and the
+// remainder order's two cells.
+const MARKER_CKB = ccc.fixedPointFrom(78);
+const ORDER_CKB = ccc.fixedPointFrom(163 + 74);
+const MIN_CHANGE_CKB = ccc.fixedPointFrom(61);
+
+/** Three ready deposits in one ring segment: one anchor and two surplus. */
+function readyPool(
+  fixture: BaseTransactionFixture,
+): Array<ReturnType<typeof depositCell>> {
+  return ["a1", "a2", "a3"].map((byte) =>
+    depositCell(byte, fixture.logic, fixture.dao, baseTip, baseTip, { isReady: true }),
+  );
+}
+
+function conversion(
+  fixture: BaseTransactionFixture,
+  amount: bigint,
+  userCkb: bigint,
+  fundingCells: ccc.Cell[] = [],
+): Parameters<BaseTransactionFixture["sdk"]["buildConversionTransaction"]>[1] {
+  const lock = fixture.botLock;
+  const { signer } = fundedSigner(
+    [plainCapacityCell(userCkb, lock, "f1"), ...fundingCells],
+    [lock],
+  );
+  return {
+    direction: ICKB_TO_CKB,
+    amount,
+    lock,
+    signer,
+    context: conversionContext({
+      system: {
+        ckbAvailable: ccc.fixedPointFrom(1_000_000),
+        poolDeposits: { deposits: readyPool(fixture), id: "pool" },
+      },
+      ickbAvailable: amount,
+    }),
+  };
+}
+
+describe("buildConversionTransaction fundable walk", () => {
+  it("walks down the greedy prefixes until the real completer can fund one", async () => {
+    const fixture = baseTransactionFixture({ completion: "real" });
+    // Two markers plus the order do not fit; one marker plus the rebuilt, larger order does.
+    const userCkb = MARKER_CKB + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(4);
+
+    const result = await fixture.sdk.buildConversionTransaction(
+      ccc.Transaction.default(),
+      conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
+    );
+
+    expect(result).toMatchObject({ ok: true, conversion: { kind: "direct-plus-order" } });
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    const daoOutputs = result.tx.outputs.filter(
+      (output) => output.type?.eq(fixture.dao) === true,
+    );
+    expect(daoOutputs).toHaveLength(1);
+    expect(result.tx.outputs).toHaveLength(5);
+  });
+
+  it("falls back to the whole-request order when every direct prefix exceeds the DAO output limit", async () => {
+    const fixture = baseTransactionFixture({ completion: "real" });
+    // A DAO withdrawal request keeps input and output positions aligned, so the crowded
+    // base transaction moves sixty plain cells.
+    const cells = Array.from({ length: 60 }, (_, index) =>
+      plainCapacityCell(
+        ccc.fixedPointFrom(100),
+        fixture.botLock,
+        (0x10 + index).toString(16),
+      ),
+    );
+    const baseTx = ccc.Transaction.default();
+    for (const cell of cells) {
+      baseTx.addInput(cell);
+      baseTx.addOutput(cell.cellOutput, cell.outputData);
+    }
+
+    const result = await fixture.sdk.buildConversionTransaction(
+      baseTx,
+      conversion(fixture, 2n * DEPOSIT, ccc.fixedPointFrom(100_000), cells),
+    );
+
+    // 60 base outputs leave no room for two requests and their markers plus change, nor
+    // for one request, its marker, and the order; the order alone fits.
+    expect(result).toMatchObject({ ok: true, conversion: { kind: "order" } });
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    expect(result.tx.outputs).toHaveLength(63);
+  });
+
+  it("throws the last completion failure when no CKB-to-iCKB candidate can be funded", async () => {
+    const fixture = baseTransactionFixture({ completion: "real" });
+    const lock = fixture.botLock;
+    const { signer } = fundedSigner(
+      [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")],
+      [lock],
+    );
+
+    await expect(
+      fixture.sdk.buildConversionTransaction(ccc.Transaction.default(), {
+        direction: "ckb-to-ickb",
+        amount: DEPOSIT,
+        lock,
+        signer,
+        context: conversionContext({
+          system: { ckbAvailable: ccc.fixedPointFrom(1_000_000) },
+          ckbAvailable: DEPOSIT,
+        }),
+      }),
+    ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_capacity" });
+  });
+
+  it("throws the last completion failure when no candidate can be funded", async () => {
+    const fixture = baseTransactionFixture({ completion: "real" });
+
+    await expect(
+      fixture.sdk.buildConversionTransaction(
+        ccc.Transaction.default(),
+        conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, ccc.fixedPointFrom(100)),
+      ),
+    ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_capacity" });
+  });
+});
+
+describe("completeFirstFundable", () => {
+  const tx = ccc.Transaction.default();
+
+  it("skips unrepresentable candidates, advances past policy rejections, and keeps the last error", async () => {
+    const attempts: number[] = [];
+    const complete = async (candidate: ccc.Transaction): Promise<ccc.Transaction> => {
+      await Promise.resolve();
+      if (candidate.outputs.length === 3) {
+        throw new DaoOutputLimitError(65);
+      }
+      return candidate;
+    };
+
+    const accepted = await completeFirstFundable(
+      [3, 2, 1, 0],
+      (count) => {
+        attempts.push(count);
+        return count === 2 ? undefined : transactionWithOutputs(count, script("11"));
+      },
+      complete,
+      (_, count) => count === 0,
+    );
+    const rejected = await completeFirstFundable(
+      [1],
+      () => tx,
+      complete,
+      () => false,
+    );
+    const exhausted = await completeFirstFundable(
+      [3],
+      () => transactionWithOutputs(3, script("11")),
+      complete,
+    );
+
+    expect(attempts).toEqual([3, 2, 1, 0]);
+    expect(accepted).toMatchObject({ candidate: 0 });
+    expect(rejected).toEqual({ error: undefined });
+    expect(exhausted).toMatchObject({ error: { name: "DaoOutputLimitError" } });
+  });
+
+  it("propagates failures that are not about fundability", async () => {
+    await expect(
+      completeFirstFundable(
+        [1],
+        () => tx,
+        async () => {
+          await Promise.resolve();
+          throw new TypeError("fetch failed");
+        },
+      ),
+    ).rejects.toThrow("fetch failed");
+  });
+});

@@ -51,10 +51,7 @@ export interface ReadyWithdrawalSelectionOptions<
   /** Maximum iCKB amount to cover with selected deposits. */
   maxAmount: bigint;
 
-  /** Minimum selected deposit count. Defaults to 1. */
-  minCount?: number;
-
-  /** Maximum selected deposit count. */
+  /** Maximum selected deposit count. Defaults to the stack maximum of 30. */
   maxCount?: number;
 
   /** Optional predicate for excluding deposits before selection. */
@@ -63,9 +60,3 @@ export interface ReadyWithdrawalSelectionOptions<
   /** Optional live anchor lookup for selected deposits. */
   requiredLiveDepositFor?: (deposit: T) => T | undefined;
 }
-
-export type ExactReadyWithdrawalSelectionOptions<
-  T extends WithdrawalDepositCandidate = IckbDepositCell,
-> = Omit<ReadyWithdrawalSelectionOptions<T>, "minCount" | "maxCount"> & {
-  count: number;
-};

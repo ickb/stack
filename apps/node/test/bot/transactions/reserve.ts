@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager, receiptPhase2Capacity } from "@ickb/sdk";
+import {
+  type BuildBaseTransactionOptions,
+  IckbError,
+  OrderManager,
+  receiptPhase2Capacity,
+} from "@ickb/sdk";
 
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -184,14 +189,21 @@ describe("buildTransaction reserve violation with withdrawals", () => {
 
     const result = await buildTransaction(runtime, state);
 
+    // Every withdrawal prefix fails the reserve predicate, so the match alone is tried and
+    // skipped by the post-completion guard.
     expect(result).toMatchObject({
       kind: "skipped",
       reason: "post_tx_ckb_reserve",
       actions: { matchedOrders: 0, withdrawalRequests: 0 },
       decision: {
+        rebalance: {
+          kind: "none",
+          reason: "no_fundable_withdrawal_prefix",
+          withdrawalCandidateCount: 2,
+        },
         skip: {
           reason: "post_tx_ckb_reserve",
-          attemptedActions: { matchedOrders: 1, withdrawalRequests: 2 },
+          attemptedActions: { matchedOrders: 1, withdrawalRequests: 0 },
         },
       },
     });
@@ -242,5 +254,68 @@ describe("buildTransaction reserve recovery with withdrawals", () => {
       decision: { rebalance: { kind: "withdraw", reason: "reserve_recovery" } },
     });
     expect(result.decision.skip).toBeUndefined();
+  });
+});
+
+describe("buildTransaction reserve recovery fallback", () => {
+  it("withdraws any ready deposit when no ring-surplus prefix can be funded", async () => {
+    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
+      completeSearchResult({ ckbDelta: 1n, udtDelta: -1n, partials: [testMatch("67")] }),
+    );
+    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+    const anchor = readyDeposit("21", 6n, 25n * 60n * 1000n);
+    const state = botState({
+      marketOrders: [testMatch("68").group],
+      availableCkbBalance: CKB_RESERVE - 50n,
+      availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
+      totalCkbBalance: CKB_RESERVE - 50n,
+      depositCapacity: ccc.fixedPointFrom(1000),
+      poolDeposits: [
+        readyDeposit("20", 4n, 20n * 60n * 1000n),
+        anchor,
+        readyDeposit("22", 5n, 40n * 60n * 1000n),
+      ],
+    });
+    // The fixture SDK builds no inputs, so each attempt is keyed by whether it spends the anchor.
+    const attempts: boolean[] = [];
+    const buildBaseTransaction = vi.fn(
+      (txLike: ccc.TransactionLike, options?: BuildBaseTransactionOptions) => {
+        attempts.push(options?.withdrawalRequest?.deposits.includes(anchor) ?? false);
+        return ccc.Transaction.from(txLike);
+      },
+    );
+    // Only a transaction that spends the anchor can be funded: every surplus prefix fails.
+    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
+      await Promise.resolve();
+      if (attempts.at(-1) !== true) {
+        throw new IckbError("short", { code: "insufficient_capacity" });
+      }
+      return ccc.Transaction.from(txLike);
+    });
+
+    const result = await buildTransaction(
+      botRuntime({
+        primaryLock: script("1f"),
+        sdk: { buildBaseTransaction },
+        completeTransaction,
+      }),
+      state,
+    );
+
+    expect(result).toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 3 },
+      decision: {
+        rebalance: {
+          kind: "withdraw",
+          reason: "reserve_recovery",
+          withdrawalRequestCount: 3,
+          withdrawalCandidateCount: 3,
+          requiredLiveDepositCount: 0,
+        },
+      },
+    });
+    // Surplus prefixes [20, 22] and [20], then the any-deposit prefix [20, 21, 22].
+    expect(attempts).toEqual([false, false, true]);
   });
 });

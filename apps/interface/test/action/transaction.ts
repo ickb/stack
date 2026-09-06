@@ -5,7 +5,6 @@ import { buildTransactionPreview } from "../../src/action/transaction.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import {
   buildConversionTransactionMock,
-  completeTransactionMock,
   context,
   failedPlan,
   successfulPlan,
@@ -18,7 +17,7 @@ afterEach(() => {
 });
 
 describe("buildTransactionPreview", () => {
-  it("delegates protocol planning to the SDK and completes the partial transaction", async () => {
+  it("delegates planning and completion to the SDK and reports the completed fee", async () => {
     const tx = txWithInput("99");
     const notice = {
       kind: "dust-ickb-to-ckb" as const,
@@ -34,15 +33,12 @@ describe("buildTransactionPreview", () => {
         conversionNotice: notice,
       }),
     );
-    const completeTransaction = completeTransactionMock();
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(42n);
     const txContext = context({
       ckbAvailable: 7n,
       system: { ...context().system, feeRate: 9n },
     });
-    const config = walletConfigWith({
-      sdk: { buildConversionTransaction, completeTransaction },
-    });
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
     const txInfo = await buildTransactionPreview(txContext, true, 7n, config);
 
@@ -52,13 +48,11 @@ describe("buildTransactionPreview", () => {
       direction: "ckb-to-ickb",
       amount: 7n,
       lock: config.primaryLock,
+      signer: config.signer,
       context: txContext,
     });
-    expect(completeTransaction).toHaveBeenCalledWith(tx, {
-      signer: config.signer,
-      feeRate: 9n,
-    });
     expect(txInfo).toMatchObject({
+      tx,
       error: "",
       fee: 42n,
       estimatedMaturity: 123n,
@@ -106,10 +100,6 @@ describe("buildTransactionPreview failure messages", () => {
   it("maps SDK planner failures to interface copy", async () => {
     const cases: Array<[ConversionTransactionFailureReason, string]> = [
       ["amount-too-small", "Enter a larger amount"],
-      [
-        "not-enough-ready-deposits",
-        "Not enough ready liquidity. Lower the amount or wait",
-      ],
       ["amount-negative", "Amount cannot be negative"],
       ["insufficient-ckb", "Not enough available CKB for this amount"],
       ["insufficient-ickb", "Not enough available iCKB for this amount"],
@@ -154,41 +144,25 @@ describe("buildTransactionPreview failure messages", () => {
 });
 
 describe("buildTransactionPreview completion", () => {
-  it("uses SDK completion instead of local UDT, fee, and DAO steps", async () => {
-    const calls: string[] = [];
+  it("does not complete locally: the SDK returns the funded transaction", async () => {
     const completeFeeBy = vi
       .spyOn(ccc.Transaction.prototype, "completeFeeBy")
-      .mockImplementation(async () => {
-        await Promise.resolve();
-        calls.push("fee");
-        return [0, false];
-      });
-    const completeTransaction = vi
-      .fn<WalletConfig["sdk"]["completeTransaction"]>()
-      .mockImplementation(async (txLike) => {
-        calls.push("sdk-complete");
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      });
+      .mockResolvedValue([0, false]);
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await buildTransactionPreview(
       context({ ckbAvailable: 1n }),
       true,
       1n,
-      walletConfigWith({
-        sdk: { completeTransaction },
-      }),
+      walletConfigWith({}),
     );
 
-    expect(completeTransaction).toHaveBeenCalledTimes(1);
     expect(completeFeeBy).not.toHaveBeenCalled();
-    expect(calls).toEqual(["sdk-complete"]);
   });
 });
 
 describe("buildTransactionPreview thrown failures", () => {
-  it("surfaces planner and completion failures as TxInfo errors", async () => {
+  it("surfaces thrown SDK failures as TxInfo errors", async () => {
     const plannerFailure = walletConfigWith({
       sdk: {
         buildConversionTransaction: vi
@@ -199,16 +173,5 @@ describe("buildTransactionPreview thrown failures", () => {
     await expect(
       buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, plannerFailure),
     ).resolves.toMatchObject({ error: "planner failed" });
-
-    const completionFailure = walletConfigWith({
-      sdk: {
-        completeTransaction: vi
-          .fn<WalletConfig["sdk"]["completeTransaction"]>()
-          .mockRejectedValue(new Error("completion failed")),
-      },
-    });
-    await expect(
-      buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, completionFailure),
-    ).resolves.toMatchObject({ error: "completion failed" });
   });
 });

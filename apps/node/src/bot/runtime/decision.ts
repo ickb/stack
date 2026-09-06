@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { Match, MatchDiagnostics } from "@ickb/sdk";
 
-import type { RebalancePlan } from "../policy.ts";
 import { auditSummary } from "./audit.ts";
 import { summarizeBotState, transactionShape } from "./support.ts";
 import type {
@@ -10,6 +9,7 @@ import type {
   BotMatchReason,
   BotMatchSearchEvidence,
   BotState,
+  RebalanceOutcome,
   Runtime,
 } from "./types.ts";
 
@@ -18,7 +18,6 @@ export function buildDecisionTranscript({
   state,
   match,
   rebalance,
-  outputSlots,
   actions,
   tx,
   matchReason: explicitMatchReason,
@@ -27,8 +26,7 @@ export function buildDecisionTranscript({
   runtime: Runtime;
   state: BotState;
   match: Pick<Match, "partials" | "ckbDelta" | "udtDelta" | "diagnostics">;
-  rebalance: RebalancePlan;
-  outputSlots: number;
+  rebalance: RebalanceOutcome;
   actions: BotActions;
   tx: ccc.Transaction;
   matchReason?: BotMatchReason;
@@ -51,7 +49,7 @@ export function buildDecisionTranscript({
       ...(match.diagnostics === undefined ? {} : { diagnostics: match.diagnostics }),
       ...(matchSearch === undefined ? {} : { search: matchSearch }),
     },
-    rebalance: rebalanceSummary(rebalance, outputSlots, state, match),
+    rebalance: rebalanceSummary(rebalance, state, match),
     audit: auditSummary({ runtime, state, match, rebalance }),
     actions,
     fee: {
@@ -83,8 +81,7 @@ function matchedOrderMasterOutPoints(
 }
 
 function rebalanceSummary(
-  rebalance: RebalancePlan,
-  outputSlots: number,
+  rebalance: RebalanceOutcome,
   state: BotState,
   match: { ckbDelta: bigint; udtDelta: bigint },
 ): BotDecisionTranscript["rebalance"] {
@@ -98,7 +95,9 @@ function rebalanceSummary(
           requiredLiveDepositCount: rebalance.requiredLiveDeposits?.length ?? 0,
         }
       : {}),
-    outputSlots,
+    ...(rebalance.withdrawalCandidateCount === undefined
+      ? {}
+      : { withdrawalCandidateCount: rebalance.withdrawalCandidateCount }),
     projectedAvailableCkb: state.availableCkbBalance + match.ckbDelta,
     projectedAvailableIckb: state.availableIckbBalance + match.udtDelta,
   };

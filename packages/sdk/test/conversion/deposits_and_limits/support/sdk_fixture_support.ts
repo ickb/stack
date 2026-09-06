@@ -1,8 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   asyncPassthroughTransaction,
+  FakeCkbSigner,
   passthroughTransaction,
   script,
+  StubClient,
 } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
 import {
@@ -36,6 +38,7 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 export function baseTransactionFixture(
   options: {
+    completion?: "passthrough" | "real";
     daoDeps?: ccc.CellDep[];
     logicDeps?: ccc.CellDep[];
     orderDeps?: ccc.CellDep[];
@@ -65,15 +68,28 @@ export function baseTransactionFixture(
     orderManager,
     ownedOwner,
     ownedOwnerManager,
-    sdk: new IckbSdk({
-      ickbUdt: fakeIckbUdt(udt),
-      ownedOwner: ownedOwnerManager,
-      ickbLogic: logicManager,
-      order: orderManager,
-      bots: [botLock],
-    }),
+    sdk: withCompletion(
+      new IckbSdk({
+        ickbUdt: fakeIckbUdt(udt),
+        ownedOwner: ownedOwnerManager,
+        ickbLogic: logicManager,
+        order: orderManager,
+        bots: [botLock],
+      }),
+      options.completion,
+    ),
     udt,
   };
+}
+
+function withCompletion(
+  sdk: IckbSdk,
+  completion: "passthrough" | "real" = "passthrough",
+): IckbSdk {
+  if (completion === "passthrough") {
+    vi.spyOn(sdk, "completeTransaction").mockImplementation(asyncPassthroughTransaction);
+  }
+  return sdk;
 }
 
 export interface BaseTransactionFixture {
@@ -89,7 +105,13 @@ export interface BaseTransactionFixture {
   udt: ccc.Script;
 }
 
-export function testSdk(): SdkFixture {
+/**
+ * SDK over fake managers. Completion is a passthrough unless `completion: "real"`, so
+ * planning tests see the built transaction and walk tests see the real completer.
+ */
+export function testSdk(
+  options: { completion?: "passthrough" | "real" } = {},
+): SdkFixture {
   const lock = script("11");
   const logicManager = new LogicManager(
     script("22"),
@@ -103,20 +125,51 @@ export function testSdk(): SdkFixture {
   );
   const orderManager = new OrderManager(script("55"), [], script("66"));
   const ickbUdt = fakeIckbUdt();
-  return {
-    sdk: new IckbSdk({
-      ickbUdt,
-      ownedOwner: ownedOwnerManager,
-      ickbLogic: logicManager,
-      order: orderManager,
-      bots: [],
-    }),
+  const sdk = new IckbSdk({
     ickbUdt,
-    logicManager,
-    ownedOwnerManager,
-    orderManager,
-    lock,
-  };
+    ownedOwner: ownedOwnerManager,
+    ickbLogic: logicManager,
+    order: orderManager,
+    bots: [],
+  });
+  withCompletion(sdk, options.completion);
+  return { sdk, ickbUdt, logicManager, ownedOwnerManager, orderManager, lock };
+}
+
+/** Signer for planning tests; completion is a passthrough, so it never scans. */
+export const stubSigner: ccc.Signer = new ccc.SignerCkbScriptReadonly(
+  baseClient,
+  script("11"),
+);
+
+/** Signer whose client serves the given committed cells to the real completer. */
+export function fundedSigner(
+  cells: readonly ccc.Cell[],
+  locks: readonly ccc.Script[],
+): { client: StubClient; signer: ccc.Signer } {
+  const client = new StubClient({
+    findCellsPaged: async (): ReturnType<ccc.Client["findCellsPaged"]> => {
+      await Promise.resolve();
+      throw new Error("Completion must not use CCC's cache-recording cell scan");
+    },
+    findCellsPagedNoCache: async (
+      keyLike,
+      _order,
+      _limit,
+      after,
+    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
+      await Promise.resolve();
+      const { script: lock } = ccc.ClientIndexerSearchKey.from(keyLike);
+      return {
+        cells:
+          after === undefined
+            ? cells.filter((cell) => cell.cellOutput.lock.eq(lock))
+            : [],
+        lastCursor: after === undefined ? "test:end" : "test:done",
+      };
+    },
+  });
+  return { client, signer: new FakeCkbSigner(client, [...locks]) };
 }
 
 export interface SdkFixture {
@@ -159,15 +212,6 @@ export function mockPassthroughMint(orderManager: OrderManager): void {
   vi.spyOn(orderManager, "mint").mockImplementation(passthroughTransaction);
 }
 
-export function mockUnitDeposit(
-  logicManager: LogicManager,
-): MockInstance<LogicManager["deposit"]> {
-  return vi.spyOn(logicManager, "deposit").mockImplementation((txLike, quantity) => {
-    expect(quantity).toBe(1);
-    return passthroughTransaction(txLike);
-  });
-}
-
 export async function expectIckbToCkbDirectPlusOrder(options: {
   sdk: IckbSdk;
   lock: ccc.Script;
@@ -179,6 +223,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       lock: options.lock,
+      signer: stubSigner,
       context: conversionContext({
         system: {
           exchangeRatio: options.exchangeRatio,

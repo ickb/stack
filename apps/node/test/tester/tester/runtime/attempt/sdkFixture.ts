@@ -36,6 +36,7 @@ describe("runtimeDefaultSdk", () => {
       direction: CKB_TO_ICKB_DIRECTION,
       amount: 1n,
       lock: script("11"),
+      signer: runtimeWithSdk({}).signer,
       context: testerState({ availableCkbBalance: 0n }).conversionContext,
     });
 

@@ -20,7 +20,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP,
         ckbBalance: threshold - 1n,
@@ -39,7 +38,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP,
         ckbBalance: threshold,
@@ -57,7 +55,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     const third = readyDeposit(5n, 40n * 60n * 1000n);
 
     const plan = planRebalance({
-      outputSlots: 6,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + 9n,
       ckbBalance: 2000n * CKB,
@@ -79,7 +76,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does not seed or withdraw ring inventory when the reserve gate fails", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP,
         ckbBalance: 1000n * CKB + CKB_RESERVE - 1n,
@@ -93,7 +89,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("seeds ring inventory even when one more deposit would cross the withdrawal floor", () => {
     expect(
       planRebalance({
-        outputSlots: 4,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE - ICKB_DEPOSIT_CAP + 1n,
         ckbBalance: 2000n * CKB,

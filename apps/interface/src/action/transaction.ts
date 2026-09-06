@@ -21,7 +21,6 @@ const conversionFailureMessages: Record<
   "insufficient-ckb": "Not enough available CKB for this amount",
   "insufficient-ickb": "Not enough available iCKB for this amount",
   "amount-too-small": "Enter a larger amount",
-  "not-enough-ready-deposits": "Not enough ready liquidity. Lower the amount or wait",
 };
 
 export interface TransactionContext extends ConversionTransactionContext {
@@ -47,6 +46,7 @@ export async function buildTransactionPreview(
         direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
         amount,
         lock: walletConfig.primaryLock,
+        signer: walletConfig.signer,
         context,
       },
     );
@@ -57,49 +57,20 @@ export async function buildTransactionPreview(
       );
     }
 
-    return await finalizeTransaction({
+    // The SDK returns the transaction completed and funded; only signing remains.
+    return Object.freeze({
       tx: result.tx,
+      error: "",
+      fee: await result.tx.getFee(walletConfig.signer.client),
       estimatedMaturity: result.estimatedMaturity,
-      feeRate: context.system.feeRate,
-      walletConfig,
       conversionKind: result.conversion.kind,
-      conversionNotice: result.conversionNotice,
+      ...(result.conversionNotice === undefined
+        ? {}
+        : { conversionNotice: result.conversionNotice }),
     });
   } catch (error) {
     return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
   }
-}
-
-interface FinalizeTransactionParams {
-  readonly tx: ccc.Transaction;
-  readonly estimatedMaturity: bigint;
-  readonly feeRate: ccc.Num;
-  readonly walletConfig: WalletConfig;
-  readonly conversionKind: NonNullable<TxInfo["conversionKind"]>;
-  readonly conversionNotice?: NonNullable<TxInfo["conversionNotice"]>;
-}
-
-async function finalizeTransaction({
-  tx,
-  estimatedMaturity,
-  feeRate,
-  walletConfig,
-  conversionKind,
-  conversionNotice,
-}: FinalizeTransactionParams): Promise<TxInfo> {
-  const completedTx = await walletConfig.sdk.completeTransaction(tx, {
-    signer: walletConfig.signer,
-    feeRate,
-  });
-
-  return Object.freeze({
-    tx: completedTx,
-    error: "",
-    fee: await completedTx.getFee(walletConfig.signer.client),
-    estimatedMaturity,
-    conversionKind,
-    ...(conversionNotice !== undefined ? { conversionNotice } : {}),
-  });
 }
 
 function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {

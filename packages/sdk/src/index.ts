@@ -47,6 +47,8 @@ export type {
   WaitTransactionArguments,
   WaitTransactionOptions,
 } from "./sdk.ts";
+export { completeFirstFundable } from "./withdrawal/withdrawal_completion.ts";
+export type { FundableCompletion } from "./withdrawal/withdrawal_completion.ts";
 export {
   ringRequiredLiveDepositFor,
   ringSegmentAnchor,
@@ -54,6 +56,7 @@ export {
   ringSurplusDepositFilter,
   ringTargetSegmentIndex,
   selectReadyWithdrawalDeposits,
+  withRequiredLiveDeposits,
 } from "./withdrawal/withdrawal_selection.ts";
 export type {
   ReadyWithdrawalSelection,

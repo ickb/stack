@@ -4,6 +4,7 @@ import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
+  stubSigner,
   testSdk,
 } from "./support/sdk_fixture_support.ts";
 
@@ -47,6 +48,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n + remainder,
       lock,
+      signer: stubSigner,
       context: conversionContext({
         system: { ckbAvailable: ICKB_DEPOSIT_CAP * 3n },
         ckbAvailable: ICKB_DEPOSIT_CAP * 2n + remainder,

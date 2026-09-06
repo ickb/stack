@@ -19,7 +19,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 1n,
         ckbBalance: 2000n * CKB,
@@ -38,7 +37,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 5n,
         ckbBalance: 2000n * CKB,
@@ -53,30 +51,10 @@ describe(PLAN_REBALANCE_SUITE, () => {
     });
   });
 
-  it("limits withdrawal requests by the available output slots", () => {
-    const first = readyDeposit(3n, 0n);
-    const second = readyDeposit(3n, 20n * 60n * 1000n);
-    const third = readyDeposit(3n, 40n * 60n * 1000n);
-
-    const plan = planRebalance({
-      outputSlots: 5,
-      tip: TIP,
-      ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + 10n,
-      ckbBalance: 2000n * CKB,
-      depositCapacity: 1000n,
-      ickbRefillThreshold: TARGET_ICKB_BALANCE,
-      readyDeposits: [first, second, third],
-      poolDepositsRest: NO_POOL_REST,
-    });
-
-    expect(plan).toMatchObject({ kind: "withdraw", deposits: [second, third] });
-  });
-
   it("caps withdrawal requests at thirty deposits", () => {
     const readyDeposits = Array.from({ length: 31 }, () => readyDeposit(1n, 0n));
 
     const plan = planRebalance({
-      outputSlots: 100,
       tip: TIP,
       ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + 100n,
       ckbBalance: 2000n * CKB,
@@ -98,7 +76,6 @@ describe("planRebalanceWithdrawal diagnostics", () => {
 
     expect(
       planRebalanceWithdrawal({
-        outputSlots: 2,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 2n,
         ckbBalance: 2000n * CKB,
@@ -112,7 +89,6 @@ describe("planRebalanceWithdrawal diagnostics", () => {
 
     expect(
       planRebalanceWithdrawal({
-        outputSlots: 2,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE,
         ckbBalance: 2000n * CKB,
@@ -160,7 +136,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
   it("does nothing when iCKB is above the withdrawal floor but ring surplus would cut below the buffer", () => {
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + 3n,
         ckbBalance: 2000n * CKB,
@@ -178,7 +153,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
 
     expect(
       planRebalance({
-        outputSlots: 6,
         tip: TIP,
         ickbBalance: TARGET_ICKB_BALANCE + ICKB_DEPOSIT_CAP + CKB,
         ckbBalance: 2000n * CKB,

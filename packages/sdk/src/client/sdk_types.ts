@@ -12,7 +12,6 @@ import type { ValueComponents } from "../utils/index.ts";
 export const MAX_DIRECT_DEPOSITS = 60;
 /** Maximum withdrawal requests accepted by one SDK conversion. @public */
 export const MAX_WITHDRAWAL_REQUESTS = 30;
-export const ORDER_MINT_OUTPUTS = 2;
 export const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
 export const NOTHING_TO_DO_REASON: ConversionTransactionFailureReason = "nothing-to-do";
 
@@ -99,17 +98,11 @@ export interface ConversionTransactionOptions {
   /** User lock for newly created user-owned outputs. */
   lock: ccc.Script;
 
+  /** Signer whose committed cells fund the completed transaction. */
+  signer: ccc.Signer;
+
   /** Sampled state used to plan this conversion. */
   context: ConversionTransactionContext;
-
-  /** Optional per-transaction planning limits. */
-  limits?: {
-    /** Direct DAO deposit cap from zero through the stack maximum of 60. */
-    maxDirectDeposits?: number;
-
-    /** Withdrawal request cap from zero through the stack maximum of 30. */
-    maxWithdrawalRequests?: number;
-  };
 }
 
 /**
@@ -122,7 +115,6 @@ export type ConversionTransactionFailureReason =
   | "insufficient-ckb"
   | "insufficient-ickb"
   | "amount-too-small"
-  | "not-enough-ready-deposits"
   | "nothing-to-do";
 
 /**
@@ -165,7 +157,7 @@ export interface ConversionMetadata {
 export type ConversionTransactionResult =
   | {
       ok: true;
-      /** Partial transaction. Callers still own iCKB completion, fee completion, signing, and send. */
+      /** Completed transaction, funded from the signer's committed cells. Callers own signing and send. */
       tx: ccc.Transaction;
       /** Estimated maturity timestamp for the conversion result. */
       estimatedMaturity: bigint;

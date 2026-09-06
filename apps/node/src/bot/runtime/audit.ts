@@ -1,10 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { receiptPhase2Capacity } from "@ickb/sdk";
 
-import type { RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import { DIRECT_DEPOSIT_FEE_HEADROOM, maxBigInt } from "./support.ts";
-import type { BotDecisionTranscript, BotState, Runtime } from "./types.ts";
+import type {
+  BotDecisionTranscript,
+  BotState,
+  RebalanceOutcome,
+  Runtime,
+} from "./types.ts";
 
 const OWNED_OWNER_TYPE_BYTES = 33;
 const OWNER_DATA_BYTES = 4;
@@ -19,7 +23,7 @@ export function auditSummary({
   runtime: Runtime;
   state: BotState;
   match: { ckbDelta: bigint; udtDelta: bigint };
-  rebalance: RebalancePlan;
+  rebalance: RebalanceOutcome;
   fee?: bigint;
 }): BotDecisionTranscript["audit"] {
   const directCost = directDepositCost(runtime, state, rebalance);
@@ -62,14 +66,14 @@ export function auditSummary({
 function directDepositCost(
   runtime: Runtime,
   state: BotState,
-  rebalance: RebalancePlan,
+  rebalance: RebalanceOutcome,
 ): bigint {
   return rebalance.kind === "deposit"
     ? state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock)
     : 0n;
 }
 
-function withdrawalRequestCost(runtime: Runtime, rebalance: RebalancePlan): bigint {
+function withdrawalRequestCost(runtime: Runtime, rebalance: RebalanceOutcome): bigint {
   if (rebalance.kind !== "withdraw") {
     return 0n;
   }
@@ -83,9 +87,9 @@ function withdrawalRequestCost(runtime: Runtime, rebalance: RebalancePlan): bigi
 }
 
 function selectedRingAudit(
-  rebalance: RebalancePlan,
+  rebalance: RebalanceOutcome,
 ): Pick<BotDecisionTranscript["audit"], "selectedRing"> {
-  const ring = rebalance.diagnostics?.ring;
+  const ring = "diagnostics" in rebalance ? rebalance.diagnostics?.ring : undefined;
   if (ring === undefined) {
     return {};
   }

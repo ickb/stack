@@ -1,9 +1,7 @@
 import {
   MAX_DIRECT_DEPOSITS,
-  MAX_WITHDRAWAL_REQUESTS,
   type CkbToIckbConversionPlan,
   type ConversionOrder,
-  type ConversionTransactionFailureReason,
   type ConversionTransactionOptions,
   type IckbToCkbConversionPlan,
   type PoolDepositState,
@@ -20,95 +18,70 @@ import { compareBigInt } from "../utils/index.ts";
 import {
   ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
-  selectReadyWithdrawalDepositCandidatesForCounts,
+  selectReadyWithdrawalDeposits,
+  withRequiredLiveDeposits,
 } from "../withdrawal/withdrawal_selection.ts";
 import {
-  directWithdrawalSurplus,
   maturityBucket,
   readyPoolDeposits,
   sumDirectWithdrawalSurplus,
   sumUdtValue,
 } from "./sdk_value_helpers.ts";
 
-export function ckbToIckbConversionPlans(options: ConversionTransactionOptions): {
-  lastFailure: ConversionTransactionFailureReason | undefined;
-  plans: CkbToIckbConversionPlan[];
-} {
+/** Plans every deposit count from the most the amount covers down to zero, skipping unrepresentable remainders. */
+export function ckbToIckbConversionPlans(
+  options: ConversionTransactionOptions,
+): CkbToIckbConversionPlan[] {
   const { amount, context } = options;
-  const maxDirectDeposits = options.limits?.maxDirectDeposits ?? MAX_DIRECT_DEPOSITS;
   const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
-    depositQuotient > BigInt(maxDirectDeposits)
-      ? maxDirectDeposits
+    depositQuotient > BigInt(MAX_DIRECT_DEPOSITS)
+      ? MAX_DIRECT_DEPOSITS
       : Number(depositQuotient);
   const plans: CkbToIckbConversionPlan[] = [];
-  let lastFailure: ConversionTransactionFailureReason | undefined;
-
   for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
     const plan = ckbToIckbConversionPlan(options, depositCapacity, depositCount);
-    if (plan === undefined) {
-      lastFailure = "amount-too-small";
-      continue;
-    }
-    plans.push(plan);
-  }
-
-  return { lastFailure, plans };
-}
-
-export function ickbToCkbConversionPlans(
-  options: ConversionTransactionOptions,
-  poolDeposits: PoolDepositState,
-): {
-  lastFailure: ConversionTransactionFailureReason | undefined;
-  plans: IckbToCkbConversionPlan[];
-} {
-  const { amount, context } = options;
-  const maxWithdrawalRequests =
-    options.limits?.maxWithdrawalRequests ?? MAX_WITHDRAWAL_REQUESTS;
-  const readyDeposits = readyPoolDeposits(poolDeposits, context.system.tip);
-  const ringSurplus = ringSurplusDepositFilter(poolDeposits.deposits);
-  const ringRequiredLiveDeposit = ringRequiredLiveDepositFor(poolDeposits.deposits);
-  const maxCount = Math.min(readyDeposits.length, maxWithdrawalRequests);
-  const positiveCounts = Array.from({ length: maxCount }, (_, index) => maxCount - index);
-  const selectionsByCount = new Map(
-    selectReadyWithdrawalDepositCandidatesForCounts({
-      readyDeposits,
-      tip: context.system.tip,
-      maxAmount: amount,
-      counts: positiveCounts,
-      canSelectDeposit: ringSurplus,
-      requiredLiveDepositFor: ringRequiredLiveDeposit,
-      score: (deposit) => directWithdrawalSurplus(deposit, context.system.exchangeRatio),
-      maturityBucket: (deposit) =>
-        maturityBucket(deposit.maturity.toUnix(context.system.tip)),
-    }),
-  );
-  selectionsByCount.set(0, [{ deposits: [], requiredLiveDeposits: [] }]);
-  const plans: IckbToCkbConversionPlan[] = [];
-  let lastFailure: ConversionTransactionFailureReason | undefined;
-
-  for (const [count, selections] of selectionsByCount) {
-    if (count > 0 && selections.length === 0) {
-      lastFailure = "not-enough-ready-deposits";
-      continue;
-    }
-    for (const selection of selections) {
-      const plan = ickbToCkbConversionPlan(
-        options,
-        selection.deposits,
-        selection.requiredLiveDeposits,
-      );
-      if (plan === undefined) {
-        lastFailure = "amount-too-small";
-        continue;
-      }
+    if (plan !== undefined) {
       plans.push(plan);
     }
   }
+  return plans;
+}
 
-  return { lastFailure, plans: plans.toSorted(compareIckbToCkbPlans) };
+/**
+ * Plans every prefix of the greedy ready-deposit selection, longest first, ranked for the
+ * completion walk. The prefix shape keeps ring classification frozen: a prefix of surplus
+ * deposits stays surplus with the same anchors pinned (decisions amendments 40, 41, 46(a)).
+ */
+export function ickbToCkbConversionPlans(
+  options: ConversionTransactionOptions,
+  poolDeposits: PoolDepositState,
+): IckbToCkbConversionPlan[] {
+  const { amount, context } = options;
+  const { deposits } = selectReadyWithdrawalDeposits({
+    readyDeposits: readyPoolDeposits(poolDeposits, context.system.tip),
+    tip: context.system.tip,
+    maxAmount: amount,
+    canSelectDeposit: ringSurplusDepositFilter(poolDeposits.deposits),
+  });
+  const requiredLiveDepositFor = ringRequiredLiveDepositFor(poolDeposits.deposits);
+  const plans: IckbToCkbConversionPlan[] = [];
+  for (let count = deposits.length; count >= 0; count -= 1) {
+    const selection = withRequiredLiveDeposits(
+      deposits.slice(0, count),
+      requiredLiveDepositFor,
+    );
+    const plan = ickbToCkbConversionPlan(
+      options,
+      selection.deposits,
+      selection.requiredLiveDeposits,
+    );
+    if (plan !== undefined) {
+      plans.push(plan);
+    }
+  }
+  return plans.toSorted(compareIckbToCkbPlans);
 }
 
 function ckbToIckbConversionPlan(
@@ -234,8 +207,6 @@ function compareIckbToCkbPlans(
   if (surplusCompare !== 0) {
     return surplusCompare;
   }
-  const directCompare = compareBigInt(right.directUdtValue, left.directUdtValue);
-  return directCompare !== 0
-    ? directCompare
-    : right.selectedDeposits.length - left.selectedDeposits.length;
+  // Prefixes of one list never tie on direct value; a stable sort keeps their order if they did.
+  return compareBigInt(right.directUdtValue, left.directUdtValue);
 }

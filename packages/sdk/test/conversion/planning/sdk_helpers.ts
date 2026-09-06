@@ -4,9 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   baseTransactionOptions,
   conversionKind,
-  plannedDaoOutputLimitError,
 } from "../../../src/conversion/sdk_conversion_common.ts";
-import { DaoOutputLimitError } from "../../../src/dao/index.ts";
 import { Info } from "../../../src/order/index.ts";
 import {
   conversionContext,
@@ -81,13 +79,5 @@ describe("sdk helper coverage", () => {
     await sdk.request(ccc.Transaction.default(), lock, info, amounts);
 
     expect(mint).toHaveBeenCalledWith(expect.any(ccc.Transaction), lock, info, amounts);
-  });
-
-  it("covers DAO output planning", () => {
-    const tx = ccc.Transaction.default();
-    const limitError = plannedDaoOutputLimitError(tx, 65, true);
-
-    expect(plannedDaoOutputLimitError(tx, 65, false)).toBeUndefined();
-    expect(limitError).toBeInstanceOf(DaoOutputLimitError);
   });
 });

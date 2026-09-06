@@ -1,9 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  completeFirstFundable,
+  type IckbDepositCell,
   type Match,
   type MatchSearchResult,
   OrderManager,
   receiptPhase2Capacity,
+  ringRequiredLiveDepositFor,
+  withRequiredLiveDeposits,
 } from "@ickb/sdk";
 
 import { planRebalance } from "../policy.ts";
@@ -17,7 +21,7 @@ import {
   isMatchOnly,
   MATCH_STEP_DIVISOR,
   matchableCkb,
-  MAX_OUTPUTS_BEFORE_CHANGE,
+  MAX_MATCH_PARTIALS,
   maxBigInt,
   usefulMatchFloors,
 } from "./support.ts";
@@ -29,6 +33,7 @@ import type {
   BuildTransactionResult,
   BuildTransactionSkipReason,
   CandidateTransaction,
+  RebalanceOutcome,
   Runtime,
 } from "./types.ts";
 
@@ -36,21 +41,46 @@ type CompletedDecisionTranscript = BotDecisionTranscript & {
   fee: BotDecisionTranscript["fee"] & { estimated: bigint };
 };
 
+interface MatchOutcome {
+  match: Match;
+  searchResult: MatchSearchResult;
+  tx: ccc.Transaction;
+}
+
 /**
  * Plans the bot transaction for the current state, then applies fee and reserve gates.
  *
- * @remarks Matching is evaluated before rebalancing. Rebalance planning receives
- * only the output slots left by the match candidate so the final transaction has
- * room for fee/change completion.
+ * @remarks Matching is evaluated before rebalancing. A withdrawal rebalance names greedy
+ * candidates; the completion walk decides how many requests the transaction carries, with
+ * the reserve check as its acceptance predicate (decisions amendment 41).
  */
 export async function buildTransaction(
   runtime: Runtime,
   state: BotState,
 ): Promise<BuildTransactionResult> {
-  const prepared = prepareCandidateTransaction(runtime, state);
-  const { match, candidate, outputSlots } = prepared;
-  const actionCount = actionTotal(candidate.actions);
-  if (actionCount === 0) {
+  const matched = matchOutcome(runtime, state);
+  const rebalance = planRebalanceForMatch(runtime, state, matched);
+  if (rebalance.kind === "withdraw") {
+    const built = await buildWithdrawalTransaction(runtime, state, matched, rebalance);
+    if (built !== undefined) {
+      return built;
+    }
+  }
+  const candidate = buildCandidateTransaction({
+    runtime,
+    state,
+    matched,
+    rebalance:
+      rebalance.kind === "withdraw"
+        ? {
+            kind: "none",
+            reason: "no_fundable_withdrawal_prefix",
+            withdrawalCandidateCount: rebalance.deposits.length,
+          }
+        : rebalance,
+  });
+  const { match } = matched;
+  if (actionTotal(candidate.actions) === 0) {
     const matchSearch = candidate.decision.match.search;
     if (matchSearch !== undefined && match.partials.length === 0) {
       return skippedResult(
@@ -62,26 +92,12 @@ export async function buildTransaction(
     }
     return skippedResult("no_actions", candidate.actions, candidate.decision);
   }
-  if (candidate.tx.outputs.length > MAX_OUTPUTS_BEFORE_CHANGE) {
-    return skippedResult(
-      "output_limit",
-      emptyActions(),
-      {
-        ...candidate.decision,
-        actions: emptyActions(),
-      },
-      {
-        attemptedActions: candidate.actions,
-      },
-    );
-  }
 
   const { tx, decision } = await completeCandidateTransaction({
     runtime,
     state,
     match,
     candidate,
-    outputSlots,
   });
   const reserveCheck = decision.audit.reserveCheck;
   if (
@@ -91,13 +107,8 @@ export async function buildTransaction(
     return skippedResult(
       "post_tx_ckb_reserve",
       emptyActions(),
-      {
-        ...decision,
-        actions: emptyActions(),
-      },
-      {
-        attemptedActions: candidate.actions,
-      },
+      { ...decision, actions: emptyActions() },
+      { attemptedActions: candidate.actions },
     );
   }
 
@@ -115,16 +126,9 @@ export async function buildTransaction(
   return { kind: "built", tx, actions: candidate.actions, decision };
 }
 
-function prepareCandidateTransaction(
-  runtime: Runtime,
-  state: BotState,
-): {
-  match: Match;
-  candidate: CandidateTransaction;
-  outputSlots: number;
-} {
+function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   // Match allowance scales with current deposit capacity, which keeps small
-  // partial matches from consuming output slots without meaningful inventory gain.
+  // partial matches from consuming outputs without meaningful inventory gain.
   const ckbAllowanceStep = maxBigInt(1n, state.depositCapacity / MATCH_STEP_DIVISOR);
   const searchResult = OrderManager.bestMatch(
     state.marketOrders,
@@ -136,19 +140,27 @@ function prepareCandidateTransaction(
     {
       feeRate: state.system.feeRate,
       ckbAllowanceStep,
-      maxPartials: MAX_OUTPUTS_BEFORE_CHANGE,
+      maxPartials: MAX_MATCH_PARTIALS,
     },
   );
   const match = searchResult.match;
+  return {
+    match,
+    searchResult,
+    tx: runtime.managers.order.addMatch(ccc.Transaction.default(), match),
+  };
+}
+
+function planRebalanceForMatch(
+  runtime: Runtime,
+  state: BotState,
+  { match, searchResult }: MatchOutcome,
+): ReturnType<typeof planRebalance> {
   const usefulFloors =
     searchResult.kind === "complete"
       ? usefulMatchFloors(match.diagnostics)
       : { ckb: 0n, ickb: 0n };
-  const tx = runtime.managers.order.addMatch(ccc.Transaction.default(), match);
-
-  const outputSlots = Math.max(0, MAX_OUTPUTS_BEFORE_CHANGE - tx.outputs.length);
-  const rebalance = planRebalance({
-    outputSlots,
+  return planRebalance({
     tip: state.system.tip,
     ickbBalance: state.availableIckbBalance + match.udtDelta,
     ckbBalance: state.availableCkbBalance + match.ckbDelta,
@@ -160,16 +172,117 @@ function prepareCandidateTransaction(
     poolDeposits: state.poolDeposits,
     readyDeposits: state.poolDeposits.filter((deposit) => deposit.isReady),
   });
-  const candidate = buildCandidateTransaction({
+}
+
+/**
+ * Completes the longest fundable prefix of the withdrawal candidates that passes the reserve
+ * check; reserve recovery retries with any ready deposit when no surplus prefix passes.
+ *
+ * @returns `undefined` when no prefix with at least one request was accepted.
+ */
+async function buildWithdrawalTransaction(
+  runtime: Runtime,
+  state: BotState,
+  matched: MatchOutcome,
+  rebalance: Extract<RebalanceOutcome, { kind: "withdraw" }>,
+): Promise<BuildTransactionResult | undefined> {
+  const { match } = matched;
+  const anchorsFor = ringRequiredLiveDepositFor(state.poolDeposits);
+  // A withdrawal with non-negative match CKB delta is staged CKB recovery: it may cross
+  // the immediate reserve because it restores CKB when it matures.
+  const recoveryException = match.ckbDelta >= 0n;
+  const walk = async (
+    candidates: readonly IckbDepositCell[],
+    ringSafe: boolean,
+  ): Promise<BuildTransactionResult | undefined> => {
+    const prefixes = Array.from({ length: candidates.length }, (_, index) =>
+      withRequiredLiveDeposits(
+        candidates.slice(0, candidates.length - index),
+        ringSafe ? anchorsFor : undefined,
+      ),
+    );
+    const completion = await completeFirstFundable(
+      prefixes,
+      (prefix) =>
+        runtime.sdk.buildBaseTransaction(matched.tx, {
+          withdrawalRequest: {
+            deposits: prefix.deposits,
+            requiredLiveDeposits: prefix.requiredLiveDeposits,
+            lock: runtime.primaryLock,
+          },
+          orders: state.userOrders,
+          receipts: state.receipts,
+          readyWithdrawals: state.readyWithdrawals,
+        }),
+      async (tx) => runtime.completeTransaction(tx, state.system.feeRate),
+      (tx, prefix) =>
+        recoveryException ||
+        auditSummary({
+          runtime,
+          state,
+          match,
+          rebalance: { ...rebalance, ...prefix },
+          fee: tx.estimateFee(state.system.feeRate),
+        }).reserveCheck.deficit === 0n,
+    );
+    if (completion.tx === undefined) {
+      return undefined;
+    }
+    const accepted: RebalanceOutcome = {
+      ...rebalance,
+      ...completion.candidate,
+      ringSafe,
+      withdrawalCandidateCount: candidates.length,
+    };
+    return completedResult({
+      runtime,
+      state,
+      matched,
+      rebalance: accepted,
+      tx: completion.tx,
+    });
+  };
+  return (
+    (await walk(rebalance.deposits, rebalance.ringSafe)) ??
+    (rebalance.fallback === undefined ? undefined : walk(rebalance.fallback, false))
+  );
+}
+
+function completedResult({
+  runtime,
+  state,
+  matched,
+  rebalance,
+  tx,
+}: {
+  runtime: Runtime;
+  state: BotState;
+  matched: MatchOutcome;
+  rebalance: RebalanceOutcome;
+  tx: ccc.Transaction;
+}): BuildTransactionResult {
+  const { match } = matched;
+  const fee = tx.estimateFee(state.system.feeRate);
+  const actions = actionsForState(state, match, rebalance);
+  const decision = buildDecisionTranscript({
     runtime,
     state,
     match,
     rebalance,
-    outputSlots,
+    actions,
     tx,
-    searchResult,
+    matchSearch: incompleteSearchEvidence(matched.searchResult),
   });
-  return { match, candidate, outputSlots };
+  return {
+    kind: "built",
+    tx,
+    actions,
+    decision: {
+      ...decision,
+      audit: auditSummary({ runtime, state, match, rebalance, fee }),
+      fee: { ...decision.fee, estimated: fee },
+    },
+  };
 }
 
 async function completeCandidateTransaction({
@@ -177,13 +290,11 @@ async function completeCandidateTransaction({
   state,
   match,
   candidate,
-  outputSlots,
 }: {
   runtime: Runtime;
   state: BotState;
   match: Match;
   candidate: CandidateTransaction;
-  outputSlots: number;
 }): Promise<{
   tx: ccc.Transaction;
   decision: CompletedDecisionTranscript;
@@ -202,7 +313,6 @@ async function completeCandidateTransaction({
     state,
     match,
     rebalance: candidate.rebalance,
-    outputSlots,
     actions: candidate.actions,
     tx,
     matchReason: candidate.decision.match.reason,
@@ -242,15 +352,8 @@ function matchOnlyResult({
     return skippedResult(
       "match_value_not_above_fee",
       emptyActions(),
-      {
-        ...valuedDecision,
-        actions: emptyActions(),
-      },
-      {
-        fee,
-        matchValue,
-        attemptedActions: candidate.actions,
-      },
+      { ...valuedDecision, actions: emptyActions() },
+      { fee, matchValue, attemptedActions: candidate.actions },
     );
   }
   return {
@@ -264,29 +367,16 @@ function matchOnlyResult({
 function buildCandidateTransaction({
   runtime,
   state,
-  match,
+  matched,
   rebalance,
-  outputSlots,
-  tx: matchTx,
-  searchResult,
 }: {
   runtime: Runtime;
   state: BotState;
-  match: Match;
-  rebalance: CandidateTransaction["rebalance"];
-  outputSlots: number;
-  tx: ccc.Transaction;
-  searchResult: MatchSearchResult;
+  matched: MatchOutcome;
+  rebalance: RebalanceOutcome;
 }): CandidateTransaction {
-  let tx = runtime.sdk.buildBaseTransaction(matchTx, {
-    withdrawalRequest:
-      rebalance.kind === "withdraw"
-        ? {
-            deposits: rebalance.deposits,
-            requiredLiveDeposits: rebalance.requiredLiveDeposits,
-            lock: runtime.primaryLock,
-          }
-        : undefined,
+  const { match, searchResult } = matched;
+  let tx = runtime.sdk.buildBaseTransaction(matched.tx, {
     orders: state.userOrders,
     receipts: state.receipts,
     readyWithdrawals: state.readyWithdrawals,
@@ -310,7 +400,6 @@ function buildCandidateTransaction({
       state,
       match,
       rebalance,
-      outputSlots,
       actions,
       tx,
       matchReason:

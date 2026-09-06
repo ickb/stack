@@ -104,7 +104,6 @@ export type BuildTransactionSkipReason =
   | "no_actions"
   | "match_search_incomplete"
   | "match_value_not_above_fee"
-  | "output_limit"
   | "post_tx_ckb_reserve";
 
 export type BotDecisionSkipReason = BuildTransactionSkipReason | "capital_below_minimum";
@@ -119,7 +118,16 @@ export type BotMatchReason =
   | "max_partials"
   | "no_positive_gain";
 
-type BotRebalanceReason = RebalancePlan["reason"];
+/** The policy's reasons, plus the runtime's when no withdrawal prefix could be funded. */
+type BotRebalanceReason = RebalancePlan["reason"] | "no_fundable_withdrawal_prefix";
+
+/**
+ * The rebalance a candidate transaction carries: the policy plan, or the runtime's outcome
+ * when the completion walk accepted a shorter withdrawal prefix or none at all.
+ */
+export type RebalanceOutcome = (
+  RebalancePlan | { kind: "none"; reason: "no_fundable_withdrawal_prefix" }
+) & { withdrawalCandidateCount?: number };
 
 /**
  * Bot transaction-build outcome with the decision transcript used for logs and events.
@@ -141,7 +149,7 @@ export type BuildTransactionResult =
 export interface CandidateTransaction {
   tx: ccc.Transaction;
   actions: BotActions;
-  rebalance: RebalancePlan;
+  rebalance: RebalanceOutcome;
   decision: BotDecisionTranscript;
 }
 
@@ -198,9 +206,10 @@ export interface BotDecisionTranscript {
     kind: RebalancePlan["kind"];
     reason: BotRebalanceReason;
     depositQuantity?: number;
+    /** Requests the accepted prefix carries; `withdrawalCandidateCount` is the policy's list. */
     withdrawalRequestCount?: number;
+    withdrawalCandidateCount?: number;
     requiredLiveDepositCount?: number;
-    outputSlots: number;
     projectedAvailableCkb: bigint;
     projectedAvailableIckb: bigint;
   };

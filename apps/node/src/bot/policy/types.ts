@@ -3,9 +3,6 @@ import type { IckbDepositCell } from "@ickb/sdk";
 
 /** Inputs for choosing the bot's post-match rebalance action. */
 export interface PlanRebalanceOptions {
-  /** Remaining output capacity after planned match/collect actions. */
-  outputSlots: number;
-
   /** Sampled tip used for maturity and ring calculations. */
   tip: ccc.ClientBlockHeader;
 
@@ -52,8 +49,14 @@ export type RebalancePlan =
   | {
       kind: "withdraw";
       reason: RebalanceWithdrawReason;
+      /** Greedy candidates by maturity; completion decides how many a transaction carries. */
       deposits: IckbDepositCell[];
+      /** Ring anchors pinned for the full candidate list; each prefix pins its own. */
       requiredLiveDeposits?: IckbDepositCell[];
+      /** Whether prefixes keep pinning ring anchors; false only for any-deposit reserve recovery. */
+      ringSafe: boolean;
+      /** Any-ready-deposit candidates for reserve recovery when no surplus prefix can be funded. */
+      fallback?: IckbDepositCell[];
       diagnostics?: RebalanceDiagnostics;
     };
 
@@ -61,7 +64,6 @@ type RebalanceDepositReason = "low_ickb_balance" | "ring_inventory";
 export type RebalanceWithdrawReason = "excess_ickb_balance" | "reserve_recovery";
 
 export type RebalanceNoopReason =
-  | "insufficient_output_slots"
   | "low_ickb_ckb_reserve_unavailable"
   | "no_withdrawable_ickb"
   | "no_ring_surplus_ready_deposits"

@@ -36,7 +36,7 @@ See [docs/pool_maturity_estimates.md](./docs/pool_maturity_estimates.md).
 
 ## Ready Withdrawal Selection
 
-`selectReadyWithdrawalDeposits(...)` exposes the stack's ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, the current tip, amount/count limits, and optional ring filters. Setting `minCount` and `maxCount` to the same value requests an exact number of deposits. The selector compares bounded best-fit and greedy candidates, returns the chosen deposits, and also returns `requiredLiveDeposits` supplied by the caller for live `cell_dep` checks when building the withdrawal request.
+`selectReadyWithdrawalDeposits(...)` exposes the stack's ready-deposit selector for direct iCKB-to-CKB withdrawal requests. Callers provide ready deposits, the current tip, an amount and count limit, and optional ring filters. The selector walks candidates greedily by maturity, taking each one that still fits, and returns the chosen deposits together with the `requiredLiveDeposits` supplied by the caller for live `cell_dep` checks. How many of them one transaction can carry is decided by completion: `completeFirstFundable(candidates, build, complete, accept?)` builds and completes candidates in order and returns the first the real completer funds and the caller accepts, advancing past capacity, DAO output-limit, and representability failures.
 
 Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDepositFor(...)` operate on the full supplied live pool sample. Normal bot and interface direct withdrawals use ring surplus only; bot reserve recovery is app policy and may relax that rule after surplus recovery fails.
 
@@ -44,13 +44,13 @@ Ring helpers such as `ringSurplusDepositFilter(...)` and `ringRequiredLiveDeposi
 
 ## Conversion Transaction Builder
 
-`IckbSdk.buildConversionTransaction(...)` builds a partial conversion transaction plus domain metadata. It owns the reusable CKB-to-iCKB and iCKB-to-CKB planning policy: base transaction assembly, direct deposit limits, exact ready-withdrawal selection, required live deposit anchors, order fallback construction, small iCKB dust order terms, and maturity metadata. The helper returns typed failures such as `amount-too-small`, `not-enough-ready-deposits`, and `nothing-to-do`; callers own user-facing copy.
+`IckbSdk.buildConversionTransaction(...)` builds and completes one conversion transaction plus domain metadata. It owns the reusable CKB-to-iCKB and iCKB-to-CKB planning policy: base transaction assembly, direct deposit counts, greedy ready-withdrawal candidates, required live deposit anchors, order fallback construction, small iCKB dust order terms, and maturity metadata. Candidate plans (deposit counts, or prefixes of the greedy withdrawal selection with their rebuilt remainder order) are completed in ranked order against the signer's committed cells and the first fundable one wins, so a wallet short of CKB degrades to fewer direct actions plus a larger standing order. The helper returns typed failures such as `amount-too-small` and `nothing-to-do`; callers own user-facing copy. When no plan can be funded, the last completion error throws.
 
 For iCKB-to-CKB planning, `getPoolDeposits(client, tip, options?)` fetches the public pool deposits on chain. `getL1State(...)` includes that required scan result in `system.poolDeposits` so UI callers can key previews by the same pool identity without a second planning-time scan. `getPoolDeposits(...)`, `getL1State(...)`, and `getL1AccountState(...)` accept `cellPageSize` as the shared per-request CCC cell-query page size. Full pages must advance the indexer cursor. Every component scan of one read shares a single fixed budget of 6400 items and the pages that budget covers, so a read that would exceed it fails with `IckbError` code `account_scan_limit` instead of returning partial state. `getL1State(...)` also accepts `poolDeposits` range filters for callers that need a narrower pool window.
 
 `getL1State(...)` and `getL1AccountState(...)` return eventually consistent, best-effort state computed from a sampled `system.tip`. Their targeted indexer queries can observe different points in indexer progress and are not an atomic snapshot. The SDK does not reread the scans or perform a final current-tip assertion. Callers should keep the time from state fetch to transaction build low and let transaction validation decide whether referenced cells are still live and the transaction can be accepted.
 
-The returned transaction is not completed, signed, sent, or confirmed. Callers still explicitly call `sdk.completeTransaction(...)` with `{ signer, feeRate }` before sending.
+The returned transaction is completed but not signed, sent, or confirmed. `sdk.completeTransaction(...)` with `{ signer, feeRate }` remains available for transactions built from the lower-level managers.
 
 ## Small iCKB Order Previews
 

@@ -15,7 +15,6 @@ export type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
  */
 export function planRebalance(options: PlanRebalanceOptions): RebalancePlan {
   const {
-    outputSlots,
     tip,
     ickbBalance,
     ckbBalance,
@@ -26,10 +25,6 @@ export function planRebalance(options: PlanRebalanceOptions): RebalancePlan {
     poolDeposits,
     readyDeposits,
   } = options;
-
-  if (outputSlots < 2) {
-    return { kind: "none", reason: "insufficient_output_slots" };
-  }
 
   const needsIckbRefill = ickbBalance < ickbRefillThreshold;
   if (
@@ -57,7 +52,6 @@ export function planRebalance(options: PlanRebalanceOptions): RebalancePlan {
     };
   }
   return planRebalanceWithdrawal({
-    outputSlots,
     tip,
     ickbBalance,
     ckbBalance,

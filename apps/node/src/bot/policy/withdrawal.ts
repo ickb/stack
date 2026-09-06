@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import {
   type IckbDepositCell,
-  MAX_WITHDRAWAL_REQUESTS,
   ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
@@ -14,17 +13,15 @@ import type {
   RebalanceWithdrawReason,
 } from "./types.ts";
 
-const OUTPUTS_PER_REBALANCE_ACTION = 2;
-
 /**
- * Plans an iCKB withdrawal rebalance after matching and output-slot reservation.
+ * Plans an iCKB withdrawal rebalance after matching.
  *
- * @remarks Ordinary excess withdrawals preserve live ring anchors. Reserve
- * recovery first tries the same ring-safe path, then may use any ready deposit
- * because restoring CKB now is the owning invariant.
+ * @remarks The plan names greedy candidates by maturity; how many of them one transaction
+ * carries is decided by completion (decisions amendment 41). Ordinary excess withdrawals
+ * preserve live ring anchors. Reserve recovery first tries the same ring-safe candidates,
+ * then may use any ready deposit because restoring CKB now is the owning invariant.
  */
 export function planRebalanceWithdrawal(options: {
-  outputSlots: number;
   tip: ccc.ClientBlockHeader;
   ickbBalance: bigint;
   ckbBalance: bigint;
@@ -35,7 +32,6 @@ export function planRebalanceWithdrawal(options: {
   diagnostics: RebalanceDiagnostics;
 }): RebalancePlan {
   const {
-    outputSlots,
     tip,
     ickbBalance,
     ckbBalance,
@@ -45,21 +41,29 @@ export function planRebalanceWithdrawal(options: {
     readyDeposits,
     diagnostics,
   } = options;
-  const withdrawalLimit = Math.min(
-    MAX_WITHDRAWAL_REQUESTS,
-    Math.floor(outputSlots / OUTPUTS_PER_REBALANCE_ACTION),
-  );
+  const ringSurplus = ringSurplusDepositFilter(poolDeposits);
+  const requiredLiveDepositFor = ringRequiredLiveDepositFor(poolDeposits);
   if (ckbBalance < ckbRecoveryThreshold || ickbBalance < ickbRefillThreshold) {
-    const recovery = planReserveRecovery({
-      withdrawalLimit,
-      tip,
-      excessIckb: ickbBalance,
-      poolDeposits,
+    const surplus = selectReadyWithdrawalDeposits({
       readyDeposits,
-      diagnostics,
+      tip,
+      maxAmount: ickbBalance,
+      canSelectDeposit: ringSurplus,
+      requiredLiveDepositFor,
     });
-    if (recovery.kind === "withdraw") {
-      return recovery;
+    const anyReady = selectReadyWithdrawalDeposits({
+      readyDeposits,
+      tip,
+      maxAmount: ickbBalance,
+    });
+    if (surplus.deposits.length > 0) {
+      return withdrawPlan("reserve_recovery", surplus, diagnostics, {
+        ringSafe: true,
+        fallback: anyReady.deposits,
+      });
+    }
+    if (anyReady.deposits.length > 0) {
+      return withdrawPlan("reserve_recovery", anyReady, diagnostics, { ringSafe: false });
     }
   }
 
@@ -72,85 +76,17 @@ export function planRebalanceWithdrawal(options: {
     return noRebalancePlan("no_withdrawable_ickb", diagnostics);
   }
 
-  return planExcessIckbWithdrawal({
-    readyDeposits,
-    tip,
-    withdrawableIckb,
-    withdrawalLimit,
-    poolDeposits,
-    diagnostics,
-  });
-}
-
-function planReserveRecovery(options: {
-  withdrawalLimit: number;
-  tip: ccc.ClientBlockHeader;
-  excessIckb: bigint;
-  poolDeposits: readonly IckbDepositCell[];
-  readyDeposits: readonly IckbDepositCell[];
-  diagnostics: RebalanceDiagnostics;
-}): RebalancePlan {
-  const { withdrawalLimit, tip, excessIckb, poolDeposits, readyDeposits, diagnostics } =
-    options;
-  const selection = selectPoolRebalancingDeposits({
-    readyDeposits,
-    tip,
-    maxAmount: excessIckb,
-    limit: withdrawalLimit,
-    ringSurplus: ringSurplusDepositFilter(poolDeposits),
-    requiredLiveDepositFor: ringRequiredLiveDepositFor(poolDeposits),
-  });
-  if (selection.deposits.length > 0) {
-    return withdrawPlan("reserve_recovery", selection, diagnostics);
-  }
-
-  // Reserve recovery is allowed to fall back to any ready deposit because its
-  // goal is restoring CKB now; normal excess withdrawals keep ring anchors live.
-  const reserveRecovery = selectPoolRebalancingDeposits({
-    readyDeposits,
-    tip,
-    maxAmount: excessIckb,
-    limit: withdrawalLimit,
-    ringSurplus: () => true,
-    requiredLiveDepositFor: undefined,
-  });
-  if (reserveRecovery.deposits.length > 0) {
-    return withdrawPlan("reserve_recovery", reserveRecovery, diagnostics);
-  }
-
-  return {
-    kind: "none",
-    reason: "no_ready_withdrawal_selection",
-    diagnostics,
-  };
-}
-
-function planExcessIckbWithdrawal({
-  readyDeposits,
-  tip,
-  withdrawableIckb,
-  withdrawalLimit,
-  poolDeposits,
-  diagnostics,
-}: {
-  readyDeposits: readonly IckbDepositCell[];
-  tip: ccc.ClientBlockHeader;
-  withdrawableIckb: bigint;
-  withdrawalLimit: number;
-  poolDeposits: readonly IckbDepositCell[];
-  diagnostics: RebalanceDiagnostics;
-}): RebalancePlan {
-  const ringSurplus = ringSurplusDepositFilter(poolDeposits);
-  const selection = selectPoolRebalancingDeposits({
+  const selection = selectReadyWithdrawalDeposits({
     readyDeposits,
     tip,
     maxAmount: withdrawableIckb,
-    limit: withdrawalLimit,
-    ringSurplus,
-    requiredLiveDepositFor: ringRequiredLiveDepositFor(poolDeposits),
+    canSelectDeposit: ringSurplus,
+    requiredLiveDepositFor,
   });
   if (selection.deposits.length > 0) {
-    return withdrawPlan("excess_ickb_balance", selection, diagnostics);
+    return withdrawPlan("excess_ickb_balance", selection, diagnostics, {
+      ringSafe: true,
+    });
   }
   return noRebalancePlan(
     noExcessWithdrawalReason(readyDeposits, ringSurplus),
@@ -174,57 +110,26 @@ function noRebalancePlan(
   reason: RebalanceNoopReason,
   diagnostics: RebalanceDiagnostics,
 ): RebalancePlan {
-  return {
-    kind: "none",
-    reason,
-    diagnostics,
-  };
+  return { kind: "none", reason, diagnostics };
 }
 
 function withdrawPlan(
   reason: RebalanceWithdrawReason,
-  selection: {
-    deposits: IckbDepositCell[];
-    requiredLiveDeposits: IckbDepositCell[];
-  },
+  selection: { deposits: IckbDepositCell[]; requiredLiveDeposits: IckbDepositCell[] },
   diagnostics: RebalanceDiagnostics,
+  options: { ringSafe: boolean; fallback?: IckbDepositCell[] },
 ): RebalancePlan {
   return {
     kind: "withdraw",
     reason,
     deposits: selection.deposits,
-    diagnostics,
     ...(selection.requiredLiveDeposits.length > 0
       ? { requiredLiveDeposits: selection.requiredLiveDeposits }
       : {}),
+    ringSafe: options.ringSafe,
+    ...(options.fallback === undefined || options.fallback.length === 0
+      ? {}
+      : { fallback: options.fallback }),
+    diagnostics,
   };
-}
-
-function selectPoolRebalancingDeposits({
-  readyDeposits,
-  tip,
-  maxAmount,
-  limit,
-  ringSurplus,
-  requiredLiveDepositFor,
-}: {
-  readyDeposits: readonly IckbDepositCell[];
-  tip: ccc.ClientBlockHeader;
-  maxAmount: bigint;
-  limit: number;
-  ringSurplus: (deposit: IckbDepositCell) => boolean;
-  requiredLiveDepositFor:
-    ((deposit: IckbDepositCell) => IckbDepositCell | undefined) | undefined;
-}): {
-  deposits: IckbDepositCell[];
-  requiredLiveDeposits: IckbDepositCell[];
-} {
-  return selectReadyWithdrawalDeposits({
-    readyDeposits,
-    tip,
-    maxAmount,
-    maxCount: limit,
-    canSelectDeposit: ringSurplus,
-    ...(requiredLiveDepositFor === undefined ? {} : { requiredLiveDepositFor }),
-  });
 }

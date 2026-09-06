@@ -1,145 +1,101 @@
 import { describe, expect, it } from "vitest";
-import {
-  selectReadyWithdrawalDepositCandidatesForCounts,
-  selectReadyWithdrawalDeposits,
-} from "../../src/withdrawal/withdrawal_selection.ts";
-import {
-  scoredReadyDeposit,
-  type ScoredTestDeposit,
-} from "./support/withdrawal_selection_scored_support.ts";
+import { selectReadyWithdrawalDeposits } from "../../src/withdrawal/withdrawal_selection.ts";
 import { readyDeposit, TIP } from "./support/withdrawal_selection_support.ts";
 
-describe("selectReadyWithdrawalDeposits direct fit", () => {
-  it("prefers the fullest valid subset under the target amount", () => {
+const MINUTE_MS = 60n * 1000n;
+
+describe("selectReadyWithdrawalDeposits greedy walk", () => {
+  it("walks by maturity and takes every deposit that still fits", () => {
     const deposits = [
       readyDeposit(6n, 0n),
-      readyDeposit(5n, 15n * 60n * 1000n),
-      readyDeposit(5n, 30n * 60n * 1000n),
+      readyDeposit(5n, 15n * MINUTE_MS),
+      readyDeposit(5n, 30n * MINUTE_MS),
+      readyDeposit(4n, 45n * MINUTE_MS),
     ];
+
+    // 6 fits, 5 would exceed 10, 5 again, then 4 fits.
+    expect(
+      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 10n })
+        .deposits,
+    ).toEqual([deposits[0], deposits[3]]);
+  });
+
+  it("orders candidates by ready maturity, not by input order", () => {
+    const earlier = readyDeposit(5n, 20n * MINUTE_MS);
+    const later = readyDeposit(5n, 45n * MINUTE_MS);
+
+    expect(
+      selectReadyWithdrawalDeposits({
+        readyDeposits: [later, earlier],
+        tip: TIP,
+        maxAmount: 5n,
+      }).deposits,
+    ).toEqual([earlier]);
+  });
+
+  it("does not select a ready deposit above the requested amount", () => {
+    const deposits = [readyDeposit(11n, 0n), readyDeposit(10n, 15n * MINUTE_MS)];
 
     expect(
       selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 10n })
         .deposits,
-    ).toEqual([deposits[1], deposits[2]]);
-  });
-
-  it("respects the request limit", () => {
-    const deposits = [
-      readyDeposit(1n, 0n),
-      readyDeposit(1n, 15n * 60n * 1000n),
-      readyDeposit(1n, 30n * 60n * 1000n),
-    ];
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-        maxCount: 2,
-      }).deposits,
-    ).toEqual([deposits[0], deposits[1]]);
-  });
-
-  it("supports exact-count direct withdrawal selection", () => {
-    const deposits = [
-      readyDeposit(10n, 0n),
-      readyDeposit(1n, 15n * 60n * 1000n),
-      readyDeposit(1n, 30n * 60n * 1000n),
-    ];
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-        minCount: 2,
-        maxCount: 2,
-      }).deposits,
-    ).toEqual([deposits[1], deposits[2]]);
-  });
-
-  it("returns no deposits when an exact-count fit is unavailable", () => {
-    const deposits = [
-      readyDeposit(6n, 0n),
-      readyDeposit(5n, 15n * 60n * 1000n),
-      readyDeposit(5n, 30n * 60n * 1000n),
-    ];
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 9n,
-        minCount: 2,
-        maxCount: 2,
-      }),
-    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
-  });
-});
-
-describe("selectReadyWithdrawalDeposits direct ordering", () => {
-  it("does not select a ready deposit above the requested amount", () => {
-    const deposits = [readyDeposit(11n, 0n), readyDeposit(10n, 15n * 60n * 1000n)];
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-        minCount: 1,
-        maxCount: 1,
-      }).deposits,
     ).toEqual([deposits[1]]);
   });
 
-  it("keeps earlier-ranked deposits when equal-total subsets tie", () => {
-    const deposits = [
-      readyDeposit(6n, 0n),
-      readyDeposit(4n, 15n * 60n * 1000n),
-      readyDeposit(6n, 30n * 60n * 1000n),
-      readyDeposit(4n, 45n * 60n * 1000n),
-    ];
+  it("respects the request limit and defaults it to the stack maximum", () => {
+    const deposits = Array.from({ length: 31 }, (_, index) =>
+      readyDeposit(1n, BigInt(index) * MINUTE_MS),
+    );
 
     expect(
-      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 10n })
-        .deposits,
+      selectReadyWithdrawalDeposits({
+        readyDeposits: deposits,
+        tip: TIP,
+        maxAmount: 100n,
+        maxCount: 2,
+      }).deposits,
     ).toEqual([deposits[0], deposits[1]]);
+    expect(
+      selectReadyWithdrawalDeposits({
+        readyDeposits: deposits,
+        tip: TIP,
+        maxAmount: 100n,
+      }).deposits,
+    ).toHaveLength(30);
   });
 
-  it("prefers the larger total when scored selections tie", () => {
-    const lowerTotal = scoredReadyDeposit(4n, 0n, 1n);
-    const higherTotal = scoredReadyDeposit(5n, 15n * 60n * 1000n, 1n);
+  it("returns no deposits for a non-positive amount or count", () => {
+    const deposits = [readyDeposit(1n, 0n)];
 
     expect(
-      selectReadyWithdrawalDepositCandidatesForCounts({
-        readyDeposits: [lowerTotal, higherTotal],
+      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 0n }),
+    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
+    expect(
+      selectReadyWithdrawalDeposits({
+        readyDeposits: deposits,
         tip: TIP,
-        maxAmount: 5n,
-        counts: [1],
-        score: (deposit: ScoredTestDeposit) => deposit.score,
-        maturityBucket: () => 0n,
-      }).get(1)?.[0]?.deposits,
-    ).toEqual([higherTotal]);
+        maxAmount: 1n,
+        maxCount: 0,
+      }),
+    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
   });
 
-  it("uses selection order as the final scored tie-breaker", () => {
-    const first = scoredReadyDeposit(5n, 0n, 1n);
-    const second = scoredReadyDeposit(5n, 15n * 60n * 1000n, 1n);
+  it("filters candidates before walking them", () => {
+    const blocked = readyDeposit(5n, 0n, "blocked");
+    const allowed = readyDeposit(5n, 1n, "allowed");
 
     expect(
-      selectReadyWithdrawalDepositCandidatesForCounts({
-        readyDeposits: [first, second],
+      selectReadyWithdrawalDeposits({
+        readyDeposits: [blocked, allowed],
         tip: TIP,
         maxAmount: 5n,
-        counts: [1],
-        score: (deposit: ScoredTestDeposit) => deposit.score,
-        maturityBucket: () => 0n,
-      }).get(1)?.[0]?.deposits,
-    ).toEqual([first]);
+        canSelectDeposit: (deposit) => deposit !== blocked,
+      }).deposits,
+    ).toEqual([allowed]);
   });
 });
 
-describe("selectReadyWithdrawalDeposits direct fallback", () => {
+describe("selectReadyWithdrawalDeposits input checks", () => {
   it("rejects non-ready deposits with the offending outpoint", () => {
     const nonReady = { ...readyDeposit(1n, 0n, "not-ready"), isReady: false };
 
@@ -163,268 +119,5 @@ describe("selectReadyWithdrawalDeposits direct fallback", () => {
         maxAmount: 2n,
       }),
     ).toThrow("Withdrawal deposit duplicate is duplicated");
-  });
-
-  it("returns no deposits when selection bounds are invalid", () => {
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [readyDeposit(1n, 0n)],
-        tip: TIP,
-        maxAmount: 1n,
-        minCount: 2,
-        maxCount: 1,
-      }),
-    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
-  });
-
-  it("can select any ready deposit when the caller permits it", () => {
-    const sparseReady = readyDeposit(5n, 0n);
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [sparseReady],
-        tip: TIP,
-        maxAmount: 5n,
-      }),
-    ).toEqual({
-      deposits: [sparseReady],
-      requiredLiveDeposits: [],
-    });
-  });
-
-  it("orders candidates by ready maturity", () => {
-    const earlierSparseReady = readyDeposit(5n, 20n * 60n * 1000n);
-    const laterSparseReady = readyDeposit(5n, 45n * 60n * 1000n);
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [laterSparseReady, earlierSparseReady],
-        tip: TIP,
-        maxAmount: 5n,
-      }).deposits,
-    ).toEqual([earlierSparseReady]);
-  });
-
-  it("uses greedy fallback for later candidates beyond the bounded best-fit horizon", () => {
-    const deposits = [
-      ...Array.from({ length: 30 }, (_, index) => readyDeposit(11n, BigInt(index))),
-      readyDeposit(10n, 31n),
-    ];
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-        maxCount: 1,
-      }).deposits,
-    ).toEqual([deposits[30]]);
-  });
-});
-
-describe("selectReadyWithdrawalDepositCandidatesForCounts candidates", () => {
-  it("returns scored and unscored candidates for each maturity bucket", () => {
-    const earlier = scoredReadyDeposit(8n, 30n * 60n * 1000n, 1n);
-    const laterHigherScore = scoredReadyDeposit(8n, 2n * 60n * 60n * 1000n, 2n);
-
-    expect(
-      selectReadyWithdrawalDepositCandidatesForCounts({
-        readyDeposits: [laterHigherScore, earlier],
-        tip: TIP,
-        maxAmount: 10n,
-        counts: [1],
-        score: (deposit) => deposit.score,
-        maturityBucket: (deposit) => deposit.maturity.toUnix(TIP) / (60n * 60n * 1000n),
-      })
-        .get(1)
-        ?.map((selection) => selection.deposits),
-    ).toEqual([[earlier], [laterHigherScore]]);
-  });
-
-  it("uses an SDK-owned score for conversion candidates", () => {
-    const fullerFirst = scoredReadyDeposit(6n, 0n, 1n);
-    const fullerSecond = scoredReadyDeposit(4n, 15n * 60n * 1000n, 1n);
-    const scoredFirst = scoredReadyDeposit(3n, 30n * 60n * 1000n, 5n);
-    const scoredSecond = scoredReadyDeposit(3n, 45n * 60n * 1000n, 5n);
-
-    expect(
-      selectReadyWithdrawalDepositCandidatesForCounts({
-        readyDeposits: [fullerFirst, fullerSecond, scoredFirst, scoredSecond],
-        tip: TIP,
-        maxAmount: 10n,
-        counts: [2],
-        score: (deposit) => deposit.score,
-        maturityBucket: () => 0n,
-      })
-        .get(2)
-        ?.map((selection) => selection.deposits),
-    ).toEqual([
-      [scoredFirst, scoredSecond],
-      [fullerFirst, fullerSecond],
-    ]);
-  });
-});
-
-describe("selectReadyWithdrawalDepositCandidatesForCounts", () => {
-  it("selects each requested count in one maturity bucket", () => {
-    const deposits = [
-      scoredReadyDeposit(6n, 0n, 1n),
-      scoredReadyDeposit(4n, 15n * 60n * 1000n, 1n),
-      scoredReadyDeposit(3n, 30n * 60n * 1000n, 5n),
-      scoredReadyDeposit(3n, 45n * 60n * 1000n, 5n),
-    ];
-    const counts = [1, 2, 3, 5];
-    const options = {
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 10n,
-      score: (deposit: ScoredTestDeposit): bigint => deposit.score,
-      maturityBucket: (): bigint => 0n,
-    };
-
-    const actual = selectReadyWithdrawalDepositCandidatesForCounts({
-      ...options,
-      counts,
-    });
-    expect(actual.get(1)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[2]],
-      [deposits[0]],
-    ]);
-    expect(actual.get(2)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[2], deposits[3]],
-      [deposits[0], deposits[1]],
-    ]);
-    expect(actual.get(3)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[1], deposits[2], deposits[3]],
-    ]);
-    expect(actual.get(5)).toEqual([]);
-  });
-});
-
-describe("selectReadyWithdrawalDepositCandidatesForCounts maturity buckets", () => {
-  it("adds distinct selections as maturity buckets expand", () => {
-    const deposits = [
-      scoredReadyDeposit(8n, 30n * 60n * 1000n, 1n),
-      scoredReadyDeposit(4n, 45n * 60n * 1000n, 4n),
-      scoredReadyDeposit(6n, 2n * 60n * 60n * 1000n, 3n),
-      scoredReadyDeposit(2n, 2n * 60n * 60n * 1000n + 1n, 5n),
-    ];
-    const counts = [1, 2, 3, 6];
-    const options = {
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 10n,
-      score: (deposit: ScoredTestDeposit): bigint => deposit.score,
-      maturityBucket: (deposit: ScoredTestDeposit): bigint =>
-        deposit.maturity.toUnix(TIP) / (60n * 60n * 1000n),
-    };
-
-    const actual = selectReadyWithdrawalDepositCandidatesForCounts({
-      ...options,
-      counts,
-    });
-    expect(actual.get(1)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[1]],
-      [deposits[0]],
-      [deposits[3]],
-    ]);
-    expect(actual.get(2)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[1], deposits[3]],
-      [deposits[0], deposits[3]],
-    ]);
-    expect(actual.get(3)).toEqual([]);
-    expect(actual.get(6)).toEqual([]);
-  });
-
-  it("keeps selecting after the bounded prefix saturates", () => {
-    const deposits = [
-      ...Array.from({ length: 30 }, (_, index) =>
-        scoredReadyDeposit(11n, BigInt(index), 1n),
-      ),
-      scoredReadyDeposit(10n, 30n, 2n),
-      scoredReadyDeposit(5n, 31n, 3n),
-      scoredReadyDeposit(5n, 32n, 4n),
-      scoredReadyDeposit(4n, 33n, 5n),
-      scoredReadyDeposit(3n, 34n, 6n),
-      scoredReadyDeposit(3n, 35n, 7n),
-    ];
-    const counts = [1, 2, 3, 4];
-    const options = {
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 10n,
-      score: (deposit: ScoredTestDeposit): bigint => deposit.score,
-      maturityBucket: (): bigint => 0n,
-    };
-
-    const actual = selectReadyWithdrawalDepositCandidatesForCounts({
-      ...options,
-      counts,
-    });
-    expect(actual.get(1)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[35]],
-      [deposits[30]],
-    ]);
-    expect(actual.get(2)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[35], deposits[34]],
-    ]);
-    expect(actual.get(3)?.map((selection) => selection.deposits)).toEqual([
-      [deposits[35], deposits[34], deposits[33]],
-    ]);
-    expect(actual.get(4)).toEqual([]);
-  });
-});
-
-describe("selectReadyWithdrawalDepositCandidatesForCounts policies", () => {
-  it("returns empty selections for a non-positive amount", () => {
-    const deposits = Array.from({ length: 30 }, (_, index) =>
-      scoredReadyDeposit(1n, BigInt(index), 1n),
-    );
-    const options = {
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 0n,
-      score: (candidate: ScoredTestDeposit): bigint => candidate.score,
-      maturityBucket: (): bigint => 0n,
-    };
-
-    expect(
-      selectReadyWithdrawalDepositCandidatesForCounts({ ...options, counts: [1] }).get(1),
-    ).toEqual([]);
-  });
-
-  it("returns filtered, anchored greedy fallback selections", () => {
-    const excluded = scoredReadyDeposit(10n, 30n, 100n);
-    const anchor = scoredReadyDeposit(1n, 40n, 0n);
-    const deposits = [
-      ...Array.from({ length: 30 }, (_, index) =>
-        scoredReadyDeposit(11n, BigInt(index), 1n),
-      ),
-      excluded,
-      scoredReadyDeposit(5n, 31n, 3n),
-      scoredReadyDeposit(5n, 32n, 2n),
-    ];
-    const counts = [1, 2, 3];
-    const options = {
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 10n,
-      canSelectDeposit: (deposit: ScoredTestDeposit): boolean => deposit !== excluded,
-      requiredLiveDepositFor: (): ScoredTestDeposit => anchor,
-      score: (deposit: ScoredTestDeposit): bigint => deposit.score,
-      maturityBucket: (): bigint => 0n,
-    };
-
-    const actual = selectReadyWithdrawalDepositCandidatesForCounts({
-      ...options,
-      counts,
-    });
-    expect(actual.get(1)).toEqual([
-      { deposits: [deposits[31]], requiredLiveDeposits: [anchor] },
-    ]);
-    expect(actual.get(2)).toEqual([
-      { deposits: [deposits[31], deposits[32]], requiredLiveDeposits: [anchor] },
-    ]);
-    expect(actual.get(3)).toEqual([]);
   });
 });
