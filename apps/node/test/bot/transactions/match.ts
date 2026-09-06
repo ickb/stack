@@ -448,20 +448,16 @@ function ringDiagnostics(): RebalanceDiagnostics {
       targetSegmentIndex: 0,
       targetSegmentUdtValue: 0n,
       totalPoolUdt: 4n,
-      depositsShareOneSegment: false,
       segments: [
-        ringSegment({ index: 0, depositCount: 0, udtValue: 0n, isTarget: true }),
-        ringSegment({ index: 1, depositCount: 2, udtValue: 4n, isTarget: false }),
+        ringSegment({ index: 0, depositCount: 0, udtValue: 0n }),
+        ringSegment({ index: 1, depositCount: 2, udtValue: 4n }),
       ],
     },
   };
 }
 
 function ringSegment(
-  segment: Pick<
-    RingSegmentDiagnostics,
-    "depositCount" | "index" | "isTarget" | "udtValue"
-  >,
+  segment: Pick<RingSegmentDiagnostics, "depositCount" | "index" | "udtValue">,
 ): RingSegmentDiagnostics {
   // One deposit per non-empty segment is the anchor; the rest is surplus.
   const protectedDepositCount = Math.min(segment.depositCount, 1);
@@ -470,10 +466,8 @@ function ringSegment(
     ...segment,
     protectedDepositCount,
     protectedUdtValue,
-    protectedOutPoints: [],
     surplusDepositCount: segment.depositCount - protectedDepositCount,
     surplusUdtValue: segment.udtValue - protectedUdtValue,
-    surplusOutPoints: [],
   };
 }
 

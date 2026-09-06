@@ -86,7 +86,6 @@ export interface RingDiagnostics {
   targetSegmentIndex: number;
   targetSegmentUdtValue: bigint;
   totalPoolUdt: bigint;
-  depositsShareOneSegment: boolean;
   segments: RingSegmentDiagnostics[];
 }
 
@@ -94,11 +93,8 @@ export interface RingSegmentDiagnostics {
   index: number;
   depositCount: number;
   udtValue: bigint;
-  isTarget: boolean;
   protectedDepositCount: number;
   protectedUdtValue: bigint;
-  protectedOutPoints: string[];
   surplusDepositCount: number;
   surplusUdtValue: bigint;
-  surplusOutPoints: string[];
 }

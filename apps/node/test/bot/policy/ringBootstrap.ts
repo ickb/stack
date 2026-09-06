@@ -29,7 +29,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
       canCreateRingInventory: true,
       shouldBootstrapRing: true,
       segmentCount: 1,
-      segments: [{ index: 0, depositCount: 0, udtValue: 0n, isTarget: true }],
+      segments: [{ index: 0, depositCount: 0, udtValue: 0n }],
     });
   });
 
@@ -66,7 +66,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
     expect(plan.diagnostics?.ring).toMatchObject({
       poolDepositCount: 0,
       shouldBootstrapRing: true,
-      segments: [{ isTarget: true }],
+      segments: [{ index: 0 }],
     });
   });
 
@@ -88,9 +88,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
       canCreateRingInventory: true,
       shouldBootstrapRing: false,
       segmentCount: 1,
-      segments: [
-        { index: 0, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP, isTarget: true },
-      ],
+      segments: [{ index: 0, depositCount: 1, udtValue: ICKB_DEPOSIT_CAP }],
     });
   });
 });
@@ -117,7 +115,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
       segmentCount: 2,
       targetSegmentIndex: 0,
       totalPoolUdt: 2n * ICKB_DEPOSIT_CAP,
-      depositsShareOneSegment: true,
+      segments: [{ depositCount: 0 }, { depositCount: 2 }],
     });
   });
 
@@ -137,7 +135,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
       segmentCount: 2,
       targetSegmentIndex: 0,
       targetSegmentUdtValue: ICKB_DEPOSIT_CAP,
-      depositsShareOneSegment: false,
+      segments: [{ depositCount: 1 }, { depositCount: 1 }],
     });
   });
 });
@@ -159,7 +157,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
       segmentCount: 4,
       targetSegmentIndex: 0,
       targetSegmentUdtValue: 0n,
-      depositsShareOneSegment: false,
     });
   });
 

@@ -116,23 +116,15 @@ function ringDiagnostics(
       targetSegmentIndex: layout.targetSegmentIndex,
       targetSegmentUdtValue: layout.targetSegment.udtValue,
       totalPoolUdt: layout.totalPoolUdt,
-      depositsShareOneSegment: layout.depositsShareOneSegment,
-      segments: layout.segments.map((segment) =>
-        ringSegmentDiagnostics(segment, layout.targetSegmentIndex),
-      ),
+      segments: layout.segments.map(ringSegmentDiagnostics),
     },
   };
 }
 
-function ringSegmentDiagnostics(
-  segment: RingPolicySegment,
-  targetSegmentIndex: number,
-): RingSegmentDiagnostics {
+function ringSegmentDiagnostics(segment: RingPolicySegment): RingSegmentDiagnostics {
   const protectedDeposit = ringSegmentAnchor(segment.deposits);
-  const protectedKey =
-    protectedDeposit === undefined ? undefined : depositOutPoint(protectedDeposit);
   const surplusDeposits = segment.deposits.filter(
-    (deposit) => depositOutPoint(deposit) !== protectedKey,
+    (deposit) => deposit !== protectedDeposit,
   );
   const protectedUdtValue = protectedDeposit?.udtValue ?? 0n;
   const surplusUdtValue = surplusDeposits.reduce(
@@ -144,18 +136,11 @@ function ringSegmentDiagnostics(
     index: segment.index,
     depositCount: segment.deposits.length,
     udtValue: segment.udtValue,
-    isTarget: segment.index === targetSegmentIndex,
     protectedDepositCount: protectedDeposit === undefined ? 0 : 1,
     protectedUdtValue,
-    protectedOutPoints: protectedKey === undefined ? [] : [protectedKey],
     surplusDepositCount: surplusDeposits.length,
     surplusUdtValue,
-    surplusOutPoints: surplusDeposits.map(depositOutPoint),
   };
-}
-
-function depositOutPoint(deposit: IckbDepositCell): string {
-  return deposit.cell.outPoint.toHex();
 }
 
 function analyzeRingSegments(
@@ -165,20 +150,7 @@ function analyzeRingSegments(
   const segments = ringSegments(poolDeposits);
   const segmentCount = segments.length;
   const targetSegmentIndex = ringTargetSegmentIndex(tip, segmentCount);
-  let totalUdt = 0n;
-  let firstSegmentIndex: number | undefined;
-  let depositsShareOneSegment = true;
-
-  for (const segment of segments) {
-    totalUdt += segment.udtValue;
-    if (segment.deposits.length > 0) {
-      if (firstSegmentIndex === undefined) {
-        firstSegmentIndex = segment.index;
-      } else {
-        depositsShareOneSegment = false;
-      }
-    }
-  }
+  const totalUdt = segments.reduce((sum, segment) => sum + segment.udtValue, 0n);
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringTargetSegmentIndex returns 0 <= index < segmentCount, and ringSegments always returns at least one segment.
   const targetSegment = segments[targetSegmentIndex]!;
@@ -188,7 +160,6 @@ function analyzeRingSegments(
     targetSegmentIndex,
     targetSegment,
     totalPoolUdt: totalUdt,
-    depositsShareOneSegment,
     segments,
   };
 }
@@ -214,7 +185,6 @@ interface RingLayout {
   targetSegmentIndex: number;
   targetSegment: RingPolicySegment;
   totalPoolUdt: bigint;
-  depositsShareOneSegment: boolean;
   segments: RingPolicySegment[];
 }
 
