@@ -24,3 +24,5 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 
 1. Ratify or reject the ring preference change.
 2. Bind generated-vector provenance to executable fixture evidence.
+
+- Floors are computed from the pre-match book (amendment 40(d)); decide at coding time whether residual-book floors after matching are worth the change, given the spurious-refill and incomplete-search consequences recorded there.
