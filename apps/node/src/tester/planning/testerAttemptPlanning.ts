@@ -79,6 +79,9 @@ export async function planTesterAttempt({
     scenario: testerScenario,
     feePolicy,
     depositCapacity,
+    // A dust order is always affordable, so below the capital minimum it must not keep a
+    // depleted tester cycling instead of holding with exit 2.
+    allowDust: totalEquivalentCkb >= depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR,
   });
   if (effectiveTesterScenario === undefined) {
     skipBeforePlanning(capitalSkipOptions, testerNoActionableAutoScenarioSkip());

@@ -6,13 +6,7 @@ The Stack rewrite is in progress. The [rewrite overview](docs/stack-rewrite/READ
 
 ## Transaction Completion Boundary
 
-`@ickb/sdk` builders still return partial `ccc.Transaction` values. Callers explicitly choose when to finalize, and the shared completion path now also lives in `@ickb/sdk`.
-
-Callers own the final completion pipeline:
-
-1. Build the partial transaction through `IckbSdk` and the package managers.
-2. Before send, call `sdk.completeTransaction(...)` from `@ickb/sdk`.
-3. Only then send the transaction.
+`IckbSdk.buildConversionTransaction(...)` returns a completed transaction: the SDK completes each candidate plan against the signer's committed cells and returns the first fundable one, so a caller only signs and sends. The lower-level builders (`buildBaseTransaction`, `request`, `collect`, and the package managers) still return partial transactions; a caller composing them calls `sdk.completeTransaction(...)` before sending.
 
 Withdrawal requests built from public pool ready deposits may include `requiredLiveDeposits`. `@ickb/sdk` adds those cells as live `cell_dep` checks so a transaction fails if a protected pool anchor disappears before inclusion.
 
@@ -35,12 +29,8 @@ Apps are private workspace runtimes and run from source under Node 22.19+ or Vit
 
 Packages:
 
-- `packages/core`: iCKB protocol primitives, cells, UDT conversion helpers, and low-level transaction builders.
-- `packages/dao`: Nervos DAO cell classification, readiness, deposit, request, and withdrawal helpers.
-- `packages/order`: UDT limit-order entities, grouping, matching, minting, melting, and deployed-script confusion mitigation.
-- `packages/sdk`: Stack-level SDK that composes core, DAO, and order packages into account state, conversion planning, completion, sending, and confirmation helpers.
+- `packages/sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, and transaction builders; `src/dao` the Nervos DAO cell classification and deposit, request, and withdrawal helpers; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/utils` the bounded paged scans and shared helpers; and the top level composes them into account state, conversion planning with completion, sending, and confirmation.
 - `packages/testkit`: Private test helpers and fixtures for workspace tests.
-- `packages/utils`: Shared low-level utilities such as complete-scan enforcement, binary search, collection helpers, and bounded subset selection.
 
 ## Dependencies
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { autoScenarioDraw } from "../../../../src/tester/planning/testerPlanning.ts";
 import type { ExecutionLog } from "../../../../src/tester/runtime/testerTypes.ts";
 import {
@@ -22,6 +22,10 @@ function drawing(scenario: string, draw: readonly string[]): () => number {
   const index = draw.indexOf(scenario);
   return () => (index + 0.5) / draw.length;
 }
+
+afterEach(() => {
+  process.exitCode = undefined;
+});
 
 describe("planTesterAttempt under auto", () => {
   const feePolicy = { fee: 1n, feeBase: 100000n };
@@ -84,5 +88,30 @@ describe("planTesterAttempt under auto", () => {
       testerScenario: DUST_CKB,
       attemptedOrder: { giveCkb: "0.00000001" },
     });
+  });
+
+  it("holds with exit 2 below the capital minimum even though a dust order is affordable", async () => {
+    const depleted = testerState({ availableCkbBalance: 0n, availableIckbBalance: 1n });
+    expect(autoScenarioDraw(depleted, depositCapacity, feePolicy)).toEqual([
+      "dust-ickb-conversion",
+    ]);
+    const executionLog: ExecutionLog = {};
+
+    const planned = await planTesterAttempt({
+      runtime: runtimeWithSdk({}),
+      state: depleted,
+      testerScenario: "auto",
+      feePolicy,
+      depositCapacity,
+      totalEquivalentCkb: 1n,
+      executionLog,
+    });
+
+    expect(planned).toBeUndefined();
+    expect(executionLog.skip).toBeUndefined();
+    expect(executionLog.error).toBe(
+      "Not enough funds to continue testing, shutting down...",
+    );
+    expect(process.exitCode).toBe(2);
   });
 });

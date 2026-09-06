@@ -11,7 +11,7 @@ import type {
   WithdrawalGroup,
 } from "@ickb/sdk";
 
-import type { RebalancePlan } from "../policy.ts";
+import type { RebalanceDiagnostics, RebalancePlan } from "../policy/types.ts";
 
 /** Runtime dependencies used by each bot loop iteration. */
 export interface Runtime {
@@ -126,7 +126,12 @@ type BotRebalanceReason = RebalancePlan["reason"] | "no_fundable_withdrawal_pref
  * when the completion walk accepted a shorter withdrawal prefix or none at all.
  */
 export type RebalanceOutcome = (
-  RebalancePlan | { kind: "none"; reason: "no_fundable_withdrawal_prefix" }
+  | RebalancePlan
+  | {
+      kind: "none";
+      reason: "no_fundable_withdrawal_prefix";
+      diagnostics: RebalanceDiagnostics | undefined;
+    }
 ) & { withdrawalCandidateCount?: number };
 
 /**

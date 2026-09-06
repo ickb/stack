@@ -76,6 +76,7 @@ export async function buildTransaction(
             kind: "none",
             reason: "no_fundable_withdrawal_prefix",
             withdrawalCandidateCount: rebalance.deposits.length,
+            diagnostics: rebalance.diagnostics,
           }
         : rebalance,
   });
@@ -203,8 +204,10 @@ async function buildWithdrawalTransaction(
     );
     const completion = await completeFirstFundable(
       prefixes,
+      // The builders mutate the transaction they are given, so each prefix starts from
+      // its own copy of the match; the shared match stays clean for the next candidate.
       (prefix) =>
-        runtime.sdk.buildBaseTransaction(matched.tx, {
+        runtime.sdk.buildBaseTransaction(matched.tx.clone(), {
           withdrawalRequest: {
             deposits: prefix.deposits,
             requiredLiveDeposits: prefix.requiredLiveDeposits,
@@ -376,7 +379,7 @@ function buildCandidateTransaction({
   rebalance: RebalanceOutcome;
 }): CandidateTransaction {
   const { match, searchResult } = matched;
-  let tx = runtime.sdk.buildBaseTransaction(matched.tx, {
+  let tx = runtime.sdk.buildBaseTransaction(matched.tx.clone(), {
     orders: state.userOrders,
     receipts: state.receipts,
     readyWithdrawals: state.readyWithdrawals,

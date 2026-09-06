@@ -71,7 +71,7 @@ export interface IckbSdk {
     txLike: ccc.TransactionLike,
     options?: BuildBaseTransactionOptions,
   ): ccc.Transaction;
-  /** Builds a partial conversion or returns a typed planning failure. */
+  /** Builds and completes a conversion, or returns a typed planning failure. */
   buildConversionTransaction(
     txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,

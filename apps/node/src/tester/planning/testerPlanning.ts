@@ -42,6 +42,9 @@ export interface ResolveTesterScenarioOptions {
 
   /** Random source used only when resolving `auto`. */
   random?: () => number;
+
+  /** Whether `auto` may draw a dust scenario. Defaults to true. */
+  allowDust?: boolean;
 }
 
 /** Each funded scenario appears this many times in the draw for every one time a dust scenario does. */
@@ -60,10 +63,11 @@ export function resolveTesterScenario({
   feePolicy = DEFAULT_TESTER_FEE_POLICY,
   depositCapacity = 0n,
   random = Math.random,
+  allowDust = true,
 }: ResolveTesterScenarioOptions): TesterScenario | undefined {
   let drawn: TesterScenario;
   if (scenario === "auto") {
-    const draw = autoScenarioDraw(state, depositCapacity, feePolicy);
+    const draw = autoScenarioDraw(state, depositCapacity, feePolicy, allowDust);
     if (draw.length === 0) {
       return undefined;
     }
@@ -81,10 +85,11 @@ export function autoScenarioDraw(
   state: TesterState,
   depositCapacity: bigint,
   feePolicy: TesterFeePolicy = DEFAULT_TESTER_FEE_POLICY,
+  allowDust = true,
 ): TesterScenario[] {
   return TESTER_SCENARIOS.flatMap((scenario): TesterScenario[] => {
     if (isDustScenario(scenario)) {
-      return isDrawableDustScenario(state, scenario) ? [scenario] : [];
+      return allowDust && isDrawableDustScenario(state, scenario) ? [scenario] : [];
     }
     return isFundedTesterScenario(state, depositCapacity, feePolicy, scenario)
       ? Array.from({ length: FUNDED_DRAW_WEIGHT }, () => scenario)
