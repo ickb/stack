@@ -1,7 +1,7 @@
 {
   "name": "@ickb/node",
   "version": "1001.0.0",
-  "description": "iCKB bot, testnet tester, and rate sampler",
+  "description": "iCKB bot, testnet stimulus generator, and rate sampler",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "bot": "node src/bot.ts",
-    "tester": "node src/tester.ts",
+    "stimulus": "node src/stimulus.ts",
     "sampler": "node src/sampler.ts | tee rate.csv",
     "test": "vitest",
     "test:ci": "vitest run",

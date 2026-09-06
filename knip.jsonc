@@ -18,7 +18,7 @@
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "apps/node": {
-      "entry": ["src/{bot,tester,sampler}.ts!"],
+      "entry": ["src/{bot,sampler,stimulus}.ts!"],
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "apps/interface": {

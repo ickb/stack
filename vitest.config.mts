@@ -15,7 +15,7 @@ export default defineConfig({
         // Process entrypoints are exercised by spawning them, which V8 coverage cannot see.
         "apps/node/src/bot.ts",
         "apps/node/src/sampler.ts",
-        "apps/node/src/tester.ts",
+        "apps/node/src/stimulus.ts",
       ],
       thresholds: {
         "packages/sdk/src/**": fullCoverage,

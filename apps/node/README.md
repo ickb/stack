@@ -1,6 +1,6 @@
 # iCKB Node Actors
 
-`apps/node` holds three one-turn entrypoints that share chain preflight, config, and logging: the bot (`src/bot.ts`), the testnet tester (`src/tester.ts`), and the mainnet rate sampler (`src/sampler.ts`). The bot is CCC-native. It reads market state from `@ickb/sdk`, matches profitable limit orders, collects the bot's own orders, completes receipts and ready withdrawals, optionally rebalances between CKB and iCKB, completes iCKB UDT balance, CKB capacity, and fees, then signs, sends, and waits for commit.
+`apps/node` holds three one-turn entrypoints that share chain preflight, config, and logging: the bot (`src/bot.ts`), the testnet stimulus generator (`src/stimulus.ts`), and the mainnet rate sampler (`src/sampler.ts`). The bot is CCC-native. It reads market state from `@ickb/sdk`, matches profitable limit orders, collects the bot's own orders, completes receipts and ready withdrawals, optionally rebalances between CKB and iCKB, completes iCKB UDT balance, CKB capacity, and fees, then signs, sends, and waits for commit.
 
 The bot minimizes excess iCKB holdings so more liquidity stays available in CKB during iCKB-to-CKB redemption pressure.
 
@@ -39,7 +39,7 @@ The start script runs the bot once from source. Stdout is the NDJSON event strea
 
 Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and a `bot.*` type. These events are the sole bot stdout contract.
 
-The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `bot.*` event types, not supervisor/tester output or log locations.
+The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `bot.*` event types, not generator output or log locations.
 
 The seven event types, each complete on its own:
 
@@ -74,24 +74,58 @@ jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.commi
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
 ```
 
-## Tester
+## Stimulus Generator
 
-The tester is the bot's testnet counterpart: each turn it places at most one order or SDK conversion from its own account, so the bot has something to match, and exits. It reads `TESTER_CHAIN`, `TESTER_RPC_URL`, and `TESTER_PRIVATE_KEY_FILE` like the bot, plus `TESTER_SCENARIO` (default `auto`) and an optional raw-order fee policy `TESTER_FEE`/`TESTER_FEE_BASE`.
+The generator is the bot's testnet counterpart: each turn it draws one random action from its own account, sends it, and exits, so the book the bot reads keeps changing in the ways real users change it. It reads `STIMULUS_CHAIN` (testnet only), `STIMULUS_RPC_URL`, and `STIMULUS_PRIVATE_KEY_FILE` like the bot. There are no scenarios: with orders accumulating on the book across turns, one action per turn already produces every shape of book the bot has to handle, and how fast the book grows is the unit's `RestartSec`.
 
-`auto` is the unsupervised mode: the turn draws uniformly among every named scenario the account can currently afford, so the tester self-balances as its balances swing between CKB and iCKB, and a tester unit with `Restart=always` produces the bulk of testnet stimulus. The two dust scenarios, whose order is rejected on purpose, are drawn at a quarter of the weight of an affordable scenario and record that rejection as an `estimated-conversion-too-small` skip. A composite draw such as `multi-order-limit-orders` resolves to the concrete scenario it would resolve to when named. Naming a scenario drives one hand-picked turn; the names are the values of `TESTER_SCENARIOS` in `src/tester/testerContract.ts`.
+Each turn reads the account, then:
 
-Each turn writes one JSON line: `identity` first (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), then `startTime`, `balance`, `ratio`, and either a `skip` with its reason and evidence or the sent transaction's `actions`, `transactionShape`, `txFee`, and `txHash`, plus `error` when the turn failed. Exit codes follow the bot: `0` done, `1` failed, `2` capital too low to continue.
+1. holds with exit `2` when every holding, live orders included, is worth less than a twentieth of one deposit;
+2. draws a kind (`order` three times in four, otherwise `conversion`), a direction weighted by the CKB value spendable on each side, an amount, and for an order a fee numerator from `{0, 1, 10}` over `100000` with `1` twice as likely; the amount is the smallest positive one in one draw out of eight, the whole budget in another, and otherwise spread evenly across the decades from one CKB up, so dust, mid-size, and whole-balance stimulus all recur;
+3. mints the order on a transaction that also collects the account's fulfilled orders and cancels live orders older than thirty days (the bot has had every chance by then), or asks the SDK for the conversion with the same collections in its context;
+4. skips a transaction that would leave plain CKB below the thousand-CKB reserve and lower than before, or that the completer cannot fund, or whose amount the order format cannot represent; whenever the drawn action is refused and there is something to collect, it sends the collection alone instead;
+5. signs, sends, waits up to ten minutes, and exits `0` on commit or skip and `1` on any failure.
+
+Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|conversion`, `STIMULUS_DIRECTION=ckb-to-ickb|ickb-to-ckb`, `STIMULUS_AMOUNT=<whole CKB or iCKB, up to eight decimals>|max`, and `STIMULUS_FEE=<numerator below 100000>`. A pinned amount is used as drawn even when it exceeds the budget; the completer's refusal is then the evidence.
+
+Each turn writes one JSON line: `identity` first (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), then `startTime`, `balance`, `orders` (live, fulfilled, and stale counts), `draw`, and `outcome`: `committed`, `unresolved` (sent, but the wait window closed), `rejected` (the node refused it), `skipped` with its `skip` reason, `hold`, or `failed` with `error`. A sent transaction carries `action` (the order and master output indices of a mint, or the SDK's conversion kind), `transactionShape`, `txFee`, and `txHash`; only `committed` proves the stimulus reached the chain. The order outpoints the bot logs in `decision.match.matchedOrderOutPoints` are `txHash` plus the logged output index, so the two journals join.
 
 ```bash
-export TESTER_CHAIN=testnet TESTER_RPC_URL=https://testnet.ckb.dev/ TESTER_PRIVATE_KEY_FILE=config/tester-testnet.key
-pnpm --filter ./apps/node tester
+export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckb.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
+pnpm --filter ./apps/node stimulus
 ```
+
+### What the journals should show
+
+The bot's reasons are lossy (any nonempty match is `matched`, whatever was rejected on the way) and some branches need pool or maturity state no order can create, so a missing reason means its precondition never occurred, not that the generator failed. Tally both journals, then read the table:
+
+```bash
+BOT=log/bot/events.ndjson; STIMULUS=log/stimulus/events.ndjson
+jq -r 'select(.decision) | .decision.match.reason' "$BOT" | sort | uniq -c
+jq -r 'select(.decision) | .decision.rebalance.reason' "$BOT" | sort | uniq -c
+jq -r 'select(.type == "bot.decision.skipped") | .reason' "$BOT" | sort | uniq -c
+jq -r 'select(.decision.match.search) | .decision.match.search.truncation' "$BOT" | sort | uniq -c
+jq -r '"\(.outcome) \(.draw.kind // "-") \(.draw.direction // "-") \(.skip.reason // "-")"' "$STIMULUS" | sort | uniq -c
+```
+
+| Bot variant                            | Precondition                                    | Evidence                                                                                                                 | Owner                                                                        |
+| -------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Profitable match, one or many partials | Orders with fee `1` or `10` on the book         | `match.reason` `matched`, `partialCount`                                                                                 | unattended                                                                   |
+| Unprofitable book                      | Fee `0` orders only, or dust                    | `match.reason` `no_positive_gain`, `no_viable_candidates`                                                                | unattended                                                                   |
+| Match not worth its transaction fee    | Small orders at low fee rates                   | skip `match_value_not_above_fee`                                                                                         | unattended; pin `STIMULUS_FEE=0` with a small `STIMULUS_AMOUNT` when missing |
+| Allowance exhausted                    | Orders larger than the bot's per-turn allowance | `match.reason` `insufficient_allowance`, `search.truncation`                                                             | unattended; `STIMULUS_AMOUNT=max` when missing                               |
+| Partial cap                            | Fifty-nine or more live eligible orders         | `match.reason` `max_partials`                                                                                            | operator: run the generator faster than the bot, or stop the bot for an hour |
+| Incomplete search                      | A crowded book within the work budget           | `match.reason` `search_incomplete`, skip `match_search_incomplete`                                                       | operator, as above                                                           |
+| Empty or unmatchable book              | Nothing live, or nothing the bot can take       | `match.reason` `no_market_orders`, `no_matchable_orders`                                                                 | unattended                                                                   |
+| Deposit and withdrawal rebalances      | Bot inventory and pool maturity, not the book   | `rebalance.reason` `low_ickb_balance`, `ring_inventory`, `excess_ickb_balance`, `reserve_recovery`, and the `no_*` noops | operator: fund or drain the bot; wait for maturity                           |
+| Withdrawal prefix walk                 | A withdrawal the bot cannot fund whole          | `rebalance.reason` `no_fundable_withdrawal_prefix`, `withdrawalCandidateCount`                                           | operator: a thin bot with ready deposits                                     |
+| Reserve protection                     | A bot near its plain-CKB floor                  | skip `post_tx_ckb_reserve`                                                                                               | operator: drain the bot                                                      |
 
 ## systemd Deployment
 
-The bot and the tester run as the operator's own user under the systemd user manager, from an ordinary git checkout, with Node wherever the operator installed it. The same steps apply to a developer desktop and a production VM; systemd 255 and later are supported. There is no root install, service user, release directory, encrypted credential, or update script: git owns revisions, the unit owns the process, and a `0600` key file owns the secret. That trades per-network user isolation and atomic updates for one concept fewer each; a single trusted operator on one host loses little.
+The bot and the stimulus generator run as the operator's own user under the systemd user manager, from an ordinary git checkout, with Node wherever the operator installed it. The same steps apply to a developer desktop and a production VM; systemd 255 and later are supported. There is no root install, service user, release directory, encrypted credential, or update script: git owns revisions, the unit owns the process, and a `0600` key file owns the secret. That trades per-network user isolation and atomic updates for one concept fewer each; a single trusted operator on one host loses little.
 
-The tracked examples `apps/node/ickb-bot-testnet.service` and `apps/node/ickb-tester-testnet.service` are the whole configuration for one network each. Copy one under a name per network, edit every path and the RPC URL, and keep the rest:
+The tracked examples `apps/node/ickb-bot-testnet.service` and `apps/node/ickb-stimulus-testnet.service` are the whole configuration for one network each. Copy one under a name per network, edit every path and the RPC URL, and keep the rest:
 
 ```bash
 pnpm node:install
@@ -106,7 +140,7 @@ systemctl --user enable --now ickb-bot-testnet.service
 journalctl --user -u ickb-bot-testnet.service -f -o cat
 ```
 
-`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the tester unit is testnet only.
+`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
 
 Operate the unit as usual:
 

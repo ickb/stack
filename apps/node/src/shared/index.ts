@@ -1,5 +1,5 @@
 /**
- * Node helpers shared by the bot, the tester, and the sampler.
+ * Node helpers shared by the bot, the sampler, and the stimulus generator.
  *
  * @packageDocumentation
  */

@@ -73,11 +73,11 @@
     },
     {
       "name": "node-actors-apart",
-      "comment": "The bot, the tester, and the sampler share only src/shared; they never import each other.",
+      "comment": "The bot, the sampler, and the stimulus generator share only src/shared; they never import each other.",
       "severity": "error",
-      "from": { "path": "^apps/node/src/(bot|tester|sampler)/" },
+      "from": { "path": "^apps/node/src/(bot|sampler|stimulus)/" },
       "to": {
-        "path": "^apps/node/src/(?:bot|tester|sampler)/",
+        "path": "^apps/node/src/(?:bot|sampler|stimulus)/",
         "pathNot": "^apps/node/src/$1/",
       },
     },
@@ -86,7 +86,7 @@
       "comment": "src/shared serves every actor and depends on none of them.",
       "severity": "error",
       "from": { "path": "^apps/node/src/shared/" },
-      "to": { "path": "^apps/node/src/(?:bot|tester|sampler)" },
+      "to": { "path": "^apps/node/src/(?:bot|sampler|stimulus)" },
     },
     {
       "name": "sdk-browser-safe",

@@ -45,11 +45,11 @@ describe("runtime config env", () => {
     await expect(
       readRuntimeConfigEnv(
         {
-          TESTER_CHAIN: "testnet",
-          TESTER_RPC_URL: RPC_URL,
-          TESTER_PRIVATE_KEY_FILE: KEY_FILE_PATH,
+          STIMULUS_CHAIN: "testnet",
+          STIMULUS_RPC_URL: RPC_URL,
+          STIMULUS_PRIVATE_KEY_FILE: KEY_FILE_PATH,
         },
-        "TESTER",
+        "STIMULUS",
       ),
     ).resolves.toMatchObject({ chain: "testnet" });
     await expect(readConfig({ BOT_CHAIN: undefined })).rejects.toThrow(
