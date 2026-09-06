@@ -552,12 +552,7 @@ export default defineConfig(
     },
   },
   {
-    files: [
-      "scripts/**/*.ts",
-      "packages/bot/**/*.ts",
-      "packages/node-utils/**/*.ts",
-      "packages/validation/**/*.ts",
-    ],
+    files: ["scripts/**/*.ts", "apps/node/**/*.ts"],
     rules: {
       "@typescript-eslint/unbound-method": "off",
     },

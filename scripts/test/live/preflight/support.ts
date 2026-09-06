@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { publicRpcEndpointIdentity } from "../../../../packages/node-utils/src/index.ts";
+import { publicRpcEndpointIdentity } from "../../../../apps/node/src/shared/index.ts";
 import type {
   AccountState,
   CccLike,

@@ -62,6 +62,11 @@ export type {
   WithdrawalDepositCandidate,
 } from "./withdrawal/withdrawal_selection.ts";
 
+export {
+  accountPlainCkbBalance,
+  postTransactionAccountPlainCkbBalance,
+  signerAccountLocks,
+} from "./account/account_locks.ts";
 export * from "./core/index.ts";
 export * from "./dao/index.ts";
 export * from "./order/index.ts";

@@ -17,8 +17,8 @@
     "packages/*": {
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
-    "apps/validation": {
-      "entry": ["src/tester.ts!"],
+    "apps/node": {
+      "entry": ["src/{bot,tester,sampler}.ts!"],
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "apps/interface": {

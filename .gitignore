@@ -8,7 +8,7 @@
 **/*.tsbuildinfo
 /log/
 apps/*/log_*.json
-apps/sampler/rate.csv
+apps/node/rate.csv
 
 # Local runtime config files
 /config/

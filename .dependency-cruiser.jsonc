@@ -14,7 +14,7 @@
           "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
           "^scripts/tooling/eslint/plugins[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
-          "^apps/(?:bot|validation)/test/.+[.]ts$",
+          "^apps/node/test/.+[.]ts$",
           "^(?:apps|packages)/[^/]+/vitest[.]config[.]mts$",
           "^apps/interface/vite[.]config[.]ts$",
           "^apps/interface/eslint[.]config[.]mts$",
@@ -63,6 +63,30 @@
       "to": {
         "path": "^packages/testkit/src/",
       },
+    },
+    {
+      "name": "node-actors-apart",
+      "comment": "The bot, the tester, and the sampler share only src/shared; they never import each other.",
+      "severity": "error",
+      "from": { "path": "^apps/node/src/(bot|tester|sampler)/" },
+      "to": {
+        "path": "^apps/node/src/(?:bot|tester|sampler)/",
+        "pathNot": "^apps/node/src/$1/",
+      },
+    },
+    {
+      "name": "node-shared-neutral",
+      "comment": "src/shared serves every actor and depends on none of them.",
+      "severity": "error",
+      "from": { "path": "^apps/node/src/shared/" },
+      "to": { "path": "^apps/node/src/(?:bot|tester|sampler)" },
+    },
+    {
+      "name": "sdk-browser-safe",
+      "comment": "The SDK runs in the browser: no Node built-ins (decisions §1).",
+      "severity": "error",
+      "from": { "path": "^packages/sdk/src/" },
+      "to": { "dependencyTypes": ["core"] },
     },
     {
       "name": "no-package-to-app",

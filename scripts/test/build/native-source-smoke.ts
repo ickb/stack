@@ -49,7 +49,6 @@ function punycodeGuardLoad(originalLoad: ModuleLoad, requests: string[]): Module
 void test("workspace packages import directly from TypeScript source", async () => {
   for (const modulePath of [
     "packages/sdk/src/index.ts",
-    "packages/node-utils/src/index.ts",
     "packages/testkit/src/index.ts",
   ]) {
     await importFromRoot(modulePath);
@@ -70,8 +69,8 @@ void test("native source imports do not load deprecated builtin punycode", async
     await importFromRoot("packages/sdk/src/index.ts");
     requireFromCore("@ckb-ccc/core");
     requireFromCccCore("@joyid/ckb");
-    await importFromRoot("packages/bot/src/index.ts");
-    await importFromRoot("apps/sampler/src/sampler.ts");
+    await importFromRoot("apps/node/src/bot/index.ts");
+    await importFromRoot("apps/node/src/sampler/sampler.ts");
   } finally {
     Reflect.set(Module, "_load", originalLoad);
   }
@@ -81,8 +80,8 @@ void test("native source imports do not load deprecated builtin punycode", async
 
 void test("Node app entrypoints run from TypeScript source and fail fast without config", () => {
   for (const [modulePath, envName] of [
-    ["apps/bot/src/index.ts", "BOT_CHAIN"],
-    ["apps/validation/src/tester.ts", "TESTER_CHAIN"],
+    ["apps/node/src/bot.ts", "BOT_CHAIN"],
+    ["apps/node/src/tester.ts", "TESTER_CHAIN"],
   ] as const) {
     const result = spawnSync(process.execPath, [modulePath], {
       cwd: rootDir,

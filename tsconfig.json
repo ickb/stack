@@ -35,18 +35,13 @@
     "scripts/**/*.ts",
     "eslint.config.mts",
     "prettier.config.mts",
-    "apps/bot/src/**/*.ts",
-    "apps/validation/src/**/*.ts",
-    "apps/sampler/src/**/*.ts",
+    "apps/node/src/**/*.ts",
     "vitest.config.mts",
     "apps/*/vitest.config.mts",
     "apps/*/eslint.config.mts",
     "packages/*/vitest.config.mts",
     "apps/interface/vite.config.ts",
     "packages/*/test/**/*.ts",
-    "apps/bot/test/**/*.ts",
-    "apps/sampler/test/**/*.ts",
-    "apps/validation/test/**/*.ts",
-    "packages/validation/test/**/*.ts"
+    "apps/node/test/**/*.ts"
   ]
 }

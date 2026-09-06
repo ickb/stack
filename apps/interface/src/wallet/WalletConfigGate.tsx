@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { unique } from "@ickb/sdk";
+import { signerAccountLocks } from "@ickb/sdk";
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type JSX } from "react";
@@ -49,18 +49,9 @@ export default function WalletConfigGate({
         await signer.connect();
       }
 
-      const [recommendedAddressObj, addressObjs] = await Promise.all([
-        signer.getRecommendedAddressObj(),
-        signer.getAddressObjs(),
-      ]);
+      const recommendedAddressObj = await signer.getRecommendedAddressObj();
       const recommendedLock = ccc.Script.from(recommendedAddressObj.script);
-
-      const accountLocks = [
-        ...unique([
-          recommendedLock,
-          ...addressObjs.map(({ script }) => ccc.Script.from(script)),
-        ]),
-      ];
+      const accountLocks = await signerAccountLocks(signer, recommendedLock);
 
       return {
         ...rootConfig,

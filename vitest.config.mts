@@ -8,9 +8,9 @@ export default defineConfig({
       include: ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"],
       exclude: [
         // Process entrypoints are exercised by spawning them, which V8 coverage cannot see.
-        "apps/bot/src/index.ts",
-        "apps/sampler/src/index.ts",
-        "apps/validation/src/tester.ts",
+        "apps/node/src/bot.ts",
+        "apps/node/src/sampler.ts",
+        "apps/node/src/tester.ts",
         "**/test/**",
         "**/*.test.{ts,tsx}",
         "**/*TestFixtures.{ts,tsx}",

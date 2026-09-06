@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import * as nodeUtilsSource from "../../../packages/node-utils/src/index.ts";
+import * as nodeUtilsSource from "../../../apps/node/src/shared/index.ts";
 import * as sdkSource from "../../../packages/sdk/src/index.ts";
 import { isPublicChainIdentityError, isRetryablePreflightError } from "./errors.ts";
 import {

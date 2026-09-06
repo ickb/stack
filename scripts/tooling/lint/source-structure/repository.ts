@@ -3,7 +3,6 @@ import { readFile, stat } from "node:fs/promises";
 import pathModule from "node:path";
 import ts from "typescript";
 import { LineCounter, isMap, isScalar, isSeq, parseDocument } from "yaml";
-import { minimalProcessEnv } from "../../../../packages/node-utils/src/index.ts";
 import {
   allowedMtsToolConfigNames,
   javascriptExtensions,
@@ -540,4 +539,14 @@ export function compareStrings(left: string, right: string): number {
 
 export function diagnosticMessage(diagnostic: ts.Diagnostic): string {
   return ts.flattenDiagnosticMessageText(diagnostic.messageText, " ");
+}
+
+/** Keeps only the environment a child process needs; never forwards secrets. */
+function minimalProcessEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  return Object.fromEntries(
+    ["PATH", "HOME", "LANG", "LC_ALL", "TERM"].flatMap((key) => {
+      const value = env[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
 }

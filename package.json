@@ -3,8 +3,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build && node scripts/tooling/build/rewrite-dts-imports.ts --check packages/*/dist",
-    "bot:install": "CI=true pnpm --filter @ickb/bot-cli... install --frozen-lockfile",
-    "bot:check": "pnpm --filter @ickb/bot-cli --filter @ickb/bot exec tsgo --noEmit -p tsconfig.json",
+    "node:install": "CI=true pnpm --filter @ickb/node... install --frozen-lockfile",
+    "node:check": "pnpm --filter @ickb/node exec tsgo --noEmit -p tsconfig.json",
     "check": "CI=true pnpm check:base",
     "check:base": "pnpm clean:deep && pnpm install && pnpm audit && pnpm lint && pnpm --filter ./apps/interface build",
     "check:fresh": "rm -f pnpm-lock.yaml && pnpm check",

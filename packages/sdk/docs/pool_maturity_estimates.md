@@ -6,7 +6,7 @@ This note describes the current stack-owned contract for estimating iCKB-to-CKB 
 
 This is an off-chain stack mechanism, not protocol law.
 
-- `apps/bot` owns bot liquidity and withdrawal-request production.
+- `apps/node` (the bot) owns bot liquidity and withdrawal-request production.
 - `@ickb/sdk` owns the summary that interface consumers read as `system.ckbAvailable` and `system.ckbMaturing`.
 - `apps/interface` renders that summary into conversion-time estimates.
 

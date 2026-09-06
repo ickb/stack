@@ -28,24 +28,19 @@ Current stack flows assume user-owned cells are protected by locks whose signatu
 
 Apps:
 
-- `apps/bot`: Node CLI adapter for the private bot runtime.
+- `apps/node`: the bot, the testnet tester, and the mainnet rate sampler, three entrypoints in one Node workspace sharing chain preflight, config, and logging.
 - `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
-- `apps/sampler`: Mainnet sampling utility that writes historical CKB-per-iCKB CSV output.
-- `apps/validation`: Node CLI adapter for the testnet tester actor.
 
 Apps are private workspace runtimes and run from source under Node 22.19+ or Vite. The supported reusable API surface lives in the packages below. Stack package `build` scripts emit `dist/` for publishing reusable packages only; local development, tests, live supervisor runs, and bot deployments use TypeScript source directly.
 
 Packages:
 
 - `packages/core`: iCKB protocol primitives, cells, UDT conversion helpers, and low-level transaction builders.
-- `packages/bot`: Private order-fulfillment and rebalance bot core for matching profitable orders, collecting owned orders, completing receipts and withdrawals, and rebalancing pool exposure.
 - `packages/dao`: Nervos DAO cell classification, readiness, deposit, request, and withdrawal helpers.
-- `packages/node-utils`: Private Node app utilities for env parsing, RPC client setup, signer locks, sleeps, and JSON logs.
 - `packages/order`: UDT limit-order entities, grouping, matching, minting, melting, and deployed-script confusion mitigation.
 - `packages/sdk`: Stack-level SDK that composes core, DAO, and order packages into account state, conversion planning, completion, sending, and confirmation helpers.
 - `packages/testkit`: Private test helpers and fixtures for workspace tests.
 - `packages/utils`: Shared low-level utilities such as complete-scan enforcement, binary search, collection helpers, and bounded subset selection.
-- `packages/validation`: Private tester core: scenarios, planning, and the fresh-order guard.
 
 ## Dependencies
 
@@ -65,8 +60,8 @@ export TESTER_CHAIN=testnet TESTER_RPC_URL=https://testnet.ckb.dev/ TESTER_PRIVA
 pnpm -s live:preflight
 pnpm -s live:preflight -- tester
 mkdir -p log/bot
-node apps/bot/src/index.ts >> log/bot/events.ndjson
-TESTER_SCENARIO=auto node apps/validation/src/tester.ts
+node apps/node/src/bot.ts >> log/bot/events.ndjson
+TESTER_SCENARIO=auto node apps/node/src/tester.ts
 ```
 
 To exercise the bot, run the tester once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd the bot's stream is the unit's journal; see `apps/bot/README.md`.

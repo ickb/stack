@@ -8,6 +8,6 @@ coverage/
 /config/
 /log/
 apps/*/log_*.json
-apps/sampler/rate.csv
+apps/node/rate.csv
 pnpm-lock.yaml
 eslint-suppressions.json

@@ -1,40 +1,65 @@
 {
-  "packages/bot/src/bot/failure.ts": {
+  "apps/node/src/bot/bot/failure.ts": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "packages/bot/src/observability/artifacts.ts": {
+  "apps/node/src/bot/observability/artifacts.ts": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "packages/bot/src/observability/error.ts": {
+  "apps/node/src/bot/observability/error.ts": {
     "no-restricted-syntax": {
       "count": 15
     }
   },
-  "packages/bot/src/observability/events.ts": {
+  "apps/node/src/bot/observability/events.ts": {
     "no-restricted-syntax": {
       "count": 9
     }
   },
-  "packages/bot/src/observability/logValue.ts": {
+  "apps/node/src/bot/observability/logValue.ts": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "packages/bot/src/observability/rbf.ts": {
+  "apps/node/src/bot/observability/rbf.ts": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "packages/node-utils/src/errors.ts": {
+  "apps/node/src/shared/logging.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "apps/node/src/tester/tester/evidence/testerAttemptEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "apps/node/src/tester/tester/evidence/testerEvidence.ts": {
+    "no-restricted-syntax": {
+      "count": 10
+    }
+  },
+  "apps/node/src/tester/tester/runtime/testerAttempt.ts": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "packages/node-utils/src/logging.ts": {
+  "apps/node/src/tester/tester/runtime/testerErrors.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "apps/node/src/tester/tester/runtime/testerTypes.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "apps/node/test/tester/support/tester/testerOrderFixtures.ts": {
     "no-restricted-syntax": {
       "count": 2
     }
@@ -67,36 +92,6 @@
   "packages/sdk/test/transaction/base/build_base_transaction_withdrawal_before_input_activity.ts": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "packages/validation/src/tester/evidence/testerAttemptEvidence.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/src/tester/evidence/testerEvidence.ts": {
-    "no-restricted-syntax": {
-      "count": 10
-    }
-  },
-  "packages/validation/src/tester/runtime/testerAttempt.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/tester/runtime/testerErrors.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "packages/validation/src/tester/runtime/testerTypes.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "packages/validation/test/support/tester/testerOrderFixtures.ts": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   }
 }
