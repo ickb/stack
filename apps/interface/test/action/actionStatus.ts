@@ -23,7 +23,6 @@ const requestConversion = "request conversion";
 // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Minimal L1 state sentinel is enough for canPreviewTx branch coverage.
 const l1State = {} as Parameters<typeof canPreviewTx>[1];
 
-// eslint-disable-next-line sonarjs/max-lines-per-function -- Exhaustive branch table keeps action status coverage readable.
 describe("action status", () => {
   it("prioritizes stored failures and availability messages", () => {
     expect(

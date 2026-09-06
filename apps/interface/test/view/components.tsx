@@ -39,7 +39,6 @@ vi.mock(import("react-dom"), () => {
   return { createPortal };
 });
 
-// eslint-disable-next-line sonarjs/max-lines-per-function -- Component coverage inspects a broad set of shallow React elements in one suite.
 describe("view components", () => {
   it("renders action layout messages and progress states", () => {
     const onAction = vi.fn<() => void>();

@@ -10,7 +10,7 @@
           "\\.d\\.(c|m)?ts$",
           "(^|/)tsconfig\\.json$",
           "(^|/)(?:babel|webpack)\\.config\\.(?:js|cjs|mjs|ts|json)$",
-          "^scripts/(?:run-node-tests|lint-source-structure)[.](?:mts|ts)$",
+          "^scripts/run-node-tests[.](?:mts|ts)$",
           "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
           "^scripts/tooling/eslint/plugins[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
@@ -63,6 +63,13 @@
       "to": {
         "path": "^packages/testkit/src/",
       },
+    },
+    {
+      "name": "oracle-independent",
+      "comment": "The contract oracle imports nothing from the implementation it judges (amendment 44).",
+      "severity": "error",
+      "from": { "path": "^packages/testkit/src/contract_oracle[.]ts$" },
+      "to": {},
     },
     {
       "name": "node-actors-apart",

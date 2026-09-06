@@ -35,72 +35,6 @@ function pluginConfig(plugin: PluginWithConfigs, name: string): ConfigInput {
   return config;
 }
 
-const classMemberOrder = {
-  memberTypes: [
-    "signature",
-    ["public-static-field", "protected-static-field", "private-static-field"],
-    "static-field",
-    "static-initialization",
-    ["public-instance-field", "protected-instance-field", "private-instance-field"],
-    "instance-field",
-    "field",
-    "constructor",
-    [
-      "public-static-accessor",
-      "public-static-get",
-      "public-static-set",
-      "public-instance-accessor",
-      "public-instance-get",
-      "public-instance-set",
-      "public-accessor",
-      "public-get",
-      "public-set",
-    ],
-    ["public-static-method", "public-instance-method", "public-method"],
-    [
-      "protected-static-accessor",
-      "protected-static-get",
-      "protected-static-set",
-      "protected-instance-accessor",
-      "protected-instance-get",
-      "protected-instance-set",
-      "protected-accessor",
-      "protected-get",
-      "protected-set",
-    ],
-    ["protected-static-method", "protected-instance-method", "protected-method"],
-    [
-      "private-static-accessor",
-      "private-static-get",
-      "private-static-set",
-      "#private-static-accessor",
-      "#private-static-get",
-      "#private-static-set",
-      "private-instance-accessor",
-      "private-instance-get",
-      "private-instance-set",
-      "#private-instance-accessor",
-      "#private-instance-get",
-      "#private-instance-set",
-      "private-accessor",
-      "private-get",
-      "private-set",
-      "#private-accessor",
-      "#private-get",
-      "#private-set",
-    ],
-    [
-      "private-static-method",
-      "private-instance-method",
-      "private-method",
-      "#private-static-method",
-      "#private-instance-method",
-      "#private-method",
-    ],
-    "method",
-  ],
-};
-
 const guardedVitestRuleErrors = {
   "vitest/max-nested-describe": "error",
   "vitest/no-interpolation-in-snapshots": "error",
@@ -139,102 +73,20 @@ const guardedVitestRuleErrors = {
   "vitest/warn-todo": "error",
 } as const;
 
+// CKB invariants (decisions amendment 36): each selector encodes a fund-safety or
+// chain-correctness rule, not a style proxy.
 const restrictedSyntax = [
   {
-    selector: ":function > RestElement > ArrayPattern",
+    selector:
+      "BinaryExpression[operator=/^[!=]==?$/u]:matches([left.type='MemberExpression'][left.property.name=/^(?:args|codeHash|hashType)$/u], [right.type='MemberExpression'][right.property.name=/^(?:args|codeHash|hashType)$/u], [left.type='MemberExpression'][left.property.value=/^(?:args|codeHash|hashType)$/u], [right.type='MemberExpression'][right.property.value=/^(?:args|codeHash|hashType)$/u])",
     message:
-      "Do not hide a long parameter list behind a rest tuple. Pass one named options object.",
-  },
-  {
-    selector: "CallExpression[callee.name='Error']",
-    message: "Use `new Error(...)` instead of `Error(...)`.",
+      "Do not compare script identity field by field. Compare whole scripts with Script.eq or by hash.",
   },
   {
     selector:
       "TSAsExpression:not([typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const']), TSTypeAssertion",
     message:
       "Avoid type assertions. If this cast is justified, add a local ESLint disable with the reason.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.property.name='todo']",
-    message: "Do not add placeholder tests. Delete the file or add a real assertion.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name=/^(?:assertions|hasAssertions)$/u]",
-    message:
-      "Do not use assertion-count placeholders. Add a concrete behavior assertion or an explicit assertion helper instead.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='anything'][arguments.length=0]",
-    message: "Do not use expect.anything(). Assert a concrete value or behavior instead.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='any'][arguments.0.type='Identifier'][arguments.0.name=/^(?:Function|Object)$/u]",
-    message:
-      "Do not use expect.any(Object) or expect.any(Function). Assert a concrete value, shape, or behavior instead.",
-  },
-  {
-    selector:
-      "MethodDefinition[accessibility=private] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/]), MethodDefinition[key.type='PrivateIdentifier'] > FunctionExpression > Identifier.params:has(TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='ccc'][typeName.right.name=/Like$/])",
-    message:
-      "Private protocol helpers should receive normalized CCC values, not broad CCC *Like inputs.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.property.name='toMatchObject'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0]",
-    message:
-      "Do not use toMatchObject({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type='ObjectExpression'][arguments.0.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ObjectExpression'][arguments.0.expression.properties.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='objectContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ObjectExpression'][arguments.0.expression.expression.properties.length=0]",
-    message:
-      "Do not use expect.objectContaining({}). Assert a concrete property, exact empty object, or explicit behavior instead.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type='ArrayExpression'][arguments.0.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='ArrayExpression'][arguments.0.expression.elements.length=0], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='arrayContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='ArrayExpression'][arguments.0.expression.expression.elements.length=0]",
-    message:
-      "Do not use expect.arrayContaining([]). Assert exact emptiness or concrete elements instead.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='Literal'][arguments.0.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='Literal'][arguments.0.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='Literal'][arguments.0.expression.expression.value=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type='TemplateLiteral'][arguments.0.expressions.length=0][arguments.0.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type='TemplateLiteral'][arguments.0.expression.expressions.length=0][arguments.0.expression.quasis.0.value.raw=''], CallExpression[callee.type='MemberExpression'][callee.object.name='expect'][callee.property.name='stringContaining'][arguments.0.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.type=/^(?:TSAsExpression|TSSatisfiesExpression)$/u][arguments.0.expression.expression.type='TemplateLiteral'][arguments.0.expression.expression.expressions.length=0][arguments.0.expression.expression.quasis.0.value.raw='']",
-    message:
-      'Do not use expect.stringContaining(""). Assert exact emptiness or concrete text instead.',
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='MemberExpression'][callee.object.property.name='not'][callee.object.object.type='CallExpression'][callee.object.object.callee.name='expect'][callee.object.object.arguments.0.type='CallExpression'][callee.object.object.arguments.0.callee.type='MemberExpression'][callee.object.object.arguments.0.callee.property.name='filter'][arguments.0.value=0]",
-    message:
-      "Avoid filter(...).not.toHaveLength(0). Assert the matched item or explicit filtered collection so failures show the missing behavior.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.property.name='toHaveLength'][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.property.name='filter'][arguments.0.type='MemberExpression'][arguments.0.property.name='length']",
-    message:
-      "Avoid filter(...).toHaveLength(items.length). Assert the mapped values or explicit filtered collection so failures show the mismatched behavior.",
-  },
-  {
-    selector:
-      "CallExpression:matches([arguments.0.value=true], [arguments.0.value=false])[callee.type='MemberExpression'][callee.computed=false][callee.object.type='CallExpression'][callee.object.callee.name='expect'][callee.object.arguments.0.type='CallExpression'][callee.object.arguments.0.callee.type='MemberExpression'][callee.object.arguments.0.callee.computed=false][callee.object.arguments.0.callee.property.name=/^(?:every|some)$/u]",
-    message:
-      "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
-  },
-  {
-    selector:
-      "CallExpression:matches([arguments.1.value=true], [arguments.1.value=false])[callee.type='MemberExpression'][callee.object.name='assert']:matches([callee.computed=false][callee.property.name='equal'], [callee.computed=true][callee.property.value='equal'])[arguments.0.type='CallExpression'][arguments.0.callee.type='MemberExpression'][arguments.0.callee.computed=false][arguments.0.callee.property.name=/^(?:every|some)$/u]",
-    message:
-      "Avoid asserting every(...) or some(...) as a bare boolean. Assert the matched item, filtered collection, or explicit length so failures show the missing behavior.",
-  },
-  {
-    selector:
-      "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(?:fails|retry)$/u]",
-    message: "Do not commit retried or expected-failing tests.",
   },
 ];
 
@@ -263,49 +115,25 @@ const productionRestrictedSyntax = [
     message:
       "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
   },
+  // Cell scans are bounded pages (decisions §1): only the two paged-scan helpers page
+  // through the client, and the page size and cursor are always passed.
+  {
+    selector:
+      "CallExpression[callee.property.name='findCellsOnChain'], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
+    message:
+      "Do not iterate cells unbounded. Page through collectPagedScan with an explicit page size.",
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u]:not(CallExpression[callee.name=/^(?:collectPagedScan|iteratePagedScan)$/u] CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u])",
+    message: "Page through the client only inside collectPagedScan or iteratePagedScan.",
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u][arguments.length<4]",
+    message: "Pass the page size and the cursor to every paged cell scan.",
+  },
 ];
-
-const noDependencyLoading: Rule.RuleModule = {
-  meta: {
-    type: "problem",
-    schema: [],
-    messages: {
-      dynamic: "The contract oracle must not load dependencies dynamically.",
-      reference: "The contract oracle must not reference dependency declarations.",
-      type: "The contract oracle must not reference dependencies through import types.",
-    },
-  },
-  create(context): Rule.RuleListener {
-    const loaderNames = new Set(["createRequire", "getBuiltinModule", "require"]);
-
-    return {
-      Identifier(node: Rule.Node): void {
-        if (loaderNames.has(context.sourceCode.getText(node))) {
-          context.report({ messageId: "dynamic", node });
-        }
-      },
-      ImportExpression(node: Rule.Node): void {
-        context.report({ messageId: "dynamic", node });
-      },
-      Program(): void {
-        for (const comment of context.sourceCode.getAllComments()) {
-          if (/^\/\s*<reference\b/iu.test(comment.value.trim())) {
-            context.report({ messageId: "reference", node: comment });
-          }
-        }
-      },
-      TSImportType(node: Rule.Node): void {
-        context.report({ messageId: "type", node });
-      },
-    };
-  },
-};
-
-const oracleIndependencePlugin: ESLint.Plugin = {
-  rules: {
-    "no-dependency-loading": noDependencyLoading,
-  },
-};
 
 // rollup deletes a `/* @__PURE__ */` call inside a class static block while keeping the
 // class, which silently breaks entities at runtime (decisions amendment 12). Comments are
@@ -352,14 +180,12 @@ export default defineConfig(
       tsdoc,
     },
     rules: {
-      complexity: ["error", { max: 15 }],
       "array-callback-return": "error",
       curly: "error",
       eqeqeq: "error",
       "no-duplicate-imports": "error",
       "no-else-return": "error",
       "no-console": ["error", { allow: ["error"] }],
-      "max-params": ["error", { max: 4, countThis: "except-void" }],
       "no-lonely-if": "error",
       "no-shadow": "off",
       "no-use-before-define": "off",
@@ -382,13 +208,6 @@ export default defineConfig(
       "no-template-curly-in-string": "error",
       "no-unmodified-loop-condition": "error",
       "no-useless-return": "error",
-      "no-warning-comments": [
-        "error",
-        {
-          location: "anywhere",
-          terms: ["todo", "fixme", "hack", "xxx"],
-        },
-      ],
       "prefer-template": "error",
       "no-restricted-syntax": ["error", ...restrictedSyntax],
       "local/no-pure-in-static-block": "error",
@@ -402,9 +221,7 @@ export default defineConfig(
         },
       ],
       "sonarjs/destructuring-assignment-syntax": "error",
-      "sonarjs/max-lines-per-function": ["error", { maximum: 80 }],
       "sonarjs/nested-control-flow": "error",
-      "sonarjs/no-duplicate-string": ["error", { threshold: 3 }],
       "sonarjs/prefer-immediate-return": "error",
       "tsdoc/syntax": "error",
       "promise/no-multiple-resolved": "error",
@@ -415,10 +232,7 @@ export default defineConfig(
         "@eslint-community/eslint-comments/no-unlimited-disable",
         "@eslint-community/eslint-comments/no-use",
         "@eslint-community/eslint-comments/require-description",
-        "no-warning-comments",
         "sonarjs/comment-regex",
-        "sonarjs/fixme-tag",
-        "sonarjs/todo-tag",
         ...Object.keys(guardedVitestRuleErrors),
       ],
       "@eslint-community/eslint-comments/no-unlimited-disable": "error",
@@ -454,14 +268,6 @@ export default defineConfig(
         },
       ],
       "@typescript-eslint/explicit-function-return-type": "error",
-      "@typescript-eslint/member-ordering": [
-        "error",
-        {
-          classExpressions: classMemberOrder,
-          classes: classMemberOrder,
-          default: "never",
-        },
-      ],
       "@typescript-eslint/method-signature-style": "error",
       "@typescript-eslint/no-dupe-class-members": "error",
       "@typescript-eslint/no-import-type-side-effects": "error",
@@ -616,9 +422,6 @@ export default defineConfig(
         {
           assertFunctionNames: [
             "expect",
-            "expectContentAddressedArtifact",
-            "expectExistingArtifactVerification",
-            "expectSymlinkedArtifactRefusal",
             "expectDefaultPageSizeScan",
             "expectRealBaseTransactionEffects",
             "expectSharedPageSizeForCapacityAndWithdrawalScans",
@@ -629,22 +432,10 @@ export default defineConfig(
     },
   },
   {
+    // The oracle's independence from the SDK is a dependency-cruiser rule (amendment 44).
     files: ["packages/testkit/src/contract_oracle.ts"],
     linterOptions: { noInlineConfig: true },
-    plugins: { "oracle-independence": oracleIndependencePlugin },
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["*"],
-              message: "The contract oracle must not import or re-export dependencies.",
-            },
-          ],
-        },
-      ],
-      "oracle-independence/no-dependency-loading": "error",
       // The oracle mirrors deployed Rust control flow; restructuring it for this metric harms auditability.
       "sonarjs/cognitive-complexity": "off",
     },

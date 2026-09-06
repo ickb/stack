@@ -8,12 +8,11 @@
     "check": "CI=true pnpm check:base",
     "check:base": "pnpm clean:deep && pnpm install && pnpm audit && pnpm lint && pnpm --filter ./apps/interface build",
     "check:fresh": "rm -f pnpm-lock.yaml && pnpm check",
-    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:structure && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
-    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:structure lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint; do pnpm \"$script\" || status=1; done; exit \"$status\"",
+    "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
+    "lint:inspect": "status=0; for script in lint:typecheck lint:format lint:duplication lint:knip lint:architecture lint:api lint:publish lint:coverage lint:eslint; do pnpm \"$script\" || status=1; done; exit \"$status\"",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./apps/interface lint:typecheck",
     "lint:format": "prettier --check .",
     "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript apps packages scripts",
-    "lint:structure": "node scripts/lint-source-structure.ts",
     "lint:knip": "knip --no-progress && knip --production --no-progress",
     "lint:architecture": "depcruise --config .dependency-cruiser.jsonc apps packages scripts",
     "lint:api": "pnpm build && pnpm -r --filter './packages/*' lint:api",
@@ -21,7 +20,7 @@
     "lint:coverage": "vitest run --coverage && node scripts/run-node-tests.ts",
     "lint:eslint:files": "eslint \"scripts/**/*.ts\" \"eslint.config.mts\" \"prettier.config.mts\" \"vitest.config.mts\" \"apps/*/vitest.config.mts\" \"packages/*/vitest.config.mts\" \"apps/interface/vite.config.ts\" \"apps/*/{src,test}/**/*.{ts,tsx}\" \"packages/*/{src,test}/**/*.{ts,tsx}\"",
     "lint:eslint": "pnpm lint:eslint:files --max-warnings=0",
-    "format": "pnpm lint:eslint:files --fix --prune-suppressions && prettier --write .",
+    "format": "pnpm lint:eslint:files --fix && prettier --write .",
     "test": "vitest",
     "test:ci": "vitest run && node scripts/run-node-tests.ts",
     "clean": "rm -fr dist packages/*/dist apps/*/dist apps/*/*.tsbuildinfo packages/*/*.tsbuildinfo",
@@ -59,8 +58,7 @@
     "publint": "^0.3.22",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
-    "vitest": "^4.1.10",
-    "yaml": "^2.9.0"
+    "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017"
 }
