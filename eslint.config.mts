@@ -212,14 +212,6 @@ export default defineConfig(
       "no-restricted-syntax": ["error", ...restrictedSyntax],
       "local/no-pure-in-static-block": "error",
       "security/detect-object-injection": "off",
-      "sonarjs/comment-regex": [
-        "error",
-        {
-          regularExpression: String.raw`\b(?:istanbul|c8|v8|coverage)[\s_-]*i[\s_-]*g[\s_-]*n[\s_-]*o[\s_-]*r[\s_-]*e\b`,
-          flags: "iu",
-          message: "Coverage ignore comments are not allowed.",
-        },
-      ],
       "sonarjs/destructuring-assignment-syntax": "error",
       "sonarjs/nested-control-flow": "error",
       "sonarjs/prefer-immediate-return": "error",
@@ -325,6 +317,20 @@ export default defineConfig(
         "error",
         ...restrictedSyntax,
         ...productionRestrictedSyntax,
+      ],
+    },
+  },
+  {
+    // Where the 100% coverage thresholds apply, nothing may opt a branch out of them.
+    files: ["packages/sdk/**/*.ts", "apps/node/**/*.ts"],
+    rules: {
+      "sonarjs/comment-regex": [
+        "error",
+        {
+          regularExpression: String.raw`\b(?:istanbul|c8|v8|coverage)[\s_-]*i[\s_-]*g[\s_-]*n[\s_-]*o[\s_-]*r[\s_-]*e\b`,
+          flags: "iu",
+          message: "Coverage ignore comments are not allowed.",
+        },
       ],
     },
   },
