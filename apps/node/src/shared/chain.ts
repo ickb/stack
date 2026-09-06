@@ -5,11 +5,6 @@ import {
   type SupportedChain,
 } from "@ickb/sdk";
 
-import { jsonLogReplacer, toJsonLogValue } from "./logging.ts";
-
-const UNKNOWN_ERROR_MESSAGE = "Unknown error";
-const FETCH_FAILED_MESSAGE = "fetch failed";
-
 export type { SupportedChain } from "@ickb/sdk";
 
 /** Public, credential-free identity for one RPC endpoint policy. */
@@ -75,35 +70,14 @@ export interface ChainPreflightEvidence {
 }
 
 /**
- * Verifies that an RPC client matches the expected public chain identity.
- *
- * @remarks Public chain mismatches keep their diagnostic text; unexpected
- * failures expose only a safe error shape before loop logging adds context.
+ * Verifies that an RPC client matches the expected public chain identity; transport
+ * failures propagate as thrown, and the JSON-line normalizer logs them whole.
  */
 export async function verifyChainPreflight(
   client: ccc.Client,
   chain: SupportedChain,
 ): Promise<ChainPreflightEvidence> {
-  try {
-    return assertChainPreflight(await readChainPreflight(client, chain));
-  } catch (error) {
-    if (isPublicChainPreflightFailure(error, chain)) {
-      const options = {
-        cause: toJsonLogValue(error, new WeakSet()),
-      };
-      throw new Error(errorMessage(error), options);
-    }
-    if (isFetchTransportFailure(error)) {
-      const options = {
-        cause: { name: "TypeError", message: FETCH_FAILED_MESSAGE },
-      };
-      throw new Error(FETCH_FAILED_MESSAGE, options);
-    }
-    const options = {
-      cause: safePreflightFailureCause(error),
-    };
-    throw new Error(`Failed to verify ${chain} RPC chain identity`, options);
-  }
+  return assertChainPreflight(await readChainPreflight(client, chain));
 }
 
 /**
@@ -172,62 +146,6 @@ function assertChainPreflight(evidence: ChainPreflightEvidence): ChainPreflightE
   }
 
   return evidence;
-}
-
-function safePreflightFailureCause(error: unknown): { name: string } | { type: string } {
-  if (error instanceof Error) {
-    return { name: safeErrorName(error.name) };
-  }
-  return { type: error === null ? "null" : typeof error };
-}
-
-function safeErrorName(name: string): string {
-  return /^[A-Za-z][\w.-]{0,63}$/u.test(name) ? name : "Error";
-}
-
-function isPublicChainPreflightFailure(error: unknown, chain: SupportedChain): boolean {
-  const message = errorMessage(error);
-  return (
-    message === `Missing ${chain} genesis header` ||
-    message.startsWith(`Invalid ${chain} RPC chain identity:`)
-  );
-}
-
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") {
-    return error;
-  }
-  return error instanceof Error ? error.message : stringifyErrorMessage(error);
-}
-
-function stringifyErrorMessage(error: unknown): string {
-  if (error === undefined || error === null) {
-    return UNKNOWN_ERROR_MESSAGE;
-  }
-  try {
-    return JSON.stringify(toJsonLogValue(error, new WeakSet()), jsonLogReplacer);
-  } catch {
-    return UNKNOWN_ERROR_MESSAGE;
-  }
-}
-
-/** True when the cause chain holds undici's `TypeError: fetch failed`, whose own cause names the host. */
-function isFetchTransportFailure(error: unknown): boolean {
-  const seen = new Set<object>();
-  let current = error;
-  while (typeof current === "object" && current !== null && !seen.has(current)) {
-    seen.add(current);
-    if (
-      "name" in current &&
-      current.name === "TypeError" &&
-      "message" in current &&
-      current.message === FETCH_FAILED_MESSAGE
-    ) {
-      return true;
-    }
-    current = current instanceof Error ? current.cause : undefined;
-  }
-  return false;
 }
 
 function invalidRpcEndpointIdentity(): TypeError {

@@ -24,8 +24,9 @@ export interface FundableCompletion<T> {
  * transport, scan, signer, and malformed-transaction errors propagate. `accept` rejects a
  * completed transaction on policy grounds, which also advances the walk.
  *
- * @returns The first accepted completion, or the last advancing error when none was accepted
- * (`undefined` when only `accept` rejected).
+ * Without `accept`, exhausting the candidates throws the last advancing failure, since the
+ * caller has no policy of its own to fall back on; with `accept`, exhaustion returns
+ * `undefined` and the caller decides.
  *
  * @public
  */
@@ -33,11 +34,21 @@ export async function completeFirstFundable<T>(
   candidates: Iterable<T>,
   build: (candidate: T) => ccc.Transaction | undefined,
   complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
+): Promise<FundableCompletion<T>>;
+/** With `accept`: exhaustion returns `undefined` and the caller decides. @public */
+export async function completeFirstFundable<T>(
+  candidates: Iterable<T>,
+  build: (candidate: T) => ccc.Transaction | undefined,
+  complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
+  accept: (tx: ccc.Transaction, candidate: T) => boolean,
+): Promise<FundableCompletion<T> | undefined>;
+export async function completeFirstFundable<T>(
+  candidates: Iterable<T>,
+  build: (candidate: T) => ccc.Transaction | undefined,
+  complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
   accept?: (tx: ccc.Transaction, candidate: T) => boolean,
-): Promise<
-  FundableCompletion<T> | { candidate?: undefined; tx?: undefined; error: unknown }
-> {
-  let error: unknown;
+): Promise<FundableCompletion<T> | undefined> {
+  let error: Error | undefined;
   for (const candidate of candidates) {
     let tx: ccc.Transaction;
     try {
@@ -57,10 +68,13 @@ export async function completeFirstFundable<T>(
       return { candidate, tx };
     }
   }
-  return { error };
+  if (accept === undefined) {
+    throw error ?? new Error("No candidate could be completed");
+  }
+  return undefined;
 }
 
-function isFundabilityFailure(error: unknown): boolean {
+function isFundabilityFailure(error: unknown): error is Error {
   return (
     isIckbError(error, "insufficient_capacity") ||
     error instanceof ccc.ErrorTransactionInsufficientCapacity ||

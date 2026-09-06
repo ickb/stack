@@ -228,7 +228,7 @@ async function buildWithdrawalTransaction(
           fee: tx.estimateFee(state.system.feeRate),
         }).reserveCheck.deficit === 0n,
     );
-    if (completion.tx === undefined) {
+    if (completion === undefined) {
       return undefined;
     }
     const accepted: RebalanceOutcome = {

@@ -9,17 +9,14 @@ import {
 } from "../../src/shared/index.ts";
 import {
   byte32FromByte,
-  FETCH_FAILED_MESSAGE,
   MAINNET_GENESIS_HASH,
   preflightClient,
-  RpcPreflightError,
   TESTNET_GENESIS_HASH,
 } from "./support/node_utils_support.ts";
 
 const MISSING_TESTNET_GENESIS_HEADER = "Missing testnet genesis header";
 const MAINNET_RPC_URL = "https://mainnet.example";
 const INVALID_RPC_ENDPOINT_IDENTITY = "Invalid RPC endpoint identity input";
-const TESTNET_PREFLIGHT_FAILURE_MESSAGE = "Failed to verify testnet RPC chain identity";
 const HTTP_CLIENT_PROCESS = fileURLToPath(
   new URL("fixtures/httpPublicClientProcess.ts", import.meta.url),
 );
@@ -166,149 +163,6 @@ describe("public client preflight identity", () => {
     );
   });
 });
-
-describe("preflight failure redaction", () => {
-  it("hides non-public preflight failure details before loop logging starts", async () => {
-    const client = testnetClient();
-    client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
-      await Promise.resolve();
-      throw new RpcPreflightError(
-        "RPC failed via https://user:pass@testnet.example/path?token=secret",
-      );
-    };
-
-    let failure: unknown;
-    try {
-      await verifyChainPreflight(client, "testnet");
-    } catch (error) {
-      failure = error;
-    }
-    expect(failure).toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { name: "RpcPreflightError" },
-    });
-    expect(JSON.stringify(failure)).not.toMatch(/user|pass|secret|testnet\.example/u);
-  });
-
-  it("hides non-Error preflight failures before loop logging starts", async () => {
-    const client = testnetClient();
-    client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
-      await Promise.resolve();
-      const failure = {
-        reason: "failed",
-        amount: 9007199254740993n,
-        reasonCode: "transport",
-      };
-      const rejectedHeader = Promise.withResolvers<ccc.ClientBlockHeader | undefined>();
-      rejectedHeader.reject(failure);
-      return rejectedHeader.promise;
-    };
-
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { type: "object" },
-    });
-  });
-});
-
-describe("preflight failure normalization", () => {
-  it("normalizes string, null, and unsafe-named preflight failures", async () => {
-    const stringFailure = testnetClient();
-    stringFailure.getHeaderByNumber = async (): Promise<
-      ccc.ClientBlockHeader | undefined
-    > => {
-      await Promise.resolve();
-      return rejectedHeaderRead("rpc failed");
-    };
-    await expect(verifyChainPreflight(stringFailure, "testnet")).rejects.toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { type: "string" },
-    });
-
-    const nullFailure = testnetClient();
-    nullFailure.getHeaderByNumber = async (): Promise<
-      ccc.ClientBlockHeader | undefined
-    > => {
-      await Promise.resolve();
-      return rejectedHeaderRead(null);
-    };
-    await expect(verifyChainPreflight(nullFailure, "testnet")).rejects.toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { type: "null" },
-    });
-
-    const unsafeNamedFailure = testnetClient();
-    unsafeNamedFailure.getHeaderByNumber = async (): Promise<
-      ccc.ClientBlockHeader | undefined
-    > => {
-      await Promise.resolve();
-      const error = new Error("failed");
-      Object.defineProperty(error, "name", { value: "not safe" });
-      throw error;
-    };
-    await expect(
-      verifyChainPreflight(unsafeNamedFailure, "testnet"),
-    ).rejects.toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { name: "Error" },
-    });
-  });
-
-  it("preserves public string preflight failures", async () => {
-    const client = testnetClient();
-    client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
-      await Promise.resolve();
-      throw new Error(MISSING_TESTNET_GENESIS_HEADER);
-    };
-
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
-      MISSING_TESTNET_GENESIS_HEADER,
-    );
-  });
-
-  it("falls back when non-Error failure message stringification throws", async () => {
-    const client = testnetClient();
-    const failure = Object.defineProperty({}, "message", {
-      enumerable: true,
-      get: () => {
-        throw new Error("getter failed");
-      },
-    });
-    client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
-      await Promise.resolve();
-      return rejectedHeaderRead(failure);
-    };
-
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
-      message: TESTNET_PREFLIGHT_FAILURE_MESSAGE,
-      cause: { type: "object" },
-    });
-  });
-});
-
-describe("preflight transport failures", () => {
-  it("keeps the fetch failure message and drops the transport cause", async () => {
-    const client = testnetClient();
-    client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
-      await Promise.resolve();
-      throw new TypeError(FETCH_FAILED_MESSAGE);
-    };
-
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toMatchObject({
-      message: FETCH_FAILED_MESSAGE,
-      cause: { name: "TypeError", message: FETCH_FAILED_MESSAGE },
-    });
-  });
-});
-
-async function rejectedHeaderRead(
-  failure: unknown,
-): Promise<ccc.ClientBlockHeader | undefined> {
-  await Promise.resolve();
-  const rejectedHeader = Promise.withResolvers<ccc.ClientBlockHeader | undefined>();
-  rejectedHeader.reject(failure);
-  return rejectedHeader.promise;
-}
 
 function testnetClient(): ccc.Client {
   return preflightClient({

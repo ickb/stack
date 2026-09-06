@@ -181,16 +181,16 @@ describe("completeFirstFundable", () => {
       complete,
       () => false,
     );
-    const exhausted = await completeFirstFundable(
-      [3],
-      () => transactionWithOutputs(3, script("11")),
-      complete,
-    );
 
     expect(attempts).toEqual([3, 2, 1, 0]);
     expect(accepted).toMatchObject({ candidate: 0 });
-    expect(rejected).toEqual({ error: undefined });
-    expect(exhausted).toMatchObject({ error: { name: "DaoOutputLimitError" } });
+    expect(rejected).toBeUndefined();
+    await expect(
+      completeFirstFundable([3], () => transactionWithOutputs(3, script("11")), complete),
+    ).rejects.toMatchObject({ name: "DaoOutputLimitError" });
+    await expect(completeFirstFundable([], () => tx, complete)).rejects.toThrow(
+      "No candidate could be completed",
+    );
   });
 
   it("propagates failures that are not about fundability", async () => {

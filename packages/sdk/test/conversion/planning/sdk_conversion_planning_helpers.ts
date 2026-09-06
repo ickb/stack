@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { errorOf } from "../../../src/client/sdk_error.ts";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
@@ -104,16 +103,6 @@ describe("sdk conversion planning helpers", () => {
         },
       ),
     ).toEqual([]);
-  });
-
-  it("normalizes unknown errors", () => {
-    const circular: { self?: unknown } = {};
-    circular.self = circular;
-
-    expect(errorOf("plain").message).toBe("plain");
-    expect(errorOf({ message: "from object" }).message).toBe("from object");
-    expect(errorOf({ value: 1n }).message).toBe('{"value":"1"}');
-    expect(errorOf(circular).message).toBe("[object Object]");
   });
 });
 

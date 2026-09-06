@@ -12,7 +12,6 @@ import {
 } from "../conversion/sdk_conversion_plans.ts";
 import { completeFirstFundable } from "../withdrawal/withdrawal_completion.ts";
 import { IckbSdkBase } from "./sdk_base.ts";
-import { errorOf } from "./sdk_error.ts";
 import type {
   CkbToIckbConversionPlan,
   ConversionTransactionOptions,
@@ -113,9 +112,6 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
       },
       async (tx) => this.completeConversion(tx, options),
     );
-    if (completion.tx === undefined) {
-      throw errorOf(completion.error);
-    }
     const { candidate: plan, tx } = completion;
     return {
       ok: true,
@@ -154,9 +150,6 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
       },
       async (tx) => this.completeConversion(tx, options),
     );
-    if (completion.tx === undefined) {
-      throw errorOf(completion.error);
-    }
     const { candidate: plan, tx } = completion;
     return {
       ok: true,

@@ -1,26 +1,19 @@
 import process from "node:process";
 
-const UNKNOWN_ERROR_MESSAGE = "Unknown error";
-const MESSAGE_KEY = "message";
 const CIRCULAR_LOG_VALUE = "[Circular]";
-const UNSAFE_LOG_VALUE = "[Unsupported log value]";
-const ERROR_BUILTIN_KEYS = new Set(["name", "message", "stack", "cause"]);
 
 /** Exit code for a stop that a restart must not retry: the account is below the capital minimum. */
 export const STOP_EXIT_CODE = 2;
 
-type JsonLogPrimitive = string | number | boolean | symbol | null | undefined;
-
 /** JSON-line-safe value after log normalization. */
-export type JsonLogValue = JsonLogPrimitive | JsonLogValue[] | JsonLogRecord;
+export type JsonLogValue =
+  string | number | boolean | null | undefined | JsonLogValue[] | JsonLogRecord;
 
 export interface JsonLogRecord {
   [key: string]: JsonLogValue;
 }
 
-/**
- * Writes an execution log with its elapsed time as one JSON line.
- */
+/** Writes an execution log with its elapsed time as one JSON line. */
 export function logExecution(executionLog: object, startTime: Date): void {
   writeJsonLine({
     ...executionLog,
@@ -28,161 +21,66 @@ export function logExecution(executionLog: object, startTime: Date): void {
   });
 }
 
-/**
- * Writes a record as one JSON line to stdout with bigint and cycle-safe conversion.
- */
-export function writeJsonLine(record: unknown): void {
-  process.stdout.write(
-    `${JSON.stringify(toJsonLogValue(record, new WeakSet()), jsonLogReplacer)}\n`,
-  );
+/** Writes a record as one JSON line to stdout. */
+export function writeJsonLine(record: object): void {
+  process.stdout.write(`${JSON.stringify(toJsonLogRecord(record))}\n`);
 }
 
-/** Normalizes one record's fields for JSON logging; see {@link toJsonLogValue}. */
+/**
+ * Normalizes a record for JSON logging: bigints become decimal strings, dates ISO strings,
+ * cycles `[Circular]`, and error-like objects keep their enumerable fields plus `name`,
+ * `message`, `stack`, and `cause`, which `JSON.stringify` alone would drop. Everything else
+ * is what `JSON.stringify` does natively. Nothing here sanitizes secrets a caller passes in.
+ */
 export function toJsonLogRecord(record: object): JsonLogRecord {
-  return objectEntriesLogValue(record, new WeakSet(), toJsonLogValue);
+  return entriesLogValue(record, new WeakSet());
 }
 
-/**
- * Converts bigint values to strings for JSON log serialization.
- */
-export function jsonLogReplacer(_: string, value: JsonLogValue | bigint): JsonLogValue {
-  return typeof value === "bigint" ? value.toString() : value;
-}
-
-/**
- * Converts an unknown value into a JSON-line-safe log value.
- *
- * @remarks
- * Bigints become decimal strings, valid dates become ISO strings, invalid dates
- * become `null`, cycles become `[Circular]`, and functions become
- * `[Unsupported log value]`. Error-like objects keep public metadata such as
- * `name`, `message`, `stack`, `cause`, `txHash`, `status`, and `isTimeout`.
- * This normalizer makes values serializable; it does not sanitize arbitrary
- * secrets that callers pass in.
- */
-export function toJsonLogValue(value: unknown, seen: WeakSet<object>): JsonLogValue {
-  let logValue: JsonLogValue;
-  if (typeof value === "string") {
-    logValue = value;
-  } else if (typeof value === "bigint") {
-    logValue = value.toString();
-  } else if (typeof value === "function") {
-    logValue = UNSAFE_LOG_VALUE;
-  } else if (isJsonLogPrimitive(value)) {
-    logValue = value;
-  } else if (value instanceof Date) {
-    logValue = dateLogValue(value);
-  } else if (isErrorLike(value)) {
-    logValue = errorLikeToLogValue(value, seen, toJsonLogValue);
-  } else {
-    logValue = objectLogValue(value, seen, toJsonLogValue);
+// eslint-disable-next-line sonarjs/function-return-type -- A JSON value is a union by definition.
+function toJsonLogValue(value: unknown, ancestors: WeakSet<object>): JsonLogValue {
+  if (typeof value === "bigint") {
+    return value.toString();
   }
-
-  return logValue;
-}
-
-function isJsonLogPrimitive(value: unknown): value is JsonLogPrimitive {
-  return typeof value !== "object" || value === null;
-}
-
-function dateLogValue(value: Date): string | null {
-  return Number.isNaN(value.getTime()) ? null : value.toISOString();
-}
-
-function isErrorLike(value: unknown): value is object & { stack?: unknown } {
-  return value instanceof Object && "stack" in value;
-}
-
-function errorLikeToLogValue(
-  error: object & { stack?: unknown },
-  seen: WeakSet<object>,
-  convert: (value: unknown, seen: WeakSet<object>) => JsonLogValue,
-): JsonLogValue {
-  let logValue: JsonLogValue = CIRCULAR_LOG_VALUE;
-  if (!seen.has(error)) {
-    seen.add(error);
-    try {
-      const logged: JsonLogRecord = {
-        ...errorOwnProperties(error, seen, convert),
-        name: logPropertyIfPresent(error, "name", seen, convert),
-        message: errorLogMessage(error),
-        txHash: logPropertyIfPresent(error, "txHash", seen, convert),
-        status: logPropertyIfPresent(error, "status", seen, convert),
-        isTimeout: logPropertyIfPresent(error, "isTimeout", seen, convert),
-        stack: typeof error.stack === "string" ? error.stack : "",
-      };
-      if ("cause" in error) {
-        logged["cause"] = convert(Reflect.get(error, "cause"), seen);
-      }
-      logValue = logged;
-    } finally {
-      seen.delete(error);
-    }
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
   }
-
-  return logValue;
-}
-
-function objectLogValue(
-  value: object,
-  seen: WeakSet<object>,
-  convert: (value: unknown, seen: WeakSet<object>) => JsonLogValue,
-): JsonLogValue {
-  let logValue: JsonLogValue = CIRCULAR_LOG_VALUE;
-  if (!seen.has(value)) {
-    seen.add(value);
-    try {
-      logValue = Array.isArray(value)
-        ? value.map((entry): JsonLogValue => convert(entry, seen))
-        : objectEntriesLogValue(value, seen, convert);
-    } finally {
-      seen.delete(value);
-    }
-  }
-
-  return logValue;
-}
-
-function logPropertyIfPresent(
-  value: object,
-  key: string,
-  seen: WeakSet<object>,
-  convert: (value: unknown, seen: WeakSet<object>) => JsonLogValue,
-): JsonLogValue {
-  if (!(key in value)) {
+  if (typeof value !== "object") {
+    // Functions, symbols, and undefined: dropped, as `JSON.stringify` drops them.
     return undefined;
   }
-  return convert(Reflect.get(value, key), seen);
-}
-
-function errorLogMessage(error: object): string {
-  const message = MESSAGE_KEY in error ? Reflect.get(error, MESSAGE_KEY) : undefined;
-  return typeof message === "string" ? message : UNKNOWN_ERROR_MESSAGE;
-}
-
-function errorOwnProperties(
-  error: object,
-  seen: WeakSet<object>,
-  convert: (value: unknown, seen: WeakSet<object>) => JsonLogValue,
-): JsonLogRecord {
-  const properties: JsonLogRecord = {};
-  for (const [key, entry] of Object.entries(error)) {
-    if (ERROR_BUILTIN_KEYS.has(key)) {
-      continue;
-    }
-    properties[key] = convert(entry, seen);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
   }
-  return properties;
+  if (ancestors.has(value)) {
+    return CIRCULAR_LOG_VALUE;
+  }
+  ancestors.add(value);
+  try {
+    return Array.isArray(value)
+      ? value.map((entry): JsonLogValue => toJsonLogValue(entry, ancestors))
+      : entriesLogValue(value, ancestors);
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
-function objectEntriesLogValue(
-  value: object,
-  seen: WeakSet<object>,
-  convert: (value: unknown, seen: WeakSet<object>) => JsonLogValue,
-): JsonLogRecord {
-  const jsonValue: JsonLogRecord = {};
+function entriesLogValue(value: object, ancestors: WeakSet<object>): JsonLogRecord {
+  const logged: JsonLogRecord = {};
   for (const [key, entry] of Object.entries(value)) {
-    jsonValue[key] = convert(entry, seen);
+    logged[key] = toJsonLogValue(entry, ancestors);
   }
-  return jsonValue;
+  if ("stack" in value) {
+    // An error's identifying fields are non-enumerable, so `Object.entries` misses them.
+    for (const key of ["name", "message", "stack", "cause"]) {
+      if (key in value) {
+        logged[key] = toJsonLogValue(Reflect.get(value, key), ancestors);
+      }
+    }
+  }
+  return logged;
 }
