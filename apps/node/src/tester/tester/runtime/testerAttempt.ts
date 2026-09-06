@@ -21,9 +21,8 @@ import { freshMatchableOrderSkip } from "./freshMatchableOrderSkip.ts";
 import { readTesterState, type Runtime, type TesterState } from "./runtime.ts";
 import {
   CKB_RESERVE,
-  createExecutionLogWriter,
   type ExecutionLog,
-  type ExecutionLogWriter,
+  type TesterBalanceLog,
   type TesterFeePolicy,
   type TesterScenarioSelection,
 } from "./testerTypes.ts";
@@ -48,11 +47,9 @@ export async function runTesterAttempt({
   const totalEquivalentCkb =
     state.totalCkbBalance +
     convert(false, state.totalIckbBalance, state.system.exchangeRatio);
-  const executionLogWriter = createExecutionLogWriter(executionLog);
-  executionLogWriter.record({
-    balance: testerBalanceLog(state, totalEquivalentCkb),
-    ratio: state.system.exchangeRatio,
-  });
+  const log = executionLog;
+  log.balance = testerBalanceLog(state, totalEquivalentCkb);
+  log.ratio = state.system.exchangeRatio;
   const skip = await freshMatchableOrderSkip(
     runtime,
     state.userOrders,
@@ -60,7 +57,7 @@ export async function runTesterAttempt({
     { feeRate: state.system.feeRate },
   );
   if (skip !== undefined) {
-    executionLogWriter.record({ skip });
+    log.skip = skip;
     return;
   }
   const planned = await planTesterAttempt({
@@ -71,23 +68,16 @@ export async function runTesterAttempt({
     depositCapacity,
     totalEquivalentCkb,
     executionLog,
-    executionLogWriter,
   });
   if (planned === undefined) {
     return;
   }
-  await sendTesterAttempt({
-    runtime,
-    state,
-    testerScenario,
-    planned,
-    executionLogWriter,
-  });
+  await sendTesterAttempt({ runtime, state, testerScenario, planned, executionLog });
 }
 function testerBalanceLog(
   state: TesterState,
   totalEquivalentCkb: bigint,
-): Record<string, unknown> {
+): TesterBalanceLog {
   return {
     CKB: {
       total: formatCkb(state.totalCkbBalance),
@@ -116,14 +106,15 @@ async function sendTesterAttempt({
   state,
   testerScenario,
   planned,
-  executionLogWriter,
+  executionLog,
 }: {
   runtime: Runtime;
   state: TesterState;
   testerScenario: TesterScenarioSelection;
   planned: PlannedTesterAttempt;
-  executionLogWriter: ExecutionLogWriter;
+  executionLog: ExecutionLog;
 }): Promise<void> {
+  const log = executionLog;
   const tx = planned.built.tx;
   const reserveSkip = testerReserveAttemptSkip(
     testerScenario,
@@ -132,19 +123,17 @@ async function sendTesterAttempt({
     planned,
   );
   if (reserveSkip !== undefined) {
-    executionLogWriter.record({ skip: reserveSkip });
+    log.skip = reserveSkip;
     return;
   }
   const fields = testerAttemptLogFields(testerScenario, state, planned);
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(runtime.signer, tx, (hash) => {
-      executionLogWriter.record({
-        actions: fields.actions,
-        transactionShape: fields.transactionShape,
-        txFee: fields.txFeeLog,
-        txHash: hash,
-      });
+      log.actions = fields.actions;
+      log.transactionShape = fields.transactionShape;
+      log.txFee = fields.txFeeLog;
+      log.txHash = hash;
     });
   } catch (error) {
     if (!(error instanceof TransactionBroadcastError)) {

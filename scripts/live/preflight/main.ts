@@ -1,4 +1,4 @@
-import { jsonLogReplacer } from "../../../apps/node/src/shared/index.ts";
+import { jsonLogReplacer } from "../../../apps/node/src/shared/logging.ts";
 import { parseArgs, type PreflightArgs, usage } from "./args.ts";
 import { publicErrorMessage } from "./errors.ts";
 import { runPreflight } from "./run.ts";

@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { ConversionMetadata, ConversionNotice } from "@ickb/sdk";
 import { formatCkb } from "../../../shared/index.ts";
 import type { TesterState } from "../runtime/runtime.ts";
 import {
@@ -8,10 +9,15 @@ import {
   type EstimatedRawOrder,
   type PlannedOrderLog,
   type PlannedRawOrder,
+  type TesterAttemptedOrderEvidence,
   type TesterExecutionActions,
   type TesterFeePolicy,
+  type TesterOrderEvidence,
   type TesterScenario,
+  type TesterScenarioEvidence,
   type TesterScenarioSelection,
+  type TesterSkip,
+  type TransactionShape,
 } from "../runtime/testerTypes.ts";
 
 /**
@@ -28,23 +34,24 @@ export function testerExecutionActions({
 }: {
   requestedScenario: TesterScenarioSelection;
   effectiveScenario: TesterScenario;
-  conversion: unknown;
-  conversionNotice: unknown;
+  conversion: ConversionMetadata | undefined;
+  conversionNotice: ConversionNotice | undefined;
   estimatedOrders: EstimatedRawOrder[];
   feePolicy: TesterFeePolicy;
   state: TesterState;
 }): TesterExecutionActions {
-  const conversionRecord = isRecord(conversion) ? conversion : undefined;
-  const noticeRecord = isRecord(conversionNotice) ? conversionNotice : undefined;
   const collectedOrders = state.userOrders.length;
   const cancelledOrders = state.userOrders.filter((group) =>
     group.order.isMatchable(),
   ).length;
   return {
     ...testerScenarioEvidence(requestedScenario, effectiveScenario),
-    ...(conversionRecord === undefined ? {} : { conversion: conversionRecord }),
-    ...(noticeRecord === undefined ? {} : { conversionNotice: noticeRecord }),
-    ...(conversionRecord === undefined ? orderEvidence(estimatedOrders, feePolicy) : {}),
+    ...(conversion === undefined
+      ? orderEvidence(estimatedOrders, feePolicy)
+      : {
+          conversion,
+          ...(conversionNotice === undefined ? {} : { conversionNotice }),
+        }),
     collectedOrders,
     cancelledOrders,
   };
@@ -61,17 +68,15 @@ export function testerSdkConversionNoticeSkip({
 }: {
   requestedScenario: TesterScenarioSelection;
   effectiveScenario: TesterScenario;
-  conversion: unknown;
-  conversionNotice: unknown;
-  orderEvidence: Record<string, unknown>;
-}): Record<string, unknown> {
-  const conversionRecord = isRecord(conversion) ? conversion : undefined;
-  const noticeRecord = isRecord(conversionNotice) ? conversionNotice : undefined;
+  conversion: ConversionMetadata;
+  conversionNotice: ConversionNotice;
+  orderEvidence: TesterAttemptedOrderEvidence;
+}): TesterSkip {
   return {
     reason: ESTIMATED_CONVERSION_TOO_SMALL,
     ...testerScenarioEvidence(requestedScenario, effectiveScenario),
-    ...(conversionRecord === undefined ? {} : { attemptedConversion: conversionRecord }),
-    ...(noticeRecord === undefined ? {} : { conversionNotice: noticeRecord }),
+    attemptedConversion: conversion,
+    conversionNotice,
     ...orderEvidence,
   };
 }
@@ -90,7 +95,7 @@ export function testerEstimatedTooSmallSkip({
   rawOrders: PlannedRawOrder[];
   estimatedOrders: EstimatedRawOrder[];
   feePolicy: TesterFeePolicy;
-}): Record<string, unknown> {
+}): TesterSkip {
   return {
     reason: ESTIMATED_CONVERSION_TOO_SMALL,
     ...testerScenarioEvidence(requestedScenario, effectiveScenario),
@@ -100,7 +105,7 @@ export function testerEstimatedTooSmallSkip({
 /**
  * Builds skip evidence when auto mode cannot find any currently actionable tester scenario.
  */
-export function testerNoActionableAutoScenarioSkip(): Record<string, unknown> {
+export function testerNoActionableAutoScenarioSkip(): TesterSkip {
   return {
     reason: ESTIMATED_CONVERSION_TOO_SMALL,
     requestedTesterScenario: "auto",
@@ -113,21 +118,19 @@ export function testerNoActionableAutoScenarioSkip(): Record<string, unknown> {
 export function testerAttemptedTransactionEvidence(
   requestedScenario: TesterScenarioSelection,
   effectiveScenario: TesterScenario,
-  conversion: unknown,
-  orderEvidence: Record<string, unknown>,
-): Record<string, unknown> {
-  const conversionRecord = isRecord(conversion) ? conversion : undefined;
+  conversion: ConversionMetadata | undefined,
+  orderEvidence: TesterAttemptedOrderEvidence,
+): TesterScenarioEvidence &
+  (TesterAttemptedOrderEvidence | { attemptedConversion: ConversionMetadata }) {
   return {
     ...testerScenarioEvidence(requestedScenario, effectiveScenario),
-    ...(conversionRecord === undefined
-      ? orderEvidence
-      : { attemptedConversion: conversionRecord }),
+    ...(conversion === undefined ? orderEvidence : { attemptedConversion: conversion }),
   };
 }
 function testerScenarioEvidence(
   requestedScenario: TesterScenarioSelection,
   effectiveScenario: TesterScenario,
-): Record<string, unknown> {
+): TesterScenarioEvidence {
   return {
     ...(effectiveScenario === requestedScenario
       ? {}
@@ -138,7 +141,7 @@ function testerScenarioEvidence(
 /**
  * Returns stable transaction-size counters for tester logs.
  */
-export function transactionShape(tx: ccc.Transaction): Record<string, number> {
+export function transactionShape(tx: ccc.Transaction): TransactionShape {
   return {
     inputs: tx.inputs.length,
     outputs: tx.outputs.length,
@@ -151,7 +154,7 @@ export function transactionShape(tx: ccc.Transaction): Record<string, number> {
 function orderEvidence(
   orders: EstimatedRawOrder[],
   feePolicy: TesterFeePolicy,
-): Record<string, unknown> {
+): TesterOrderEvidence {
   const logs = orders.map((order) => orderLog(order, feePolicy));
   const [first] = logs;
   return logs.length === 1 && first !== undefined
@@ -162,7 +165,7 @@ export function attemptedOrderEvidence(
   rawOrders: PlannedRawOrder[],
   estimatedOrders: EstimatedRawOrder[],
   feePolicy: TesterFeePolicy,
-): Record<string, unknown> {
+): TesterAttemptedOrderEvidence {
   const logs = rawOrders.map((order, index) =>
     attemptedOrderLog(order, estimatedOrders[index], feePolicy),
   );
@@ -201,9 +204,6 @@ function orderLog(order: EstimatedRawOrder, feePolicy: TesterFeePolicy): Planned
         fee,
         ...feeFields,
       };
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function feePolicyLog(
   policy: TesterFeePolicy,

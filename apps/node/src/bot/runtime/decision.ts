@@ -98,9 +98,6 @@ function rebalanceSummary(
           requiredLiveDepositCount: rebalance.requiredLiveDeposits?.length ?? 0,
         }
       : {}),
-    ...(rebalance.diagnostics === undefined
-      ? {}
-      : { diagnostics: rebalance.diagnostics }),
     outputSlots,
     projectedAvailableCkb: state.availableCkbBalance + match.ckbDelta,
     projectedAvailableIckb: state.availableIckbBalance + match.udtDelta,

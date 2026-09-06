@@ -21,13 +21,8 @@ import {
 
 // One process is one bot turn: read config, connect, act at most once, exit.
 const { chain, privateKey, rpcUrl } = await readBotRuntimeConfig(process.env);
-const artifactRoot = process.env["BOT_ARTIFACT_ROOT"];
-const events = new BotEventEmitter({
-  chain,
-  runId: createRunId(),
-  ...(artifactRoot === undefined ? {} : { artifactRoot }),
-});
-events.emit("bot.run.started");
+const events = new BotEventEmitter({ chain, runId: createRunId() });
+events.emit({ type: "bot.turn.started" });
 try {
   const client = createPublicClient(chain, rpcUrl);
   const preflight = await verifyChainPreflight(client, chain);
@@ -38,9 +33,9 @@ try {
   // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const primaryLock = (await signer.getRecommendedAddressObj()).script;
-  events.emit("bot.chain.preflight", {
+  events.emit({
+    type: "bot.chain.preflight",
     identity: {
-      chain,
       primaryLock: {
         codeHash: primaryLock.codeHash,
         hashType: primaryLock.hashType,

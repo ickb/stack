@@ -1,6 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbSdk } from "@ickb/sdk";
-import type { TesterDirection } from "../../testerContract.ts";
+import type { ConversionMetadata, ConversionNotice, IckbSdk } from "@ickb/sdk";
+import type {
+  TesterDirection,
+  TesterScenario,
+  TesterScenarioSelection,
+} from "../../testerContract.ts";
+import type { FreshMatchableOrderSkip } from "./freshMatchableOrderSkip.ts";
 export {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   AUTO_TESTER_SCENARIOS,
@@ -74,31 +79,91 @@ export type EstimatedRawOrder = PlannedRawOrder & {
   estimate: ReturnType<typeof IckbSdk.estimate>;
 };
 
-export type TesterExecutionActions = Record<string, unknown>;
+/** Which scenario ran, and which one was asked for when `auto` or a composite resolved it. */
+export interface TesterScenarioEvidence {
+  requestedTesterScenario?: TesterScenarioSelection;
+  testerScenario: TesterScenario;
+}
 
-/** Mutable JSON log record for one tester attempt. */
-export type ExecutionLog = Record<string, unknown> & {
-  startTime?: string;
-  skip?: unknown;
-  balance?: unknown;
-  ratio?: unknown;
-  error?: unknown;
-  actions?: unknown;
-  transactionShape?: unknown;
-  txFee?: unknown;
-  txHash?: unknown;
-};
-/** Writer that owns mutation of one tester execution log record. */
-export interface ExecutionLogWriter {
-  record: (fields: Partial<ExecutionLog>) => void;
+export type TesterOrderEvidence =
+  { newOrder: PlannedOrderLog } | { newOrders: PlannedOrderLog[]; orderCount: number };
+
+export type TesterAttemptedOrderEvidence =
+  | { attemptedOrder: PlannedOrderLog }
+  | { attemptedOrders: PlannedOrderLog[]; attemptedOrderCount: number };
+
+/** Public summary of one sent tester transaction. */
+export type TesterExecutionActions = TesterScenarioEvidence & {
+  collectedOrders: number;
+  cancelledOrders: number;
+} & (
+    | { conversion: ConversionMetadata; conversionNotice?: ConversionNotice }
+    | TesterOrderEvidence
+  );
+
+/** Reserve skip payload: projected plain CKB would fall below the tester reserve. */
+export interface TesterReserveSkip {
+  reason: "post-tx-ckb-reserve";
+  reserve: string;
+  preTxCkbBalance: string;
+  postTxCkbBalance: string;
+  deficit: string;
 }
-export function createExecutionLogWriter(executionLog: ExecutionLog): ExecutionLogWriter {
-  return {
-    record(fields): void {
-      Object.assign(executionLog, fields);
-    },
+
+/** Every way one tester turn ends without sending. */
+export type TesterSkip =
+  | FreshMatchableOrderSkip
+  | { reason: "sampled-amount-too-small" }
+  | {
+      reason: typeof ESTIMATED_CONVERSION_TOO_SMALL;
+      requestedTesterScenario: "auto";
+      attemptedTesterScenarios: TesterScenario[];
+    }
+  | ({ reason: typeof ESTIMATED_CONVERSION_TOO_SMALL } & TesterScenarioEvidence &
+      TesterAttemptedOrderEvidence & {
+        attemptedConversion?: ConversionMetadata;
+        conversionNotice?: ConversionNotice;
+      })
+  | (TesterReserveSkip &
+      TesterScenarioEvidence &
+      (TesterAttemptedOrderEvidence | { attemptedConversion: ConversionMetadata }));
+
+/** Human-readable balances for one tester turn. */
+export interface TesterBalanceLog {
+  CKB: {
+    total: string;
+    available: string;
+    plainAvailable: string;
+    projectedAvailable: string;
+    reserve: string;
+    unavailable: string;
   };
+  ICKB: { total: string; available: string; unavailable: string };
+  totalEquivalent: { CKB: string; ICKB: string };
 }
+
+/** The one JSON record a tester turn writes; fields fill in as the turn advances. */
+export interface ExecutionLog {
+  startTime?: string;
+  balance?: TesterBalanceLog;
+  ratio?: { ckbScale: bigint; udtScale: bigint };
+  skip?: TesterSkip;
+  error?: unknown;
+  actions?: TesterExecutionActions;
+  transactionShape?: TransactionShape;
+  txFee?: { fee: string; feeRate: ccc.Num };
+  txHash?: ccc.Hex;
+}
+
+export interface TransactionShape {
+  inputs: number;
+  outputs: number;
+  outputsData: number;
+  cellDeps: number;
+  headerDeps: number;
+  witnesses: number;
+}
+
 /** Terminal tester error that should stop retry loops. */
 export class TesterTerminalError extends Error {
   constructor(message: string, options?: ErrorOptions) {

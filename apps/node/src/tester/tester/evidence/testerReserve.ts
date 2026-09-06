@@ -9,6 +9,7 @@ import {
   MIXED_DIRECTION_LIMIT_ORDERS_SCENARIO,
   TWO_CKB_TO_ICKB_LIMIT_ORDERS_SCENARIO,
   TesterTerminalError,
+  type TesterReserveSkip,
   type TesterScenario,
 } from "../runtime/testerTypes.ts";
 
@@ -24,7 +25,7 @@ export function enforceTesterPlainCkbReserve(
   state: TesterState,
   accountLocks: ccc.Script[],
   scenario: TesterScenario,
-): Record<string, string> | undefined {
+): TesterReserveSkip | undefined {
   const preTxCkbBalance = state.plainCkbBalance;
   const postTxCkbBalance = postTransactionPlainCkbBalance(tx, state, accountLocks);
   if (isExplicitCkbReserveScenario(scenario) && postTxCkbBalance < CKB_RESERVE) {
@@ -66,7 +67,7 @@ export function postTransactionPlainCkbBalance(
 export function testerReserveSkip(
   postTxCkbBalance: bigint,
   preTxCkbBalance: bigint,
-): Record<string, string> | undefined {
+): TesterReserveSkip | undefined {
   if (postTxCkbBalance >= CKB_RESERVE) {
     return undefined;
   }

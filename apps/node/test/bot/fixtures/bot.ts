@@ -24,7 +24,7 @@ import {
   outPoint,
   script,
 } from "@ickb/testkit";
-import type { BotState, Runtime } from "../../../../src/bot/runtime/types.ts";
+import type { BotState, Runtime } from "../../../src/bot/runtime/types.ts";
 
 type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0];
 

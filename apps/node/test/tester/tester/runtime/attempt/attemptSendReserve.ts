@@ -16,6 +16,7 @@ vi.mock(import("@ickb/sdk"), async (importOriginal) => {
   };
 });
 
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
@@ -24,7 +25,6 @@ import {
   capacityCell,
   ccc,
   completeTransactionMock,
-  isRetryableTesterError,
   requestMock,
   runTesterAttempt,
   runtimeWithSdk,
@@ -54,7 +54,7 @@ describe("runTesterAttempt send outcomes", () => {
       .spyOn(runtime.signer, "sendTransaction")
       .mockResolvedValue(txHash);
     waitTransactionMock.mockResolvedValueOnce(committedResponse());
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     await runTesterAttempt({
       runtime,
@@ -66,10 +66,10 @@ describe("runTesterAttempt send outcomes", () => {
     expect(waitTransactionMock).toHaveBeenCalledWith(runtime.client, txHash, {
       timeout: 600_000,
     });
-    expect(executionLog["actions"]).toMatchObject({
+    expect(executionLog.actions).toMatchObject({
       testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
     });
-    expect(executionLog["txHash"]).toBe(txHash);
+    expect(executionLog.txHash).toBe(txHash);
     expect(calls).toEqual(["base", "request", "complete"]);
   });
 });
@@ -81,7 +81,7 @@ describe("runTesterAttempt wait failures", () => {
     vi.spyOn(runtime.signer, "sendTransaction").mockResolvedValue(txHash);
     const timeout = new ccc.ErrorClientWaitTransactionTimeout(600_000);
     waitTransactionMock.mockRejectedValue(timeout);
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     await expect(runFundedSendAttempt(runtime, executionLog)).rejects.toMatchObject({
       name: "TransactionConfirmationError",
@@ -99,7 +99,7 @@ describe("runTesterAttempt wait failures", () => {
       { timeout: 600_000 },
     ]);
     expect(calls).toEqual(["base", "request", "complete"]);
-    expect(executionLog["txHash"]).toBe(txHash);
+    expect(executionLog.txHash).toBe(txHash);
   });
 
   it("preserves terminal chain rejection evidence", async () => {
@@ -148,7 +148,6 @@ describe("runTesterAttempt wait failures", () => {
       isTimeout: true,
       cause: pollingError,
     });
-    expect(isRetryableTesterError(error)).toBe(false);
   });
 });
 
@@ -166,7 +165,7 @@ describe("runTesterAttempt send ambiguity", () => {
       },
     );
     waitTransactionMock.mockResolvedValueOnce(committedResponse());
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     await expect(runFundedSendAttempt(runtime, executionLog)).resolves.toBeUndefined();
 
@@ -178,7 +177,7 @@ describe("runTesterAttempt send ambiguity", () => {
       { timeout: 600_000 },
     ]);
     expect(calls).toEqual(["base", "request", "complete"]);
-    expect(executionLog["txHash"]).toBe(txHash);
+    expect(executionLog.txHash).toBe(txHash);
   });
 
   it("rethrows a pre-broadcast failure without waiting for a confirmation", async () => {
@@ -233,7 +232,7 @@ describe("runTesterAttempt reserve outcomes", () => {
     });
     runtime.primaryLock = lock;
     runtime.accountLocks = [lock];
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     await runTesterAttempt({
       runtime,
@@ -242,7 +241,7 @@ describe("runTesterAttempt reserve outcomes", () => {
       executionLog,
     });
     expect(waitTransactionMock).not.toHaveBeenCalled();
-    expect(executionLog["skip"]).toMatchObject({
+    expect(executionLog.skip).toMatchObject({
       reason: "post-tx-ckb-reserve",
       testerScenario: ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
     });
@@ -282,7 +281,7 @@ function fundedSendRuntime(): {
 
 async function runFundedSendAttempt(
   runtime: ReturnType<typeof runtimeWithSdk>,
-  executionLog: Record<string, unknown>,
+  executionLog: ExecutionLog,
 ): ReturnType<typeof runTesterAttempt> {
   await Promise.resolve();
   return runTesterAttempt({

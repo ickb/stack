@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   ESTIMATED_TOO_SMALL_REASON,
@@ -38,7 +39,7 @@ describe("runTesterAttempt skip outcomes", () => {
           };
         },
       });
-      const executionLog: Record<string, unknown> = {};
+      const executionLog: ExecutionLog = {};
 
       await runTesterAttempt({
         runtime,
@@ -47,7 +48,7 @@ describe("runTesterAttempt skip outcomes", () => {
         executionLog,
       });
       expect(process.exitCode).toBe(2);
-      expect(executionLog["error"]).toBe(LOW_CAPITAL_MESSAGE);
+      expect(executionLog.error).toBe(LOW_CAPITAL_MESSAGE);
     } finally {
       stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
@@ -78,7 +79,7 @@ describe("runTesterAttempt pending-capital outcomes", () => {
           };
         },
       });
-      const executionLog: Record<string, unknown> = {};
+      const executionLog: ExecutionLog = {};
 
       await runTesterAttempt({
         runtime,
@@ -87,11 +88,11 @@ describe("runTesterAttempt pending-capital outcomes", () => {
         executionLog,
       });
       expect(process.exitCode).toBeUndefined();
-      expect(executionLog["skip"]).toMatchObject({
+      expect(executionLog.skip).toMatchObject({
         reason: ESTIMATED_TOO_SMALL_REASON,
         requestedTesterScenario: "auto",
       });
-      expect(executionLog["balance"]).toMatchObject({
+      expect(executionLog.balance).toMatchObject({
         CKB: { total: "6000", available: "0", unavailable: "6000" },
         ICKB: { total: "0", available: "0", unavailable: "0" },
         totalEquivalent: { CKB: "6000", ICKB: "6000" },
@@ -150,7 +151,7 @@ describe("runTesterAttempt fresh-order outcomes", () => {
           blockNumber: 100n,
         });
       };
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     await runTesterAttempt({
       runtime,
@@ -158,7 +159,7 @@ describe("runTesterAttempt fresh-order outcomes", () => {
       feePolicy: { fee: 1n, feeBase: 100000n },
       executionLog,
     });
-    expect(executionLog["skip"]).toMatchObject({
+    expect(executionLog.skip).toMatchObject({
       reason: "fresh-matchable-order",
       txHash,
       blockNumber: 100n,

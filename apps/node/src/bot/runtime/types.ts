@@ -11,7 +11,7 @@ import type {
   WithdrawalGroup,
 } from "@ickb/sdk";
 
-import type { RebalanceDiagnostics, RebalancePlan } from "../policy.ts";
+import type { RebalancePlan } from "../policy.ts";
 
 /** Runtime dependencies used by each bot loop iteration. */
 export interface Runtime {
@@ -200,7 +200,6 @@ export interface BotDecisionTranscript {
     depositQuantity?: number;
     withdrawalRequestCount?: number;
     requiredLiveDepositCount?: number;
-    diagnostics?: RebalanceDiagnostics;
     outputSlots: number;
     projectedAvailableCkb: bigint;
     projectedAvailableIckb: bigint;
@@ -235,7 +234,11 @@ export interface BotDecisionTranscript {
       directDepositCost: bigint;
       withdrawalRequestCost: bigint;
     };
+    /** Compact shape of the pool ring the rebalance policy evaluated; the only ring evidence kept. */
     selectedRing?: {
+      poolDepositCount: number;
+      ringLength: bigint;
+      segmentCount: number;
       targetSegmentIndex: number;
       targetDepositCount: number;
       targetUdtValue: bigint;
@@ -245,6 +248,10 @@ export interface BotDecisionTranscript {
       heaviestSegmentIndex: number;
       heaviestSegmentDepositCount: number;
       heaviestSegmentUdtValue: bigint;
+      protectedDepositCount: number;
+      protectedUdtValue: bigint;
+      surplusDepositCount: number;
+      surplusUdtValue: bigint;
       canCreateRingInventory: boolean;
       shouldBootstrapRing: boolean;
     };

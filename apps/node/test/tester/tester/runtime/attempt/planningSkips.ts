@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ESTIMATED_TOO_SMALL_REASON,
   LOW_CAPITAL_MESSAGE,
@@ -11,7 +12,7 @@ import {
 
 describe("planTesterAttempt", () => {
   it("skips auto attempts when no scenario is funded", async () => {
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
     const result = await planTesterAttempt({
       runtime: runtimeWithSdk({}),
       state: testerState({ availableCkbBalance: ccc.fixedPointFrom(1000) + 1n }),
@@ -23,7 +24,7 @@ describe("planTesterAttempt", () => {
     });
 
     expect(result).toBeUndefined();
-    expect(executionLog["skip"]).toMatchObject({
+    expect(executionLog.skip).toMatchObject({
       reason: ESTIMATED_TOO_SMALL_REASON,
       requestedTesterScenario: "auto",
     });
@@ -34,7 +35,7 @@ describe("planTesterAttempt", () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
       process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = {};
+      const executionLog: ExecutionLog = {};
 
       const result = await planTesterAttempt({
         runtime: runtimeWithSdk({}),
@@ -47,7 +48,7 @@ describe("planTesterAttempt", () => {
       });
       expect(result).toBeUndefined();
       expect(process.exitCode).toBe(2);
-      expect(executionLog["error"]).toBe(LOW_CAPITAL_MESSAGE);
+      expect(executionLog.error).toBe(LOW_CAPITAL_MESSAGE);
     } finally {
       stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
@@ -55,7 +56,7 @@ describe("planTesterAttempt", () => {
   });
 
   it("skips sampled random plans that produce no raw orders", async () => {
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     const result = await planTesterAttempt({
       runtime: runtimeWithSdk({}),
@@ -68,6 +69,6 @@ describe("planTesterAttempt", () => {
     });
 
     expect(result).toBeUndefined();
-    expect(executionLog["skip"]).toEqual({ reason: "sampled-amount-too-small" });
+    expect(executionLog.skip).toEqual({ reason: "sampled-amount-too-small" });
   });
 });

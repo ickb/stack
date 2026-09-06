@@ -9,8 +9,8 @@ import {
 
 import { headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import { readBotState } from "../../../src/bot/bot/state.ts";
-import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "../../../src/bot/policy.ts";
+import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "../../src/bot/policy.ts";
+import { readBotState } from "../../src/bot/state.ts";
 import { botRuntime, NO_DEPOSITS, readyDeposit, testMatch } from "./fixtures/bot.ts";
 
 describe("readBotState pool snapshot", () => {

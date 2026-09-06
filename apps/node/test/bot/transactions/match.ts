@@ -3,12 +3,12 @@ import { type MatchDiagnostics, OrderManager, Ratio } from "@ickb/sdk";
 
 import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RebalancePlan } from "../../../src/bot/policy.ts";
+import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
 import type {
   RebalanceDiagnostics,
-  RebalancePlan,
   RingSegmentDiagnostics,
-} from "../../../src/bot/policy.ts";
-import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
+} from "../../../src/bot/policy/types.ts";
 import { buildDecisionTranscript } from "../../../src/bot/runtime/decision.ts";
 import { MAX_OUTPUTS_BEFORE_CHANGE } from "../../../src/bot/runtime/support.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
@@ -26,7 +26,7 @@ import {
   readyDeposit,
   TARGET_ICKB_BALANCE,
   testMatch,
-} from "../bot/fixtures/bot.ts";
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -450,19 +450,34 @@ describe("buildDecisionTranscript withdrawal summaries", () => {
 });
 
 describe("buildDecisionTranscript selected ring summaries", () => {
-  it("summarizes the heaviest selected ring segment", () => {
-    expect(
-      transcriptForRebalance({
-        kind: "none",
-        reason: "no_withdrawable_ickb",
-        diagnostics: ringDiagnostics(),
-      }).audit.selectedRing,
-    ).toMatchObject({
+  it("keeps only the compact ring shape: target, heaviest, and totals", () => {
+    const transcript = transcriptForRebalance({
+      kind: "none",
+      reason: "no_withdrawable_ickb",
+      diagnostics: ringDiagnostics(),
+    });
+
+    expect(transcript.audit.selectedRing).toEqual({
+      poolDepositCount: 2,
+      ringLength: 180n,
+      segmentCount: 2,
+      targetSegmentIndex: 0,
       targetDepositCount: 0,
+      targetUdtValue: 0n,
+      totalPoolUdt: 4n,
+      emptySegmentCount: 1,
+      nonemptySegmentCount: 1,
       heaviestSegmentIndex: 1,
       heaviestSegmentDepositCount: 2,
       heaviestSegmentUdtValue: 4n,
+      protectedDepositCount: 1,
+      protectedUdtValue: 3n,
+      surplusDepositCount: 1,
+      surplusUdtValue: 1n,
+      canCreateRingInventory: true,
+      shouldBootstrapRing: false,
     });
+    expect(transcript.rebalance).not.toHaveProperty("diagnostics");
   });
 });
 
@@ -515,13 +530,16 @@ function ringSegment(
     "depositCount" | "index" | "isTarget" | "udtValue"
   >,
 ): RingSegmentDiagnostics {
+  // One deposit per non-empty segment is the anchor; the rest is surplus.
+  const protectedDepositCount = Math.min(segment.depositCount, 1);
+  const protectedUdtValue = segment.depositCount === 0 ? 0n : segment.udtValue - 1n;
   return {
     ...segment,
-    protectedDepositCount: 0,
-    protectedUdtValue: 0n,
+    protectedDepositCount,
+    protectedUdtValue,
     protectedOutPoints: [],
-    surplusDepositCount: segment.depositCount,
-    surplusUdtValue: segment.udtValue,
+    surplusDepositCount: segment.depositCount - protectedDepositCount,
+    surplusUdtValue: segment.udtValue - protectedUdtValue,
     surplusOutPoints: [],
   };
 }

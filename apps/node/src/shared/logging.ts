@@ -14,31 +14,18 @@ type JsonLogPrimitive = string | number | boolean | symbol | null | undefined;
 /** JSON-line-safe value after log normalization. */
 export type JsonLogValue = JsonLogPrimitive | JsonLogValue[] | JsonLogRecord;
 
-interface JsonLogRecord {
+export interface JsonLogRecord {
   [key: string]: JsonLogValue;
 }
 
 /**
- * Records a JSON-safe error on the execution log.
+ * Writes an execution log with its elapsed time as one JSON line.
  */
-export function recordExecutionError(
-  executionLog: Record<string, unknown>,
-  error: unknown,
-): void {
-  const log = executionLog;
-  log["error"] = errorToLog(error);
-}
-
-/**
- * Adds elapsed time to an execution log and writes it as one JSON line.
- */
-export function logExecution(
-  executionLog: Record<string, unknown>,
-  startTime: Date,
-): void {
-  const log = executionLog;
-  log["ElapsedSeconds"] = Math.round((Date.now() - startTime.getTime()) / 1000);
-  writeJsonLine(log);
+export function logExecution(executionLog: object, startTime: Date): void {
+  writeJsonLine({
+    ...executionLog,
+    ElapsedSeconds: Math.round((Date.now() - startTime.getTime()) / 1000),
+  });
 }
 
 /**
@@ -50,15 +37,16 @@ export function writeJsonLine(record: unknown): void {
   );
 }
 
+/** Normalizes one record's fields for JSON logging; see {@link toJsonLogValue}. */
+export function toJsonLogRecord(record: object): JsonLogRecord {
+  return objectEntriesLogValue(record, new WeakSet(), toJsonLogValue);
+}
+
 /**
  * Converts bigint values to strings for JSON log serialization.
  */
 export function jsonLogReplacer(_: string, value: JsonLogValue | bigint): JsonLogValue {
   return typeof value === "bigint" ? value.toString() : value;
-}
-
-function errorToLog(error: unknown): JsonLogValue {
-  return toJsonLogValue(error ?? "Empty Error", new WeakSet());
 }
 
 /**

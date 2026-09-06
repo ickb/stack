@@ -6,9 +6,9 @@ import {
 } from "@ickb/sdk";
 
 import { jsonLogReplacer, toJsonLogValue } from "./logging.ts";
-import { FETCH_FAILED_MESSAGE, isRetryableRpcTransportError } from "./retryable.ts";
 
 const UNKNOWN_ERROR_MESSAGE = "Unknown error";
+const FETCH_FAILED_MESSAGE = "fetch failed";
 
 export type { SupportedChain } from "@ickb/sdk";
 
@@ -93,7 +93,7 @@ export async function verifyChainPreflight(
       };
       throw new Error(errorMessage(error), options);
     }
-    if (isRetryableRpcTransportError(error)) {
+    if (isFetchTransportFailure(error)) {
       const options = {
         cause: { name: "TypeError", message: FETCH_FAILED_MESSAGE },
       };
@@ -209,6 +209,25 @@ function stringifyErrorMessage(error: unknown): string {
   } catch {
     return UNKNOWN_ERROR_MESSAGE;
   }
+}
+
+/** True when the cause chain holds undici's `TypeError: fetch failed`, whose own cause names the host. */
+function isFetchTransportFailure(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current = error;
+  while (typeof current === "object" && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (
+      "name" in current &&
+      current.name === "TypeError" &&
+      "message" in current &&
+      current.message === FETCH_FAILED_MESSAGE
+    ) {
+      return true;
+    }
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return false;
 }
 
 function invalidRpcEndpointIdentity(): TypeError {

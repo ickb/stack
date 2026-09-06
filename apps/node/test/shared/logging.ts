@@ -1,11 +1,7 @@
 import process from "node:process";
 import { describe, expect, it, vi } from "vitest";
-import {
-  jsonLogReplacer,
-  logExecution,
-  recordExecutionError,
-  writeJsonLine,
-} from "../../src/shared/index.ts";
+import { logExecution, writeJsonLine } from "../../src/shared/index.ts";
+import { jsonLogReplacer, toJsonLogValue } from "../../src/shared/logging.ts";
 import {
   byte32FromByte,
   script,
@@ -15,6 +11,12 @@ import {
 } from "./support/node_utils_support.ts";
 
 const UNKNOWN_ERROR_MESSAGE = "Unknown error";
+
+/** What a written execution log holds for a raw `error` field. */
+function recordExecutionError(log: Record<string, unknown>, error: unknown): void {
+  const executionLog = log;
+  executionLog["error"] = toJsonLogValue(error ?? "Empty Error", new WeakSet());
+}
 
 describe("loop error logging", () => {
   it("serializes error-like values for JSON logs", () => {

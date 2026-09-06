@@ -4,12 +4,7 @@ import type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
 import { planRebalanceWithdrawal } from "./policy/withdrawal.ts";
 
 export { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy/constants.ts";
-export type {
-  PlanRebalanceOptions,
-  RebalanceDiagnostics,
-  RebalancePlan,
-  RingSegmentDiagnostics,
-} from "./policy/types.ts";
+export type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
 
 /**
  * Chooses at most one deposit or withdrawal-request action for bot inventory and reserve policy.

@@ -2,7 +2,12 @@ import type { ccc } from "@ckb-ccc/core";
 import { formatCkb } from "../../../shared/index.ts";
 import type { PlannedTesterAttempt } from "../planning/testerAttemptPlanning.ts";
 import type { TesterState } from "../runtime/runtime.ts";
-import type { TesterScenarioSelection } from "../runtime/testerTypes.ts";
+import type {
+  TesterExecutionActions,
+  TesterScenarioSelection,
+  TesterSkip,
+  TransactionShape,
+} from "../runtime/testerTypes.ts";
 import {
   attemptedOrderEvidence,
   testerAttemptedTransactionEvidence,
@@ -16,8 +21,8 @@ export function testerAttemptLogFields(
   state: TesterState,
   planned: PlannedTesterAttempt,
 ): {
-  actions: Record<string, unknown>;
-  transactionShape: Record<string, number>;
+  actions: TesterExecutionActions;
+  transactionShape: TransactionShape;
   txFeeLog: { fee: string; feeRate: TesterState["system"]["feeRate"] };
 } {
   const { built, effectiveFeePolicy, effectiveTesterScenario, estimatedOrders } = planned;
@@ -42,7 +47,7 @@ export function testerReserveAttemptSkip(
   state: TesterState,
   accountLocks: ccc.Script[],
   planned: PlannedTesterAttempt,
-): Record<string, unknown> | undefined {
+): TesterSkip | undefined {
   const {
     built,
     effectiveFeePolicy,

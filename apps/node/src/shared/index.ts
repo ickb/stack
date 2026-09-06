@@ -9,19 +9,18 @@ export {
   publicRpcEndpointIdentity,
   verifyChainPreflight,
 } from "./chain.ts";
-export type { SupportedChain } from "./chain.ts";
+export type {
+  ChainPreflightEvidence,
+  PublicRpcEndpointIdentity,
+  SupportedChain,
+} from "./chain.ts";
 export { formatCkb } from "./format.ts";
 export {
   STOP_EXIT_CODE,
-  jsonLogReplacer,
   logExecution,
-  recordExecutionError,
+  toJsonLogRecord,
   writeJsonLine,
 } from "./logging.ts";
-export {
-  isRetryableCkbStateRaceError,
-  isRetryableRpcResponseShapeError,
-  isRetryableRpcTransportError,
-} from "./retryable.ts";
+export type { JsonLogRecord } from "./logging.ts";
 export { readRuntimeConfigEnv } from "./runtime_config.ts";
 export type { RuntimeConfig } from "./runtime_config.ts";

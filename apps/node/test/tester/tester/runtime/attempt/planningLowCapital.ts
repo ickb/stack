@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   DUST_ICKB_CONVERSION_SCENARIO,
@@ -19,7 +20,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
       process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = {};
+      const executionLog: ExecutionLog = {};
 
       const result = await planTesterAttempt({
         runtime: runtimeWithSdk({}),
@@ -32,7 +33,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
       });
       expect(result).toBeUndefined();
       expect(process.exitCode).toBe(2);
-      expect(executionLog["error"]).toBe(LOW_CAPITAL_MESSAGE);
+      expect(executionLog.error).toBe(LOW_CAPITAL_MESSAGE);
     } finally {
       stdoutWrite.mockRestore();
       process.exitCode = originalExitCode;
@@ -44,7 +45,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
       throw new OrderConversionRepresentabilityError();
     });
     try {
-      const executionLog: Record<string, unknown> = {};
+      const executionLog: ExecutionLog = {};
 
       const result = await planTesterAttempt({
         runtime: runtimeWithSdk({}),
@@ -57,7 +58,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
       });
 
       expect(result).toBeUndefined();
-      expect(executionLog["skip"]).toMatchObject({
+      expect(executionLog.skip).toMatchObject({
         reason: ESTIMATED_TOO_SMALL_REASON,
         testerScenario: ALL_CKB_LIMIT_ORDER_SCENARIO,
         attemptedOrder: { giveCkb: "2000" },
@@ -68,7 +69,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
   });
 
   it("skips raw orders whose SDK estimate is unbuildable", async () => {
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
 
     const result = await planTesterAttempt({
       runtime: runtimeWithSdk({}),
@@ -81,7 +82,7 @@ describe("planTesterAttempt low-capital outcomes", () => {
     });
 
     expect(result).toBeUndefined();
-    expect(executionLog["skip"]).toMatchObject({
+    expect(executionLog.skip).toMatchObject({
       reason: ESTIMATED_TOO_SMALL_REASON,
       testerScenario: DUST_ICKB_CONVERSION_SCENARIO,
     });

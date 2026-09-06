@@ -274,24 +274,6 @@ describe(`${PLAN_TESTER_TRANSACTION} SDK skip evidence`, () => {
       },
     });
   });
-
-  it("omits non-record SDK conversion notice details", () => {
-    expect(
-      testerSdkConversionNoticeSkip({
-        requestedScenario: SDK_CONVERSION_SCENARIO,
-        effectiveScenario: SDK_CONVERSION_SCENARIO,
-        conversion: undefined,
-        conversionNotice: undefined,
-        orderEvidence: {
-          attemptedOrder: { giveIckb: "1", feeNumerator: "1", feeBase: "100000" },
-        },
-      }),
-    ).toEqual({
-      reason: ESTIMATED_TOO_SMALL_REASON,
-      testerScenario: SDK_CONVERSION_SCENARIO,
-      attemptedOrder: { giveIckb: "1", feeNumerator: "1", feeBase: "100000" },
-    });
-  });
 });
 describe(`${PLAN_TESTER_TRANSACTION} attempted transaction evidence`, () => {
   it("uses attempted conversion evidence when a conversion was planned", () => {

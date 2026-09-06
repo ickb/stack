@@ -6,59 +6,21 @@ import { describe, expect, it, vi } from "vitest";
 import { transactionShape } from "../../../../src/tester/tester/evidence/testerEvidence.ts";
 import { isUnrepresentableTesterEstimateError } from "../../../../src/tester/tester/planning/testerOrderPlanning.ts";
 import { hasActionableTesterScenarioEstimate } from "../../../../src/tester/tester/planning/testerPlanning.ts";
-import { MissingFreshOrderOriginError } from "../../../../src/tester/tester/runtime/freshMatchableOrderSkip.ts";
-import {
-  handleTesterAttemptError,
-  isRetryableTesterError,
-} from "../../../../src/tester/tester/runtime/testerErrors.ts";
+import { handleTesterAttemptError } from "../../../../src/tester/tester/runtime/testerErrors.ts";
 import { stopForLowTesterCapital } from "../../../../src/tester/tester/runtime/testerStop.ts";
+import type { ExecutionLog } from "../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   DUPLICATED_TX_ERROR_MESSAGE,
-  FETCH_FAILED_MESSAGE,
   RANDOM_ORDER_SCENARIO,
   testerState,
 } from "../../support/tester/index.ts";
 
-describe("isRetryableTesterError", () => {
-  it("recognizes live retryable CKB state races", () => {
-    expect(
-      isRetryableTesterError(
-        Object.assign(new Error(DUPLICATED_TX_ERROR_MESSAGE), {
-          code: -1107,
-          data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
-          txHash: `0x${"22".repeat(32)}`,
-        }),
-      ),
-    ).toBe(true);
-    expect(isRetryableTesterError(new Error("Not enough CKB"))).toBe(false);
-  });
-
-  it("recognizes live retryable RPC transport and response-shape failures", () => {
-    expect(isRetryableTesterError(new TypeError(FETCH_FAILED_MESSAGE))).toBe(true);
-    expect(
-      isRetryableTesterError(
-        new Error(FETCH_FAILED_MESSAGE, {
-          cause: new TypeError(FETCH_FAILED_MESSAGE),
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      isRetryableTesterError(new Error("Id mismatched, got null, expected 319")),
-    ).toBe(true);
-    expect(
-      isRetryableTesterError(
-        new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"),
-      ),
-    ).toBe(true);
-    expect(isRetryableTesterError(new Error(FETCH_FAILED_MESSAGE))).toBe(false);
-  });
-});
 describe("handleTesterAttemptError", () => {
-  it("records retryable failures and exits 1 so the next turn can retry", () => {
+  it("records the error with its public RPC fields and stack, then exits 1", () => {
     const originalExitCode = process.exitCode;
     try {
       process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
+      const executionLog: ExecutionLog = { startTime: "fixture" };
 
       handleTesterAttemptError(
         Object.assign(new Error(DUPLICATED_TX_ERROR_MESSAGE), {
@@ -70,26 +32,23 @@ describe("handleTesterAttemptError", () => {
       );
 
       expect(process.exitCode).toBe(1);
-      expect(executionLog["error"]).toEqual({
-        message: "Retryable tester error",
-        retryable: true,
-        error: {
-          name: "Error",
-          message: DUPLICATED_TX_ERROR_MESSAGE,
-          code: -1107,
-          data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
-          txHash: byte32FromByte("22"),
-        },
+      expect(executionLog.error).toMatchObject({
+        name: "Error",
+        message: DUPLICATED_TX_ERROR_MESSAGE,
+        code: -1107,
+        data: `Duplicated(Byte32(0x${"22".repeat(32)}))`,
+        txHash: byte32FromByte("22"),
       });
+      expect(executionLog.error).toBeInstanceOf(Error);
 
-      const plainLog: Record<string, unknown> = {};
+      const plainLog: ExecutionLog = {};
       handleTesterAttemptError(
         { code: -301, data: `Resolve(Dead(OutPoint(0x${"11".repeat(32)}00000000)))` },
         plainLog,
       );
-      expect(plainLog["error"]).toMatchObject({
-        retryable: true,
-        error: { message: "Retryable tester error" },
+      expect(plainLog.error).toEqual({
+        code: -301,
+        data: `Resolve(Dead(OutPoint(0x${"11".repeat(32)}00000000)))`,
       });
     } finally {
       process.exitCode = originalExitCode;
@@ -100,7 +59,7 @@ describe("handleTesterAttemptError", () => {
     const originalExitCode = process.exitCode;
     try {
       process.exitCode = 2;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
+      const executionLog: ExecutionLog = { startTime: "fixture" };
 
       handleTesterAttemptError(
         new Error("SDK conversion failed: deterministic fixture"),
@@ -108,7 +67,7 @@ describe("handleTesterAttemptError", () => {
       );
 
       expect(process.exitCode).toBe(1);
-      expect(executionLog["error"]).toMatchObject({
+      expect(executionLog.error).toMatchObject({
         message: "SDK conversion failed: deterministic fixture",
       });
     } finally {
@@ -117,32 +76,6 @@ describe("handleTesterAttemptError", () => {
   });
 });
 
-describe("handleTesterAttemptError after a broadcast", () => {
-  it("lets the next turn rebuild after a confirmation timeout or missing provenance", () => {
-    const originalExitCode = process.exitCode;
-    try {
-      class TransactionConfirmationError extends Error {
-        public readonly isTimeout = true;
-
-        public override readonly name = "TransactionConfirmationError";
-      }
-      process.exitCode = undefined;
-      handleTesterAttemptError(
-        new TransactionConfirmationError("confirmation timed out"),
-        {},
-      );
-      expect(process.exitCode).toBe(1);
-
-      process.exitCode = undefined;
-      const missingOrigin = new MissingFreshOrderOriginError(byte32FromByte("12"));
-      expect(isRetryableTesterError(missingOrigin)).toBe(false);
-      handleTesterAttemptError(missingOrigin, {});
-      expect(process.exitCode).toBe(1);
-    } finally {
-      process.exitCode = originalExitCode;
-    }
-  });
-});
 describe("isUnrepresentableTesterEstimateError", () => {
   it("recognizes fee-adjusted ratio overflow as an unbuildable tester estimate", () => {
     const error = new OrderConversionRepresentabilityError();
@@ -204,12 +137,12 @@ describe("stopForLowTesterCapital", () => {
     const originalExitCode = process.exitCode;
     try {
       process.exitCode = undefined;
-      const executionLog: Record<string, unknown> = { startTime: "fixture" };
+      const executionLog: ExecutionLog = { startTime: "fixture" };
 
       stopForLowTesterCapital(executionLog);
 
       expect(process.exitCode).toBe(2);
-      expect(executionLog["error"]).toBe(
+      expect(executionLog.error).toBe(
         "Not enough funds to continue testing, shutting down...",
       );
     } finally {

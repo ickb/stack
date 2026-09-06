@@ -2,13 +2,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { logExecution, recordExecutionError } from "../../../../../src/shared/index.ts";
+import { logExecution } from "../../../../../src/shared/index.ts";
 import {
   randomTesterScenario,
   readTesterFeePolicy,
   readTesterRuntimeConfig,
   readTesterScenario,
 } from "../../../../../src/tester/tester/planning/testerConfig.ts";
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   BOUNDED_ICKB_TO_CKB_LIMIT_ORDER_SCENARIO,
@@ -134,12 +135,11 @@ describe("tester private key output boundary", () => {
         TESTER_RPC_URL: rpcUrlCanary,
         TESTER_PRIVATE_KEY_FILE: keyPath,
       });
-      const executionLog: Record<string, unknown> = {
-        chain: runtimeConfig.chain,
-        startTime: "fixture",
+      const executionLog: ExecutionLog = {
+        startTime: `fixture on ${runtimeConfig.chain}`,
+        error: new Error("tester deterministic crash"),
       };
 
-      recordExecutionError(executionLog, new Error("tester deterministic crash"));
       logExecution(executionLog, new Date());
 
       expect(runtimeConfig.privateKey).toBe(privateKey);

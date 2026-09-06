@@ -9,14 +9,15 @@ import {
   type FakeClientOverrides,
 } from "@ickb/testkit";
 import { afterEach, expect, it, vi } from "vitest";
+import { BotEventEmitter } from "../../src/bot/events.ts";
+import type { Runtime } from "../../src/bot/runtime/types.ts";
 import {
   BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
   runBotTurn,
   type BotTurnContext,
-} from "../../../src/bot/bot/turn.ts";
-import { BotEventEmitter } from "../../../src/bot/observability/events.ts";
-import type { Runtime } from "../../../src/bot/runtime/types.ts";
+} from "../../src/bot/turn.ts";
+import type { JsonLogRecord } from "../../src/shared/index.ts";
 import {
   botRuntime,
   completeSearchResult,
@@ -28,18 +29,12 @@ import {
   type L1AccountState,
 } from "./fixtures/bot.ts";
 
-const BOT_TURN_STARTED = "bot.turn.started";
 const BOT_STATE_READ = "bot.state.read";
+const BOT_TRANSACTION_BUILT = "bot.transaction.built";
 const BOT_TURN_FAILED = "bot.turn.failed";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
-const BOT_TRANSACTION_CONFIRMATION = "bot.transaction.confirmation";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
-const BOT_TRANSACTION_FAILED = "bot.transaction.failed";
 const FETCH_FAILED = "fetch failed";
-const RBF_REJECTED_REASON = JSON.stringify({
-  type: "RBFRejected",
-  description: `RBF rejected: replaced by tx Byte32(0x${"22".repeat(32)})`,
-});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -53,31 +48,28 @@ it("stops with event-only low-capital evidence", async () => {
   await runBotTurn(harness.context);
 
   expect(process.exitCode).toBe(2);
-  expect(eventTypes(harness.events)).toEqual([
-    BOT_TURN_STARTED,
-    BOT_STATE_READ,
-    "bot.decision.skipped",
-  ]);
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
   expect(harness.events.at(-1)).toMatchObject({
     reason: "capital_below_minimum",
     deficit: String((21n * ICKB_DEPOSIT_CAP) / 20n),
+    state: { balances: { minimumCkbCapital: String((21n * ICKB_DEPOSIT_CAP) / 20n) } },
   });
+  expect(harness.events.at(-1)).not.toHaveProperty("decision");
   expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
-it("records skipped terminal iterations without legacy execution logs", async () => {
+it("records a skipped decision with its transcript and no ring segment list", async () => {
   noMatch();
   const harness = turnHarness();
 
   await runBotTurn(harness.context);
 
-  expect(eventTypes(harness.events)).toEqual([
-    BOT_TURN_STARTED,
-    BOT_STATE_READ,
-    "bot.match.evaluated",
-    "bot.rebalance.evaluated",
-    "bot.decision.skipped",
-  ]);
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
+  expect(harness.events[1]).toMatchObject({
+    reason: "no_actions",
+    decision: { match: { reason: "no_market_orders" }, rebalance: { kind: "none" } },
+  });
+  expect(JSON.stringify(harness.events[1])).not.toContain("segments");
   expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
@@ -95,23 +87,22 @@ it("sends explicitly and waits with the finite production policy", async () => {
   const recordTxHash = harness.sendTransaction.mock.calls[0]?.[1];
   expect(typeof recordTxHash).toBe("function");
   expect(eventTypes(harness.events)).toEqual([
-    BOT_TURN_STARTED,
     BOT_STATE_READ,
-    "bot.match.evaluated",
-    "bot.rebalance.evaluated",
-    "bot.transaction.built",
+    BOT_TRANSACTION_BUILT,
     BOT_TRANSACTION_SENT,
-    BOT_TRANSACTION_CONFIRMATION,
     BOT_TRANSACTION_COMMITTED,
   ]);
-  expect(harness.events[4]).toMatchObject({
+  expect(harness.events[1]).toMatchObject({
     decision: { rebalance: { kind: "deposit", reason: "low_ickb_balance" } },
   });
-  expect(harness.events[5]).toMatchObject({
+  expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
-    transaction: { fee: "7", feeRate: "1" },
+    outcome: "broadcasted",
+    fee: "7",
+    feeRate: "1",
   });
-  expect(harness.events[6]).toMatchObject({
+  expect(harness.events[2]).toHaveProperty("transactionShape.witnesses");
+  expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
     status: "committed",
     timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
@@ -119,7 +110,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
   });
 });
 
-it("reports broadcast failures with send-phase evidence", async () => {
+it("ends the turn with the broadcast error when the send fails without a hash", async () => {
   noMatch();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
@@ -132,14 +123,13 @@ it("reports broadcast failures with send-phase evidence", async () => {
   await runBotTurn(harness.context);
 
   expect(process.exitCode).toBe(1);
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_FAILED),
-  ).toMatchObject({
-    phase: "broadcast",
-    outcome: "send_failed",
-    retryable: false,
-    terminal: true,
-    error: { message: "transaction broadcast failed" },
+  expect(eventTypes(harness.events)).toEqual([
+    BOT_STATE_READ,
+    BOT_TRANSACTION_BUILT,
+    BOT_TURN_FAILED,
+  ]);
+  expect(harness.events.at(-1)).toMatchObject({
+    error: { name: "Error", message: "transaction broadcast failed" },
   });
 });
 
@@ -160,19 +150,18 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   await runBotTurn(harness.context);
 
   expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
-  expect(harness.events).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        type: BOT_TRANSACTION_SENT,
-        txHash: harness.sentHash(),
-        outcome: "broadcast_ambiguous",
-      }),
-      expect.objectContaining({
-        type: BOT_TRANSACTION_COMMITTED,
-        txHash: harness.sentHash(),
-      }),
-    ]),
-  );
+  expect(eventTypes(harness.events)).toEqual([
+    BOT_STATE_READ,
+    BOT_TRANSACTION_BUILT,
+    BOT_TRANSACTION_SENT,
+    BOT_TRANSACTION_COMMITTED,
+  ]);
+  expect(harness.events[2]).toMatchObject({
+    txHash: harness.sentHash(),
+    outcome: "broadcast_ambiguous",
+    error: { name: "TransactionBroadcastError", cause: { message: FETCH_FAILED } },
+  });
+  expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
@@ -206,98 +195,6 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
   );
 });
 
-it("normalizes confirmation error fields from public errors", async () => {
-  noMatch();
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    client: {
-      getTransactionNoCache: async () => {
-        await Promise.resolve();
-        throw Object.assign(new Error("transaction confirmation failed"), {
-          reason: "node rejected transaction",
-          status: 503,
-        });
-      },
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  // The outcome is unknown; the next turn rebuilds from committed state.
-  expect(process.exitCode).toBe(1);
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
-  ).toMatchObject({
-    txHash: harness.sentHash(),
-    outcome: "confirmation_failed",
-    status: "unresolved",
-    reason: "node rejected transaction",
-    isTimeout: false,
-    retryable: false,
-    terminal: true,
-  });
-});
-
-// Only an RBF replacement proves the sent transaction can never confirm, so only it is
-// classified retryable; either way the next turn rebuilds (exit 1).
-it.each([
-  { reason: RBF_REJECTED_REASON, retryable: true },
-  { reason: "Resolve failed Dead(OutPoint(...))", retryable: false },
-])("exits 1 and classifies the rejection: $reason", async ({ reason, retryable }) => {
-  noMatch();
-  const chain = chainState();
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    chain,
-    sendTransaction: async (txLike) => {
-      await Promise.resolve();
-      const transaction = ccc.Transaction.from(txLike);
-      chain.tx({ transaction, status: "rejected", reason });
-      return transaction.hash();
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
-  expect(process.exitCode).toBe(1);
-  expect(harness.events.at(-1)).toMatchObject({ type: BOT_TURN_FAILED, retryable });
-});
-
-it("tolerates confirmation fields disappearing during inspection", async () => {
-  noMatch();
-  let statusChecks = 0;
-  const error = new Proxy(
-    Object.assign(new Error("transaction confirmation failed"), {
-      status: "rejected",
-    }),
-    {
-      has: (target, property): boolean => {
-        if (property === "status") {
-          statusChecks += 1;
-          return statusChecks === 1;
-        }
-        return Reflect.has(target, property);
-      },
-    },
-  );
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    client: {
-      getTransactionNoCache: async () => {
-        await Promise.resolve();
-        throw error;
-      },
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
-  ).toMatchObject({ status: "unresolved" });
-});
-
 it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
   noMatch();
   vi.useFakeTimers();
@@ -319,25 +216,49 @@ it("ends the attempt after one confirmation window without resending or rebuildi
 
   expect(process.exitCode).toBe(1);
   expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
-  const timeoutFailure = {
-    txHash: harness.sentHash(),
-    outcome: "timeout",
-    isTimeout: true,
-    retryable: false,
-    terminal: true,
-  };
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_CONFIRMATION),
-  ).toMatchObject(timeoutFailure);
-  expect(
-    harness.events.find((event) => event.type === BOT_TRANSACTION_FAILED),
-  ).toMatchObject(timeoutFailure);
-  expect(
-    harness.events.filter((event) => event.type === BOT_TRANSACTION_COMMITTED),
-  ).toHaveLength(0);
+  expect(eventTypes(harness.events)).toEqual([
+    BOT_STATE_READ,
+    BOT_TRANSACTION_BUILT,
+    BOT_TRANSACTION_SENT,
+    BOT_TURN_FAILED,
+  ]);
+  expect(harness.events.at(-1)).toMatchObject({
+    error: {
+      message: `Client request error Wait transaction timeout ${String(BOT_TRANSACTION_WAIT_TIMEOUT_MS)}ms`,
+    },
+  });
 });
 
-it("exits 1 with retryable metadata so the next turn can retry", async () => {
+it("ends the turn with the SDK wait error when the node rejects the transaction", async () => {
+  noMatch();
+  const chain = chainState();
+  const reason = "Resolve failed Dead(OutPoint(...))";
+  const harness = turnHarness({
+    account: fundedAccount({ withdrawal: true }),
+    chain,
+    sendTransaction: async (txLike) => {
+      await Promise.resolve();
+      const transaction = ccc.Transaction.from(txLike);
+      chain.tx({ transaction, status: "rejected", reason });
+      return transaction.hash();
+    },
+  });
+
+  await runBotTurn(harness.context);
+
+  expect(process.exitCode).toBe(1);
+  expect(harness.events.at(-1)).toMatchObject({
+    type: BOT_TURN_FAILED,
+    error: {
+      name: "TransactionWaitError",
+      txHash: harness.sentHash(),
+      status: "rejected",
+      reason,
+    },
+  });
+});
+
+it("exits 1 with the error, its stack, and no private material when the read fails", async () => {
   const harness = turnHarness({
     getL1AccountState: async () => {
       await Promise.resolve();
@@ -351,14 +272,14 @@ it("exits 1 with retryable metadata so the next turn can retry", async () => {
   expect(harness.sendTransaction).not.toHaveBeenCalled();
   expect(harness.events.at(-1)).toMatchObject({
     type: BOT_TURN_FAILED,
-    retryable: true,
-    terminal: false,
     error: { name: "TypeError", message: FETCH_FAILED },
   });
-  expect(harness.events.at(-1)?.["error"]).not.toHaveProperty("stack");
+  expect(JSON.stringify(harness.events.at(-1))).toContain(
+    '"stack":"TypeError: fetch failed',
+  );
 });
 
-it("stops non-retryable failures with structured event evidence", async () => {
+it("exits 1 with structured event evidence for a build failure", async () => {
   vi.spyOn(OrderManager, "bestMatch").mockImplementation(() => {
     throw new Error("deterministic build failure");
   });
@@ -369,8 +290,6 @@ it("stops non-retryable failures with structured event evidence", async () => {
   expect(process.exitCode).toBe(1);
   expect(harness.events.at(-1)).toMatchObject({
     type: BOT_TURN_FAILED,
-    retryable: false,
-    terminal: true,
     error: { message: "deterministic build failure" },
   });
 });
@@ -385,13 +304,13 @@ function turnHarness(
   } = {},
 ): {
   context: BotTurnContext;
-  events: Array<Record<string, unknown> & { type: string }>;
+  events: JsonLogRecord[];
   sendTransaction: ReturnType<typeof vi.fn<Runtime["sendTransaction"]>>;
   sentHash: () => ccc.Hex;
 } {
   const chain = options.chain ?? chainState();
   const account = options.account ?? fundedAccount();
-  const events: Array<Record<string, unknown> & { type: string }> = [];
+  const events: JsonLogRecord[] = [];
   // The default fake node accepts and commits whatever the bot sends.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
@@ -479,6 +398,6 @@ function hashScript(byte: string): ccc.Script {
   return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
 }
 
-function eventTypes(events: Array<{ type: string }>): string[] {
-  return events.map((event) => event.type);
+function eventTypes(events: JsonLogRecord[]): unknown[] {
+  return events.map((event) => event["type"]);
 }

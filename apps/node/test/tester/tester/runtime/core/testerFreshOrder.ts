@@ -7,7 +7,6 @@ import {
   freshMatchableOrderSkip,
   MissingFreshOrderOriginError,
 } from "../../../../../src/tester/tester/runtime/freshMatchableOrderSkip.ts";
-import { isRetryableTesterError } from "../../../../../src/tester/tester/runtime/testerErrors.ts";
 import {
   FRESH_MATCHABLE_ORDER_REASON,
   FRESH_MATCHABLE_ORDER_SKIP,
@@ -47,7 +46,6 @@ describe(FRESH_MATCHABLE_ORDER_SKIP, () => {
     expect(thrown.message).toContain(
       "Missing origin transaction block number for fresh-order guard",
     );
-    expect(isRetryableTesterError(thrown)).toBe(false);
   });
 
   it("explains skips caused by fresh matchable orders", async () => {

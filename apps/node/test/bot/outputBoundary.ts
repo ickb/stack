@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { handleTurnFailure } from "../../../src/bot/bot/failure.ts";
-import { BotEventEmitter, readBotRuntimeConfig } from "../../../src/bot/index.ts";
+import { handleTurnFailure } from "../../src/bot/failure.ts";
+import { BotEventEmitter, readBotRuntimeConfig } from "../../src/bot/index.ts";
 
 describe("bot private key output boundary", () => {
   it("does not expose the configured key through failure events", async () => {
@@ -26,7 +26,7 @@ describe("bot private key output boundary", () => {
         },
       });
 
-      emitter.emit("bot.run.started");
+      emitter.emit({ type: "bot.turn.started" });
       handleTurnFailure(emitter, new TypeError("fetch failed"));
 
       expect(config.privateKey).toBe(privateKey);

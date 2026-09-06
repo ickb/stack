@@ -115,7 +115,7 @@ Withdrawal count is capped by `min(MAX_WITHDRAWAL_REQUESTS, floor(outputSlots / 
 
 ## Send Turn
 
-Each process runs one turn: it builds at most one transaction, sends it through the initialization-owned signer closure, and calls the SDK transaction waiter with a 10-minute timeout and 10-second polling interval. There is no inner loop, retry budget, or sleep; the systemd unit (`Restart=always`, `RestartSec=60`) or the operator starts the next turn. Rejections and confirmation failures are reported as `bot.transaction.failed` and `bot.turn.failed` events with the broadcast hash. A broadcast transaction gets that one observation window; any confirmation failure exits `1`, and the next turn rebuilds from committed state, where a still-pending transaction conflicts with the rebuilt one at the node. Only capital below the minimum exits `2`, which `RestartPreventExitStatus=2` turns into a hold. Large numeric values are logged as strings to preserve bigint precision.
+Each process runs one turn: it builds at most one transaction, sends it through the initialization-owned signer closure, and calls the SDK transaction waiter with a 10-minute timeout and 10-second polling interval. There is no inner loop, retry budget, or sleep; the systemd unit (`Restart=always`, `RestartSec=60`) or the operator starts the next turn. Rejections and confirmation failures end the turn with a `bot.turn.failed` event whose error names the broadcast hash and status. A broadcast transaction gets that one observation window; any confirmation failure exits `1`, and the next turn rebuilds from committed state, where a still-pending transaction conflicts with the rebuilt one at the node. Only capital below the minimum exits `2`, which `RestartPreventExitStatus=2` turns into a hold. Large numeric values are logged as strings to preserve bigint precision.
 
 ## Non-Goals
 
@@ -127,5 +127,5 @@ The bot does not try to:
 - create ring inventory when the hard CKB reserve, useful iCKB floor, or output-slot gates fail
 - persist ring observations or retry-widen across loops
 - treat pending CKB from withdrawal requests as liquid before account state reports it
-- publish a consensus or API pool snapshot; operator diagnostics may include compact pool summaries and content-addressed artifacts under `log/`
+- publish a consensus or API pool snapshot; operator diagnostics keep only the compact ring summary in the decision transcript
 - coordinate with other bots beyond the current visible chain state

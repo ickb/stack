@@ -52,7 +52,10 @@ describe("runTesterTurn", () => {
   });
 
   it.each([
-    [new TypeError("fetch failed"), "Retryable tester error"],
+    [
+      new TypeError("fetch failed"),
+      '"error":{"name":"TypeError","message":"fetch failed"',
+    ],
     [new Error("deterministic state failure"), "deterministic state failure"],
   ])("records %s and exits 1", async (failure, expectedText) => {
     const originalExitCode = process.exitCode;

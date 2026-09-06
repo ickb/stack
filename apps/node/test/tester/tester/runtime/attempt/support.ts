@@ -6,7 +6,6 @@ export { byte32FromByte, capacityCell, headerLike, script } from "@ickb/testkit"
 export { planTesterAttempt } from "../../../../../src/tester/tester/planning/testerAttemptPlanning.ts";
 export { buildSdkConversionTransaction } from "../../../../../src/tester/tester/runtime/runtime.ts";
 export { runTesterAttempt } from "../../../../../src/tester/tester/runtime/testerAttempt.ts";
-export { isRetryableTesterError } from "../../../../../src/tester/tester/runtime/testerErrors.ts";
 export { runTesterTurn } from "../../../../../src/tester/tester/runtime/testerTurn.ts";
 export {
   buildBaseTransactionMock,

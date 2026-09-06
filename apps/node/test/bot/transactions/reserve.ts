@@ -13,7 +13,7 @@ import {
   TARGET_ICKB_BALANCE,
   testMatch,
   testWithdrawal,
-} from "../bot/fixtures/bot.ts";
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();

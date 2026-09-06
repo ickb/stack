@@ -26,7 +26,7 @@ describe("bot process", () => {
     expect(result.stderr).toContain("Empty env BOT_CHAIN");
   });
 
-  it("emits run start then a retryable turn failure when the RPC is unreachable", async () => {
+  it("emits turn start then the turn failure when the RPC is unreachable", async () => {
     const keyPath = path.join(dir, "testnet.key");
     await writeFile(keyPath, privateKey, { mode: 0o600 });
 
@@ -40,13 +40,12 @@ describe("bot process", () => {
     expect(result.stderr).toBe("");
     const events = result.stdout.trim().split("\n").map(parseEvent);
     expect(events.map((event) => String(event["type"]))).toEqual([
-      "bot.run.started",
+      "bot.turn.started",
       "bot.turn.failed",
     ]);
     expect(events[1]).toMatchObject({
       chain: "testnet",
-      retryable: true,
-      terminal: false,
+      error: { message: "fetch failed" },
     });
     expect(events[0]?.["runId"]).toBe(events[1]?.["runId"]);
     expect(result.stdout).not.toContain(privateKey);

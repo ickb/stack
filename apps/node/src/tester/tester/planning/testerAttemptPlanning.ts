@@ -12,17 +12,16 @@ import {
 } from "../runtime/runtime.ts";
 import { stopForLowTesterCapital } from "../runtime/testerStop.ts";
 import {
-  createExecutionLogWriter,
   DEFAULT_TESTER_FEE_POLICY,
   MIN_TOTAL_CAPITAL_DIVISOR,
   type EstimatedRawOrder,
   type ExecutionLog,
-  type ExecutionLogWriter,
   type PlannedRawOrder,
   type TesterFeePolicy,
   type TesterPlan,
   type TesterScenario,
   type TesterScenarioSelection,
+  type TesterSkip,
 } from "../runtime/testerTypes.ts";
 import {
   estimateTesterRawOrders,
@@ -58,11 +57,9 @@ interface PlanTesterAttemptOptions {
   depositCapacity: bigint;
   totalEquivalentCkb: bigint;
   executionLog: ExecutionLog;
-  executionLogWriter?: ExecutionLogWriter;
 }
 interface CapitalSkipOptions {
   executionLog: ExecutionLog;
-  executionLogWriter: ExecutionLogWriter;
   totalEquivalentCkb: bigint;
   depositCapacity: bigint;
 }
@@ -74,14 +71,9 @@ export async function planTesterAttempt({
   depositCapacity,
   totalEquivalentCkb,
   executionLog,
-  executionLogWriter = createExecutionLogWriter(executionLog),
 }: PlanTesterAttemptOptions): Promise<PlannedTesterAttempt | undefined> {
-  const capitalSkipOptions = {
-    executionLog,
-    executionLogWriter,
-    totalEquivalentCkb,
-    depositCapacity,
-  };
+  const log = executionLog;
+  const capitalSkipOptions = { executionLog, totalEquivalentCkb, depositCapacity };
   const effectiveTesterScenario = resolveTesterScenario({
     state,
     scenario: testerScenario,
@@ -89,7 +81,8 @@ export async function planTesterAttempt({
     depositCapacity,
   });
   if (effectiveTesterScenario === undefined) {
-    return skipUnfundedAutoScenario(capitalSkipOptions);
+    skipBeforePlanning(capitalSkipOptions, testerNoActionableAutoScenarioSkip());
+    return undefined;
   }
   const plan = planTesterTransaction(
     state,
@@ -99,13 +92,14 @@ export async function planTesterAttempt({
   );
   const rawOrders = plannedRawOrders(plan, effectiveTesterScenario);
   if (rawOrders.length === 0) {
-    return skipEmptyRawOrders(capitalSkipOptions);
+    skipBeforePlanning(capitalSkipOptions, { reason: "sampled-amount-too-small" });
+    return undefined;
   }
   const effectiveFeePolicy = isSdkConversionScenario(effectiveTesterScenario)
     ? DEFAULT_TESTER_FEE_POLICY
     : feePolicy;
   const estimatedOrders = estimateActionableTesterOrders({
-    executionLogWriter,
+    executionLog,
     requestedScenario: testerScenario,
     effectiveScenario: effectiveTesterScenario,
     rawOrders,
@@ -122,19 +116,20 @@ export async function planTesterAttempt({
     effectiveTesterScenario,
     estimatedOrders,
   });
-  if (built.conversionNotice?.kind === "dust-ickb-to-ckb") {
-    executionLogWriter.record({
-      skip: testerSdkConversionNoticeSkip({
-        requestedScenario: testerScenario,
-        effectiveScenario: effectiveTesterScenario,
-        conversion: built.conversion,
-        conversionNotice: built.conversionNotice,
-        orderEvidence: attemptedOrderEvidence(
-          rawOrders,
-          estimatedOrders,
-          effectiveFeePolicy,
-        ),
-      }),
+  if (
+    built.conversion !== undefined &&
+    built.conversionNotice?.kind === "dust-ickb-to-ckb"
+  ) {
+    log.skip = testerSdkConversionNoticeSkip({
+      requestedScenario: testerScenario,
+      effectiveScenario: effectiveTesterScenario,
+      conversion: built.conversion,
+      conversionNotice: built.conversionNotice,
+      orderEvidence: attemptedOrderEvidence(
+        rawOrders,
+        estimatedOrders,
+        effectiveFeePolicy,
+      ),
     });
     return undefined;
   }
@@ -147,95 +142,48 @@ export async function planTesterAttempt({
   };
 }
 function estimateActionableTesterOrders({
-  executionLogWriter,
+  executionLog,
   requestedScenario,
   effectiveScenario,
   rawOrders,
   state,
   feePolicy,
 }: {
-  executionLogWriter: ExecutionLogWriter;
+  executionLog: ExecutionLog;
   requestedScenario: TesterScenarioSelection;
   effectiveScenario: TesterScenario;
   rawOrders: PlannedRawOrder[];
   state: TesterState;
   feePolicy: TesterFeePolicy;
 }): EstimatedRawOrder[] | undefined {
+  const log = executionLog;
   const estimatedOrders = estimateTesterRawOrders(rawOrders, state, feePolicy);
-  if (estimatedOrders === undefined) {
-    recordTesterEstimatedTooSmallSkip({
-      executionLogWriter,
+  if (
+    estimatedOrders === undefined ||
+    hasTooSmallTesterRawOrder(estimatedOrders, state, effectiveScenario)
+  ) {
+    log.skip = testerEstimatedTooSmallSkip({
       requestedScenario,
       effectiveScenario,
       rawOrders,
-      estimatedOrders: [],
-      feePolicy,
-    });
-    return undefined;
-  }
-  if (hasTooSmallTesterRawOrder(estimatedOrders, state, effectiveScenario)) {
-    recordTesterEstimatedTooSmallSkip({
-      executionLogWriter,
-      requestedScenario,
-      effectiveScenario,
-      rawOrders,
-      estimatedOrders,
+      estimatedOrders: estimatedOrders ?? [],
       feePolicy,
     });
     return undefined;
   }
   return estimatedOrders;
 }
-function recordTesterEstimatedTooSmallSkip({
-  executionLogWriter,
-  requestedScenario,
-  effectiveScenario,
-  rawOrders,
-  estimatedOrders,
-  feePolicy,
-}: {
-  executionLogWriter: ExecutionLogWriter;
-  requestedScenario: TesterScenarioSelection;
-  effectiveScenario: TesterScenario;
-  rawOrders: PlannedRawOrder[];
-  estimatedOrders: EstimatedRawOrder[];
-  feePolicy: TesterFeePolicy;
-}): void {
-  executionLogWriter.record({
-    skip: testerEstimatedTooSmallSkip({
-      requestedScenario,
-      effectiveScenario,
-      rawOrders,
-      estimatedOrders,
-      feePolicy,
-    }),
-  });
-}
-function skipUnfundedAutoScenario({
-  executionLog,
-  executionLogWriter,
-  totalEquivalentCkb,
-  depositCapacity,
-}: CapitalSkipOptions): PlannedTesterAttempt | undefined {
+/** Records the skip, unless capital is so low that the turn stops for good instead. */
+function skipBeforePlanning(
+  { executionLog, totalEquivalentCkb, depositCapacity }: CapitalSkipOptions,
+  skip: TesterSkip,
+): undefined {
   if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
     stopForLowTesterCapital(executionLog);
-    return undefined;
+    return;
   }
-  executionLogWriter.record({ skip: testerNoActionableAutoScenarioSkip() });
-  return undefined;
-}
-function skipEmptyRawOrders({
-  executionLog,
-  executionLogWriter,
-  totalEquivalentCkb,
-  depositCapacity,
-}: CapitalSkipOptions): PlannedTesterAttempt | undefined {
-  if (totalEquivalentCkb < depositCapacity / MIN_TOTAL_CAPITAL_DIVISOR) {
-    stopForLowTesterCapital(executionLog);
-    return undefined;
-  }
-  executionLogWriter.record({ skip: { reason: "sampled-amount-too-small" } });
-  return undefined;
+  const log = executionLog;
+  log.skip = skip;
 }
 async function buildTesterAttemptTransaction({
   runtime,

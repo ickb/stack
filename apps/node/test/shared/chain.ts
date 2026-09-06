@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createPublicClient,
-  isRetryableRpcTransportError,
   publicRpcEndpointIdentity,
   verifyChainPreflight,
 } from "../../src/shared/index.ts";
@@ -287,8 +286,8 @@ describe("preflight failure normalization", () => {
   });
 });
 
-describe("retryable preflight failures", () => {
-  it("normalizes retryable preflight transport failures", async () => {
+describe("preflight transport failures", () => {
+  it("keeps the fetch failure message and drops the transport cause", async () => {
     const client = testnetClient();
     client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
       await Promise.resolve();
@@ -299,13 +298,6 @@ describe("retryable preflight failures", () => {
       message: FETCH_FAILED_MESSAGE,
       cause: { name: "TypeError", message: FETCH_FAILED_MESSAGE },
     });
-    let caught: unknown;
-    try {
-      await verifyChainPreflight(client, "testnet");
-    } catch (error) {
-      caught = error;
-    }
-    expect(isRetryableRpcTransportError(caught)).toBe(true);
   });
 });
 

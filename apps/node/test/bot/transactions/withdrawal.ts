@@ -12,7 +12,7 @@ import {
   hash,
   readyDeposit,
   TARGET_ICKB_BALANCE,
-} from "../bot/fixtures/bot.ts";
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();

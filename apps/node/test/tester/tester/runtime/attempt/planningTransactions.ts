@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { ExecutionLog } from "../../../../../src/tester/tester/runtime/testerTypes.ts";
 import {
   ALL_CKB_LIMIT_ORDER_SCENARIO,
   CKB_TO_ICKB_DIRECTION,
@@ -53,7 +54,7 @@ describe("planTesterAttempt transaction building", () => {
   });
 
   it("uses default fee policy for SDK conversion planning and skips dust notices", async () => {
-    const executionLog: Record<string, unknown> = {};
+    const executionLog: ExecutionLog = {};
     const state = testerState({
       availableCkbBalance: 0n,
       availableIckbBalance: ccc.fixedPointFrom(1),
@@ -89,7 +90,7 @@ describe("planTesterAttempt transaction building", () => {
     });
 
     expect(result).toBeUndefined();
-    expect(executionLog["skip"]).toMatchObject({
+    expect(executionLog.skip).toMatchObject({
       reason: ESTIMATED_TOO_SMALL_REASON,
       testerScenario: SDK_CONVERSION_SCENARIO,
       conversionNotice: { kind: "dust-ickb-to-ckb" },

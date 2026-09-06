@@ -29,7 +29,7 @@ describe("tester process", () => {
     expect(withoutConfig.stderr).toContain("Empty env TESTER_CHAIN");
   });
 
-  it("logs one retryable failure line when the RPC is unreachable", async () => {
+  it("logs one failure line when the RPC is unreachable", async () => {
     const keyPath = path.join(dir, "testnet.key");
     await writeFile(keyPath, privateKey, { mode: 0o600 });
 
@@ -45,7 +45,7 @@ describe("tester process", () => {
     const lines = result.stdout.trim().split("\n");
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0] ?? "")).toMatchObject({
-      error: { message: "Retryable tester error", retryable: true },
+      error: { message: "fetch failed" },
     });
     expect(result.stdout).not.toContain(privateKey);
     expect(result.stdout).not.toContain("token=canary");

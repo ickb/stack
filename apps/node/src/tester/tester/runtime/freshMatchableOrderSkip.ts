@@ -5,7 +5,7 @@ import type { Runtime } from "./runtime.ts";
 
 const MAX_ELAPSED_BLOCKS = 180n;
 
-interface FreshMatchableOrderSkip {
+export interface FreshMatchableOrderSkip {
   reason: "fresh-matchable-order";
   txHash: ccc.Hex;
   blockNumber: bigint;

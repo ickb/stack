@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { readBotRuntimeConfig } from "../../../src/bot/index.ts";
+import { readBotRuntimeConfig } from "../../src/bot/index.ts";
 
 describe("readBotRuntimeConfig", () => {
   it("reads the BOT_ variables and key file", async () => {

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { receiptPhase2Capacity } from "@ickb/sdk";
 
-import type { RebalancePlan, RingSegmentDiagnostics } from "../policy.ts";
+import type { RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import { DIRECT_DEPOSIT_FEE_HEADROOM, maxBigInt } from "./support.ts";
 import type { BotDecisionTranscript, BotState, Runtime } from "./types.ts";
@@ -89,43 +89,40 @@ function selectedRingAudit(
   if (ring === undefined) {
     return {};
   }
-  const segmentStats = selectedRingSegmentStats(ring.segments);
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- policy ring diagnostics are built from ringSegments, so the target index points at an existing segment.
   const targetSegment = ring.segments[ring.targetSegmentIndex]!;
+  const totals = {
+    emptySegmentCount: 0,
+    protectedDepositCount: 0,
+    protectedUdtValue: 0n,
+    surplusDepositCount: 0,
+    surplusUdtValue: 0n,
+  };
+  let heaviest = targetSegment;
+  for (const segment of ring.segments) {
+    totals.emptySegmentCount += segment.depositCount === 0 ? 1 : 0;
+    totals.protectedDepositCount += segment.protectedDepositCount;
+    totals.protectedUdtValue += segment.protectedUdtValue;
+    totals.surplusDepositCount += segment.surplusDepositCount;
+    totals.surplusUdtValue += segment.surplusUdtValue;
+    heaviest = segment.udtValue > heaviest.udtValue ? segment : heaviest;
+  }
   return {
     selectedRing: {
+      poolDepositCount: ring.poolDepositCount,
+      ringLength: ring.ringLength,
+      segmentCount: ring.segmentCount,
       targetSegmentIndex: ring.targetSegmentIndex,
       targetDepositCount: targetSegment.depositCount,
       targetUdtValue: ring.targetSegmentUdtValue,
       totalPoolUdt: ring.totalPoolUdt,
-      emptySegmentCount: segmentStats.emptySegmentCount,
-      nonemptySegmentCount: ring.segments.length - segmentStats.emptySegmentCount,
-      heaviestSegmentIndex: segmentStats.heaviest.index,
-      heaviestSegmentDepositCount: segmentStats.heaviest.depositCount,
-      heaviestSegmentUdtValue: segmentStats.heaviest.udtValue,
+      ...totals,
+      nonemptySegmentCount: ring.segments.length - totals.emptySegmentCount,
+      heaviestSegmentIndex: heaviest.index,
+      heaviestSegmentDepositCount: heaviest.depositCount,
+      heaviestSegmentUdtValue: heaviest.udtValue,
       canCreateRingInventory: ring.canCreateRingInventory,
       shouldBootstrapRing: ring.shouldBootstrapRing,
     },
   };
-}
-
-function selectedRingSegmentStats(segments: RingSegmentDiagnostics[]): {
-  heaviest: RingSegmentDiagnostics;
-  emptySegmentCount: number;
-} {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- policy ring diagnostics are built from ringSegments, which always returns at least one segment.
-  let heaviest = segments[0]!;
-  let emptySegmentCount = 0;
-  for (const segment of segments) {
-    emptySegmentCount += segment.depositCount === 0 ? 1 : 0;
-    heaviest = heavierRingSegment(heaviest, segment);
-  }
-  return { heaviest, emptySegmentCount };
-}
-
-function heavierRingSegment(
-  current: RingSegmentDiagnostics,
-  segment: RingSegmentDiagnostics,
-): RingSegmentDiagnostics {
-  return segment.udtValue > current.udtValue ? segment : current;
 }
