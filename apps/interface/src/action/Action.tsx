@@ -36,6 +36,8 @@ import type {
   PendingTransactionStore,
 } from "./pendingTransaction.ts";
 
+const PREVIEW_SETTLE_MS = 300;
+
 export default function Action({
   isCkb2Udt,
   amount,
@@ -103,6 +105,8 @@ export default function Action({
   const transactionHash =
     pendingTransaction?.status === "pending" ? pendingTransaction.txHash : undefined;
   const isSubmitting = pendingTransaction?.status === "submitting";
+  // The preview completes a real transaction, so it follows the amount only once typing settles.
+  const settledAmount = useSettled(amount, PREVIEW_SETTLE_MS);
   const txPreviewQuery = useQuery({
     queryKey: [
       walletConfig.chain,
@@ -110,10 +114,10 @@ export default function Action({
       "txInfo",
       stateId,
       isCkb2Udt,
-      amountKey,
+      amountIdentity(settledAmount, amountError),
     ],
-    queryFn: async () => buildPreview(l1State, isCkb2Udt, amount),
-    enabled: canPreviewTx(isLocked, l1State, amount),
+    queryFn: async () => buildPreview(l1State, isCkb2Udt, settledAmount),
+    enabled: canPreviewTx(isLocked, l1State, settledAmount),
     retry: false,
   });
   if (l1State === undefined) {
@@ -292,6 +296,20 @@ function previewHasCollectable(
   l1State: L1StateType,
 ): boolean {
   return preview?.hasCollectable ?? l1State.hasCollectable;
+}
+
+/** The value as it was `delayMs` ago, unless it has kept changing since. */
+function useSettled<T>(value: T, delayMs: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSettled(value);
+    }, delayMs);
+    return (): void => {
+      clearTimeout(timer);
+    };
+  }, [value, delayMs]);
+  return settled;
 }
 
 function amountIdentity(amount: bigint | undefined, amountError: string): string {

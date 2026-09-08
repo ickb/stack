@@ -10,6 +10,13 @@ export interface RootConfig {
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
 
+  /**
+   * Replaces the app-owned client with a fresh one. CCC's cache clear keeps stale block
+   * headers, so after any transaction error the interface starts over from a new client;
+   * the pending hash and the session mutex are untouched (decisions amendment 52).
+   */
+  resetClient: () => void;
+
   /** Shared React Query client. */
   queryClient: QueryClient;
 

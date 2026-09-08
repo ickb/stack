@@ -37,8 +37,9 @@ export function WalletGate(): JSX.Element {
   const draftClient = draftChain === "mainnet" ? mainnetClient : testnetClient;
   const activeClient = selectedClient(signer, client, draftClient);
   const rootConfig = useMemo(
-    () => (chain === undefined ? undefined : createRootConfig(chain, activeClient)),
-    [activeClient, chain],
+    () =>
+      chain === undefined ? undefined : createRootConfig(chain, activeClient, setClient),
+    [activeClient, chain, setClient],
   );
   const testnetHint = chain === "testnet" ? <TestnetHint /> : null;
   const quoteStateQuery = useQuoteState(rootConfig);
@@ -69,7 +70,7 @@ export function WalletGate(): JSX.Element {
           {...{
             open,
             setClient,
-            rootConfig: createRootConfig(draftChain, draftClient),
+            rootConfig: createRootConfig(draftChain, draftClient, setClient),
             rawText,
             setRawText,
             quoteStateQuery,

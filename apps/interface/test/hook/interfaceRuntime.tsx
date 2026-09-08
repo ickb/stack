@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
 import {
   quoteStateQuery,
@@ -61,7 +61,8 @@ describe("hook-based interface runtime", () => {
   });
 
   it("exposes interface config and wallet gate state helpers", async () => {
-    const root = createRootConfig("testnet", testnetClient);
+    const setClient = vi.fn<(client: unknown) => unknown>();
+    const root = createRootConfig("testnet", testnetClient, setClient);
     const ckbSigner = signerInfo(ccc.SignerType.CKB, "ckt");
     const btcSigner = signerInfo(ccc.SignerType.BTC, "ckt");
 
@@ -70,6 +71,11 @@ describe("hook-based interface runtime", () => {
       cccClient: testnetClient,
       queryClient,
     });
+    // A reset hands the connector a fresh client of the same chain, never the shared one.
+    root.resetClient();
+    expect(setClient).toHaveBeenCalledTimes(1);
+    expect(setClient.mock.calls[0]?.[0]).toBeInstanceOf(ccc.ClientPublicTestnet);
+    expect(setClient.mock.calls[0]?.[0]).not.toBe(testnetClient);
     expect(connectorStyle["--background"]).toBe("oklch(21% 0.006 286)");
     await expect(ckbSignerOnly(signerFilterInfo(ckbSigner))).resolves.toBe(true);
     await expect(ckbSignerOnly(signerFilterInfo(btcSigner))).resolves.toBe(false);

@@ -279,6 +279,7 @@ function walletConfig(
     address: "ckt1remount",
     queryClient,
     cccClient: client,
+    resetClient: vi.fn<() => void>(),
     signer: { client, sendTransaction },
     accountLocks: [],
     primaryLock: {},

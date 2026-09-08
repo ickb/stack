@@ -256,6 +256,17 @@ describe("transact broadcast identity and rejection", () => {
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
+    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the client after a committed transaction", async () => {
+    waitTransaction.mockResolvedValueOnce(committedResponse());
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.formReset).toHaveBeenCalledTimes(1);
+    expect(calls.walletConfig.resetClient).not.toHaveBeenCalled();
   });
 });
 
@@ -316,6 +327,7 @@ describe("retryConfirmation", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith(`${rpcUnavailable}. Hash: ${txHash}`);
     expect(calls.freezePreview).not.toHaveBeenCalled();
+    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -604,6 +616,7 @@ function walletConfig(): WalletConfig {
     address: "ckt1test",
     chain: "testnet",
     cccClient,
+    resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     accountLocks: [{ toHex: () => "0x22" }],
     primaryLock: { toHex: () => "0x11" },

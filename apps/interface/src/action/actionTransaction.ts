@@ -115,6 +115,7 @@ export async function transact({
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash), stateId);
     callbacks.setMessage("");
+    callbacks.walletConfig.resetClient();
     if (error instanceof TransactionWaitError) {
       // A known rejection is final; the next action rebuilds from committed cells.
       clearPendingTransaction(callbacks.pendingStore);
@@ -172,6 +173,7 @@ export async function retryConfirmation({
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
+    callbacks.walletConfig.resetClient();
     if (error instanceof TransactionWaitError) {
       clearPendingTransaction(callbacks.pendingStore);
       releaseTransaction(callbacks);

@@ -19,14 +19,13 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
-export const mainnetClient = new ccc.ClientPublicMainnet({
-  url: "https://mainnet.ckb.dev/",
-  fallbacks: [],
-});
-export const testnetClient = new ccc.ClientPublicTestnet({
-  url: "https://testnet.ckb.dev/",
-  fallbacks: [],
-});
+export function createClient(chain: RootConfig["chain"]): ccc.Client {
+  return chain === "mainnet"
+    ? new ccc.ClientPublicMainnet({ url: "https://mainnet.ckb.dev/", fallbacks: [] })
+    : new ccc.ClientPublicTestnet({ url: "https://testnet.ckb.dev/", fallbacks: [] });
+}
+export const mainnetClient = createClient("mainnet");
+export const testnetClient = createClient("testnet");
 export const savedConnectionRestoreMs = 800;
 
 const sdks = {
@@ -37,11 +36,16 @@ const sdks = {
 export function createRootConfig(
   chain: RootConfig["chain"],
   cccClient: ccc.Client,
+  // The connector's setter returns unknown; the reset discards it.
+  setClient: (client: ccc.Client) => unknown,
 ): RootConfig {
   return {
     chain,
     queryClient,
     cccClient,
+    resetClient: (): void => {
+      setClient(createClient(chain));
+    },
     sdk: sdks[chain],
   };
 }

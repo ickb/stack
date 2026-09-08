@@ -3,7 +3,7 @@ import { Ratio } from "@ickb/sdk";
 
 import { headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
   getL1State,
@@ -35,6 +35,7 @@ function itPollsLiveStateUnlessFrozen(): void {
     const walletConfig = {
       chain: "testnet",
       cccClient: testClient(),
+      resetClient: vi.fn<() => void>(),
       queryClient: new QueryClient(),
       signer: testSigner(),
       address: "ckt1same",

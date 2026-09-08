@@ -348,6 +348,7 @@ function walletFixture(): {
     address: "ckt1strict",
     queryClient: new QueryClient(),
     cccClient: {},
+    resetClient: vi.fn<() => void>(),
     signer: { sendTransaction },
     accountLocks: [],
     primaryLock: {},
