@@ -345,28 +345,7 @@ describe("buildDecisionTranscript match miss labels", () => {
 });
 
 describe("buildDecisionTranscript withdrawal summaries", () => {
-  it("records required live deposits for withdrawal rebalances", () => {
-    const selected = readyDeposit("73", 1n, 20n * 60n * 1000n);
-    const requiredLive = readyDeposit("74", 1n, 25n * 60n * 1000n);
-
-    expect(
-      transcriptForRebalance(
-        {
-          kind: "withdraw",
-          reason: "excess_ickb_balance",
-          deposits: [selected],
-          requiredLiveDeposits: [requiredLive],
-          ringSafe: true,
-        },
-        { withdrawalRequests: 1 },
-      ).rebalance,
-    ).toMatchObject({
-      withdrawalRequestCount: 1,
-      requiredLiveDepositCount: 1,
-    });
-  });
-
-  it("defaults required live deposits to zero", () => {
+  it("counts withdrawal requests for withdrawal rebalances", () => {
     const selected = readyDeposit("75", 1n, 20n * 60n * 1000n);
 
     expect(
@@ -379,7 +358,7 @@ describe("buildDecisionTranscript withdrawal summaries", () => {
         },
         { withdrawalRequests: 1 },
       ).rebalance,
-    ).toMatchObject({ requiredLiveDepositCount: 0 });
+    ).toMatchObject({ withdrawalRequestCount: 1 });
   });
 });
 

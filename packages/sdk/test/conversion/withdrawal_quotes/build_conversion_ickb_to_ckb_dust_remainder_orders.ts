@@ -27,22 +27,10 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 1n);
     const requestWithdrawal = vi
       .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation(
-        (
-          ...[txLike, deposits, , requestOptions]: [
-            txLike: ccc.TransactionLike,
-            deposits: unknown,
-            lock: unknown,
-            requestOptions: unknown,
-          ]
-        ) => {
-          expect(deposits).toEqual([directDeposit]);
-          expect(requestOptions).toEqual({
-            requiredLiveDeposits: [ringAnchor],
-          });
-          return ccc.Transaction.from(txLike);
-        },
-      );
+      .mockImplementation((txLike, deposits) => {
+        expect(deposits).toEqual([directDeposit]);
+        return ccc.Transaction.from(txLike);
+      });
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike, _lock, info, amounts) => {

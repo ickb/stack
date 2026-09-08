@@ -6,8 +6,6 @@ import {
   type MatchSearchResult,
   OrderManager,
   receiptPhase2Capacity,
-  ringRequiredLiveDepositFor,
-  withRequiredLiveDeposits,
 } from "@ickb/sdk";
 
 import { planRebalance } from "../policy.ts";
@@ -188,7 +186,6 @@ async function buildWithdrawalTransaction(
   rebalance: Extract<RebalanceOutcome, { kind: "withdraw" }>,
 ): Promise<BuildTransactionResult | undefined> {
   const { match } = matched;
-  const anchorsFor = ringRequiredLiveDepositFor(state.poolDeposits);
   // A withdrawal with non-negative match CKB delta is staged CKB recovery: it may cross
   // the immediate reserve because it restores CKB when it matures.
   const recoveryException = match.ckbDelta >= 0n;
@@ -196,23 +193,16 @@ async function buildWithdrawalTransaction(
     candidates: readonly IckbDepositCell[],
     ringSafe: boolean,
   ): Promise<BuildTransactionResult | undefined> => {
-    const prefixes = Array.from({ length: candidates.length }, (_, index) =>
-      withRequiredLiveDeposits(
-        candidates.slice(0, candidates.length - index),
-        ringSafe ? anchorsFor : undefined,
-      ),
-    );
+    const prefixes = Array.from({ length: candidates.length }, (_, index) => ({
+      deposits: candidates.slice(0, candidates.length - index),
+    }));
     const completion = await completeFirstFundable(
       prefixes,
       // The builders mutate the transaction they are given, so each prefix starts from
       // its own copy of the match; the shared match stays clean for the next candidate.
       (prefix) =>
         runtime.sdk.buildBaseTransaction(matched.tx.clone(), {
-          withdrawalRequest: {
-            deposits: prefix.deposits,
-            requiredLiveDeposits: prefix.requiredLiveDeposits,
-            lock: runtime.primaryLock,
-          },
+          withdrawalRequest: { deposits: prefix.deposits, lock: runtime.primaryLock },
           orders: state.userOrders,
           receipts: state.receipts,
           readyWithdrawals: state.readyWithdrawals,

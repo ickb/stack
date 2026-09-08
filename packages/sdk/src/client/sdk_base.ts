@@ -1,10 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type {
-  IckbDepositCell,
-  IckbUdt,
-  LogicManager,
-  OwnedOwnerManager,
-} from "../core/index.ts";
+import type { IckbUdt, LogicManager, OwnedOwnerManager } from "../core/index.ts";
 import { assertDaoOutputLimit } from "../dao/index.ts";
 import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
 import {
@@ -78,12 +73,8 @@ export abstract class IckbSdkBase {
   /**
    * Adds order group inputs for collection or fulfilled-order cleanup.
    */
-  public collect(
-    txLike: ccc.TransactionLike,
-    groups: OrderGroup[],
-    options?: { isFulfilledOnly?: boolean },
-  ): ccc.Transaction {
-    return this.order.melt(txLike, groups, options);
+  public collect(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction {
+    return this.order.melt(txLike, groups);
   }
 
   /**
@@ -105,17 +96,11 @@ export abstract class IckbSdkBase {
       readyWithdrawals = [],
     } = options;
     if (withdrawalRequest !== undefined && withdrawalRequest.deposits.length > 0) {
-      const requiredLiveDeposits = withdrawalRequest.requiredLiveDeposits ?? [];
       assertReadyWithdrawalDeposits(withdrawalRequest.deposits);
-      assertRequiredLiveWithdrawalDeposits(
-        withdrawalRequest.deposits,
-        requiredLiveDeposits,
-      );
       tx = this.ownedOwner.requestWithdrawal(
         tx,
         withdrawalRequest.deposits,
         withdrawalRequest.lock,
-        requiredLiveDeposits.length > 0 ? { requiredLiveDeposits } : undefined,
       );
     }
     if (orders.length > 0) {
@@ -180,25 +165,5 @@ export abstract class IckbSdkBase {
       tx.addInput(cell);
       addedCapacity += cell.cellOutput.capacity;
     }
-  }
-}
-
-function assertRequiredLiveWithdrawalDeposits(
-  requestedDeposits: readonly IckbDepositCell[],
-  requiredLiveDeposits: readonly IckbDepositCell[],
-): void {
-  const spent = new Set(
-    requestedDeposits.map((deposit) => deposit.cell.outPoint.toHex()),
-  );
-  const seen = new Set<string>();
-  for (const deposit of requiredLiveDeposits) {
-    const outPoint = deposit.cell.outPoint.toHex();
-    if (seen.has(outPoint)) {
-      throw new Error(`Withdrawal live deposit anchor ${outPoint} is duplicated`);
-    }
-    if (spent.has(outPoint)) {
-      throw new Error(`Withdrawal live deposit anchor ${outPoint} is also being spent`);
-    }
-    seen.add(outPoint);
   }
 }

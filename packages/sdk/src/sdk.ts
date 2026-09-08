@@ -23,7 +23,6 @@ import type { ValueComponents } from "./utils/index.ts";
 export { IckbError, isIckbError } from "./client/sdk_error.ts";
 export type { IckbErrorCode } from "./client/sdk_error.ts";
 
-export { MAX_WITHDRAWAL_REQUESTS } from "./client/sdk_types.ts";
 export type {
   AccountAvailabilityProjection,
   AccountState,
@@ -76,11 +75,7 @@ export interface IckbSdk {
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult>;
   /** Adds order-group inputs for collection or fulfilled-order cleanup. */
-  collect(
-    txLike: ccc.TransactionLike,
-    groups: OrderGroup[],
-    options?: { isFulfilledOnly?: boolean },
-  ): ccc.Transaction;
+  collect(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction;
   /** Completes iCKB inputs and fees without signing or sending the transaction. */
   completeTransaction(
     txLike: ccc.TransactionLike,
@@ -91,7 +86,6 @@ export interface IckbSdk {
     client: ccc.Client,
     locks: ccc.Script[],
     tip: ccc.ClientBlockHeader,
-    options?: { cellPageSize?: number; signal?: AbortSignal },
   ): Promise<AccountState>;
   /** Returns sampled system, user-order, and account state from best-effort scans. */
   getL1AccountState(

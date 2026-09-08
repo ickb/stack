@@ -20,21 +20,6 @@ export interface WithdrawalDepositCandidate {
 }
 
 /**
- * Selected deposits plus required live anchors for owned-owner withdrawal.
- *
- * @public
- */
-export interface ReadyWithdrawalSelection<
-  T extends WithdrawalDepositCandidate = IckbDepositCell,
-> {
-  /** Deposits selected to spend into withdrawal requests. */
-  deposits: T[];
-
-  /** Extra deposits to add as live cell deps without spending. */
-  requiredLiveDeposits: T[];
-}
-
-/**
  * Options for selecting ready deposits for one withdrawal request transaction.
  *
  * @public
@@ -51,12 +36,6 @@ export interface ReadyWithdrawalSelectionOptions<
   /** Maximum iCKB amount to cover with selected deposits. */
   maxAmount: bigint;
 
-  /** Maximum selected deposit count. Defaults to the stack maximum of 30. */
-  maxCount?: number;
-
   /** Optional predicate for excluding deposits before selection. */
   canSelectDeposit?: (deposit: T) => boolean;
-
-  /** Optional live anchor lookup for selected deposits. */
-  requiredLiveDepositFor?: (deposit: T) => T | undefined;
 }

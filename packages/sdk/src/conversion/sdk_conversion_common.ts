@@ -18,24 +18,12 @@ export function conversionFailure(
 
 export function baseTransactionOptions(
   context: ConversionTransactionContext,
-  withdrawalRequest?: {
-    deposits: IckbDepositCell[];
-    requiredLiveDeposits: IckbDepositCell[];
-    lock: ccc.Script;
-  },
+  withdrawalRequest?: { deposits: IckbDepositCell[]; lock: ccc.Script },
 ): BuildBaseTransactionOptions {
   return {
     ...(withdrawalRequest === undefined || withdrawalRequest.deposits.length === 0
       ? {}
-      : {
-          withdrawalRequest: {
-            deposits: withdrawalRequest.deposits,
-            ...(withdrawalRequest.requiredLiveDeposits.length > 0
-              ? { requiredLiveDeposits: withdrawalRequest.requiredLiveDeposits }
-              : {}),
-            lock: withdrawalRequest.lock,
-          },
-        }),
+      : { withdrawalRequest }),
     orders: context.availableOrders,
     receipts: context.receipts,
     readyWithdrawals: context.readyWithdrawals,

@@ -9,9 +9,6 @@ import type {
 } from "../core/index.ts";
 import type { Info, OrderCell, OrderGroup, OrderManager, Ratio } from "../order/index.ts";
 import type { ValueComponents } from "../utils/index.ts";
-export const MAX_DIRECT_DEPOSITS = 60;
-/** Maximum withdrawal requests accepted by one SDK conversion. @public */
-export const MAX_WITHDRAWAL_REQUESTS = 30;
 export const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
 export const NOTHING_TO_DO_REASON: ConversionTransactionFailureReason = "nothing-to-do";
 
@@ -349,9 +346,6 @@ export interface BuildBaseTransactionOptions {
     /** Deposits to spend into owned withdrawal requests. */
     deposits: IckbDepositCell[];
 
-    /** Live pool deposits to add as cell deps without spending them. */
-    requiredLiveDeposits?: IckbDepositCell[];
-
     /** User lock for owner marker outputs. */
     lock: ccc.Script;
   };
@@ -384,7 +378,6 @@ export interface IckbToCkbConversionPlan {
   directUdtValue: bigint;
   estimatedMaturity: bigint;
   order?: ConversionOrder;
-  requiredLiveDeposits: IckbDepositCell[];
   selectedDeposits: IckbDepositCell[];
 }
 

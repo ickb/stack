@@ -101,17 +101,8 @@ export function meltOrderGroups(
   context: OrderTransactionContext,
   tx: ccc.Transaction,
   groups: OrderGroup[],
-  options?: { isFulfilledOnly?: boolean },
 ): ccc.Transaction {
-  const selectedGroups: OrderGroup[] = [];
-  for (const group of groups) {
-    const validated = validatedOrderGroup(group);
-    const { order } = validated;
-    if (options?.isFulfilledOnly === true && !order.isFulfilled()) {
-      continue;
-    }
-    selectedGroups.push(validated);
-  }
+  const selectedGroups = groups.map(validatedOrderGroup);
   if (selectedGroups.length === 0) {
     return tx;
   }

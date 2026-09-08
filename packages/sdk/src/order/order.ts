@@ -157,14 +157,11 @@ export class OrderManager implements ScriptDeps {
   /**
    * Adds order groups and their master cells as melt inputs.
    *
-   * @param options - Set `isFulfilledOnly` to skip groups whose current order is still matchable.
+   * @remarks Melts exactly the groups it is given: callers pass fulfilled groups
+   * to collect and a live group to cancel it (decisions amendment 52, N17).
    */
-  public melt(
-    txLike: ccc.TransactionLike,
-    groups: OrderGroup[],
-    options?: { isFulfilledOnly?: boolean },
-  ): ccc.Transaction {
-    return meltOrderGroups(this, ccc.Transaction.from(txLike), groups, options);
+  public melt(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction {
+    return meltOrderGroups(this, ccc.Transaction.from(txLike), groups);
   }
 
   /**

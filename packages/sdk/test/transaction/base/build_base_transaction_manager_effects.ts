@@ -39,7 +39,6 @@ interface RealBaseTransactionEffects {
   receipt: ReceiptCell;
   receiptHeader: ccc.ClientBlockHeader;
   requestedDeposit: IckbDepositCell;
-  requiredLiveDeposit: IckbDepositCell;
   withdrawalGroup: WithdrawalGroup;
   withdrawalHeader: ccc.ClientBlockHeader;
 }
@@ -75,12 +74,6 @@ function expectRealBaseTransactionEffects(
   expect(tx.cellDeps).toContainEqual(options.ownedDep);
   expect(tx.cellDeps).toContainEqual(options.logicDep);
   expect(tx.cellDeps).toContainEqual(options.orderDep);
-  expect(tx.cellDeps).toContainEqual(
-    ccc.CellDep.from({
-      outPoint: options.requiredLiveDeposit.cell.outPoint,
-      depType: "code",
-    }),
-  );
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
@@ -110,47 +103,6 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
     );
     expect(requestWithdrawal).not.toHaveBeenCalled();
   });
-
-  it("rejects duplicated required live withdrawal deposits", () => {
-    const { botLock, dao, logic, sdk } = baseTransactionFixture();
-    const requestedDeposit = depositCell("75", logic, dao, baseTip, baseTip, {
-      isReady: true,
-    });
-    const requiredLiveDeposit = depositCell("76", logic, dao, baseTip, baseTip, {
-      isReady: true,
-    });
-
-    expect(() =>
-      sdk.buildBaseTransaction(ccc.Transaction.default(), {
-        withdrawalRequest: {
-          deposits: [requestedDeposit],
-          requiredLiveDeposits: [requiredLiveDeposit, requiredLiveDeposit],
-          lock: botLock,
-        },
-      }),
-    ).toThrow(
-      `Withdrawal live deposit anchor ${requiredLiveDeposit.cell.outPoint.toHex()} is duplicated`,
-    );
-  });
-
-  it("rejects required live withdrawal deposits that are also spent", () => {
-    const { botLock, dao, logic, sdk } = baseTransactionFixture();
-    const requestedDeposit = depositCell("77", logic, dao, baseTip, baseTip, {
-      isReady: true,
-    });
-
-    expect(() =>
-      sdk.buildBaseTransaction(ccc.Transaction.default(), {
-        withdrawalRequest: {
-          deposits: [requestedDeposit],
-          requiredLiveDeposits: [requestedDeposit],
-          lock: botLock,
-        },
-      }),
-    ).toThrow(
-      `Withdrawal live deposit anchor ${requestedDeposit.cell.outPoint.toHex()} is also being spent`,
-    );
-  });
 });
 
 async function buildRealBaseTransactionCase(): Promise<
@@ -173,9 +125,6 @@ async function buildRealBaseTransactionCase(): Promise<
   const requestedDeposit = depositCell("70", logic, dao, depositHeader, baseTip, {
     isReady: true,
   });
-  const requiredLiveDeposit = depositCell("71", logic, dao, depositHeader, baseTip, {
-    isReady: true,
-  });
   const orderFixture = makeOrderGroup({
     orderScript: order,
     udtScript: udt,
@@ -194,11 +143,7 @@ async function buildRealBaseTransactionCase(): Promise<
   });
 
   const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    withdrawalRequest: {
-      deposits: [requestedDeposit],
-      requiredLiveDeposits: [requiredLiveDeposit],
-      lock: botLock,
-    },
+    withdrawalRequest: { deposits: [requestedDeposit], lock: botLock },
     orders: [orderGroup],
     receipts: [receipt],
     readyWithdrawals: [withdrawalGroup],
@@ -219,7 +164,6 @@ async function buildRealBaseTransactionCase(): Promise<
     receipt,
     receiptHeader,
     requestedDeposit,
-    requiredLiveDeposit,
     withdrawalGroup,
     withdrawalHeader,
   };

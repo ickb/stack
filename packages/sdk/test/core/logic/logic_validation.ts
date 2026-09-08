@@ -66,7 +66,7 @@ describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {
         ccc.fixedPointFrom(1082),
         script("33"),
       ),
-    ).toThrow("iCKB deposit quantity maximum is 63");
+    ).toThrow(DaoOutputLimitError);
   });
 
   it("rejects output 65 after appending the receipt", () => {

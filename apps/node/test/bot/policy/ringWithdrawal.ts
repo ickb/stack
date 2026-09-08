@@ -31,7 +31,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
       kind: "withdraw",
       reason: "excess_ickb_balance",
       deposits: [extra, sparseReady],
-      requiredLiveDeposits: [ringAnchor],
     });
     expect(plan.diagnostics?.ring).toMatchObject({
       canCreateRingInventory: false,
@@ -57,7 +56,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
       kind: "withdraw",
       reason: "excess_ickb_balance",
       deposits: [extra, sparseReady],
-      requiredLiveDeposits: [ringAnchor],
     });
   });
 

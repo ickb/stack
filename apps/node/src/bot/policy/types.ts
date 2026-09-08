@@ -51,8 +51,6 @@ export type RebalancePlan =
       reason: RebalanceWithdrawReason;
       /** Greedy candidates by maturity; completion decides how many a transaction carries. */
       deposits: IckbDepositCell[];
-      /** Ring anchors pinned for the full candidate list; each prefix pins its own. */
-      requiredLiveDeposits?: IckbDepositCell[];
       /** Whether prefixes keep pinning ring anchors; false only for any-deposit reserve recovery. */
       ringSafe: boolean;
       /** Any-ready-deposit candidates for reserve recovery when no surplus prefix can be funded. */

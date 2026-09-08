@@ -28,7 +28,6 @@ function mockBaseTransactionStepOrder(options: {
   orderManager: OrderManager;
   ownedOwnerManager: OwnedOwnerManager;
   requestedDeposit: IckbDepositCell;
-  requiredLiveDeposit: IckbDepositCell;
   steps: string[];
 }): void {
   const {
@@ -37,24 +36,13 @@ function mockBaseTransactionStepOrder(options: {
     orderManager,
     ownedOwnerManager,
     requestedDeposit,
-    requiredLiveDeposit,
     steps,
   } = options;
   vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(
-    (
-      ...[txLike, deposits, lock, requestOptions]: [
-        txLike: ccc.TransactionLike,
-        deposits: unknown,
-        lock: unknown,
-        requestOptions: unknown,
-      ]
-    ) => {
+    (txLike, deposits, lock) => {
       steps.push("request");
       expect(deposits).toEqual([requestedDeposit]);
       expect(lock).toEqual(botLock);
-      expect(requestOptions).toEqual({
-        requiredLiveDeposits: [requiredLiveDeposit],
-      });
       return appendInputAndOutput(txLike, hash("70"), botLock, 1n);
     },
   );
@@ -116,25 +104,17 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
     const requestedDeposit = depositCell("80", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
-    const requiredLiveDeposit = depositCell("90", logic, dao, baseTip, baseTip, {
-      isReady: true,
-    });
     mockBaseTransactionStepOrder({
       botLock,
       logicManager,
       orderManager,
       ownedOwnerManager,
       requestedDeposit,
-      requiredLiveDeposit,
       steps,
     });
 
     const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
-      withdrawalRequest: {
-        deposits: [requestedDeposit],
-        requiredLiveDeposits: [requiredLiveDeposit],
-        lock: botLock,
-      },
+      withdrawalRequest: { deposits: [requestedDeposit], lock: botLock },
       orders: [placeholderOrder],
       receipts: [placeholderReceipt],
       readyWithdrawals: [placeholderWithdrawal],

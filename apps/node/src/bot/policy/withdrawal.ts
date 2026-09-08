@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import {
   type IckbDepositCell,
-  ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
 } from "@ickb/sdk";
@@ -42,27 +41,25 @@ export function planRebalanceWithdrawal(options: {
     diagnostics,
   } = options;
   const ringSurplus = ringSurplusDepositFilter(poolDeposits);
-  const requiredLiveDepositFor = ringRequiredLiveDepositFor(poolDeposits);
   if (ckbBalance < ckbRecoveryThreshold || ickbBalance < ickbRefillThreshold) {
     const surplus = selectReadyWithdrawalDeposits({
       readyDeposits,
       tip,
       maxAmount: ickbBalance,
       canSelectDeposit: ringSurplus,
-      requiredLiveDepositFor,
     });
     const anyReady = selectReadyWithdrawalDeposits({
       readyDeposits,
       tip,
       maxAmount: ickbBalance,
     });
-    if (surplus.deposits.length > 0) {
+    if (surplus.length > 0) {
       return withdrawPlan("reserve_recovery", surplus, diagnostics, {
         ringSafe: true,
-        fallback: anyReady.deposits,
+        fallback: anyReady,
       });
     }
-    if (anyReady.deposits.length > 0) {
+    if (anyReady.length > 0) {
       return withdrawPlan("reserve_recovery", anyReady, diagnostics, { ringSafe: false });
     }
   }
@@ -81,9 +78,8 @@ export function planRebalanceWithdrawal(options: {
     tip,
     maxAmount: withdrawableIckb,
     canSelectDeposit: ringSurplus,
-    requiredLiveDepositFor,
   });
-  if (selection.deposits.length > 0) {
+  if (selection.length > 0) {
     return withdrawPlan("excess_ickb_balance", selection, diagnostics, {
       ringSafe: true,
     });
@@ -115,17 +111,14 @@ function noRebalancePlan(
 
 function withdrawPlan(
   reason: RebalanceWithdrawReason,
-  selection: { deposits: IckbDepositCell[]; requiredLiveDeposits: IckbDepositCell[] },
+  deposits: IckbDepositCell[],
   diagnostics: RebalanceDiagnostics,
   options: { ringSafe: boolean; fallback?: IckbDepositCell[] },
 ): RebalancePlan {
   return {
     kind: "withdraw",
     reason,
-    deposits: selection.deposits,
-    ...(selection.requiredLiveDeposits.length > 0
-      ? { requiredLiveDeposits: selection.requiredLiveDeposits }
-      : {}),
+    deposits,
     ringSafe: options.ringSafe,
     ...(options.fallback === undefined || options.fallback.length === 0
       ? {}

@@ -15,8 +15,11 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
 
     // 6 fits, 5 would exceed 10, 5 again, then 4 fits.
     expect(
-      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 10n })
-        .deposits,
+      selectReadyWithdrawalDeposits({
+        readyDeposits: deposits,
+        tip: TIP,
+        maxAmount: 10n,
+      }),
     ).toEqual([deposits[0], deposits[3]]);
   });
 
@@ -29,7 +32,7 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
         readyDeposits: [later, earlier],
         tip: TIP,
         maxAmount: 5n,
-      }).deposits,
+      }),
     ).toEqual([earlier]);
   });
 
@@ -37,47 +40,20 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
     const deposits = [readyDeposit(11n, 0n), readyDeposit(10n, 15n * MINUTE_MS)];
 
     expect(
-      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 10n })
-        .deposits,
+      selectReadyWithdrawalDeposits({
+        readyDeposits: deposits,
+        tip: TIP,
+        maxAmount: 10n,
+      }),
     ).toEqual([deposits[1]]);
   });
 
-  it("respects the request limit and defaults it to the stack maximum", () => {
-    const deposits = Array.from({ length: 31 }, (_, index) =>
-      readyDeposit(1n, BigInt(index) * MINUTE_MS),
-    );
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 100n,
-        maxCount: 2,
-      }).deposits,
-    ).toEqual([deposits[0], deposits[1]]);
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 100n,
-      }).deposits,
-    ).toHaveLength(30);
-  });
-
-  it("returns no deposits for a non-positive amount or count", () => {
+  it("returns no deposits for a non-positive amount", () => {
     const deposits = [readyDeposit(1n, 0n)];
 
     expect(
       selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 0n }),
-    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 1n,
-        maxCount: 0,
-      }),
-    ).toEqual({ deposits: [], requiredLiveDeposits: [] });
+    ).toEqual([]);
   });
 
   it("filters candidates before walking them", () => {
@@ -90,7 +66,7 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
         tip: TIP,
         maxAmount: 5n,
         canSelectDeposit: (deposit) => deposit !== blocked,
-      }).deposits,
+      }),
     ).toEqual([allowed]);
   });
 });

@@ -53,6 +53,35 @@ export class DaoOutputLimitError extends Error {
 }
 
 /**
+ * Deposit-header indices the deployed DAO script can address in a phase-2 witness.
+ *
+ * @remarks The script reads one byte of the u64 field (RFC 0023 erratum,
+ * nervosnetwork/rfcs pull 456).
+ *
+ * @public
+ */
+export const DAO_HEADER_INDEX_LIMIT = 256;
+
+/**
+ * Error thrown when a phase-2 withdrawal would reference a deposit header the
+ * deployed DAO script cannot address.
+ *
+ * @public
+ */
+export class DaoHeaderIndexError extends Error {
+  /**
+   * Creates a header-index error for one unrepresentable index.
+   */
+  constructor(headerIndex: number, options?: ErrorOptions) {
+    super(
+      `NervosDAO deposit header index ${String(headerIndex)} is not below ${String(DAO_HEADER_INDEX_LIMIT)}`,
+      options,
+    );
+    this.name = "DaoHeaderIndexError";
+  }
+}
+
+/**
  * Error thrown when unresolved inputs prevent a safe DAO output-limit check.
  *
  * @public

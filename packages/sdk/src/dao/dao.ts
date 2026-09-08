@@ -7,7 +7,11 @@ import {
   type DaoDepositCell,
   type DaoWithdrawalRequestCell,
 } from "./cells.ts";
-import { assertDaoOutputLimit } from "./dao_output_limit.ts";
+import {
+  assertDaoOutputLimit,
+  DAO_HEADER_INDEX_LIMIT,
+  DaoHeaderIndexError,
+} from "./dao_output_limit.ts";
 import { cellInputLikeFrom, cellOutputLikeFrom } from "./transaction_shape.ts";
 
 /**
@@ -137,7 +141,6 @@ export class DaoManager implements ScriptDeps {
   /**
    * Adds DAO withdrawal request inputs and outputs for the selected deposits.
    *
-   * @param options - Set `isReadyOnly` to only process ready deposits.
    * @returns The updated partial transaction.
    * @throws Error if the transaction has different input and output lengths.
    * @throws Error if the withdrawal request lock args have a different size from the deposit.
@@ -146,14 +149,9 @@ export class DaoManager implements ScriptDeps {
     txLike: ccc.TransactionLike | ccc.Transaction,
     deposits: DaoDepositCell[],
     lock: ccc.Script,
-    options?: {
-      isReadyOnly?: boolean;
-    },
   ): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
-    const selectedDeposits =
-      options?.isReadyOnly === true ? deposits.filter((d) => d.isReady) : deposits;
-    if (selectedDeposits.length === 0) {
+    if (deposits.length === 0) {
       assertDaoOutputLimit(tx, this.script);
       return tx;
     }
@@ -166,11 +164,11 @@ export class DaoManager implements ScriptDeps {
     }
     assertUniqueUnspentInputs(
       tx,
-      selectedDeposits.map((deposit) => deposit.cell.outPoint),
+      deposits.map((deposit) => deposit.cell.outPoint),
       "DAO deposit",
     );
 
-    for (const deposit of selectedDeposits) {
+    for (const deposit of deposits) {
       const { cell, headers } = deposit;
       this.assertDepositReadyForWithdrawalRequest(deposit);
       if (cell.cellOutput.lock.args.length !== lock.args.length) {
@@ -201,23 +199,19 @@ export class DaoManager implements ScriptDeps {
   /**
    * Adds DAO withdrawal request inputs with required header deps and witness input types.
    *
-   * @param options - Set `isReadyOnly` to skip requests that are not ready yet.
    * @returns The updated partial transaction.
    * @throws Error if a withdrawal request witness input type is already in use.
+   *
+   * @remarks Header deps are pushed in two passes, every distinct deposit header
+   * first and the withdrawal headers after, so deposit-header indices stay as
+   * low as the collection allows.
    */
   public withdraw(
     txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalRequests: DaoWithdrawalRequestCell[],
-    options?: {
-      isReadyOnly?: boolean;
-    },
   ): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
-    const selectedWithdrawalRequests =
-      options?.isReadyOnly === true
-        ? withdrawalRequests.filter((d) => d.isReady)
-        : withdrawalRequests;
-    if (selectedWithdrawalRequests.length === 0) {
+    if (withdrawalRequests.length === 0) {
       assertDaoOutputLimit(tx, this.script);
       return tx;
     }
@@ -225,25 +219,29 @@ export class DaoManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
     assertUniqueUnspentInputs(
       tx,
-      selectedWithdrawalRequests.map((request) => request.cell.outPoint),
+      withdrawalRequests.map((request) => request.cell.outPoint),
       "DAO withdrawal request",
     );
+    for (const request of withdrawalRequests) {
+      this.assertWithdrawalRequestReadyForWithdrawal(request);
+      pushHeaderDep(tx, request.headers[0].header.hash);
+    }
+    for (const request of withdrawalRequests) {
+      pushHeaderDep(tx, request.headers[1].header.hash);
+    }
 
-    for (const withdrawalRequest of selectedWithdrawalRequests) {
-      this.assertWithdrawalRequestReadyForWithdrawal(withdrawalRequest);
+    for (const withdrawalRequest of withdrawalRequests) {
       const {
         cell: { outPoint, cellOutput, outputData },
         headers,
         maturity,
       } = withdrawalRequest;
-      for (const th of headers) {
-        const hash = th.header.hash;
-        if (!tx.headerDeps.includes(hash)) {
-          tx.headerDeps.push(hash);
-        }
+      const headerIndex = tx.headerDeps.indexOf(headers[0].header.hash);
+      // The deployed dao.c reads one byte of the u64 index field (RFC 0023 erratum,
+      // nervosnetwork/rfcs pull 456), so index 256 would be read as 0.
+      if (headerIndex >= DAO_HEADER_INDEX_LIMIT) {
+        throw new DaoHeaderIndexError(headerIndex);
       }
-      const depositHeader = headers[0];
-      const headerIndex = tx.headerDeps.indexOf(depositHeader.header.hash);
 
       const inputIndex =
         tx.addInput({
@@ -449,4 +447,10 @@ async function cellFromLike(
     throw new Error(`Cell not found for out point ${cellLike.toHex()}`);
   }
   return cell;
+}
+
+function pushHeaderDep(tx: ccc.Transaction, hash: ccc.Hex): void {
+  if (!tx.headerDeps.includes(hash)) {
+    tx.headerDeps.push(hash);
+  }
 }

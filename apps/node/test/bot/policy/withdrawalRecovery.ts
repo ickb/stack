@@ -67,7 +67,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     expect(plan).toMatchObject({
       kind: "withdraw",
       deposits: [first, third],
-      requiredLiveDeposits: [second],
     });
   });
 });

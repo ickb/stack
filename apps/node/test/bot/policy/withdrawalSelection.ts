@@ -29,7 +29,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [crowdedEarly],
-      requiredLiveDeposits: [sparseReady],
     });
   });
 
@@ -50,7 +49,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [extra],
-      requiredLiveDeposits: [ringAnchor],
     });
   });
 
@@ -92,7 +90,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [sparseReady, crowdedSmall],
-      requiredLiveDeposits: [crowdedLarge],
     });
   });
 
@@ -114,7 +111,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [sparseReady, crowdedSmall],
-      requiredLiveDeposits: [crowdedLarge],
     });
   });
 
@@ -137,7 +133,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [lowExtra],
-      requiredLiveDeposits: [lowProtected],
     });
   });
 });
@@ -160,7 +155,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [last],
-      requiredLiveDeposits: [first],
     });
   });
 
@@ -181,7 +175,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [later],
-      requiredLiveDeposits: [earlier],
     });
   });
 
@@ -202,7 +195,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [laterSparseReady],
-      requiredLiveDeposits: [earlierSparseReady],
     });
   });
 });

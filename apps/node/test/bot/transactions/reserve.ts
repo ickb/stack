@@ -253,7 +253,6 @@ describe("buildTransaction reserve recovery fallback", () => {
           reason: "reserve_recovery",
           withdrawalRequestCount: 3,
           withdrawalCandidateCount: 3,
-          requiredLiveDepositCount: 0,
         },
       },
     });

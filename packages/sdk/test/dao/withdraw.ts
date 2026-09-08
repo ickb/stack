@@ -2,7 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import type { DaoWithdrawalRequestCell } from "../../src/dao/cells.ts";
 import {
+  DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
+  DaoHeaderIndexError,
   DaoManager,
   DaoOutputLimitError,
 } from "../../src/dao/index.ts";
@@ -38,6 +40,50 @@ function registerWithdrawConstructionTests(): void {
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
   });
 
+  it("pushes every deposit header before any withdrawal header", () => {
+    const manager = new DaoManager(script("11"), []);
+    const first = withdrawalCell(
+      manager,
+      headerWithHash(1n, "a1"),
+      headerWithHash(2n, "b1"),
+    );
+    const second = withdrawalCell(
+      manager,
+      headerWithHash(3n, "a2"),
+      headerWithHash(4n, "b2"),
+      "42",
+    );
+
+    const tx = manager.withdraw(ccc.Transaction.default(), [first, second]);
+
+    expect(tx.headerDeps).toEqual([
+      first.headers[0].header.hash,
+      second.headers[0].header.hash,
+      first.headers[1].header.hash,
+      second.headers[1].header.hash,
+    ]);
+    expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
+    expect(tx.getWitnessArgs(1)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(1n, 8)));
+  });
+
+  it("rejects a deposit header the deployed script cannot address", () => {
+    const manager = new DaoManager(script("11"), []);
+    const withdrawal = withdrawalCell(manager, headerLike(1n), headerWithHash(2n, "99"));
+    const tx = ccc.Transaction.default();
+    for (let index = 0; index < DAO_HEADER_INDEX_LIMIT; index += 1) {
+      tx.headerDeps.push(ccc.hexFrom(ccc.numToBytes(index + 1, 32)));
+    }
+
+    expect(() => manager.withdraw(tx, [withdrawal])).toThrow(DaoHeaderIndexError);
+  });
+
+  it("leaves the transaction unchanged when no requests are given", () => {
+    const manager = new DaoManager(script("11"), []);
+    const tx = ccc.Transaction.default();
+
+    expect(manager.withdraw(tx, [])).toEqual(tx);
+  });
+
   it("does not duplicate withdrawal header deps", () => {
     const manager = new DaoManager(script("11"), []);
     const depositHeader = headerLike(1n);
@@ -66,19 +112,6 @@ function registerWithdrawConstructionTests(): void {
       ccc.hexFrom(ccc.numLeToBytes(0n, 8)),
     );
     expect(updated.witnesses[1]).toBe(preservedWitness);
-  });
-
-  it("leaves transactions unchanged when ready-only withdrawals are pending", () => {
-    const manager = new DaoManager(script("11"), []);
-    const depositHeader = headerLike(1n);
-    const withdrawHeader = headerWithHash(2n, "99");
-    const pending = {
-      ...withdrawalCell(manager, depositHeader, withdrawHeader),
-      isReady: false,
-    };
-    const tx = ccc.Transaction.default();
-
-    expect(manager.withdraw(tx, [pending], { isReadyOnly: true })).toEqual(tx);
   });
 
   it("rejects DAO withdrawals with more than 64 outputs", () => {
@@ -182,10 +215,11 @@ function withdrawalCell(
   manager: DaoManager,
   depositHeader: ccc.ClientBlockHeader,
   withdrawHeader: ccc.ClientBlockHeader,
+  txByte = "22",
 ): DaoWithdrawalRequestCell {
   return {
     cell: ccc.Cell.from({
-      outPoint: { txHash: byte32FromByte("22"), index: 0n },
+      outPoint: { txHash: byte32FromByte(txByte), index: 0n },
       cellOutput: {
         capacity: ccc.fixedPointFrom(100082),
         lock: script("33", "0x1234"),
@@ -196,7 +230,7 @@ function withdrawalCell(
     isDeposit: false,
     headers: [
       { header: depositHeader },
-      { header: withdrawHeader, txHash: byte32FromByte("22") },
+      { header: withdrawHeader, txHash: byte32FromByte(txByte) },
     ],
     interests: 0n,
     maturity: ccc.Epoch.from([180n, 0n, 1n]),

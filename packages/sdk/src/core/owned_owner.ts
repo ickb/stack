@@ -59,12 +59,9 @@ export class OwnedOwnerManager implements ScriptDeps {
   /**
    * Adds DAO withdrawal request outputs and owner marker outputs for the selected deposits.
    *
-   * @param options - Withdrawal options. `isReadyOnly` skips deposits that are not ready. `requiredLiveDeposits` adds live deposit anchors as cell deps while requested deposits are spent.
    * @returns The updated partial transaction.
    *
-   * @remarks Required live deposits are not spent; they anchor the withdrawal
-   * request as live cell deps. Duplicate anchors, duplicate deposits, and anchors
-   * that are also being spent throw. Anchor readiness is not required here.
+   * @remarks Duplicate deposits and deposits already spent by the transaction throw.
    * Caller must ensure UDT cellDeps are added to the transaction, for example
    * via `ickbUdt.addCellDeps(tx)`.
    */
@@ -72,31 +69,19 @@ export class OwnedOwnerManager implements ScriptDeps {
     txLike: ccc.TransactionLike | ccc.Transaction,
     deposits: IckbDepositCell[],
     lock: ccc.Script,
-    options?: {
-      isReadyOnly?: boolean;
-      requiredLiveDeposits?: IckbDepositCell[];
-    },
   ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
-    const selectedDeposits =
-      options?.isReadyOnly === true
-        ? deposits.filter((deposit) => deposit.isReady)
-        : deposits;
-    if (selectedDeposits.length === 0) {
+    if (deposits.length === 0) {
       return tx;
     }
-    const spentOutPoints = withdrawalSpentOutPoints(tx, selectedDeposits);
-    const requiredLiveDeposits = options?.requiredLiveDeposits ?? [];
-    assertRequiredLiveDepositsUnspent(requiredLiveDeposits, spentOutPoints);
-    // Readiness filtering, when requested, happened above; preserve the selected deposits here.
-    const daoOptions = { isReadyOnly: false };
+    assertWithdrawalDepositsUnspent(tx, deposits);
 
     const withdrawalOutputStart = tx.outputs.length;
-    tx = this.daoManager.requestWithdrawal(tx, selectedDeposits, this.script, daoOptions);
+    tx = this.daoManager.requestWithdrawal(tx, deposits, this.script);
     const withdrawalOutputs = withdrawalRequestOutputs(
       tx,
       withdrawalOutputStart,
-      selectedDeposits.length,
+      deposits.length,
     );
     tx.addCellDeps(this.cellDeps);
     addWithdrawalOwnerOutputs({
@@ -108,10 +93,6 @@ export class OwnedOwnerManager implements ScriptDeps {
       daoScript: this.daoManager.script,
     });
 
-    for (const deposit of requiredLiveDeposits) {
-      tx.addCellDeps({ outPoint: deposit.cell.outPoint, depType: "code" });
-    }
-
     assertDaoOutputLimit(tx, this.daoManager.script);
     return tx;
   }
@@ -121,34 +102,27 @@ export class OwnedOwnerManager implements ScriptDeps {
    *
    * @returns The updated partial transaction.
    *
-   * @remarks Set `isReadyOnly` to spend only ready requests. Caller must ensure
-   * UDT cellDeps are added to the transaction (e.g., via ickbUdt.addCellDeps(tx)).
+   * @remarks Caller must ensure UDT cellDeps are added to the transaction
+   * (e.g., via ickbUdt.addCellDeps(tx)).
    */
   public withdraw(
     txLike: ccc.TransactionLike | ccc.Transaction,
     withdrawalGroups: WithdrawalGroup[],
-    options?: {
-      isReadyOnly?: boolean;
-    },
   ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
-    const selectedWithdrawalGroups =
-      options?.isReadyOnly === true
-        ? withdrawalGroups.filter((group) => group.owned.isReady)
-        : withdrawalGroups;
-    if (selectedWithdrawalGroups.length === 0) {
+    if (withdrawalGroups.length === 0) {
       return tx;
     }
-    for (const group of selectedWithdrawalGroups) {
+    for (const group of withdrawalGroups) {
       assertWithdrawalGroupLinked(group);
     }
 
     tx.addCellDeps(this.cellDeps);
 
-    const requests = selectedWithdrawalGroups.map((group) => group.owned);
+    const requests = withdrawalGroups.map((group) => group.owned);
     tx = this.daoManager.withdraw(tx, requests);
 
-    for (const { owner } of selectedWithdrawalGroups) {
+    for (const { owner } of withdrawalGroups) {
       tx.addInput(cellInputLikeFrom(owner.cell));
     }
 
@@ -217,10 +191,10 @@ export class OwnedOwnerManager implements ScriptDeps {
   }
 }
 
-function withdrawalSpentOutPoints(
+function assertWithdrawalDepositsUnspent(
   tx: ccc.Transaction,
   deposits: IckbDepositCell[],
-): Set<string> {
+): void {
   const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
   const requestedDepositOutPoints = new Set<string>();
   for (const deposit of deposits) {
@@ -233,24 +207,6 @@ function withdrawalSpentOutPoints(
       throw new Error("Withdrawal deposit is already being spent");
     }
     spentOutPoints.add(outPoint);
-  }
-  return spentOutPoints;
-}
-
-function assertRequiredLiveDepositsUnspent(
-  requiredLiveDeposits: IckbDepositCell[],
-  spentOutPoints: Set<string>,
-): void {
-  const requiredAnchorOutPoints = new Set<string>();
-  for (const deposit of requiredLiveDeposits) {
-    const outPoint = deposit.cell.outPoint.toHex();
-    if (requiredAnchorOutPoints.has(outPoint)) {
-      throw new Error("Withdrawal live deposit anchor is duplicated");
-    }
-    requiredAnchorOutPoints.add(outPoint);
-    if (spentOutPoints.has(outPoint)) {
-      throw new Error("Withdrawal live deposit anchor is also being spent");
-    }
   }
 }
 

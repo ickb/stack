@@ -12,7 +12,9 @@ export type {
 } from "./cells.ts";
 export { DaoManager } from "./dao.ts";
 export {
+  DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
+  DaoHeaderIndexError,
   DaoOutputLimitError,
   DaoOutputLimitIndeterminateError,
   assertDaoOutputLimit,

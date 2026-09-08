@@ -12,12 +12,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const maxDirectDeposits = 60;
+const maxDirectDeposits = 63;
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
-  it("caps CKB-to-iCKB direct deposits", async () => {
+  it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
     const deposit = vi
       .spyOn(logicManager, "deposit")

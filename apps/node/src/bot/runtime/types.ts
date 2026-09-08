@@ -214,7 +214,6 @@ export interface BotDecisionTranscript {
     /** Requests the accepted prefix carries; `withdrawalCandidateCount` is the policy's list. */
     withdrawalRequestCount?: number;
     withdrawalCandidateCount?: number;
-    requiredLiveDepositCount?: number;
     projectedAvailableCkb: bigint;
     projectedAvailableIckb: bigint;
   };

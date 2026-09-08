@@ -39,15 +39,8 @@ describe("sdk helper coverage", () => {
       receipts: [],
       readyWithdrawals: [],
     });
-    expect(
-      baseTransactionOptions(context, { deposits, requiredLiveDeposits: [], lock }),
-    ).toMatchObject({
+    expect(baseTransactionOptions(context, { deposits, lock })).toMatchObject({
       withdrawalRequest: { deposits, lock },
-    });
-    expect(
-      baseTransactionOptions(context, { deposits, requiredLiveDeposits: deposits, lock }),
-    ).toMatchObject({
-      withdrawalRequest: { deposits, requiredLiveDeposits: deposits, lock },
     });
     expect(conversionKind(true, true)).toBe("direct-plus-order");
     expect(conversionKind(true, false)).toBe("direct");

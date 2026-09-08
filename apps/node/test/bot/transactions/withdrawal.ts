@@ -96,8 +96,8 @@ describe("buildTransaction excess withdrawal reserve crossing", () => {
   });
 });
 
-describe("buildTransaction withdrawal required live deposits", () => {
-  it("passes required live deposits to SDK base transaction construction", async () => {
+describe("buildTransaction withdrawal surplus selection", () => {
+  it("passes the ring surplus deposits to SDK base transaction construction", async () => {
     vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
       completeSearchResult({
         ckbDelta: 0n,
@@ -131,7 +131,6 @@ describe("buildTransaction withdrawal required live deposits", () => {
     expect(buildBaseTransaction.mock.calls[0]?.[1]).toMatchObject({
       withdrawalRequest: {
         deposits: [first, third],
-        requiredLiveDeposits: [protectedAnchor],
       },
     });
     expect(completeTransaction).toHaveBeenCalledTimes(1);
@@ -173,7 +172,6 @@ describe("buildTransaction excess withdrawal ready deposit selection", () => {
     const withdrawalRequest = buildBaseTransaction.mock.calls[0]?.[1]?.withdrawalRequest;
     expect(withdrawalRequest).toMatchObject({
       deposits: [extra, protectedAnchor],
-      requiredLiveDeposits: [futureFirst],
     });
     expect(withdrawalRequest?.deposits).not.toContain(futureFirst);
     expect(withdrawalRequest?.deposits).not.toContain(futureSecond);

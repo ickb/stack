@@ -143,7 +143,7 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({ kind: "none" });
   });
 
-  it("withdraws one over-cap ring surplus and pins its ring anchor", () => {
+  it("withdraws one over-cap ring surplus and leaves its ring anchor", () => {
     const first = readyDeposit(ICKB_DEPOSIT_CAP + CKB, 20n * 60n * 1000n);
     const second = readyDeposit(ICKB_DEPOSIT_CAP + CKB, 25n * 60n * 1000n);
 
@@ -160,7 +160,6 @@ describe(PLAN_REBALANCE_SUITE, () => {
     ).toMatchObject({
       kind: "withdraw",
       deposits: [second],
-      requiredLiveDeposits: [first],
     });
   });
 });

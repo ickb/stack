@@ -90,10 +90,7 @@ function rebalanceSummary(
     reason: rebalance.reason,
     ...(rebalance.kind === "deposit" ? { depositQuantity: rebalance.quantity } : {}),
     ...(rebalance.kind === "withdraw"
-      ? {
-          withdrawalRequestCount: rebalance.deposits.length,
-          requiredLiveDepositCount: rebalance.requiredLiveDeposits?.length ?? 0,
-        }
+      ? { withdrawalRequestCount: rebalance.deposits.length }
       : {}),
     ...(rebalance.withdrawalCandidateCount === undefined
       ? {}

@@ -10,7 +10,6 @@ export {
   DEFAULT_ORDER_FEE_BASE,
   IckbError,
   IckbSdk,
-  MAX_WITHDRAWAL_REQUESTS,
   TransactionBroadcastError,
   TransactionWaitError,
   estimateMaturityFeeThreshold,
@@ -48,16 +47,13 @@ export type {
 export { completeFirstFundable } from "./withdrawal/withdrawal_completion.ts";
 export type { FundableCompletion } from "./withdrawal/withdrawal_completion.ts";
 export {
-  ringRequiredLiveDepositFor,
   ringSegmentAnchor,
   ringSegments,
   ringSurplusDepositFilter,
   ringTargetSegmentIndex,
   selectReadyWithdrawalDeposits,
-  withRequiredLiveDeposits,
 } from "./withdrawal/withdrawal_selection.ts";
 export type {
-  ReadyWithdrawalSelection,
   ReadyWithdrawalSelectionOptions,
   RingSegment,
   WithdrawalDepositCandidate,

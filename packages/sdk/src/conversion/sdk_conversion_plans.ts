@@ -1,12 +1,12 @@
-import {
-  MAX_DIRECT_DEPOSITS,
-  type CkbToIckbConversionPlan,
-  type ConversionOrder,
-  type ConversionTransactionOptions,
-  type IckbToCkbConversionPlan,
-  type PoolDepositState,
+import type {
+  CkbToIckbConversionPlan,
+  ConversionOrder,
+  ConversionTransactionOptions,
+  IckbToCkbConversionPlan,
+  PoolDepositState,
 } from "../client/sdk_types.ts";
 import { ICKB_DEPOSIT_CAP, convert, type IckbDepositCell } from "../core/index.ts";
+import { DAO_OUTPUT_LIMIT } from "../dao/index.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
@@ -16,10 +16,8 @@ import {
 } from "../estimate/sdk_estimate.ts";
 import { compareBigInt } from "../utils/index.ts";
 import {
-  ringRequiredLiveDepositFor,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
-  withRequiredLiveDeposits,
 } from "../withdrawal/withdrawal_selection.ts";
 import {
   maturityBucket,
@@ -27,6 +25,13 @@ import {
   sumDirectWithdrawalSurplus,
   sumUdtValue,
 } from "./sdk_value_helpers.ts";
+
+// The DAO script accepts 64 outputs per transaction. Planners start at the most the
+// consensus limit can hold (one change output beside the deposits; a request and its
+// owner marker per withdrawal) and the completion walk steps down from there when
+// change and fees need more room (decisions amendment 52, finding N7).
+const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
+const MAX_PLANNED_WITHDRAWAL_REQUESTS = DAO_OUTPUT_LIMIT / 2;
 
 /** Plans every deposit count from the most the amount covers down to zero, skipping unrepresentable remainders. */
 export function ckbToIckbConversionPlans(
@@ -36,8 +41,8 @@ export function ckbToIckbConversionPlans(
   const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
-    depositQuotient > BigInt(MAX_DIRECT_DEPOSITS)
-      ? MAX_DIRECT_DEPOSITS
+    depositQuotient > BigInt(MAX_PLANNED_DEPOSITS)
+      ? MAX_PLANNED_DEPOSITS
       : Number(depositQuotient);
   const plans: CkbToIckbConversionPlan[] = [];
   for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
@@ -59,24 +64,16 @@ export function ickbToCkbConversionPlans(
   poolDeposits: PoolDepositState,
 ): IckbToCkbConversionPlan[] {
   const { amount, context } = options;
-  const { deposits } = selectReadyWithdrawalDeposits({
+  const deposits = selectReadyWithdrawalDeposits({
     readyDeposits: readyPoolDeposits(poolDeposits, context.system.tip),
     tip: context.system.tip,
     maxAmount: amount,
     canSelectDeposit: ringSurplusDepositFilter(poolDeposits.deposits),
   });
-  const requiredLiveDepositFor = ringRequiredLiveDepositFor(poolDeposits.deposits);
   const plans: IckbToCkbConversionPlan[] = [];
-  for (let count = deposits.length; count >= 0; count -= 1) {
-    const selection = withRequiredLiveDeposits(
-      deposits.slice(0, count),
-      requiredLiveDepositFor,
-    );
-    const plan = ickbToCkbConversionPlan(
-      options,
-      selection.deposits,
-      selection.requiredLiveDeposits,
-    );
+  const longest = Math.min(deposits.length, MAX_PLANNED_WITHDRAWAL_REQUESTS);
+  for (let count = longest; count >= 0; count -= 1) {
+    const plan = ickbToCkbConversionPlan(options, deposits.slice(0, count));
     if (plan !== undefined) {
       plans.push(plan);
     }
@@ -118,7 +115,6 @@ function ckbToIckbConversionPlan(
 function ickbToCkbConversionPlan(
   options: ConversionTransactionOptions,
   selectedDeposits: IckbDepositCell[],
-  requiredLiveDeposits: IckbDepositCell[],
 ): IckbToCkbConversionPlan | undefined {
   const { amount, context } = options;
   let estimatedMaturity = context.estimatedMaturity;
@@ -159,7 +155,6 @@ function ickbToCkbConversionPlan(
     directUdtValue,
     estimatedMaturity,
     ...(order === undefined ? {} : { order }),
-    requiredLiveDeposits,
     selectedDeposits,
   };
 }

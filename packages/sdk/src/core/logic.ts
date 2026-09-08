@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { assertDaoOutputLimit, DaoManager } from "../dao/index.ts";
+import { assertDaoOutputLimit, DaoManager, DaoOutputLimitError } from "../dao/index.ts";
 import { findCells, type ScriptDeps, unique } from "../utils/index.ts";
 import {
   type IckbDepositCell,
@@ -93,7 +93,8 @@ export class LogicManager implements ScriptDeps {
       throw new TypeError("iCKB deposit quantity must be a safe integer");
     }
     if (depositQuantity > maxDepositQuantity) {
-      throw new Error(`iCKB deposit quantity maximum is ${String(maxDepositQuantity)}`);
+      // The completion walk steps a plan down on this error (decisions amendment 52, N7).
+      throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
     }
 
     const depositCell = ccc.Cell.from({

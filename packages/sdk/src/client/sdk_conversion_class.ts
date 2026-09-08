@@ -137,11 +137,7 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
       (plan: IckbToCkbConversionPlan): ccc.Transaction => {
         let tx = this.buildBaseTransaction(
           baseTx.clone(),
-          baseTransactionOptions(context, {
-            deposits: plan.selectedDeposits,
-            requiredLiveDeposits: plan.requiredLiveDeposits,
-            lock,
-          }),
+          baseTransactionOptions(context, { deposits: plan.selectedDeposits, lock }),
         );
         if (plan.order !== undefined) {
           tx = this.order.mint(tx, lock, plan.order.estimate.info, plan.order.amounts);

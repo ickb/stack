@@ -25,7 +25,6 @@ afterEach(() => {
 
 describe(REQUEST_WITHDRAWAL_SUITE, () => {
   registerOwnerDistanceTests();
-  registerLiveDepositAnchorTests();
   registerWithdrawalDepositValidationTests();
   registerWithdrawalInputTests();
   registerMalformedDaoManagerTests();
@@ -87,40 +86,12 @@ function registerOwnerDistanceTests(): void {
   });
 }
 
-function registerLiveDepositAnchorTests(): void {
-  it("adds required live deposit anchors as cell deps", () => {
-    const { manager, ownerLock, requestedDeposit, requiredLiveDeposit } =
-      requestWithdrawalFixture();
-
-    const tx = manager.requestWithdrawal(
-      ccc.Transaction.default(),
-      [requestedDeposit],
-      ownerLock,
-      { requiredLiveDeposits: [requiredLiveDeposit] },
-    );
-
-    expect(tx.cellDeps).toContainEqual(
-      ccc.CellDep.from({ outPoint: requiredLiveDeposit.cell.outPoint, depType: "code" }),
-    );
-  });
-}
-
 function registerWithdrawalDepositValidationTests(): void {
-  it("leaves transactions unchanged when no withdrawal groups are selected", () => {
-    const { manager, depositHeader } = requestWithdrawalFixture();
+  it("leaves transactions unchanged when no deposits or withdrawal groups are given", () => {
+    const { manager, ownerLock } = requestWithdrawalFixture();
     const baseTx = ccc.Transaction.default();
-    const notReadyGroup = withdrawalGroupFixture({
-      isReady: false,
-      daoScript: manager.daoManager.script,
-      ownedOwnerScript: manager.script,
-      depositHeader,
-    });
 
-    expect(
-      manager.withdraw(baseTx, [notReadyGroup], {
-        isReadyOnly: true,
-      }),
-    ).toEqual(baseTx);
+    expect(manager.requestWithdrawal(baseTx, [], ownerLock)).toEqual(baseTx);
     expect(manager.withdraw(baseTx, [])).toEqual(baseTx);
   });
 }
@@ -275,19 +246,6 @@ function registerMalformedDaoManagerTests(): void {
 }
 
 function registerWithdrawalRequestSelectionTests(): void {
-  it("filters not-ready deposits when requesting ready withdrawals only", () => {
-    const { manager, ownerLock, requestedDeposit } = requestWithdrawalFixture();
-    const notReadyDeposit = { ...requestedDeposit, isReady: false };
-    const tx = manager.requestWithdrawal(
-      ccc.Transaction.default(),
-      [notReadyDeposit],
-      ownerLock,
-      { isReadyOnly: true },
-    );
-
-    expect(tx.outputs).toEqual([]);
-  });
-
   it("rejects duplicated or already spent withdrawal deposits", () => {
     const { manager, ownerLock, requestedDeposit } = requestWithdrawalFixture();
     const spentTx = ccc.Transaction.default();
@@ -327,44 +285,6 @@ function registerOutputBoundaryTests(): void {
   });
 }
 
-function withdrawalGroupFixture({
-  isReady,
-  daoScript,
-  ownedOwnerScript,
-  depositHeader,
-}: WithdrawalGroupFixtureOptions): WithdrawalGroup {
-  const ownedCell = ccc.Cell.from({
-    outPoint: { txHash: byte32FromByte("ef"), index: 0n },
-    cellOutput: {
-      capacity: ccc.fixedPointFrom(100082),
-      lock: ownedOwnerScript,
-      type: daoScript,
-    },
-    outputData: ccc.mol.Uint64LE.encode(depositHeader.number),
-  });
-  const owner = new OwnerCell(
-    ccc.Cell.from({
-      outPoint: { txHash: byte32FromByte("ef"), index: 1n },
-      cellOutput: { capacity: 61n, lock: script("44"), type: ownedOwnerScript },
-      outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
-    }),
-  );
-  const owned: DaoWithdrawalRequestCell = {
-    cell: ownedCell,
-    headers: [
-      { header: depositHeader },
-      { header: depositHeader, txHash: ownedCell.outPoint.txHash },
-    ],
-    ckbValue: ownedCell.cellOutput.capacity,
-    udtValue: 0n,
-    interests: 0n,
-    maturity: depositHeader.epoch,
-    isDeposit: false,
-    isReady,
-  };
-  return new WithdrawalGroup(owned, owner);
-}
-
 class NoRequestOutputDaoManager extends DaoManager {
   constructor(daoScript: ccc.Script) {
     super(daoScript, []);
@@ -398,11 +318,4 @@ class FastWithdrawDaoManager extends DaoManager {
     }
     return tx;
   }
-}
-
-interface WithdrawalGroupFixtureOptions {
-  isReady: boolean;
-  daoScript: ccc.Script;
-  ownedOwnerScript: ccc.Script;
-  depositHeader: ccc.ClientBlockHeader;
 }

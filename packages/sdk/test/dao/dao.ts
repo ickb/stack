@@ -201,7 +201,14 @@ describe(REQUEST_WITHDRAWAL_SUITE, () => {
 });
 
 function registerRequestWithdrawalSelectionTests(): void {
-  it("keeps non-ready deposits unless isReadyOnly is set", () => {
+  it("leaves the transaction unchanged when no deposits are given", () => {
+    const manager = new DaoManager(script("11"), []);
+    const tx = ccc.Transaction.default();
+
+    expect(manager.requestWithdrawal(tx, [], script("44"))).toEqual(tx);
+  });
+
+  it("requests withdrawals for every given deposit", () => {
     const manager = new DaoManager(script("11"), []);
     const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
     const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
@@ -215,37 +222,6 @@ function registerRequestWithdrawalSelectionTests(): void {
     expect(tx.inputs).toHaveLength(2);
     expect(tx.outputs).toHaveLength(2);
     expect(tx.outputsData).toHaveLength(2);
-  });
-
-  it("filters non-ready deposits when isReadyOnly is set", () => {
-    const manager = new DaoManager(script("11"), []);
-    const pending = depositCell(manager, { isReady: false, txHashByte: "22" });
-    const ready = depositCell(manager, { isReady: true, txHashByte: "23" });
-
-    const tx = manager.requestWithdrawal(
-      ccc.Transaction.default(),
-      [pending, ready],
-      script("44"),
-      { isReadyOnly: true },
-    );
-
-    expect(tx.inputs).toHaveLength(1);
-    expect(tx.outputs).toHaveLength(1);
-    expect(tx.inputs[0]?.previousOutput.txHash).toBe(ready.cell.outPoint.txHash);
-  });
-
-  it("leaves the transaction unchanged when ready-only deposits are all pending", () => {
-    const manager = new DaoManager(script("11"), []);
-    const baseTx = ccc.Transaction.default();
-
-    expect(
-      manager.requestWithdrawal(
-        baseTx,
-        [depositCell(manager, { isReady: false })],
-        script("44"),
-        { isReadyOnly: true },
-      ),
-    ).toEqual(baseTx);
   });
 
   it("does not duplicate existing deposit header deps", () => {

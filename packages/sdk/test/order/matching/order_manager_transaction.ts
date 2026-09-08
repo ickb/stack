@@ -108,9 +108,7 @@ describe("OrderManager no-op transaction helpers", () => {
       kind: "complete",
       match: { ckbDelta: 0n, udtDelta: 0n, partials: [] },
     });
-    expect(
-      manager.melt(ccc.Transaction.default(), [], { isFulfilledOnly: true }).inputs,
-    ).toEqual([]);
+    expect(manager.melt(ccc.Transaction.default(), []).inputs).toEqual([]);
   });
 });
 
@@ -152,15 +150,11 @@ function registerMatchMeltSuccessTests(): void {
       partials: [{ group, ckbOut: order.ckbValue, udtOut: order.udtValue }],
     });
     const melted = manager.melt(ccc.Transaction.default(), [group]);
-    const fulfilledOnly = manager.melt(ccc.Transaction.default(), [group], {
-      isFulfilledOnly: true,
-    });
 
     expect(matched.cellDeps).toHaveLength(1);
     expect(matched.inputs).toHaveLength(1);
     expect(matched.outputs).toHaveLength(1);
     expect(melted.inputs).toHaveLength(2);
-    expect(fulfilledOnly.inputs).toEqual([]);
   });
 }
 
