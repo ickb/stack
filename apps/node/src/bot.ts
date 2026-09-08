@@ -56,8 +56,8 @@ try {
     managers: config.managers,
     primaryLock,
     accountLocks: await signerAccountLocks(signer, primaryLock),
-    completeTransaction: async (tx, feeRate) =>
-      sdk.completeTransaction(tx, { signer, feeRate }),
+    completeTransaction: async (tx, feeRate, cells) =>
+      sdk.completeTransaction(tx, { signer, feeRate, cells }),
     sendTransaction: async (tx, recordTxHash) =>
       signAndSendTransaction(signer, tx, recordTxHash),
   };

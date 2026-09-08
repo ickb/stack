@@ -4,22 +4,16 @@ import { IckbUdt } from "../../../src/core/udt.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
 import {
   byte32FromByte,
-  clientWithHeader,
-  headerLike,
   RECEIPT_PREFIX_DECODING_SUITE,
   receiptCell,
   receiptOutputData,
   script,
-  signerWithCells,
-  StubClient,
   xudtCell,
 } from "../cells/support/cells_support.ts";
 
 describe(RECEIPT_PREFIX_DECODING_SUITE, () => {
   registerUdtCellDepTests();
   registerUdtDetectionTests();
-  registerCompleteByHeaderErrorTests();
-  registerOverfundingTests();
 });
 
 function registerUdtCellDepTests(): void {
@@ -59,92 +53,6 @@ function registerUdtDetectionTests(): void {
         }),
       ),
     ).toBe(false);
-  });
-}
-
-function registerCompleteByHeaderErrorTests(): void {
-  it("completeBy throws when receipt header is missing", async () => {
-    const { ickbUdt, logic } = testIckbUdt();
-    const tx = ccc.Transaction.default();
-    const receipt = receiptCell(receiptOutputData(1, 40n), logic);
-    tx.addInput(receipt);
-    const signer = signerWithCells(
-      [],
-      new StubClient({
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          await Promise.resolve();
-          return undefined;
-        },
-      }),
-    );
-
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toThrow(
-      `Header not found for txHash ${receipt.outPoint.txHash} at ${receipt.outPoint.toHex()}`,
-    );
-  });
-}
-
-function registerOverfundingTests(): void {
-  it("completeBy collects a second xUDT input when the first overfunds", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    const secondInput = xudtCell(30n, type, script("23"));
-    secondInput.outPoint.index = 1n;
-    const signer = signerWithCells(
-      [xudtCell(150n, type), secondInput],
-      clientWithHeader(ccc.ClientBlockHeader.from(headerLike(10000000000000000n))),
-    );
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(2);
-    expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(80n, 16)));
-  });
-
-  it("does not count receipt inputs as xUDT inputs for overfunding", async () => {
-    const { ickbUdt, logic, type } = testIckbUdt();
-    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    tx.addInput(receiptCell(receiptOutputData(1, 40n), logic));
-    const secondInput = xudtCell(5n, type, script("23"));
-    secondInput.outPoint.index = 1n;
-    const signer = signerWithCells(
-      [xudtCell(80n, type), secondInput],
-      clientWithHeader(header),
-    );
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(3);
-    expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(25n, 16)));
-  });
-
-  it("does not count receipt inputs toward existing xUDT overfunding", async () => {
-    const { ickbUdt, logic, type } = testIckbUdt();
-    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
-    const existingXudt = xudtCell(80n, type);
-    const tx = ccc.Transaction.from({
-      inputs: [existingXudt],
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    tx.addInput(receiptCell(receiptOutputData(1, 40n), logic));
-    const secondInput = xudtCell(5n, type, script("23"));
-    secondInput.outPoint.index = 1n;
-    const signer = signerWithCells([secondInput], clientWithHeader(header));
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(3);
-    expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(25n, 16)));
   });
 }
 

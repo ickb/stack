@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import { script as typeScript } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
-import type { IckbUdt } from "../src/core/index.ts";
 import { IckbSdk } from "../src/sdk.ts";
 
 function script(byte: string): ccc.Script {
@@ -33,16 +32,6 @@ describe("getConfig", () => {
       url: "https://example.invalid",
     });
     const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-    const completeBy = vi.fn(
-      async (...args: Parameters<IckbUdt["completeBy"]>): Promise<ccc.Transaction> => {
-        await Promise.resolve();
-        const [txLike] = args;
-        const completed = ccc.Transaction.from(txLike);
-        completed.outputsData.push("0x01");
-        return completed;
-      },
-    );
-    ickbUdt.completeBy = completeBy;
     vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockResolvedValue([0, false]);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
@@ -52,14 +41,12 @@ describe("getConfig", () => {
     const completed = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1n,
+      cells: [],
     });
 
-    const call = completeBy.mock.calls[0];
-    expect(call?.[0]).toBeInstanceOf(ccc.Transaction);
-    expect(call?.[0]).not.toBe(tx);
-    expect(call?.[1]).toBe(signer);
-    expect(tx.outputsData).toEqual([]);
-    expect(completed.outputsData).toEqual(["0x01"]);
+    expect(completed).not.toBe(tx);
+    expect(completed.cellDeps).toHaveLength(2);
+    expect(tx.cellDeps).toEqual([]);
   });
 });
 

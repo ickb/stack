@@ -184,6 +184,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
       tx: await runtime.sdk.completeTransaction(tx, {
         signer: runtime.signer,
         feeRate: state.system.feeRate,
+        cells: state.context.cells,
       }),
       action: { order: { outputs: [orderOutput, orderOutput + 1] } },
     };

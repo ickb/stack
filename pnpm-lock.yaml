@@ -15,9 +15,6 @@ catalogs:
     '@ckb-ccc/core':
       specifier: ^1.19.1
       version: 1.19.1
-    '@ckb-ccc/udt':
-      specifier: ^0.2.9
-      version: 0.2.9
     '@types/node':
       specifier: ~22.20.1
       version: 22.20.1
@@ -200,9 +197,6 @@ importers:
       '@ckb-ccc/core':
         specifier: 'catalog:'
         version: 1.19.1(typescript@6.0.3)(zod@3.25.76)
-      '@ckb-ccc/udt':
-        specifier: 'catalog:'
-        version: 0.2.9(typescript@6.0.3)(zod@3.25.76)
     devDependencies:
       '@ickb/testkit':
         specifier: workspace:*

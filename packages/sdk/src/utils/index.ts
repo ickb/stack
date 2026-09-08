@@ -20,7 +20,6 @@ export {
   compareBigInt,
   defaultCellPageSize,
   findCells,
-  findSignerCells,
   isPlainCapacityCell,
   unique,
 } from "./utils.ts";

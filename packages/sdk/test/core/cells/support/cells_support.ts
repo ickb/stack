@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
-  FakeCkbSigner,
   script,
   StubClient,
   headerLike as testHeaderLike,
@@ -67,45 +66,6 @@ export function xudtCell(
     },
     outputData: ccc.numLeToBytes(balance, 16),
   });
-}
-
-export function signerWithCells(cells: ccc.Cell[], client: ccc.Client): ccc.Signer {
-  const findCellsPagedNoCache: ccc.Client["findCellsPagedNoCache"] = async (
-    keyLike,
-    _order,
-    _limit,
-    after,
-  ) => {
-    await Promise.resolve();
-    const key = ccc.ClientIndexerSearchKey.from(keyLike);
-    return {
-      cells:
-        after === undefined
-          ? cells.filter((cell) => cell.cellOutput.lock.eq(key.script))
-          : [],
-      lastCursor: after === undefined ? "test:end" : "test:done",
-    };
-  };
-  Object.defineProperties(client, {
-    findCellsPaged: {
-      configurable: true,
-      value: async (): ReturnType<ccc.Client["findCellsPaged"]> => {
-        await Promise.resolve();
-        throw new Error("iCKB completion must use the no-cache cell scan");
-      },
-      writable: true,
-    },
-    findCellsPagedNoCache: {
-      configurable: true,
-      value: findCellsPagedNoCache,
-      writable: true,
-    },
-  });
-  const locks = [script("22"), ...cells.map((cell) => cell.cellOutput.lock)];
-  return new FakeCkbSigner(
-    client,
-    Array.from(new Map(locks.map((lock) => [lock.toHex(), lock])).values()),
-  );
 }
 
 export { byte32FromByte, script, StubClient, transactionWithHeader };

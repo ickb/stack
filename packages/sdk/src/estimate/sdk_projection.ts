@@ -36,6 +36,7 @@ export function projectConversionTransactionContext(
       receipts: account.receipts,
       readyWithdrawals: projection.readyWithdrawals,
       availableOrders: projection.availableOrders,
+      cells: [...account.capacityCells, ...account.nativeUdtCells],
       ckbAvailable: projection.ckbAvailable,
       ickbAvailable: projection.ickbAvailable,
       estimatedMaturity,

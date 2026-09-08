@@ -240,6 +240,7 @@ export function botState(overrides: Partial<BotState>): BotState {
     readyWithdrawals: [],
     notReadyWithdrawals: [],
     poolDeposits: [],
+    cells: [],
     system: {
       feeRate: 1n,
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),

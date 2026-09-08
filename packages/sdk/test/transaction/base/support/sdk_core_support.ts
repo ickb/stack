@@ -40,12 +40,13 @@ export function conversionContext(
     system?: Partial<SystemState>;
   } = {},
 ): ConversionTransactionContext {
-  const { system: systemOverrides, ...contextOverrides } = overrides;
+  const { system: systemOverrides, cells = [], ...contextOverrides } = overrides;
   return {
     system: system(systemOverrides),
     receipts: [],
     readyWithdrawals: [],
     availableOrders: [],
+    cells,
     ckbAvailable: 0n,
     ickbAvailable: 0n,
     estimatedMaturity: 0n,

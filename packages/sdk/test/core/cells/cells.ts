@@ -20,10 +20,8 @@ import {
   receiptCell,
   receiptOutputData,
   script,
-  signerWithCells,
   StubClient,
   transactionWithHeader,
-  xudtCell,
 } from "./support/cells_support.ts";
 
 describe(RECEIPT_PREFIX_DECODING_SUITE, () => {
@@ -261,12 +259,10 @@ function registerCompleteByPrefixTests(): void {
       ],
     });
     tx.addInput(cell);
-    const signer = signerWithCells([], clientWithHeader(header));
 
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(1);
-    expect(completed.outputs).toHaveLength(1);
+    await expect(ickbUdt.inputBalance(tx, clientWithHeader(header))).resolves.toBe(
+      ickbValue(ccc.fixedPointFrom(100000), header) * 3n,
+    );
   });
 }
 
@@ -314,12 +310,8 @@ function registerConcurrentHeaderTests(): void {
     });
     tx.addInput(receipt);
     tx.addInput(deposit);
-    const signer = signerWithCells(
-      [xudtCell(ickbValue(deposit.capacityFree, header) + 50n, type)],
-      client,
-    );
 
-    const completedPromise = ickbUdt.completeBy(tx, signer);
+    const balancePromise = ickbUdt.inputBalance(tx, client);
 
     await vi.waitFor(() => {
       expect(requests).toEqual([receipt.outPoint.txHash, deposit.outPoint.txHash]);
@@ -328,9 +320,10 @@ function registerConcurrentHeaderTests(): void {
     await Promise.resolve();
     resolveReceipt(transactionWithHeader(header));
 
-    const completed = await completedPromise;
-
-    expect(completed.inputs).toHaveLength(2);
+    await expect(balancePromise).resolves.toBe(
+      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
+        ickbValue(deposit.capacityFree, header),
+    );
   });
 }
 
@@ -366,30 +359,22 @@ function registerRepeatedHeaderTests(): void {
     tx.addInput(receipt);
     tx.addInput(deposit);
     let headerRequests = 0;
-    const signer = signerWithCells(
-      [],
-      new StubClient({
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          headerRequests += 1;
-          await Promise.resolve();
-          return transactionWithHeader(header);
-        },
-      }),
-    );
+    const client = new StubClient({
+      getTransactionWithHeader: async (): ReturnType<
+        ccc.Client["getTransactionWithHeader"]
+      > => {
+        headerRequests += 1;
+        await Promise.resolve();
+        return transactionWithHeader(header);
+      },
+    });
 
-    const completed = await ickbUdt.completeBy(tx, signer);
+    const balance = await ickbUdt.inputBalance(tx, client);
 
     expect(headerRequests).toBe(1);
-    expect(completed.outputsData).toContain(
-      ccc.hexFrom(
-        ccc.numLeToBytes(
-          ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
-            ickbValue(deposit.capacityFree, header),
-          16,
-        ),
-      ),
+    expect(balance).toBe(
+      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
+        ickbValue(deposit.capacityFree, header),
     );
   });
 }

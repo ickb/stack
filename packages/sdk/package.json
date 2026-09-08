@@ -60,8 +60,7 @@
     }
   },
   "dependencies": {
-    "@ckb-ccc/core": "catalog:",
-    "@ckb-ccc/udt": "catalog:"
+    "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*"

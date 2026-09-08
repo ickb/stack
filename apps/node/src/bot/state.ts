@@ -37,6 +37,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     readyWithdrawals: projection.readyWithdrawals,
     notReadyWithdrawals: projection.pendingWithdrawals,
     poolDeposits: system.poolDeposits.deposits,
+    cells: [...account.capacityCells, ...account.nativeUdtCells],
     availableCkbBalance,
     availableIckbBalance,
     unavailableCkbBalance,

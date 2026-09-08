@@ -1,5 +1,5 @@
 /** Stable machine-readable failures owned by the Phase-2 SDK. @public */
-export type IckbErrorCode = "insufficient_capacity";
+export type IckbErrorCode = "insufficient_capacity" | "insufficient_ickb";
 
 /** Typed SDK failure with a stable machine-readable code. @public */
 export class IckbError extends Error {

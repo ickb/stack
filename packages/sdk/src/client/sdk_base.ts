@@ -3,7 +3,7 @@ import type { IckbUdt, LogicManager, OwnedOwnerManager } from "../core/index.ts"
 import { assertDaoOutputLimit } from "../dao/index.ts";
 import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
 import {
-  findSignerCells,
+  compareBigInt,
   isPlainCapacityCell,
   type ValueComponents,
 } from "../utils/index.ts";
@@ -35,25 +35,63 @@ export abstract class IckbSdkBase {
   }
 
   /**
-   * Completes iCKB/xUDT inputs and transaction fees for a partial transaction.
+   * Completes iCKB inputs, iCKB change, plain change, and the fee from the cells it is given.
    *
-   * @remarks This does not sign or send the transaction. Candidate inputs come
-   * from committed scans and ordinary change is always a plain cell.
-   * Existing outputs are never reinterpreted or resized as fee change.
-   * Callers must resolve or independently exclude inputs from pending attempts
-   * before rebuilding; completion deliberately does not chain pending outputs.
+   * @remarks Completion never scans. `cells` are the signer's known liquid cells, plain
+   * CKB and iCKB, from the account state already read: the largest ones fund what the
+   * outputs need, the rest ride along as a sweep while the prepared transaction stays
+   * under {@link TRANSACTION_SIZE_BUDGET}, so every own transaction compacts the account
+   * (decisions amendment 52). Ordinary change is always a plain cell; existing outputs
+   * are never reinterpreted or resized as fee change. This does not sign or send.
    */
   public async completeTransaction(
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
-    const tx = await this.ickbUdt.completeBy(
-      ccc.Transaction.from(txLike).clone(),
-      options.signer,
-    );
-    await this.completeFeeFromCommittedCells(tx, options);
+    const { signer, feeRate } = options;
+    const tx = this.ickbUdt.addCellDeps(ccc.Transaction.from(txLike).clone());
+    const { script: changeLock } = await signer.getRecommendedAddressObj();
+    const spent = new Set(tx.inputs.map(({ previousOutput }) => previousOutput.toHex()));
+    const unspent = options.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
+    const ickbCells = unspent
+      .filter((cell) => this.ickbUdt.isUdt(cell))
+      .toSorted((left, right) => compareBigInt(udtBalance(right), udtBalance(left)));
+    const plainCells = unspent
+      .filter(isPlainCapacityCell)
+      .toSorted((left, right) =>
+        compareBigInt(right.cellOutput.capacity, left.cellOutput.capacity),
+      );
+
+    await this.completeIckb(tx, signer.client, changeLock, ickbCells);
+    // Plain CKB: the sweep first, then whatever the fee still needs beyond the budget.
+    const swept = sweep(tx, plainCells);
+    await completeFee(tx, signer, feeRate, plainCells.slice(swept));
     assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
     return tx;
+  }
+
+  /** iCKB: what the outputs need first, then the sweep while the budget allows, then change. */
+  private async completeIckb(
+    tx: ccc.Transaction,
+    client: ccc.Client,
+    changeLock: ccc.Script,
+    ickbCells: readonly ccc.Cell[],
+  ): Promise<void> {
+    const required = this.ickbUdt.outputBalance(tx);
+    let balance = await this.ickbUdt.inputBalance(tx, client);
+    for (const cell of ickbCells) {
+      if (balance >= required && !withinSizeBudget(tx)) {
+        break;
+      }
+      tx.addInput(cell);
+      balance += udtBalance(cell);
+    }
+    if (balance < required) {
+      throw new IckbError(`Insufficient iCKB, need ${String(required - balance)} more`, {
+        code: "insufficient_ickb",
+      });
+    }
+    this.ickbUdt.addChange(tx, changeLock, balance - required);
   }
 
   /**
@@ -114,56 +152,64 @@ export abstract class IckbSdkBase {
     }
     return tx;
   }
+}
 
-  private async completeFeeFromCommittedCells(
-    tx: ccc.Transaction,
-    options: CompleteIckbTransactionOptions,
-  ): Promise<void> {
-    const candidates = findSignerCells(options.signer, {
-      scriptLenRange: [0, 1],
-      outputDataLenRange: [0, 1],
-    });
-    const selected = new Set(
-      tx.inputs.map(({ previousOutput }) => previousOutput.toHex()),
-    );
-    for (;;) {
-      try {
-        await tx.completeFeeBy(options.signer, options.feeRate, undefined, {
-          shouldAddInputs: false,
-        });
-        return;
-      } catch (error) {
-        if (!(error instanceof ccc.ErrorTransactionInsufficientCapacity)) {
-          throw error;
-        }
-        await this.addCommittedCapacity(tx, candidates, selected, error);
-      }
+/**
+ * Prepared-size budget one own transaction may grow to while sweeping liquid cells.
+ *
+ * @remarks Measured as CCC charges fees, `toBytes().length + 4`. About a tenth of a
+ * block; it admits roughly 1,400 inputs, so it outpaces one cellbase cell per block
+ * from a miner paying the bot and is never reached after the first sweep.
+ *
+ * @public
+ */
+export const TRANSACTION_SIZE_BUDGET = 64 * 1024;
+
+function withinSizeBudget(tx: ccc.Transaction): boolean {
+  return tx.toBytes().length + 4 <= TRANSACTION_SIZE_BUDGET;
+}
+
+function udtBalance(cell: ccc.Cell): ccc.Num {
+  return ccc.udtBalanceFrom(cell.outputData);
+}
+
+/** Adds cells while the prepared size stays under budget; returns how many were added. */
+function sweep(tx: ccc.Transaction, cells: readonly ccc.Cell[]): number {
+  let added = 0;
+  for (const cell of cells) {
+    if (!withinSizeBudget(tx)) {
+      break;
     }
+    tx.addInput(cell);
+    added += 1;
   }
+  return added;
+}
 
-  private async addCommittedCapacity(
-    tx: ccc.Transaction,
-    candidates: AsyncGenerator<ccc.Cell, void>,
-    selected: Set<string>,
-    shortfall: ccc.ErrorTransactionInsufficientCapacity,
-  ): Promise<void> {
-    let addedCapacity = 0n;
-    while (addedCapacity < shortfall.amount) {
-      const next = await candidates.next();
-      if (next.done === true) {
-        throw new IckbError(shortfall.message, {
+/** Completes the fee, adding reserve cells one at a time while capacity is short. */
+async function completeFee(
+  tx: ccc.Transaction,
+  signer: ccc.Signer,
+  feeRate: ccc.Num,
+  reserve: readonly ccc.Cell[],
+): Promise<void> {
+  const remaining = [...reserve];
+  for (;;) {
+    try {
+      await tx.completeFeeBy(signer, feeRate, undefined, { shouldAddInputs: false });
+      return;
+    } catch (error) {
+      if (!(error instanceof ccc.ErrorTransactionInsufficientCapacity)) {
+        throw error;
+      }
+      const cell = remaining.shift();
+      if (cell === undefined) {
+        throw new IckbError(error.message, {
           code: "insufficient_capacity",
-          cause: shortfall,
+          cause: error,
         });
       }
-      const cell = next.value;
-      const outPoint = cell.outPoint.toHex();
-      if (selected.has(outPoint) || !isPlainCapacityCell(cell)) {
-        continue;
-      }
-      selected.add(outPoint);
       tx.addInput(cell);
-      addedCapacity += cell.cellOutput.capacity;
     }
   }
 }

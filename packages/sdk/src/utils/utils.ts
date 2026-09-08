@@ -42,36 +42,6 @@ export async function findCells(
 }
 
 /**
- * Yields the signer's committed cells matching the filter, one exact-lock scan per address.
- *
- * @public
- */
-export async function* findSignerCells(
-  signer: ccc.Signer,
-  filter: ccc.ClientIndexerSearchKeyFilterLike,
-): AsyncGenerator<ccc.Cell, void> {
-  const seen = new Set<string>();
-  for (const lock of unique(
-    (await signer.getAddressObjs()).map(({ script }) => script),
-  )) {
-    for (const cell of await findCells(signer.client, {
-      script: lock,
-      scriptType: "lock",
-      filter,
-      scriptSearchMode: "exact",
-      withData: true,
-    })) {
-      const outPoint = cell.outPoint.toHex();
-      if (!cell.cellOutput.lock.eq(lock) || seen.has(outPoint)) {
-        continue;
-      }
-      seen.add(outPoint);
-      yield cell;
-    }
-  }
-}
-
-/**
  * Local transaction inclusion metadata.
  *
  * @public

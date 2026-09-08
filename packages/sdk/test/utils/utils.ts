@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { FakeCkbSigner } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
@@ -8,7 +7,6 @@ import {
   compareBigInt,
   defaultCellPageSize,
   findCells,
-  findSignerCells,
   isPlainCapacityCell,
   unique,
 } from "../../src/utils/utils.ts";
@@ -68,34 +66,6 @@ describe("findCells", () => {
       }),
     ).resolves.toEqual([]);
     expect(noCache).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("findSignerCells", () => {
-  it("scans each signer lock once with an exact filter and drops foreign or repeated cells", async () => {
-    const owned = testCell({ type: undefined, outputData: "0x" });
-    const foreign = testCell({ type: undefined, outputData: "0x", txByte: "12" });
-    foreign.cellOutput.lock = ccc.Script.from({
-      codeHash: owned.cellOutput.lock.codeHash,
-      hashType: owned.cellOutput.lock.hashType,
-      args: "0x99",
-    });
-    const signer = new FakeCkbSigner(
-      new ccc.ClientPublicTestnet({ url: invalidRpcUrl }),
-      [owned.cellOutput.lock],
-    );
-    const queries: ccc.ClientIndexerSearchKeyLike[] = [];
-    vi.spyOn(signer.client, "findCellsPagedNoCache").mockImplementation(
-      async (key): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-        queries.push(key);
-        await Promise.resolve();
-        return { cells: [owned, foreign, owned], lastCursor: "done" };
-      },
-    );
-
-    await expect(collect(findSignerCells(signer, {}))).resolves.toEqual([owned]);
-    expect(queries).toHaveLength(1);
-    expect(queries[0]?.scriptSearchMode).toBe("exact");
   });
 });
 

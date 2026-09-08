@@ -207,7 +207,7 @@ async function buildWithdrawalTransaction(
           receipts: state.receipts,
           readyWithdrawals: state.readyWithdrawals,
         }),
-      async (tx) => runtime.completeTransaction(tx, state.system.feeRate),
+      async (tx) => runtime.completeTransaction(tx, state.system.feeRate, state.cells),
       (tx, prefix) =>
         recoveryException ||
         auditSummary({
@@ -292,7 +292,11 @@ async function completeCandidateTransaction({
   tx: ccc.Transaction;
   decision: CompletedDecisionTranscript;
 }> {
-  const tx = await runtime.completeTransaction(candidate.tx, state.system.feeRate);
+  const tx = await runtime.completeTransaction(
+    candidate.tx,
+    state.system.feeRate,
+    state.cells,
+  );
   const fee = tx.estimateFee(state.system.feeRate);
   const audit = auditSummary({
     runtime,

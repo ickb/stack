@@ -16,61 +16,18 @@ import {
   receiptCell,
   receiptOutputData,
   script,
-  signerWithCells,
   StubClient,
   xudtCell,
 } from "../cells/support/cells_support.ts";
 
 describe(RECEIPT_PREFIX_DECODING_SUITE, () => {
-  registerCompleteByCollectionTests();
-  registerCompleteByExistingInputTests();
-  registerCompleteByErrorTests();
-  registerCompleteByContextErrorTests();
-  registerCompleteByProtocolInputTests();
+  registerInputBalanceTests();
+  registerInputBalanceErrorTests();
+  registerOutputBalanceAndChangeTests();
 });
 
-function registerCompleteByCollectionTests(): void {
-  it("completeBy ignores unrelated inputs and outputs", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const unrelatedInput = xudtCell(100n, script("aa"));
-    unrelatedInput.outPoint.index = 1n;
-    const tx = ccc.Transaction.from({
-      inputs: [unrelatedInput],
-      outputs: [
-        { lock: script("22"), type: script("bb") },
-        { lock: script("22"), type },
-      ],
-      outputsData: [ccc.numLeToBytes(900n, 16), ccc.numLeToBytes(100n, 16)],
-    });
-    const signer = signerWithCells(
-      [xudtCell(100n, type)],
-      clientWithHeader(headerLike(1n)),
-    );
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(2);
-    expect(completed.outputs).toHaveLength(2);
-  });
-
-  it("completeBy does not add change or second input on exact xUDT match", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    const signer = signerWithCells(
-      [xudtCell(100n, type), xudtCell(50n, type, script("23"))],
-      clientWithHeader(headerLike(1n)),
-    );
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(1);
-    expect(completed.outputs).toHaveLength(1);
-  });
-
-  it("completeBy does not consume prefix-matching foreign xUDT cells", async () => {
+function registerInputBalanceTests(): void {
+  it("values xUDT inputs and ignores unrelated or prefix-matching foreign cells", async () => {
     const { ickbUdt, type } = testIckbUdt();
     const prefixedType = ccc.Script.from({
       codeHash: type.codeHash,
@@ -79,92 +36,49 @@ function registerCompleteByCollectionTests(): void {
     });
     const foreign = xudtCell(900n, prefixedType);
     foreign.outPoint.index = 1n;
-    const exact = xudtCell(100n, type);
-    exact.outPoint.index = 2n;
+    const unrelated = xudtCell(700n, script("aa"));
+    unrelated.outPoint.index = 2n;
     const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
+      inputs: [xudtCell(100n, type), foreign, unrelated],
     });
-    const signer = signerWithCells([foreign, exact], clientWithHeader(headerLike(1n)));
 
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(1);
-    expect(completed.inputs[0]?.previousOutput.eq(exact.outPoint)).toBe(true);
+    await expect(
+      ickbUdt.inputBalance(tx, clientWithHeader(headerLike(1n))),
+    ).resolves.toBe(100n);
   });
-}
 
-function registerCompleteByExistingInputTests(): void {
-  it("completeBy changes existing two xUDT input surplus without collecting more", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const firstInput = xudtCell(80n, type);
-    const secondInput = xudtCell(50n, type, script("23"));
-    secondInput.outPoint.index = 1n;
-    const tx = ccc.Transaction.from({
-      inputs: [firstInput, secondInput],
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    const signer = signerWithCells(
-      [xudtCell(200n, type, script("24"))],
-      clientWithHeader(headerLike(1n)),
-    );
+  it("values receipt inputs at their deposit header", async () => {
+    const { ickbUdt, logic } = testIckbUdt();
+    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
+    const tx = ccc.Transaction.default();
+    tx.addInput(receiptCell(receiptOutputData(1, 100n), logic));
 
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(2);
-    expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(30n, 16)));
-  });
-}
-
-function registerCompleteByErrorTests(): void {
-  it("completeBy throws when iCKB balance is insufficient", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    const signer = signerWithCells(
-      [xudtCell(40n, type)],
-      clientWithHeader(headerLike(1n)),
-    );
-
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toThrow(
-      "Insufficient iCKB, need 60 more",
+    await expect(ickbUdt.inputBalance(tx, clientWithHeader(header))).resolves.toBe(
+      ickbValue(100n, header),
     );
   });
 
-  it("completeBy throws when protocol input headers are unavailable", async () => {
-    const { ickbUdt, receipt, tx } = protocolReceiptCompletionCase();
-    const signer = signerWithCells(
-      [],
-      new StubClient({
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          await Promise.resolve();
-          return undefined;
-        },
-      }),
-    );
-
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toThrow(
-      `Header not found for txHash ${receipt.outPoint.txHash} at ${receipt.outPoint.toHex()}`,
-    );
-  });
-
-  it("completeBy rejects malformed receipt inputs with out point context", async () => {
-    const { ickbUdt, logic, type } = testIckbUdt();
-    const receipt = receiptCell("0x12", logic);
-    const tx = ccc.Transaction.from({
-      inputs: [receipt],
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(1n, 16)],
+  it("values first-phase deposit inputs as negative iCKB", async () => {
+    const logic = script("33");
+    const dao = script("44");
+    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
+    const deposit = ccc.Cell.from({
+      outPoint: { txHash: byte32FromByte("88"), index: 0n },
+      cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao },
+      outputData: "0x0000000000000000",
     });
-    const signer = signerWithCells([], clientWithHeader(headerLike(1n)));
+    const ickbUdt = new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 1n },
+      script: script("55"),
+      logicCode: { txHash: byte32FromByte("66"), index: 2n },
+      logicScript: logic,
+      daoManager: new DaoManager(dao, []),
+    });
+    const tx = ccc.Transaction.default();
+    tx.addInput(deposit);
 
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toThrow(
-      `Invalid iCKB receipt payload at ${receipt.outPoint.toHex()}: 0x12`,
+    await expect(ickbUdt.inputBalance(tx, clientWithHeader(header))).resolves.toBe(
+      -ickbValue(deposit.capacityFree, header),
     );
   });
 
@@ -172,73 +86,107 @@ function registerCompleteByErrorTests(): void {
     const { ickbUdt, logic } = testIckbUdt();
     const tx = ccc.Transaction.default();
     tx.inputs.push(new DetachedProtocolInput(logic));
-    const signer = signerWithCells([], clientWithHeader(headerLike(1n)));
 
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(1);
+    await expect(
+      ickbUdt.inputBalance(tx, clientWithHeader(headerLike(1n))),
+    ).resolves.toBe(0n);
   });
 }
 
-function registerCompleteByContextErrorTests(): void {
-  it("completeBy preserves protocol input out point when header reads fail", async () => {
-    const { ickbUdt, receipt, tx } = protocolReceiptCompletionCase();
-    const headerError = new Error("header rpc failed");
-    const signer = signerWithCells(
-      [],
-      new StubClient({
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          await Promise.resolve();
-          throw headerError;
-        },
-      }),
-    );
+function registerInputBalanceErrorTests(): void {
+  it("throws when a protocol input header is unavailable", async () => {
+    const { ickbUdt, receipt, tx } = protocolReceiptCase();
+    const client = new StubClient({
+      getTransactionWithHeader: async (): ReturnType<
+        ccc.Client["getTransactionWithHeader"]
+      > => {
+        await Promise.resolve();
+        return undefined;
+      },
+    });
 
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toMatchObject({
+    await expect(ickbUdt.inputBalance(tx, client)).rejects.toThrow(
+      `Header not found for txHash ${receipt.outPoint.txHash} at ${receipt.outPoint.toHex()}`,
+    );
+  });
+
+  it("rejects malformed receipt inputs with out point context", async () => {
+    const { ickbUdt, logic } = testIckbUdt();
+    const receipt = receiptCell("0x12", logic);
+    const tx = ccc.Transaction.from({ inputs: [receipt] });
+
+    await expect(
+      ickbUdt.inputBalance(tx, clientWithHeader(headerLike(1n))),
+    ).rejects.toThrow(
+      `Invalid iCKB receipt payload at ${receipt.outPoint.toHex()}: 0x12`,
+    );
+  });
+
+  it("preserves the protocol input out point when the header read fails", async () => {
+    const { ickbUdt, receipt, tx } = protocolReceiptCase();
+    const headerError = new Error("header rpc failed");
+    const client = new StubClient({
+      getTransactionWithHeader: async (): ReturnType<
+        ccc.Client["getTransactionWithHeader"]
+      > => {
+        await Promise.resolve();
+        throw headerError;
+      },
+    });
+
+    await expect(ickbUdt.inputBalance(tx, client)).rejects.toMatchObject({
       message: `Failed to load transaction header for txHash ${receipt.outPoint.txHash} at ${receipt.outPoint.toHex()}`,
       cause: headerError,
     });
   });
 
-  it("completeBy preserves input out point when existing input loading fails", async () => {
-    const { ickbUdt, type } = testIckbUdt();
+  it("preserves the input out point when loading an input cell fails", async () => {
+    const { ickbUdt } = testIckbUdt();
     const inputError = new Error("source cell missing");
     const missingOutPoint = ccc.OutPoint.from({
       txHash: byte32FromByte("ac"),
       index: 2n,
     });
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(1n, 16)],
-    });
+    const tx = ccc.Transaction.default();
     tx.inputs.push(new MissingInput(missingOutPoint, inputError));
-    const signer = signerWithCells([], new StubClient());
 
-    await expect(ickbUdt.completeBy(tx, signer)).rejects.toMatchObject({
+    await expect(ickbUdt.inputBalance(tx, new StubClient())).rejects.toMatchObject({
       message: `Failed to load input cell ${missingOutPoint.toHex()}`,
       cause: inputError,
     });
   });
 }
 
-function protocolReceiptCompletionCase(): {
+function registerOutputBalanceAndChangeTests(): void {
+  it("sums only iCKB outputs and adds change only for a positive surplus", () => {
+    const { ickbUdt, type } = testIckbUdt();
+    const tx = ccc.Transaction.from({
+      outputs: [
+        { lock: script("22"), type: script("bb") },
+        { lock: script("22"), type },
+      ],
+      outputsData: [ccc.numLeToBytes(900n, 16), ccc.numLeToBytes(100n, 16)],
+    });
+
+    expect(ickbUdt.outputBalance(tx)).toBe(100n);
+    ickbUdt.addChange(tx, script("22"), 0n);
+    expect(tx.outputs).toHaveLength(2);
+    ickbUdt.addChange(tx, script("22"), 30n);
+    expect(tx.outputs).toHaveLength(3);
+    expect(tx.outputs[2]?.type?.eq(type)).toBe(true);
+    expect(tx.outputsData[2]).toBe(ccc.hexFrom(ccc.numLeToBytes(30n, 16)));
+    expect(ickbUdt.outputBalance(tx)).toBe(130n);
+  });
+}
+
+function protocolReceiptCase(): {
   ickbUdt: IckbUdt;
   receipt: ccc.Cell;
   tx: ccc.Transaction;
 } {
-  const { ickbUdt, logic, type } = testIckbUdt();
+  const { ickbUdt, logic } = testIckbUdt();
   const receipt = receiptCell(receiptOutputData(1, 100n), logic);
-  return {
-    ickbUdt,
-    receipt,
-    tx: ccc.Transaction.from({
-      inputs: [receipt],
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(50n, 16)],
-    }),
-  };
+  return { ickbUdt, receipt, tx: ccc.Transaction.from({ inputs: [receipt] }) };
 }
 
 class DetachedProtocolInput extends ccc.CellInput {
@@ -273,75 +221,6 @@ class MissingInput extends ccc.CellInput {
     await Promise.resolve();
     throw this.error;
   }
-}
-
-function registerCompleteByProtocolInputTests(): void {
-  it("completeBy values existing receipt inputs before adding xUDT inputs", async () => {
-    const { ickbUdt, logic, type } = testIckbUdt();
-    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
-    const receipt = receiptCell(receiptOutputData(1, 100n), logic);
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(150n, 16)],
-    });
-    tx.addInput(receipt);
-    const signer = signerWithCells([xudtCell(100n, type)], clientWithHeader(header));
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(2);
-    expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(50n, 16)));
-    expect(completed.cellDeps).toHaveLength(2);
-  });
-
-  it("completeBy accounts deposit inputs as negative iCKB", async () => {
-    const logic = script("33");
-    const dao = script("44");
-    const type = script("55");
-    const header = ccc.ClientBlockHeader.from(headerLike(10000000000000000n));
-    const deposit = ccc.Cell.from({
-      outPoint: { txHash: byte32FromByte("88"), index: 0n },
-      cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao },
-      outputData: "0x0000000000000000",
-    });
-    const ickbUdt = new IckbUdt({
-      code: { txHash: byte32FromByte("44"), index: 1n },
-      script: type,
-      logicCode: { txHash: byte32FromByte("66"), index: 2n },
-      logicScript: logic,
-      daoManager: new DaoManager(dao, []),
-    });
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(50n, 16)],
-    });
-    tx.addInput(deposit);
-    const signer = signerWithCells(
-      [xudtCell(ickbValue(deposit.capacityFree, header) + 50n, type)],
-      clientWithHeader(header),
-    );
-
-    const completed = await ickbUdt.completeBy(tx, signer);
-
-    expect(completed.inputs).toHaveLength(2);
-    expect(completed.outputs).toHaveLength(1);
-  });
-}
-
-function testIckbUdt(): { ickbUdt: IckbUdt; logic: ccc.Script; type: ccc.Script } {
-  const logic = script("33");
-  const type = script("55");
-  return {
-    ickbUdt: new IckbUdt({
-      code: { txHash: byte32FromByte("44"), index: 1n },
-      script: type,
-      logicCode: { txHash: byte32FromByte("66"), index: 2n },
-      logicScript: logic,
-      daoManager: new DaoManager(script("77"), []),
-    }),
-    logic,
-    type,
-  };
 }
 
 describe("IckbUdt.typeScriptFrom", () => {
@@ -384,3 +263,19 @@ describe("iCKB conversion", () => {
     );
   });
 });
+
+function testIckbUdt(): { ickbUdt: IckbUdt; logic: ccc.Script; type: ccc.Script } {
+  const logic = script("33");
+  const type = script("55");
+  return {
+    ickbUdt: new IckbUdt({
+      code: { txHash: byte32FromByte("44"), index: 1n },
+      script: type,
+      logicCode: { txHash: byte32FromByte("66"), index: 2n },
+      logicScript: logic,
+      daoManager: new DaoManager(script("77"), []),
+    }),
+    logic,
+    type,
+  };
+}

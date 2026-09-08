@@ -34,6 +34,7 @@ export interface Runtime {
   completeTransaction: (
     tx: ccc.TransactionLike,
     feeRate: ccc.Num,
+    cells: ccc.Cell[],
   ) => Promise<ccc.Transaction>;
 
   /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */
@@ -65,6 +66,9 @@ export interface BotState {
 
   /** Full public pool deposit snapshot. */
   poolDeposits: IckbDepositCell[];
+
+  /** The bot's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
+  cells: ccc.Cell[];
 
   /** Spendable CKB after projected availability rules. */
   availableCkbBalance: bigint;

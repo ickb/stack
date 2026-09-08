@@ -23,10 +23,7 @@ const conversionFailureMessages: Record<
   "amount-too-small": "Enter a larger amount",
 };
 
-export interface TransactionContext extends ConversionTransactionContext {
-  capacityCells: ccc.Cell[];
-  nativeUdtCells: ccc.Cell[];
-}
+export type TransactionContext = ConversionTransactionContext;
 
 /**
  * Builds a non-broadcast transaction preview for one conversion request.

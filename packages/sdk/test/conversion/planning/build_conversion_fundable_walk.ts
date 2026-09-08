@@ -16,6 +16,7 @@ import {
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import {
   depositCell,
+  nativeUdtCell,
   plainCapacityCell,
 } from "../withdrawal_quotes/support/sdk_cell_support.ts";
 
@@ -30,6 +31,7 @@ const DEPOSIT = ICKB_DEPOSIT_CAP;
 const MARKER_CKB = ccc.fixedPointFrom(78);
 const ORDER_CKB = ccc.fixedPointFrom(163 + 74);
 const MIN_CHANGE_CKB = ccc.fixedPointFrom(61);
+const UDT_CELL_CKB = ccc.fixedPointFrom(146);
 
 /** Three ready deposits in one ring segment: one anchor and two surplus. */
 function readyPool(
@@ -47,20 +49,29 @@ function conversion(
   fundingCells: ccc.Cell[] = [],
 ): Parameters<BaseTransactionFixture["sdk"]["buildConversionTransaction"]>[1] {
   const lock = fixture.botLock;
-  const { signer } = fundedSigner(
-    [plainCapacityCell(userCkb, lock, "f1"), ...fundingCells],
-    [lock],
-  );
+  // The user's iCKB sits in one minimum-capacity cell; its capacity is taken off the
+  // plain cell so the CKB arithmetic below stays the measured one.
+  const cells = [
+    plainCapacityCell(userCkb - UDT_CELL_CKB, lock, "f1"),
+    nativeUdtCell(amount, {
+      lock,
+      type: fixture.udt,
+      capacity: UDT_CELL_CKB,
+      byte: "f0",
+    }),
+    ...fundingCells,
+  ];
   return {
     direction: ICKB_TO_CKB,
     amount,
     lock,
-    signer,
+    signer: fundedSigner(cells, [lock]).signer,
     context: conversionContext({
       system: {
         ckbAvailable: ccc.fixedPointFrom(1_000_000),
         poolDeposits: { deposits: readyPool(fixture), id: "pool" },
       },
+      cells,
       ickbAvailable: amount,
     }),
   };
@@ -122,19 +133,17 @@ describe("buildConversionTransaction fundable walk", () => {
   it("throws the last completion failure when no CKB-to-iCKB candidate can be funded", async () => {
     const fixture = baseTransactionFixture({ completion: "real" });
     const lock = fixture.botLock;
-    const { signer } = fundedSigner(
-      [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")],
-      [lock],
-    );
+    const cells = [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")];
 
     await expect(
       fixture.sdk.buildConversionTransaction(ccc.Transaction.default(), {
         direction: "ckb-to-ickb",
         amount: DEPOSIT,
         lock,
-        signer,
+        signer: fundedSigner(cells, [lock]).signer,
         context: conversionContext({
           system: { ckbAvailable: ccc.fixedPointFrom(1_000_000) },
+          cells,
           ckbAvailable: DEPOSIT,
         }),
       }),

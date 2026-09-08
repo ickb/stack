@@ -5,6 +5,7 @@ import {
   passthroughTransaction,
   script,
   StubClient,
+  transactionWithHeader,
 } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
 import {
@@ -17,6 +18,7 @@ import {
 import { DaoManager } from "../../../../src/dao/index.ts";
 import { OrderManager, type Ratio } from "../../../../src/order/index.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import { headerLike } from "../../../core/cells/support/cells_support.ts";
 import {
   baseClient,
   conversionContext,
@@ -34,6 +36,7 @@ interface WithdrawalRemainderOrderMocks {
 }
 
 const ICKB_TO_CKB = "ickb-to-ckb";
+const GENESIS_AR = 10000000000000000n;
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 export function baseTransactionFixture(
@@ -70,7 +73,7 @@ export function baseTransactionFixture(
     ownedOwnerManager,
     sdk: withCompletion(
       new IckbSdk({
-        ickbUdt: fakeIckbUdt(udt),
+        ickbUdt: fakeIckbUdt(udt, logic, daoManager),
         ownedOwner: ownedOwnerManager,
         ickbLogic: logicManager,
         order: orderManager,
@@ -142,34 +145,26 @@ export const stubSigner: ccc.Signer = new ccc.SignerCkbScriptReadonly(
   script("11"),
 );
 
-/** Signer whose client serves the given committed cells to the real completer. */
+/** Signer over a client that serves headers only; completion funds from the cells it is given. */
 export function fundedSigner(
   cells: readonly ccc.Cell[],
   locks: readonly ccc.Script[],
-): { client: StubClient; signer: ccc.Signer } {
+): { client: StubClient; signer: ccc.Signer; cells: ccc.Cell[] } {
   const client = new StubClient({
-    findCellsPaged: async (): ReturnType<ccc.Client["findCellsPaged"]> => {
+    findCellsPagedNoCache: async (): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
       await Promise.resolve();
-      throw new Error("Completion must not use CCC's cache-recording cell scan");
+      throw new Error("Completion must not scan");
     },
-    findCellsPagedNoCache: async (
-      keyLike,
-      _order,
-      _limit,
-      after,
-    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
+    // Fixture deposits are worth their free capacity one to one, so the header they
+    // are valued at carries the genesis accumulated rate.
+    getTransactionWithHeader: async (): ReturnType<
+      ccc.Client["getTransactionWithHeader"]
+    > => {
       await Promise.resolve();
-      const { script: lock } = ccc.ClientIndexerSearchKey.from(keyLike);
-      return {
-        cells:
-          after === undefined
-            ? cells.filter((cell) => cell.cellOutput.lock.eq(lock))
-            : [],
-        lastCursor: after === undefined ? "test:end" : "test:done",
-      };
+      return transactionWithHeader(ccc.ClientBlockHeader.from(headerLike(GENESIS_AR)));
     },
   });
-  return { client, signer: new FakeCkbSigner(client, [...locks]) };
+  return { client, signer: new FakeCkbSigner(client, [...locks]), cells: [...cells] };
 }
 
 export interface SdkFixture {
@@ -181,8 +176,13 @@ export interface SdkFixture {
   lock: ccc.Script;
 }
 
-export function fakeIckbUdt(udt = script("66")): IckbUdt {
-  return new TestIckbUdt(udt);
+/** Fake iCKB token that recognises the fixture's logic deposits so completion values them. */
+export function fakeIckbUdt(
+  udt = script("66"),
+  logic = script("22"),
+  daoManager = new DaoManager(script("33"), []),
+): IckbUdt {
+  return new TestIckbUdt(udt, logic, daoManager);
 }
 
 export function signerWithLock(lock: ccc.Script): ccc.Signer {
@@ -264,29 +264,17 @@ export function mockWithdrawalWithRemainderOrder(
 }
 
 class TestIckbUdt extends IckbUdt {
-  public readonly completeByMock = vi.fn(
-    async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
-      return asyncPassthroughTransaction(txLike);
-    },
-  );
-
-  constructor(udt: ccc.Script) {
+  constructor(udt: ccc.Script, logic: ccc.Script, daoManager: DaoManager) {
     super({
       code: { txHash: hash("a1"), index: 0n },
       script: udt,
       logicCode: { txHash: hash("a2"), index: 0n },
-      logicScript: script("a3"),
-      daoManager: new DaoManager(script("a4"), []),
+      logicScript: logic,
+      daoManager,
     });
   }
 
   public override isUdt(cell: ccc.Cell): boolean {
     return cell.cellOutput.type?.eq(this.script) ?? false;
-  }
-
-  public override async completeBy(
-    txLike: ccc.TransactionLike,
-  ): Promise<ccc.Transaction> {
-    return this.completeByMock(txLike);
   }
 }

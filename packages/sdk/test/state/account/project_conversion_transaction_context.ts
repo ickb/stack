@@ -93,6 +93,7 @@ describe("projectConversionTransactionContext", () => {
       receipts: [receipt],
       readyWithdrawals: [readyWithdrawal],
       availableOrders: [matchable],
+      cells: [...account.capacityCells, nativeUdt],
       ckbAvailable: projection.ckbAvailable,
       ickbAvailable: projection.ickbAvailable,
       estimatedMaturity: 5000n,

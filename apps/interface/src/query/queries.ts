@@ -102,11 +102,7 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
   const { ckbNative, ickbNative, ckbBalance, ickbBalance, ckbAvailable, ickbAvailable } =
     projection;
 
-  const txContext: TransactionContext = {
-    ...conversionContext,
-    capacityCells: account.capacityCells,
-    nativeUdtCells: account.nativeUdtCells,
-  };
+  const txContext: TransactionContext = conversionContext;
 
   return {
     ckbNative,

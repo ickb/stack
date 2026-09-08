@@ -59,6 +59,8 @@ export interface ConversionTransactionContext {
   readyWithdrawals: WithdrawalGroup[];
   /** Order groups available for collection or budgeting as account value. */
   availableOrders: OrderGroup[];
+  /** The wallet's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
+  cells: ccc.Cell[];
   /** Projected CKB available to the wallet after pending state is considered. */
   ckbAvailable: bigint;
   /** Projected iCKB available to the wallet after pending state is considered. */
@@ -164,11 +166,14 @@ export type ConversionTransactionResult =
  * @public
  */
 export interface CompleteIckbTransactionOptions {
-  /** Signer used for iCKB input completion and fee completion. */
+  /** Signer whose recommended lock receives change and which prepares the transaction. */
   signer: ccc.Signer;
 
   /** Fee rate passed to CCC fee completion. */
   feeRate: ccc.Num;
+
+  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
+  cells: ccc.Cell[];
 }
 
 /**

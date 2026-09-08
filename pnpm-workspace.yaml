@@ -27,7 +27,6 @@ catalog:
   "@ckb-ccc/ccc": ^1.3.0
   "@ckb-ccc/connector-react": ^1.1.9
   "@ckb-ccc/core": ^1.19.1
-  "@ckb-ccc/udt": ^0.2.9
   "@types/node": ~22.20.1
 
 minimumReleaseAge: 10080

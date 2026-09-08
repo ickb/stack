@@ -1,12 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { udt } from "@ckb-ccc/udt";
 import type { DaoManager } from "../dao/index.ts";
-import {
-  CheckedUint128LE,
-  CheckedUint32LE,
-  findSignerCells,
-  type ExchangeRatio,
-} from "../utils/index.ts";
+import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "../utils/index.ts";
 import { ReceiptData } from "./entities.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
@@ -23,21 +17,19 @@ const xudtOwnerMode = 0x80000000n;
  */
 export const ICKB_DEPOSIT_CAP = ccc.fixedPointFrom(100000); // 100,000 iCKB
 
-const zeroInputContribution: IckbInputContribution = {
-  balance: ccc.Zero,
-  isXudt: false,
-};
-
 type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
 
 /**
- * IckbUdt extends CCC's Udt class with iCKB-aware completion.
- * CCC UDT APIs account actual xUDT cells; iCKB inputs can also carry value
- * through receipt and DAO deposit cells.
+ * The iCKB xUDT token: its scripts, code cells, and the iCKB accounting of a
+ * transaction's inputs. Inputs carry iCKB as xUDT balances, as receipt value,
+ * and negatively as the first-phase deposits a transaction re-mints.
  *
  * @public
  */
-export class IckbUdt extends udt.Udt {
+export class IckbUdt {
+  /** The iCKB xUDT type script. */
+  public readonly script: ccc.Script;
+
   /** Out point of the xUDT code cell used by this iCKB token. */
   public readonly udtCode: ccc.OutPoint;
 
@@ -64,7 +56,7 @@ export class IckbUdt extends udt.Udt {
     logicScript: ccc.ScriptLike;
     daoManager: DaoManager;
   }) {
-    super(code, script);
+    this.script = ccc.Script.from(script);
     this.udtCode = ccc.OutPoint.from(code);
     this.logicCode = ccc.OutPoint.from(logicCode);
     this.logicScript = ccc.Script.from(logicScript);
@@ -113,43 +105,6 @@ export class IckbUdt extends udt.Udt {
   }
 
   /**
-   * Completes iCKB xUDT inputs and change.
-   * Existing receipt/deposit inputs are valued here, but the code that added
-   * them still owns protocol-specific cell deps and header deps.
-   */
-  public override async completeChangeToLock(
-    txLike: ccc.TransactionLike,
-    signer: ccc.Signer,
-    changeLike: ccc.ScriptLike,
-  ): Promise<ccc.Transaction> {
-    const tx = this.addCellDeps(txLike);
-    let inputTally = await this.inputTallyFromTransaction(tx, signer.client);
-    const requiredBalance = this.requiredBalanceFromOutputs(tx);
-
-    if (shouldCollectMoreInputs(inputTally, requiredBalance)) {
-      inputTally = await this.collectXudtInputs(tx, signer, {
-        inputTally,
-        requiredBalance,
-      });
-    }
-
-    addUdtChangeOutput(tx, changeLike, this.script, inputTally.balance - requiredBalance);
-
-    return tx;
-  }
-
-  /**
-   * Completes iCKB xUDT inputs and sends change to the signer's recommended lock.
-   */
-  public override async completeBy(
-    txLike: ccc.TransactionLike,
-    signer: ccc.Signer,
-  ): Promise<ccc.Transaction> {
-    const { script } = await signer.getRecommendedAddressObj();
-    return this.completeChangeToLock(txLike, signer, script);
-  }
-
-  /**
    * Adds iCKB-specific cell dependencies to a transaction.
    *
    * Adds individual code deps (not dep group) for:
@@ -166,11 +121,11 @@ export class IckbUdt extends udt.Udt {
     return tx;
   }
 
-  /** Builds the initial tally from inputs already present in the transaction. */
-  private async inputTallyFromTransaction(
-    tx: ccc.Transaction,
-    client: ccc.Client,
-  ): Promise<IckbInputTally> {
+  /**
+   * iCKB carried by the transaction's inputs: xUDT balances plus receipt value,
+   * minus the first-phase deposits it re-mints. Final withdrawal inputs carry none.
+   */
+  public async inputBalance(tx: ccc.Transaction, client: ccc.Client): Promise<ccc.Num> {
     const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
     const cells = await Promise.all(
       tx.inputs.map(async (input) => {
@@ -186,62 +141,35 @@ export class IckbUdt extends udt.Udt {
     const contributions = await Promise.all(
       cells.map(async (cell) => this.inputContribution(cell, client, transactionCache)),
     );
-    const tally = IckbInputTally.default();
-    for (const contribution of contributions) {
-      tally.addAssign(contribution);
-    }
-    return tally;
+    return contributions.reduce((total, balance) => total + balance, ccc.Zero);
   }
 
-  /** Adds xUDT inputs until the required balance and xUDT-count policy are met. */
-  private async collectXudtInputs(
-    tx: ccc.Transaction,
-    signer: ccc.Signer,
-    options: { inputTally: IckbInputTally; requiredBalance: ccc.Num },
-  ): Promise<IckbInputTally> {
-    const { inputTally, requiredBalance } = options;
-    const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
-    const collectedTally = new IckbInputTally(inputTally.balance, inputTally.xudtCount);
-    for await (const cell of findSignerCells(signer, {
-      script: this.script,
-      outputDataLenRange: [udtDataSize, ccc.numFrom("0xffffffff")],
-    })) {
-      if (
-        tx.inputs.some(({ previousOutput }) => previousOutput.eq(cell.outPoint)) ||
-        !this.isUdt(cell)
-      ) {
-        continue;
-      }
-      collectedTally.addAssign(
-        await this.inputContribution(cell, signer.client, transactionCache),
-      );
-      tx.addInput(cell);
-      if (!shouldCollectMoreInputs(collectedTally, requiredBalance)) {
-        break;
-      }
-    }
-    if (collectedTally.balance < requiredBalance) {
-      throw new Error(
-        `Insufficient iCKB, need ${String(requiredBalance - collectedTally.balance)} more`,
-      );
-    }
-    return collectedTally;
+  /** iCKB the transaction's outputs require. */
+  public outputBalance(tx: ccc.Transaction): ccc.Num {
+    return Array.from(tx.outputCells).reduce((required, cell) => {
+      return this.isUdt(cell) ? required + decodeUdtBalance(cell.outputData) : required;
+    }, ccc.Zero);
   }
 
-  /** Classifies an input cell once for iCKB completion accounting. */
+  /** Adds the iCKB change output when the surplus is positive; zero needs no output. */
+  public addChange(tx: ccc.Transaction, lock: ccc.ScriptLike, balance: ccc.Num): void {
+    if (balance <= ccc.Zero) {
+      return;
+    }
+    tx.addOutput({ lock, type: this.script }, CheckedUint128LE.encode(balance));
+  }
+
+  /** Values one input cell in iCKB. */
   private async inputContribution(
     cell: ccc.CellAny,
     client: ccc.Client,
     transactionCache: Map<ccc.Hex, Promise<TransactionWithHeader>>,
-  ): Promise<IckbInputContribution> {
+  ): Promise<ccc.Num> {
     if (this.isUdt(cell)) {
-      return {
-        balance: decodeUdtBalance(cell.outputData),
-        isXudt: true,
-      };
+      return decodeUdtBalance(cell.outputData);
     }
     if (cell.outPoint === undefined) {
-      return zeroInputContribution;
+      return ccc.Zero;
     }
 
     const { type, lock } = cell.cellOutput;
@@ -264,7 +192,7 @@ export class IckbUdt extends udt.Udt {
       amount = cell.capacityFree;
       sign = -1n;
     } else {
-      return zeroInputContribution;
+      return ccc.Zero;
     }
 
     const header = (
@@ -276,16 +204,7 @@ export class IckbUdt extends udt.Udt {
       );
     }
 
-    return {
-      balance: sign * ickbValue(amount, header) * quantity,
-      isXudt: false,
-    };
-  }
-
-  private requiredBalanceFromOutputs(tx: ccc.Transaction): ccc.Num {
-    return Array.from(tx.outputCells).reduce((required, cell) => {
-      return this.isUdt(cell) ? required + decodeUdtBalance(cell.outputData) : required;
-    }, ccc.Zero);
+    return sign * ickbValue(amount, header) * quantity;
   }
 }
 
@@ -315,63 +234,6 @@ async function getTransactionWithHeader(
       { cause: error },
     );
   }
-}
-
-interface IckbInputContribution {
-  balance: ccc.Num;
-  isXudt: boolean;
-}
-
-/** Tracks iCKB input value and actual xUDT input count separately. */
-class IckbInputTally {
-  public balance: ccc.Num;
-  public xudtCount: number;
-
-  constructor(balance: ccc.Num, xudtCount: number) {
-    this.balance = balance;
-    this.xudtCount = xudtCount;
-  }
-
-  public static default(): IckbInputTally {
-    return new IckbInputTally(ccc.Zero, 0);
-  }
-
-  public addAssign(contribution: IckbInputContribution): void {
-    this.balance += contribution.balance;
-    if (contribution.isXudt) {
-      this.xudtCount += 1;
-    }
-  }
-}
-
-/** Decides whether xUDT collection should continue for the current tally. */
-function shouldCollectMoreInputs(
-  inputTally: IckbInputTally,
-  requiredBalance: ccc.Num,
-): boolean {
-  if (inputTally.balance < requiredBalance) {
-    return true;
-  }
-  if (inputTally.balance === requiredBalance) {
-    return false;
-  }
-
-  // Match CCC's xUDT compression rule: one overfunding xUDT input should
-  // collect a second xUDT input. Receipt and deposit inputs do not count.
-  return inputTally.xudtCount === 1;
-}
-
-function addUdtChangeOutput(
-  tx: ccc.Transaction,
-  lock: ccc.ScriptLike,
-  type: ccc.ScriptLike,
-  balance: ccc.Num,
-): void {
-  if (balance <= ccc.Zero) {
-    return;
-  }
-  const balanceData = CheckedUint128LE.encode(balance);
-  tx.addOutput({ lock, type }, balanceData);
 }
 
 function decodeUdtBalance(data: ccc.BytesLike): ccc.Num {

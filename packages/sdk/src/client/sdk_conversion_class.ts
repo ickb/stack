@@ -167,6 +167,7 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     return this.completeTransaction(tx, {
       signer: options.signer,
       feeRate: options.context.system.feeRate,
+      cells: options.context.cells,
     });
   }
 }
