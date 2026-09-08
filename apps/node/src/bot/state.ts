@@ -14,7 +14,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     runtime.accountLocks,
     { poolDeposits: { minLockUp: POOL_MIN_LOCK_UP, maxLockUp: POOL_MAX_LOCK_UP } },
   );
-  const projection = projectAccountAvailability(account, []);
+  const projection = projectAccountAvailability(account, { available: [], pending: [] });
 
   return {
     system,

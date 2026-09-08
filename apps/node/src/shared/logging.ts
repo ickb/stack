@@ -2,9 +2,6 @@ import process from "node:process";
 
 const CIRCULAR_LOG_VALUE = "[Circular]";
 
-/** Exit code for a stop that a restart must not retry: the account is below the capital minimum. */
-export const STOP_EXIT_CODE = 2;
-
 /** JSON-line-safe value after log normalization. */
 export type JsonLogValue =
   string | number | boolean | null | undefined | JsonLogValue[] | JsonLogRecord;

@@ -15,12 +15,7 @@ export type {
   SupportedChain,
 } from "./chain.ts";
 export { formatCkb } from "./format.ts";
-export {
-  STOP_EXIT_CODE,
-  logExecution,
-  toJsonLogRecord,
-  writeJsonLine,
-} from "./logging.ts";
+export { logExecution, toJsonLogRecord, writeJsonLine } from "./logging.ts";
 export type { JsonLogRecord } from "./logging.ts";
 export { readRuntimeConfigEnv } from "./runtime_config.ts";
 export type { RuntimeConfig } from "./runtime_config.ts";

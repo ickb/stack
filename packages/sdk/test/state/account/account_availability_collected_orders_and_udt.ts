@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe(ACCOUNT_AVAILABILITY_SUITE, () => {
-  it("can budget collected matchable orders as available", () => {
+  it("budgets the available orders whatever their matchability", () => {
     const matchable = projectionOrderGroup({
       ckbValue: 31n,
       udtValue: 37n,
@@ -31,8 +31,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [matchable],
-      { collectedOrdersAvailable: true },
+      { available: [matchable], pending: [] },
     );
 
     expect(projection.availableOrders).toEqual([matchable]);
@@ -55,7 +54,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [],
+      { available: [], pending: [] },
     );
 
     expect(projection.ckbNative).toBe(nativeCkb);
@@ -87,7 +86,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
           }),
         ],
       },
-      [],
+      { available: [], pending: [] },
     );
 
     expect(projection.ckbAvailable).toBe(11n);

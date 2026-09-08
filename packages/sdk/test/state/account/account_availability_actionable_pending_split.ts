@@ -52,7 +52,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
         receipts: [receiptValue(41n, 43n)],
         withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
       },
-      [availableOrder, pendingOrder],
+      { available: [availableOrder], pending: [pendingOrder] },
     );
 
     expect(projection.readyWithdrawals).toEqual([readyWithdrawal]);
@@ -83,7 +83,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [],
+      { available: [], pending: [] },
     );
 
     expect(projection.ickbNative).toBe(7n);

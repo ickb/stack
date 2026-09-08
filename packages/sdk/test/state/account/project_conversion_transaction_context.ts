@@ -44,7 +44,7 @@ function system(overrides: Partial<SystemState> = {}): SystemState {
 }
 
 describe("projectConversionTransactionContext", () => {
-  it("projects conversion context from account state and collected-order policy", () => {
+  it("projects conversion context from account state and the orders to collect", () => {
     const nativeCkb = ccc.fixedPointFrom(50);
     const readyWithdrawal = withdrawalValue({
       ckbValue: 11n,
@@ -81,10 +81,7 @@ describe("projectConversionTransactionContext", () => {
     const { projection, context } = projectConversionTransactionContext(
       currentSystem,
       account,
-      [matchable],
-      {
-        collectedOrdersAvailable: true,
-      },
+      { available: [matchable], pending: [] },
     );
 
     expect(projection.availableOrders).toEqual([matchable]);
@@ -100,7 +97,7 @@ describe("projectConversionTransactionContext", () => {
     });
   });
 
-  it("includes pending order maturity when collected orders are not budgeted", () => {
+  it("includes pending order maturity", () => {
     const matchable = projectionOrderGroup({
       ckbValue: 31n,
       udtValue: 37n,
@@ -119,7 +116,7 @@ describe("projectConversionTransactionContext", () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [matchable],
+      { available: [], pending: [matchable] },
     );
 
     expect(context.estimatedMaturity).toBe(7000n);

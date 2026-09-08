@@ -116,7 +116,7 @@ describe("sdk projection account availability", () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      [dual, settled],
+      { available: [settled], pending: [dual] },
     );
 
     expect(projection.availableOrders).toEqual([settled]);

@@ -9,17 +9,18 @@ import type { WithdrawalGroup } from "../core/index.ts";
 import type { OrderGroup } from "../order/index.ts";
 
 /**
- * Builds the conversion planner context from account and user-order state.
+ * Builds the conversion planner context from account state and the caller's own orders,
+ * split by what it will melt: `available` orders are collected and budgeted as account
+ * value, `pending` ones stay on the book.
  *
  * @public
  */
 export function projectConversionTransactionContext(
   system: SystemState,
   account: AccountState,
-  userOrders: OrderGroup[],
-  options?: Parameters<typeof projectAccountAvailability>[2],
+  orders: { available: OrderGroup[]; pending: OrderGroup[] },
 ): ConversionTransactionContextProjection {
-  const projection = projectAccountAvailability(account, userOrders, options);
+  const projection = projectAccountAvailability(account, orders);
   const estimatedMaturity = [
     ...projection.pendingWithdrawals.map((group) =>
       group.owned.maturity.toUnix(system.tip),
@@ -51,15 +52,14 @@ export function projectConversionTransactionContext(
  */
 export function projectAccountAvailability(
   account: AccountState,
-  userOrders: OrderGroup[],
-  options?: {
-    collectedOrdersAvailable?: boolean;
-  },
+  {
+    available: availableOrders,
+    pending: pendingOrders,
+  }: { available: OrderGroup[]; pending: OrderGroup[] },
 ): AccountAvailabilityProjection {
   const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
     account.withdrawalGroups,
   );
-  const { availableOrders, pendingOrders } = splitOrders(userOrders, options);
   const ckbNative = sumValues(account.capacityCells, (cell) => cell.cellOutput.capacity);
   const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
     ccc.udtBalanceFrom(cell.outputData),
@@ -107,22 +107,6 @@ function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
     }
   }
   return { readyWithdrawals, pendingWithdrawals };
-}
-
-function splitOrders(
-  userOrders: readonly OrderGroup[],
-  options: { collectedOrdersAvailable?: boolean } | undefined,
-): { availableOrders: OrderGroup[]; pendingOrders: OrderGroup[] } {
-  const availableOrders: OrderGroup[] = [];
-  const pendingOrders: OrderGroup[] = [];
-  for (const group of userOrders) {
-    if (options?.collectedOrdersAvailable === true || !group.order.isMatchable()) {
-      availableOrders.push(group);
-    } else {
-      pendingOrders.push(group);
-    }
-  }
-  return { availableOrders, pendingOrders };
 }
 
 function sumCkb(items: Array<{ ckbValue: bigint }>): bigint {

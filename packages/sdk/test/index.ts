@@ -33,7 +33,9 @@ describe("sdk package barrel", () => {
     expect(configured).toBeInstanceOf(sdk.IckbSdk);
     expect(configured.constructor.name).toBe("IckbSdk");
     expect(sdk.estimateMaturityFeeThreshold({ feeRate: 2n })).toBe(20n);
-    expect(sdk.projectAccountAvailability(account, [])).toMatchObject({
+    expect(
+      sdk.projectAccountAvailability(account, { available: [], pending: [] }),
+    ).toMatchObject({
       ckbNative,
       ckbAvailable: ckbNative,
       ickbNative: 7n,

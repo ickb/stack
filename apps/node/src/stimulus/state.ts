@@ -1,9 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import {
   accountPlainCkbBalance,
-  convert,
-  ICKB_DEPOSIT_CAP,
-  projectAccountAvailability,
   projectConversionTransactionContext,
   type AccountState,
   type ConversionTransactionContext,
@@ -34,20 +31,15 @@ export interface StimulusState {
   orders: { live: number; fulfilled: number; stale: number };
   budgets: Budgets;
   plainCkb: bigint;
-  totalCkb: bigint;
-  totalIckb: bigint;
-  /** Every holding in CKB, live orders included, so stale orders never trigger the hold. */
-  totalEquivalentCkb: bigint;
-  capitalMinimum: bigint;
 }
 
 const CKB = 100_000_000n;
 /** Plain CKB the account keeps for its own cells and fees. */
 export const CKB_RESERVE = 1000n * CKB;
-/** Below one twentieth of a deposit the turn holds with exit 2 (decisions amendment 34). */
-const CAPITAL_MINIMUM_DIVISOR = 20n;
 /** Thirty days of eight-second blocks: an order the bot left that long is cancelled. */
 export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
+/** Testnet hygiene, not safety: with this many own orders live, the turn stops minting. */
+export const MAX_LIVE_ORDERS = 500;
 
 export async function readStimulusState(runtime: Runtime): Promise<StimulusState> {
   const { system, user, account } = await runtime.sdk.getL1AccountState(
@@ -58,11 +50,10 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   const live = user.orders.filter((group) => group.order.isMatchable());
   const stale = await staleOrders(runtime.client, live, system.tip.number);
   const collectable = [...fulfilled, ...stale];
-  const { context } = projectConversionTransactionContext(system, account, collectable, {
-    collectedOrdersAvailable: true,
+  const { context } = projectConversionTransactionContext(system, account, {
+    available: collectable,
+    pending: live.filter((group) => !stale.includes(group)),
   });
-  const totals = projectAccountAvailability(account, user.orders);
-  const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
   const ckbBudget = context.ckbAvailable - CKB_RESERVE;
   return {
     system,
@@ -76,11 +67,6 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
       ratio: system.exchangeRatio,
     },
     plainCkb: accountPlainCkbBalance(account.capacityCells, runtime.accountLocks),
-    totalCkb: totals.ckbBalance,
-    totalIckb: totals.ickbBalance,
-    totalEquivalentCkb:
-      totals.ckbBalance + convert(false, totals.ickbBalance, system.exchangeRatio),
-    capitalMinimum: depositCapacity / CAPITAL_MINIMUM_DIVISOR,
   };
 }
 

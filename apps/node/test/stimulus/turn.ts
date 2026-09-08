@@ -10,9 +10,8 @@ import {
 } from "@ickb/sdk";
 import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { toJsonLogRecord } from "../../src/shared/index.ts";
 import { ORDER_FEE_BASE, type Override } from "../../src/stimulus/draw.ts";
-import type { Runtime } from "../../src/stimulus/state.ts";
+import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
   runStimulusTurn,
   type StimulusIdentity,
@@ -24,6 +23,7 @@ import {
   order,
   plainCell,
   PRIMARY_LOCK,
+  receipt,
   runtime,
 } from "./support/fixtures.ts";
 
@@ -111,16 +111,43 @@ async function turn(target: Runtime, override: Override = {}): Promise<StimulusL
 }
 
 describe("runStimulusTurn", () => {
-  it("holds with exit 2 below the capital minimum", async () => {
-    const log = await turn(runtime());
-
-    expect(log).toMatchObject({
-      identity: toJsonLogRecord(identity),
-      outcome: "hold",
-      skip: { reason: "capital-below-minimum", deficit: "5000" },
-      balance: { CKB: { total: "0", budget: "0" }, capitalMinimum: "5000" },
+  it("stops minting at the live-order cap and still collects", async () => {
+    const fresh = await order("a2", true);
+    const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
+    const request = vi.fn<Runtime["sdk"]["request"]>();
+    const buildConversionTransaction = vi.fn<
+      Runtime["sdk"]["buildConversionTransaction"]
+    >(async (_txLike, options) => {
+      await Promise.resolve();
+      expect(options).toMatchObject({ amount: 0n, context: { receipts: [{}] } });
+      return {
+        ok: true,
+        tx: ccc.Transaction.default(),
+        estimatedMaturity: 0n,
+        conversion: { kind: "collect-only" },
+      };
     });
-    expect(process.exitCode).toBe(2);
+    const log = await turn(
+      runtime({
+        account: accountState({
+          capacityCells: [plainCell(FUNDED_CKB, "b1")],
+          receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
+        }),
+        orders: live,
+        originBlocks: new Map([[fresh.origin.cell.outPoint.txHash, 1_000_000n]]),
+        sdk: { request, buildConversionTransaction },
+      }),
+      orderDraw,
+    );
+
+    expect(request).not.toHaveBeenCalled();
+    expect(log).toMatchObject({
+      outcome: "committed",
+      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, stale: 0 },
+      skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
+      draw: { kind: "collect-only" },
+      balance: { CKB: { budget: "5100" }, ICKB: { budget: "50" } },
+    });
   });
 
   it("skips when nothing is spendable and nothing is collectable", async () => {

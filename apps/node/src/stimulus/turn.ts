@@ -15,11 +15,11 @@ import {
   formatCkb,
   logExecution,
   type PublicRpcEndpointIdentity,
-  STOP_EXIT_CODE,
 } from "../shared/index.ts";
 import { type Draw, drawTurn, ORDER_FEE_BASE, type Override } from "./draw.ts";
 import {
   CKB_RESERVE,
+  MAX_LIVE_ORDERS,
   readStimulusState,
   type Runtime,
   type StimulusState,
@@ -35,12 +35,11 @@ export interface StimulusIdentity {
 }
 
 /** Every way a turn ends; `committed` is the only one that proves stimulus reached the chain. */
-export type Outcome =
-  "committed" | "unresolved" | "rejected" | "skipped" | "hold" | "failed";
+export type Outcome = "committed" | "unresolved" | "rejected" | "skipped" | "failed";
 
 export type Skip =
-  | { reason: "capital-below-minimum"; deficit: string }
   | { reason: "nothing-to-spend" }
+  | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
   | { reason: "unfundable"; error: unknown }
   | { reason: "conversion-not-buildable"; conversion: string }
@@ -60,10 +59,8 @@ export interface StimulusLog {
   identity?: StimulusIdentity;
   startTime?: string;
   balance?: {
-    CKB: { total: string; plain: string; budget: string; reserve: string };
-    ICKB: { total: string; budget: string };
-    totalEquivalentCkb: string;
-    capitalMinimum: string;
+    CKB: { plain: string; budget: string; reserve: string };
+    ICKB: { budget: string };
   };
   orders?: StimulusState["orders"];
   draw?: Draw | { kind: "collect-only" };
@@ -121,26 +118,19 @@ async function stimulate(
 ): Promise<void> {
   const state = await readStimulusState(runtime);
   record({ balance: balanceLog(state), orders: state.orders });
-  if (state.totalEquivalentCkb < state.capitalMinimum) {
-    record({
-      outcome: "hold",
-      skip: {
-        reason: "capital-below-minimum",
-        deficit: formatCkb(state.capitalMinimum - state.totalEquivalentCkb),
-      },
-    });
-    process.exitCode = STOP_EXIT_CODE;
-    return;
-  }
   const draw = drawTurn(state.budgets, override, random);
   record({ draw });
-  let built: Built =
-    draw === undefined
-      ? { skip: { reason: "nothing-to-spend" } }
-      : acceptReserve(runtime, state, await build(runtime, state, draw));
-  // Whatever stopped the drawn action, collecting what the bot filled keeps the account
-  // liquid; the SDK's zero-amount conversion is exactly that transaction.
-  if ("skip" in built && state.collectable.length > 0) {
+  let built: Built;
+  if (draw === undefined) {
+    built = { skip: { reason: "nothing-to-spend" } };
+  } else if (draw.kind === "order" && state.orders.live >= MAX_LIVE_ORDERS) {
+    built = { skip: { reason: "live-order-cap", live: state.orders.live } };
+  } else {
+    built = acceptReserve(runtime, state, await build(runtime, state, draw));
+  }
+  // Whatever stopped the drawn action, collecting what the account has keeps it liquid;
+  // the SDK's zero-amount conversion is exactly that transaction.
+  if ("skip" in built && hasCollectible(state)) {
     record({ skip: built.skip, draw: { kind: "collect-only" } });
     built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
   }
@@ -290,16 +280,21 @@ async function send(
   record({ outcome: "committed" });
 }
 
+function hasCollectible({ context }: StimulusState): boolean {
+  return (
+    context.availableOrders.length > 0 ||
+    context.receipts.length > 0 ||
+    context.readyWithdrawals.length > 0
+  );
+}
+
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      total: formatCkb(state.totalCkb),
       plain: formatCkb(state.plainCkb),
       budget: formatCkb(state.budgets.ckb),
       reserve: formatCkb(CKB_RESERVE),
     },
-    ICKB: { total: formatCkb(state.totalIckb), budget: formatCkb(state.budgets.ickb) },
-    totalEquivalentCkb: formatCkb(state.totalEquivalentCkb),
-    capitalMinimum: formatCkb(state.capitalMinimum),
+    ICKB: { budget: formatCkb(state.budgets.ickb) },
   };
 }

@@ -7,6 +7,7 @@ import {
   OrderData,
   type OrderGroup,
   Ratio,
+  type ReceiptCell,
   type SystemState,
 } from "@ickb/sdk";
 import {
@@ -45,6 +46,16 @@ export function accountState(
     withdrawalGroups: [],
     ...overrides,
   };
+}
+
+/** A receipt worth `ckbValue` CKB and `udtValue` iCKB; the turn only counts and collects it. */
+export function receipt(
+  txHashByte: string,
+  ckbValue: bigint,
+  udtValue: bigint,
+): ReceiptCell {
+  const cell = plainCell(ckbValue, txHashByte);
+  return { cell, ckbValue, udtValue, header: { header: headerLike({ number: 1n }) } };
 }
 
 export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {

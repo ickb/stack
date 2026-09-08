@@ -94,10 +94,14 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     walletConfig.accountLocks,
   );
   const { system, user, account } = sdkState;
+  // Fulfilled orders are collected on the next transaction; live ones stay on the book.
   const { projection, context: conversionContext } = projectConversionTransactionContext(
     system,
     account,
-    user.orders,
+    {
+      available: user.orders.filter((group) => group.order.isFulfilled()),
+      pending: user.orders.filter((group) => group.order.isMatchable()),
+    },
   );
   const { ckbNative, ickbNative, ckbBalance, ickbBalance, ckbAvailable, ickbAvailable } =
     projection;

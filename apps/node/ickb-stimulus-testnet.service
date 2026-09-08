@@ -15,10 +15,9 @@ Environment="STIMULUS_RPC_URL=https://testnet.ckb.dev/"
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
 # Every draw is random unless pinned; see the knobs in apps/node/README.md.
-# Exit 0 and 1 start the next turn after a minute; exit 2 is a hold until the operator restarts the unit.
+# Every exit starts the next turn after a minute; a turn never holds.
 Restart=always
 RestartSec=60s
-RestartPreventExitStatus=2
 NoNewPrivileges=yes
 # The process holds a private key, so never write a core file.
 LimitCORE=0
