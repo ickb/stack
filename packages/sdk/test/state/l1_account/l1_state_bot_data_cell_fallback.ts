@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe(L1_STATE_SUITE, () => {
-  it("ignores bot data cells and falls back to direct deposit scanning", async () => {
+  it("counts plain bot cells, ignores bot data cells, and scans direct deposits", async () => {
     const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
@@ -40,6 +40,11 @@ describe(L1_STATE_SUITE, () => {
         outPoint: { txHash: hash("01"), index: 0n },
         cellOutput: { capacity: 1000n, lock: botLock },
         outputData: fakeAlignedData,
+      }),
+      ccc.Cell.from({
+        outPoint: { txHash: hash("03"), index: 0n },
+        cellOutput: { capacity: ccc.fixedPointFrom(5000), lock: botLock },
+        outputData: "0x",
       }),
     ];
     const depositCell = ccc.Cell.from({
@@ -79,6 +84,8 @@ describe(L1_STATE_SUITE, () => {
     const state = await sdk.getL1State(client, []);
 
     expect(state.user.orders).toEqual([]);
+    // The plain bot cell counts net of the 2,000 CKB the bot keeps; the data cell is ignored.
+    expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(3000));
     expect(state.system.ckbMaturing).toHaveLength(1);
     expect(state.system.ckbMaturing[0]?.ckbCumulative).toBe(ccc.fixedPointFrom(100082));
   });

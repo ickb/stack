@@ -4,14 +4,7 @@ import {
   type DaoCellFromCache,
   type DaoManager,
 } from "../dao/index.ts";
-import {
-  collectCellsPaged,
-  defaultCellPageSize,
-  defaultScanBudget,
-  unique,
-  type PagedScanBudget,
-  type ScriptDeps,
-} from "../utils/index.ts";
+import { findCells, unique, type ScriptDeps } from "../utils/index.ts";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.ts";
 import { OwnerData } from "./entities.ts";
 
@@ -165,47 +158,27 @@ export class OwnedOwnerManager implements ScriptDeps {
   /**
    * Finds owner marker cells for the given locks and yields valid owned withdrawal groups.
    *
-   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, `pageSize` is per lock,
-   * and `budget` shares one bound with the other scans of a composed state read.
+   * @param options - Scan options. `tip` controls readiness calculations.
    * @remarks Header and transaction caches span all requested locks so related DAO cell conversions share the same reads.
-   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial withdrawal groups.
    */
   public async *findWithdrawalGroups(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: {
-      tip?: ccc.ClientBlockHeader;
-      onChain?: boolean;
-      pageSize?: number;
-      budget?: PagedScanBudget;
-    },
+    options?: { tip?: ccc.ClientBlockHeader },
   ): AsyncGenerator<WithdrawalGroup> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const pageSize = options?.pageSize ?? defaultCellPageSize;
     const locksToScan = Array.from(unique(locks));
-    const budget = options?.budget ?? defaultScanBudget({ pageSize });
     const headerCache: DaoCellFromCache["headerCache"] = new Map();
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     const foundGroups: WithdrawalGroup[] = [];
     for (const lock of locksToScan) {
-      const findCellsArgs = [
-        {
+      const ownerCandidates = (
+        await findCells(client, {
           script: lock,
           scriptType: "lock",
-          filter: {
-            script: this.script,
-          },
+          filter: { script: this.script },
           scriptSearchMode: "exact",
           withData: true,
-        },
-        "asc",
-      ] as const;
-
-      const ownerCandidates = (
-        await collectCellsPaged(client, ...findCellsArgs, {
-          onChain: options?.onChain === true,
-          pageSize,
-          budget,
         })
       )
         .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))

@@ -1,12 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  defaultCellPageSize,
-  defaultScanBudget,
-  type ExchangeRatio,
-  type PagedScanBudget,
-  type ScriptDeps,
-  type ValueComponents,
-} from "../utils/index.ts";
+import type { ExchangeRatio, ScriptDeps, ValueComponents } from "../utils/index.ts";
 import {
   findAllMasters,
   findSimpleOrders,
@@ -178,35 +171,19 @@ export class OrderManager implements ScriptDeps {
    * Finds valid order groups by scanning order cells and master cells.
    *
    * @remarks
-   * `pageSize` is the per-scan RPC/indexer page size, not a total cap: the order
-   * and master scans share one `budget`, which defaults to a bound that fails
-   * instead of yielding partial order state. Every group is resolved before the
-   * first one is yielded, so a failed resolution cannot leave earlier groups
-   * observed as a complete scan. The origin order lookup reads the client cache
-   * first, then fetches and records the transaction response when needed.
-   * `onSkippedGroup` reports unresolved or invalid groups without aborting the
-   * scan.
+   * Every group is resolved before the first one is yielded, so a failed
+   * resolution cannot leave earlier groups observed as a complete scan. The
+   * origin order lookup reads the client cache first, then fetches and records
+   * the transaction response when needed. `onSkippedGroup` reports unresolved
+   * or invalid groups without aborting the scan.
    */
   public async *findOrders(
     client: ccc.Client,
-    options?: {
-      onChain?: boolean;
-      pageSize?: number;
-      budget?: PagedScanBudget;
-      onSkippedGroup?: (reason: OrderGroupSkipReason) => void;
-    },
+    options?: { onSkippedGroup?: (reason: OrderGroupSkipReason) => void },
   ): AsyncGenerator<OrderGroup> {
-    const { onChain, pageSize, budget } = orderScanBounds(options);
     const [simpleOrders, allMasters] = await Promise.all([
-      findSimpleOrders({
-        client,
-        script: this.script,
-        udtScript: this.udtScript,
-        onChain,
-        pageSize,
-        budget,
-      }),
-      findAllMasters({ client, script: this.script, onChain, pageSize, budget }),
+      findSimpleOrders({ client, script: this.script, udtScript: this.udtScript }),
+      findAllMasters({ client, script: this.script }),
     ]);
     const rawGroups = new Map(
       allMasters.map((master) => [
@@ -242,19 +219,4 @@ export class OrderManager implements ScriptDeps {
       yield group;
     }
   }
-}
-
-/** Resolves the scan mode, page size, and budget shared by the order and master scans. */
-function orderScanBounds(options?: {
-  onChain?: boolean;
-  pageSize?: number;
-  budget?: PagedScanBudget;
-}): { onChain: boolean; pageSize: number; budget: PagedScanBudget } {
-  const pageSize = options?.pageSize ?? defaultCellPageSize;
-  return {
-    onChain: options?.onChain ?? true,
-    pageSize,
-    // One scan for order cells and one for their master cells.
-    budget: options?.budget ?? defaultScanBudget({ pageSize }),
-  };
 }

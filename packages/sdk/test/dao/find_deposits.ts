@@ -13,59 +13,18 @@ import {
 } from "./support/dao_support.ts";
 
 describe(`${FIND_DEPOSITS_SUITE} scan paging`, () => {
-  it("passes the cell page size to deposit scanning", async () => {
-    const manager = new DaoManager(script("11"), []);
-    const lock = script("22");
-    const [firstDeposit, secondDeposit] = depositCells(manager, lock, "33", "44");
-    let requestedPageSize = 0;
-    const testClient = new StubClient({
-      async *findCells(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCells"]> {
-        requestedPageSize = pageSize;
-        await Promise.resolve();
-        yield firstDeposit;
-        yield secondDeposit;
-      },
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return transactionWithHeader(headerLike(1n));
-      },
-    });
-
-    const deposits = await collect(
-      manager.findDeposits(testClient, [lock], { tip: headerLike(3n), pageSize: 1 }),
-    );
-
-    expect(requestedPageSize).toBe(1);
-    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
-      firstDeposit.outPoint.txHash,
-      secondDeposit.outPoint.txHash,
-    ]);
-  });
-
-  it("uses default tip and on-chain scans when requested", async () => {
+  it("uses the default tip and on-chain scans", async () => {
     const manager = new DaoManager(script("11"), []);
     const lock = script("22");
     const [deposit] = depositCells(manager, lock, "33", "44");
     let tipReads = 0;
-    let onChainPageSize = 0;
     const testClient = new StubClient({
       getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
         tipReads += 1;
         await Promise.resolve();
         return headerLike(3n);
       },
-      async *findCellsOnChain(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCellsOnChain"]> {
-        onChainPageSize = pageSize;
+      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield deposit;
       },
@@ -79,14 +38,12 @@ describe(`${FIND_DEPOSITS_SUITE} scan paging`, () => {
 
     const deposits = await collect(
       manager.findDeposits(testClient, [lock], {
-        onChain: true,
         minLockUp: ccc.Epoch.from([0n, 0n, 1n]),
         maxLockUp: ccc.Epoch.from([200n, 0n, 1n]),
       }),
     );
 
     expect(tipReads).toBe(1);
-    expect(onChainPageSize).toBeGreaterThan(1);
     expect(deposits).toHaveLength(1);
   });
 });

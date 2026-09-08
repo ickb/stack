@@ -18,7 +18,6 @@ afterEach(() => {
 
 describe(FIND_WITHDRAWAL_GROUPS_SUITE, () => {
   registerOwnerDecodingTests();
-  registerOwnerPageSizeTests();
   registerOwnerFilterTests();
 });
 
@@ -44,48 +43,8 @@ function registerOwnerDecodingTests(): void {
   });
 }
 
-function registerOwnerPageSizeTests(): void {
-  it("passes the cell page size to owner scanning", async () => {
-    const ownerLock = script("11");
-    const ownedOwnerScript = script("22");
-    const daoScript = script("33");
-    const tip = headerLike();
-    const manager = new OwnedOwnerManager(
-      ownedOwnerScript,
-      [],
-      new DaoManager(daoScript, []),
-    );
-    const firstOwner = ownerCell("55", ownerLock, ownedOwnerScript);
-    const secondOwner = ownerCell("66", ownerLock, ownedOwnerScript);
-    let requestedPageSize = 0;
-    const client = new StubClient({
-      async *findCells(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCells"]> {
-        requestedPageSize = pageSize;
-        await Promise.resolve();
-        yield firstOwner;
-        yield secondOwner;
-      },
-      getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        return undefined;
-      },
-    });
-
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock], { tip, pageSize: 1 }),
-    );
-
-    expect(requestedPageSize).toBe(1);
-    expect(groups).toEqual([]);
-  });
-}
-
 function registerOwnerFilterTests(): void {
-  it("filters owners by owner type, owner lock, and scan mode", async () => {
+  it("filters owners by owner type and owner lock", async () => {
     const ownerLock = script("11");
     const otherLock = script("12");
     const ownedOwnerScript = script("22");
@@ -107,18 +66,12 @@ function registerOwnerFilterTests(): void {
       cellOutput: { capacity: 61n, lock: ownerLock, type: ownedOwnerScript },
       outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
     });
-    let onChainPageSize = 0;
     const client = new StubClient({
       getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
         await Promise.resolve();
         return headerLike();
       },
-      async *findCellsOnChain(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCellsOnChain"]> {
-        onChainPageSize = pageSize;
+      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield matchingOwner;
         yield shortDataOwner;
@@ -137,13 +90,9 @@ function registerOwnerFilterTests(): void {
     expect(manager.isOwner(impossibleOwner)).toBe(false);
 
     const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock, ownerLock], {
-        onChain: true,
-        pageSize: 3,
-      }),
+      manager.findWithdrawalGroups(client, [ownerLock, ownerLock]),
     );
 
-    expect(onChainPageSize).toBe(3);
     expect(groups).toEqual([]);
   });
 }

@@ -6,344 +6,61 @@ import { ccc } from "@ckb-ccc/core";
  * This page size is aligned with Nervos CKB's pull request #4576
  * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
  *
- * @remarks
- * When searching for cells, callers may override this page size by passing a
- * custom `pageSize` in their options. Total results are bounded separately by
- * the scan budget, see {@link defaultScanBudget}.
- *
  * @public
  */
 export const defaultCellPageSize = 400;
 
 /**
- * Fixed item ceiling for one bounded scan of financial state.
+ * Reads every committed cell matching the key, page by page, without touching
+ * CCC's cell cache. The scan ends on the first short page.
  *
- * @remarks Scans that would exceed it fail instead of returning partial state.
- *
- * @public
- */
-export const defaultScanItemLimit = 6_400;
-
-/**
- * A page returned to {@link collectPagedScan}.
+ * @remarks The operator's node is trusted: CKB's indexers advance the cursor on
+ * every non-empty page, so no progress guard exists here (decisions amendment 52).
  *
  * @public
  */
-export type PagedScanPage<T> =
-  | { items: readonly T[]; lastCursor?: string }
-  | { cells: readonly T[]; lastCursor?: string };
-
-/**
- * Stable error code for a full page that cannot advance pagination.
- *
- * @public
- */
-export const pagedScanCursorErrorCode = "PAGED_SCAN_CURSOR_NOT_ADVANCING";
-
-/**
- * Raised when a full page omits its next cursor or repeats a cursor in the scan.
- *
- * @public
- */
-export class PagedScanCursorError extends Error {
-  /** Machine-readable stable error code. */
-  public readonly code = pagedScanCursorErrorCode;
-
-  /** Cursor supplied to the failed page request. */
-  public readonly previousCursor: string | undefined;
-
-  /** Cursor returned by the failed page request. */
-  public readonly lastCursor: string | undefined;
-
-  /** Creates a cursor-progress error for one failed page. */
-  constructor(
-    progress: { previousCursor: string | undefined; lastCursor: string | undefined },
-    options?: ErrorOptions,
-  ) {
-    super("Paged scan returned a full page without an advancing lastCursor", options);
-    this.name = "PagedScanCursorError";
-    this.previousCursor = progress.previousCursor;
-    this.lastCursor = progress.lastCursor;
-  }
-}
-
-/** Why a bounded paged scan stopped before returning complete results. @public */
-export type PagedScanBudgetReason = "items" | "pages" | "aborted";
-
-/** Minimal cancellation signal accepted by the browser-safe scan collector. @public */
-export interface PagedScanSignal {
-  /** Whether cancellation has been requested. */
-  readonly aborted: boolean;
-  /** Caller-owned cancellation reason, when one was supplied. */
-  readonly reason?: unknown;
-}
-
-/** Raised when a shared paged-scan budget is exhausted or aborted. @public */
-export class PagedScanBudgetError extends Error {
-  /** Limit that stopped the scan. */
-  public readonly reason: PagedScanBudgetReason;
-
-  /** Number of items accepted before the failure. */
-  public readonly items: number;
-
-  /** Number of page requests started before the failure. */
-  public readonly pages: number;
-
-  /** Creates a scan-budget failure from the current budget counters. */
-  constructor(
-    message: string,
-    options: ErrorOptions & {
-      reason: PagedScanBudgetReason;
-      items: number;
-      pages: number;
-    },
-  ) {
-    super(message, options);
-    this.name = "PagedScanBudgetError";
-    this.reason = options.reason;
-    this.items = options.items;
-    this.pages = options.pages;
-  }
-}
-
-/** Shared aggregate budget for one logical scan composed of several page collectors. @public */
-export class PagedScanBudget {
-  private items = 0;
-  private pages = 0;
-  private readonly maxItems: number;
-  private readonly maxPages: number;
-  private readonly signal: PagedScanSignal | undefined;
-
-  /** Creates a fixed aggregate budget. */
-  constructor(maxItems: number, maxPages: number, signal?: PagedScanSignal) {
-    assertPositiveSafeInteger(maxItems, "maxItems");
-    assertPositiveSafeInteger(maxPages, "maxPages");
-    this.maxItems = maxItems;
-    this.maxPages = maxPages;
-    this.signal = signal;
-  }
-
-  /** Charges one page request before it starts. */
-  public startPage(): void {
-    this.assertActive();
-    if (this.pages >= this.maxPages) {
-      throw this.error("pages");
-    }
-    this.pages += 1;
-  }
-
-  /** Charges returned items before the caller can observe partial results. */
-  public addItems(count: number): void {
-    this.assertActive();
-    if (!Number.isSafeInteger(count) || count < 0) {
-      throw new RangeError("Paged scan item count must be a non-negative safe integer");
-    }
-    if (this.items + count > this.maxItems) {
-      throw this.error("items");
-    }
-    this.items += count;
-  }
-
-  /** Converts an in-flight request failure to an abort when its signal fired. */
-  public rethrowIfAborted(cause: unknown): void {
-    if (this.signal?.aborted === true) {
-      throw this.error("aborted", { cause });
-    }
-  }
-
-  private assertActive(): void {
-    if (this.signal?.aborted === true) {
-      throw this.error("aborted", { cause: this.signal.reason });
-    }
-  }
-
-  private error(
-    reason: PagedScanBudgetReason,
-    options?: ErrorOptions,
-  ): PagedScanBudgetError {
-    return new PagedScanBudgetError(
-      `Paged scan stopped at ${String(this.items)} items and ${String(this.pages)} pages: ${reason}`,
-      { reason, items: this.items, pages: this.pages, ...options },
-    );
-  }
-}
-
-/**
- * Terminal short pages one default budget allows across all its collectors.
- *
- * Every component scan ends on a short page, which is empty when its result
- * count is an exact multiple of the page size. Allowing a fixed number of them,
- * derived from the item ceiling at {@link defaultCellPageSize}, keeps the total
- * absolute: arbitrarily many empty per-lock scans cannot raise it.
- */
-const defaultTerminalPageAllowance = defaultScanItemLimit / defaultCellPageSize;
-
-/**
- * Creates the default budget shared by the collectors of one logical scan.
- *
- * @remarks The page allowance is absolute and independent of how many component
- * collectors share it: the pages the item ceiling spends at `pageSize`, plus a
- * fixed terminal-page allowance for their short final pages.
- *
- * @public
- */
-export function defaultScanBudget(options: {
-  pageSize: number;
-  signal?: PagedScanSignal;
-}): PagedScanBudget {
-  assertPageSize(options.pageSize);
-  return new PagedScanBudget(
-    defaultScanItemLimit,
-    Math.ceil(defaultScanItemLimit / options.pageSize) + defaultTerminalPageAllowance,
-    options.signal,
-  );
-}
-
-/**
- * Fetches and collects every page while enforcing cursor progress.
- *
- * @remarks `pageSize` is passed to each request and is not a total result cap;
- * a `budget` bounds total items and pages. Empty and short pages complete the
- * scan. Every full page must return a non-empty cursor not previously observed
- * by the scan.
- *
- * @public
- */
-export async function collectPagedScan<T>(
-  fetchPage: (pageSize: number, after: string | undefined) => Promise<PagedScanPage<T>>,
-  options: {
-    pageSize: number;
-    budget?: PagedScanBudget;
-  },
-): Promise<T[]> {
-  const results: T[] = [];
-  for await (const item of iteratePagedScan(fetchPage, options)) {
-    results.push(item);
-  }
-  return results;
-}
-
-async function* iteratePagedScan<T>(
-  fetchPage: (pageSize: number, after: string | undefined) => Promise<PagedScanPage<T>>,
-  options: { pageSize: number; budget?: PagedScanBudget },
-): AsyncGenerator<T> {
-  assertPageSize(options.pageSize);
-
-  const seenCursors = new Set<string>();
+export async function findCells(
+  client: ccc.Client,
+  keyLike: ccc.ClientIndexerSearchKeyLike,
+): Promise<ccc.Cell[]> {
+  const key = ccc.ClientIndexerSearchKey.from(keyLike);
+  const cells: ccc.Cell[] = [];
   let after: string | undefined;
   for (;;) {
-    options.budget?.startPage();
-    let page: PagedScanPage<T>;
-    try {
-      page = await fetchPage(options.pageSize, after);
-    } catch (error) {
-      options.budget?.rethrowIfAborted(error);
-      throw error;
+    const page = await client.findCellsPagedNoCache(
+      key,
+      "asc",
+      defaultCellPageSize,
+      after,
+    );
+    cells.push(...page.cells);
+    if (page.cells.length < defaultCellPageSize) {
+      return cells;
     }
-    const items = "items" in page ? page.items : page.cells;
-    options.budget?.addItems(items.length);
-    yield* items;
-    if (items.length < options.pageSize) {
-      return;
-    }
-    if (
-      page.lastCursor === undefined ||
-      page.lastCursor === "" ||
-      page.lastCursor === after ||
-      seenCursors.has(page.lastCursor)
-    ) {
-      throw new PagedScanCursorError({
-        previousCursor: after,
-        lastCursor: page.lastCursor,
-      });
-    }
-    seenCursors.add(page.lastCursor);
     after = page.lastCursor;
   }
 }
 
 /**
- * Collects CCC cell pages while preserving its cached and on-chain scan modes.
- *
- * @remarks Cached scans yield matching cached cells first, then omit unusable
- * or duplicate on-chain cells. On-chain scans use `findCellsPagedNoCache`, so
- * they neither read nor mutate CCC's cache. Both modes enforce cursor progress,
- * and an optional `budget` charges cached cells and RPC page items alike.
+ * Yields the signer's committed cells matching the filter, one exact-lock scan per address.
  *
  * @public
  */
-export async function collectCellsPaged(
-  client: ccc.Client,
-  keyLike: Parameters<ccc.Client["findCells"]>[0],
-  order: "asc" | "desc",
-  options: { onChain: boolean; pageSize: number; budget?: PagedScanBudget },
-): Promise<ccc.Cell[]> {
-  const key = ccc.ClientIndexerSearchKey.from(keyLike);
-  const cached: ccc.Cell[] = [];
-  const cells = await collectPagedScan(
-    async (requestPageSize, after) => {
-      if (!options.onChain && after === undefined) {
-        for await (const cell of client.cache.findCells(key)) {
-          // Charged per observed cell so an oversized or nonterminating cache
-          // iterator fails on the same budget as RPC pages, before any request.
-          options.budget?.addItems(1);
-          cached.push(cell);
-        }
-      }
-      return options.onChain
-        ? client.findCellsPagedNoCache(key, order, requestPageSize, after)
-        : client.findCellsPaged(key, order, requestPageSize, after);
-    },
-    {
-      pageSize: options.pageSize,
-      ...(options.budget === undefined ? {} : { budget: options.budget }),
-    },
-  );
-  if (options.onChain) {
-    return cells;
-  }
-
-  const result = [...cached];
-  for (const cell of cells) {
-    if (
-      !(await client.cache.isUnusable(cell.outPoint)) &&
-      cached.every((cachedCell) => !cachedCell.outPoint.eq(cell.outPoint))
-    ) {
-      result.push(cell);
-    }
-  }
-  return result;
-}
-
-/**
- * Iterates signer-owned committed candidate pages without using CCC's cell cache.
- *
- * @remarks Without a caller-supplied budget the scan bounds itself with
- * {@link defaultScanBudget}, shared by its per-lock collectors.
- *
- * @public
- */
-export async function* findSignerCellsPagedNoCache(
+export async function* findSignerCells(
   signer: ccc.Signer,
-  filter: Parameters<ccc.Signer["findCellsOnChain"]>[0],
-  options: { pageSize: number; budget?: PagedScanBudget },
+  filter: ccc.ClientIndexerSearchKeyFilterLike,
 ): AsyncGenerator<ccc.Cell, void> {
   const seen = new Set<string>();
-  const locks = unique((await signer.getAddressObjs()).map(({ script }) => script));
-  const budget = options.budget ?? defaultScanBudget({ pageSize: options.pageSize });
-  for (const lock of locks) {
-    const key = ccc.ClientIndexerSearchKey.from({
+  for (const lock of unique(
+    (await signer.getAddressObjs()).map(({ script }) => script),
+  )) {
+    for (const cell of await findCells(signer.client, {
       script: lock,
       scriptType: "lock",
       filter,
       scriptSearchMode: "exact",
       withData: true,
-    });
-    for await (const cell of iteratePagedScan(
-      async (pageSize, after): ReturnType<ccc.Client["findCellsPagedNoCache"]> =>
-        signer.client.findCellsPagedNoCache(key, "asc", pageSize, after),
-      { pageSize: options.pageSize, budget },
-    )) {
+    })) {
       const outPoint = cell.outPoint.toHex();
       if (!cell.cellOutput.lock.eq(lock) || seen.has(outPoint)) {
         continue;
@@ -351,16 +68,6 @@ export async function* findSignerCellsPagedNoCache(
       seen.add(outPoint);
       yield cell;
     }
-  }
-}
-
-function assertPageSize(pageSize: number): void {
-  assertPositiveSafeInteger(pageSize, "pageSize");
-}
-
-function assertPositiveSafeInteger(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${name} must be a positive safe integer`);
   }
 }
 

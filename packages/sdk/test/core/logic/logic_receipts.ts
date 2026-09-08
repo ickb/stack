@@ -23,7 +23,7 @@ describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {
   registerReceiptFilteringTests();
   registerReceiptWireFormatTests();
   registerReceiptConcurrencyTests();
-  registerReceiptPageSizeTests();
+  registerReceiptScanTests();
   registerReceiptHeaderCacheTests();
 });
 
@@ -140,57 +140,14 @@ function registerReceiptConcurrencyTests(): void {
   });
 }
 
-function registerReceiptPageSizeTests(): void {
-  it("passes the cell page size to receipt scanning", async () => {
-    const logic = script("11");
-    const wantedLock = script("22");
-    const [firstReceipt, secondReceipt] = receiptPair(logic, wantedLock);
-    let requestedPageSize = 0;
-    const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
-    const client = new StubClient({
-      async *findCells(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCells"]> {
-        requestedPageSize = pageSize;
-        await Promise.resolve();
-        yield firstReceipt;
-        yield secondReceipt;
-      },
-      findCellsOnChain: noCellsOnChain,
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return transactionWithHeader(headerLike());
-      },
-    });
-
-    const receipts = await collect(
-      manager.findReceipts(client, [wantedLock], { pageSize: 1 }),
-    );
-
-    expect(requestedPageSize).toBe(1);
-    expect(receipts.map((receipt) => receipt.cell.outPoint.txHash)).toEqual([
-      firstReceipt.outPoint.txHash,
-      secondReceipt.outPoint.txHash,
-    ]);
-  });
-
-  it("scans receipts directly from chain when requested", async () => {
+function registerReceiptScanTests(): void {
+  it("scans receipts directly from chain", async () => {
     const logic = script("11");
     const wantedLock = script("22");
     const [receipt] = receiptPair(logic, wantedLock);
-    let onChainPageSize = 0;
     const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
     const client = new StubClient({
-      async *findCellsOnChain(
-        _query,
-        _order,
-        pageSize = 10,
-      ): ReturnType<ccc.Client["findCellsOnChain"]> {
-        onChainPageSize = pageSize;
+      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield receipt;
       },
@@ -202,11 +159,8 @@ function registerReceiptPageSizeTests(): void {
       },
     });
 
-    const receipts = await collect(
-      manager.findReceipts(client, [wantedLock], { onChain: true, pageSize: 2 }),
-    );
+    const receipts = await collect(manager.findReceipts(client, [wantedLock]));
 
-    expect(onChainPageSize).toBe(2);
     expect(receipts).toHaveLength(1);
   });
 }

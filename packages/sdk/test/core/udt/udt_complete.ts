@@ -8,7 +8,6 @@ import {
   ickbValue,
 } from "../../../src/core/udt.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
-import { PagedScanBudget } from "../../../src/utils/index.ts";
 import {
   byte32FromByte,
   clientWithHeader,
@@ -25,7 +24,6 @@ import {
 describe(RECEIPT_PREFIX_DECODING_SUITE, () => {
   registerCompleteByCollectionTests();
   registerCompleteByExistingInputTests();
-  registerCompleteByBudgetTests();
   registerCompleteByErrorTests();
   registerCompleteByContextErrorTests();
   registerCompleteByProtocolInputTests();
@@ -116,29 +114,6 @@ function registerCompleteByExistingInputTests(): void {
 
     expect(completed.inputs).toHaveLength(2);
     expect(completed.outputsData).toContain(ccc.hexFrom(ccc.numLeToBytes(30n, 16)));
-  });
-}
-
-function registerCompleteByBudgetTests(): void {
-  it("completeBy charges a supplied aggregate scan budget", async () => {
-    const { ickbUdt, type } = testIckbUdt();
-    const tx = ccc.Transaction.from({
-      outputs: [{ lock: script("22"), type }],
-      outputsData: [ccc.numLeToBytes(100n, 16)],
-    });
-    const signer = signerWithCells(
-      [xudtCell(100n, type)],
-      clientWithHeader(headerLike(1n)),
-    );
-    const budget = new PagedScanBudget(1, 1, {
-      aborted: true,
-      reason: new Error("aggregate preview expired"),
-    });
-
-    await expect(ickbUdt.completeBy(tx, signer, { budget })).rejects.toMatchObject({
-      name: "PagedScanBudgetError",
-      reason: "aborted",
-    });
   });
 }
 

@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import type { IckbUdt } from "../src/core/index.ts";
 import { IckbSdk } from "../src/sdk.ts";
-import { PagedScanBudget } from "../src/utils/index.ts";
 
 function script(byte: string): ccc.Script {
   return ccc.Script.from({
@@ -59,7 +58,6 @@ describe("getConfig", () => {
     expect(call?.[0]).toBeInstanceOf(ccc.Transaction);
     expect(call?.[0]).not.toBe(tx);
     expect(call?.[1]).toBe(signer);
-    expect(call?.[2]?.budget).toBeInstanceOf(PagedScanBudget);
     expect(tx.outputsData).toEqual([]);
     expect(completed.outputsData).toEqual(["0x01"]);
   });

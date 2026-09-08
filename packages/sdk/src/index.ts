@@ -36,7 +36,6 @@ export type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  GetPoolDepositsOptions,
   IckbErrorCode,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,

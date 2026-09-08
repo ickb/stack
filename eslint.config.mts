@@ -115,18 +115,18 @@ const productionRestrictedSyntax = [
     message:
       "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
   },
-  // Cell scans are bounded pages (decisions §1): only the two paged-scan helpers page
-  // through the client, and the page size and cursor are always passed.
+  // Cell reads go through the SDK's one uncached paging loop (decisions amendment 52):
+  // CCC's cached iterators are never used for financial state.
   {
     selector:
       "CallExpression[callee.property.name='findCellsOnChain'], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
     message:
-      "Do not iterate cells unbounded. Page through collectPagedScan with an explicit page size.",
+      "Read cells through the SDK's findCells helper, never CCC's cached iterators.",
   },
   {
     selector:
-      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u]:not(CallExpression[callee.name=/^(?:collectPagedScan|iteratePagedScan)$/u] CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u])",
-    message: "Page through the client only inside collectPagedScan or iteratePagedScan.",
+      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u]:not(FunctionDeclaration[id.name='findCells'] CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u])",
+    message: "Page through the client only inside the SDK's findCells helper.",
   },
   {
     selector:

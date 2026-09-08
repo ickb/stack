@@ -76,7 +76,7 @@ export async function completeFirstFundable<T>(
 
 function isFundabilityFailure(error: unknown): error is Error {
   return (
-    isIckbError(error, "insufficient_capacity") ||
+    isIckbError(error) ||
     error instanceof ccc.ErrorTransactionInsufficientCapacity ||
     error instanceof DaoOutputLimitError ||
     error instanceof OrderConversionRepresentabilityError

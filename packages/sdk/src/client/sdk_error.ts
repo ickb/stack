@@ -1,5 +1,5 @@
 /** Stable machine-readable failures owned by the Phase-2 SDK. @public */
-export type IckbErrorCode = "account_scan_limit" | "insufficient_capacity";
+export type IckbErrorCode = "insufficient_capacity";
 
 /** Typed SDK failure with a stable machine-readable code. @public */
 export class IckbError extends Error {
@@ -17,7 +17,7 @@ export class IckbError extends Error {
   }
 }
 
-/** Returns whether a value is an SDK failure, optionally with one exact code. @public */
-export function isIckbError(error: unknown, code?: IckbErrorCode): error is IckbError {
-  return error instanceof IckbError && (code === undefined || error.code === code);
+/** Returns whether a value is an SDK failure. @public */
+export function isIckbError(error: unknown): error is IckbError {
+  return error instanceof IckbError;
 }

@@ -1,13 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  CheckedUint64LE,
-  collectCellsPaged,
-  defaultCellPageSize,
-  defaultScanBudget,
-  unique,
-  type PagedScanBudget,
-  type ScriptDeps,
-} from "../utils/index.ts";
+import { CheckedUint64LE, findCells, unique, type ScriptDeps } from "../utils/index.ts";
 import {
   daoCellFrom,
   type DaoCellFromCache,
@@ -280,33 +272,27 @@ export class DaoManager implements ScriptDeps {
   /**
    * Finds DAO deposit cells for the given locks.
    *
-   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, and `pageSize` is per lock.
-   * `minLockUp` and `maxLockUp` override deposit readiness windows. `budget` shares one bound with the other scans of a composed state read.
+   * @param options - Scan options. `tip` controls readiness calculations;
+   * `minLockUp` and `maxLockUp` override deposit readiness windows.
    * @remarks The transaction cache is shared across the scan so deposit conversions reuse transaction-header reads.
-   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial deposits.
    */
   public async *findDeposits(
     client: ccc.Client,
     locks: ccc.Script[],
     options?: {
       tip?: ccc.ClientBlockHeader;
-      onChain?: boolean;
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
-      pageSize?: number;
-      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<DaoDepositCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const pageSize = options?.pageSize ?? defaultCellPageSize;
     const locksToScan = Array.from(unique(locks));
-    const budget = options?.budget ?? defaultScanBudget({ pageSize });
 
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     const foundDeposits: DaoDepositCell[] = [];
     for (const lock of locksToScan) {
-      const findCellsArgs = [
-        {
+      const depositCandidates = (
+        await findCells(client, {
           script: lock,
           scriptType: "lock",
           filter: {
@@ -316,15 +302,6 @@ export class DaoManager implements ScriptDeps {
           },
           scriptSearchMode: "exact",
           withData: true,
-        },
-        "asc",
-      ] as const;
-
-      const depositCandidates = (
-        await collectCellsPaged(client, ...findCellsArgs, {
-          onChain: options?.onChain === true,
-          pageSize,
-          budget,
         })
       ).filter((cell) => this.isDeposit(cell) && cell.cellOutput.lock.eq(lock));
 
@@ -348,48 +325,28 @@ export class DaoManager implements ScriptDeps {
   /**
    * Finds DAO withdrawal request cells for the given locks.
    *
-   * @param options - Scan options. `tip` controls readiness calculations, `onChain` bypasses cached cell queries, `pageSize` is per lock,
-   * and `budget` shares one bound with the other scans of a composed state read.
+   * @param options - Scan options. `tip` controls readiness calculations.
    * @remarks Header and transaction caches are shared across the scan so withdrawal conversions reuse DAO reads.
-   * Without a caller-supplied `budget` the scan bounds itself and fails instead of yielding partial withdrawal requests.
    */
   public async *findWithdrawalRequests(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: {
-      tip?: ccc.ClientBlockHeader;
-      onChain?: boolean;
-      pageSize?: number;
-      budget?: PagedScanBudget;
-    },
+    options?: { tip?: ccc.ClientBlockHeader },
   ): AsyncGenerator<DaoWithdrawalRequestCell> {
     const tip = options?.tip ?? (await client.getTipHeader());
-    const pageSize = options?.pageSize ?? defaultCellPageSize;
     const locksToScan = Array.from(unique(locks));
-    const budget = options?.budget ?? defaultScanBudget({ pageSize });
 
     const headerCache: DaoCellFromCache["headerCache"] = new Map();
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
     const foundWithdrawals: DaoWithdrawalRequestCell[] = [];
     for (const lock of locksToScan) {
-      const findCellsArgs = [
-        {
+      const withdrawalCandidates = (
+        await findCells(client, {
           script: lock,
           scriptType: "lock",
-          filter: {
-            script: this.script,
-          },
+          filter: { script: this.script },
           scriptSearchMode: "exact",
           withData: true,
-        },
-        "asc",
-      ] as const;
-
-      const withdrawalCandidates = (
-        await collectCellsPaged(client, ...findCellsArgs, {
-          onChain: options?.onChain === true,
-          pageSize,
-          budget,
         })
       ).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
 

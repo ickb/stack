@@ -4,7 +4,7 @@ iCKB SDK built on top of CCC
 
 ## Layout
 
-One package, four internal directories beside the SDK's own: `src/core` (iCKB protocol primitives, cells, transaction builders), `src/dao` (Nervos DAO cell classification and helpers), `src/order` (UDT limit orders), and `src/utils` (bounded paged scans and shared helpers). The only runtime dependency is `@ckb-ccc/core`, and nothing here imports Node built-ins, so the package runs in the browser.
+One package, four internal directories beside the SDK's own: `src/core` (iCKB protocol primitives, cells, transaction builders), `src/dao` (Nervos DAO cell classification and helpers), `src/order` (UDT limit orders), and `src/utils` (the one uncached cell paging loop and shared helpers). The only runtime dependency is `@ckb-ccc/core`, and nothing here imports Node built-ins, so the package runs in the browser.
 
 ## Send Confirmation
 

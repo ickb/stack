@@ -4,10 +4,8 @@ import type { DaoManager } from "../dao/index.ts";
 import {
   CheckedUint128LE,
   CheckedUint32LE,
-  defaultCellPageSize,
-  findSignerCellsPagedNoCache,
+  findSignerCells,
   type ExchangeRatio,
-  type PagedScanBudget,
 } from "../utils/index.ts";
 import { ReceiptData } from "./entities.ts";
 
@@ -123,7 +121,6 @@ export class IckbUdt extends udt.Udt {
     txLike: ccc.TransactionLike,
     signer: ccc.Signer,
     changeLike: ccc.ScriptLike,
-    options?: { budget?: PagedScanBudget },
   ): Promise<ccc.Transaction> {
     const tx = this.addCellDeps(txLike);
     let inputTally = await this.inputTallyFromTransaction(tx, signer.client);
@@ -133,7 +130,6 @@ export class IckbUdt extends udt.Udt {
       inputTally = await this.collectXudtInputs(tx, signer, {
         inputTally,
         requiredBalance,
-        budget: options?.budget,
       });
     }
 
@@ -148,10 +144,9 @@ export class IckbUdt extends udt.Udt {
   public override async completeBy(
     txLike: ccc.TransactionLike,
     signer: ccc.Signer,
-    options?: { budget?: PagedScanBudget },
   ): Promise<ccc.Transaction> {
     const { script } = await signer.getRecommendedAddressObj();
-    return this.completeChangeToLock(txLike, signer, script, options);
+    return this.completeChangeToLock(txLike, signer, script);
   }
 
   /**
@@ -202,26 +197,15 @@ export class IckbUdt extends udt.Udt {
   private async collectXudtInputs(
     tx: ccc.Transaction,
     signer: ccc.Signer,
-    options: {
-      inputTally: IckbInputTally;
-      requiredBalance: ccc.Num;
-      budget?: PagedScanBudget;
-    },
+    options: { inputTally: IckbInputTally; requiredBalance: ccc.Num },
   ): Promise<IckbInputTally> {
     const { inputTally, requiredBalance } = options;
     const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
     const collectedTally = new IckbInputTally(inputTally.balance, inputTally.xudtCount);
-    for await (const cell of findSignerCellsPagedNoCache(
-      signer,
-      {
-        script: this.script,
-        outputDataLenRange: [udtDataSize, ccc.numFrom("0xffffffff")],
-      },
-      {
-        pageSize: defaultCellPageSize,
-        ...(options.budget === undefined ? {} : { budget: options.budget }),
-      },
-    )) {
+    for await (const cell of findSignerCells(signer, {
+      script: this.script,
+      outputDataLenRange: [udtDataSize, ccc.numFrom("0xffffffff")],
+    })) {
       if (
         tx.inputs.some(({ previousOutput }) => previousOutput.eq(cell.outPoint)) ||
         !this.isUdt(cell)

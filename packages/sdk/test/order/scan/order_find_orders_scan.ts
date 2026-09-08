@@ -216,25 +216,4 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(groups).toHaveLength(1);
   });
-
-  it("uses cached scans when onChain is false", async () => {
-    const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
-    let cachedScans = 0;
-    const client = new StubClient({
-      async *findCells(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-        cachedScans += 1;
-        await Promise.resolve();
-        yield dummyCell(
-          query.scriptType === "lock" ? "71" : "72",
-          query.scriptType === "lock" ? orderScript : ownerLock,
-          udtScript,
-        );
-      },
-    });
-
-    await expect(
-      collectOrders(manager, client, { onChain: false, pageSize: 2 }),
-    ).resolves.toEqual([]);
-    expect(cachedScans).toBe(2);
-  });
 });

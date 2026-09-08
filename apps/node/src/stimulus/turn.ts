@@ -218,10 +218,7 @@ async function buildConversion(
 }
 
 function unfundableOrThrow(error: unknown): Built {
-  if (
-    isIckbError(error, "insufficient_capacity") ||
-    error instanceof ccc.ErrorTransactionInsufficientCapacity
-  ) {
+  if (isIckbError(error) || error instanceof ccc.ErrorTransactionInsufficientCapacity) {
     return { skip: { reason: "unfundable", error } };
   }
   throw error;

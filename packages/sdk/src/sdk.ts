@@ -8,9 +8,9 @@ import type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  GetPoolDepositsOptions,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
+  PoolDepositRangeOptions,
   PoolDepositState,
   SdkManagers,
   SystemState,
@@ -40,7 +40,6 @@ export type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  GetPoolDepositsOptions,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
   PoolDepositRangeOptions,
@@ -114,7 +113,7 @@ export interface IckbSdk {
   getPoolDeposits(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
-    options?: GetPoolDepositsOptions,
+    options?: PoolDepositRangeOptions,
   ): Promise<PoolDepositState>;
   /** Adds a user-owned order request, deriving its lock from a signer when needed. */
   request(

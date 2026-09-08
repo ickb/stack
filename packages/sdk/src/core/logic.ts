@@ -1,13 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoManager } from "../dao/index.ts";
-import {
-  collectCellsPaged,
-  defaultCellPageSize,
-  defaultScanBudget,
-  type PagedScanBudget,
-  type ScriptDeps,
-  unique,
-} from "../utils/index.ts";
+import { findCells, type ScriptDeps, unique } from "../utils/index.ts";
 import {
   type IckbDepositCell,
   ickbDepositCellFrom,
@@ -191,9 +184,8 @@ export class LogicManager implements ScriptDeps {
    * Receipt cells are identified by `this.script` (the receipt type script)
    * and must also pass `this.isReceipt(cell)`.
    *
-   * @param client - CKB client used for cached and direct on-chain searches.
+   * @param client - CKB client used for direct on-chain searches.
    * @param locks - Lock scripts whose exact matching receipt cells will be considered.
-   * @param options - Query options. `onChain` defaults to false and `pageSize` defaults to `defaultCellPageSize`.
    * @returns An async generator yielding {@link ReceiptCell} objects for each valid receipt cell found.
    *
    * @remarks
@@ -208,50 +200,21 @@ export class LogicManager implements ScriptDeps {
   public async *findReceipts(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: {
-      /**
-       * If true, fetch cells directly from the chain RPC. Otherwise, use cached results.
-       * Defaults to false.
-       */
-      onChain?: boolean;
-      /**
-       * Cell query page size per lock script. Defaults to {@link defaultCellPageSize}.
-       */
-      pageSize?: number;
-      /**
-       * Shared bound for a composed state read. Defaults to a scan-local bound
-       * that fails instead of yielding partial receipts.
-       */
-      budget?: PagedScanBudget;
-    },
   ): AsyncGenerator<ReceiptCell> {
-    const pageSize = options?.pageSize ?? defaultCellPageSize;
     const locksToScan = Array.from(unique(locks));
-    const budget = options?.budget ?? defaultScanBudget({ pageSize });
     const transactionCache = new Map<
       ccc.Hex,
       Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
     >();
     const foundReceipts: ReceiptCell[] = [];
     for (const lock of locksToScan) {
-      const findCellsArgs = [
-        {
+      const receiptCandidates = (
+        await findCells(client, {
           script: lock,
           scriptType: "lock",
-          filter: {
-            script: this.script,
-          },
+          filter: { script: this.script },
           scriptSearchMode: "exact",
           withData: true,
-        },
-        "asc",
-      ] as const;
-
-      const receiptCandidates = (
-        await collectCellsPaged(client, ...findCellsArgs, {
-          onChain: options?.onChain === true,
-          pageSize,
-          budget,
         })
       ).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
 
@@ -274,9 +237,8 @@ export class LogicManager implements ScriptDeps {
    * to `this.daoManager.findDeposits` and converting results.
    *
    * @param client - CKB client used for tip/header reads and cell queries.
-   * @param options - Search options. `tip` controls epoch calculations, `onChain` uses direct RPC queries, and `pageSize` defaults to `defaultCellPageSize`.
-   * `minLockUp` and `maxLockUp` override the DAO helper windows. `budget` shares one bound
-   * with the other scans of a composed state read; the DAO scan bounds itself when it is omitted.
+   * @param options - Search options. `tip` controls epoch calculations;
+   * `minLockUp` and `maxLockUp` override the DAO helper windows.
    *
    * @returns
    *   An async generator yielding `IckbDepositCell` objects, each representing
@@ -293,11 +255,8 @@ export class LogicManager implements ScriptDeps {
     client: ccc.Client,
     options?: {
       tip?: ccc.ClientBlockHeader;
-      onChain?: boolean;
       minLockUp?: ccc.Epoch;
       maxLockUp?: ccc.Epoch;
-      pageSize?: number;
-      budget?: PagedScanBudget;
     },
   ): AsyncGenerator<IckbDepositCell> {
     const tip =

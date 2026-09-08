@@ -3,7 +3,6 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LogicManager, OwnedOwnerManager } from "../../../src/core/index.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
-import { PagedScanBudget } from "../../../src/utils/index.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -56,12 +55,7 @@ describe(L1_STATE_SUITE, () => {
 
     const state = await sdk.getL1State(client, []);
 
-    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
-      onChain: true,
-      pageSize: 400,
-      tip,
-    });
-    expect(findDeposits.mock.calls[0]?.[1]?.budget).toBeInstanceOf(PagedScanBudget);
+    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({ tip });
     expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(100082));
     expect(state.system.ckbMaturing).toEqual([]);
   });

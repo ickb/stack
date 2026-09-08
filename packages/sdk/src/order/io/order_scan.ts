@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { collectCellsPaged, type PagedScanBudget } from "../../utils/index.ts";
+import { findCells } from "../../utils/index.ts";
 import {
   attestResolvedOrderGroup,
   MasterCell,
@@ -51,9 +51,6 @@ interface OriginOrderAtOptions {
 interface FindCellsOptions {
   client: ccc.Client;
   script: ccc.Script;
-  onChain: boolean;
-  pageSize: number;
-  budget: PagedScanBudget;
 }
 
 interface FindSimpleOrdersOptions extends FindCellsOptions {
@@ -65,25 +62,14 @@ export async function findSimpleOrders({
   client,
   script,
   udtScript,
-  onChain,
-  pageSize,
-  budget,
 }: FindSimpleOrdersOptions): Promise<OrderCell[]> {
-  const findCellsArgs = [
-    {
-      script,
-      scriptType: "lock",
-      filter: { script: udtScript },
-      scriptSearchMode: "exact",
-      withData: true,
-    },
-    "asc",
-  ] as const;
   const orders: OrderCell[] = [];
-  for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
-    onChain,
-    pageSize,
-    budget,
+  for (const cell of await findCells(client, {
+    script,
+    scriptType: "lock",
+    filter: { script: udtScript },
+    scriptSearchMode: "exact",
+    withData: true,
   })) {
     const order = OrderCell.tryFrom(cell);
     if (order !== undefined && isOrderCell(cell, script, udtScript)) {
@@ -98,31 +84,16 @@ export async function findSimpleOrders({
 export async function findAllMasters({
   client,
   script,
-  onChain,
-  pageSize,
-  budget,
 }: FindCellsOptions): Promise<MasterCell[]> {
-  const findCellsArgs = [
-    {
+  // An exact type search returns master cells only; the node is trusted (amendment 52).
+  return (
+    await findCells(client, {
       script,
       scriptType: "type",
       scriptSearchMode: "exact",
       withData: true,
-    },
-    "asc",
-  ] as const;
-  const masters: MasterCell[] = [];
-  for (const cell of await collectCellsPaged(client, ...findCellsArgs, {
-    onChain,
-    pageSize,
-    budget,
-  })) {
-    if (isMasterCell(cell, script)) {
-      masters.push(new MasterCell(cell));
-    }
-  }
-
-  return masters;
+    })
+  ).map((cell) => new MasterCell(cell));
 }
 
 /** Resolves one master and its descendant orders into a validated order group. */

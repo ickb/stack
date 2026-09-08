@@ -8,13 +8,8 @@ import type {
 import { assertDaoOutputLimit } from "../dao/index.ts";
 import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
 import {
-  defaultCellPageSize,
-  defaultScanBudget,
-  findSignerCellsPagedNoCache,
+  findSignerCells,
   isPlainCapacityCell,
-  PagedScanBudgetError,
-  PagedScanCursorError,
-  type PagedScanBudget,
   type ValueComponents,
 } from "../utils/index.ts";
 import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
@@ -48,7 +43,7 @@ export abstract class IckbSdkBase {
    * Completes iCKB/xUDT inputs and transaction fees for a partial transaction.
    *
    * @remarks This does not sign or send the transaction. Candidate inputs come
-   * from bounded committed scans and ordinary change is always a plain cell.
+   * from committed scans and ordinary change is always a plain cell.
    * Existing outputs are never reinterpreted or resized as fee change.
    * Callers must resolve or independently exclude inputs from pending attempts
    * before rebuilding; completion deliberately does not chain pending outputs.
@@ -57,29 +52,13 @@ export abstract class IckbSdkBase {
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
-    // The xUDT and fee scans page over every signer lock on one shared budget.
-    const budget = defaultScanBudget({ pageSize: defaultCellPageSize });
-    try {
-      const tx = await this.ickbUdt.completeBy(
-        ccc.Transaction.from(txLike).clone(),
-        options.signer,
-        { budget },
-      );
-      await this.completeFeeFromCommittedCells(tx, options, budget);
-      assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
-      return tx;
-    } catch (error) {
-      if (
-        error instanceof PagedScanBudgetError ||
-        error instanceof PagedScanCursorError
-      ) {
-        throw new IckbError(
-          "Transaction completion did not finish its committed-cell scan",
-          { code: "account_scan_limit", cause: error },
-        );
-      }
-      throw error;
-    }
+    const tx = await this.ickbUdt.completeBy(
+      ccc.Transaction.from(txLike).clone(),
+      options.signer,
+    );
+    await this.completeFeeFromCommittedCells(tx, options);
+    assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
+    return tx;
   }
 
   /**
@@ -154,13 +133,11 @@ export abstract class IckbSdkBase {
   private async completeFeeFromCommittedCells(
     tx: ccc.Transaction,
     options: CompleteIckbTransactionOptions,
-    budget: PagedScanBudget,
   ): Promise<void> {
-    const candidates = findSignerCellsPagedNoCache(
-      options.signer,
-      { scriptLenRange: [0, 1], outputDataLenRange: [0, 1] },
-      { pageSize: defaultCellPageSize, budget },
-    );
+    const candidates = findSignerCells(options.signer, {
+      scriptLenRange: [0, 1],
+      outputDataLenRange: [0, 1],
+    });
     const selected = new Set(
       tx.inputs.map(({ previousOutput }) => previousOutput.toHex()),
     );

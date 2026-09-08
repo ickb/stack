@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { DaoOutputLimitError } from "../../../src/dao/index.ts";
-import { defaultCellPageSize } from "../../../src/utils/index.ts";
 import {
   fundedSigner,
   testSdk,
@@ -129,34 +128,6 @@ function registerCompletionFailureTests(): void {
       sdk.completeTransaction(tx, { signer, feeRate: 1_000n }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
-  });
-
-  it("maps a committed-cell examination overflow without using partial results", async () => {
-    const { sdk, logicManager, lock } = testSdk({ completion: "real" });
-    const foreign = plainCell("86", lock, ccc.fixedPointFrom(100));
-    foreign.cellOutput.type = logicManager.script;
-    const client = new StubClient();
-    let cursor = 0;
-    client.findCellsPagedNoCache = async (
-      _key,
-      _order,
-      limit,
-    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-      await Promise.resolve();
-      cursor += 1;
-      return {
-        cells: Array.from({ length: Number(limit) }, () => foreign),
-        lastCursor: `page:${String(cursor)}`,
-      };
-    };
-    const signer = new ccc.SignerCkbScriptReadonly(client, lock);
-    const tx = ccc.Transaction.default();
-    tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
-
-    await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n }),
-    ).rejects.toMatchObject({ code: "account_scan_limit" });
-    expect(cursor).toBe(Math.floor(6_400 / defaultCellPageSize) + 1);
   });
 }
 

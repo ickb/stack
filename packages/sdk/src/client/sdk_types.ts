@@ -49,19 +49,6 @@ export interface PoolDepositRangeOptions {
 }
 
 /**
- * Options for scanning public pool deposits.
- *
- * @public
- */
-export interface GetPoolDepositsOptions extends PoolDepositRangeOptions {
-  /** CCC cell pagination size. Total results are bounded by the scan itself. */
-  cellPageSize?: number;
-
-  /** Cancels the bounded pool scan without returning partial financial state. */
-  signal?: AbortSignal;
-}
-
-/**
  * Snapshot used to plan one wallet conversion transaction.
  *
  * @public
@@ -193,12 +180,6 @@ export interface CompleteIckbTransactionOptions {
  * @public
  */
 export interface GetL1StateOptions {
-  /** CCC cell pagination size for each scan. Total results are bounded by the scan itself. */
-  cellPageSize?: number;
-
-  /** Cancels the whole composed scan without returning partial financial state. */
-  signal?: AbortSignal;
-
   /** Optional readiness window for public pool deposit scans. */
   poolDeposits?: PoolDepositRangeOptions;
 }
