@@ -1,9 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
 import { TransactionBroadcastError, waitTransaction } from "@ickb/sdk";
-import { STOP_EXIT_CODE } from "../shared/index.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { handleTurnFailure } from "./failure.ts";
-import { emptyActions, summarizeBotState, transactionShape } from "./runtime/support.ts";
+import { summarizeBotState, transactionShape } from "./runtime/support.ts";
 import { buildTransaction } from "./runtime/transaction.ts";
 import type { BotState, BuildTransactionResult, Runtime } from "./runtime/types.ts";
 import { readBotState } from "./state.ts";
@@ -34,18 +33,6 @@ async function executeBotWork(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
   const summary = summarizeBotState(state);
   context.events.emit({ type: "bot.state.read", ...summary });
-
-  if (summary.balances.totalEquivalentCkb <= state.minCkbBalance) {
-    context.events.emit({
-      type: "bot.decision.skipped",
-      reason: "capital_below_minimum",
-      actions: emptyActions(),
-      state: summary,
-      deficit: summary.balances.minimumCkbCapital - summary.balances.totalEquivalentCkb,
-    });
-    process.exitCode = STOP_EXIT_CODE;
-    return;
-  }
 
   const result = await buildTransaction(context.runtime, state);
   if (result.kind === "skipped") {

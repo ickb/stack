@@ -5,44 +5,28 @@ import type { BotState, Runtime } from "./runtime/types.ts";
 /**
  * Reads bot-owned account state and public market state for one planning attempt.
  *
- * @remarks Own orders are excluded from the market side, and pool deposits must
- * come from the same L1 snapshot used for account projection.
+ * @remarks Own orders do not exist for the bot: the SDK keeps them out of the market
+ * side and nothing here counts or collects them (decisions amendment 52).
  */
 export async function readBotState(runtime: Runtime): Promise<BotState> {
-  const { system, user, account } = await runtime.sdk.getL1AccountState(
+  const { system, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
-    {
-      poolDeposits: {
-        minLockUp: POOL_MIN_LOCK_UP,
-        maxLockUp: POOL_MAX_LOCK_UP,
-      },
-    },
+    { poolDeposits: { minLockUp: POOL_MIN_LOCK_UP, maxLockUp: POOL_MAX_LOCK_UP } },
   );
-  const projection = projectAccountAvailability(account, user.orders, {
-    collectedOrdersAvailable: true,
-  });
-
-  const availableCkbBalance = projection.ckbAvailable;
-  const availableIckbBalance = projection.ickbAvailable;
-  const unavailableCkbBalance = projection.ckbPending;
-  const totalCkbBalance = availableCkbBalance + unavailableCkbBalance;
-  const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+  const projection = projectAccountAvailability(account, []);
 
   return {
     system,
-    userOrders: user.orders,
     marketOrders: system.orderPool,
     receipts: account.receipts,
     readyWithdrawals: projection.readyWithdrawals,
     notReadyWithdrawals: projection.pendingWithdrawals,
     poolDeposits: system.poolDeposits.deposits,
     cells: [...account.capacityCells, ...account.nativeUdtCells],
-    availableCkbBalance,
-    availableIckbBalance,
-    unavailableCkbBalance,
-    totalCkbBalance,
-    depositCapacity,
-    minCkbBalance: (21n * depositCapacity) / 20n,
+    ckb: projection.ckbAvailable,
+    ickb: projection.ickbAvailable,
+    pendingCkb: projection.ckbPending,
+    depositCapacity: convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
   };
 }

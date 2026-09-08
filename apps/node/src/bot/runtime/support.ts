@@ -1,14 +1,8 @@
-import { ccc } from "@ckb-ccc/core";
-import { convert, type Match, type MatchDiagnostics } from "@ickb/sdk";
+import type { ccc } from "@ckb-ccc/core";
+import { convert, type Match } from "@ickb/sdk";
 
 import { CKB_RESERVE } from "../policy/constants.ts";
-import type {
-  BotActions,
-  BotDecisionTranscript,
-  BotState,
-  BotStateSummary,
-  RebalanceOutcome,
-} from "./types.ts";
+import type { BotDecision, BotState, BotStateSummary } from "./types.ts";
 
 export const MATCH_STEP_DIVISOR = 100n;
 /**
@@ -16,116 +10,45 @@ export const MATCH_STEP_DIVISOR = 100n;
  * DAO output limit but never a fixed match, so the match keeps room for the rest.
  */
 export const MAX_MATCH_PARTIALS = 58;
-export const DIRECT_DEPOSIT_FEE_HEADROOM = ccc.fixedPointFrom(1);
 
-/**
- * Builds the stable public state summary emitted with bot decisions.
- */
+/** Builds the stable public state summary emitted with bot decisions. */
 export function summarizeBotState(state: BotState): BotStateSummary {
+  const { tip, exchangeRatio, feeRate } = state.system;
   return {
     chainTip: {
-      blockNumber: state.system.tip.number,
-      blockHash: state.system.tip.hash,
-      timestamp: state.system.tip.timestamp,
+      blockNumber: tip.number,
+      blockHash: tip.hash,
+      timestamp: tip.timestamp,
       epoch: {
-        integer: state.system.tip.epoch.integer,
-        numerator: state.system.tip.epoch.numerator,
-        denominator: state.system.tip.epoch.denominator,
+        integer: tip.epoch.integer,
+        numerator: tip.epoch.numerator,
+        denominator: tip.epoch.denominator,
       },
     },
     balances: {
-      availableCkb: state.availableCkbBalance,
-      unavailableCkb: state.unavailableCkbBalance,
-      totalCkb: state.totalCkbBalance,
-      availableIckb: state.availableIckbBalance,
+      ckb: state.ckb,
+      ickb: state.ickb,
+      pendingCkb: state.pendingCkb,
       totalEquivalentCkb:
-        state.totalCkbBalance +
-        convert(false, state.availableIckbBalance, state.system.exchangeRatio),
-      totalEquivalentIckb:
-        convert(true, state.totalCkbBalance, state.system.exchangeRatio) +
-        state.availableIckbBalance,
-      minimumCkbCapital: state.minCkbBalance,
-      spendableCkb: spendableCkb(state.availableCkbBalance),
-      matchableCkb: matchableCkb(state.availableCkbBalance),
+        state.ckb + state.pendingCkb + convert(false, state.ickb, exchangeRatio),
+      matchableCkb: matchableCkb(state.ckb),
+      cellCount: state.cells.length,
     },
-    orders: {
-      marketCount: state.marketOrders.length,
-      userCount: state.userOrders.length,
-      receiptCount: state.receipts.length,
+    counts: {
+      marketOrders: state.marketOrders.length,
+      receipts: state.receipts.length,
+      readyWithdrawals: state.readyWithdrawals.length,
+      pendingWithdrawals: state.notReadyWithdrawals.length,
+      poolDeposits: state.poolDeposits.length,
+      readyPoolDeposits: state.poolDeposits.filter((deposit) => deposit.isReady).length,
     },
-    withdrawals: {
-      readyCount: state.readyWithdrawals.length,
-      pendingCount: state.notReadyWithdrawals.length,
-    },
-    poolDeposits: {
-      totalCount: state.poolDeposits.length,
-      readyCount: state.poolDeposits.filter((deposit) => deposit.isReady).length,
-    },
-    exchangeRatio: {
-      ckbScale: state.system.exchangeRatio.ckbScale,
-      udtScale: state.system.exchangeRatio.udtScale,
-    },
+    exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,
-    fee: {
-      feeRate: state.system.feeRate,
-    },
+    fee: { feeRate },
   };
 }
 
-export function emptyActions(): BotActions {
-  return {
-    collectedOrders: 0,
-    completedDeposits: 0,
-    matchedOrders: 0,
-    deposits: 0,
-    withdrawalRequests: 0,
-    withdrawals: 0,
-  };
-}
-
-export function actionTotal(actions: BotActions): number {
-  return (
-    actions.collectedOrders +
-    actions.completedDeposits +
-    actions.matchedOrders +
-    actions.deposits +
-    actions.withdrawalRequests +
-    actions.withdrawals
-  );
-}
-
-export function actionsForState(
-  state: BotState,
-  match: Match,
-  rebalance: RebalanceOutcome,
-): BotActions {
-  return {
-    collectedOrders: state.userOrders.length,
-    completedDeposits: state.receipts.length,
-    matchedOrders: match.partials.length,
-    deposits: rebalance.kind === "deposit" ? rebalance.quantity : 0,
-    withdrawalRequests: rebalance.kind === "withdraw" ? rebalance.deposits.length : 0,
-    withdrawals: state.readyWithdrawals.length,
-  };
-}
-
-export function isMatchOnly(actions: BotActions): boolean {
-  return (
-    actions.matchedOrders > 0 &&
-    actions.collectedOrders === 0 &&
-    actions.completedDeposits === 0 &&
-    actions.deposits === 0 &&
-    actions.withdrawalRequests === 0 &&
-    actions.withdrawals === 0
-  );
-}
-
-/**
- * Counts transaction sections for decision logs without exposing transaction contents.
- */
-export function transactionShape(
-  tx: ccc.Transaction,
-): BotDecisionTranscript["transactionShape"] {
+export function transactionShape(tx: ccc.Transaction): BotDecision["transactionShape"] {
   return {
     inputs: tx.inputs.length,
     outputs: tx.outputs.length,
@@ -135,43 +58,20 @@ export function transactionShape(
   };
 }
 
-export function usefulMatchFloors(diagnostics: MatchDiagnostics | undefined): {
-  ckb: bigint;
-  ickb: bigint;
-} {
-  if (diagnostics === undefined) {
-    return { ckb: 0n, ickb: 0n };
-  }
-  return {
-    ckb: usefulDirectionFloor(
-      diagnostics.ckbAllowanceStep,
-      diagnostics.directions.udtToCkb,
-    ),
-    ickb: usefulDirectionFloor(
-      diagnostics.udtAllowanceStep,
-      diagnostics.directions.ckbToUdt,
-    ),
-  };
-}
-
-function usefulDirectionFloor(
-  allowanceStep: bigint,
-  direction: MatchDiagnostics["directions"]["ckbToUdt"],
-): bigint {
-  if (direction.matchableCount === 0) {
-    return 0n;
-  }
-  return maxBigInt(allowanceStep, direction.minAllowance ?? 0n);
-}
-
-export function matchableCkb(availableCkbBalance: bigint): bigint {
-  return maxBigInt(0n, spendableCkb(availableCkbBalance) - DIRECT_DEPOSIT_FEE_HEADROOM);
-}
-
-function spendableCkb(availableCkbBalance: bigint): bigint {
-  return maxBigInt(0n, availableCkbBalance - CKB_RESERVE);
+/** CKB a match may spend: what is available above the reserve. */
+export function matchableCkb(ckb: bigint): bigint {
+  return maxBigInt(0n, ckb - CKB_RESERVE);
 }
 
 export function maxBigInt(left: bigint, right: bigint): bigint {
   return left > right ? left : right;
+}
+
+export function matchedOrderOutPoints(
+  partials: Match["partials"],
+): Array<{ txHash: ccc.Hex; index: string }> {
+  return partials.map((partial) => ({
+    txHash: partial.group.order.cell.outPoint.txHash,
+    index: String(partial.group.order.cell.outPoint.index),
+  }));
 }

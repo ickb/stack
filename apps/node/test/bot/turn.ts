@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP, OrderManager, TransactionBroadcastError } from "@ickb/sdk";
+import { OrderManager, TransactionBroadcastError } from "@ickb/sdk";
 
 import {
   chainState,
@@ -19,12 +19,11 @@ import {
 } from "../../src/bot/turn.ts";
 import type { JsonLogRecord } from "../../src/shared/index.ts";
 import {
+  BAND_ICKB_BALANCE,
   botRuntime,
   completeSearchResult,
   hash,
   l1AccountState,
-  matchDiagnostics,
-  TARGET_ICKB_BALANCE,
   testWithdrawal,
   type L1AccountState,
 } from "./fixtures/bot.ts";
@@ -42,23 +41,7 @@ afterEach(() => {
   process.exitCode = undefined;
 });
 
-it("stops with event-only low-capital evidence", async () => {
-  const harness = turnHarness({ account: l1AccountState() });
-
-  await runBotTurn(harness.context);
-
-  expect(process.exitCode).toBe(2);
-  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
-  expect(harness.events.at(-1)).toMatchObject({
-    reason: "capital_below_minimum",
-    deficit: String((21n * ICKB_DEPOSIT_CAP) / 20n),
-    state: { balances: { minimumCkbCapital: String((21n * ICKB_DEPOSIT_CAP) / 20n) } },
-  });
-  expect(harness.events.at(-1)).not.toHaveProperty("decision");
-  expect(harness.sendTransaction).not.toHaveBeenCalled();
-});
-
-it("records a skipped decision with its transcript and no ring segment list", async () => {
+it("records a skipped decision with its evidence and no ring segment list", async () => {
   noMatch();
   const harness = turnHarness();
 
@@ -67,16 +50,26 @@ it("records a skipped decision with its transcript and no ring segment list", as
   expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
   expect(harness.events[1]).toMatchObject({
     reason: "no_actions",
-    decision: { match: { reason: "no_market_orders" }, rebalance: { kind: "none" } },
+    decision: { match: { reason: "no_market_orders" }, core: { kind: "none" } },
   });
   expect(JSON.stringify(harness.events[1])).not.toContain("segments");
   expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
+it("keeps turning below the recommended funding instead of holding", async () => {
+  noMatch();
+  const harness = turnHarness({ account: l1AccountState() });
+
+  await runBotTurn(harness.context);
+
+  expect(process.exitCode).toBeUndefined();
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
+  expect(harness.sendTransaction).not.toHaveBeenCalled();
+});
+
 it("sends explicitly and waits with the finite production policy", async () => {
-  // A CKB-rich, iCKB-poor account under a useful iCKB floor plans a direct deposit,
-  // the one rebalance kind that carries no ring diagnostics.
-  noMatch(matchDiagnostics({ ckbValue: ccc.fixedPointFrom(2000), udtValue: 99n }));
+  // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
+  noMatch();
   vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(7n);
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
@@ -93,7 +86,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
     BOT_TRANSACTION_COMMITTED,
   ]);
   expect(harness.events[1]).toMatchObject({
-    decision: { rebalance: { kind: "deposit", reason: "low_ickb_balance" } },
+    decision: { rebalance: { deposit: "low_ickb" }, core: { kind: "deposit" } },
   });
   expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
@@ -354,11 +347,11 @@ function turnHarness(
   };
 }
 
-/** By default enough CKB and target iCKB that no policy action is due. */
+/** By default enough CKB and in-band iCKB that no policy action is due. */
 function fundedAccount(
   options: { ckb?: bigint; ickb?: bigint; withdrawal?: boolean } = {},
 ): L1AccountState {
-  const ickb = options.ickb ?? TARGET_ICKB_BALANCE;
+  const ickb = options.ickb ?? BAND_ICKB_BALANCE;
   return l1AccountState({
     capacityCells: [
       ccc.Cell.from({
@@ -382,9 +375,9 @@ function fundedAccount(
   });
 }
 
-function noMatch(diagnostics?: ReturnType<typeof matchDiagnostics>): void {
+function noMatch(): void {
   vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [], diagnostics }),
+    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
   );
 }
 

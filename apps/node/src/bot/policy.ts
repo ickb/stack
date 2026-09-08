@@ -1,64 +1,87 @@
-import { CKB_RESERVE } from "./policy/constants.ts";
-import { canFundDirectDeposit, evaluateRingCoverage } from "./policy/ring.ts";
-import type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
-import { planRebalanceWithdrawal } from "./policy/withdrawal.ts";
+import type { ccc } from "@ckb-ccc/core";
+import { compareBigInt, type IckbDepositCell, ringSurplusDepositFilter } from "@ickb/sdk";
+
+import {
+  CKB_RESERVE,
+  ICKB_REFILL_BELOW,
+  ICKB_RETAIN,
+  ICKB_WITHDRAW_ABOVE,
+  STRESS_DIVISOR,
+} from "./policy/constants.ts";
+import { ringCoverage, type RingSummary } from "./policy/ring.ts";
 
 export { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy/constants.ts";
-export type { PlanRebalanceOptions, RebalancePlan } from "./policy/types.ts";
+export type { RingSummary } from "./policy/ring.ts";
+
+/** Post-match balances and the pool the rebalance decision reads. */
+export interface RebalanceInput {
+  tip: ccc.ClientBlockHeader;
+  /** iCKB the bot holds after the match. */
+  ickb: bigint;
+  /** CKB available to the bot after the match. */
+  ckb: bigint;
+  /** Capacity of one cap-sized deposit plus its receipt. */
+  depositCost: bigint;
+  poolDeposits: readonly IckbDepositCell[];
+}
+
+export type DepositReason = "low_ickb" | "ring_coverage";
 
 /**
- * Chooses at most one deposit or withdrawal-request action for bot inventory and reserve policy.
- *
- * @remarks Reserve recovery can withdraw any ready deposit when ring-surplus
- * selection cannot recover CKB; normal excess withdrawals preserve live ring
- * anchors.
+ * The two rebalance moves a turn may attempt, never both in one transaction: the runtime
+ * tries the deposit first and, when it cannot complete, the withdrawal candidates.
  */
-export function planRebalance(options: PlanRebalanceOptions): RebalancePlan {
-  const {
-    tip,
-    ickbBalance,
-    ckbBalance,
-    directDepositCapacity,
-    directDepositFeeHeadroom = 0n,
-    ickbRefillThreshold = 0n,
-    ckbRecoveryThreshold = CKB_RESERVE,
-    poolDeposits,
-    readyDeposits,
-  } = options;
+export interface RebalancePlan {
+  deposit?: { reason: DepositReason };
+  withdrawal?: {
+    /** Ready deposits in maturity order, surplus first, then anchors under stress. */
+    candidates: IckbDepositCell[];
+    /** iCKB the requests may consume: the balance minus the retained buffer. */
+    budget: bigint;
+    /** Anchors were admitted because spendable CKB is below a fifth of a deposit. */
+    stress: boolean;
+  };
+  ring: RingSummary;
+}
 
-  const needsIckbRefill = ickbBalance < ickbRefillThreshold;
-  if (
-    needsIckbRefill &&
-    canFundDirectDeposit(ckbBalance, directDepositCapacity, directDepositFeeHeadroom)
-  ) {
-    return { kind: "deposit", reason: "low_ickb_balance", quantity: 1 };
+/**
+ * Deposit one cap-sized deposit when the ring's current window lacks coverage or the
+ * bot holds under 2,000 iCKB, if 1,000 CKB remains after it. Withdraw ready surplus
+ * deposits while the bot holds over 120,000 iCKB, keeping 20,000; anchors only under
+ * stress (decisions amendment 52).
+ */
+export function planRebalance(input: RebalanceInput): RebalancePlan {
+  const { tip, ickb, ckb, depositCost, poolDeposits } = input;
+  const ring = ringCoverage(poolDeposits, tip);
+  const plan: RebalancePlan = { ring: ring.summary };
+
+  const depositReason = depositReasonFor(ickb, ring.needsSeed);
+  if (depositReason !== undefined && ckb - depositCost >= CKB_RESERVE) {
+    plan.deposit = { reason: depositReason };
   }
 
-  const ringCoverage = evaluateRingCoverage({
-    poolDeposits,
-    tip,
-    ickbBalance,
-    ckbBalance,
-    directDepositCapacity,
-    directDepositFeeHeadroom,
-    ickbRefillThreshold,
-  });
-  if (ringCoverage.canSeed) {
-    return {
-      kind: "deposit",
-      reason: "ring_inventory",
-      quantity: 1,
-      diagnostics: ringCoverage.diagnostics,
-    };
+  if (ickb > ICKB_WITHDRAW_ABOVE) {
+    const isSurplus = ringSurplusDepositFilter(poolDeposits);
+    const stress = ckb - CKB_RESERVE < depositCost / STRESS_DIVISOR;
+    const ready = poolDeposits
+      .filter((deposit) => deposit.isReady)
+      .toSorted((left, right) =>
+        compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip)),
+      );
+    const candidates = [
+      ...ready.filter(isSurplus),
+      ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),
+    ];
+    if (candidates.length > 0) {
+      plan.withdrawal = { candidates, budget: ickb - ICKB_RETAIN, stress };
+    }
   }
-  return planRebalanceWithdrawal({
-    tip,
-    ickbBalance,
-    ckbBalance,
-    ickbRefillThreshold,
-    ckbRecoveryThreshold,
-    poolDeposits,
-    readyDeposits,
-    diagnostics: ringCoverage.diagnostics,
-  });
+  return plan;
+}
+
+function depositReasonFor(ickb: bigint, needsSeed: boolean): DepositReason | undefined {
+  if (ickb < ICKB_REFILL_BELOW) {
+    return "low_ickb";
+  }
+  return needsSeed ? "ring_coverage" : undefined;
 }

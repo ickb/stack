@@ -9,7 +9,6 @@ import {
   type MatchSearchResult,
   OrderData,
   type OrderGroup,
-  type OrderManager,
   OwnerCell,
   OwnerData,
   Ratio,
@@ -45,7 +44,10 @@ export interface BotRuntimeOptions {
 }
 
 export const hash = byte32FromByte;
-export const TARGET_ICKB_BALANCE = ccc.fixedPointFrom(120000);
+/** Plain change the default test completion returns: comfortably above the reserve. */
+export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
+/** An iCKB balance inside the band: above the refill line, below the withdrawal line. */
+export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
 export const NO_DEPOSITS: IckbDepositCell[] = [];
 
 /**
@@ -189,6 +191,7 @@ export function testWithdrawal(byte: string): WithdrawalGroup {
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   const client = overrides.client ?? new FakeClient(chainState());
   const config = getConfig("testnet");
+  const primaryLock = overrides.primaryLock ?? script("11");
 
   return {
     client,
@@ -209,13 +212,16 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       },
       ...overrides.sdk,
     }),
-    primaryLock: overrides.primaryLock ?? script("11"),
+    primaryLock,
     accountLocks: [script("11")],
+    // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
       (async (tx): Promise<ccc.Transaction> => {
         await Promise.resolve();
-        return ccc.Transaction.from(tx);
+        const completed = ccc.Transaction.from(tx).clone();
+        completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
+        return completed;
       }),
     sendTransaction:
       overrides.sendTransaction ??
@@ -229,13 +235,10 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
 export function botState(overrides: Partial<BotState>): BotState {
   const state: BotState = {
     marketOrders: [],
-    availableCkbBalance: 0n,
-    availableIckbBalance: 0n,
-    unavailableCkbBalance: 0n,
-    totalCkbBalance: 0n,
+    ckb: 0n,
+    ickb: 0n,
+    pendingCkb: 0n,
     depositCapacity: ccc.fixedPointFrom(100_000),
-    minCkbBalance: 0n,
-    userOrders: [],
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
@@ -372,43 +375,4 @@ class TestEpoch extends ccc.Epoch {
   public override toUnix(): bigint {
     return this.unix;
   }
-}
-
-/** Complete-match diagnostics whose ckbToUdt side leaves a useful iCKB floor. */
-export function matchDiagnostics({
-  ckbValue,
-  udtValue,
-  positiveGain = 0,
-}: {
-  ckbValue: bigint;
-  udtValue: bigint;
-  positiveGain?: number;
-}): ReturnType<typeof OrderManager.bestMatch>["match"]["diagnostics"] {
-  return {
-    orderCount: 1,
-    allowance: { ckbValue, udtValue },
-    ckbAllowanceStep: 100n,
-    udtAllowanceStep: 100n,
-    ckbMiningFee: 1n,
-    candidateBudget: 100_000,
-    workCount: 1,
-    generatedStates: { ckbToUdt: 1, udtToCkb: 0 },
-    directions: {
-      ckbToUdt: { matchableCount: 1, minAllowance: 100n, maxMatch: 1000n },
-      udtToCkb: { matchableCount: 0 },
-    },
-    candidates: {
-      total: 1,
-      viable: 1,
-      positiveGain,
-      rejected: {
-        maxPartials: 0,
-        duplicateOrder: 0,
-        insufficientCkbAllowance: 0,
-        insufficientUdtAllowance: positiveGain === 0 ? 1 : 0,
-        nonPositiveGain: 0,
-      },
-      bestGain: BigInt(positiveGain),
-    },
-  };
 }

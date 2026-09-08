@@ -71,7 +71,7 @@ describe("readBotState pool snapshot", () => {
 });
 
 describe("readBotState", () => {
-  it("excludes own orders from the market and projects account availability", async () => {
+  it("ignores own orders and projects account availability", async () => {
     const ownOrder = await testOrderGroup("46", 7n);
     const marketOrder = (await testMatch("47")).group;
     const capacityCell = ccc.Cell.from({
@@ -108,16 +108,12 @@ describe("readBotState", () => {
 
     const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
 
-    expect(state.userOrders).toEqual([ownOrder]);
+    // Own orders do not exist for the bot: not in the market, not in the balances.
     expect(state.marketOrders).toEqual([marketOrder]);
-    expect(state.availableCkbBalance).toBe(
-      capacityCell.cellOutput.capacity + ownOrder.ckbValue,
-    );
-    expect(state.availableIckbBalance).toBe(11n + ownOrder.udtValue);
-    expect(state.unavailableCkbBalance).toBe(0n);
-    expect(state.totalCkbBalance).toBe(
-      state.availableCkbBalance + state.unavailableCkbBalance,
-    );
+    expect(state.ckb).toBe(capacityCell.cellOutput.capacity);
+    expect(state.ickb).toBe(11n);
+    expect(state.pendingCkb).toBe(0n);
+    expect(state.cells).toEqual([capacityCell, nativeUdtCell]);
   });
 });
 

@@ -11,14 +11,14 @@ import type {
   WithdrawalGroup,
 } from "@ickb/sdk";
 
-import type { RebalanceDiagnostics, RebalancePlan } from "../policy/types.ts";
+import type { DepositReason, RingSummary } from "../policy.ts";
 
 /** Runtime dependencies used by each bot loop iteration. */
 export interface Runtime {
   /** CCC client for the configured chain. */
   client: ccc.Client;
 
-  /** SDK instance for public state scans and partial transaction builders. */
+  /** SDK instance for public state reads and partial transaction builders. */
   sdk: IckbSdk;
 
   /** Lower-level managers from the selected deployment config. */
@@ -49,10 +49,7 @@ export interface BotState {
   /** Sampled public L1 state. */
   system: SystemState;
 
-  /** User-owned order groups. */
-  userOrders: OrderGroup[];
-
-  /** Public market orders eligible for matching. */
+  /** Public market orders eligible for matching; own orders are not part of it. */
   marketOrders: OrderGroup[];
 
   /** User receipt cells ready for deposit completion. */
@@ -70,32 +67,25 @@ export interface BotState {
   /** The bot's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
   cells: ccc.Cell[];
 
-  /** Spendable CKB after projected availability rules. */
-  availableCkbBalance: bigint;
+  /** CKB available now: plain cells, collectible receipt capacity, ready withdrawals. */
+  ckb: bigint;
 
-  /** Spendable iCKB after projected availability rules. */
-  availableIckbBalance: bigint;
+  /** iCKB available now: xUDT cells plus receipts. */
+  ickb: bigint;
 
-  /** CKB represented by pending or otherwise unavailable paths. */
-  unavailableCkbBalance: bigint;
+  /** CKB locked in withdrawal requests that are not ready yet. */
+  pendingCkb: bigint;
 
-  /** Total projected CKB balance. */
-  totalCkbBalance: bigint;
-
-  /** Capacity used for one direct deposit output. */
+  /** Capacity of one cap-sized deposit output at the sampled exchange ratio. */
   depositCapacity: bigint;
-
-  /** Minimum CKB-equivalent capital required before the bot acts. */
-  minCkbBalance: bigint;
 }
 
-/** Counts of actions selected for a candidate transaction. */
+/** Counts of actions a transaction carries. */
 export interface BotActions {
-  collectedOrders: number;
-  completedDeposits: number;
   matchedOrders: number;
   deposits: number;
   withdrawalRequests: number;
+  completedDeposits: number;
   withdrawals: number;
 }
 
@@ -108,97 +98,52 @@ export type BuildTransactionSkipReason =
   | "no_actions"
   | "match_search_incomplete"
   | "match_value_not_above_fee"
-  | "post_tx_ckb_reserve";
+  | "no_fundable_candidate";
 
-export type BotDecisionSkipReason = BuildTransactionSkipReason | "capital_below_minimum";
-
+/** Why the turn carries no match beyond these; `match.diagnostics` has the SDK's counters. */
 export type BotMatchReason =
-  | "matched"
-  | "no_market_orders"
-  | "search_incomplete"
-  | "no_matchable_orders"
-  | "insufficient_allowance"
-  | "no_viable_candidates"
-  | "max_partials"
-  | "no_positive_gain";
+  "matched" | "no_market_orders" | "search_incomplete" | "no_match";
 
-/** The policy's reasons, plus the runtime's when no withdrawal prefix could be funded. */
-type BotRebalanceReason = RebalancePlan["reason"] | "no_fundable_withdrawal_prefix";
+/** One action core the completion walk tries; the match and the collections ride on every one. */
+export type Core =
+  | { kind: "none" }
+  | { kind: "deposit"; reason: DepositReason }
+  | { kind: "withdraw"; deposits: IckbDepositCell[]; stress: boolean };
 
-/**
- * The rebalance a candidate transaction carries: the policy plan, or the runtime's outcome
- * when the completion walk accepted a shorter withdrawal prefix or none at all.
- */
-export type RebalanceOutcome = (
-  | RebalancePlan
-  | {
-      kind: "none";
-      reason: "no_fundable_withdrawal_prefix";
-      diagnostics: RebalanceDiagnostics | undefined;
-    }
-) & { withdrawalCandidateCount?: number };
-
-/**
- * Bot transaction-build outcome with the decision transcript used for logs and events.
- */
+/** Bot transaction-build outcome with the decision evidence used for logs and events. */
 export type BuildTransactionResult =
-  | {
-      kind: "built";
-      tx: ccc.Transaction;
-      actions: BotActions;
-      decision: BotDecisionTranscript;
-    }
+  | { kind: "built"; tx: ccc.Transaction; actions: BotActions; decision: BotDecision }
   | {
       kind: "skipped";
       reason: BuildTransactionSkipReason;
       actions: BotActions;
-      decision: BotDecisionTranscript;
+      decision: BotDecision;
     };
 
-export interface CandidateTransaction {
-  tx: ccc.Transaction;
-  actions: BotActions;
-  rebalance: RebalanceOutcome;
-  decision: BotDecisionTranscript;
-}
-
-/**
- * Structured evidence for one bot planning attempt.
- */
-export interface BotDecisionTranscript {
+/** Structured evidence for one bot planning attempt. */
+export interface BotDecision {
   chainTip: {
     blockNumber: bigint;
     blockHash: ccc.Hex;
     timestamp: bigint;
-    epoch: {
-      integer: bigint;
-      numerator: bigint;
-      denominator: bigint;
-    };
+    epoch: { integer: bigint; numerator: bigint; denominator: bigint };
   };
   balances: {
-    availableCkb: bigint;
-    unavailableCkb: bigint;
-    totalCkb: bigint;
-    availableIckb: bigint;
+    ckb: bigint;
+    ickb: bigint;
+    pendingCkb: bigint;
+    /** Total liquid capital in CKB terms, own orders excluded. */
     totalEquivalentCkb: bigint;
-    totalEquivalentIckb: bigint;
-    minimumCkbCapital: bigint;
-    spendableCkb: bigint;
     matchableCkb: bigint;
+    cellCount: number;
   };
-  orders: {
-    marketCount: number;
-    userCount: number;
-    receiptCount: number;
-  };
-  withdrawals: {
-    readyCount: number;
-    pendingCount: number;
-  };
-  poolDeposits: {
-    totalCount: number;
-    readyCount: number;
+  counts: {
+    marketOrders: number;
+    receipts: number;
+    readyWithdrawals: number;
+    pendingWithdrawals: number;
+    poolDeposits: number;
+    readyPoolDeposits: number;
   };
   match: {
     reason: BotMatchReason;
@@ -206,107 +151,37 @@ export interface BotDecisionTranscript {
     ckbDelta: bigint;
     udtDelta: bigint;
     matchedOrderOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
-    matchedOrderMasterOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
     value?: bigint;
     diagnostics?: MatchDiagnostics;
     search?: BotMatchSearchEvidence;
   };
   rebalance: {
-    kind: RebalancePlan["kind"];
-    reason: BotRebalanceReason;
-    depositQuantity?: number;
-    /** Requests the accepted prefix carries; `withdrawalCandidateCount` is the policy's list. */
-    withdrawalRequestCount?: number;
-    withdrawalCandidateCount?: number;
-    projectedAvailableCkb: bigint;
-    projectedAvailableIckb: bigint;
+    deposit?: DepositReason;
+    withdrawal?: { candidateCount: number; stress: boolean };
+    ring: RingSummary;
   };
-  audit: {
-    /** Reserve projection based on selected actions, not plain-cell accounting. */
-    reserveCheck: {
-      /** CKB available before applying selected match and rebalance actions. */
-      availableCkb: bigint;
-      /** CKB delta contributed by order matching. */
-      matchCkbDelta: bigint;
-      /** CKB cost of the selected rebalance action. */
-      rebalanceCkbCost: bigint;
-      /** Direct deposit capacity component of the rebalance cost. */
-      directDepositCost: bigint;
-      /** Withdrawal request capacity component of the rebalance cost. */
-      withdrawalRequestCost: bigint;
-      /** Optional estimated fee applied to the projection. */
-      estimatedFee?: bigint;
-      /** Projected available CKB after the candidate transaction. */
-      projectedPostTransactionCkb: bigint;
-      /** Required CKB reserve floor. */
-      reserve: bigint;
-      /** Positive shortfall below reserve after projection. */
-      deficit: bigint;
-      /** True when a withdrawal rebalance with non-negative match CKB delta may cross the immediate reserve. */
-      recoveryException: boolean;
-    };
-    rebalanceCosts: {
-      directDepositCapacity: bigint;
-      directDepositFeeHeadroom: bigint;
-      directDepositCost: bigint;
-      withdrawalRequestCost: bigint;
-    };
-    /** Compact shape of the pool ring the rebalance policy evaluated; the only ring evidence kept. */
-    selectedRing?: {
-      poolDepositCount: number;
-      ringLength: bigint;
-      segmentCount: number;
-      targetSegmentIndex: number;
-      targetDepositCount: number;
-      targetUdtValue: bigint;
-      totalPoolUdt: bigint;
-      emptySegmentCount: number;
-      nonemptySegmentCount: number;
-      heaviestSegmentIndex: number;
-      heaviestSegmentDepositCount: number;
-      heaviestSegmentUdtValue: bigint;
-      protectedDepositCount: number;
-      protectedUdtValue: bigint;
-      surplusDepositCount: number;
-      surplusUdtValue: bigint;
-      canCreateRingInventory: boolean;
-      shouldBootstrapRing: boolean;
-    };
-  };
+  /** The core the walk settled on and how many candidates it built on the way. */
+  core: { kind: Core["kind"]; withdrawalRequests: number; attempts: number };
   actions: BotActions;
-  fee: {
-    feeRate: ccc.Num;
-    estimated?: bigint;
-  };
-  transactionShape: {
+  fee: { feeRate: ccc.Num; estimated?: bigint };
+  transactionShape?: {
     inputs: number;
     outputs: number;
     cellDeps: number;
     headerDeps: number;
     witnesses: number;
   };
-  exchangeRatio: {
-    ckbScale: bigint;
-    udtScale: bigint;
-  };
+  exchangeRatio: { ckbScale: bigint; udtScale: bigint };
   depositCapacity: bigint;
   skip?: {
-    reason: BotDecisionSkipReason;
+    reason: BuildTransactionSkipReason;
     fee?: bigint;
     matchValue?: bigint;
-    attemptedActions?: BotActions;
     matchSearch?: BotMatchSearchEvidence;
   };
 }
 
 export type BotStateSummary = Pick<
-  BotDecisionTranscript,
-  | "chainTip"
-  | "balances"
-  | "orders"
-  | "withdrawals"
-  | "poolDeposits"
-  | "exchangeRatio"
-  | "depositCapacity"
-  | "fee"
+  BotDecision,
+  "chainTip" | "balances" | "counts" | "exchangeRatio" | "depositCapacity" | "fee"
 >;

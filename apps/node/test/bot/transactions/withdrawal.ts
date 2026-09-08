@@ -1,286 +1,194 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP, IckbError, OrderManager, Ratio } from "@ickb/sdk";
+import {
+  ICKB_DEPOSIT_CAP,
+  IckbError,
+  OrderManager,
+  type IckbDepositCell,
+} from "@ickb/sdk";
 
-import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
+import { ICKB_RETAIN, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
+import type { Runtime } from "../../../src/bot/runtime/types.ts";
 import {
   botRuntime,
   botState,
   completeSearchResult,
-  hash,
+  FUNDED_CHANGE,
   readyDeposit,
-  TARGET_ICKB_BALANCE,
+  testWithdrawal,
 } from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("buildTransaction withdrawal reserve staging", () => {
-  it("allows withdrawal requests from an available CKB reserve deficit", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const state = botState({
-      availableCkbBalance: 0n,
-      availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
-      totalCkbBalance: 0n,
-      depositCapacity: 1000n,
-      poolDeposits: [
-        readyDeposit("82", 4n, 20n * 60n * 1000n),
-        readyDeposit("83", 6n, 25n * 60n * 1000n),
-        readyDeposit("84", 5n, 40n * 60n * 1000n),
-      ],
-    });
+const MINUTE = 60n * 1000n;
 
-    const result = await buildTransaction(
-      botRuntime({ primaryLock: script("11") }),
-      state,
-    );
+function noMatch(): void {
+  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
+    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
+  );
+}
 
-    expect(result).toMatchObject({ kind: "built", actions: { withdrawalRequests: 2 } });
-    expect(result.decision.skip).toBeUndefined();
-  });
-});
-
-describe("buildTransaction excess withdrawal reserve crossing", () => {
-  it("allows excess withdrawal requests that cross below the available CKB reserve", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const withdrawal = readyDeposit("86", ccc.fixedPointFrom(1000), 20n * 60n * 1000n);
-    const protectedAnchor = readyDeposit(
-      "8a",
-      ccc.fixedPointFrom(1001),
-      25n * 60n * 1000n,
-    );
-    const futureFirst = readyDeposit("87", ccc.fixedPointFrom(1000), 9n, {
-      isReady: false,
-    });
-    const futureSecond = readyDeposit("88", ccc.fixedPointFrom(1000), 10n, {
-      isReady: false,
-    });
-    const state = botState({
-      availableCkbBalance: CKB_RESERVE + 50n,
-      availableIckbBalance: TARGET_ICKB_BALANCE + ccc.fixedPointFrom(1000),
-      totalCkbBalance: CKB_RESERVE + 50n,
-      depositCapacity: ccc.fixedPointFrom(1000),
-      poolDeposits: [withdrawal, protectedAnchor, futureFirst, futureSecond],
-      system: systemState("89"),
-    });
-
-    const result = await buildTransaction(
-      botRuntime({ primaryLock: script("11") }),
-      state,
-    );
-
-    expect(result).toMatchObject({
-      kind: "built",
-      actions: { withdrawalRequests: 2 },
-      decision: { rebalance: { kind: "withdraw", reason: "excess_ickb_balance" } },
-    });
-    expect(result.decision.audit.reserveCheck.recoveryException).toBe(true);
-    expect(result.decision.skip).toBeUndefined();
-  });
-});
-
-describe("buildTransaction withdrawal surplus selection", () => {
-  it("passes the ring surplus deposits to SDK base transaction construction", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    const first = readyDeposit("11", 4n, 20n * 60n * 1000n);
-    const protectedAnchor = readyDeposit("12", 6n, 25n * 60n * 1000n);
-    const third = readyDeposit("13", 5n, 40n * 60n * 1000n);
-    const completeTransaction = vi.fn(
-      async (txLike: ccc.TransactionLike): Promise<ccc.Transaction> => {
-        await Promise.resolve();
-        return ccc.Transaction.from(txLike);
-      },
-    );
-    const runtime = botRuntime({ completeTransaction, primaryLock: script("44") });
-    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
-
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
-        depositCapacity: 1000n,
-        poolDeposits: [first, protectedAnchor, third],
-      }),
-    );
-
-    expect(result.kind).toBe("built");
-    expect(result.actions.withdrawalRequests).toBe(2);
-    expect(buildBaseTransaction.mock.calls[0]?.[1]).toMatchObject({
-      withdrawalRequest: {
-        deposits: [first, third],
-      },
-    });
-    expect(completeTransaction).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("buildTransaction excess withdrawal ready deposit selection", () => {
-  it("labels excess withdrawals and passes only ready deposits", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    const extra = readyDeposit("14", 4n, 20n * 60n * 1000n);
-    const protectedAnchor = readyDeposit("15", 6n, 25n * 60n * 1000n);
-    const futureFirst = readyDeposit("16", 100n, 9n, { isReady: false });
-    const futureSecond = readyDeposit("17", 100n, 10n, { isReady: false });
-    const runtime = botRuntime({ primaryLock: script("46") });
-    const buildBaseTransaction = vi.spyOn(runtime.sdk, "buildBaseTransaction");
-
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        availableCkbBalance: ccc.fixedPointFrom(1999),
-        availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
-        depositCapacity: ccc.fixedPointFrom(1000),
-        poolDeposits: [extra, protectedAnchor, futureFirst, futureSecond],
-        system: systemState("18"),
-      }),
-    );
-
-    expect(result).toMatchObject({
-      kind: "built",
-      actions: { withdrawalRequests: 2 },
-      decision: { rebalance: { kind: "withdraw", reason: "excess_ickb_balance" } },
-    });
-    const withdrawalRequest = buildBaseTransaction.mock.calls[0]?.[1]?.withdrawalRequest;
-    expect(withdrawalRequest).toMatchObject({
-      deposits: [extra, protectedAnchor],
-    });
-    expect(withdrawalRequest?.deposits).not.toContain(futureFirst);
-    expect(withdrawalRequest?.deposits).not.toContain(futureSecond);
-  });
-});
-
-function systemState(hashByte: string): Parameters<typeof botState>[0]["system"] {
-  return {
-    feeRate: 1n,
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-    orderPool: [],
-    ckbAvailable: 0n,
-    ckbMaturing: [],
-    poolDeposits: { deposits: [], id: "pool" },
-    tip: headerLike({
-      number: 3n,
-      hash: hash(hashByte),
-      timestamp: 0n,
-      epoch: [0n, 0n, 1n],
-    }),
+/** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
+function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
+  const daoScript = botRuntime().managers.dao.script;
+  return async (txLike): Promise<ccc.Transaction> => {
+    await Promise.resolve();
+    const tx = ccc.Transaction.from(txLike).clone();
+    const requests = tx.outputs.filter((output) => output.type?.eq(daoScript) === true);
+    if (requests.length > maxRequests) {
+      throw new IckbError("too many markers", { code: "insufficient_capacity" });
+    }
+    if (requests.length === 0) {
+      tx.addOutput({ capacity: FUNDED_CHANGE, lock: botRuntime().primaryLock }, "0x");
+    }
+    return tx;
   };
 }
 
-describe("buildTransaction excess withdrawal without a fundable prefix", () => {
-  it("proceeds without withdrawals when completion can fund no prefix", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-    );
-    const state = botState({
-      availableCkbBalance: ccc.fixedPointFrom(2000),
-      availableIckbBalance: TARGET_ICKB_BALANCE + 9n,
-      totalCkbBalance: ccc.fixedPointFrom(2000),
-      depositCapacity: 1000n,
-      poolDeposits: [
-        readyDeposit("82", 4n, 20n * 60n * 1000n),
-        readyDeposit("83", 6n, 25n * 60n * 1000n),
-        readyDeposit("84", 5n, 40n * 60n * 1000n),
-      ],
-    });
-    const completeTransaction = vi.fn(async () => {
-      await Promise.resolve();
-      throw new IckbError("short", { code: "insufficient_capacity" });
-    });
+/** Surplus deposits in one covered ring: an anchor per window plus these extras. */
+function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
+  return [readyDeposit("a0", ICKB_DEPOSIT_CAP + 1n, 0n), ...extras];
+}
+
+describe("buildTransaction withdrawal", () => {
+  it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
+    noMatch();
+    const first = readyDeposit("81", 4n, 0n);
+    const second = readyDeposit("82", 6n, 5n * MINUTE);
+    const third = readyDeposit("83", 5n, 10n * MINUTE);
+    const completeTransaction = completingUpTo(2);
+    const runtime = botRuntime({ completeTransaction });
+    const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
 
     const result = await buildTransaction(
-      botRuntime({ primaryLock: script("11"), completeTransaction }),
-      state,
-    );
-
-    // Excess withdrawals have no any-deposit fallback; the turn ends with nothing to do,
-    // and the compact ring evidence the policy evaluated stays in the transcript.
-    expect(result).toMatchObject({
-      kind: "skipped",
-      reason: "no_actions",
-      decision: {
-        rebalance: {
-          kind: "none",
-          reason: "no_fundable_withdrawal_prefix",
-          withdrawalCandidateCount: 2,
-        },
-        audit: { selectedRing: { poolDepositCount: 3 } },
-      },
-    });
-    expect(completeTransaction).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("buildTransaction prefix walk with the real builders", () => {
-  it("retries a shorter prefix from a clean base when completion rejects the longer one", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const deposits = ["a1", "a2", "a3"].map((byte, index) =>
-      readyDeposit(byte, ICKB_DEPOSIT_CAP, BigInt(20 + 5 * index) * 60n * 1000n),
-    );
-    const attempts: number[] = [];
-    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike);
-      attempts.push(tx.inputs.length);
-      if (attempts.length === 1) {
-        throw new IckbError("short", { code: "insufficient_capacity" });
-      }
-      return tx;
-    });
-
-    const result = await buildTransaction(
-      botRuntime({ completeTransaction }),
+      runtime,
       botState({
-        availableCkbBalance: ccc.fixedPointFrom(2000),
-        availableIckbBalance: TARGET_ICKB_BALANCE + 2n * ICKB_DEPOSIT_CAP,
-        totalCkbBalance: ccc.fixedPointFrom(2000),
-        depositCapacity: ccc.fixedPointFrom(100_000),
-        poolDeposits: deposits,
+        ckb: ccc.fixedPointFrom(500_000),
+        ickb: ICKB_WITHDRAW_ABOVE + 100n,
+        poolDeposits: pool([third, first, second]),
       }),
     );
 
-    // Two surplus deposits were candidates; the first attempt spent both, the second
-    // attempt starts from the match again and spends one.
-    expect(attempts).toEqual([2, 1]);
+    expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([first, second]);
     expect(result).toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 1 },
-      decision: { rebalance: { withdrawalRequestCount: 1, withdrawalCandidateCount: 2 } },
+      actions: { withdrawalRequests: 2 },
+      decision: {
+        rebalance: { withdrawal: { candidateCount: 3, stress: false } },
+        core: { kind: "withdraw", withdrawalRequests: 2, attempts: 2 },
+      },
     });
-    if (result.kind !== "built") {
-      throw new Error("Expected a built transaction");
-    }
-    expect(result.tx.inputs).toHaveLength(1);
+  });
+
+  it("rebuilds the chain from the next oldest deposit when the first chain cannot complete", async () => {
+    noMatch();
+    const big = readyDeposit("84", ICKB_DEPOSIT_CAP, 0n);
+    const small = readyDeposit("85", ICKB_DEPOSIT_CAP / 2n, 5n * MINUTE);
+    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
+      await Promise.resolve();
+      const tx = ccc.Transaction.from(txLike).clone();
+      if (tx.inputs.some((input) => input.previousOutput.eq(big.cell.outPoint))) {
+        throw new IckbError("the big deposit does not fit", {
+          code: "insufficient_capacity",
+        });
+      }
+      return tx;
+    });
+    const runtime = botRuntime({ completeTransaction });
+    const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
+    // Budget takes the big deposit alone; the small one only fits once the big one is dropped.
+    const ickb = ICKB_RETAIN + ICKB_DEPOSIT_CAP + ICKB_DEPOSIT_CAP / 4n;
+
+    const result = await buildTransaction(
+      runtime,
+      botState({
+        ckb: ccc.fixedPointFrom(500_000),
+        ickb,
+        poolDeposits: pool([big, small]),
+      }),
+    );
+
+    expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([small]);
+    expect(result).toMatchObject({
+      kind: "built",
+      decision: { core: { kind: "withdraw", withdrawalRequests: 1, attempts: 2 } },
+    });
+  });
+
+  it("accepts a withdrawal that leaves no plain reserve, since it brings CKB back", async () => {
+    noMatch();
+    const only = readyDeposit("86", 4n, 0n);
+    const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
+
+    const result = await buildTransaction(
+      runtime,
+      botState({
+        ckb: ccc.fixedPointFrom(1500),
+        ickb: ICKB_WITHDRAW_ABOVE + 100n,
+        poolDeposits: pool([only]),
+      }),
+    );
+
+    expect(result).toMatchObject({ kind: "built", actions: { withdrawalRequests: 1 } });
+  });
+
+  it("starts the chain past a surplus deposit larger than the budget", async () => {
+    noMatch();
+    // The pool anchor stays the largest; the oversize surplus alone repeats the next chain.
+    const oversize = readyDeposit("85", ICKB_DEPOSIT_CAP + 200n, 0n);
+    const fitting = readyDeposit("86", 4n, 5n * MINUTE);
+    const completeTransaction = vi.fn(completingUpTo(1));
+    const runtime = botRuntime({ completeTransaction });
+
+    const result = await buildTransaction(
+      runtime,
+      botState({
+        ckb: ccc.fixedPointFrom(500_000),
+        ickb: ICKB_WITHDRAW_ABOVE + 100n,
+        poolDeposits: [
+          readyDeposit("a0", ICKB_DEPOSIT_CAP + 300n, 0n),
+          oversize,
+          fitting,
+        ],
+      }),
+    );
+
+    expect(completeTransaction).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      kind: "built",
+      decision: {
+        rebalance: { withdrawal: { candidateCount: 2 } },
+        core: { kind: "withdraw", withdrawalRequests: 1, attempts: 1 },
+      },
+    });
+  });
+
+  it("collects alone when no withdrawal prefix can complete, and skips when there is nothing", async () => {
+    noMatch();
+    const only = readyDeposit("87", 4n, 0n);
+    const runtime = botRuntime({ completeTransaction: completingUpTo(0) });
+    const state = {
+      ckb: ccc.fixedPointFrom(500_000),
+      ickb: ICKB_WITHDRAW_ABOVE + 100n,
+      poolDeposits: pool([only]),
+    };
+
+    await expect(
+      buildTransaction(
+        runtime,
+        botState({ ...state, readyWithdrawals: [testWithdrawal("88")] }),
+      ),
+    ).resolves.toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 0, withdrawals: 1 },
+      decision: { core: { kind: "none", attempts: 2 } },
+    });
+    await expect(buildTransaction(runtime, botState(state))).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "no_fundable_candidate",
+    });
   });
 });

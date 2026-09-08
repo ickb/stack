@@ -9,7 +9,7 @@ import {
 } from "../shared/index.ts";
 import type {
   BotActions,
-  BotDecisionTranscript,
+  BotDecision,
   BotStateSummary,
   BuildTransactionSkipReason,
 } from "./runtime/types.ts";
@@ -38,21 +38,14 @@ export type BotEvent =
       type: "bot.decision.skipped";
       reason: BuildTransactionSkipReason;
       actions: BotActions;
-      decision: BotDecisionTranscript;
-    }
-  | {
-      type: "bot.decision.skipped";
-      reason: "capital_below_minimum";
-      actions: BotActions;
-      state: BotStateSummary;
-      deficit: bigint;
+      decision: BotDecision;
     }
   | {
       type: "bot.transaction.built";
       actions: BotActions;
-      fee: BotDecisionTranscript["fee"];
-      transactionShape: BotDecisionTranscript["transactionShape"];
-      decision: BotDecisionTranscript;
+      fee: BotDecision["fee"];
+      transactionShape: BotDecision["transactionShape"];
+      decision: BotDecision;
     }
   | {
       type: "bot.transaction.sent";
@@ -62,7 +55,7 @@ export type BotEvent =
       elapsedMs: number;
       fee: bigint;
       feeRate: ccc.Num;
-      transactionShape: BotDecisionTranscript["transactionShape"];
+      transactionShape: BotDecision["transactionShape"];
       error?: unknown;
     }
   | {

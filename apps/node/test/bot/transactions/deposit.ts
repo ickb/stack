@@ -1,182 +1,126 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager, receiptPhase2Capacity } from "@ickb/sdk";
+import { ICKB_DEPOSIT_CAP, IckbError, OrderManager } from "@ickb/sdk";
 
-import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
+import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
+import type { Runtime } from "../../../src/bot/runtime/types.ts";
 import {
   botRuntime,
   botState,
   completeSearchResult,
-  matchDiagnostics,
-  searchResult,
-  TARGET_ICKB_BALANCE,
-  testMatch,
+  readyDeposit,
 } from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("buildTransaction direct deposit seeding", () => {
-  it("labels direct ring seeding decisions", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
+const MINUTE = 60n * 1000n;
+const RICH_CKB = ccc.fixedPointFrom(500_000);
 
-    const lock = script("45");
-    const runtime = botRuntime({ primaryLock: lock });
-    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
-    const state = botState({
-      availableCkbBalance: ccc.fixedPointFrom(3000),
-      availableIckbBalance: TARGET_ICKB_BALANCE + CKB_RESERVE,
-      depositCapacity: ccc.fixedPointFrom(1100),
-      totalCkbBalance: ccc.fixedPointFrom(3000),
+function noMatch(): void {
+  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
+    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
+  );
+}
+
+/** Completion that leaves `change` plain CKB with the bot. */
+function completing(change: bigint): Runtime["completeTransaction"] {
+  return async (txLike): Promise<ccc.Transaction> => {
+    await Promise.resolve();
+    const tx = ccc.Transaction.from(txLike).clone();
+    tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
+    return tx;
+  };
+}
+
+describe("buildTransaction deposit", () => {
+  it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
+    noMatch();
+    const runtime = botRuntime({
+      completeTransaction: completing(ccc.fixedPointFrom(2000)),
     });
+    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
-    await expect(buildTransaction(runtime, state)).resolves.toMatchObject({
+    const result = await buildTransaction(
+      runtime,
+      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
+    );
+
+    expect(deposit).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      ccc.fixedPointFrom(1100),
+      runtime.primaryLock,
+    );
+    expect(result).toMatchObject({
       kind: "built",
       actions: { deposits: 1 },
       decision: {
-        audit: {
-          reserveCheck: {
-            directDepositCost: ccc.fixedPointFrom(1100) + receiptPhase2Capacity(lock),
-            estimatedFee: 1n,
-          },
-          rebalanceCosts: {
-            directDepositCapacity: ccc.fixedPointFrom(1100) + receiptPhase2Capacity(lock),
-            directDepositFeeHeadroom: ccc.fixedPointFrom(1),
-          },
-          selectedRing: {
-            targetDepositCount: 0,
-            canCreateRingInventory: true,
-            shouldBootstrapRing: true,
-          },
-        },
-        rebalance: { kind: "deposit", reason: "ring_inventory" },
+        rebalance: { deposit: "low_ickb", ring: { poolDepositCount: 0 } },
+        core: { kind: "deposit", attempts: 1 },
       },
     });
-    expect(deposit).toHaveBeenCalledTimes(1);
   });
-});
 
-describe("buildTransaction low iCKB direct deposit refill", () => {
-  it("refills iCKB when post-match balance is below the useful UDT floor", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-        diagnostics: matchDiagnostics({
-          ckbValue: ccc.fixedPointFrom(2000),
-          udtValue: 99n,
-        }),
-      }),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const runtime = botRuntime();
-    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
-
-    await expect(
-      buildTransaction(
-        runtime,
-        botState({
-          availableCkbBalance: ccc.fixedPointFrom(3000),
-          availableIckbBalance: 99n,
-          depositCapacity: ccc.fixedPointFrom(1100),
-          totalCkbBalance: ccc.fixedPointFrom(3000),
-          marketOrders: [(await testMatch("6c")).group],
-        }),
-      ),
-    ).resolves.toMatchObject({
-      kind: "built",
-      actions: { deposits: 1 },
-      decision: { rebalance: { kind: "deposit", reason: "low_ickb_balance" } },
+  it("rejects a deposit that would leave less than the reserve in plain CKB", async () => {
+    noMatch();
+    const runtime = botRuntime({
+      completeTransaction: completing(ccc.fixedPointFrom(999)),
     });
-    expect(deposit).toHaveBeenCalledTimes(1);
-  });
 
-  it("skips direct iCKB refill when only capacity and reserve are available", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-        diagnostics: matchDiagnostics({
-          ckbValue: ccc.fixedPointFrom(1000),
-          udtValue: 99n,
-        }),
-      }),
+    const result = await buildTransaction(
+      runtime,
+      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
     );
-    const completeTransaction = vi.fn();
-    const runtime = botRuntime({ completeTransaction });
-    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
-    await expect(
-      buildTransaction(
-        runtime,
-        botState({
-          availableCkbBalance: ccc.fixedPointFrom(1000) + CKB_RESERVE,
-          availableIckbBalance: 99n,
-          depositCapacity: ccc.fixedPointFrom(1100),
-          totalCkbBalance: ccc.fixedPointFrom(1000) + CKB_RESERVE,
-          marketOrders: [(await testMatch("6d")).group],
-        }),
-      ),
-    ).resolves.toMatchObject({
+    expect(result).toMatchObject({
       kind: "skipped",
-      reason: "no_actions",
-      decision: {
-        rebalance: { kind: "none", reason: "low_ickb_ckb_reserve_unavailable" },
-      },
+      reason: "no_fundable_candidate",
+      decision: { core: { kind: "none", attempts: 1 } },
     });
-    expect(deposit).not.toHaveBeenCalled();
-    expect(completeTransaction).not.toHaveBeenCalled();
   });
-});
 
-describe("buildTransaction post-match direct deposit refill", () => {
-  it("refills iCKB in the same transaction when a match depletes it below the useful UDT floor", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      searchResult(
-        "complete",
-        [await testMatch("6e", { ckbDelta: 1n, udtDelta: -60n })],
-        matchDiagnostics({
-          ckbValue: ccc.fixedPointFrom(2000),
-          udtValue: 150n,
-          positiveGain: 1,
-        }),
-      ),
+  it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
+    noMatch();
+    // An under-covered tip window with one ready surplus deposit, and excess iCKB.
+    const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP, 0n);
+    const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n, 0n);
+    const whale = readyDeposit("73", 30n * ICKB_DEPOSIT_CAP, 60n * MINUTE);
+    const daoScript = botRuntime().managers.dao.script;
+    const primaryLock = botRuntime().primaryLock;
+    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
+      await Promise.resolve();
+      const tx = ccc.Transaction.from(txLike).clone();
+      const isDeposit = (output: ccc.CellOutput): boolean =>
+        output.type?.eq(daoScript) === true &&
+        output.capacity === ccc.fixedPointFrom(100_000);
+      if (tx.outputs.some(isDeposit)) {
+        throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
+      }
+      tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
+      return tx;
+    });
+    const runtime = botRuntime({ completeTransaction });
+
+    const result = await buildTransaction(
+      runtime,
+      botState({
+        ckb: RICH_CKB,
+        ickb: ICKB_WITHDRAW_ABOVE + 1n,
+        poolDeposits: [surplus, anchor, whale],
+      }),
     );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1n);
-    const runtime = botRuntime();
-    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
 
-    await expect(
-      buildTransaction(
-        runtime,
-        botState({
-          availableCkbBalance: ccc.fixedPointFrom(3000),
-          availableIckbBalance: 150n,
-          depositCapacity: ccc.fixedPointFrom(1100),
-          totalCkbBalance: ccc.fixedPointFrom(3000),
-          marketOrders: [(await testMatch("6f")).group],
-        }),
-      ),
-    ).resolves.toMatchObject({
+    expect(completeTransaction).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
       kind: "built",
-      actions: { matchedOrders: 1, deposits: 1 },
+      actions: { deposits: 0, withdrawalRequests: 1 },
       decision: {
-        match: { reason: "matched" },
-        rebalance: { kind: "deposit", reason: "low_ickb_balance" },
+        rebalance: { deposit: "ring_coverage", withdrawal: { candidateCount: 1 } },
+        core: { kind: "withdraw", withdrawalRequests: 1, attempts: 2 },
       },
     });
-    expect(deposit).toHaveBeenCalledTimes(1);
   });
 });
