@@ -2,18 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "../../utils/index.ts";
 import { OrderData } from "./order_data.ts";
 
-interface ResolvedOrderGroupAttestation {
-  master: ccc.Cell;
-  origin: ccc.Cell;
-  /**
-   * The group parsed once from private clones of the resolved cells: matching and
-   * transactions use it, so nothing the caller does to its own wrappers or cells reaches
-   * them, and no call re-parses the book.
-   */
-  canonical: OrderGroup;
-}
-
-const resolvedOrderGroups = new WeakMap<ccc.Cell, ResolvedOrderGroupAttestation>();
+// The resolver's own group, keyed by its order cell: matching and transactions use this
+// parse, so a caller's own wrapper is only ever a key into it.
+const resolvedOrderGroups = new WeakMap<ccc.Cell, OrderGroup>();
 
 /**
  * Represents a parsed order cell on the blockchain.
@@ -515,35 +506,25 @@ export class OrderGroup implements ValueComponents {
 /** Records canonical resolver output without exposing forgeable provenance data. */
 export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
   group.validate();
-  const canonical = new OrderGroup(
-    MasterCell.from(group.master.cell.clone()),
-    OrderCell.mustFrom(group.order.cell.clone()),
-    OrderCell.mustFrom(group.origin.cell.clone()),
-  );
-  canonical.validate();
-  resolvedOrderGroups.set(group.order.cell, {
-    master: group.master.cell,
-    origin: group.origin.cell,
-    canonical,
-  });
+  resolvedOrderGroups.set(group.order.cell, group);
   return group;
 }
 
-/** Returns the resolver's parse of a group at a matching or transaction boundary. */
+/** Returns the resolver's group at a matching or transaction boundary. */
 export function validatedOrderGroup(group: OrderGroup): OrderGroup {
   if (!(group instanceof OrderGroup)) {
     throw new TypeError("Matching requires resolved OrderGroups from findOrders()");
   }
 
-  const attestation = resolvedOrderGroups.get(group.order.cell);
-  if (attestation === undefined) {
+  const attested = resolvedOrderGroups.get(group.order.cell);
+  if (attested === undefined) {
     throw new TypeError("OrderGroup was not produced by the order resolver");
   }
   if (
-    group.master.cell !== attestation.master ||
-    group.origin.cell !== attestation.origin
+    group.master.cell !== attested.master.cell ||
+    group.origin.cell !== attested.origin.cell
   ) {
     throw new TypeError("OrderGroup does not match its resolver attestation");
   }
-  return attestation.canonical;
+  return attested;
 }

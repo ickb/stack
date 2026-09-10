@@ -349,6 +349,29 @@ function registerOrderGroupProvenanceTests(): void {
 }
 
 function registerMeltGroupValidationTests(): void {
+  it("builds the transaction of a best match from the resolver's groups", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      master: { type: "absolute", value: { txHash: byte32FromByte("77"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("5b"), index: 0n },
+    });
+    const group = resolvedOrderGroup(order);
+    // The order pays one CKB per iCKB while the rate values CKB double, so the bot gains.
+    const result = OrderManager.bestMatch(
+      [group],
+      { ckbValue: 0n, udtValue: ccc.fixedPointFrom(1000) },
+      { ckbScale: 2n, udtScale: 1n },
+    );
+
+    expect(result.match.partials).toHaveLength(1);
+    expect(manager.addMatch(ccc.Transaction.default(), result.match).inputs).toHaveLength(
+      1,
+    );
+  });
+
   it("rejects melt groups from a different manager", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const foreignOrder = makeOrderCell({
