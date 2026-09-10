@@ -24,7 +24,6 @@ import type {
   BotActions,
   BotDecision,
   BotMatchReason,
-  BotMatchSearchEvidence,
   BotState,
   BuildTransactionResult,
   BuildTransactionSkipReason,
@@ -78,9 +77,10 @@ export async function buildTransaction(
 
   if (cores.length === 0) {
     const skip = decision({ kind: "none" }, 0);
-    return searchResult.kind === "incomplete"
-      ? skipped("match_search_incomplete", skip, { matchSearch: skip.match.search })
-      : skipped("no_actions", skip);
+    return skipped(
+      searchResult.kind === "incomplete" ? "match_search_incomplete" : "no_actions",
+      skip,
+    );
   }
 
   let attempts = 0;
@@ -265,9 +265,6 @@ function buildDecision({
         ? {}
         : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
       ...(match.diagnostics === undefined ? {} : { diagnostics: match.diagnostics }),
-      ...(searchResult.kind === "complete"
-        ? {}
-        : { search: incompleteSearchEvidence(searchResult) }),
     },
     rebalance: {
       ...(plan.deposit === undefined ? {} : { deposit: plan.deposit.reason }),
@@ -294,11 +291,7 @@ function buildDecision({
 function skipped(
   reason: BuildTransactionSkipReason,
   decision: BotDecision,
-  details: {
-    fee?: bigint;
-    matchValue?: bigint;
-    matchSearch?: BotMatchSearchEvidence;
-  } = {},
+  details: { fee?: bigint; matchValue?: bigint } = {},
 ): BuildTransactionResult {
   return {
     kind: "skipped",
@@ -306,11 +299,4 @@ function skipped(
     actions: decision.actions,
     decision: { ...decision, skip: { reason, ...details } },
   };
-}
-
-function incompleteSearchEvidence(
-  result: Extract<MatchSearchResult, { kind: "incomplete" }>,
-): BotMatchSearchEvidence {
-  const { kind, budget, work, gap } = result;
-  return { kind, budget, work, gap };
 }

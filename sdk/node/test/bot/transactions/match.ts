@@ -66,8 +66,8 @@ describe("buildTransaction matching", () => {
       kind: "skipped",
       reason: "match_search_incomplete",
       decision: {
-        match: { reason: "search_incomplete", search: { kind: "incomplete" } },
-        skip: { reason: "match_search_incomplete", matchSearch: { kind: "incomplete" } },
+        match: { reason: "search_incomplete" },
+        skip: { reason: "match_search_incomplete" },
       },
     });
   });
@@ -159,7 +159,6 @@ describe("buildTransaction matching", () => {
           partialCount: 1,
           value: ccc.fixedPointFrom(10),
           matchedOrderOutPoints: [{ index: "1" }],
-          search: { kind: "incomplete" },
         },
         core: { kind: "none", attempts: 1 },
         fee: { estimated: 1000n },

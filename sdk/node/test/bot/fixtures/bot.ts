@@ -121,10 +121,7 @@ export function searchResult(
     partials,
     ...(diagnostics === undefined ? {} : { diagnostics }),
   };
-  if (kind === "complete") {
-    return completeSearchResult(match);
-  }
-  return incompleteSearchResult(match);
+  return { kind, match };
 }
 
 export function completeSearchResult(match: Match): MatchSearchResult {
@@ -132,13 +129,7 @@ export function completeSearchResult(match: Match): MatchSearchResult {
 }
 
 export function incompleteSearchResult(match: Match): MatchSearchResult {
-  return {
-    kind: "incomplete",
-    match,
-    budget: 100_000,
-    work: 100_001,
-    gap: 1n,
-  };
+  return { kind: "incomplete", match };
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */

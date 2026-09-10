@@ -13,9 +13,7 @@ interface Node {
   matcher: OrderMatcher;
   full: Match;
   key: string;
-  /** Gain of the whole fill, net of its fee; negative for a losing order. */
-  gain: bigint;
-  /** The whole gain as a number, for ranking closers cheaply. */
+  /** Gain of the whole fill, net of its fee, as a number for ranking closers cheaply. */
   gainNumber: number;
   /** Gain per unit of the asset the bot pays, for what a smaller fill is worth. */
   rate: number;
@@ -41,6 +39,12 @@ interface State {
 interface Fill {
   key: string;
   fill: Match;
+}
+
+/** What the bot still holds of each asset. */
+interface Balances {
+  ckb: bigint;
+  udt: bigint;
 }
 
 /** How many unused orders of a direction a node probes as closers, per fill size. */
@@ -100,7 +104,6 @@ class Search {
         matcher,
         full,
         key: matcher.group.order.cell.outPoint.toHex(),
-        gain,
         gainNumber: Number(gain),
         rate: Number(gain) / Number(matcher.bMaxMatch),
         next,
@@ -163,26 +166,16 @@ export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   const diagnostics = context.diagnostics;
   diagnostics.workCount = search.work;
   diagnostics.bestGain = search.best.gain;
-  const match = { ...search.best.match, diagnostics };
-  if (!search.exhausted) {
-    diagnostics.gainUpperBound = search.best.gain;
-    return { kind: "complete", match };
-  }
-  const upper = maxBigInt(search.unvisitedUpper, search.best.gain);
-  diagnostics.gainUpperBound = upper;
+  diagnostics.gainUpperBound = maxBigInt(search.unvisitedUpper, search.best.gain);
   return {
-    kind: "incomplete",
-    match,
-    budget: context.candidateBudget,
-    work: search.work,
-    gap: upper - search.best.gain,
+    kind: search.exhausted ? "incomplete" : "complete",
+    match: { ...search.best.match, diagnostics },
   };
 }
 
 function visit(search: Search, node: Node | undefined, state: State): void {
   const { context } = search;
-  const upper =
-    stateGain(context, state) + (node?.positiveGain ?? 0n) + search.closerUpper;
+  const upper = gainOf(context, state) + (node?.positiveGain ?? 0n) + search.closerUpper;
   if (!search.charge(upper)) {
     return;
   }
@@ -309,31 +302,24 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
     }
     return found;
   };
+  // Closers of one direction paid from what is left: buyers spend the iCKB and must
+  // repair a CKB deficit, sellers the reverse, each fill's fee taken off the CKB first.
+  const closers = (left: Balances, isBuyer: boolean, except?: string): Fill[] =>
+    isBuyer
+      ? fills(search.buyers, left.udt, fee - left.ckb, except)
+      : fills(search.sellers, left.ckb - fee, -left.udt, except);
+  const left = { ckb: ckbLeft, udt: udtLeft };
   consider([]);
-  const bought = fills(search.buyers, udtLeft, -(ckbLeft - fee));
-  const sold = fills(search.sellers, ckbLeft - fee, -udtLeft);
-  for (const { key, fill } of bought) {
-    consider([fill]);
-    const ckbAfter = ckbLeft - 2n * fee + fill.ckbDelta;
-    for (const seller of fills(
-      search.sellers,
-      ckbAfter,
-      -(udtLeft + fill.udtDelta),
-      key,
-    )) {
-      consider([fill, seller.fill]);
-    }
-  }
-  for (const { key, fill } of sold) {
-    consider([fill]);
-    const udtAfter = udtLeft + fill.udtDelta;
-    for (const buyer of fills(
-      search.buyers,
-      udtAfter,
-      -(ckbLeft - 2n * fee + fill.ckbDelta),
-      key,
-    )) {
-      consider([fill, buyer.fill]);
+  for (const isBuyer of [true, false]) {
+    for (const { key, fill } of closers(left, isBuyer)) {
+      consider([fill]);
+      const after = {
+        ckb: left.ckb - fee + fill.ckbDelta,
+        udt: left.udt + fill.udtDelta,
+      };
+      for (const other of closers(after, !isBuyer, key)) {
+        consider([fill, other.fill]);
+      }
     }
   }
   return best;
@@ -356,14 +342,6 @@ function withFills(state: State, fills: Match[]): Match {
     match.partials.push(...fill.partials);
   }
   return match;
-}
-
-function stateGain(context: BestMatchContext, state: State): bigint {
-  return gainOf(context, {
-    ckbDelta: state.ckbDelta,
-    udtDelta: state.udtDelta,
-    partials: state.partials,
-  });
 }
 
 function hasSlot(context: BestMatchContext, state: State, needed: number): boolean {

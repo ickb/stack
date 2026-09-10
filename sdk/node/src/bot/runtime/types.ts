@@ -6,11 +6,7 @@ import type {
   ReceiptCell,
   WithdrawalGroup,
 } from "../../../../src/core/index.ts";
-import type {
-  MatchDiagnostics,
-  MatchSearchResult,
-  OrderGroup,
-} from "../../../../src/order/index.ts";
+import type { MatchDiagnostics, OrderGroup } from "../../../../src/order/index.ts";
 import type { IckbSdk } from "../../../../src/sdk.ts";
 
 import type { DepositReason, RingSummary } from "../policy.ts";
@@ -91,11 +87,6 @@ export interface BotActions {
   withdrawals: number;
 }
 
-export type BotMatchSearchEvidence = Pick<
-  Extract<MatchSearchResult, { kind: "incomplete" }>,
-  "budget" | "gap" | "kind" | "work"
->;
-
 export type BuildTransactionSkipReason =
   | "no_actions"
   | "match_search_incomplete"
@@ -155,7 +146,6 @@ export interface BotDecision {
     matchedOrderOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
     value?: bigint;
     diagnostics?: MatchDiagnostics;
-    search?: BotMatchSearchEvidence;
   };
   rebalance: {
     deposit?: DepositReason;
@@ -179,7 +169,6 @@ export interface BotDecision {
     reason: BuildTransactionSkipReason;
     fee?: bigint;
     matchValue?: bigint;
-    matchSearch?: BotMatchSearchEvidence;
   };
 }
 

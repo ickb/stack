@@ -529,15 +529,12 @@ describe(ORDER_MATCHER_SUITE, () => {
 
     const result = OrderManager.bestMatch(groups, allowance, exchangeRate, options);
 
-    expect(result).toMatchObject({ kind: "incomplete", budget: 3 });
-    if (result.kind !== "incomplete") {
-      throw new Error("Expected an incomplete search");
-    }
-    expect(result.gap).toBeGreaterThanOrEqual(0n);
+    expect(result.kind).toBe("incomplete");
     expect(allowance.ckbValue + result.match.ckbDelta).toBeGreaterThanOrEqual(0n);
     expect(allowance.udtValue + result.match.udtDelta).toBeGreaterThanOrEqual(0n);
-    expect(result.match.diagnostics?.gainUpperBound).toBe(
-      (result.match.diagnostics?.bestGain ?? 0n) + result.gap,
+    expect(result.match.diagnostics).toMatchObject({ candidateBudget: 3, workCount: 3 });
+    expect(result.match.diagnostics?.gainUpperBound).toBeGreaterThanOrEqual(
+      result.match.diagnostics?.bestGain ?? 0n,
     );
   });
 });

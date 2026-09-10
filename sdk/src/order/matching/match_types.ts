@@ -30,24 +30,18 @@ export interface Match {
   diagnostics?: MatchDiagnostics;
 }
 
-/** Result of the bounded best-match search. @public */
-export type MatchSearchResult =
-  | {
-      /** Every branch was visited or pruned: the match is the best of the search space. */
-      kind: "complete";
-      match: Match;
-    }
-  | {
-      /** The work budget ended the search; the match is the best feasible one visited. */
-      kind: "incomplete";
-      match: Match;
-      /** Configured node budget. */
-      budget: number;
-      /** Nodes visited. */
-      work: number;
-      /** How much more gain an unvisited branch could at most have reached. */
-      gap: bigint;
-    };
+/**
+ * Result of the bounded best-match search: `complete` when every branch was visited or
+ * pruned, so the match is the best of the search space; `incomplete` when the work
+ * budget ended the search, so the match is the best feasible one visited and the
+ * diagnostics bound what an unvisited branch could still have reached.
+ *
+ * @public
+ */
+export interface MatchSearchResult {
+  kind: "complete" | "incomplete";
+  match: Match;
+}
 
 /**
  * Search diagnostics for best-match selection.
@@ -61,9 +55,9 @@ export interface MatchDiagnostics {
   allowance: ValueComponents;
   /** CKB fee budget reserved per matched order. */
   ckbMiningFee: ccc.FixedPoint;
-  /** Maximum number of search nodes. */
+  /** The work budget: nodes, closers examined, and probes. */
   candidateBudget: number;
-  /** Search nodes visited. */
+  /** Work done, never beyond the budget. */
   workCount: number;
   /** Optional maximum number of partial order outputs. */
   maxPartials?: number;
