@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { OrderManager } from "../../../../src/order/index.ts";
+import { partialOrderFee } from "../../../../src/order/io/order_io.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
@@ -8,10 +9,7 @@ import {
   BAND_ICKB_BALANCE,
   botRuntime,
   botState,
-  completeSearchResult,
-  incompleteSearchResult,
-  searchResult,
-  testMatch,
+  marketOrder,
   testWithdrawal,
 } from "../fixtures/bot.ts";
 
@@ -34,49 +32,34 @@ function completing(change = RESERVE_CHANGE): Parameters<typeof botRuntime>[0] {
 }
 
 describe("buildTransaction matching", () => {
-  it("offers the CKB above the reserve and all the iCKB as match allowance", async () => {
-    const bestMatch = vi
-      .spyOn(OrderManager, "bestMatch")
-      .mockReturnValue(
-        completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-      );
-
-    await buildTransaction(
-      botRuntime(),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
-    );
-
-    expect(bestMatch.mock.calls[0]?.[1]).toEqual({
-      ckbValue: ccc.fixedPointFrom(4000),
-      udtValue: BAND_ICKB_BALANCE,
+  it("offers the CKB above the reserve, less the fill's fee, to a seller", async () => {
+    // The seller hands over twice its CKB ask in iCKB, whole only.
+    const ask = ccc.fixedPointFrom(4000);
+    const seller = marketOrder({
+      byte: "30",
+      ckb: 0n,
+      udt: 2n * ask,
+      ratio: { ckbScale: 2n, udtScale: 1n },
+      ckbMinMatchLog: 44,
     });
-  });
+    const fee = partialOrderFee([seller], 1n);
+    const state = (ckb: bigint): ReturnType<typeof botState> =>
+      botState({ marketOrders: [seller], ckb, ickb: BAND_ICKB_BALANCE });
 
-  it("skips an empty incomplete search with its evidence when nothing else is due", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      incompleteSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
+    const short = await buildTransaction(
+      botRuntime(completing()),
+      state(CKB_RESERVE + ask + fee - 1n),
+    );
+    const enough = await buildTransaction(
+      botRuntime(completing()),
+      state(CKB_RESERVE + ask + fee),
     );
 
-    const result = await buildTransaction(
-      botRuntime(),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
-    );
-
-    expect(result).toMatchObject({
-      kind: "skipped",
-      reason: "match_search_incomplete",
-      decision: {
-        match: { reason: "search_incomplete" },
-        skip: { reason: "match_search_incomplete" },
-      },
-    });
+    expect(short.decision.match).toMatchObject({ reason: "no_match", candidates: 1 });
+    expect(enough.decision.match).toMatchObject({ reason: "matched", partialCount: 1 });
   });
 
   it("skips with no_actions when the book, the collections, and the rebalance are all empty", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-    );
-
     const result = await buildTransaction(
       botRuntime(),
       botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
@@ -86,68 +69,59 @@ describe("buildTransaction matching", () => {
       kind: "skipped",
       reason: "no_actions",
       decision: {
-        match: { reason: "no_market_orders" },
+        match: { reason: "no_market_orders", candidates: 0 },
         core: { kind: "none", attempts: 0 },
       },
     });
   });
 
-  it("reports no_match with the matcher's diagnostics when the allowance takes no order", async () => {
-    const marketOrders = [(await testMatch("33")).group];
+  it("reports no_match when the balances pay no fill", async () => {
+    const buyer = marketOrder({
+      byte: "31",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
 
     const result = await buildTransaction(
       botRuntime(),
-      botState({ marketOrders, ckb: CKB_RESERVE, ickb: 0n }),
+      botState({ marketOrders: [buyer], ckb: CKB_RESERVE, ickb: 0n }),
     );
 
     expect(result).toMatchObject({
       kind: "skipped",
       reason: "no_actions",
-      decision: {
-        match: { reason: "no_match", partialCount: 0, diagnostics: { orderCount: 1 } },
-      },
+      decision: { match: { reason: "no_match", partialCount: 0, candidates: 1 } },
     });
   });
 
-  it("propagates unexpected match search failures", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockImplementation(() => {
-      throw new Error("search failed");
+  it("propagates unexpected match failures", async () => {
+    vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
+      throw new Error("match failed");
     });
 
     await expect(buildTransaction(botRuntime(), botState({}))).rejects.toThrow(
-      "search failed",
+      "match failed",
     );
   });
 
-  it("skips a pure match whose value does not beat the fee of its own bytes", async () => {
-    const partial = await testMatch("31", { ckbDelta: 5n });
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      searchResult("complete", [partial]),
-    );
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(5n);
-
-    const result = await buildTransaction(
-      botRuntime(completing()),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
-    );
-
-    expect(result).toMatchObject({
-      kind: "skipped",
-      reason: "match_value_not_above_fee",
-      decision: { match: { value: 5n }, skip: { fee: 5n, matchValue: 5n } },
+  it("builds a gaining match with its evidence", async () => {
+    // The buyer pays two CKB per iCKB against a one-to-one rate.
+    const buyer = marketOrder({
+      byte: "32",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
     });
-  });
-
-  it("builds a profitable match, incomplete searches included, with its evidence", async () => {
-    const partial = await testMatch("32", { ckbDelta: ccc.fixedPointFrom(10) });
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      searchResult("incomplete", [partial]),
-    );
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1000n);
 
     const result = await buildTransaction(
       botRuntime(completing()),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
+      botState({
+        marketOrders: [buyer],
+        ckb: ccc.fixedPointFrom(5000),
+        ickb: BAND_ICKB_BALANCE,
+      }),
     );
 
     expect(result).toMatchObject({
@@ -157,19 +131,19 @@ describe("buildTransaction matching", () => {
         match: {
           reason: "matched",
           partialCount: 1,
-          value: ccc.fixedPointFrom(10),
-          matchedOrderOutPoints: [{ index: "1" }],
+          ckbDelta: ccc.fixedPointFrom(200),
+          udtDelta: -ccc.fixedPointFrom(100),
+          matchedOrderOutPoints: [{ index: "0" }],
+          candidates: 1,
         },
         core: { kind: "none", attempts: 1 },
         fee: { estimated: 1000n },
       },
     });
+    expect(typeof result.decision.match.seed).toBe("number");
   });
 
   it("sends collections alone and counts them", async () => {
-    vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-      completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-    );
     const runtime = botRuntime(completing());
     const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
 

@@ -5,18 +5,14 @@ import {
   type IckbDepositCell,
   receiptPhase2Capacity,
 } from "../../../../src/core/index.ts";
-import {
-  type Match,
-  type MatchSearchResult,
-  OrderManager,
-} from "../../../../src/order/index.ts";
+import type { Match } from "../../../../src/order/index.ts";
 
+import { matchTurn, seedOf, type TurnMatch } from "../match.ts";
 import { planRebalance, type RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import {
   matchableCkb,
   matchedOrderOutPoints,
-  MAX_MATCH_PARTIALS,
   summarizeBotState,
   transactionShape,
 } from "./support.ts";
@@ -32,8 +28,7 @@ import type {
 } from "./types.ts";
 
 interface MatchOutcome {
-  match: Match;
-  searchResult: MatchSearchResult;
+  match: TurnMatch;
   tx: ccc.Transaction;
 }
 
@@ -43,16 +38,9 @@ interface MatchOutcome {
  * riding along. Matches and deposits must leave the reserve in plain CKB after fees;
  * withdrawal requests bring CKB back, so they only need to complete (decisions amendment 52).
  */
-function matchReason(
-  match: Match,
-  searchResult: MatchSearchResult,
-  state: BotState,
-): BotMatchReason {
+function matchReason(match: Match, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
-  }
-  if (searchResult.kind === "incomplete") {
-    return "search_incomplete";
   }
   return state.marketOrders.length === 0 ? "no_market_orders" : "no_match";
 }
@@ -62,7 +50,7 @@ export async function buildTransaction(
   state: BotState,
 ): Promise<BuildTransactionResult> {
   const matched = matchOutcome(runtime, state);
-  const { match, searchResult } = matched;
+  const { match } = matched;
   const plan = planRebalance({
     tip: state.system.tip,
     ickb: state.ickb + match.udtDelta,
@@ -76,11 +64,7 @@ export async function buildTransaction(
     buildDecision({ state, matched, plan, core, attempts, tx });
 
   if (cores.length === 0) {
-    const skip = decision({ kind: "none" }, 0);
-    return skipped(
-      searchResult.kind === "incomplete" ? "match_search_incomplete" : "no_actions",
-      skip,
-    );
+    return skipped("no_actions", decision({ kind: "none" }, 0));
   }
 
   let attempts = 0;
@@ -99,31 +83,19 @@ export async function buildTransaction(
   }
   const { candidate: core, tx } = completion;
   const built = decision(core, attempts, tx);
-  if (core.kind === "none" && !hasCollections) {
-    // A pure match must beat the fee of its own bytes; the sweep never vetoes it.
-    const matchValue = matchValueCkb(match, state);
-    const fee = matched.tx.estimateFee(state.system.feeRate);
-    built.match.value = matchValue;
-    if (matchValue <= fee) {
-      return skipped("match_value_not_above_fee", built, { fee, matchValue });
-    }
-  }
   return { kind: "built", tx, actions: built.actions, decision: built };
 }
 
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
-  const searchResult = OrderManager.bestMatch(
-    state.marketOrders,
-    { ckbValue: matchableCkb(state.ckb), udtValue: state.ickb },
-    state.system.exchangeRatio,
-    { feeRate: state.system.feeRate, maxPartials: MAX_MATCH_PARTIALS },
-  );
-  const { match } = searchResult;
-  return {
-    match,
-    searchResult,
-    tx: runtime.managers.order.addMatch(ccc.Transaction.default(), match),
-  };
+  const match = matchTurn({
+    orders: state.marketOrders,
+    ckb: matchableCkb(state.ckb),
+    udt: state.ickb,
+    exchangeRatio: state.system.exchangeRatio,
+    feeRate: state.system.feeRate,
+    seed: seedOf(state.system.tip.hash),
+  });
+  return { match, tx: runtime.managers.order.addMatch(ccc.Transaction.default(), match) };
 }
 
 /**
@@ -226,11 +198,6 @@ function plainCkbAfter(tx: ccc.Transaction, lock: ccc.Script): bigint {
   return total;
 }
 
-function matchValueCkb(match: Match, state: BotState): bigint {
-  const { ckbScale, udtScale } = state.system.exchangeRatio;
-  return match.ckbDelta + (match.udtDelta * udtScale) / ckbScale;
-}
-
 function buildDecision({
   state,
   matched,
@@ -246,7 +213,7 @@ function buildDecision({
   attempts: number;
   tx?: ccc.Transaction;
 }): BotDecision {
-  const { match, searchResult } = matched;
+  const { match } = matched;
   const actions: BotActions = {
     matchedOrders: match.partials.length,
     deposits: core.kind === "deposit" ? 1 : 0,
@@ -257,14 +224,15 @@ function buildDecision({
   return {
     ...summarizeBotState(state),
     match: {
-      reason: matchReason(match, searchResult, state),
+      reason: matchReason(match, state),
       partialCount: match.partials.length,
       ckbDelta: match.ckbDelta,
       udtDelta: match.udtDelta,
       ...(match.partials.length === 0
         ? {}
         : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
-      ...(match.diagnostics === undefined ? {} : { diagnostics: match.diagnostics }),
+      candidates: match.candidates,
+      seed: match.seed,
     },
     rebalance: {
       ...(plan.deposit === undefined ? {} : { deposit: plan.deposit.reason }),
@@ -291,12 +259,11 @@ function buildDecision({
 function skipped(
   reason: BuildTransactionSkipReason,
   decision: BotDecision,
-  details: { fee?: bigint; matchValue?: bigint } = {},
 ): BuildTransactionResult {
   return {
     kind: "skipped",
     reason,
     actions: decision.actions,
-    decision: { ...decision, skip: { reason, ...details } },
+    decision: { ...decision, skip: { reason } },
   };
 }

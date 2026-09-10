@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/sdk_error.ts";
 import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "../../../../src/core/index.ts";
-import { OrderManager } from "../../../../src/order/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_RETAIN, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
@@ -10,7 +9,6 @@ import type { Runtime } from "../../../src/bot/runtime/types.ts";
 import {
   botRuntime,
   botState,
-  completeSearchResult,
   FUNDED_CHANGE,
   readyDeposit,
   testWithdrawal,
@@ -21,12 +19,6 @@ afterEach(() => {
 });
 
 const MINUTE = 60n * 1000n;
-
-function noMatch(): void {
-  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-  );
-}
 
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
@@ -52,7 +44,6 @@ function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
 
 describe("buildTransaction withdrawal", () => {
   it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
-    noMatch();
     const first = readyDeposit("81", 4n, 0n);
     const second = readyDeposit("82", 6n, 5n * MINUTE);
     const third = readyDeposit("83", 5n, 10n * MINUTE);
@@ -81,7 +72,6 @@ describe("buildTransaction withdrawal", () => {
   });
 
   it("rebuilds the chain from the next oldest deposit when the first chain cannot complete", async () => {
-    noMatch();
     const big = readyDeposit("84", ICKB_DEPOSIT_CAP, 0n);
     const small = readyDeposit("85", ICKB_DEPOSIT_CAP / 2n, 5n * MINUTE);
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
@@ -116,7 +106,6 @@ describe("buildTransaction withdrawal", () => {
   });
 
   it("accepts a withdrawal that leaves no plain reserve, since it brings CKB back", async () => {
-    noMatch();
     const only = readyDeposit("86", 4n, 0n);
     const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
 
@@ -133,7 +122,6 @@ describe("buildTransaction withdrawal", () => {
   });
 
   it("starts the chain past a surplus deposit larger than the budget", async () => {
-    noMatch();
     // The pool anchor stays the largest; the oversize surplus alone repeats the next chain.
     const oversize = readyDeposit("85", ICKB_DEPOSIT_CAP + 200n, 0n);
     const fitting = readyDeposit("86", 4n, 5n * MINUTE);
@@ -164,7 +152,6 @@ describe("buildTransaction withdrawal", () => {
   });
 
   it("collects alone when no withdrawal prefix can complete, and skips when there is nothing", async () => {
-    noMatch();
     const only = readyDeposit("87", 4n, 0n);
     const runtime = botRuntime({ completeTransaction: completingUpTo(0) });
     const state = {

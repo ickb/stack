@@ -6,7 +6,7 @@ import type {
   ReceiptCell,
   WithdrawalGroup,
 } from "../../../../src/core/index.ts";
-import type { MatchDiagnostics, OrderGroup } from "../../../../src/order/index.ts";
+import type { OrderGroup } from "../../../../src/order/index.ts";
 import type { IckbSdk } from "../../../../src/sdk.ts";
 
 import type { DepositReason, RingSummary } from "../policy.ts";
@@ -87,15 +87,10 @@ export interface BotActions {
   withdrawals: number;
 }
 
-export type BuildTransactionSkipReason =
-  | "no_actions"
-  | "match_search_incomplete"
-  | "match_value_not_above_fee"
-  | "no_fundable_candidate";
+export type BuildTransactionSkipReason = "no_actions" | "no_fundable_candidate";
 
-/** Why the turn carries no match beyond these; `match.diagnostics` has the SDK's counters. */
-export type BotMatchReason =
-  "matched" | "no_market_orders" | "search_incomplete" | "no_match";
+/** Why the turn carries no match: an empty book, or no fill the balances pay that returns its cost. */
+export type BotMatchReason = "matched" | "no_market_orders" | "no_match";
 
 /** One action core the completion walk tries; the match and the collections ride on every one. */
 export type Core =
@@ -144,8 +139,10 @@ export interface BotDecision {
     ckbDelta: bigint;
     udtDelta: bigint;
     matchedOrderOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
-    value?: bigint;
-    diagnostics?: MatchDiagnostics;
+    /** Order directions the balances were offered to. */
+    candidates: number;
+    /** The shuffle seed of the turn's match. */
+    seed: number;
   };
   rebalance: {
     deposit?: DepositReason;
@@ -165,11 +162,7 @@ export interface BotDecision {
   };
   exchangeRatio: { ckbScale: bigint; udtScale: bigint };
   depositCapacity: bigint;
-  skip?: {
-    reason: BuildTransactionSkipReason;
-    fee?: bigint;
-    matchValue?: bigint;
-  };
+  skip?: { reason: BuildTransactionSkipReason };
 }
 
 export type BotStateSummary = Pick<

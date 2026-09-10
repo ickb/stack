@@ -7,12 +7,12 @@ import {
   type IckbDepositCell,
   WithdrawalGroup,
 } from "../../../../src/core/index.ts";
+import { Info, type Match, OrderGroup, Ratio } from "../../../../src/order/index.ts";
 import {
-  type Match,
-  type MatchSearchResult,
-  type OrderGroup,
-  Ratio,
-} from "../../../../src/order/index.ts";
+  attestResolvedOrderGroup,
+  MasterCell,
+  OrderCell,
+} from "../../../../src/order/model/cells.ts";
 import { OrderData } from "../../../../src/order/model/order_data.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 
@@ -103,33 +103,63 @@ export async function testMatch(
   };
 }
 
-/** A search result whose deltas are the sum of its partials, as the real matcher's are. */
-export function searchResult(
-  kind: "complete" | "incomplete",
-  partials: Match["partials"],
-  diagnostics?: Match["diagnostics"],
-): MatchSearchResult {
-  const match: Match = {
-    ckbDelta: partials.reduce(
-      (sum, { group, ckbOut }) => sum + group.order.ckbValue - ckbOut,
-      0n,
-    ),
-    udtDelta: partials.reduce(
-      (sum, { group, udtOut }) => sum + group.order.udtValue - udtOut,
-      0n,
-    ),
-    partials,
-    ...(diagnostics === undefined ? {} : { diagnostics }),
-  };
-  return { kind, match };
-}
-
-export function completeSearchResult(match: Match): MatchSearchResult {
-  return { kind: "complete", match };
-}
-
-export function incompleteSearchResult(match: Match): MatchSearchResult {
-  return { kind: "incomplete", match };
+/**
+ * A market order the resolver would attest, from the bot's side: a buyer offers CKB for
+ * iCKB at the ratio, a seller iCKB for CKB, and the minimum match is the exponent.
+ */
+export function marketOrder({
+  byte,
+  ckb,
+  udt,
+  ratio,
+  ckbMinMatchLog = 0,
+}: {
+  byte: string;
+  ckb: bigint;
+  udt: bigint;
+  ratio: { ckbScale: bigint; udtScale: bigint };
+  ckbMinMatchLog?: number;
+}): OrderGroup {
+  const { script: orderLock, udtScript } = getConfig("testnet").managers.order;
+  // A mint order: its master sits one output later in the same transaction.
+  const masterOutPoint = { txHash: hash(byte), index: 1n };
+  const outputData = OrderData.from({
+    udtValue: udt,
+    master: { type: "relative", value: { distance: 1n, padding: new Uint8Array(32) } },
+    info: Info.from({
+      ckbToUdt: ckb > 0n ? ratio : Ratio.empty(),
+      udtToCkb: udt > 0n ? ratio : Ratio.empty(),
+      ckbMinMatchLog,
+    }),
+  }).toBytes();
+  const minimal = ccc.Cell.from({
+    outPoint: { txHash: hash(byte), index: 0n },
+    cellOutput: { lock: orderLock, type: udtScript },
+    outputData,
+  });
+  const order = OrderCell.mustFrom(
+    ccc.Cell.from({
+      outPoint: minimal.outPoint,
+      cellOutput: {
+        capacity: minimal.cellOutput.capacity + ckb,
+        lock: orderLock,
+        type: udtScript,
+      },
+      outputData,
+    }),
+  );
+  const master = new MasterCell(
+    ccc.Cell.from({
+      outPoint: masterOutPoint,
+      cellOutput: {
+        capacity: ccc.fixedPointFrom(74),
+        lock: script("54"),
+        type: orderLock,
+      },
+      outputData: "0x",
+    }),
+  );
+  return attestResolvedOrderGroup(new OrderGroup(master, order, order));
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */

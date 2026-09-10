@@ -22,7 +22,6 @@ import type { JsonLogRecord } from "../../src/shared/index.ts";
 import {
   BAND_ICKB_BALANCE,
   botRuntime,
-  completeSearchResult,
   hash,
   l1AccountState,
   testWithdrawal,
@@ -43,7 +42,6 @@ afterEach(() => {
 });
 
 it("records a skipped decision with its evidence and no ring segment list", async () => {
-  noMatch();
   const harness = turnHarness();
 
   await runBotTurn(harness.context);
@@ -58,7 +56,6 @@ it("records a skipped decision with its evidence and no ring segment list", asyn
 });
 
 it("keeps turning below the recommended funding instead of holding", async () => {
-  noMatch();
   const harness = turnHarness({ account: l1AccountState() });
 
   await runBotTurn(harness.context);
@@ -70,7 +67,6 @@ it("keeps turning below the recommended funding instead of holding", async () =>
 
 it("sends explicitly and waits with the finite production policy", async () => {
   // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
-  noMatch();
   vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(7n);
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
@@ -105,7 +101,6 @@ it("sends explicitly and waits with the finite production policy", async () => {
 });
 
 it("ends the turn with the broadcast error when the send fails without a hash", async () => {
-  noMatch();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     sendTransaction: async () => {
@@ -128,7 +123,6 @@ it("ends the turn with the broadcast error when the send fails without a hash", 
 });
 
 it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
-  noMatch();
   const chain = chainState();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
@@ -159,7 +153,6 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
-  noMatch();
   const chain = chainState();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
@@ -190,7 +183,6 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
 });
 
 it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
-  noMatch();
   vi.useFakeTimers();
   const chain = chainState();
   const harness = turnHarness({
@@ -224,7 +216,6 @@ it("ends the attempt after one confirmation window without resending or rebuildi
 });
 
 it("ends the turn with the SDK wait error when the node rejects the transaction", async () => {
-  noMatch();
   const chain = chainState();
   const reason = "Resolve failed Dead(OutPoint(...))";
   const harness = turnHarness({
@@ -274,7 +265,7 @@ it("exits 1 with the error, its stack, and no private material when the read fai
 });
 
 it("exits 1 with structured event evidence for a build failure", async () => {
-  vi.spyOn(OrderManager, "bestMatch").mockImplementation(() => {
+  vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
     throw new Error("deterministic build failure");
   });
   const harness = turnHarness();
@@ -374,12 +365,6 @@ function fundedAccount(
     nativeUdtBalance: ickb,
     withdrawalGroups: options.withdrawal === true ? [testWithdrawal("62")] : [],
   });
-}
-
-function noMatch(): void {
-  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-  );
 }
 
 function commitTransaction(chain: ChainState, txLike: ccc.TransactionLike): ccc.Hex {

@@ -1,18 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/sdk_error.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
-import { OrderManager } from "../../../../src/order/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
 import type { Runtime } from "../../../src/bot/runtime/types.ts";
-import {
-  botRuntime,
-  botState,
-  completeSearchResult,
-  readyDeposit,
-} from "../fixtures/bot.ts";
+import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,12 +14,6 @@ afterEach(() => {
 
 const MINUTE = 60n * 1000n;
 const RICH_CKB = ccc.fixedPointFrom(500_000);
-
-function noMatch(): void {
-  vi.spyOn(OrderManager, "bestMatch").mockReturnValue(
-    completeSearchResult({ ckbDelta: 0n, udtDelta: 0n, partials: [] }),
-  );
-}
 
 /** Completion that leaves `change` plain CKB with the bot. */
 function completing(change: bigint): Runtime["completeTransaction"] {
@@ -39,7 +27,6 @@ function completing(change: bigint): Runtime["completeTransaction"] {
 
 describe("buildTransaction deposit", () => {
   it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
-    noMatch();
     const runtime = botRuntime({
       completeTransaction: completing(ccc.fixedPointFrom(2000)),
     });
@@ -67,7 +54,6 @@ describe("buildTransaction deposit", () => {
   });
 
   it("rejects a deposit that would leave less than the reserve in plain CKB", async () => {
-    noMatch();
     const runtime = botRuntime({
       completeTransaction: completing(ccc.fixedPointFrom(999)),
     });
@@ -85,7 +71,6 @@ describe("buildTransaction deposit", () => {
   });
 
   it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
-    noMatch();
     // An under-covered tip window with one ready surplus deposit, and excess iCKB.
     const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP, 0n);
     const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n, 0n);
