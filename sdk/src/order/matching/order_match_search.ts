@@ -4,7 +4,6 @@ import {
   type BestMatchContext,
   fullFill,
   gainOf,
-  gainSlack,
   PRICE_SCALE,
 } from "./order_match_context.ts";
 import type { OrderMatcher } from "./order_matcher.ts";
@@ -98,7 +97,6 @@ class Search {
   public link(): Node | undefined {
     const { context } = this;
     const { prices } = context;
-    const slack = gainSlack(context);
     let next: Node | undefined;
     const upper = { buyer: 0n, seller: 0n, buyerPriced: 0n, sellerPriced: 0n };
     for (const matcher of context.matchers.toReversed()) {
@@ -108,8 +106,18 @@ class Search {
         gain * PRICE_SCALE +
         prices.udt * full.udtDelta +
         prices.ckb * (full.ckbDelta - context.ckbMiningFee);
-      const padded = maxBigInt(gain + slack, 0n);
-      const paddedPriced = maxBigInt(priced + slack * PRICE_SCALE, 0n);
+      // The whole fill pays one unit of the bot's asset more than the ratio, rounded up,
+      // so a partial can gain up to that unit converted at the order's ratio over the
+      // whole fill's rate: pad by that much, at the exchange ratio and at the prices.
+      const rounding = (matcher.bScale + matcher.aScale - 1n) / matcher.aScale;
+      const [value, price] = matcher.isCkb2Udt
+        ? [context.ckbScale, prices.ckb]
+        : [context.udtScale, prices.udt];
+      const padded = maxBigInt(gain + rounding * value, 0n);
+      const paddedPriced = maxBigInt(
+        priced + rounding * (value * PRICE_SCALE + price),
+        0n,
+      );
       const node: Node = {
         matcher,
         full,
@@ -348,9 +356,9 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
   return best;
 }
 
-/** The payment that hands back at least `deficit` of the order's asset, one unit of rounding spare. */
+/** The smallest payment that hands back at least `deficit` of the order's asset. */
 function repairingPayment(matcher: OrderMatcher, deficit: bigint): bigint {
-  return (deficit * matcher.aScale + matcher.bScale - 1n) / matcher.bScale + 1n;
+  return (deficit * matcher.aScale + matcher.bScale - 1n) / matcher.bScale;
 }
 
 function withFills(state: State, fills: Match[]): Match {

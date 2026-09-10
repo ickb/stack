@@ -15,6 +15,10 @@ import { makeOrderCell } from "./support/order_order_helpers.ts";
 const CKB = ccc.fixedPointFrom(1);
 const L = 10_000n * CKB;
 const D = CKB;
+/** The default minimum-match exponent: an order at most 2^33 shannons fills only whole. */
+const WHOLE = 33;
+/** A whole-only order size: twice this is still below the default minimum match. */
+const W = 40n * CKB;
 const UNIT = { ckbScale: 1n, udtScale: 1n };
 /** The prepared fee of one partial at fee rate 1000 for the test order size. */
 const FEE = 283n;
@@ -99,8 +103,8 @@ function expectFeasible(
 describe("best match search", () => {
   it("funds a buyer and a seller from each other with empty inventory", () => {
     const groups = resolvedOrderGroups([
-      buyer("a1", 2n * L, L, 41),
-      seller("a2", L, L, 41),
+      buyer("a1", 2n * W, W, WHOLE),
+      seller("a2", W, W, WHOLE),
     ]);
     const allowance = { ckbValue: 0n, udtValue: 0n };
 
@@ -108,23 +112,23 @@ describe("best match search", () => {
 
     expect(result.kind).toBe("complete");
     expect(result.match.partials).toHaveLength(2);
-    expect(gainAtUnit(result.match, FEE)).toBe(L - 2n * FEE);
+    expect(gainAtUnit(result.match, FEE)).toBe(W - 2n * FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
   it("is not poisoned by a small best-margin buyer that would eat the seed of a large pair", () => {
-    // The poison alone gains 2 CKB; the two large all-or-nothing orders with it gain over 10,000.
+    // The small buyer alone gains 2 CKB; the two whole-only orders with it gain over 40.
     const groups = resolvedOrderGroups([
-      buyer("b1", (101n * L) / 100n, L, 41),
-      seller("b2", 2n * L, L, 41),
+      buyer("b1", (101n * W) / 100n, W, WHOLE),
+      seller("b2", 2n * W, W, WHOLE),
       buyer("b3", 3n * D, D),
     ]);
-    const allowance = { ckbValue: 0n, udtValue: L };
+    const allowance = { ckbValue: 0n, udtValue: W };
 
     const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
 
     expect(result.match.partials).toHaveLength(3);
-    expect(gainAtUnit(result.match, FEE)).toBe(L / 100n + L + 2n * D - 3n * FEE);
+    expect(gainAtUnit(result.match, FEE)).toBe(W / 100n + W + 2n * D - 3n * FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -153,9 +157,9 @@ describe("best match search", () => {
 
   it("crosses seventeen all-or-nothing buyers and one seller from empty inventory", () => {
     const orders = Array.from({ length: 17 }, (_, index) =>
-      buyer((0x60 + index).toString(16), 2n * L, L, 41),
+      buyer((0x60 + index).toString(16), 2n * W, W, WHOLE),
     );
-    orders.push(seller("d1", 17n * L, 17n * L));
+    orders.push(seller("d1", 17n * W, 17n * W));
     const groups = resolvedOrderGroups(orders);
     const allowance = { ckbValue: 0n, udtValue: 0n };
 
@@ -165,7 +169,7 @@ describe("best match search", () => {
     });
 
     expect(result.match.partials).toHaveLength(18);
-    expect(gainAtUnit(result.match, FEE)).toBe(17n * L - 18n * FEE);
+    expect(gainAtUnit(result.match, FEE)).toBe(17n * W - 18n * FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -237,11 +241,12 @@ describe("best match search", () => {
   });
 
   it("finds the large selection behind a small order taken first, within the budget", () => {
-    const K = 1000n * CKB;
+    const K = 2n * CKB;
+    const S = D / 100n;
     const orders = Array.from({ length: 17 }, (_, index) =>
-      buyer((0x70 + index).toString(16), 2n * K, K, 42),
+      buyer((0x70 + index).toString(16), 2n * K, K, WHOLE),
     );
-    orders.push(seller("3a", 17n * K, 33n * K, 42), buyer("4a", 3n * D, D));
+    orders.push(seller("3a", 17n * K, 33n * K, WHOLE), buyer("4a", 3n * S, S));
     const groups = resolvedOrderGroups(orders);
     const allowance = { ckbValue: 0n, udtValue: 0n };
 
@@ -345,14 +350,14 @@ describe("best match search", () => {
     // large buyer's partial must still be taken.
     const groups = resolvedOrderGroups([
       buyer("1b", 10_000_000_000_000n, 5_000_000_000_000n),
-      buyer("2b", 30_000_000_000n, 10_000_000_001n, 40),
+      buyer("2b", 6_000_000_000n, 2_000_000_001n, WHOLE),
     ]);
-    const allowance = { ckbValue: 0n, udtValue: 10_000_000_000n };
+    const allowance = { ckbValue: 0n, udtValue: 2_000_000_000n };
 
     const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
 
     expect(result.match.partials).toHaveLength(1);
-    expect(gainAtUnit(result.match, FEE)).toBe(10_000_000_000n - FEE);
+    expect(gainAtUnit(result.match, FEE)).toBe(2_000_000_000n - FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -371,9 +376,10 @@ describe("best match search", () => {
   });
 
   it("takes both sellers whole to fund a partial of a buyer skipped whole", () => {
-    const K = 1000n * CKB;
+    // The buyer is large enough to fill partially above the default minimum match.
+    const K = 20n * CKB;
     const groups = resolvedOrderGroups([
-      buyer("5b", 10n * K, 5n * K, 39),
+      buyer("5b", 10n * K, 5n * K, WHOLE),
       seller("6b", 2n * K, K),
       seller("7b", 2n * K, K),
     ]);
@@ -387,13 +393,13 @@ describe("best match search", () => {
   });
 
   it("skips three small buyers that would unbalance an all-or-nothing selection", () => {
-    const K = 1000n * CKB;
+    const K = 2n * CKB;
     const orders = Array.from({ length: 17 }, (_, index) =>
-      buyer((0x70 + index).toString(16), 2n * K, K, 42),
+      buyer((0x70 + index).toString(16), 2n * K, K, WHOLE),
     );
-    orders.push(seller("8b", 17n * K, 33n * K, 42));
+    orders.push(seller("8b", 17n * K, 33n * K, WHOLE));
     for (const byte of ["9b", "ab", "bb"]) {
-      orders.push(buyer(byte, 3n * D, D));
+      orders.push(buyer(byte, (3n * D) / 100n, D / 100n));
     }
     const groups = resolvedOrderGroups(orders);
     const allowance = { ckbValue: 0n, udtValue: 0n };
@@ -409,22 +415,23 @@ describe("best match search", () => {
   });
 
   it("keeps the one affordable order when the cap would otherwise drop it", () => {
+    const V = 14n * CKB;
     const orders = Array.from({ length: 500 }, (_, index) =>
       makeOrderCell({
-        ckbUnoccupied: 6n * L,
+        ckbUnoccupied: 6n * V,
         udtValue: 0n,
         info: Info.from({
-          ckbToUdt: ratioOf(6n * L, 2n * L),
+          ckbToUdt: ratioOf(6n * V, 2n * V),
           udtToCkb: Ratio.empty(),
-          ckbMinMatchLog: 44,
+          ckbMinMatchLog: WHOLE,
         }),
         master: { type: "absolute", value: { txHash: hashOf(index + 1), index: 1n } },
         outPoint: { txHash: hashOf(index + 1), index: 0n },
       }),
     );
-    orders.push(buyer("cb", 2n * L, L, 44));
+    orders.push(buyer("cb", 2n * V, V, WHOLE));
     const groups = resolvedOrderGroups(orders);
-    const allowance = { ckbValue: 0n, udtValue: L };
+    const allowance = { ckbValue: 0n, udtValue: V };
 
     const result = OrderManager.bestMatch(groups, allowance, UNIT, {
       feeRate: 1000n,
@@ -432,7 +439,7 @@ describe("best match search", () => {
     });
 
     expect(result.match.partials).toHaveLength(1);
-    expect(gainAtUnit(result.match, FEE)).toBe(L - FEE);
+    expect(gainAtUnit(result.match, FEE)).toBe(V - FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -479,7 +486,7 @@ describe("best match search", () => {
   it("finds the one payable buyer behind thirty-two all-or-nothing ones and an unpayable seller", () => {
     // Each blocker needs one unit more iCKB than the bot holds and the seller that could
     // hand it over asks more CKB than every blocker offers, so nothing whole is payable.
-    const Q = 10_000_000_000n;
+    const Q = 2_000_000_000n;
     const orders = Array.from({ length: 32 }, (_, index) =>
       makeOrderCell({
         ckbUnoccupied: 3n * Q,
@@ -487,19 +494,19 @@ describe("best match search", () => {
         info: Info.from({
           ckbToUdt: ratioOf(3n * Q, Q + 1n),
           udtToCkb: Ratio.empty(),
-          ckbMinMatchLog: 40,
+          ckbMinMatchLog: WHOLE,
         }),
         master: { type: "absolute", value: { txHash: hashOf(index + 1), index: 1n } },
         outPoint: { txHash: hashOf(index + 1), index: 0n },
       }),
     );
-    orders.push(buyer("d4", 2n * Q, Q + 1n), seller("d5", Q, 10n * L, 44));
+    orders.push(buyer("d4", 2n * Q, Q + 1n, 0), seller("d5", Q, 10n * L, WHOLE));
     const groups = resolvedOrderGroups(orders);
     const allowance = { ckbValue: 0n, udtValue: Q };
 
     const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
 
-    expect(gainAtUnit(result.match, FEE)).toBe(9_999_999_715n);
+    expect(gainAtUnit(result.match, FEE)).toBe((2n * Q * Q) / (Q + 1n) - Q - FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -542,17 +549,17 @@ describe("best match search", () => {
   it("closes with the seller whose minimum the CKB covers when two others' minimums round past it", () => {
     // All three sellers share the minimum exponent; the bot holds exactly that minimum
     // plus one fee, which the two cheaper ratios round past and the useful one meets.
-    const M = 1n << 39n;
+    const M = 1n << BigInt(WHOLE);
     const groups = resolvedOrderGroups([
-      seller("e1", 4n * L, 3n * L, 39),
-      seller("e2", 4n * L, 3n * L, 39),
-      seller("e3", 5n * L, 4n * L, 39),
+      seller("e1", 4n * W, 3n * W, WHOLE),
+      seller("e2", 4n * W, 3n * W, WHOLE),
+      seller("e3", 5n * W, 4n * W, WHOLE),
     ]);
     const allowance = { ckbValue: M + FEE, udtValue: 0n };
 
     const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
 
-    expect(gainAtUnit(result.match, FEE)).toBe(137_438_953_189n);
+    expect(gainAtUnit(result.match, FEE)).toBe(M / 4n - FEE);
     expectFeasible(result.match, allowance, FEE);
   });
 
@@ -572,9 +579,10 @@ describe("best match search", () => {
     expectFeasible(result.match, allowance, FEE);
   });
 
-  it("drops a long chain of orders that only paid for each other in one sweep", () => {
+  it("returns from a four-thousand-order book of losing orders within a second", () => {
     // Buyer i needs one unit more iCKB than sellers 1..i supply and seller i one fee
-    // less CKB than buyers 1..i offer, so each drop makes the next order unpayable.
+    // less CKB than buyers 1..i offer; nothing gains, and the sweep drops what no
+    // combination could pay.
     const N = 2000;
     const orders = Array.from({ length: N }, (_, index) => {
       const i = BigInt(index + 1);
@@ -585,7 +593,7 @@ describe("best match search", () => {
           info: Info.from({
             ckbToUdt: ratioOf(2n * D, i * 2n * D + 1n),
             udtToCkb: Ratio.empty(),
-            ckbMinMatchLog: 44,
+            ckbMinMatchLog: WHOLE,
           }),
           master: {
             type: "absolute",
@@ -599,7 +607,7 @@ describe("best match search", () => {
           info: Info.from({
             ckbToUdt: Ratio.empty(),
             udtToCkb: ratioOf(i * 2n * D - FEE, 2n * D),
-            ckbMinMatchLog: 44,
+            ckbMinMatchLog: WHOLE,
           }),
           master: {
             type: "absolute",
@@ -619,19 +627,19 @@ describe("best match search", () => {
 
     expect(performance.now() - started).toBeLessThan(1000);
     expect(result.match.partials).toHaveLength(0);
-    expect(result.match.diagnostics?.truncatedMatchers).toBe(2 * N);
+    expect(result.match.diagnostics?.truncatedMatchers).toBeGreaterThan(0);
   });
 
   it("crosses the all-or-nothing book behind one buyer with a larger whole gain", () => {
     // The extra buyer sorts first and is repayable in principle, but nothing below it
     // is feasible with it taken; the walk must not spend the budget under it.
-    const K = 1000n * CKB;
+    const K = 2n * CKB;
     const orders = Array.from({ length: 17 }, (_, index) =>
-      buyer((0xa0 + index).toString(16), 2n * K, K, 44),
+      buyer((0xa0 + index).toString(16), 2n * K, K, WHOLE),
     );
     orders.push(
-      seller("c0", 17n * K, 33n * K, 44),
-      buyer("c1", 3n * K + 17n * FEE, 2n * K, 44),
+      seller("c0", 17n * K, 33n * K, WHOLE),
+      buyer("c1", 3n * K + 17n * FEE, 2n * K, WHOLE),
     );
     const groups = resolvedOrderGroups(orders);
     const allowance = { ckbValue: 0n, udtValue: 0n };
@@ -643,6 +651,83 @@ describe("best match search", () => {
 
     expect(result.match.partials).toHaveLength(18);
     expect(gainAtUnit(result.match, FEE)).toBe(K - 18n * FEE);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("leaves orders with a minimum-match exponent above the default to other bots", () => {
+    // Fifteen whole-only orders with exponent 50, twelve large buyers no seller can
+    // balance and a small self-funding pair hidden behind them, plus one order a step
+    // above the default and one at it: only the last is matched.
+    const orders = Array.from({ length: 12 }, (_, index) =>
+      buyer((0x10 + index).toString(16), 2n * L, L, 50),
+    );
+    orders.push(
+      seller("30", (23n * L) / 2n, (45n * L) / 2n, 50),
+      buyer("31", 3n * D, D, 50),
+      seller("32", D, 2n * D, 50),
+      buyer("33", 2n * W, W, WHOLE + 1),
+      buyer("34", 2n * W, W, WHOLE),
+    );
+    const groups = resolvedOrderGroups(orders);
+    const allowance = { ckbValue: 0n, udtValue: W };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(result.match.diagnostics?.directions.ckbToUdt.matchableCount).toBe(1);
+    expect(result.match.diagnostics?.directions.udtToCkb.matchableCount).toBe(0);
+    expect(result.match.partials).toHaveLength(1);
+    expect(gainAtUnit(result.match, FEE)).toBe(W - FEE);
+  });
+
+  it("bounds a partial's gain by one unit of the paid asset at the order's own ratio", () => {
+    // One iCKB unit buys 1.5 million shannons; the buyer's whole fill of three units
+    // rounds its payment up, so its two-unit partial gains a third more per unit than
+    // the whole. Two one-unit sellers fund it.
+    const groups = resolvedOrderGroups([
+      order(
+        "f1",
+        4_000_000n,
+        0n,
+        {
+          ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 1_500_000n }),
+          udtToCkb: Ratio.empty(),
+        },
+        21,
+      ),
+      ...["f2", "f3"].map((byte) =>
+        order(
+          byte,
+          0n,
+          1n,
+          {
+            ckbToUdt: Ratio.empty(),
+            udtToCkb: Ratio.from({ ckbScale: 1n, udtScale: 1_400_000n }),
+          },
+          0,
+        ),
+      ),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(result.match.partials).toHaveLength(3);
+    expect(gainAtUnit(result.match, FEE)).toBe(199_151n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("repairs a deficit with the exact payment when one unit more would lose the gain", () => {
+    const Q = D;
+    const groups = resolvedOrderGroups([
+      buyer("f4", 2n * Q + 2n * FEE + 1n, Q, 0),
+      seller("f5", 2n * Q, 4n * Q, 0),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(result.match.partials).toHaveLength(2);
+    expect(gainAtUnit(result.match, FEE)).toBe(1n);
     expectFeasible(result.match, allowance, FEE);
   });
 

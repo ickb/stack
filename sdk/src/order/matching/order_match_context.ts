@@ -5,6 +5,7 @@ import {
   type ValueComponents,
 } from "../../utils/index.ts";
 import type { OrderGroup } from "../model/cells.ts";
+import { Info } from "../model/info.ts";
 import type {
   Match,
   MatchDiagnostics,
@@ -193,14 +194,6 @@ export function gainOf(context: BestMatchContext, match: Match): bigint {
   );
 }
 
-/**
- * One unit of rounding in the bot's favour, valued at the exchange ratio: a partial fill
- * can gain this much more than the full fill's per-unit rate, so bounds add it per order.
- */
-export function gainSlack(context: BestMatchContext): bigint {
-  return context.ckbScale + context.udtScale;
-}
-
 /** The full fill of a matcher: everything the order offers. */
 export function fullFill(matcher: OrderMatcher): Match {
   return matcher.create(matcher.aMin, matcher.bMaxOut);
@@ -270,12 +263,23 @@ function interleaved(buyers: OrderMatcher[], sellers: OrderMatcher[]): OrderMatc
   return matchers;
 }
 
+/**
+ * The largest minimum-match exponent the bot matches: the default every standard order
+ * carries. Above it an order fills only in whole steps larger than the default minimum,
+ * which is what lets a crafted book hide a cross behind subsets that never close; the
+ * bot leaves such orders to others (decisions amendment 52).
+ */
+export const MAX_MATCH_CKB_MIN_MATCH_LOG = Info.ckbMinMatchLogDefault();
+
 export function orderMatchers(
   orderPool: OrderGroup[],
   isCkb2Udt: boolean,
   ckbMiningFee: ccc.FixedPoint,
 ): OrderMatcher[] {
   return orderPool
+    .filter(
+      (group) => group.order.data.info.ckbMinMatchLog <= MAX_MATCH_CKB_MIN_MATCH_LOG,
+    )
     .map((group) => OrderMatcher.from(group, isCkb2Udt, ckbMiningFee))
     .filter((matcher): matcher is OrderMatcher => matcher !== undefined);
 }

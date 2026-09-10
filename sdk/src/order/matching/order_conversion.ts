@@ -228,7 +228,6 @@ export function quoteConversion(
   options?: {
     fee?: ccc.Num;
     feeBase?: ccc.Num;
-    ckbMinMatchLog?: number;
   },
 ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
   const fee = options?.fee ?? 0n;
@@ -247,10 +246,11 @@ export function quoteConversion(
       : base.convert(false, amount, false) - convertedAmount;
   }
 
+  // Every order this SDK creates carries the default minimum match, which is also the
+  // only one the bot matches (decisions amendment 52).
   const info = Info.create(
     isCkb2Udt,
     quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
-    options?.ckbMinMatchLog,
   );
   return { convertedAmount, ckbFee, info };
 }
