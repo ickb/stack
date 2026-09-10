@@ -76,7 +76,7 @@ export interface MatchDiagnostics {
   bestGain: bigint;
   /** Largest gain any unvisited branch could still reach; equals `bestGain` when complete. */
   gainUpperBound: bigint;
-  /** Directional matchers left out of the search by the per-direction order cap. */
+  /** Directional matchers left out: no combination could pay them, or beyond the cap. */
   truncatedMatchers: number;
 }
 

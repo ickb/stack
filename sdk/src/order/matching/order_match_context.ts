@@ -25,10 +25,10 @@ const PREPARED_PARTIAL_SERIALIZATION_OVERHEAD =
   OUTPUT_DATA_SERIALIZATION_OVERHEAD +
   EMPTY_WITNESS_SERIALIZATION_SIZE;
 const DEFAULT_CANDIDATE_BUDGET = 100_000;
-// Beyond this many orders per direction the worst-priced ones wait for the next turn:
-// whoever floods the book pays cell capacity for every order and only moves the bot
-// onto the better-priced ones, and the walk's recursion depth stays bounded. Capping
-// each direction on its own keeps the funding side of a lopsided book in the search.
+// Beyond this many fundable orders per direction the smallest gains wait for the next
+// turn: whoever floods the book pays cell capacity for every order and only moves the
+// bot onto the larger ones, and the walk's recursion depth stays bounded. Capping each
+// direction on its own keeps the funding side of a lopsided book in the search.
 const MAX_SEARCH_ORDERS_PER_DIRECTION = 500;
 
 /** Options controlling bounded best-match search. @public */
@@ -104,15 +104,18 @@ export function createBestMatchContext({
       truncatedMatchers: 0,
     },
   };
-  const byMargin = (matchers: OrderMatcher[]): OrderMatcher[] =>
-    matchers.toSorted((left, right) => compareMarginDesc(context, left, right));
-  const searched = [
-    ...byMargin(ckbToUdtMatchers).slice(0, MAX_SEARCH_ORDERS_PER_DIRECTION),
-    ...byMargin(udtToCkbMatchers).slice(0, MAX_SEARCH_ORDERS_PER_DIRECTION),
-  ];
+  const fundable = fundableMatchers(context, ckbToUdtMatchers, udtToCkbMatchers);
+  const byGain = (matchers: OrderMatcher[]): OrderMatcher[] =>
+    matchers
+      .toSorted((left, right) =>
+        compareBigInt(fullGain(context, right), fullGain(context, left)),
+      )
+      .slice(0, MAX_SEARCH_ORDERS_PER_DIRECTION);
+  const buyers = byGain(fundable.buyers);
+  const sellers = byGain(fundable.sellers);
   context.diagnostics.truncatedMatchers =
-    ckbToUdtMatchers.length + udtToCkbMatchers.length - searched.length;
-  context.matchers = byMargin(searched);
+    ckbToUdtMatchers.length + udtToCkbMatchers.length - buyers.length - sellers.length;
+  context.matchers = interleaved(buyers, sellers);
   return context;
 }
 
@@ -138,23 +141,44 @@ export function fullFill(matcher: OrderMatcher): Match {
   return matcher.create(matcher.aMin, matcher.bMaxOut);
 }
 
-/** Orders by the gain of a full fill per unit of value paid, best first. */
-function compareMarginDesc(
-  context: BestMatchContext,
-  left: OrderMatcher,
-  right: OrderMatcher,
-): number {
-  const [leftGain, leftCost] = gainAndCost(context, left);
-  const [rightGain, rightCost] = gainAndCost(context, right);
-  return compareBigInt(rightGain * leftCost, leftGain * rightCost);
+/** Gain of the whole order at the exchange ratio, net of its fee. */
+export function fullGain(context: BestMatchContext, matcher: OrderMatcher): bigint {
+  return gainOf(context, fullFill(matcher));
 }
 
-function gainAndCost(context: BestMatchContext, matcher: OrderMatcher): [bigint, bigint] {
-  const full = fullFill(matcher);
-  const paid = matcher.isCkb2Udt
-    ? -full.udtDelta * context.udtScale
-    : (-full.ckbDelta + context.ckbMiningFee) * context.ckbScale;
-  return [gainOf(context, full), paid];
+/**
+ * Drops the orders no combination could pay: a buyer's minimum beyond the iCKB
+ * allowance plus everything every seller could hand over, and the same for sellers.
+ */
+function fundableMatchers(
+  context: BestMatchContext,
+  buyers: OrderMatcher[],
+  sellers: OrderMatcher[],
+): { buyers: OrderMatcher[]; sellers: OrderMatcher[] } {
+  const supply = (matchers: OrderMatcher[], isCkb: boolean): bigint =>
+    matchers.reduce((sum, matcher) => {
+      const full = fullFill(matcher);
+      return sum + (isCkb ? full.ckbDelta : full.udtDelta);
+    }, 0n);
+  const udtBudget = context.allowance.udtValue + supply(sellers, false);
+  const ckbBudget =
+    context.allowance.ckbValue - context.ckbMiningFee + supply(buyers, true);
+  return {
+    buyers: buyers.filter((matcher) => matcher.bMinMatch <= udtBudget),
+    sellers: sellers.filter((matcher) => matcher.bMinMatch <= ckbBudget),
+  };
+}
+
+/**
+ * Alternates buyers and sellers, best gain first, so the walk's first descent takes
+ * self-funding pairs and the small orders sit at the leaves where a skip is cheap.
+ */
+function interleaved(buyers: OrderMatcher[], sellers: OrderMatcher[]): OrderMatcher[] {
+  const matchers: OrderMatcher[] = [];
+  for (let index = 0; index < Math.max(buyers.length, sellers.length); index += 1) {
+    matchers.push(...buyers.slice(index, index + 1), ...sellers.slice(index, index + 1));
+  }
+  return matchers;
 }
 
 export function orderMatchers(

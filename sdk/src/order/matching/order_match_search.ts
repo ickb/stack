@@ -14,11 +14,11 @@ interface Node {
   full: Match;
   key: string;
   next: Node | undefined;
-  /** CKB and iCKB this order and the rest could hand the bot, ignoring fees. */
-  receivableCkb: bigint;
-  receivableUdt: bigint;
   /** Gain this order and the rest could still add, ignoring what funds them. */
   positiveGain: bigint;
+  /** CKB and iCKB this order and the rest could hand the bot with whole fills. */
+  receivableCkb: bigint;
+  receivableUdt: bigint;
 }
 
 /** The fills chosen so far, mutated along the depth-first walk and restored on return. */
@@ -28,6 +28,11 @@ interface State {
   partials: Match["partials"];
   used: Set<string>;
 }
+
+// How many unused orders of a direction a node tries as closers, and how far down the
+// direction's list it looks for ones the balances can pay.
+const CLOSERS = 2;
+const CLOSER_SCAN = 32;
 
 /** Search progress; the walk mutates it through its own methods. */
 class Search {
@@ -39,70 +44,44 @@ class Search {
   /** Once the budget is spent, every unvisited subtree only records its bound. */
   public exhausted = false;
   public unvisitedUpper = 0n;
-  /** A pass refused a skip because its discrepancy allowance was spent. */
-  public limitHit = false;
   public readonly context: BestMatchContext;
-  /** The gaining orders of each direction, best margin first, for the closers. */
+  /** Every order of each direction, largest gain first, for the closers. */
   public readonly buyers: Node[] = [];
   public readonly sellers: Node[] = [];
   /** What the two closers could add at most, on top of the orders still undecided. */
   public closerUpper = 0n;
-  private buyerGain = 0n;
-  private sellerGain = 0n;
+  private buyerUpper = 0n;
+  private sellerUpper = 0n;
 
   constructor(context: BestMatchContext) {
     this.context = context;
   }
 
-  /** Charges one node; false once the budget is spent, recording the bound left behind. */
-  public charge(upper: bigint): boolean {
+  /** Charges work; false once the budget is spent, recording the bound left behind. */
+  public charge(upper: bigint, units = 1): boolean {
     if (this.exhausted) {
       this.unvisitedUpper = maxBigInt(this.unvisitedUpper, upper);
       return false;
     }
-    if (this.work === this.context.candidateBudget) {
+    if (this.work + units > this.context.candidateBudget) {
       this.exhausted = true;
       this.unvisitedUpper = upper;
       return false;
     }
-    this.work += 1;
+    this.work += units;
     return true;
   }
 
-  /** Runs the passes: no skips, one, two, then any number, until one is exhaustive. */
-  public run(root: Node | undefined): void {
-    for (const skips of [0, 1, 2, Infinity]) {
-      this.startPass();
-      visit(
-        this,
-        root,
-        { ckbDelta: 0n, udtDelta: 0n, partials: [], used: new Set() },
-        skips,
-      );
-      if (!this.limitHit || this.exhausted) {
-        return;
-      }
-    }
-  }
-
-  public startPass(): void {
-    this.limitHit = false;
-  }
-
-  public refuseSkip(): void {
-    this.limitHit = true;
-  }
-
-  /** Records a gaining order as a closer candidate and widens the closer bound. */
+  /** Registers an order as a closer candidate of its direction and widens the closer bound. */
   public addCloser(node: Node, gain: bigint): void {
     if (node.matcher.isCkb2Udt) {
       this.buyers.unshift(node);
-      this.buyerGain = maxBigInt(this.buyerGain, gain);
+      this.buyerUpper = maxBigInt(this.buyerUpper, gain);
     } else {
       this.sellers.unshift(node);
-      this.sellerGain = maxBigInt(this.sellerGain, gain);
+      this.sellerUpper = maxBigInt(this.sellerUpper, gain);
     }
-    this.closerUpper = this.buyerGain + this.sellerGain;
+    this.closerUpper = this.buyerUpper + this.sellerUpper;
   }
 
   public record(candidate: Match | undefined): void {
@@ -117,25 +96,24 @@ class Search {
 }
 
 /**
- * Depth-first search over the orders, best margin first: each order is taken whole or
- * skipped, and only the final net balances of the whole selection must fit the allowance,
- * so what buyers pay funds sellers in the same transaction and vice versa, even from empty
- * inventory. At every node the balances are closed by at most one partial fill per
- * direction from the orders not yet decided (a two-constraint optimum has at most two
- * fractional orders), one of them funded by the other's proceeds; a closer may also
- * repair a selection the whole fills alone leave short. Passes allow zero, one, two, and
- * then any number of skips of takeable orders, so a small order taken first cannot keep
- * the walk in its own subtree while the budget runs out. A branch is pruned when even the
- * whole remaining supply cannot make it feasible, or when its gain plus every remaining
- * gain cannot beat the incumbent. The node budget ends the search with the best feasible
- * match seen and the largest gain an unvisited branch could still hold (decisions
- * amendment 52).
+ * Depth-first search over the orders, largest gain first with the two directions
+ * interleaved: each order is taken whole or skipped, and only the final net balances of
+ * the whole selection must fit the allowance, so what buyers pay funds sellers in the
+ * same transaction and vice versa, even from empty inventory. Small orders sit at the
+ * leaves, where skipping them costs little. At every node the balances are closed by at
+ * most one partial fill per direction from the best unused orders, any gain, one of them
+ * funded by the other's proceeds, sized to the largest fill the balances can pay or the
+ * smallest that repairs a deficit, so a partial can repair what whole fills leave short.
+ * A branch is pruned when its gain plus every remaining gain cannot beat the incumbent.
+ * The work budget, charged per node and per closer probe, ends the search with the best
+ * feasible match seen and the largest gain an unvisited branch could still hold
+ * (decisions amendment 52).
  */
 export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   const search = new Search(context);
   const root = bookNodes(search);
   if (context.maxPartials !== 0) {
-    search.run(root);
+    visit(search, root, { ckbDelta: 0n, udtDelta: 0n, partials: [], used: new Set() });
   }
   const diagnostics = context.diagnostics;
   diagnostics.workCount = search.work;
@@ -163,97 +141,86 @@ function bookNodes(search: Search): Node | undefined {
   let next: Node | undefined;
   for (const matcher of context.matchers.toReversed()) {
     const full = fullFill(matcher);
-    const gain = gainOf(context, full) + slack;
+    const gain = maxBigInt(gainOf(context, full) + slack, 0n);
     const node: Node = {
       matcher,
       full,
       key: matcher.group.order.cell.outPoint.toHex(),
       next,
+      positiveGain: (next?.positiveGain ?? 0n) + gain,
       receivableCkb: (next?.receivableCkb ?? 0n) + maxBigInt(full.ckbDelta, 0n),
       receivableUdt: (next?.receivableUdt ?? 0n) + maxBigInt(full.udtDelta, 0n),
-      positiveGain: (next?.positiveGain ?? 0n) + maxBigInt(gain, 0n),
     };
-    if (gain > 0n) {
-      search.addCloser(node, gain);
-    }
+    search.addCloser(node, gain);
     next = node;
   }
   return next;
 }
 
-function visit(
-  search: Search,
-  node: Node | undefined,
-  state: State,
-  skips: number,
-): void {
+function visit(search: Search, node: Node | undefined, state: State): void {
   const { context } = search;
   const upper =
     stateGain(context, state) + (node?.positiveGain ?? 0n) + search.closerUpper;
   if (!search.charge(upper)) {
     return;
   }
-  const ckbLeft =
-    context.allowance.ckbValue +
-    state.ckbDelta -
-    context.ckbMiningFee * BigInt(state.partials.length);
-  const udtLeft = context.allowance.udtValue + state.udtDelta;
-  search.record(closed(search, state, ckbLeft, udtLeft));
-  if (
-    node === undefined ||
-    upper <= search.best.gain ||
-    ckbLeft + node.receivableCkb < 0n ||
-    udtLeft + node.receivableUdt < 0n
-  ) {
+  search.record(closed(search, state, upper));
+  if (node === undefined || upper <= search.best.gain) {
     return;
   }
-  const takeable = !state.used.has(node.key) && hasSlot(context, state, 1);
-  if (takeable) {
-    state.used.add(node.key);
-    state.partials.push(...node.full.partials);
-    visit(
-      search,
-      node.next,
-      {
-        ...state,
-        ckbDelta: state.ckbDelta + node.full.ckbDelta,
-        udtDelta: state.udtDelta + node.full.udtDelta,
-      },
-      skips,
-    );
-    state.partials.pop();
-    state.used.delete(node.key);
-    if (skips === 0) {
-      search.refuseSkip();
+  const take = (): void => {
+    if (state.used.has(node.key) || !hasSlot(context, state, 1)) {
       return;
     }
+    state.used.add(node.key);
+    state.partials.push(...node.full.partials);
+    visit(search, node.next, {
+      ...state,
+      ckbDelta: state.ckbDelta + node.full.ckbDelta,
+      udtDelta: state.udtDelta + node.full.udtDelta,
+    });
+    state.partials.pop();
+    state.used.delete(node.key);
+  };
+  const skip = (): void => {
+    visit(search, node.next, state);
+  };
+  // Take first when the rest of the book could still pay for the whole fill; otherwise
+  // skip first, so an order too large for what remains does not hold the walk in its
+  // subtree while the budget runs out. Order only: both children are still visited.
+  const ckbAfter =
+    context.allowance.ckbValue +
+    state.ckbDelta +
+    node.full.ckbDelta -
+    context.ckbMiningFee * BigInt(state.partials.length + 1) +
+    (node.next?.receivableCkb ?? 0n);
+  const udtAfter =
+    context.allowance.udtValue +
+    state.udtDelta +
+    node.full.udtDelta +
+    (node.next?.receivableUdt ?? 0n);
+  for (const child of ckbAfter >= 0n && udtAfter >= 0n ? [take, skip] : [skip, take]) {
+    child();
   }
-  visit(search, node.next, state, takeable ? skips - 1 : skips);
 }
 
 /**
- * The state plus the best closing partials: the best unused buyer and seller, alone or
- * one funding the other, whichever gains most among the feasible ones; the state alone
- * when it is feasible and nothing improves it. Each candidate is paid from the leftover
- * balances plus what the earlier fill hands over. An order skipped whole earlier stays
- * available as a closer, since skipping the whole fill never rules out a partial one.
+ * The state plus the best closing partials: unused buyers and sellers, alone or one
+ * funding the other, whichever gains most among the feasible ones; the state alone when
+ * it is feasible and nothing improves it. Each closer is paid from the leftover balances
+ * plus what the earlier fill hands over, and is sized to the largest fill that budget
+ * pays and to the smallest that repairs a deficit of the other asset. An order skipped
+ * whole earlier stays available, since skipping the whole fill never rules out a partial.
  */
-function closed(
-  search: Search,
-  state: State,
-  ckbLeft: bigint,
-  udtLeft: bigint,
-): Match | undefined {
+function closed(search: Search, state: State, upper: bigint): Match | undefined {
   const { context } = search;
   const fee = context.ckbMiningFee;
-  const buyer = search.buyers.find((node) => !state.used.has(node.key))?.matcher;
-  const seller = search.sellers.find((node) => !state.used.has(node.key))?.matcher;
-  const buy = (udt: bigint): Match[] =>
-    buyer === undefined ? [] : fillsOf([buyer.match(cap(buyer, udt))]);
-  const sell = (ckb: bigint): Match[] =>
-    seller === undefined ? [] : fillsOf([seller.match(cap(seller, ckb))]);
+  const ckbLeft =
+    context.allowance.ckbValue + state.ckbDelta - fee * BigInt(state.partials.length);
+  const udtLeft = context.allowance.udtValue + state.udtDelta;
   let best: Match | undefined;
   let bestGain = 0n;
+  let probes = 0;
   const consider = (fills: Match[]): void => {
     if (!hasSlot(context, state, fills.length)) {
       return;
@@ -272,27 +239,76 @@ function closed(
       bestGain = gain;
     }
   };
-  const bought = buy(udtLeft);
-  const sold = sell(ckbLeft - fee);
+  // Fills of the best unused orders of one direction: the largest the budget pays, and
+  // the smallest that repairs the given deficit of the asset the order hands back.
+  const fills = (
+    nodes: Node[],
+    budget: bigint,
+    deficit: bigint,
+    except?: string,
+  ): Array<{ key: string; fill: Match }> => {
+    const found: Array<{ key: string; fill: Match }> = [];
+    for (const node of nodes.slice(0, CLOSER_SCAN)) {
+      if (found.length >= 2 * CLOSERS) {
+        break;
+      }
+      const { matcher, key } = node;
+      if (state.used.has(key) || key === except || matcher.bMinMatch > budget) {
+        continue;
+      }
+      const payments = [cap(matcher, budget)];
+      if (deficit > 0n) {
+        payments.push(cap(matcher, repairingPayment(matcher, deficit)));
+      }
+      for (const payment of new Set(payments)) {
+        probes += 1;
+        const fill = matcher.match(payment);
+        if (fill.partials.length > 0) {
+          found.push({ key, fill });
+        }
+      }
+    }
+    return found;
+  };
   consider([]);
-  consider(bought);
-  consider(sold);
-  for (const fill of bought) {
-    consider([fill, ...sell(ckbLeft - 2n * fee + fill.ckbDelta)]);
+  const bought = fills(search.buyers, udtLeft, -(ckbLeft - fee));
+  const sold = fills(search.sellers, ckbLeft - fee, -udtLeft);
+  for (const { key, fill } of bought) {
+    consider([fill]);
+    const ckbAfter = ckbLeft - 2n * fee + fill.ckbDelta;
+    for (const seller of fills(
+      search.sellers,
+      ckbAfter,
+      -(udtLeft + fill.udtDelta),
+      key,
+    )) {
+      consider([fill, seller.fill]);
+    }
   }
-  for (const fill of sold) {
-    consider([fill, ...buy(udtLeft + fill.udtDelta)]);
+  for (const { key, fill } of sold) {
+    consider([fill]);
+    const udtAfter = udtLeft + fill.udtDelta;
+    for (const buyer of fills(
+      search.buyers,
+      udtAfter,
+      -(ckbLeft - 2n * fee + fill.ckbDelta),
+      key,
+    )) {
+      consider([fill, buyer.fill]);
+    }
   }
+  search.charge(upper, probes);
   return best;
+}
+
+/** The payment that hands back at least `deficit` of the order's asset, one unit of rounding spare. */
+function repairingPayment(matcher: OrderMatcher, deficit: bigint): bigint {
+  return (deficit * matcher.aScale + matcher.bScale - 1n) / matcher.bScale + 1n;
 }
 
 /** The payment a budget allows: nothing below the minimum, the whole order at most. */
 function cap(matcher: OrderMatcher, budget: bigint): bigint {
   return budget < matcher.bMaxMatch ? budget : matcher.bMaxMatch;
-}
-
-function fillsOf(fills: Match[]): Match[] {
-  return fills.filter((fill) => fill.partials.length > 0);
 }
 
 function withFills(state: State, fills: Match[]): Match {
