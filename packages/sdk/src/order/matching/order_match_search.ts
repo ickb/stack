@@ -56,9 +56,11 @@ export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   claimCandidateWork(context, state);
   evaluateCandidate(context, state, { c2u: emptyMatch(), u2c: emptyMatch() });
 
-  const singleton = context.diagnostics.orderCount === 1;
+  // Each direction is capped at what the bot could fund in the best case: its allowance
+  // plus everything the other direction's orders could hand it. States no combination
+  // can fund are never generated (decisions amendment 52).
   const ckb2Udt = directionalMatchFrontier(context.ckbToUdtMatchers, {
-    ...(singleton ? { allowanceCap: context.allowance.udtValue } : {}),
+    allowanceCap: udtAllowanceCap(context),
     allowanceStep: context.udtAllowanceStep,
     claimWork: (count) => claimWork(context, state, "ckbToUdtFrontier", count),
     isCkb2Udt: true,
@@ -75,7 +77,7 @@ export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   }
 
   const udt2Ckb = directionalMatchFrontier(context.udtToCkbMatchers, {
-    ...(singleton ? { allowanceCap: singletonCkbCap(context) } : {}),
+    allowanceCap: ckbAllowanceCap(context),
     allowanceStep: context.ckbAllowanceStep,
     claimWork: (count) => claimWork(context, state, "udtToCkbFrontier", count),
     isCkb2Udt: false,
@@ -340,17 +342,16 @@ function atomicSearchWorkUpperBound(context: BestMatchContext): bigint {
   if (maxPartials === 0) {
     return 1n;
   }
-  const singleton = context.diagnostics.orderCount === 1;
   const limit = BigInt(context.candidateBudget) + 1n;
   const c2u = directionWorkBound(
     context.ckbToUdtMatchers,
-    singleton ? context.allowance.udtValue : undefined,
+    udtAllowanceCap(context),
     maxPartials,
     limit,
   );
   const u2c = directionWorkBound(
     context.udtToCkbMatchers,
-    singleton ? singletonCkbCap(context) : undefined,
+    ckbAllowanceCap(context),
     maxPartials,
     limit,
   );
@@ -375,7 +376,7 @@ function atomicSearchWorkUpperBound(context: BestMatchContext): bigint {
 
 function directionWorkBound(
   matchers: OrderMatcher[],
-  allowanceCap: bigint | undefined,
+  allowanceCap: bigint,
   maxPartials: number,
   limit: bigint,
 ): DirectionWorkBound {
@@ -536,9 +537,20 @@ function isPositiveMatchCandidate(
   return false;
 }
 
-function singletonCkbCap(context: BestMatchContext): bigint {
-  const value = context.allowance.ckbValue - context.ckbMiningFee;
-  return value > 0n ? value : 0n;
+/** CKB the bot could spend on sellers: its allowance after the mining fee, plus what buyers pay it. */
+function ckbAllowanceCap(context: BestMatchContext): bigint {
+  const own = context.allowance.ckbValue - context.ckbMiningFee;
+  return (own > 0n ? own : 0n) + supply(context.ckbToUdtMatchers);
+}
+
+/** iCKB the bot could spend on buyers: its allowance plus what sellers hand it. */
+function udtAllowanceCap(context: BestMatchContext): bigint {
+  return context.allowance.udtValue + supply(context.udtToCkbMatchers);
+}
+
+/** The most the bot can receive from these orders: each order's whole offered side. */
+function supply(matchers: readonly OrderMatcher[]): bigint {
+  return matchers.reduce((sum, matcher) => sum + matcher.aIn, 0n);
 }
 
 function emptyMatch(): Match {
