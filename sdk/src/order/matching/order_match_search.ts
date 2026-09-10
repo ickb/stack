@@ -8,8 +8,8 @@ import {
 } from "./order_match_context.ts";
 import type { OrderMatcher } from "./order_matcher.ts";
 
-/** One order of the sorted book with what the book from it on could still add. */
-interface Node {
+/** One order of the book with its whole fill and what that fill is worth. */
+interface Entry {
   matcher: OrderMatcher;
   full: Match;
   key: string;
@@ -17,6 +17,14 @@ interface Node {
   gain: bigint;
   /** The whole gain net of what the fill takes at the asset prices, times `PRICE_SCALE`. */
   priced: bigint;
+  /** The gains padded by what a partial can gain over the whole fill's rate, floored at zero. */
+  padded: bigint;
+  paddedPriced: bigint;
+}
+
+/** One order of a walk's chain with what the chain from it on could still add. */
+interface Node {
+  entry: Entry;
   next: Node | undefined;
   /** Gain this order and the rest could still add, ignoring what funds them. */
   positiveGain: bigint;
@@ -60,46 +68,28 @@ class Search {
     gain: 0n,
   };
   public work = 0;
-  /** Once the budget is spent, every unvisited subtree only records its bound. */
+  /** The work the current walk may reach; once spent, unvisited subtrees only record their bound. */
+  public limit: number;
   public exhausted = false;
   public unvisitedUpper = 0n;
   public readonly context: BestMatchContext;
+  /** Every order, largest whole gain first, the directions interleaved. */
+  public readonly entries: Entry[];
   /** Every order of each direction, largest whole gain first, for the closers. */
-  public readonly buyers: Node[] = [];
-  public readonly sellers: Node[] = [];
+  public readonly buyers: Entry[];
+  public readonly sellers: Entry[];
   /** What the two closers could add at most, on top of the orders still undecided. */
-  public closerUpper = 0n;
-  public closerPricedUpper = 0n;
+  public readonly closerUpper: bigint;
+  public readonly closerPricedUpper: bigint;
   /** CKB and iCKB the whole book could hand the bot. */
-  public receivableCkb = 0n;
-  public receivableUdt = 0n;
+  public readonly receivableCkb: bigint;
+  public readonly receivableUdt: bigint;
 
   constructor(context: BestMatchContext) {
     this.context = context;
-  }
-
-  /** Charges one unit of work; false once the budget is spent, recording the bound left behind. */
-  public charge(upper: bigint): boolean {
-    if (this.exhausted) {
-      this.unvisitedUpper = maxBigInt(this.unvisitedUpper, upper);
-      return false;
-    }
-    if (this.work >= this.context.candidateBudget) {
-      this.exhausted = true;
-      this.unvisitedUpper = upper;
-      return false;
-    }
-    this.work += 1;
-    return true;
-  }
-
-  /** Links the sorted book from the last order back to the first, accumulating the bounds. */
-  public link(): Node | undefined {
-    const { context } = this;
+    this.limit = context.candidateBudget;
     const { prices } = context;
-    let next: Node | undefined;
-    const upper = { buyer: 0n, seller: 0n, buyerPriced: 0n, sellerPriced: 0n };
-    for (const matcher of context.matchers.toReversed()) {
+    this.entries = context.matchers.map((matcher) => {
       const full = fullFill(matcher);
       const gain = gainOf(context, full);
       const priced =
@@ -113,32 +103,69 @@ class Search {
       const [value, price] = matcher.isCkb2Udt
         ? [context.ckbScale, prices.ckb]
         : [context.udtScale, prices.udt];
-      const padded = maxBigInt(gain + rounding * value, 0n);
-      const paddedPriced = maxBigInt(
-        priced + rounding * (value * PRICE_SCALE + price),
-        0n,
-      );
-      const node: Node = {
+      return {
         matcher,
         full,
         key: matcher.group.order.cell.outPoint.toHex(),
         gain,
         priced,
-        next,
-        positiveGain: (next?.positiveGain ?? 0n) + padded,
-        positivePriced: (next?.positivePriced ?? 0n) + paddedPriced,
+        padded: maxBigInt(gain + rounding * value, 0n),
+        paddedPriced: maxBigInt(priced + rounding * (value * PRICE_SCALE + price), 0n),
       };
-      const side = matcher.isCkb2Udt ? "buyer" : "seller";
-      (matcher.isCkb2Udt ? this.buyers : this.sellers).unshift(node);
-      upper[side] = maxBigInt(upper[side], padded);
-      upper[`${side}Priced`] = maxBigInt(upper[`${side}Priced`], paddedPriced);
-      this.receivableCkb += maxBigInt(full.ckbDelta, 0n);
-      this.receivableUdt += maxBigInt(full.udtDelta, 0n);
-      next = node;
+    });
+    this.buyers = this.entries.filter((entry) => entry.matcher.isCkb2Udt);
+    this.sellers = this.entries.filter((entry) => !entry.matcher.isCkb2Udt);
+    const largest = (entries: Entry[], of: (entry: Entry) => bigint): bigint =>
+      entries.reduce((most, entry) => maxBigInt(most, of(entry)), 0n);
+    this.closerUpper =
+      largest(this.buyers, (e) => e.padded) + largest(this.sellers, (e) => e.padded);
+    this.closerPricedUpper =
+      largest(this.buyers, (e) => e.paddedPriced) +
+      largest(this.sellers, (e) => e.paddedPriced);
+    this.receivableCkb = this.entries.reduce(
+      (sum, entry) => sum + maxBigInt(entry.full.ckbDelta, 0n),
+      0n,
+    );
+    this.receivableUdt = this.entries.reduce(
+      (sum, entry) => sum + maxBigInt(entry.full.udtDelta, 0n),
+      0n,
+    );
+  }
+
+  /** Charges one unit of work; false once the limit is spent, recording the bound left behind. */
+  public charge(upper: bigint): boolean {
+    if (this.exhausted) {
+      this.unvisitedUpper = maxBigInt(this.unvisitedUpper, upper);
+      return false;
     }
-    this.closerUpper = upper.buyer + upper.seller;
-    this.closerPricedUpper = upper.buyerPriced + upper.sellerPriced;
-    return next;
+    if (this.work >= this.limit) {
+      this.exhausted = true;
+      this.unvisitedUpper = upper;
+      return false;
+    }
+    this.work += 1;
+    return true;
+  }
+
+  /** Walks the orders in the given sequence from the initial state. */
+  public walk(sequence: Entry[]): void {
+    let next: Node | undefined;
+    for (const entry of sequence.toReversed()) {
+      next = {
+        entry,
+        next,
+        positiveGain: (next?.positiveGain ?? 0n) + entry.padded,
+        positivePriced: (next?.positivePriced ?? 0n) + entry.paddedPriced,
+      };
+    }
+    visit(this, next, {
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+      used: new Set(),
+      reachableCkb: this.context.allowance.ckbValue + this.receivableCkb,
+      reachableUdt: this.context.allowance.udtValue + this.receivableUdt,
+    });
   }
 
   public record(candidate: Match | undefined): void {
@@ -169,16 +196,21 @@ class Search {
  */
 export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   const search = new Search(context);
-  const root = search.link();
   if (context.maxPartials !== 0) {
-    visit(search, root, {
-      ckbDelta: 0n,
-      udtDelta: 0n,
-      partials: [],
-      used: new Set(),
-      reachableCkb: context.allowance.ckbValue + search.receivableCkb,
-      reachableUdt: context.allowance.udtValue + search.receivableUdt,
-    });
+    // Largest gains first, keeping a tenth of the budget back: when that walk runs out,
+    // a second one takes the smallest orders first, so a small cross the large orders'
+    // subtrees hid is reached within a few nodes.
+    search.limit = context.candidateBudget - Math.floor(context.candidateBudget / 10);
+    search.walk(search.entries);
+    if (search.exhausted) {
+      search.exhausted = false;
+      search.limit = context.candidateBudget;
+      search.walk(
+        search.entries.toSorted((left, right) =>
+          compareBigInt(absBigInt(left.full.ckbDelta), absBigInt(right.full.ckbDelta)),
+        ),
+      );
+    }
   }
   const diagnostics = context.diagnostics;
   diagnostics.workCount = search.work;
@@ -212,28 +244,29 @@ function visit(search: Search, node: Node | undefined, state: State): void {
   if (node === undefined || upper <= search.best.gain) {
     return;
   }
-  const reachableCkb = state.reachableCkb + minBigInt(node.full.ckbDelta, 0n) - fee;
-  const reachableUdt = state.reachableUdt + minBigInt(node.full.udtDelta, 0n);
+  const { full, key } = node.entry;
+  const reachableCkb = state.reachableCkb + minBigInt(full.ckbDelta, 0n) - fee;
+  const reachableUdt = state.reachableUdt + minBigInt(full.udtDelta, 0n);
   const take = (): void => {
     if (
-      state.used.has(node.key) ||
+      state.used.has(key) ||
       !hasSlot(context, state, 1) ||
       reachableCkb < 0n ||
       reachableUdt < 0n
     ) {
       return;
     }
-    state.used.add(node.key);
-    state.partials.push(...node.full.partials);
+    state.used.add(key);
+    state.partials.push(...full.partials);
     visit(search, node.next, {
       ...state,
-      ckbDelta: state.ckbDelta + node.full.ckbDelta,
-      udtDelta: state.udtDelta + node.full.udtDelta,
+      ckbDelta: state.ckbDelta + full.ckbDelta,
+      udtDelta: state.udtDelta + full.udtDelta,
       reachableCkb,
       reachableUdt,
     });
     state.partials.pop();
-    state.used.delete(node.key);
+    state.used.delete(key);
   };
   const skip = (): void => {
     visit(search, node.next, state);
@@ -241,7 +274,7 @@ function visit(search: Search, node: Node | undefined, state: State): void {
   // Take first only when the order gains net of what it takes at the asset prices;
   // otherwise the rest of the book is worth more without it, and the walk finds that
   // incumbent before the priced bound closes the subtree that holds this order.
-  for (const child of node.priced >= 0n ? [take, skip] : [skip, take]) {
+  for (const child of node.entry.priced >= 0n ? [take, skip] : [skip, take]) {
     child();
   }
 }
@@ -281,34 +314,34 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
     }
   };
   // The unused orders of one direction whose fill at the given size gains most, each
-  // probed once as it is examined. The list is sorted by whole gain, so the scan stops
-  // once no order left could beat the ones kept; a smaller fill can beat its whole
-  // fill by one rounding unit of value, which the stop accepts losing.
+  // probed once as it is examined. The list is sorted by whole gain, so once the kept
+  // fills gain and no order left gains as much whole the scan stops; a smaller fill can
+  // beat its whole fill by one rounding unit of value, which the stop accepts losing.
   const pick = (
-    nodes: Node[],
+    entries: Entry[],
     size: (matcher: OrderMatcher) => bigint | undefined,
     except: string | undefined,
   ): Fill[] => {
     const picked: Fill[] = [];
-    for (const node of nodes) {
+    for (const entry of entries) {
       const worst = picked[CLOSERS - 1];
-      if (worst !== undefined && worst.gain >= 0n && node.gain <= worst.gain) {
+      if (worst !== undefined && worst.gain > 0n && entry.gain <= worst.gain) {
         break;
       }
       if (!search.charge(upper)) {
         break;
       }
-      if (state.used.has(node.key) || node.key === except) {
+      if (state.used.has(entry.key) || entry.key === except) {
         continue;
       }
-      const payment = size(node.matcher);
+      const payment = size(entry.matcher);
       if (payment === undefined) {
         continue;
       }
-      const fill = node.matcher.match(payment);
+      const fill = entry.matcher.match(payment);
       const gain = gainOf(context, fill);
-      const at = picked.findIndex((entry) => entry.gain < gain);
-      picked.splice(at === -1 ? picked.length : at, 0, { key: node.key, fill, gain });
+      const at = picked.findIndex((kept) => kept.gain < gain);
+      picked.splice(at === -1 ? picked.length : at, 0, { key: entry.key, fill, gain });
       picked.length = Math.min(picked.length, CLOSERS);
     }
     return picked;
@@ -316,7 +349,7 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
   // Fills of the best unused orders of one direction: the largest the budget pays, and
   // the smallest that repairs the given deficit of the asset the order hands back.
   const fills = (
-    nodes: Node[],
+    entries: Entry[],
     budget: bigint,
     deficit: bigint,
     except?: string,
@@ -331,7 +364,7 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
         return payment <= minBigInt(budget, matcher.bMaxMatch) ? payment : undefined;
       });
     }
-    return sizes.flatMap((size) => pick(nodes, size, except));
+    return sizes.flatMap((size) => pick(entries, size, except));
   };
   // Closers of one direction paid from what is left: buyers spend the iCKB and must
   // repair a CKB deficit, sellers the reverse, each fill's fee taken off the CKB first.
@@ -380,6 +413,10 @@ function hasSlot(context: BestMatchContext, state: State, needed: number): boole
     context.maxPartials === undefined ||
     state.partials.length + needed <= context.maxPartials
   );
+}
+
+function absBigInt(value: bigint): bigint {
+  return value < 0n ? -value : value;
 }
 
 function maxBigInt(left: bigint, right: bigint): bigint {

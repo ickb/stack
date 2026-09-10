@@ -731,6 +731,79 @@ describe("best match search", () => {
     expectFeasible(result.match, allowance, FEE);
   });
 
+  it("reaches a small pair hidden behind whole-only orders no combination completes", () => {
+    // Twelve buyers under 86 CKB and a seller that eleven of them cannot pay and twelve
+    // overfill: every subtree with them is a dead end, and the gain-first walk spends
+    // its budget there; the smallest-first walk finds the pair within a few nodes.
+    const V = 2n * CKB;
+    const S = D / 100n;
+    const orders = Array.from({ length: 12 }, (_, index) =>
+      buyer((0x10 + index).toString(16), 2n * V, V, WHOLE),
+    );
+    orders.push(
+      seller("30", (23n * V) / 2n, (45n * V) / 2n, WHOLE),
+      buyer("31", 3n * S, S, WHOLE),
+      seller("32", S, 2n * S, WHOLE),
+    );
+    const groups = resolvedOrderGroups(orders);
+    const allowance = { ckbValue: 0n, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, {
+      feeRate: 1000n,
+      maxPartials: 58,
+    });
+
+    expect(result.match.partials).toHaveLength(2);
+    expect(gainAtUnit(result.match, FEE)).toBe(S - 2n * FEE);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("keeps scanning closers past whole fills that gain nothing", () => {
+    // Two buyers whose whole fill gains exactly zero sort ahead of a buyer whose partial
+    // gains fifty; the scan must not stop on the zero gains.
+    const exchange = { ckbScale: 1n, udtScale: 1000n };
+    const groups = resolvedOrderGroups([
+      order(
+        "e7",
+        1_283n,
+        0n,
+        {
+          ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 1_283n }),
+          udtToCkb: Ratio.empty(),
+        },
+        0,
+      ),
+      order(
+        "e8",
+        1_283n,
+        0n,
+        {
+          ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 1_283n }),
+          udtToCkb: Ratio.empty(),
+        },
+        0,
+      ),
+      order(
+        "e9",
+        2_000n,
+        0n,
+        {
+          ckbToUdt: Ratio.from({ ckbScale: 3n, udtScale: 4_000n }),
+          udtToCkb: Ratio.empty(),
+        },
+        0,
+      ),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: 1n };
+
+    const result = OrderManager.bestMatch(groups, allowance, exchange, {
+      feeRate: 1000n,
+    });
+
+    expect(result.match.partials).toHaveLength(1);
+    expect(result.match.diagnostics?.bestGain).toBe(50n);
+  });
+
   it("pairs buyers and sellers on a balanced thousand-order book within a few hundred milliseconds", () => {
     const orders = Array.from({ length: 1000 }, (_, index) =>
       makeOrderCell({
