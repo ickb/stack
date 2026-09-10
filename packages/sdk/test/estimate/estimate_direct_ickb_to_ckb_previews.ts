@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { estimateIckbToCkbOrder } from "../../src/estimate/sdk_estimate.ts";
 import { OrderManager, Ratio } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
@@ -41,7 +42,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("builds normal iCKB-to-CKB orders when maturity is unavailable", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
       system({ ckbAvailable: 0n }),
     );

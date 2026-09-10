@@ -44,25 +44,9 @@ function registerReceiptCellFromPrefixTests(): void {
       cell,
       client: clientWithHeader(header),
     });
-    const receiptFromOutPoint = await receiptCellFrom({
-      outpoint: cell.outPoint,
-      client: new StubClient({
-        getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-          await Promise.resolve();
-          return cell;
-        },
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          await Promise.resolve();
-          return transactionWithHeader(header);
-        },
-      }),
-    });
 
     expect(receipt.ckbValue).toBe(ccc.fixedPointFrom(100082));
     expect(receipt.udtValue).toBe(ccc.fixedPointFrom(200000));
-    expect(receiptFromOutPoint.cell.outPoint.toHex()).toBe(cell.outPoint.toHex());
   });
 
   it("rejects malformed receipt payloads with out point context", async () => {
@@ -122,14 +106,10 @@ function registerReceiptCellFromPrefixTests(): void {
 }
 
 function registerReceiptCellFromFailureTests(): void {
-  it("rejects missing receipt cells and transaction headers", async () => {
+  it("rejects a missing transaction header", async () => {
     const logic = script("33");
     const cell = receiptCell(receiptOutputData(1, ccc.fixedPointFrom(100000)), logic);
     const client = new StubClient({
-      getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        return undefined;
-      },
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {
@@ -138,25 +118,15 @@ function registerReceiptCellFromFailureTests(): void {
       },
     });
 
-    await expect(receiptCellFrom({ outpoint: cell.outPoint, client })).rejects.toThrow(
-      `Cell not found for out point ${cell.outPoint.toHex()}`,
-    );
     await expect(receiptCellFrom({ cell, client })).rejects.toThrow(
       `Header not found for txHash ${cell.outPoint.txHash} at ${cell.outPoint.toHex()}`,
     );
   });
 
-  it("preserves receipt coordinates when cell and header reads fail", async () => {
+  it("preserves receipt coordinates when the header read fails", async () => {
     const logic = script("33");
     const cell = receiptCell(receiptOutputData(1, ccc.fixedPointFrom(100000)), logic);
-    const cellError = new Error("cell rpc failed");
     const headerError = new Error("header rpc failed");
-    const failedCellClient = new StubClient({
-      getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        throw cellError;
-      },
-    });
     const failedHeaderClient = new StubClient({
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
@@ -166,12 +136,6 @@ function registerReceiptCellFromFailureTests(): void {
       },
     });
 
-    await expect(
-      receiptCellFrom({ outpoint: cell.outPoint, client: failedCellClient }),
-    ).rejects.toMatchObject({
-      message: `Failed to load cell for out point ${cell.outPoint.toHex()}`,
-      cause: cellError,
-    });
     await expect(
       receiptCellFrom({ cell, client: failedHeaderClient }),
     ).rejects.toMatchObject({

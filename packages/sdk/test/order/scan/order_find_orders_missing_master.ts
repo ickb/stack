@@ -6,7 +6,7 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  collectSkippedOrders,
+  collectOrders,
   findOrdersFixture,
   transactionResponse,
 } from "./support/order_scan_helpers.ts";
@@ -35,9 +35,8 @@ describe("OrderManager.findOrders missing master", () => {
       },
     });
 
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toEqual([]);
-    expect(skippedReasons).toEqual(["missing-master"]);
   });
 });

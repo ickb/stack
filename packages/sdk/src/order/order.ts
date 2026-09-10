@@ -6,7 +6,6 @@ import {
   isMasterCell,
   isOrderCell,
   resolveOrderGroup,
-  type OrderGroupSkipReason,
 } from "./io/order_scan.ts";
 import { addOrderMatch, meltOrderGroups, mintOrder } from "./io/order_transaction.ts";
 import { ceilDiv, quotePreservingRatio } from "./matching/order_conversion.ts";
@@ -171,13 +170,9 @@ export class OrderManager implements ScriptDeps {
    * Every group is resolved before the first one is yielded, so a failed
    * resolution cannot leave earlier groups observed as a complete scan. The
    * origin order lookup reads the client cache first, then fetches and records
-   * the transaction response when needed. `onSkippedGroup` reports unresolved
-   * or invalid groups without aborting the scan.
+   * the transaction response when needed. Unresolved or invalid groups are skipped.
    */
-  public async *findOrders(
-    client: ccc.Client,
-    options?: { onSkippedGroup?: (reason: OrderGroupSkipReason) => void },
-  ): AsyncGenerator<OrderGroup> {
+  public async *findOrders(client: ccc.Client): AsyncGenerator<OrderGroup> {
     const [simpleOrders, allMasters] = await Promise.all([
       findSimpleOrders({ client, script: this.script, udtScript: this.udtScript }),
       findAllMasters({ client, script: this.script }),
@@ -192,7 +187,6 @@ export class OrderManager implements ScriptDeps {
     for (const order of simpleOrders) {
       const rawGroup = rawGroups.get(order.getMaster().toHex());
       if (rawGroup === undefined) {
-        options?.onSkippedGroup?.("missing-master");
         continue;
       }
       rawGroup.orders.push(order);
@@ -207,7 +201,6 @@ export class OrderManager implements ScriptDeps {
         this.isOrder(cell),
       );
       if (!orderGroup.ok) {
-        options?.onSkippedGroup?.(orderGroup.reason);
         continue;
       }
       foundGroups.push(orderGroup.group);

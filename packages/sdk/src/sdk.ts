@@ -8,14 +8,11 @@ import type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  IckbToCkbOrderEstimate,
-  MaturityOrderInput,
   SdkManagers,
   SystemState,
 } from "./client/sdk_types.ts";
 import type { getConfig } from "./constants.ts";
-import { estimate, estimateIckbToCkbOrder } from "./estimate/sdk_estimate.ts";
-import { maturity } from "./estimate/sdk_maturity.ts";
+import { estimate } from "./estimate/sdk_estimate.ts";
 import type { Info, OrderGroup } from "./order/index.ts";
 import type { ValueComponents } from "./utils/index.ts";
 export { IckbError, isIckbError } from "./client/sdk_error.ts";
@@ -44,11 +41,7 @@ export type {
   SdkManagers,
   SystemState,
 } from "./client/sdk_types.ts";
-export {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-  estimateMaturityFeeThreshold,
-} from "./estimate/sdk_estimate.ts";
+export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./estimate/sdk_estimate.ts";
 export {
   projectAccountAvailability,
   projectConversionTransactionContext,
@@ -110,14 +103,6 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
     return estimate(isCkb2Udt, amounts, system, options);
   }
 
-  /** Estimates the order path for an iCKB-to-CKB conversion when one is available. */
-  public static estimateIckbToCkbOrder(
-    amounts: ValueComponents,
-    system: SystemState,
-  ): IckbToCkbOrderEstimate | undefined {
-    return estimateIckbToCkbOrder(amounts, system);
-  }
-
   /**
    * Creates an SDK from a chain config object.
    */
@@ -128,11 +113,6 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
     } = config;
 
     return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order, bots });
-  }
-
-  /** Estimates maturity for an order input from the sampled system state. */
-  public static maturity(o: MaturityOrderInput, system: SystemState): bigint | undefined {
-    return maturity(o, system);
   }
 };
 
@@ -146,10 +126,5 @@ export const IckbSdk: {
     system: SystemState,
     options?: { fee?: ccc.Num; feeBase?: ccc.Num },
   ) => ConversionOrderEstimate;
-  estimateIckbToCkbOrder: (
-    amounts: ValueComponents,
-    system: SystemState,
-  ) => IckbToCkbOrderEstimate | undefined;
   fromConfig: (config: ReturnType<typeof getConfig>) => IckbSdk;
-  maturity: (o: MaturityOrderInput, system: SystemState) => bigint | undefined;
 } = IckbSdkImplementation;

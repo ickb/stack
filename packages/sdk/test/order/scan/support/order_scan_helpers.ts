@@ -9,15 +9,12 @@ import type {
   GetTransactionReturn,
 } from "../../fixtures/order_constants.ts";
 
-type FindOrdersOptions = Parameters<OrderManager["findOrders"]>[1];
-
 export async function collectOrders(
   manager: OrderManager,
   client: ccc.Client,
-  options?: FindOrdersOptions,
 ): Promise<OrderGroup[]> {
   const groups: OrderGroup[] = [];
-  for await (const group of manager.findOrders(client, options)) {
+  for await (const group of manager.findOrders(client)) {
     groups.push(group);
   }
   return groups;
@@ -123,20 +120,4 @@ export function dummyCell(byte: string, lock: ccc.Script, type: ccc.Script): ccc
     },
     outputData: "0x",
   });
-}
-
-export async function collectSkippedOrders(
-  manager: OrderManager,
-  client: ccc.Client,
-): Promise<{ groups: OrderGroup[]; skippedReasons: string[] }> {
-  const skippedReasons: string[] = [];
-  const groups: OrderGroup[] = [];
-  for await (const group of manager.findOrders(client, {
-    onSkippedGroup: (reason) => {
-      skippedReasons.push(reason);
-    },
-  })) {
-    groups.push(group);
-  }
-  return { groups, skippedReasons };
 }

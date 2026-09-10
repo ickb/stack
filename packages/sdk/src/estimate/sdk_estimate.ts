@@ -71,10 +71,7 @@ export function estimateIckbToCkbOrder(
     : dustIckbToCkbOrderEstimate(amounts, system, dustEstimate);
 }
 
-export {
-  estimateConversionOrder,
-  estimateMaturityFeeThreshold,
-} from "./sdk_estimate_core.ts";
+export { estimateConversionOrder } from "./sdk_estimate_core.ts";
 export { maxMaturity };
 
 function estimateIckbToCkbOrderDefaultFee(

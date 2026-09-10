@@ -64,38 +64,14 @@ interface ReceiptCellFromCache {
 }
 
 /**
- * Loads and decodes an iCKB receipt cell from a cell or out point.
+ * Decodes an iCKB receipt cell and reads its deposit header.
  *
  * @remarks `transactionCache` is scoped to one coherent read batch; it does not refresh transaction headers.
  */
 export async function receiptCellFrom(
-  options:
-    | ({
-        cell: ccc.Cell;
-        client: ccc.Client;
-      } & ReceiptCellFromCache)
-    | ({
-        outpoint: ccc.OutPoint;
-        client: ccc.Client;
-      } & ReceiptCellFromCache),
+  options: { cell: ccc.Cell; client: ccc.Client } & ReceiptCellFromCache,
 ): Promise<ReceiptCell> {
-  let cell: ccc.Cell;
-  if ("cell" in options) {
-    cell = options.cell;
-  } else {
-    let loadedCell: ccc.Cell | undefined;
-    try {
-      loadedCell = await options.client.getCell(options.outpoint);
-    } catch (error) {
-      throw new Error(`Failed to load cell for out point ${options.outpoint.toHex()}`, {
-        cause: error,
-      });
-    }
-    if (loadedCell === undefined) {
-      throw new Error(`Cell not found for out point ${options.outpoint.toHex()}`);
-    }
-    cell = loadedCell;
-  }
+  const { cell } = options;
 
   const txHash = cell.outPoint.txHash;
   let txWithHeaderPromise = options.transactionCache?.get(txHash);

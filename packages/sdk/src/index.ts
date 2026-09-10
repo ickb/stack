@@ -12,7 +12,6 @@ export {
   IckbSdk,
   TransactionBroadcastError,
   TransactionWaitError,
-  estimateMaturityFeeThreshold,
   isIckbError,
   projectAccountAvailability,
   projectConversionTransactionContext,

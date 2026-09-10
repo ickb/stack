@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { estimateIckbToCkbOrder } from "../../src/estimate/sdk_estimate.ts";
 import { type Info, OrderData, OrderManager, Ratio } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
@@ -61,7 +62,7 @@ const DUST_ICKB_TO_CKB = "dust-ickb-to-ckb";
 
 describe(ESTIMATE_SUITE, () => {
   it("does not advertise one-sat iCKB-to-CKB dust orders below the fee threshold", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({ ckbAvailable: 1n, tip: headerLike(0n, { timestamp: 1234n }) }),
     );
@@ -70,7 +71,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("does not throw when default iCKB-to-CKB fee precision exceeds Uint64", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({
@@ -99,7 +100,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("returns no iCKB-to-CKB estimate when default and dust quotes are unrepresentable", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({
@@ -114,7 +115,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("returns no iCKB-to-CKB estimate when both default and dust estimates are missing", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 0n },
       system({ ckbAvailable: 0n }),
     );
@@ -125,7 +126,7 @@ describe(ESTIMATE_SUITE, () => {
 
 describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("uses a dust estimate when the default iCKB-to-CKB quote is unrepresentable", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
@@ -141,7 +142,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   });
 
   it("keeps a base estimate without fee search when fee thresholds are disabled", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({ ckbAvailable: 1n, feeRate: 0n }),
     );
@@ -153,7 +154,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   });
 
   it("returns no iCKB-to-CKB estimate when the base quote converts to zero", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({ ckbScale: 2n, udtScale: 1n }),
@@ -165,7 +166,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   });
 
   it("uses a dust quote when the default quote has no actionable maturity", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 100000n },
       system({
         ckbAvailable: 100000n,
@@ -181,7 +182,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   });
 
   it("returns no dust estimate when no fee reaches the maturity threshold", () => {
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 2n },
       system({
         ckbAvailable: 2n,
@@ -239,7 +240,7 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       ckbScale: 10000000000000000n,
       udtScale: 11850413696044750n,
     });
-    const result = IckbSdk.estimateIckbToCkbOrder(
+    const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
       system({
         exchangeRatio,

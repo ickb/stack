@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { maturity } from "../../src/estimate/sdk_maturity.ts";
 import { Info } from "../../src/order/index.ts";
-import { IckbSdk } from "../../src/sdk.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import {
   headerLike,
@@ -13,21 +13,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IckbSdk.maturity", () => {
+describe("maturity", () => {
   it("returns undefined for dual-ratio orders", () => {
     const dualRatio = new Info(ratio, ratio, 1);
 
     expect(
-      IckbSdk.maturity(
-        { info: dualRatio, amounts: { ckbValue: 1n, udtValue: 1n } },
-        system(),
-      ),
+      maturity({ info: dualRatio, amounts: { ckbValue: 1n, udtValue: 1n } }, system()),
     ).toBeUndefined();
   });
 
   it("returns zero for already fulfilled orders", () => {
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(true, ratio),
           amounts: { ckbValue: 0n, udtValue: 0n },
@@ -39,7 +36,7 @@ describe("IckbSdk.maturity", () => {
 
   it("returns the baseline maturity when enough CKB is already available", () => {
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(false, ratio),
           amounts: { ckbValue: 0n, udtValue: 100n },
@@ -53,10 +50,10 @@ describe("IckbSdk.maturity", () => {
   });
 });
 
-describe("IckbSdk.maturity CKB availability", () => {
+describe("maturity CKB availability", () => {
   it("picks the first matching maturing CKB entry", () => {
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(false, ratio),
           amounts: { ckbValue: 0n, udtValue: 100n },
@@ -79,7 +76,7 @@ describe("IckbSdk.maturity CKB availability", () => {
     });
 
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info,
           amounts: {
@@ -98,10 +95,10 @@ describe("IckbSdk.maturity CKB availability", () => {
   });
 });
 
-describe("IckbSdk.maturity order pool pressure", () => {
+describe("maturity order pool pressure", () => {
   it("scales CKB-to-iCKB maturity when positive pressure exceeds the threshold", () => {
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(true, ratio),
           amounts: { ckbValue: ccc.fixedPointFrom(400000), udtValue: 0n },
@@ -122,7 +119,7 @@ describe("IckbSdk.maturity order pool pressure", () => {
     });
 
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(true, ratio),
           amounts: { ckbValue: 100n, udtValue: 0n },
@@ -145,7 +142,7 @@ describe("IckbSdk.maturity order pool pressure", () => {
     pressure.order.data.info = Info.create(false, { ckbScale: 2n, udtScale: 1n });
 
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(false, ratio),
           amounts: { ckbValue: 0n, udtValue: 100n },
@@ -159,10 +156,10 @@ describe("IckbSdk.maturity order pool pressure", () => {
   });
 });
 
-describe("IckbSdk.maturity order pressure", () => {
+describe("maturity order pressure", () => {
   it("keeps the base maturity when CKB-to-iCKB pressure is not positive", () => {
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(true, ratio),
           amounts: { ckbValue: 100n, udtValue: 0n },
@@ -184,7 +181,7 @@ describe("IckbSdk.maturity order pressure", () => {
     pressure.order.data.info = Info.create(false, ratio);
 
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(true, ratio),
           amounts: { ckbValue: 100n, udtValue: 0n },
@@ -207,7 +204,7 @@ describe("IckbSdk.maturity order pressure", () => {
     pressure.order.data.info = Info.create(false, { ckbScale: 1n, udtScale: 2n });
 
     expect(
-      IckbSdk.maturity(
+      maturity(
         {
           info: Info.create(false, ratio),
           amounts: { ckbValue: 0n, udtValue: 100n },

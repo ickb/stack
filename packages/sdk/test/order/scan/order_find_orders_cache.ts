@@ -16,15 +16,12 @@ import {
 } from "../matching/support/order_order_helpers.ts";
 import {
   collectOrders,
-  collectSkippedOrders,
   findOrdersFixture,
   masterCell,
   originLookupClient,
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
-
-const MISSING_ORIGIN = "missing-origin";
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin skips parseable non-mint origins in the master transaction", async () => {
@@ -125,10 +122,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: tx,
     });
 
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toHaveLength(0);
-    expect(skippedReasons).toEqual([MISSING_ORIGIN]);
   });
 
   it("uses cached origin transactions before fetching from the client", async () => {
@@ -236,10 +232,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(firstOrigin.getMaster().eq(originMaster)).toBe(true);
     expect(secondOrigin.getMaster().eq(originMaster)).toBe(true);
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toHaveLength(0);
-    expect(skippedReasons).toEqual(["ambiguous-origin"]);
   });
 });
 
@@ -263,10 +258,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: ccc.Transaction.default(),
     });
 
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toHaveLength(0);
-    expect(skippedReasons).toEqual([MISSING_ORIGIN]);
   });
 
   it("reports ambiguous descendant orders separately from missing descendants", async () => {
@@ -315,10 +309,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toHaveLength(0);
-    expect(skippedReasons).toEqual(["ambiguous-order"]);
   });
 });
 
@@ -350,10 +343,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: transactionWithOutputs([origin.cell, liveMaster]),
     });
 
-    const { groups, skippedReasons } = await collectSkippedOrders(manager, client);
+    const groups = await collectOrders(manager, client);
 
     expect(groups).toHaveLength(0);
-    expect(skippedReasons).toEqual(["missing-order"]);
   });
 });
 
