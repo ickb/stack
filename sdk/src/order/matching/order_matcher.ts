@@ -105,9 +105,13 @@ export class OrderMatcher {
       aOut: bOut,
     });
 
+    // limit_order's udt2ckb minimum on the UDT moved, valued at the ratio; bMinMatch
+    // is that bound rounded up to the ratio's grid, so this fires only on direct
+    // construction.
     if (
       !this.isCkb2Udt &&
-      this.aIn * this.aScale < aOut * this.aScale + this.bMinMatch * this.bScale
+      this.aIn * this.aScale <
+        aOut * this.aScale + this.group.order.data.info.getCkbMinMatch() * this.bScale
     ) {
       return { ckbDelta: 0n, udtDelta: 0n, partials: [] };
     }
@@ -206,13 +210,19 @@ function orderMatcherValues(
   }
 
   const { ckbScale: bScale, udtScale: aScale } = order.data.info.udtToCkb;
+  // The contract's udt2ckb minimum values the UDT moved at the ratio, and a payment of
+  // p CKB moves floor(p*bScale/aScale) UDT, so the smallest payment the contract accepts
+  // is the one whose floor reaches ceil(min*bScale/aScale) UDT: the plain minimum,
+  // rounded up to the ratio's grid.
+  const ckbMinMatch = order.data.info.getCkbMinMatch();
+  const udtMinMatch = (ckbMinMatch * bScale + aScale - 1n) / aScale;
   return {
     aScale,
     bScale,
     aIn: order.udtValue,
     bIn: order.ckbValue,
     aMin: 0n,
-    bMinMatch: order.data.info.getCkbMinMatch(),
+    bMinMatch: (udtMinMatch * aScale + bScale - 1n) / bScale,
     aMiningFee: 0n,
     bMiningFee: ckbMiningFee,
   };

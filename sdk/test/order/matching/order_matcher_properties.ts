@@ -192,6 +192,46 @@ describe("order matcher properties versus contract oracle", () => {
   );
 });
 
+describe("minimum match pre-gate", () => {
+  it.each(DIRECTIONS)(
+    "$name: every allowance from bMinMatch up to the whole fill matches one valid partial",
+    ({ isCkb2Udt }) => {
+      // The pre-gate is the contract's own minimum on the value moved, so nothing the
+      // gate admits is rejected later; the seller side rounds the CKB minimum up to the
+      // ratio's grid for that.
+      fc.assert(
+        fc.property(
+          orderAndFeeArb(isCkb2Udt),
+          allowanceArb,
+          ({ order, ckbMiningFee }, pick) => {
+            const matcher = mustMatcher(order, isCkb2Udt, ckbMiningFee);
+            const band = matcher.bMaxMatch - matcher.bMinMatch;
+            for (const bAllowance of [
+              matcher.bMinMatch,
+              matcher.bMinMatch + (pick % (band + 1n)),
+            ]) {
+              const match = matcher.match(bAllowance);
+              expect(match.partials).toHaveLength(1);
+              expect(adjudicate(order, match)).toEqual(["ok"]);
+            }
+          },
+        ),
+      );
+    },
+  );
+
+  it("rounds a seller's minimum up to the first payment whose UDT covers it", () => {
+    // Three CKB buy one UDT; a minimum of one CKB moves no whole UDT, so the first
+    // payment the contract accepts is three CKB.
+    const info = Info.create(false, { ckbScale: 1n, udtScale: 3n }, 0);
+    const order = orderWith({ info, ckbUnoccupied: 0n, udtValue: 1_000n });
+    const matcher = mustMatcher(order, false);
+    expect(matcher.bMinMatch).toBe(3n);
+    expect(matcher.match(2n).partials).toHaveLength(0);
+    expect(adjudicate(order, matcher.match(3n))).toEqual(["ok"]);
+  });
+});
+
 describe("ckb2udt entry.rs:116 post-guard reachability", () => {
   it("admitted partial-band allowances clear the plain-CKB minimum at any fee", () => {
     // The post-guard fires only when a partial moves less than ckbMinMatch

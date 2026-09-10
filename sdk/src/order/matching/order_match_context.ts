@@ -149,29 +149,48 @@ export function fullGain(context: BestMatchContext, matcher: OrderMatcher): bigi
 /**
  * Drops the orders no combination could pay: a buyer's minimum beyond the iCKB
  * allowance plus everything every payable seller could hand over, and the same for
- * sellers, until no order's supply rests on one that was dropped.
+ * sellers. Each direction is sorted by its minimum, so dropping the largest minimum
+ * first and taking its supply from the other direction's budget settles both in one
+ * sweep, however long the chain of orders that only paid for each other.
  */
 function fundableMatchers(
   context: BestMatchContext,
   buyers: OrderMatcher[],
   sellers: OrderMatcher[],
 ): { buyers: OrderMatcher[]; sellers: OrderMatcher[] } {
-  const supply = (matchers: OrderMatcher[], isCkb: boolean): bigint =>
-    matchers.reduce((sum, matcher) => {
-      const full = fullFill(matcher);
-      return sum + (isCkb ? full.ckbDelta : full.udtDelta);
-    }, 0n);
-  const udtBudget = context.allowance.udtValue + supply(sellers, false);
-  const ckbBudget =
-    context.allowance.ckbValue - context.ckbMiningFee + supply(buyers, true);
-  const fundable = {
-    buyers: buyers.filter((matcher) => matcher.bMinMatch <= udtBudget),
-    sellers: sellers.filter((matcher) => matcher.bMinMatch <= ckbBudget),
+  const byMinimum = (matchers: OrderMatcher[]): OrderMatcher[] =>
+    matchers.toSorted((left, right) => compareBigInt(left.bMinMatch, right.bMinMatch));
+  const supply = (matcher: OrderMatcher): bigint => {
+    const full = fullFill(matcher);
+    return matcher.isCkb2Udt ? full.ckbDelta : full.udtDelta;
   };
-  return fundable.buyers.length === buyers.length &&
-    fundable.sellers.length === sellers.length
-    ? fundable
-    : fundableMatchers(context, fundable.buyers, fundable.sellers);
+  const sorted = { buyers: byMinimum(buyers), sellers: byMinimum(sellers) };
+  const budget = {
+    buyers:
+      context.allowance.udtValue + sorted.sellers.reduce((sum, m) => sum + supply(m), 0n),
+    sellers:
+      context.allowance.ckbValue -
+      context.ckbMiningFee +
+      sorted.buyers.reduce((sum, m) => sum + supply(m), 0n),
+  };
+  for (let dropped = true; dropped;) {
+    dropped = false;
+    for (const [side, other] of [
+      ["buyers", "sellers"],
+      ["sellers", "buyers"],
+    ] as const) {
+      for (
+        let last = sorted[side].at(-1);
+        last !== undefined && last.bMinMatch > budget[side];
+        last = sorted[side].at(-1)
+      ) {
+        sorted[side].pop();
+        budget[other] -= supply(last);
+        dropped = true;
+      }
+    }
+  }
+  return sorted;
 }
 
 /**

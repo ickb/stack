@@ -539,6 +539,89 @@ describe("best match search", () => {
     probes.mockRestore();
   });
 
+  it("closes with the seller whose minimum the CKB covers when two others' minimums round past it", () => {
+    // All three sellers share the minimum exponent; the bot holds exactly that minimum
+    // plus one fee, which the two cheaper ratios round past and the useful one meets.
+    const M = 1n << 39n;
+    const groups = resolvedOrderGroups([
+      seller("e1", 4n * L, 3n * L, 39),
+      seller("e2", 4n * L, 3n * L, 39),
+      seller("e3", 5n * L, 4n * L, 39),
+    ]);
+    const allowance = { ckbValue: M + FEE, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(gainAtUnit(result.match, FEE)).toBe(137_438_953_189n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("ranks closers by the gain of the fill after its whole fee", () => {
+    // The two large buyers gain a little per unit but lose the fee on the sliver the
+    // bot can pay; the small buyer gains 116 after the fee.
+    const groups = resolvedOrderGroups([
+      buyer("e4", 10n * L, 9_999_980_000_000n),
+      buyer("e5", 10n * L, 9_999_980_000_000n),
+      buyer("e6", 100_000_401n, 100_000_001n),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: D };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(gainAtUnit(result.match, FEE)).toBe(116n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("drops a long chain of orders that only paid for each other in one sweep", () => {
+    // Buyer i needs one unit more iCKB than sellers 1..i supply and seller i one fee
+    // less CKB than buyers 1..i offer, so each drop makes the next order unpayable.
+    const N = 2000;
+    const orders = Array.from({ length: N }, (_, index) => {
+      const i = BigInt(index + 1);
+      return [
+        makeOrderCell({
+          ckbUnoccupied: 2n * D,
+          udtValue: 0n,
+          info: Info.from({
+            ckbToUdt: ratioOf(2n * D, i * 2n * D + 1n),
+            udtToCkb: Ratio.empty(),
+            ckbMinMatchLog: 44,
+          }),
+          master: {
+            type: "absolute",
+            value: { txHash: hashOf(2 * index + 1), index: 1n },
+          },
+          outPoint: { txHash: hashOf(2 * index + 1), index: 0n },
+        }),
+        makeOrderCell({
+          ckbUnoccupied: 0n,
+          udtValue: 2n * D,
+          info: Info.from({
+            ckbToUdt: Ratio.empty(),
+            udtToCkb: ratioOf(i * 2n * D - FEE, 2n * D),
+            ckbMinMatchLog: 44,
+          }),
+          master: {
+            type: "absolute",
+            value: { txHash: hashOf(2 * index + 2), index: 1n },
+          },
+          outPoint: { txHash: hashOf(2 * index + 2), index: 0n },
+        }),
+      ];
+    }).flat();
+    const groups = resolvedOrderGroups(orders);
+    const started = performance.now();
+
+    const result = OrderManager.bestMatch(groups, { ckbValue: 0n, udtValue: 0n }, UNIT, {
+      feeRate: 1000n,
+      candidateBudget: 1,
+    });
+
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(result.match.partials).toHaveLength(0);
+    expect(result.match.diagnostics?.truncatedMatchers).toBe(2 * N);
+  });
+
   it("pairs buyers and sellers on a balanced thousand-order book within a few hundred milliseconds", () => {
     const orders = Array.from({ length: 1000 }, (_, index) =>
       makeOrderCell({

@@ -349,6 +349,21 @@ function registerOrderGroupProvenanceTests(): void {
 }
 
 function registerMeltGroupValidationTests(): void {
+  it("hands out frozen groups, so a caller cannot reprice a resolved order", () => {
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      master: { type: "absolute", value: { txHash: byte32FromByte("79"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("5d"), index: 0n },
+    });
+    const group = resolvedOrderGroup(order);
+
+    for (const target of [group, group.order, group.order.data, group.order.data.info]) {
+      expect(Object.isFrozen(target)).toBe(true);
+    }
+  });
+
   it("builds the transaction of a best match from the resolver's groups", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({

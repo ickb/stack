@@ -132,4 +132,31 @@ describe("defense-in-depth guard on direct construction", () => {
     expect(desynced.match(4n).partials).toHaveLength(0);
     expect(sound.match(16n).partials).toHaveLength(1);
   });
+
+  it("rejects a seller partial whose UDT is worth less than the minimum when bMinMatch is desynced", () => {
+    // Three CKB buy one UDT and the minimum is one CKB, so from() rounds bMinMatch up
+    // to 3; a direct construction admitting 1 CKB moves no UDT at all.
+    const info = infoFrom({
+      udtToCkb: { ckbScale: 1n, udtScale: 3n },
+      ckbMinMatchLog: 0,
+    });
+    const order = orderWith({ info, ckbUnoccupied: 0n, udtValue: 1_000n });
+    const sound = mustMatcher(order, false);
+    expect(sound.bMinMatch).toBe(3n);
+
+    const desynced = new OrderMatcher(sound.group, false, {
+      aScale: sound.aScale,
+      bScale: sound.bScale,
+      aIn: sound.aIn,
+      bIn: sound.bIn,
+      aMin: sound.aMin,
+      bMinMatch: 1n,
+      bMaxMatch: sound.bMaxMatch,
+      bMaxOut: sound.bMaxOut,
+      realRatioNumerator: sound.realRatioNumerator,
+      realRatioDenominator: sound.realRatioDenominator,
+    });
+    expect(desynced.match(1n).partials).toHaveLength(0);
+    expect(sound.match(3n).partials).toHaveLength(1);
+  });
 });

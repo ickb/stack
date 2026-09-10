@@ -13,10 +13,8 @@ interface Node {
   matcher: OrderMatcher;
   full: Match;
   key: string;
-  /** Gain of the whole fill, net of its fee, as a number for ranking closers cheaply. */
-  gainNumber: number;
-  /** Gain per unit of the asset the bot pays, for what a smaller fill is worth. */
-  rate: number;
+  /** Gain of the whole fill, net of its fee; negative for a losing order. */
+  gain: bigint;
   next: Node | undefined;
   /** Gain this order and the rest could still add, ignoring what funds them. */
   positiveGain: bigint;
@@ -39,6 +37,7 @@ interface State {
 interface Fill {
   key: string;
   fill: Match;
+  gain: bigint;
 }
 
 /** What the bot still holds of each asset. */
@@ -47,7 +46,7 @@ interface Balances {
   udt: bigint;
 }
 
-/** How many unused orders of a direction a node probes as closers, per fill size. */
+/** How many unused orders of a direction a node keeps as closers, per fill size. */
 const CLOSERS = 2;
 
 /** Search progress; the walk mutates it through its own methods. */
@@ -104,8 +103,7 @@ class Search {
         matcher,
         full,
         key: matcher.group.order.cell.outPoint.toHex(),
-        gainNumber: Number(gain),
-        rate: Number(gain) / Number(matcher.bMaxMatch),
+        gain,
         next,
         positiveGain: (next?.positiveGain ?? 0n) + padded,
       };
@@ -146,9 +144,9 @@ class Search {
  * other's proceeds, sized to the largest fill the balances pay or the smallest that
  * repairs a deficit, so a partial can repair what whole fills leave short. A branch is
  * pruned when its gain plus every remaining gain cannot beat the incumbent. The work
- * budget, charged per node, per closer examined and per closer probed, ends the search
- * with the best feasible match seen and the largest gain an unvisited branch could
- * still hold (decisions amendment 52).
+ * budget, charged per node and per closer examined, ends the search with the best
+ * feasible match seen and the largest gain an unvisited branch could still hold
+ * (decisions amendment 52).
  */
 export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
   const search = new Search(context);
@@ -241,18 +239,19 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
       bestGain = gain;
     }
   };
-  // The unused orders of one direction whose fill at the given size is worth most, from
-  // the list sorted by whole gain, which bounds what any smaller fill is worth, so the
-  // scan stops once no order left could beat the ones picked.
+  // The unused orders of one direction whose fill at the given size gains most, each
+  // probed once as it is examined. The list is sorted by whole gain, so the scan stops
+  // once no order left could beat the ones kept; a smaller fill can beat its whole
+  // fill by one rounding unit of value, which the stop accepts losing.
   const pick = (
     nodes: Node[],
     size: (matcher: OrderMatcher) => bigint | undefined,
     except: string | undefined,
-  ): Array<{ node: Node; payment: bigint; worth: number }> => {
-    const picked: Array<{ node: Node; payment: bigint; worth: number }> = [];
+  ): Fill[] => {
+    const picked: Fill[] = [];
     for (const node of nodes) {
       const worst = picked[CLOSERS - 1];
-      if (worst !== undefined && worst.worth >= 0 && node.gainNumber <= worst.worth) {
+      if (worst !== undefined && worst.gain >= 0n && node.gain <= worst.gain) {
         break;
       }
       if (!search.charge(upper)) {
@@ -265,9 +264,10 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
       if (payment === undefined) {
         continue;
       }
-      const worth = node.rate * Number(payment);
-      const at = picked.findIndex((entry) => entry.worth < worth);
-      picked.splice(at === -1 ? picked.length : at, 0, { node, payment, worth });
+      const fill = node.matcher.match(payment);
+      const gain = gainOf(context, fill);
+      const at = picked.findIndex((entry) => entry.gain < gain);
+      picked.splice(at === -1 ? picked.length : at, 0, { key: node.key, fill, gain });
       picked.length = Math.min(picked.length, CLOSERS);
     }
     return picked;
@@ -290,17 +290,7 @@ function closed(search: Search, state: State, upper: bigint): Match | undefined 
         return payment <= minBigInt(budget, matcher.bMaxMatch) ? payment : undefined;
       });
     }
-    const found: Fill[] = [];
-    for (const { node, payment } of sizes.flatMap((size) => pick(nodes, size, except))) {
-      if (!search.charge(upper)) {
-        break;
-      }
-      const fill = node.matcher.match(payment);
-      if (fill.partials.length > 0) {
-        found.push({ key: node.key, fill });
-      }
-    }
-    return found;
+    return sizes.flatMap((size) => pick(nodes, size, except));
   };
   // Closers of one direction paid from what is left: buyers spend the iCKB and must
   // repair a CKB deficit, sellers the reverse, each fill's fee taken off the CKB first.
