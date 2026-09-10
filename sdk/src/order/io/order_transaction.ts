@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "../../utils/index.ts";
 import type { Match } from "../matching/match_types.ts";
 import { OrderGroup, validatedOrderGroup } from "../model/cells.ts";
@@ -140,12 +140,6 @@ function assertMatchPartial(
   if (!(group instanceof OrderGroup)) {
     throw new TypeError("Match partial is missing resolved order provenance");
   }
-  const wrappedOrder = group.order;
-  const wrappedOutPoint = wrappedOrder.cell.outPoint.toHex();
-  if (ccc.hexFrom(wrappedOrder.data.toBytes()) !== wrappedOrder.cell.outputData) {
-    throw new Error(`Match order ${wrappedOutPoint} does not match its cell data`);
-  }
-
   const validatedGroup = validatedOrderGroup(group);
   const { order } = validatedGroup;
   const outPoint = order.cell.outPoint.toHex();

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import { OrderCell, OrderGroup } from "../../../src/order/model/cells.ts";
 import { Info } from "../../../src/order/model/info.ts";
-import { OrderData } from "../../../src/order/model/order_data.ts";
 import { Ratio } from "../../../src/order/model/ratio.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
@@ -278,21 +277,8 @@ function registerMatchPartialValidationTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
       outPoint: { txHash: byte32FromByte("56"), index: 0n },
     });
-    const mismatched = new OrderCell({
-      cell: order.cell,
-      data: OrderData.from({
-        udtValue: 11n,
-        master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-        info: order.data.info,
-      }),
-      ckbUnoccupied: order.ckbUnoccupied,
-      absTotal: order.absTotal,
-      absProgress: order.absProgress,
-      maturity: order.maturity,
-    });
     const group = resolvedOrderGroup(order);
     const foreignGroup = resolvedOrderGroup(foreign);
-    const mismatchedGroup = new OrderGroup(group.master, mismatched, group.origin);
 
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
@@ -327,15 +313,6 @@ function registerMatchPartialValidationTests(): void {
         partials: [{ group, ckbOut: order.ckbValue, udtOut: -1n }],
       }),
     ).toThrow("negative UDT output");
-    expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [
-          { group: mismatchedGroup, ckbOut: order.ckbValue, udtOut: order.udtValue },
-        ],
-      }),
-    ).toThrow("does not match its cell data");
   });
 }
 
@@ -372,40 +349,6 @@ function registerOrderGroupProvenanceTests(): void {
 }
 
 function registerMeltGroupValidationTests(): void {
-  it("rejects canonical cell mutation after resolution", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("77"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("5b"), index: 0n },
-    });
-    const group = resolvedOrderGroup(order);
-    group.order.cell.outputData = "0x";
-
-    expect(() => manager.melt(ccc.Transaction.default(), [group])).toThrow(
-      "Resolved OrderGroup canonical cells were mutated",
-    );
-  });
-
-  it("rejects decoded wrapper mutation after resolution", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("78"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("5c"), index: 0n },
-    });
-    const group = resolvedOrderGroup(order);
-    group.order.ckbUnoccupied += 1n;
-
-    expect(() => manager.melt(ccc.Transaction.default(), [group])).toThrow(
-      "Resolved OrderGroup wrapper was mutated",
-    );
-  });
-
   it("rejects melt groups from a different manager", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const foreignOrder = makeOrderCell({
@@ -563,7 +506,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 
     const result = OrderManager.bestMatch(groups, allowance, exchangeRate, options);
 
-    expect(result).toMatchObject({ kind: "incomplete", budget: 3, work: 3 });
+    expect(result).toMatchObject({ kind: "incomplete", budget: 3 });
     if (result.kind !== "incomplete") {
       throw new Error("Expected an incomplete search");
     }

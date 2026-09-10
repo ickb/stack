@@ -4,10 +4,13 @@ import { OrderData } from "./order_data.ts";
 
 interface ResolvedOrderGroupAttestation {
   master: ccc.Cell;
-  masterBytes: string;
-  orderBytes: string;
   origin: ccc.Cell;
-  originBytes: string;
+  /**
+   * The group parsed once from private clones of the resolved cells: matching and
+   * transactions use it, so nothing the caller does to its own wrappers or cells reaches
+   * them, and no call re-parses the book.
+   */
+  canonical: OrderGroup;
 }
 
 const resolvedOrderGroups = new WeakMap<ccc.Cell, ResolvedOrderGroupAttestation>();
@@ -512,17 +515,21 @@ export class OrderGroup implements ValueComponents {
 /** Records canonical resolver output without exposing forgeable provenance data. */
 export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
   group.validate();
+  const canonical = new OrderGroup(
+    MasterCell.from(group.master.cell.clone()),
+    OrderCell.mustFrom(group.order.cell.clone()),
+    OrderCell.mustFrom(group.origin.cell.clone()),
+  );
+  canonical.validate();
   resolvedOrderGroups.set(group.order.cell, {
     master: group.master.cell,
-    masterBytes: canonicalCellBytes(group.master.cell),
-    orderBytes: canonicalCellBytes(group.order.cell),
     origin: group.origin.cell,
-    originBytes: canonicalCellBytes(group.origin.cell),
+    canonical,
   });
   return group;
 }
 
-/** Re-reads and validates a resolved group at a matching or transaction boundary. */
+/** Returns the resolver's parse of a group at a matching or transaction boundary. */
 export function validatedOrderGroup(group: OrderGroup): OrderGroup {
   if (!(group instanceof OrderGroup)) {
     throw new TypeError("Matching requires resolved OrderGroups from findOrders()");
@@ -538,37 +545,5 @@ export function validatedOrderGroup(group: OrderGroup): OrderGroup {
   ) {
     throw new TypeError("OrderGroup does not match its resolver attestation");
   }
-  if (
-    canonicalCellBytes(group.master.cell) !== attestation.masterBytes ||
-    canonicalCellBytes(group.order.cell) !== attestation.orderBytes ||
-    canonicalCellBytes(group.origin.cell) !== attestation.originBytes
-  ) {
-    throw new Error("Resolved OrderGroup canonical cells were mutated");
-  }
-  assertCanonicalOrderWrapper(group.order);
-  assertCanonicalOrderWrapper(group.origin);
-
-  const validated = new OrderGroup(
-    MasterCell.from(group.master.cell),
-    OrderCell.mustFrom(group.order.cell),
-    OrderCell.mustFrom(group.origin.cell),
-  );
-  validated.validate();
-  return validated;
-}
-
-function canonicalCellBytes(cell: ccc.Cell): string {
-  return `${cell.outPoint.toHex()}:${cell.cellOutput.toHex()}:${cell.outputData}`;
-}
-
-function assertCanonicalOrderWrapper(order: OrderCell): void {
-  const canonical = OrderCell.mustFrom(order.cell);
-  if (
-    ccc.hexFrom(order.data.toBytes()) !== order.cell.outputData ||
-    order.ckbUnoccupied !== canonical.ckbUnoccupied ||
-    order.absTotal !== canonical.absTotal ||
-    order.absProgress !== canonical.absProgress
-  ) {
-    throw new Error("Resolved OrderGroup wrapper was mutated");
-  }
+  return attestation.canonical;
 }
