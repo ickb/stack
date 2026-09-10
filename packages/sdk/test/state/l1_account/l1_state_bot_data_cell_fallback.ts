@@ -81,7 +81,7 @@ describe(L1_STATE_SUITE, () => {
       },
     });
 
-    const state = await sdk.getL1State(client, []);
+    const state = await sdk.getL1AccountState(client, []);
 
     expect(state.user.orders).toEqual([]);
     // The plain bot cell counts net of the 2,000 CKB the bot keeps; the data cell is ignored.

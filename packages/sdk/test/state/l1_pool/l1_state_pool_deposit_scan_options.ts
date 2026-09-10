@@ -27,7 +27,7 @@ describe(L1_STATE_SUITE, () => {
     const minLockUp = ccc.Epoch.from([0n, 1n, 16n]);
     const maxLockUp = ccc.Epoch.from([0n, 4n, 16n]);
 
-    await sdk.getL1State(client, [], { poolDeposits: { minLockUp, maxLockUp } });
+    await sdk.getL1AccountState(client, [], { poolDeposits: { minLockUp, maxLockUp } });
 
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({
       tip: baseTip,

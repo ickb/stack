@@ -1,21 +1,20 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  addBotCkb,
-  botWithdrawalCkb,
   cumulativeCkbMaturing,
-  mergeBotCkb,
   poolDepositCkb,
   poolDepositsKey,
-  positiveMapValueSum,
 } from "../conversion/sdk_value_helpers.ts";
-import { ickbExchangeRatio } from "../core/index.ts";
+import {
+  ickbExchangeRatio,
+  type ReceiptCell,
+  type WithdrawalGroup,
+} from "../core/index.ts";
 import { orderGroupWithMaturity } from "../estimate/sdk_maturity_order_group.ts";
 import { Info, Ratio, type OrderGroup } from "../order/index.ts";
 import { collect, findCells, isPlainCapacityCell, unique } from "../utils/index.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
 import type {
   AccountState,
-  CkbCumulative,
   GetL1StateOptions,
   MaturingCkb,
   PoolDepositRangeOptions,
@@ -23,17 +22,77 @@ import type {
   SystemState,
 } from "./sdk_types.ts";
 
+/** Plain CKB each known bot keeps for its own cells and fees, excluded from the maturity estimate. */
+const botCkbReserve = ccc.fixedPointFrom("2000");
+
+/** Every Stack cell one lock owns, classified from a single exact-lock scan. */
+interface LockCells {
+  lock: ccc.Script;
+  capacityCells: ccc.Cell[];
+  nativeUdtCells: ccc.Cell[];
+  receipts: ReceiptCell[];
+  withdrawalGroups: WithdrawalGroup[];
+}
+
 /**
  * SDK layer that reads public and account L1 state.
  *
  * @remarks Every read is complete and uncapped: a large book or pool costs a
- * slower read, never a partial or failed one (decisions amendment 52).
+ * slower read, never a partial or failed one. Each account lock and each known
+ * bot lock is enumerated by one uncached unfiltered exact-lock scan and
+ * classified client-side, so the account read and the bot maturity estimate
+ * share one observation of the same cells (decisions amendment 52).
  */
 export class IckbSdkL1 extends IckbSdkConversion {
   /**
-   * Reads public iCKB pool deposits and evaluates readiness against the sampled tip.
+   * Reads system, user-order, and account state against one sampled tip.
    */
-  public async getPoolDeposits(
+  public async getL1AccountState(
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ): Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }> {
+    const tip = await client.getTipHeader();
+    const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
+    const [poolDeposits, orders, feeRate, lockCells] = await Promise.all([
+      this.getPoolDeposits(client, tip, options?.poolDeposits),
+      collect(this.order.findOrders(client)),
+      getFeeRate(client),
+      Promise.all(
+        [...unique([...locks, ...this.bots])].map(async (lock) =>
+          this.readLockCells(client, lock, tip),
+        ),
+      ),
+    ]);
+    const { ckbAvailable, ckbMaturing } = this.ckbProjection(
+      lockCells,
+      poolDeposits,
+      tip,
+    );
+    const { systemOrders, userOrders } = partitionOrders(orders, locks, exchangeRatio);
+    const system = {
+      feeRate,
+      tip,
+      exchangeRatio,
+      orderPool: systemOrders,
+      ckbAvailable,
+      ckbMaturing,
+      poolDeposits,
+    };
+    return {
+      system,
+      user: { orders: userOrders.map((group) => orderGroupWithMaturity(group, system)) },
+      account: accountState(
+        lockCells.filter(({ lock }) => locks.some((l) => l.eq(lock))),
+      ),
+    };
+  }
+
+  private async getPoolDeposits(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
     range?: PoolDepositRangeOptions,
@@ -48,165 +107,78 @@ export class IckbSdkL1 extends IckbSdkConversion {
     return { deposits, id: poolDepositsKey(deposits, tip) };
   }
 
-  /**
-   * Reads account cells, receipts, withdrawal groups, and native iCKB xUDT cells.
-   */
-  public async getAccountState(
+  private async readLockCells(
     client: ccc.Client,
-    locks: ccc.Script[],
+    lock: ccc.Script,
     tip: ccc.ClientBlockHeader,
-  ): Promise<AccountState> {
-    const [liquidCells, receipts, withdrawalGroups] = await Promise.all([
-      this.findAccountLiquidCells(client, locks),
-      collect(this.ickbLogic.findReceipts(client, locks)),
-      collect(this.ownedOwner.findWithdrawalGroups(client, locks, { tip })),
+  ): Promise<LockCells> {
+    const cells = await findCells(client, {
+      script: lock,
+      scriptType: "lock",
+      scriptSearchMode: "exact",
+      withData: true,
+    });
+    const [receipts, withdrawalGroups] = await Promise.all([
+      this.ickbLogic.receiptsFrom(client, cells),
+      this.ownedOwner.withdrawalGroupsFrom(client, cells, tip),
     ]);
-    const capacityCells = liquidCells.filter(isPlainCapacityCell);
-    const nativeUdtCells = liquidCells.filter((cell) => this.ickbUdt.isUdt(cell));
-    const nativeUdt = nativeUdtCells.reduce(
-      (acc, cell) => ({
-        capacity: acc.capacity + cell.cellOutput.capacity,
-        balance: acc.balance + ccc.udtBalanceFrom(cell.outputData),
-      }),
-      { capacity: 0n, balance: 0n },
-    );
-
     return {
-      capacityCells,
-      nativeUdtCells,
-      nativeUdtCapacity: nativeUdt.capacity,
-      nativeUdtBalance: nativeUdt.balance,
+      lock,
+      capacityCells: cells.filter(isPlainCapacityCell),
+      nativeUdtCells: cells.filter((cell) => this.ickbUdt.isUdt(cell)),
       receipts,
       withdrawalGroups,
     };
   }
 
-  /**
-   * Reads system and account state using one sampled L1 system state.
-   */
-  public async getL1AccountState(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    options?: GetL1StateOptions,
-  ): Promise<{
-    system: SystemState;
-    user: { orders: OrderGroup[] };
-    account: AccountState;
-  }> {
-    const { system, user } = await this.getL1State(client, locks, options);
-    const account = await this.getAccountState(client, locks, system.tip);
-    return { system, user, account };
-  }
-
-  /**
-   * Samples L1 system state and partitions user-owned orders from the public order pool.
-   */
-  public async getL1State(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    options?: GetL1StateOptions,
-  ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }> {
-    const tip = await client.getTipHeader();
-    const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
-    const [poolDeposits, orders, feeRate] = await Promise.all([
-      this.getPoolDeposits(client, tip, options?.poolDeposits),
-      collect(this.order.findOrders(client)),
-      getFeeRate(client),
-    ]);
-    const { ckbAvailable, ckbMaturing } = await this.getCkb(client, tip, poolDeposits);
-    const { systemOrders, userOrders } = partitionOrders(orders, locks, exchangeRatio);
-    const system = {
-      feeRate,
-      tip,
-      exchangeRatio,
-      orderPool: systemOrders,
-      ckbAvailable,
-      ckbMaturing,
-      poolDeposits,
-    };
-    return {
-      system,
-      user: { orders: userOrders.map((group) => orderGroupWithMaturity(group, system)) },
-    };
-  }
-
-  private async getCkb(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
+  /** CKB the system can pay out: ready pool deposits plus each known bot's spendable CKB. */
+  private ckbProjection(
+    lockCells: readonly LockCells[],
     poolDeposits: PoolDepositState,
-  ): Promise<{ ckbAvailable: ccc.FixedPoint; ckbMaturing: CkbCumulative[] }> {
-    const [botCkb, withdrawalCkb] = await Promise.all([
-      this.getBotCkbBalances(client),
-      this.getBotWithdrawalCkb(client, tip),
-    ]);
+    tip: ccc.ClientBlockHeader,
+  ): Pick<SystemState, "ckbAvailable" | "ckbMaturing"> {
     const poolCkb = poolDepositCkb(poolDeposits, tip);
-
-    return {
-      ckbAvailable:
-        positiveMapValueSum(mergeBotCkb(botCkb, withdrawalCkb.ready)) + poolCkb.ready,
-      ckbMaturing: cumulativeCkbMaturing([
-        ...withdrawalCkb.maturing,
-        ...poolCkb.maturing,
-      ]),
-    };
-  }
-
-  private async getBotCkbBalances(
-    client: ccc.Client,
-  ): Promise<Map<string, ccc.FixedPoint>> {
-    const bot2Ckb = new Map<string, ccc.FixedPoint>();
-    for (const lock of unique(this.bots)) {
-      const cells = await this.findPlainCapacityCells(client, lock);
-      for (const cell of cells) {
-        addBotCkb(bot2Ckb, lock.toHex(), cell.cellOutput.capacity);
+    let ckbAvailable = poolCkb.ready;
+    const maturing: MaturingCkb[] = [...poolCkb.maturing];
+    for (const bot of lockCells.filter(({ lock }) => this.bots.some((b) => b.eq(lock)))) {
+      let ready = -botCkbReserve;
+      for (const cell of bot.capacityCells) {
+        ready += cell.cellOutput.capacity;
+      }
+      for (const group of bot.withdrawalGroups) {
+        if (group.owned.isReady) {
+          ready += group.ckbValue;
+        } else {
+          maturing.push({
+            ckbValue: group.ckbValue,
+            maturity: group.owned.maturity.toUnix(tip),
+          });
+        }
+      }
+      if (ready > 0n) {
+        ckbAvailable += ready;
       }
     }
-    return bot2Ckb;
+    return { ckbAvailable, ckbMaturing: cumulativeCkbMaturing(maturing) };
   }
+}
 
-  private async findPlainCapacityCells(
-    client: ccc.Client,
-    lock: ccc.Script,
-  ): Promise<ccc.Cell[]> {
-    const cells = await findCells(client, {
-      script: lock,
-      scriptType: "lock",
-      filter: { scriptLenRange: [0n, 1n], outputDataLenRange: [0n, 1n] },
-      scriptSearchMode: "exact",
-      withData: true,
-    });
-    return cells.filter(isPlainCapacityCell);
-  }
-
-  private async getBotWithdrawalCkb(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-  ): Promise<{ ready: Map<string, ccc.FixedPoint>; maturing: MaturingCkb[] }> {
-    const withdrawals = await collect(
-      this.ownedOwner.findWithdrawalGroups(client, this.bots, { tip }),
-    );
-    return botWithdrawalCkb(withdrawals, tip);
-  }
-
-  private async findAccountLiquidCells(
-    client: ccc.Client,
-    locks: ccc.Script[],
-  ): Promise<ccc.Cell[]> {
-    const liquidCells: ccc.Cell[] = [];
-    // One exact-lock scan per distinct lock: a cell has one lock, so no cell repeats.
-    for (const lock of unique(locks)) {
-      const cells = await findCells(client, {
-        script: lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-        withData: true,
-      });
-      liquidCells.push(
-        ...cells.filter((cell) => isPlainCapacityCell(cell) || this.ickbUdt.isUdt(cell)),
-      );
-    }
-    return liquidCells;
-  }
+function accountState(lockCells: readonly LockCells[]): AccountState {
+  const nativeUdtCells = lockCells.flatMap((cells) => cells.nativeUdtCells);
+  return {
+    capacityCells: lockCells.flatMap((cells) => cells.capacityCells),
+    nativeUdtCells,
+    nativeUdtCapacity: nativeUdtCells.reduce(
+      (sum, cell) => sum + cell.cellOutput.capacity,
+      0n,
+    ),
+    nativeUdtBalance: nativeUdtCells.reduce(
+      (sum, cell) => sum + ccc.udtBalanceFrom(cell.outputData),
+      0n,
+    ),
+    receipts: lockCells.flatMap((cells) => cells.receipts),
+    withdrawalGroups: lockCells.flatMap((cells) => cells.withdrawalGroups),
+  };
 }
 
 function partitionOrders(

@@ -4,7 +4,6 @@ import { OwnerCell } from "../../../src/core/cells.ts";
 import { OwnerData } from "../../../src/core/entities.ts";
 import { OwnedOwnerManager } from "../../../src/core/owned_owner.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
-import { collect } from "../../../src/utils/index.ts";
 import {
   FIND_WITHDRAWAL_GROUPS_SUITE,
   headerLike,
@@ -44,9 +43,8 @@ function registerOwnerDecodingTests(): void {
 }
 
 function registerOwnerFilterTests(): void {
-  it("filters owners by owner type and owner lock", async () => {
+  it("recognizes owner markers by owner type and decodable data", async () => {
     const ownerLock = script("11");
-    const otherLock = script("12");
     const ownedOwnerScript = script("22");
     const manager = new OwnedOwnerManager(
       ownedOwnerScript,
@@ -59,7 +57,6 @@ function registerOwnerFilterTests(): void {
       cellOutput: { capacity: 61n, lock: ownerLock, type: ownedOwnerScript },
       outputData: "0x00",
     });
-    const wrongLockOwner = ownerCell("77", otherLock, ownedOwnerScript);
     const wrongTypeOwner = ownerCell("88", ownerLock, script("44"));
     const impossibleOwner = ccc.Cell.from({
       outPoint: { txHash: `0x${"99".repeat(32)}`, index: 0n },
@@ -67,18 +64,6 @@ function registerOwnerFilterTests(): void {
       outputData: OwnerData.from({ ownedDistance: -1n }).toBytes(),
     });
     const client = new StubClient({
-      getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
-        await Promise.resolve();
-        return headerLike();
-      },
-      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
-        await Promise.resolve();
-        yield matchingOwner;
-        yield shortDataOwner;
-        yield wrongLockOwner;
-        yield wrongTypeOwner;
-        yield impossibleOwner;
-      },
       getCell: async (): ReturnType<ccc.Client["getCell"]> => {
         await Promise.resolve();
         return undefined;
@@ -89,8 +74,10 @@ function registerOwnerFilterTests(): void {
     expect(manager.isOwner(shortDataOwner)).toBe(false);
     expect(manager.isOwner(impossibleOwner)).toBe(false);
 
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock, ownerLock]),
+    const groups = await manager.withdrawalGroupsFrom(
+      client,
+      [matchingOwner, shortDataOwner, wrongTypeOwner, impossibleOwner],
+      headerLike(),
     );
 
     expect(groups).toEqual([]);

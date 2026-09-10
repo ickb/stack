@@ -12,7 +12,6 @@ import { DaoManager } from "../../../src/dao/dao.ts";
 
 export const REQUEST_WITHDRAWAL_SUITE = "DaoManager.requestWithdrawal";
 export const FIND_DEPOSITS_SUITE = "DaoManager.findDeposits";
-export const FIND_WITHDRAWAL_REQUESTS_SUITE = "DaoManager.findWithdrawalRequests";
 
 export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = [];

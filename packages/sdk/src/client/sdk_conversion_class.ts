@@ -17,8 +17,6 @@ import type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   IckbToCkbConversionPlan,
-  PoolDepositRangeOptions,
-  PoolDepositState,
 } from "./sdk_types.ts";
 
 /**
@@ -27,11 +25,6 @@ import type {
  */
 export abstract class IckbSdkConversion extends IckbSdkBase {
   /** Reads public pool deposits and evaluates readiness against the supplied sampled tip. */
-  public abstract getPoolDeposits(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-    options?: PoolDepositRangeOptions,
-  ): Promise<PoolDepositState>;
 
   /**
    * Builds and completes one conversion transaction from a conversion context.

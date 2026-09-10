@@ -11,10 +11,6 @@ import { IckbUdt } from "../../../../src/core/udt.ts";
 
 export const LOGIC_MANAGER_DEPOSIT_SUITE = "LogicManager.deposit";
 
-export function noCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
-  return cellsOf([]);
-}
-
 export function receiptPair(logic: ccc.Script, lock: ccc.Script): [ccc.Cell, ccc.Cell] {
   return [receiptCell("44", logic, lock), receiptCell("55", logic, lock)];
 }
@@ -28,11 +24,6 @@ export function receiptPhase2Capacity(lock: ccc.Script): ccc.FixedPoint {
       }).occupiedSize,
     ) * ccc.One;
   return plainCellCapacity + IckbUdt.minimumXudtCellCapacity(lock) + ccc.One;
-}
-
-async function* cellsOf(cells: readonly ccc.Cell[]): AsyncGenerator<ccc.Cell> {
-  await Promise.resolve();
-  yield* cells;
 }
 
 function receiptCell(txHashByte: string, logic: ccc.Script, lock: ccc.Script): ccc.Cell {

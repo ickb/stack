@@ -13,7 +13,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     const feeRateStatistics = vi.fn(() => null);
     const client = clientWithFeeRateStatistics(feeRateStatistics);
 
-    const state = await defaultL1Sdk().getL1State(client, []);
+    const state = await defaultL1Sdk().getL1AccountState(client, []);
 
     expect(feeRateStatistics).toHaveBeenCalledTimes(1);
     expect(state.system.feeRate).toBe(1000n);
@@ -27,7 +27,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
       throw feeRateError;
     });
 
-    await expect(defaultL1Sdk().getL1State(client, [])).rejects.toBe(feeRateError);
+    await expect(defaultL1Sdk().getL1AccountState(client, [])).rejects.toBe(feeRateError);
   });
 
   it("rejects a negative fee rate returned by a custom client", async () => {
@@ -39,7 +39,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
       -1n,
     );
 
-    await expect(defaultL1Sdk().getL1State(client, [])).rejects.toThrow(
+    await expect(defaultL1Sdk().getL1AccountState(client, [])).rejects.toThrow(
       "Client fee rate must be non-negative",
     );
   });

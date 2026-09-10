@@ -320,50 +320,6 @@ export class DaoManager implements ScriptDeps {
     }
   }
 
-  /**
-   * Finds DAO withdrawal request cells for the given locks.
-   *
-   * @param options - Scan options. `tip` controls readiness calculations.
-   * @remarks Header and transaction caches are shared across the scan so withdrawal conversions reuse DAO reads.
-   */
-  public async *findWithdrawalRequests(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    options?: { tip?: ccc.ClientBlockHeader },
-  ): AsyncGenerator<DaoWithdrawalRequestCell> {
-    const tip = options?.tip ?? (await client.getTipHeader());
-    const locksToScan = Array.from(unique(locks));
-
-    const headerCache: DaoCellFromCache["headerCache"] = new Map();
-    const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
-    const foundWithdrawals: DaoWithdrawalRequestCell[] = [];
-    for (const lock of locksToScan) {
-      const withdrawalCandidates = (
-        await findCells(client, {
-          script: lock,
-          scriptType: "lock",
-          filter: { script: this.script },
-          scriptSearchMode: "exact",
-          withData: true,
-        })
-      ).filter((cell) => this.isWithdrawalRequest(cell) && cell.cellOutput.lock.eq(lock));
-
-      const withdrawals = await Promise.all(
-        withdrawalCandidates.map(async (cell) =>
-          this.withdrawalRequestCellFrom(cell, client, {
-            tip,
-            headerCache,
-            transactionCache,
-          }),
-        ),
-      );
-      foundWithdrawals.push(...withdrawals);
-    }
-    for (const withdrawal of foundWithdrawals) {
-      yield withdrawal;
-    }
-  }
-
   private assertDepositReadyForWithdrawalRequest(deposit: DaoDepositCell): void {
     const outPoint = deposit.cell.outPoint.toHex();
     if (!this.isDeposit(deposit.cell)) {

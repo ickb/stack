@@ -55,7 +55,7 @@ describe(L1_STATE_SUITE, () => {
       findCellsOnChain: emptyCellScan,
     });
 
-    const state = await sdk.getL1State(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock]);
 
     expect(state.user.orders).toHaveLength(1);
     expect(state.user.orders[0]).not.toBe(ownerOrder.group);
@@ -75,7 +75,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
       txHashByte: "b1",
     });
 
-    const state = await sdk.getL1State(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock]);
 
     expect(state.user.orders).toEqual([]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
@@ -87,7 +87,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
       txHashByte: "c1",
     });
 
-    const state = await sdk.getL1State(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock]);
 
     expect(state.user.orders).toEqual([]);
     expect(state.system.orderPool).toEqual([]);

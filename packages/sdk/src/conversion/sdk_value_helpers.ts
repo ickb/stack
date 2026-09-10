@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import {
   CONVERSION_MATURITY_BUCKET_MS,
   type CkbCumulative,
@@ -6,43 +6,9 @@ import {
   type MaturingCkb,
   type PoolDepositState,
 } from "../client/sdk_types.ts";
-import { convert, type IckbDepositCell, type WithdrawalGroup } from "../core/index.ts";
+import { convert, type IckbDepositCell } from "../core/index.ts";
 import type { Ratio } from "../order/index.ts";
 import { compareBigInt } from "../utils/index.ts";
-
-export function mergeBotCkb(
-  left: Map<string, ccc.FixedPoint>,
-  right: Map<string, ccc.FixedPoint>,
-): Map<string, ccc.FixedPoint> {
-  const merged = new Map(left);
-  for (const [key, ckbValue] of right) {
-    addBotCkb(merged, key, ckbValue);
-  }
-  return merged;
-}
-
-export function botWithdrawalCkb(
-  withdrawals: readonly WithdrawalGroup[],
-  tip: ccc.ClientBlockHeader,
-): { ready: Map<string, ccc.FixedPoint>; maturing: MaturingCkb[] } {
-  const ready = new Map<string, ccc.FixedPoint>();
-  const maturing: MaturingCkb[] = [];
-  for (const withdrawal of withdrawals) {
-    if (withdrawal.owned.isReady) {
-      addBotCkb(
-        ready,
-        withdrawal.owner.cell.cellOutput.lock.toHex(),
-        withdrawal.ckbValue,
-      );
-    } else {
-      maturing.push({
-        ckbValue: withdrawal.ckbValue,
-        maturity: withdrawal.owned.maturity.toUnix(tip),
-      });
-    }
-  }
-  return { ready, maturing };
-}
 
 export function cumulativeCkbMaturing(maturing: readonly MaturingCkb[]): CkbCumulative[] {
   let cumulative = 0n;
@@ -92,27 +58,6 @@ export function readyPoolDeposits(
     poolDeposits.deposits.filter((deposit) => deposit.isReady),
     tip,
   );
-}
-
-export function addBotCkb(
-  botCkb: Map<string, ccc.FixedPoint>,
-  key: string,
-  ckbValue: ccc.FixedPoint,
-): void {
-  const reserved = -ccc.fixedPointFrom("2000");
-  botCkb.set(key, (botCkb.get(key) ?? reserved) + ckbValue);
-}
-
-export function positiveMapValueSum(
-  values: ReadonlyMap<string, ccc.FixedPoint>,
-): ccc.FixedPoint {
-  let total = 0n;
-  for (const value of values.values()) {
-    if (value > 0n) {
-      total += value;
-    }
-  }
-  return total;
 }
 
 export function directWithdrawalSurplus(

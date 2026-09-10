@@ -4,7 +4,7 @@ import {
   type DaoCellFromCache,
   type DaoManager,
 } from "../dao/index.ts";
-import { findCells, unique, type ScriptDeps } from "../utils/index.ts";
+import type { ScriptDeps } from "../utils/index.ts";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.ts";
 import { OwnerData } from "./entities.ts";
 
@@ -130,64 +130,41 @@ export class OwnedOwnerManager implements ScriptDeps {
   }
 
   /**
-   * Finds owner marker cells for the given locks and yields valid owned withdrawal groups.
+   * Resolves the owner markers among `cells` into withdrawal groups.
    *
-   * @param options - Scan options. `tip` controls readiness calculations.
-   * @remarks Header and transaction caches span all requested locks so related DAO cell conversions share the same reads.
+   * @remarks The caller enumerates the account's cells once; this only recognizes
+   * owner markers and fetches each owned withdrawal request, which lives in the
+   * marker's own transaction at the encoded distance. Markers whose target is not an
+   * owned withdrawal request are skipped. Header and transaction caches span the batch.
    */
-  public async *findWithdrawalGroups(
+  public async withdrawalGroupsFrom(
     client: ccc.Client,
-    locks: ccc.Script[],
-    options?: { tip?: ccc.ClientBlockHeader },
-  ): AsyncGenerator<WithdrawalGroup> {
-    const tip = options?.tip ?? (await client.getTipHeader());
-    const locksToScan = Array.from(unique(locks));
+    cells: readonly ccc.Cell[],
+    tip: ccc.ClientBlockHeader,
+  ): Promise<WithdrawalGroup[]> {
     const headerCache: DaoCellFromCache["headerCache"] = new Map();
     const transactionCache: DaoCellFromCache["transactionCache"] = new Map();
-    const foundGroups: WithdrawalGroup[] = [];
-    for (const lock of locksToScan) {
-      const ownerCandidates = (
-        await findCells(client, {
-          script: lock,
-          scriptType: "lock",
-          filter: { script: this.script },
-          scriptSearchMode: "exact",
-          withData: true,
-        })
-      )
-        .filter((cell) => this.isOwner(cell) && cell.cellOutput.lock.eq(lock))
-        .map((cell) => new OwnerCell(cell));
-
-      const ownedCells = await Promise.all(
-        ownerCandidates.map(async (owner) => client.getCell(owner.getOwned())),
-      );
-
-      const withdrawalGroups = await Promise.all(
-        ownerCandidates.map(
-          async (owner, index): Promise<WithdrawalGroup | undefined> => {
-            const ownedCell = ownedCells[index];
-            if (ownedCell === undefined || !this.isOwned(ownedCell)) {
-              return undefined;
-            }
-            const owned = await this.daoManager.withdrawalRequestCellFrom(
-              ownedCell,
-              client,
-              {
-                tip,
-                headerCache,
-                transactionCache,
-              },
-            );
-            return new WithdrawalGroup(owned, owner);
-          },
-        ),
-      );
-
-      foundGroups.push(...withdrawalGroups.filter((group) => group !== undefined));
-    }
-    for (const group of foundGroups) {
-      yield group;
-    }
+    const owners = cells
+      .filter((cell) => this.isOwner(cell))
+      .map((cell) => new OwnerCell(cell));
+    const ownedCells = await Promise.all(
+      owners.map(async (owner) => client.getCell(owner.getOwned())),
+    );
+    const groups = await Promise.all(
+      owners.map(async (owner, index): Promise<WithdrawalGroup | undefined> => {
+        const ownedCell = ownedCells[index];
+        if (ownedCell === undefined || !this.isOwned(ownedCell)) {
+          return undefined;
+        }
+        const owned = await this.daoManager.withdrawalRequestCellFrom(ownedCell, client, {
+          tip,
+          headerCache,
+          transactionCache,
+        });
+        return new WithdrawalGroup(owned, owner);
+      }),
+    );
+    return groups.filter((group) => group !== undefined);
   }
 }
 

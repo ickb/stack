@@ -9,7 +9,6 @@ import {
   emptyCellScan,
   FeeRateStubClient,
   l1SdkWithManagers,
-  none,
   repeat,
   tipHeaderHandler,
   transactionWithHeader,
@@ -35,7 +34,6 @@ describe(L1_STATE_SUITE, () => {
     const findDeposits = vi
       .spyOn(logicManager, "findDeposits")
       .mockImplementation(() => repeat(1, readyDeposit));
-    vi.spyOn(ownedOwnerManager, "findWithdrawalGroups").mockImplementation(() => none());
     const sdk = l1SdkWithManagers({
       botLock,
       ownedOwnerManager,
@@ -53,7 +51,7 @@ describe(L1_STATE_SUITE, () => {
       },
     });
 
-    const state = await sdk.getL1State(client, []);
+    const state = await sdk.getL1AccountState(client, []);
 
     expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({ tip });
     expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(100082));

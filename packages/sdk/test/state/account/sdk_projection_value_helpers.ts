@@ -1,12 +1,8 @@
-import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import {
-  botWithdrawalCkb,
   cumulativeCkbMaturing,
-  mergeBotCkb,
   poolDepositCkb,
   poolDepositsKey,
-  positiveMapValueSum,
   sortDepositsByMaturity,
   sumDirectWithdrawalSurplus,
   sumUdtValue,
@@ -20,38 +16,17 @@ import {
   nativeUdtCell,
   plainCapacityCell,
   projectionReadyDeposit,
-  withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, ratio } from "../../transaction/base/support/sdk_core_support.ts";
 
 describe("sdk projection value helpers", () => {
   it("covers CKB projection helper branches", () => {
-    const ready = withdrawalValue({ ckbValue: 10n, isReady: true, byte: "41" });
-    const pending = withdrawalValue({
-      ckbValue: 20n,
-      isReady: false,
-      maturityUnix: 30n,
-      byte: "42",
-    });
     const readyDeposit = projectionReadyDeposit(5n, 40n, { ckbValue: 50n, id: "43" });
     const pendingDeposit = projectionReadyDeposit(7n, 60n, {
       ckbValue: 70n,
       id: "44",
       isReady: false,
     });
-    const left = new Map([["a", 1n]]);
-    const right = new Map([
-      ["a", 2n],
-      ["b", 3n],
-    ]);
-
-    const reserved = -ccc.fixedPointFrom("2000");
-    const readyCkb = botWithdrawalCkb([ready, pending], baseTip).ready;
-
-    expect(readyCkb.get(ready.owner.cell.cellOutput.lock.toHex())).toBe(reserved + 10n);
-    expect(botWithdrawalCkb([ready, pending], baseTip).maturing).toEqual([
-      { ckbValue: 20n, maturity: 30n },
-    ]);
     expect(
       cumulativeCkbMaturing([
         { ckbValue: 2n, maturity: 2n },
@@ -61,15 +36,6 @@ describe("sdk projection value helpers", () => {
       { ckbCumulative: 3n, maturity: 1n },
       { ckbCumulative: 5n, maturity: 2n },
     ]);
-    expect(mergeBotCkb(left, right).get("a")).toBe(3n);
-    expect(
-      positiveMapValueSum(
-        new Map([
-          ["a", -1n],
-          ["b", 3n],
-        ]),
-      ),
-    ).toBe(3n);
     expect(
       poolDepositCkb(
         {

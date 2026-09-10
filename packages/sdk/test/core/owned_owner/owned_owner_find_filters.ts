@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnedOwnerManager } from "../../../src/core/owned_owner.ts";
 import { ickbValue } from "../../../src/core/udt.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
-import { collect } from "../../../src/utils/index.ts";
 import {
   byte32FromByte,
   FIND_WITHDRAWAL_GROUPS_SUITE,
@@ -47,11 +46,9 @@ function registerOwnerLockFilterTests(): void {
       },
       outputData: ccc.mol.Uint64LE.encode(1n),
     });
-    const client = clientWithSingleOwned(tip, ownerCell, fakeOwned);
+    const client = clientWithReferencedCells(tip, [fakeOwned]);
 
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock], { tip }),
-    );
+    const groups = await manager.withdrawalGroupsFrom(client, [ownerCell], tip);
 
     expect(groups).toEqual([]);
   });
@@ -80,14 +77,6 @@ function registerPreDecodeFilterTests(): void {
     });
     let headerLookups = 0;
     const client = new StubClient({
-      getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
-        await Promise.resolve();
-        return tip;
-      },
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        yield ownerCell;
-      },
       getCell: async (): ReturnType<ccc.Client["getCell"]> => {
         await Promise.resolve();
         return fakeOwned;
@@ -106,9 +95,7 @@ function registerPreDecodeFilterTests(): void {
       },
     });
 
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock], { tip }),
-    );
+    const groups = await manager.withdrawalGroupsFrom(client, [ownerCell], tip);
 
     expect(groups).toEqual([]);
     expect(headerLookups).toBe(0);
@@ -140,14 +127,12 @@ function registerWithdrawalTypeFilterTests(): void {
       script("44"),
       ccc.mol.Uint64LE.encode(1n),
     );
-    const client = clientWithReferencedCells(
-      tip,
-      [firstOwner, secondOwner],
-      [deposit, foreignCell],
-    );
+    const client = clientWithReferencedCells(tip, [deposit, foreignCell]);
 
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock], { tip }),
+    const groups = await manager.withdrawalGroupsFrom(
+      client,
+      [firstOwner, secondOwner],
+      tip,
     );
 
     expect(groups).toEqual([]);
@@ -176,14 +161,6 @@ function registerWithdrawalValueTests(): void {
       depositHeaderNumber: depositHeader.number,
     });
     const client = new StubClient({
-      getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
-        await Promise.resolve();
-        return tip;
-      },
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        yield ownerCell;
-      },
       getCell: async (): ReturnType<ccc.Client["getCell"]> => {
         await Promise.resolve();
         return owned;
@@ -200,40 +177,21 @@ function registerWithdrawalValueTests(): void {
       },
     });
 
-    const groups = await collect(
-      manager.findWithdrawalGroups(client, [ownerLock], { tip }),
-    );
+    const groups = await manager.withdrawalGroupsFrom(client, [ownerCell], tip);
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.udtValue).toBe(ickbValue(owned.capacityFree, depositHeader));
   });
 }
 
-function clientWithSingleOwned(
-  tip: ccc.ClientBlockHeader,
-  owner: ccc.Cell,
-  owned: ccc.Cell,
-): ccc.Client {
-  return clientWithReferencedCells(tip, [owner], [owned]);
-}
-
 function clientWithReferencedCells(
   tip: ccc.ClientBlockHeader,
-  owners: ccc.Cell[],
   referenced: ccc.Cell[],
 ): ccc.Client {
   const referencedCells = new Map(
     referenced.map((cell) => [cell.outPoint.toHex(), cell]),
   );
   return new StubClient({
-    getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
-      await Promise.resolve();
-      return tip;
-    },
-    async *findCells(): ReturnType<ccc.Client["findCells"]> {
-      await Promise.resolve();
-      yield* owners;
-    },
     getCell: async (outPoint): ReturnType<ccc.Client["getCell"]> => {
       await Promise.resolve();
       return referencedCells.get(ccc.OutPoint.from(outPoint).toHex());

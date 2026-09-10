@@ -3,12 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReceiptData } from "../../../src/core/entities.ts";
 import { LogicManager } from "../../../src/core/logic.ts";
 import { DaoManager } from "../../../src/dao/index.ts";
-import { collect } from "../../../src/utils/index.ts";
 import {
   byte32FromByte,
   headerLike,
   LOGIC_MANAGER_DEPOSIT_SUITE,
-  noCellsOnChain,
   receiptPair,
   script,
   StubClient,
@@ -23,7 +21,6 @@ describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {
   registerReceiptFilteringTests();
   registerReceiptWireFormatTests();
   registerReceiptConcurrencyTests();
-  registerReceiptScanTests();
   registerReceiptHeaderCacheTests();
 });
 
@@ -44,30 +41,18 @@ function registerReceiptWireFormatTests(): void {
 }
 
 function registerReceiptFilteringTests(): void {
-  it("filters receipts by exact lock and type while deduplicating locks", async () => {
+  it("converts only the receipt cells of a batch", async () => {
     const logic = script("11");
     const wantedLock = script("22");
-    const otherLock = script("33");
     const receiptData = ReceiptData.from({
       depositQuantity: 1,
       depositAmount: ccc.fixedPointFrom(100000),
     }).toBytes();
     const validReceipt = receiptCell("44", logic, wantedLock, receiptData);
-    const wrongLock = receiptCell("55", logic, otherLock, receiptData);
     const wrongType = receiptCell("66", script("77"), wantedLock, receiptData);
     const shortData = receiptCell("99", logic, wantedLock, "0x00");
-    let calls = 0;
     const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
     const client = new StubClient({
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        calls += 1;
-        yield validReceipt;
-        yield wrongLock;
-        yield wrongType;
-        yield shortData;
-      },
-      findCellsOnChain: noCellsOnChain,
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {
@@ -76,11 +61,12 @@ function registerReceiptFilteringTests(): void {
       },
     });
 
-    const receipts = await collect(
-      manager.findReceipts(client, [wantedLock, wantedLock]),
-    );
+    const receipts = await manager.receiptsFrom(client, [
+      validReceipt,
+      wrongType,
+      shortData,
+    ]);
 
-    expect(calls).toBe(1);
     expect(manager.isReceipt(shortData)).toBe(false);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]?.cell.outPoint.txHash).toBe(byte32FromByte("44"));
@@ -88,7 +74,7 @@ function registerReceiptFilteringTests(): void {
 }
 
 function registerReceiptConcurrencyTests(): void {
-  it("fetches receipt headers concurrently and yields scan order", async () => {
+  it("fetches receipt headers concurrently and keeps batch order", async () => {
     const logic = script("11");
     const wantedLock = script("22");
     const [firstReceipt, secondReceipt] = receiptPair(logic, wantedLock);
@@ -104,12 +90,6 @@ function registerReceiptConcurrencyTests(): void {
     const requests: ccc.Hex[] = [];
     const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
     const client = new StubClient({
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        yield firstReceipt;
-        yield secondReceipt;
-      },
-      findCellsOnChain: noCellsOnChain,
       getTransactionWithHeader: async (
         txHash,
       ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
@@ -119,7 +99,7 @@ function registerReceiptConcurrencyTests(): void {
       },
     });
 
-    const receiptsPromise = collect(manager.findReceipts(client, [wantedLock]));
+    const receiptsPromise = manager.receiptsFrom(client, [firstReceipt, secondReceipt]);
 
     await vi.waitFor(() => {
       expect(requests).toEqual([
@@ -140,33 +120,8 @@ function registerReceiptConcurrencyTests(): void {
   });
 }
 
-function registerReceiptScanTests(): void {
-  it("scans receipts directly from chain", async () => {
-    const logic = script("11");
-    const wantedLock = script("22");
-    const [receipt] = receiptPair(logic, wantedLock);
-    const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
-    const client = new StubClient({
-      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
-        await Promise.resolve();
-        yield receipt;
-      },
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return transactionWithHeader(headerLike());
-      },
-    });
-
-    const receipts = await collect(manager.findReceipts(client, [wantedLock]));
-
-    expect(receipts).toHaveLength(1);
-  });
-}
-
 function registerReceiptHeaderCacheTests(): void {
-  it("reuses receipt transaction header requests across lock scans", async () => {
+  it("reuses one transaction header request across the receipts of a batch", async () => {
     const logic = script("11");
     const firstLock = script("22");
     const secondLock = script("33");
@@ -192,11 +147,6 @@ function registerReceiptHeaderCacheTests(): void {
     let transactionCalls = 0;
     const manager = new LogicManager(logic, [], new DaoManager(script("88"), []));
     const client = new StubClient({
-      async *findCells(query): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        yield ccc.Script.from(query.script).eq(firstLock) ? firstReceipt : secondReceipt;
-      },
-      findCellsOnChain: noCellsOnChain,
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {
@@ -206,7 +156,7 @@ function registerReceiptHeaderCacheTests(): void {
       },
     });
 
-    const receipts = await collect(manager.findReceipts(client, [firstLock, secondLock]));
+    const receipts = await manager.receiptsFrom(client, [firstReceipt, secondReceipt]);
 
     expect(transactionCalls).toBe(1);
     expect(receipts.map((receipt) => receipt.cell.outPoint.index)).toEqual([0n, 1n]);

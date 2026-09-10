@@ -26,7 +26,7 @@ describe(L1_STATE_SUITE, () => {
       findCellsOnChain: emptyCellScan,
     });
 
-    const state = await sdk.getL1State(client, []);
+    const state = await sdk.getL1AccountState(client, []);
 
     expect(state.system.tip).toBe(firstTip);
     expect(getTipHeader).toHaveBeenCalledTimes(1);

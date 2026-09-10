@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertDaoOutputLimit, DaoManager, DaoOutputLimitError } from "../dao/index.ts";
-import { findCells, type ScriptDeps, unique } from "../utils/index.ts";
+import type { ScriptDeps } from "../utils/index.ts";
 import {
   type IckbDepositCell,
   ickbDepositCellFrom,
@@ -180,55 +180,24 @@ export class LogicManager implements ScriptDeps {
   }
 
   /**
-   * Async generator that finds and yields receipt cells matching the given lock scripts.
+   * Converts the receipt cells among `cells` into receipts.
    *
-   * Receipt cells are identified by `this.script` (the receipt type script)
-   * and must also pass `this.isReceipt(cell)`.
-   *
-   * @param client - CKB client used for direct on-chain searches.
-   * @param locks - Lock scripts whose exact matching receipt cells will be considered.
-   * @returns An async generator yielding {@link ReceiptCell} objects for each valid receipt cell found.
-   *
-   * @remarks
-   * - Deduplicates `locks` via `unique(locks)`.
-   * - Applies an RPC filter with:
-   *     - `script: this.script` (receipt type script)
-   * - Skips any cell that:
-   *     1. Fails `this.isReceipt(cell)`
-   *     2. Has a non-matching lock script
-   * - Converts each raw cell with a transaction cache shared across this scan batch.
+   * @remarks The caller enumerates the account's cells once; this only recognizes
+   * receipts and reads each deposit header, sharing one transaction cache per batch.
    */
-  public async *findReceipts(
+  public async receiptsFrom(
     client: ccc.Client,
-    locks: ccc.Script[],
-  ): AsyncGenerator<ReceiptCell> {
-    const locksToScan = Array.from(unique(locks));
+    cells: readonly ccc.Cell[],
+  ): Promise<ReceiptCell[]> {
     const transactionCache = new Map<
       ccc.Hex,
       Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
     >();
-    const foundReceipts: ReceiptCell[] = [];
-    for (const lock of locksToScan) {
-      const receiptCandidates = (
-        await findCells(client, {
-          script: lock,
-          scriptType: "lock",
-          filter: { script: this.script },
-          scriptSearchMode: "exact",
-          withData: true,
-        })
-      ).filter((cell) => this.isReceipt(cell) && cell.cellOutput.lock.eq(lock));
-
-      const receipts = await Promise.all(
-        receiptCandidates.map(async (cell) =>
-          receiptCellFrom({ client, cell, transactionCache }),
-        ),
-      );
-      foundReceipts.push(...receipts);
-    }
-    for (const receipt of foundReceipts) {
-      yield receipt;
-    }
+    return Promise.all(
+      cells
+        .filter((cell) => this.isReceipt(cell))
+        .map(async (cell) => receiptCellFrom({ client, cell, transactionCache })),
+    );
   }
 
   /**

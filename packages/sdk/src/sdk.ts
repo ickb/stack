@@ -10,8 +10,6 @@ import type {
   GetL1StateOptions,
   IckbToCkbOrderEstimate,
   MaturityOrderInput,
-  PoolDepositRangeOptions,
-  PoolDepositState,
   SdkManagers,
   SystemState,
 } from "./client/sdk_types.ts";
@@ -81,13 +79,7 @@ export interface IckbSdk {
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction>;
-  /** Scans wallet-owned cells, evaluating withdrawal readiness at `tip`. */
-  getAccountState(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    tip: ccc.ClientBlockHeader,
-  ): Promise<AccountState>;
-  /** Returns sampled system, user-order, and account state from best-effort scans. */
+  /** Reads system, user-order, and account state against one sampled tip. */
   getL1AccountState(
     client: ccc.Client,
     locks: ccc.Script[],
@@ -97,18 +89,6 @@ export interface IckbSdk {
     user: { orders: OrderGroup[] };
     account: AccountState;
   }>;
-  /** Samples system state and partitions user orders from the public order pool. */
-  getL1State(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    options?: GetL1StateOptions,
-  ): Promise<{ system: SystemState; user: { orders: OrderGroup[] } }>;
-  /** Scans public pool deposits and evaluates readiness against `tip`. */
-  getPoolDeposits(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-    options?: PoolDepositRangeOptions,
-  ): Promise<PoolDepositState>;
   /** Adds a user-owned order request, deriving its lock from a signer when needed. */
   request(
     txLike: ccc.TransactionLike,
