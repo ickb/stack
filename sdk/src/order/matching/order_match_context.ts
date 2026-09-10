@@ -25,6 +25,11 @@ const PREPARED_PARTIAL_SERIALIZATION_OVERHEAD =
   OUTPUT_DATA_SERIALIZATION_OVERHEAD +
   EMPTY_WITNESS_SERIALIZATION_SIZE;
 const DEFAULT_CANDIDATE_BUDGET = 100_000;
+// Beyond this many orders per direction the worst-priced ones wait for the next turn:
+// whoever floods the book pays cell capacity for every order and only moves the bot
+// onto the better-priced ones, and the walk's recursion depth stays bounded. Capping
+// each direction on its own keeps the funding side of a lopsided book in the search.
+const MAX_SEARCH_ORDERS_PER_DIRECTION = 500;
 
 /** Options controlling bounded best-match search. @public */
 export interface BestMatchOptions {
@@ -67,8 +72,14 @@ export function createBestMatchContext({
   const maxPartials = checkedMaxPartials(options?.maxPartials);
   const ckbMiningFee =
     (preparedPartialOrderSerializedSize(orderSize) * feeRate + 999n) / 1000n;
-  const ckbToUdtMatchers = orderMatchers(orderPool, true, ckbMiningFee);
-  const udtToCkbMatchers = orderMatchers(orderPool, false, ckbMiningFee);
+  // A pool that repeats a cell would let the walk fill it twice; one entry per outpoint.
+  const uniquePool = [
+    ...new Map(
+      orderPool.map((group) => [group.order.cell.outPoint.toHex(), group]),
+    ).values(),
+  ];
+  const ckbToUdtMatchers = orderMatchers(uniquePool, true, ckbMiningFee);
+  const udtToCkbMatchers = orderMatchers(uniquePool, false, ckbMiningFee);
   const context: BestMatchContext = {
     allowance,
     candidateBudget,
@@ -90,11 +101,18 @@ export function createBestMatchContext({
       },
       bestGain: 0n,
       gainUpperBound: 0n,
+      truncatedMatchers: 0,
     },
   };
-  context.matchers = [...ckbToUdtMatchers, ...udtToCkbMatchers].toSorted((left, right) =>
-    compareMarginDesc(context, left, right),
-  );
+  const byMargin = (matchers: OrderMatcher[]): OrderMatcher[] =>
+    matchers.toSorted((left, right) => compareMarginDesc(context, left, right));
+  const searched = [
+    ...byMargin(ckbToUdtMatchers).slice(0, MAX_SEARCH_ORDERS_PER_DIRECTION),
+    ...byMargin(udtToCkbMatchers).slice(0, MAX_SEARCH_ORDERS_PER_DIRECTION),
+  ];
+  context.diagnostics.truncatedMatchers =
+    ckbToUdtMatchers.length + udtToCkbMatchers.length - searched.length;
+  context.matchers = byMargin(searched);
   return context;
 }
 
@@ -105,6 +123,14 @@ export function gainOf(context: BestMatchContext, match: Match): bigint {
       context.ckbScale +
     match.udtDelta * context.udtScale
   );
+}
+
+/**
+ * One unit of rounding in the bot's favour, valued at the exchange ratio: a partial fill
+ * can gain this much more than the full fill's per-unit rate, so bounds add it per order.
+ */
+export function gainSlack(context: BestMatchContext): bigint {
+  return context.ckbScale + context.udtScale;
 }
 
 /** The full fill of a matcher: everything the order offers. */

@@ -94,8 +94,9 @@ export class OrderManager implements ScriptDeps {
    * @remarks
    * Groups preserve the genuine mint origin used by the resolver's confusion
    * heuristic. Raw `OrderCell`s are intentionally not accepted for matching.
-   * A complete result proves the atomic optimum; an incomplete result carries
-   * the best exactly evaluated candidate without claiming global optimality.
+   * A complete result is the best of the search space (whole fills plus one closing
+   * partial per direction); an incomplete result carries the best feasible match
+   * visited and the gain an unvisited branch could still hold.
    */
   public static bestMatch(
     orderPool: OrderGroup[],
