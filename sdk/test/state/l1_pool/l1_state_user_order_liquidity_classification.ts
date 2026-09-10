@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OrderManager } from "../../../src/order/index.ts";
+import { OrderCell, OrderGroup, OrderManager } from "../../../src/order/index.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -33,7 +33,19 @@ describe(L1_STATE_SUITE, () => {
       ownerLock: userLock,
       txHashByte: "a1",
     });
-    ownerOrder.group.order.maturity = 999n;
+    // A stale maturity on the yielded group must not leak into the state's fresh parse.
+    const staleGroup = new OrderGroup(
+      ownerOrder.group.master,
+      new OrderCell({
+        cell: ownerOrder.group.order.cell,
+        data: ownerOrder.group.order.data,
+        ckbUnoccupied: ownerOrder.group.order.ckbUnoccupied,
+        absTotal: ownerOrder.group.order.absTotal,
+        absProgress: ownerOrder.group.order.absProgress,
+        maturity: 999n,
+      }),
+      ownerOrder.group.origin,
+    );
     const marketOrder = makeOrderGroup({
       orderScript,
       udtScript: udt,
@@ -45,7 +57,7 @@ describe(L1_STATE_SUITE, () => {
       udtValue: 1n,
     });
     vi.spyOn(orderManager, "findOrders").mockImplementation(async function* () {
-      yield ownerOrder.group;
+      yield staleGroup;
       yield marketOrder.group;
       await Promise.resolve();
     });
@@ -63,7 +75,6 @@ describe(L1_STATE_SUITE, () => {
     expect(state.user.orders[0]?.origin).toBe(ownerOrder.group.origin);
     expect(state.user.orders[0]?.order).not.toBe(ownerOrder.group.order);
     expect(state.user.orders[0]?.order.maturity).toBe(0n);
-    expect(ownerOrder.group.order.maturity).toBe(999n);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 });

@@ -57,9 +57,9 @@ const RelativeImplementation = class Relative extends RelativeBase {
   }
 
   /** Standard zero padding. */
-  public padding: ccc.Bytes;
+  public readonly padding: ccc.Bytes;
   /** Signed output-index distance to the master output. */
-  public distance: ccc.Num;
+  public readonly distance: ccc.Num;
 
   /** Creates a normalized relative pointer. */
   constructor(padding: ccc.Bytes, distance: ccc.Num) {

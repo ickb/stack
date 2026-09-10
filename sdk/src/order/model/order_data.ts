@@ -73,11 +73,11 @@ const OrderDataImplementation = class OrderData extends OrderBase {
   }
 
   /** UDT amount held by the order cell. */
-  public udtValue: ccc.FixedPoint;
+  public readonly udtValue: ccc.FixedPoint;
   /** Master-cell pointer. */
-  public master: Master;
+  public readonly master: Master;
   /** Price and minimum-match metadata. */
-  public info: Info;
+  public readonly info: Info;
 
   /** Creates normalized order data. */
   constructor(udtValue: ccc.FixedPoint, master: Master, info: Info) {

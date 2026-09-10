@@ -16,17 +16,17 @@ const resolvedOrderGroups = new WeakMap<ccc.Cell, OrderGroup>();
  */
 export class OrderCell implements ValueComponents {
   /** Raw live cell that carries the order lock and UDT type. */
-  public cell: ccc.Cell;
+  public readonly cell: ccc.Cell;
   /** Decoded order payload from `cell.outputData`. */
-  public data: OrderData;
+  public readonly data: OrderData;
   /** CKB capacity available for matching after occupied capacity is reserved. */
-  public ckbUnoccupied: ccc.FixedPoint;
+  public readonly ckbUnoccupied: ccc.FixedPoint;
   /** Absolute total order value in the order's comparison units. */
-  public absTotal: ccc.Num;
+  public readonly absTotal: ccc.Num;
   /** Absolute matched progress in the order's comparison units. */
-  public absProgress: ccc.Num;
+  public readonly absProgress: ccc.Num;
   /** Estimated completion maturity, `0n` for complete orders, or `undefined` when unavailable. */
-  public maturity: bigint | undefined;
+  public readonly maturity: bigint | undefined;
 
   /**
    * Creates an instance of OrderCell. Core parsing sets `maturity` to `undefined` for
@@ -353,7 +353,7 @@ function compareOrderScore(left: OrderCell, right: OrderCell): number {
  */
 export class MasterCell implements ValueComponents {
   /** Raw live master cell that anchors an order group. */
-  public cell: ccc.Cell;
+  public readonly cell: ccc.Cell;
 
   /**
    * Gets the UDT value of the cell.
@@ -413,11 +413,11 @@ export class MasterCell implements ValueComponents {
  */
 export class OrderGroup implements ValueComponents {
   /** Master cell that authorizes and anchors the current order. */
-  public master: MasterCell;
+  public readonly master: MasterCell;
   /** Current resolved order cell. */
-  public order: OrderCell;
+  public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
-  public origin: OrderCell;
+  public readonly origin: OrderCell;
 
   /**
    * Creates an instance of OrderGroup.
@@ -503,10 +503,27 @@ export class OrderGroup implements ValueComponents {
   }
 }
 
-/** Records canonical resolver output without exposing forgeable provenance data. */
+/**
+ * Records canonical resolver output without exposing forgeable provenance data. The
+ * group and its parsed parts are frozen, since matching and transactions build on them.
+ */
 export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
   group.validate();
-  resolvedOrderGroups.set(group.order.cell, group);
+  for (const order of [group.order, group.origin]) {
+    const { info } = order.data;
+    for (const part of [
+      order,
+      order.data,
+      order.data.master,
+      info,
+      info.ckbToUdt,
+      info.udtToCkb,
+    ]) {
+      Object.freeze(part);
+    }
+  }
+  Object.freeze(group.master);
+  resolvedOrderGroups.set(group.order.cell, Object.freeze(group));
   return group;
 }
 

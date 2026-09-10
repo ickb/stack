@@ -77,11 +77,11 @@ const InfoImplementation = class Info extends InfoBase {
   }
 
   /** Ratio for CKB-to-UDT matching, or empty when unavailable. */
-  public ckbToUdt: Ratio;
+  public readonly ckbToUdt: Ratio;
   /** Ratio for UDT-to-CKB matching, or empty when unavailable. */
-  public udtToCkb: Ratio;
+  public readonly udtToCkb: Ratio;
   /** Base-2 exponent for the minimum CKB match amount. */
-  public ckbMinMatchLog: number;
+  public readonly ckbMinMatchLog: number;
 
   /** Creates order info from normalized ratio objects. */
   constructor(ckbToUdt: Ratio, udtToCkb: Ratio, ckbMinMatchLog: number) {

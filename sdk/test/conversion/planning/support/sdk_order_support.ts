@@ -11,10 +11,7 @@ import { OrderData } from "../../../../src/order/model/order_data.ts";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {
-  const group = new ProjectionOrderGroup(options);
-  group.order.isDualRatio = (): boolean => options.isDualRatio;
-  group.order.isMatchable = (): boolean => options.isMatchable;
-  return group;
+  return new ProjectionOrderGroup(options);
 }
 
 interface ProjectionOrderOptions {
@@ -24,11 +21,31 @@ interface ProjectionOrderOptions {
   isMatchable: boolean;
 }
 
+class ProjectionOrderCell extends OrderCell {
+  private readonly projection: ProjectionOrderOptions;
+
+  constructor(
+    projection: ProjectionOrderOptions,
+    fields: ConstructorParameters<typeof OrderCell>[0],
+  ) {
+    super(fields);
+    this.projection = projection;
+  }
+
+  public override isDualRatio(): boolean {
+    return this.projection.isDualRatio;
+  }
+
+  public override isMatchable(): boolean {
+    return this.projection.isMatchable;
+  }
+}
+
 class ProjectionOrderGroup extends OrderGroup {
   private readonly projection: ProjectionOrderOptions;
 
   constructor(projection: ProjectionOrderOptions) {
-    const order = new OrderCell({
+    const order = new ProjectionOrderCell(projection, {
       cell: ccc.Cell.from({
         outPoint: { txHash: hash("77"), index: 0n },
         cellOutput: { capacity: projection.ckbValue, lock: script("55") },

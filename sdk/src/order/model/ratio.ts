@@ -60,9 +60,9 @@ const RatioImplementation = class Ratio extends RatioBase {
   }
 
   /** CKB-side scale. */
-  public ckbScale: ccc.Num;
+  public readonly ckbScale: ccc.Num;
   /** UDT-side scale. */
-  public udtScale: ccc.Num;
+  public readonly udtScale: ccc.Num;
 
   /** Creates a ratio from raw scales. */
   constructor(ckbScale: ccc.Num, udtScale: ccc.Num) {
