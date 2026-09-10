@@ -63,6 +63,7 @@ describe("matchTurn", () => {
       ckbDelta: 80n * CKB,
       udtDelta: -40n * CKB,
       candidates: 1,
+      fee: partialOrderFee(orders, FEE_RATE),
       seed: 1,
     });
     expect(match.partials).toHaveLength(1);

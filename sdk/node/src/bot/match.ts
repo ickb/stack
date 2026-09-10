@@ -9,8 +9,10 @@ import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
 
 /** One turn's match and how it was chosen. */
 export interface TurnMatch extends Match {
-  /** Order directions the balances were offered to. */
+  /** Matchable order directions on the book, each probed at every step. */
   candidates: number;
+  /** The mining fee of one fill; a fill is taken only above ten of them. */
+  fee: bigint;
   /** The shuffle seed, so the choice among equal fills can be replayed. */
   seed: number;
 }
@@ -63,6 +65,7 @@ export function matchTurn({
     udtDelta: 0n,
     partials: [],
     candidates: matchers.length,
+    fee,
     seed,
   };
   const balances = { ckb, udt };

@@ -139,8 +139,10 @@ export interface BotDecision {
     ckbDelta: bigint;
     udtDelta: bigint;
     matchedOrderOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
-    /** Order directions the balances were offered to. */
+    /** Matchable order directions on the book, each probed at every step. */
     candidates: number;
+    /** The mining fee of one fill; a fill is taken only above ten of them. */
+    fee: bigint;
     /** The shuffle seed of the turn's match. */
     seed: number;
   };

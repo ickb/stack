@@ -135,6 +135,7 @@ describe("buildTransaction matching", () => {
           udtDelta: -ccc.fixedPointFrom(100),
           matchedOrderOutPoints: [{ index: "0" }],
           candidates: 1,
+          fee: partialOrderFee([buyer], 1n),
         },
         core: { kind: "none", attempts: 1 },
         fee: { estimated: 1000n },

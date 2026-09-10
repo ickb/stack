@@ -232,6 +232,7 @@ function buildDecision({
         ? {}
         : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
       candidates: match.candidates,
+      fee: match.fee,
       seed: match.seed,
     },
     rebalance: {
