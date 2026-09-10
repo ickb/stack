@@ -1,23 +1,23 @@
 import { ccc } from "@ckb-ccc/core";
+import { IckbSdkBase } from "./sdk_base.ts";
 import {
   baseTransactionOptions,
   conversionFailure,
   conversionKind,
   hasTransactionActivity,
   NOTHING_TO_DO_REASON,
-} from "../conversion/sdk_conversion_common.ts";
+} from "./sdk_conversion_common.ts";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
-} from "../conversion/sdk_conversion_plans.ts";
-import { completeFirstFundable } from "../withdrawal/withdrawal_completion.ts";
-import { IckbSdkBase } from "./sdk_base.ts";
+} from "./sdk_conversion_plans.ts";
 import type {
   CkbToIckbConversionPlan,
   ConversionTransactionOptions,
   ConversionTransactionResult,
   IckbToCkbConversionPlan,
 } from "./sdk_types.ts";
+import { completeFirstFundable } from "./withdrawal_completion.ts";
 
 /**
  * SDK layer that builds conversion transactions from a sampled state context.

@@ -1,9 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import type {
-  ConversionOrderEstimate,
-  IckbToCkbOrderEstimate,
-  SystemState,
-} from "../client/sdk_types.ts";
 import { OrderConversionRepresentabilityError } from "../order/index.ts";
 import type { ValueComponents } from "../utils/index.ts";
 import {
@@ -12,6 +7,11 @@ import {
 } from "./sdk_estimate_core.ts";
 import { maturity } from "./sdk_maturity.ts";
 import { maxMaturity } from "./sdk_projection.ts";
+import type {
+  ConversionOrderEstimate,
+  IckbToCkbOrderEstimate,
+  SystemState,
+} from "./sdk_types.ts";
 
 /** Default order-fee numerator used by Stack conversion quotes and plans. @public */
 export const DEFAULT_ORDER_FEE = 1n;

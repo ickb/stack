@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { TRANSACTION_SIZE_BUDGET } from "../../../src/client/sdk_base.ts";
-import { DaoOutputLimitError } from "../../../src/dao/index.ts";
+import { TRANSACTION_SIZE_BUDGET } from "../../../src/conversion/sdk_base.ts";
+import { DaoOutputLimitError } from "../../../src/core/index.ts";
 import {
   fundedSigner,
   testSdk,

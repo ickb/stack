@@ -7,8 +7,8 @@ import {
   transactionWithHeader,
   type TransactionWithHeader,
 } from "@ickb/testkit";
-import type { DaoDepositCell } from "../../../src/dao/cells.ts";
-import { DaoManager } from "../../../src/dao/dao.ts";
+import { DaoManager } from "../../../src/core/dao.ts";
+import type { DaoDepositCell } from "../../../src/core/dao_cells.ts";
 
 export const REQUEST_WITHDRAWAL_SUITE = "DaoManager.requestWithdrawal";
 export const FIND_DEPOSITS_SUITE = "DaoManager.findDeposits";

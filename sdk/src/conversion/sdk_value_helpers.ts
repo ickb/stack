@@ -1,14 +1,14 @@
 import type { ccc } from "@ckb-ccc/core";
+import { convert, type IckbDepositCell } from "../core/index.ts";
+import type { Ratio } from "../order/index.ts";
+import { compareBigInt } from "../utils/index.ts";
 import {
   CONVERSION_MATURITY_BUCKET_MS,
   type CkbCumulative,
   type CkbProjection,
   type MaturingCkb,
   type PoolDepositState,
-} from "../client/sdk_types.ts";
-import { convert, type IckbDepositCell } from "../core/index.ts";
-import type { Ratio } from "../order/index.ts";
-import { compareBigInt } from "../utils/index.ts";
+} from "./sdk_types.ts";
 
 export function cumulativeCkbMaturing(maturing: readonly MaturingCkb[]): CkbCumulative[] {
   let cumulative = 0n;

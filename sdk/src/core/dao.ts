@@ -6,7 +6,7 @@ import {
   type DaoCellFromOptions,
   type DaoDepositCell,
   type DaoWithdrawalRequestCell,
-} from "./cells.ts";
+} from "./dao_cells.ts";
 import {
   assertDaoOutputLimit,
   DAO_HEADER_INDEX_LIMIT,

@@ -1,6 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../core/index.ts";
 import { compareBigInt } from "../utils/index.ts";
+import type { IckbDepositCell } from "./cells.ts";
 import { depositKey } from "./withdrawal_ring.ts";
 import type {
   ReadyWithdrawalSelectionOptions,

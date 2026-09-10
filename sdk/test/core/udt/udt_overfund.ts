@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
+import { DaoManager } from "../../../src/core/index.ts";
 import { IckbUdt } from "../../../src/core/udt.ts";
-import { DaoManager } from "../../../src/dao/index.ts";
 import {
   byte32FromByte,
   RECEIPT_PREFIX_DECODING_SUITE,

@@ -1,13 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import type { DaoWithdrawalRequestCell } from "../../src/dao/cells.ts";
+import type { DaoWithdrawalRequestCell } from "../../src/core/dao_cells.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
   DaoHeaderIndexError,
   DaoManager,
   DaoOutputLimitError,
-} from "../../src/dao/index.ts";
+} from "../../src/core/index.ts";
 import {
   byte32FromByte,
   headerLike,

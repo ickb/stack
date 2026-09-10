@@ -14,7 +14,8 @@ describe("IckbSdk.estimate dust fee search", () => {
   it("uses a dust quote when the default quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: 1n, feeBase: 100000n });
 
-    const { estimateIckbToCkbOrder } = await import("../../src/estimate/sdk_estimate.ts");
+    const { estimateIckbToCkbOrder } =
+      await import("../../src/conversion/sdk_estimate.ts");
 
     expect(
       estimateIckbToCkbOrder(
@@ -30,7 +31,8 @@ describe("IckbSdk.estimate dust fee search", () => {
   it("stops when an intermediate dust fee quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: 5n, feeBase: 11n });
 
-    const { estimateIckbToCkbOrder } = await import("../../src/estimate/sdk_estimate.ts");
+    const { estimateIckbToCkbOrder } =
+      await import("../../src/conversion/sdk_estimate.ts");
 
     expect(
       estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, system({ feeRate: 1n })),

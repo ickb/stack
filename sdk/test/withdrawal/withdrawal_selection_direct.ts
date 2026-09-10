@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectReadyWithdrawalDeposits } from "../../src/withdrawal/withdrawal_selection.ts";
+import { selectReadyWithdrawalDeposits } from "../../src/core/withdrawal_selection.ts";
 import { readyDeposit, TIP } from "./support/withdrawal_selection_support.ts";
 
 const MINUTE_MS = 60n * 1000n;

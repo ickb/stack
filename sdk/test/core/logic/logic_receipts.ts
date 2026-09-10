@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReceiptData } from "../../../src/core/entities.ts";
+import { DaoManager } from "../../../src/core/index.ts";
 import { LogicManager } from "../../../src/core/logic.ts";
-import { DaoManager } from "../../../src/dao/index.ts";
 import {
   byte32FromByte,
   headerLike,

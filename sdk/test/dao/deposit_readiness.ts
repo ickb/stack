@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { DaoManager } from "../../src/dao/dao.ts";
+import { DaoManager } from "../../src/core/dao.ts";
 
 const hash = byte32FromByte;
 

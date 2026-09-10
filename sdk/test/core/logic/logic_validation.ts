@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LogicManager } from "../../../src/core/logic.ts";
 import {
   DAO_OUTPUT_LIMIT,
   DaoManager,
   DaoOutputLimitError,
-} from "../../../src/dao/index.ts";
+} from "../../../src/core/index.ts";
+import { LogicManager } from "../../../src/core/logic.ts";
 import { LOGIC_MANAGER_DEPOSIT_SUITE, script } from "./support/logic_support.ts";
 
 describe(LOGIC_MANAGER_DEPOSIT_SUITE, () => {

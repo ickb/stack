@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
-import { DaoOutputLimitError } from "../../../src/dao/index.ts";
-import { completeFirstFundable } from "../../../src/withdrawal/withdrawal_completion.ts";
+import { completeFirstFundable } from "../../../src/conversion/withdrawal_completion.ts";
+import { DaoOutputLimitError, ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import {
   baseTip,
   conversionContext,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  maxMaturity,
+  projectAccountAvailability,
+} from "../../../src/conversion/sdk_projection.ts";
+import {
   cumulativeCkbMaturing,
   poolDepositCkb,
   poolDepositsKey,
@@ -7,10 +11,6 @@ import {
   sumDirectWithdrawalSurplus,
   sumUdtValue,
 } from "../../../src/conversion/sdk_value_helpers.ts";
-import {
-  maxMaturity,
-  projectAccountAvailability,
-} from "../../../src/estimate/sdk_projection.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,

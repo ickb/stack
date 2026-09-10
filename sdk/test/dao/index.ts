@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as dao from "../../src/dao/index.ts";
+import * as dao from "../../src/core/index.ts";
 
 describe("dao package barrel", () => {
   it("exposes DAO output-limit behavior through the public index", () => {

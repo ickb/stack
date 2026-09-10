@@ -11,6 +11,21 @@ export {
   type IckbDepositCell,
   type ReceiptCell,
 } from "./cells.ts";
+export { DaoManager } from "./dao.ts";
+export type {
+  DaoCellFromCache,
+  DaoCellFromOptions,
+  DaoDepositCell,
+  DaoWithdrawalRequestCell,
+} from "./dao_cells.ts";
+export {
+  DAO_HEADER_INDEX_LIMIT,
+  DAO_OUTPUT_LIMIT,
+  DaoHeaderIndexError,
+  DaoOutputLimitError,
+  DaoOutputLimitIndeterminateError,
+  assertDaoOutputLimit,
+} from "./dao_output_limit.ts";
 export {
   OwnerData,
   ReceiptData,

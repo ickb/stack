@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
-import { isIckbError } from "../client/sdk_error.ts";
-import { DaoOutputLimitError } from "../dao/index.ts";
+import { DaoOutputLimitError } from "../core/index.ts";
 import { OrderConversionRepresentabilityError } from "../order/index.ts";
+import { isIckbError } from "./sdk_error.ts";
 
 /**
  * One attempt of a completion walk: the candidate it was built from and the completed transaction.

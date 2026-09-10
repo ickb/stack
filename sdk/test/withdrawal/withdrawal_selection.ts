@@ -4,7 +4,7 @@ import {
   ringSegments,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
-} from "../../src/withdrawal/withdrawal_selection.ts";
+} from "../../src/core/withdrawal_selection.ts";
 import { depositCell, ringDeposit, TIP } from "./support/withdrawal_selection_support.ts";
 
 describe("selectReadyWithdrawalDeposits ring segments", () => {

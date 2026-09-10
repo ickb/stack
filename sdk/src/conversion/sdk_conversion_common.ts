@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { IckbDepositCell } from "../core/index.ts";
 import {
   NOTHING_TO_DO_REASON,
   type BuildBaseTransactionOptions,
@@ -6,8 +7,7 @@ import {
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
-} from "../client/sdk_types.ts";
-import type { IckbDepositCell } from "../core/index.ts";
+} from "./sdk_types.ts";
 
 export function conversionFailure(
   reason: ConversionTransactionFailureReason,

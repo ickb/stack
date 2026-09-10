@@ -1,15 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import {
+  DaoManager,
   ickbDepositCellFrom,
   OwnerCell,
   OwnerData,
   ReceiptData,
   WithdrawalGroup,
+  type DaoWithdrawalRequestCell,
   type IckbDepositCell,
   type ReceiptCell,
 } from "../../../../src/core/index.ts";
-import { DaoManager, type DaoWithdrawalRequestCell } from "../../../../src/dao/index.ts";
 import { baseTip, hash } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function depositCell(

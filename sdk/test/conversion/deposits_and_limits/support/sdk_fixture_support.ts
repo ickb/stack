@@ -9,13 +9,13 @@ import {
 } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
 import {
+  DaoManager,
   ICKB_DEPOSIT_CAP,
   IckbUdt,
   LogicManager,
   OwnedOwnerManager,
   type IckbDepositCell,
 } from "../../../../src/core/index.ts";
-import { DaoManager } from "../../../../src/dao/index.ts";
 import { OrderManager, type Ratio } from "../../../../src/order/index.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { headerLike } from "../../../core/cells/support/cells_support.ts";

@@ -9,8 +9,8 @@ import {
 } from "@ickb/testkit";
 import { ickbDepositCellFrom, type IckbDepositCell } from "../../../../src/core/cells.ts";
 import { OwnerData } from "../../../../src/core/entities.ts";
+import { DaoManager } from "../../../../src/core/index.ts";
 import { OwnedOwnerManager } from "../../../../src/core/owned_owner.ts";
-import { DaoManager } from "../../../../src/dao/index.ts";
 
 export const FIND_WITHDRAWAL_GROUPS_SUITE = "OwnedOwnerManager.findWithdrawalGroups";
 export const REQUEST_WITHDRAWAL_SUITE = "OwnedOwnerManager.requestWithdrawal";

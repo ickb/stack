@@ -1,5 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
-import { IckbSdkL1 } from "./client/sdk_l1_class.ts";
+import type { getConfig } from "./constants.ts";
+import { estimate } from "./conversion/sdk_estimate.ts";
+import { IckbSdkL1 } from "./conversion/sdk_l1_class.ts";
 import type {
   AccountState,
   BuildBaseTransactionOptions,
@@ -10,14 +12,17 @@ import type {
   GetL1StateOptions,
   SdkManagers,
   SystemState,
-} from "./client/sdk_types.ts";
-import type { getConfig } from "./constants.ts";
-import { estimate } from "./estimate/sdk_estimate.ts";
+} from "./conversion/sdk_types.ts";
 import type { Info, OrderGroup } from "./order/index.ts";
 import type { ValueComponents } from "./utils/index.ts";
-export { IckbError, isIckbError } from "./client/sdk_error.ts";
-export type { IckbErrorCode } from "./client/sdk_error.ts";
+export { IckbError, isIckbError } from "./conversion/sdk_error.ts";
+export type { IckbErrorCode } from "./conversion/sdk_error.ts";
 
+export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/sdk_estimate.ts";
+export {
+  projectAccountAvailability,
+  projectConversionTransactionContext,
+} from "./conversion/sdk_projection.ts";
 export type {
   AccountAvailabilityProjection,
   AccountState,
@@ -40,12 +45,7 @@ export type {
   PoolDepositState,
   SdkManagers,
   SystemState,
-} from "./client/sdk_types.ts";
-export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./estimate/sdk_estimate.ts";
-export {
-  projectAccountAvailability,
-  projectConversionTransactionContext,
-} from "./estimate/sdk_projection.ts";
+} from "./conversion/sdk_types.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,

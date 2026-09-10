@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReceiptCell } from "../../../src/core/cells.ts";
 import { ReceiptData } from "../../../src/core/entities.ts";
+import { DaoManager, type DaoDepositCell } from "../../../src/core/index.ts";
 import { LogicManager } from "../../../src/core/logic.ts";
 import { IckbUdt } from "../../../src/core/udt.ts";
-import { DaoManager, type DaoDepositCell } from "../../../src/dao/index.ts";
 import { collect } from "../../../src/utils/index.ts";
 import {
   byte32FromByte,

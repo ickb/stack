@@ -2,8 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCell } from "../../../src/core/cells.ts";
 import { OwnerData } from "../../../src/core/entities.ts";
+import { DaoManager } from "../../../src/core/index.ts";
 import { OwnedOwnerManager } from "../../../src/core/owned_owner.ts";
-import { DaoManager } from "../../../src/dao/index.ts";
 import {
   FIND_WITHDRAWAL_GROUPS_SUITE,
   headerLike,

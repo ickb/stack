@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import type { DaoManager } from "../dao/index.ts";
 import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "../utils/index.ts";
+import type { DaoManager } from "./dao.ts";
 import { ReceiptData } from "./entities.ts";
 
 const ickbXudtTypeOccupiedSize = 69;

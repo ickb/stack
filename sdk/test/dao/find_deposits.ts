@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
-import { DaoManager } from "../../src/dao/index.ts";
+import { DaoManager } from "../../src/core/index.ts";
 import {
   byte32FromByte,
   collect,

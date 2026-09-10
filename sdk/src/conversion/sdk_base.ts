@@ -1,13 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbUdt, LogicManager, OwnedOwnerManager } from "../core/index.ts";
-import { assertDaoOutputLimit } from "../dao/index.ts";
+import {
+  assertDaoOutputLimit,
+  type IckbUdt,
+  type LogicManager,
+  type OwnedOwnerManager,
+} from "../core/index.ts";
+import { assertReadyWithdrawalDeposits } from "../core/withdrawal_selection.ts";
 import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
 import {
   compareBigInt,
   isPlainCapacityCell,
   type ValueComponents,
 } from "../utils/index.ts";
-import { assertReadyWithdrawalDeposits } from "../withdrawal/withdrawal_selection.ts";
 import { IckbError } from "./sdk_error.ts";
 import type {
   BuildBaseTransactionOptions,

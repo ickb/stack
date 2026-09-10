@@ -2,13 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCell, WithdrawalGroup } from "../../../src/core/cells.ts";
 import { OwnerData } from "../../../src/core/entities.ts";
-import { OwnedOwnerManager } from "../../../src/core/owned_owner.ts";
 import {
   DAO_OUTPUT_LIMIT,
   DaoManager,
   DaoOutputLimitError,
   type DaoWithdrawalRequestCell,
-} from "../../../src/dao/index.ts";
+} from "../../../src/core/index.ts";
+import { OwnedOwnerManager } from "../../../src/core/owned_owner.ts";
 import {
   byte32FromByte,
   clientForDepositHeader,

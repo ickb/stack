@@ -29,7 +29,7 @@ Apps are private workspace runtimes and run from source under Node 22.19+ or Vit
 
 Packages:
 
-- `sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, and transaction builders; `src/dao` the Nervos DAO cell classification and deposit, request, and withdrawal helpers; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/utils` the bounded paged scans and shared helpers; and the top level composes them into account state, conversion planning with completion, sending, and confirmation.
+- `sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, transaction builders, the Nervos DAO cells and builders, and the ring and withdrawal selection; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/conversion` the state read, projection, estimates, conversion plans, and the completion walk; `src/send` signing, sending, and confirmation; and `src/utils` the one uncached cell paging loop and shared helpers.
 - `testkit`: Private test helpers and fixtures for workspace tests.
 
 ## Dependencies

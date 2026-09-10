@@ -1,4 +1,4 @@
-import type { IckbDepositCell } from "../core/index.ts";
+import type { IckbDepositCell } from "./cells.ts";
 import { ringSegments } from "./withdrawal_ring_core.ts";
 import type { WithdrawalDepositCandidate } from "./withdrawal_selection_types.ts";
 

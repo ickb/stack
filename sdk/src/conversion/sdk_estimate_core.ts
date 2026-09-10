@@ -1,7 +1,7 @@
-import type { ConversionOrderEstimate, SystemState } from "../client/sdk_types.ts";
 import { OrderConversionRepresentabilityError, OrderManager } from "../order/index.ts";
 import type { ValueComponents } from "../utils/index.ts";
 import { maturity } from "./sdk_maturity.ts";
+import type { ConversionOrderEstimate, SystemState } from "./sdk_types.ts";
 
 export function estimateConversionOrder(
   isCkb2Udt: boolean,

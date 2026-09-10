@@ -6,8 +6,8 @@ import {
   headerLike as testHeaderLike,
 } from "@ickb/testkit";
 import { expect, it, vi } from "vitest";
-import { daoClaimEpoch } from "../../src/dao/cells.ts";
-import { DaoManager } from "../../src/dao/dao.ts";
+import { DaoManager } from "../../src/core/dao.ts";
+import { daoClaimEpoch } from "../../src/core/dao_cells.ts";
 
 const DAO_CELL_WITHDRAWAL_READINESS_SUITE = "daoCellFrom withdrawal readiness";
 const FULL_WORKSPACE_TIMEOUT_MS = 20_000;

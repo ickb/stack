@@ -6,8 +6,8 @@ import {
   DaoManager,
   DaoOutputLimitError,
   DaoOutputLimitIndeterminateError,
-} from "../../src/dao/index.ts";
-import { cellOutputLikeFrom } from "../../src/dao/transaction_shape.ts";
+} from "../../src/core/index.ts";
+import { cellOutputLikeFrom } from "../../src/core/transaction_shape.ts";
 import {
   byte32FromByte,
   client,

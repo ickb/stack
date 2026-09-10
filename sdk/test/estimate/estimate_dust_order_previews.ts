@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateIckbToCkbOrder } from "../../src/estimate/sdk_estimate.ts";
+import { estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
 import { type Info, OrderData, OrderManager, Ratio } from "../../src/order/index.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";

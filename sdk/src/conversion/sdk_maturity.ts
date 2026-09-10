@@ -1,12 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import type {
-  CkbCumulative,
-  MaturityOrderInput,
-  SystemState,
-} from "../client/sdk_types.ts";
 import { convert } from "../core/index.ts";
 import { Info } from "../order/index.ts";
 import { binarySearch, type ValueComponents } from "../utils/index.ts";
+import type { CkbCumulative, MaturityOrderInput, SystemState } from "./sdk_types.ts";
 
 export function maturity(o: MaturityOrderInput, system: SystemState): bigint | undefined {
   const { info, amounts } = maturityOrderParts(o);

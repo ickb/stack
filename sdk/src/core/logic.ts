@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { assertDaoOutputLimit, DaoManager, DaoOutputLimitError } from "../dao/index.ts";
 import type { ScriptDeps } from "../utils/index.ts";
 import {
   type IckbDepositCell,
@@ -7,6 +6,8 @@ import {
   type ReceiptCell,
   receiptCellFrom,
 } from "./cells.ts";
+import { DaoManager } from "./dao.ts";
+import { assertDaoOutputLimit, DaoOutputLimitError } from "./dao_output_limit.ts";
 import { ReceiptData } from "./entities.ts";
 import { IckbUdt } from "./udt.ts";
 

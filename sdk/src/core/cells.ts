@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import type { DaoDepositCell, DaoWithdrawalRequestCell } from "../dao/index.ts";
 import type { TransactionHeader, ValueComponents } from "../utils/index.ts";
+import type { DaoDepositCell, DaoWithdrawalRequestCell } from "./dao_cells.ts";
 import { OwnerData, ReceiptData } from "./entities.ts";
 import { ickbValue } from "./udt.ts";
 

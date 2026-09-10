@@ -1,11 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  assertDaoOutputLimit,
-  type DaoCellFromCache,
-  type DaoManager,
-} from "../dao/index.ts";
 import type { ScriptDeps } from "../utils/index.ts";
 import { OwnerCell, WithdrawalGroup, type IckbDepositCell } from "./cells.ts";
+import type { DaoManager } from "./dao.ts";
+import type { DaoCellFromCache } from "./dao_cells.ts";
+import { assertDaoOutputLimit } from "./dao_output_limit.ts";
 import { OwnerData } from "./entities.ts";
 
 /**
