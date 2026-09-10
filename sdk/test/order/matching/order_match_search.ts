@@ -622,6 +622,30 @@ describe("best match search", () => {
     expect(result.match.diagnostics?.truncatedMatchers).toBe(2 * N);
   });
 
+  it("crosses the all-or-nothing book behind one buyer with a larger whole gain", () => {
+    // The extra buyer sorts first and is repayable in principle, but nothing below it
+    // is feasible with it taken; the walk must not spend the budget under it.
+    const K = 1000n * CKB;
+    const orders = Array.from({ length: 17 }, (_, index) =>
+      buyer((0xa0 + index).toString(16), 2n * K, K, 44),
+    );
+    orders.push(
+      seller("c0", 17n * K, 33n * K, 44),
+      buyer("c1", 3n * K + 17n * FEE, 2n * K, 44),
+    );
+    const groups = resolvedOrderGroups(orders);
+    const allowance = { ckbValue: 0n, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, {
+      feeRate: 1000n,
+      maxPartials: 58,
+    });
+
+    expect(result.match.partials).toHaveLength(18);
+    expect(gainAtUnit(result.match, FEE)).toBe(K - 18n * FEE);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
   it("pairs buyers and sellers on a balanced thousand-order book within a few hundred milliseconds", () => {
     const orders = Array.from({ length: 1000 }, (_, index) =>
       makeOrderCell({

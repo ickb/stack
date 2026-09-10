@@ -49,9 +49,14 @@ export interface BestMatchContext {
   udtScale: bigint;
   /** Both directions, best margin first; a cell in both directions appears twice. */
   matchers: OrderMatcher[];
+  /** What a unit of each asset costs to obtain from the book, times `PRICE_SCALE`. */
+  prices: { udt: bigint; ckb: bigint };
   diagnostics: MatchDiagnostics;
   maxPartials?: number;
 }
+
+/** Fixed-point scale of the asset prices. */
+export const PRICE_SCALE = 1n << 32n;
 
 export function createBestMatchContext({
   orderPool,
@@ -87,6 +92,7 @@ export function createBestMatchContext({
     ckbScale,
     udtScale,
     matchers: [],
+    prices: { udt: 0n, ckb: 0n },
     ...(maxPartials === undefined ? {} : { maxPartials }),
     diagnostics: {
       orderCount: orderPool.length,
@@ -116,7 +122,66 @@ export function createBestMatchContext({
   context.diagnostics.truncatedMatchers =
     ckbToUdtMatchers.length + udtToCkbMatchers.length - buyers.length - sellers.length;
   context.matchers = interleaved(buyers, sellers);
+  context.prices = assetPrices(context);
   return context;
+}
+
+/**
+ * Prices the two assets as Lagrange multipliers on the balance constraints: for any
+ * non-negative pair, a selection's gain is at most its gain plus the priced balances
+ * plus every order's gain net of what it takes at those prices, so a book whose losing
+ * sellers are the only source of iCKB bounds each buyer by its gain net of that cost.
+ * Each price is the minimiser of the root bound, one asset after the other.
+ */
+function assetPrices(context: BestMatchContext): { udt: bigint; ckb: bigint } {
+  const fee = context.ckbMiningFee;
+  const orders = context.matchers.map((matcher) => {
+    const full = fullFill(matcher);
+    return {
+      gain: gainOf(context, full) * PRICE_SCALE,
+      udt: full.udtDelta,
+      ckb: full.ckbDelta - fee,
+    };
+  });
+  const udt = price(
+    context.allowance.udtValue,
+    orders.map((order) => ({ value: order.gain, amount: order.udt })),
+  );
+  const ckb = price(
+    context.allowance.ckbValue,
+    orders.map((order) => ({ value: order.gain + udt * order.udt, amount: order.ckb })),
+  );
+  return { udt, ckb };
+}
+
+/**
+ * The non-negative price minimising the held amount times the price plus every order's
+ * value net of its amount at that price, floored at zero, which is convex and piecewise linear: its slope starts as the held amount
+ * plus every gaining order's amount and rises by an order's absolute amount where that
+ * order's term turns on or off, so the minimum is the first such point with a
+ * non-negative slope.
+ */
+function price(held: bigint, orders: Array<{ value: bigint; amount: bigint }>): bigint {
+  let slope = held;
+  const turns: Array<{ at: bigint; rise: bigint }> = [];
+  for (const { value, amount } of orders) {
+    if (value > 0n) {
+      slope += amount;
+    }
+    if ((amount > 0n && value <= 0n) || (amount < 0n && value > 0n)) {
+      turns.push({ at: -value / amount, rise: amount < 0n ? -amount : amount });
+    }
+  }
+  for (const turn of turns.toSorted((left, right) => compareBigInt(left.at, right.at))) {
+    if (slope >= 0n) {
+      break;
+    }
+    slope += turn.rise;
+    if (slope >= 0n) {
+      return turn.at;
+    }
+  }
+  return 0n;
 }
 
 /** Value of a match at the exchange ratio, net of one fee per partial. */

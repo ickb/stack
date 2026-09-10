@@ -5,6 +5,7 @@ import {
   fullFill,
   gainOf,
   gainSlack,
+  PRICE_SCALE,
 } from "./order_match_context.ts";
 import type { OrderMatcher } from "./order_matcher.ts";
 
@@ -15,9 +16,13 @@ interface Node {
   key: string;
   /** Gain of the whole fill, net of its fee; negative for a losing order. */
   gain: bigint;
+  /** The whole gain net of what the fill takes at the asset prices, times `PRICE_SCALE`. */
+  priced: bigint;
   next: Node | undefined;
   /** Gain this order and the rest could still add, ignoring what funds them. */
   positiveGain: bigint;
+  /** The same with every gain priced, times `PRICE_SCALE`. */
+  positivePriced: bigint;
 }
 
 /** The fills chosen so far, mutated along the depth-first walk and restored on return. */
@@ -65,6 +70,7 @@ class Search {
   public readonly sellers: Node[] = [];
   /** What the two closers could add at most, on top of the orders still undecided. */
   public closerUpper = 0n;
+  public closerPricedUpper = 0n;
   /** CKB and iCKB the whole book could hand the bot. */
   public receivableCkb = 0n;
   public receivableUdt = 0n;
@@ -91,34 +97,39 @@ class Search {
   /** Links the sorted book from the last order back to the first, accumulating the bounds. */
   public link(): Node | undefined {
     const { context } = this;
+    const { prices } = context;
     const slack = gainSlack(context);
     let next: Node | undefined;
-    let buyerUpper = 0n;
-    let sellerUpper = 0n;
+    const upper = { buyer: 0n, seller: 0n, buyerPriced: 0n, sellerPriced: 0n };
     for (const matcher of context.matchers.toReversed()) {
       const full = fullFill(matcher);
       const gain = gainOf(context, full);
+      const priced =
+        gain * PRICE_SCALE +
+        prices.udt * full.udtDelta +
+        prices.ckb * (full.ckbDelta - context.ckbMiningFee);
       const padded = maxBigInt(gain + slack, 0n);
+      const paddedPriced = maxBigInt(priced + slack * PRICE_SCALE, 0n);
       const node: Node = {
         matcher,
         full,
         key: matcher.group.order.cell.outPoint.toHex(),
         gain,
+        priced,
         next,
         positiveGain: (next?.positiveGain ?? 0n) + padded,
+        positivePriced: (next?.positivePriced ?? 0n) + paddedPriced,
       };
-      if (matcher.isCkb2Udt) {
-        this.buyers.unshift(node);
-        buyerUpper = maxBigInt(buyerUpper, padded);
-      } else {
-        this.sellers.unshift(node);
-        sellerUpper = maxBigInt(sellerUpper, padded);
-      }
+      const side = matcher.isCkb2Udt ? "buyer" : "seller";
+      (matcher.isCkb2Udt ? this.buyers : this.sellers).unshift(node);
+      upper[side] = maxBigInt(upper[side], padded);
+      upper[`${side}Priced`] = maxBigInt(upper[`${side}Priced`], paddedPriced);
       this.receivableCkb += maxBigInt(full.ckbDelta, 0n);
       this.receivableUdt += maxBigInt(full.udtDelta, 0n);
       next = node;
     }
-    this.closerUpper = buyerUpper + sellerUpper;
+    this.closerUpper = upper.buyer + upper.seller;
+    this.closerPricedUpper = upper.buyerPriced + upper.sellerPriced;
     return next;
   }
 
@@ -173,7 +184,19 @@ export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
 
 function visit(search: Search, node: Node | undefined, state: State): void {
   const { context } = search;
-  const upper = gainOf(context, state) + (node?.positiveGain ?? 0n) + search.closerUpper;
+  const { allowance, ckbMiningFee: fee, prices } = context;
+  // Two bounds on what the subtree can reach, the plain one and the priced one, each
+  // the state's gain plus what the undecided orders and the two closers could add.
+  const gain = gainOf(context, state);
+  const plain = gain + (node?.positiveGain ?? 0n) + search.closerUpper;
+  const priced =
+    gain * PRICE_SCALE +
+    prices.udt * (allowance.udtValue + state.udtDelta) +
+    prices.ckb *
+      (allowance.ckbValue + state.ckbDelta - fee * BigInt(state.partials.length)) +
+    (node?.positivePriced ?? 0n) +
+    search.closerPricedUpper;
+  const upper = minBigInt(plain, priced / PRICE_SCALE + 1n);
   if (!search.charge(upper)) {
     return;
   }
@@ -181,15 +204,17 @@ function visit(search: Search, node: Node | undefined, state: State): void {
   if (node === undefined || upper <= search.best.gain) {
     return;
   }
-  const reachableCkb =
-    state.reachableCkb + minBigInt(node.full.ckbDelta, 0n) - context.ckbMiningFee;
+  const reachableCkb = state.reachableCkb + minBigInt(node.full.ckbDelta, 0n) - fee;
   const reachableUdt = state.reachableUdt + minBigInt(node.full.udtDelta, 0n);
-  if (
-    !state.used.has(node.key) &&
-    hasSlot(context, state, 1) &&
-    reachableCkb >= 0n &&
-    reachableUdt >= 0n
-  ) {
+  const take = (): void => {
+    if (
+      state.used.has(node.key) ||
+      !hasSlot(context, state, 1) ||
+      reachableCkb < 0n ||
+      reachableUdt < 0n
+    ) {
+      return;
+    }
     state.used.add(node.key);
     state.partials.push(...node.full.partials);
     visit(search, node.next, {
@@ -201,8 +226,16 @@ function visit(search: Search, node: Node | undefined, state: State): void {
     });
     state.partials.pop();
     state.used.delete(node.key);
+  };
+  const skip = (): void => {
+    visit(search, node.next, state);
+  };
+  // Take first only when the order gains net of what it takes at the asset prices;
+  // otherwise the rest of the book is worth more without it, and the walk finds that
+  // incumbent before the priced bound closes the subtree that holds this order.
+  for (const child of node.priced >= 0n ? [take, skip] : [skip, take]) {
+    child();
   }
-  visit(search, node.next, state);
 }
 
 /**
