@@ -1,5 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "@ickb/sdk";
+import {
+  convert,
+  ICKB_DEPOSIT_CAP,
+  ickbAccountingRatio,
+  ickbExchangeRatio,
+  receiptPhase2Capacity,
+  type IckbDepositCell,
+} from "@ickb/sdk";
 
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
@@ -137,5 +144,80 @@ describe("planRebalance withdrawal", () => {
       }),
     );
     expect(none.withdrawal).toBeUndefined();
+  });
+});
+
+const CKB = ccc.fixedPointFrom(1);
+const AR_0 = 10_000_000_000_000_000n;
+
+// Adopted from the fable51, fable5, and grok46 policy audits: the numbers the thresholds
+// rest on, so a future edit cannot move one without the others.
+describe("policy arithmetic", () => {
+  it("keeps the iCKB lines in cap units and the CKB costs at the tip", () => {
+    const secpLock = ccc.Script.from({
+      codeHash: `0x${"9b".repeat(32)}`,
+      hashType: "type",
+      args: `0x${"11".repeat(20)}`,
+    });
+    const header = headerLike({ dao: { c: 0n, ar: (AR_0 * 11n) / 10n, s: 0n, u: 0n } });
+
+    expect(ICKB_REFILL_BELOW).toBe(ccc.fixedPointFrom(2_000));
+    expect(ICKB_RETAIN).toBe(ccc.fixedPointFrom(20_000));
+    expect(ICKB_WITHDRAW_ABOVE).toBe(ccc.fixedPointFrom(120_000));
+    expect(CKB_RESERVE).toBe(1000n * CKB);
+    expect(convert(false, ICKB_DEPOSIT_CAP, ickbExchangeRatio(header))).toBe(
+      110_082n * CKB,
+    );
+    expect(receiptPhase2Capacity(secpLock)).toBe(208n * CKB);
+  });
+
+  it.each([AR_0, (15n * AR_0) / 10n, (3n * AR_0) / 2n + 12345n])(
+    "a refill lands below the withdrawal line because a cap-sized deposit mints at most the cap at ar=%s",
+    (ar) => {
+      const header = headerLike({ dao: { c: 0n, ar, s: 0n, u: 0n } });
+      const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, ickbExchangeRatio(header));
+      // 82 CKB is the occupied capacity of a standard iCKB deposit cell.
+      const minted = convert(
+        true,
+        depositCapacity - 82n * CKB,
+        ickbAccountingRatio(header),
+      );
+
+      expect(minted).toBeLessThanOrEqual(ICKB_DEPOSIT_CAP);
+      expect(ICKB_REFILL_BELOW - 1n + minted).toBeLessThan(ICKB_WITHDRAW_ABOVE);
+    },
+  );
+});
+
+/** A small deterministic generator, so the property is reproducible from its seed. */
+function* pseudoRandom(seed: bigint): Generator<bigint, never, void> {
+  let state = seed;
+  for (;;) {
+    state =
+      (state * 6_364_136_223_846_793_005n + 1_442_695_040_888_963_407n) % (1n << 64n);
+    yield state >> 11n;
+  }
+}
+
+// The self-recovery invariant (decisions amendment 52, finding N16): an account funded to
+// the recommended 2.2 deposits never sits below the refill line with nothing to do; either
+// the deposit is affordable or pending withdrawals are on their way back.
+describe("self-recovery property", () => {
+  it("below the refill line, a funded account can deposit unless CKB is pending", () => {
+    const random = pseudoRandom(20_260_908n);
+    const funding = (22n * DEPOSIT_COST) / 10n;
+    let checked = 0;
+    for (let round = 0; round < 2000; round += 1) {
+      const ickb = random.next().value % ICKB_REFILL_BELOW;
+      const pendingCkb = random.next().value % (3n * DEPOSIT_COST);
+      const ckb = random.next().value % (4n * DEPOSIT_COST);
+      if (ckb + ickb + pendingCkb < funding) {
+        continue;
+      }
+      checked += 1;
+      const plan = planRebalance(input({ ickb, ckb }));
+      expect(plan.deposit !== undefined || pendingCkb > 0n).toBe(true);
+    }
+    expect(checked).toBeGreaterThan(500);
   });
 });

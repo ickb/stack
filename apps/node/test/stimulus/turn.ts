@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import type * as IckbSdkModule from "@ickb/sdk";
 import {
   expectedChainIdentity,
+  ICKB_DEPOSIT_CAP,
   IckbError,
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -273,6 +274,29 @@ describe("runStimulusTurn", () => {
       skip: { reason: "post-tx-ckb-reserve" },
       action: { conversion: { kind: "collect-only" } },
     });
+  });
+
+  it("collects the receipts alone when the drawn conversion is refused", async () => {
+    // Adopted from the astra audit: the fallback fires on receipts, not only on orders.
+    const target = runtime({
+      account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
+    });
+    const build = vi.spyOn(target.sdk, "buildConversionTransaction");
+    vi.spyOn(target.sdk, "completeTransaction").mockRejectedValue(
+      new IckbError("no cells", { code: "insufficient_capacity" }),
+    );
+
+    const log = await turn(target, {
+      kind: "conversion",
+      direction: "ickb-to-ckb",
+      amount: ICKB_DEPOSIT_CAP + 1n,
+    });
+
+    expect(build.mock.calls.map(([, options]) => options.amount)).toEqual([
+      ICKB_DEPOSIT_CAP + 1n,
+      0n,
+    ]);
+    expect(log).toMatchObject({ outcome: "skipped", draw: { kind: "collect-only" } });
   });
 
   it("skips amounts the order format cannot represent", async () => {

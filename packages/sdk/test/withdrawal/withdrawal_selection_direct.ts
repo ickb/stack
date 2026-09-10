@@ -23,6 +23,20 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
     ).toEqual([deposits[0], deposits[3]]);
   });
 
+  it("takes every fitting deposit with no count cap of its own", () => {
+    const deposits = Array.from({ length: 40 }, (_, index) =>
+      readyDeposit(1n, BigInt(index) * MINUTE_MS, `d-${String(index)}`),
+    );
+
+    const selected = selectReadyWithdrawalDeposits({
+      readyDeposits: deposits,
+      tip: TIP,
+      maxAmount: 40n,
+    });
+
+    expect(selected).toHaveLength(40);
+  });
+
   it("orders candidates by ready maturity, not by input order", () => {
     const earlier = readyDeposit(5n, 20n * MINUTE_MS);
     const later = readyDeposit(5n, 45n * MINUTE_MS);

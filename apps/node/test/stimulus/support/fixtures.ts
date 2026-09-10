@@ -8,6 +8,7 @@ import {
   type OrderGroup,
   Ratio,
   type ReceiptCell,
+  ReceiptData,
   type SystemState,
 } from "@ickb/sdk";
 import {
@@ -48,14 +49,30 @@ export function accountState(
   };
 }
 
-/** A receipt worth `ckbValue` CKB and `udtValue` iCKB; the turn only counts and collects it. */
+/** A real iCKB receipt worth `ckbValue` CKB and `udtValue` iCKB, one deposit of that amount. */
 export function receipt(
   txHashByte: string,
   ckbValue: bigint,
   udtValue: bigint,
 ): ReceiptCell {
-  const cell = plainCell(ckbValue, txHashByte);
-  return { cell, ckbValue, udtValue, header: { header: headerLike({ number: 1n }) } };
+  const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
+  const cell = ccc.Cell.from({
+    outPoint: { txHash, index: 0n },
+    cellOutput: {
+      capacity: ckbValue,
+      lock: PRIMARY_LOCK,
+      type: getConfig("testnet").managers.logic.script,
+    },
+    outputData: ccc.hexFrom(
+      ReceiptData.encode({ depositQuantity: 1, depositAmount: udtValue }),
+    ),
+  });
+  return {
+    cell,
+    ckbValue,
+    udtValue,
+    header: { header: headerLike({ number: 1n }), txHash },
+  };
 }
 
 export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
