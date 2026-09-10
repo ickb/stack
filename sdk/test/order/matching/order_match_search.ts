@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import type { OrderGroup } from "../../../src/order/model/cells.ts";
 import { Info } from "../../../src/order/model/info.ts";
 import { Ratio } from "../../../src/order/model/ratio.ts";
@@ -457,6 +458,85 @@ describe("best match search", () => {
 
     expect(result.match.partials.length).toBeLessThanOrEqual(1);
     expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("closes with the high-margin buyer behind two large low-margin ones", () => {
+    // Both large buyers gain more whole than the small one, but the bot can only pay a
+    // sliver of them; the small buyer's partial is worth a hundred times more.
+    const groups = resolvedOrderGroups([
+      buyer("d1", 10n * L, 9_990_000_000_000n),
+      buyer("d2", 10n * L, 9_990_000_000_000n),
+      buyer("d3", 10_000_000_000n, D + 1n),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: D };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(gainAtUnit(result.match, FEE)).toBe(9_899_999_617n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("finds the one payable buyer behind thirty-two all-or-nothing ones and an unpayable seller", () => {
+    // Each blocker needs one unit more iCKB than the bot holds and the seller that could
+    // hand it over asks more CKB than every blocker offers, so nothing whole is payable.
+    const Q = 10_000_000_000n;
+    const orders = Array.from({ length: 32 }, (_, index) =>
+      makeOrderCell({
+        ckbUnoccupied: 3n * Q,
+        udtValue: 0n,
+        info: Info.from({
+          ckbToUdt: ratioOf(3n * Q, Q + 1n),
+          udtToCkb: Ratio.empty(),
+          ckbMinMatchLog: 40,
+        }),
+        master: { type: "absolute", value: { txHash: hashOf(index + 1), index: 1n } },
+        outPoint: { txHash: hashOf(index + 1), index: 0n },
+      }),
+    );
+    orders.push(buyer("d4", 2n * Q, Q + 1n), seller("d5", Q, 10n * L, 44));
+    const groups = resolvedOrderGroups(orders);
+    const allowance = { ckbValue: 0n, udtValue: Q };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(gainAtUnit(result.match, FEE)).toBe(9_999_999_715n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("raises a repairing fill to the order's minimum match", () => {
+    // The seller is worth taking whole but costs CKB the bot lacks; the buyer repays it
+    // only at exactly its minimum match, which the deficit alone falls short of.
+    const M = 1n << 27n;
+    const groups = resolvedOrderGroups([
+      buyer("d6", 1_000_000_000n, 10n * L, 27),
+      seller("d7", (M + D) * 10_000n, M - 1n - 2n * FEE),
+    ]);
+    const allowance = { ckbValue: 0n, udtValue: 0n };
+
+    const result = OrderManager.bestMatch(groups, allowance, UNIT, { feeRate: 1000n });
+
+    expect(gainAtUnit(result.match, FEE)).toBe(1_000_000_000_001n);
+    expectFeasible(result.match, allowance, FEE);
+  });
+
+  it("never probes past its budget", () => {
+    const groups = resolvedOrderGroups([
+      buyer("d8", 2n * L, L),
+      seller("d9", 2n * L, L),
+      buyer("da", 2n * L, L),
+    ]);
+    const probes = vi.spyOn(OrderMatcher.prototype, "match");
+
+    for (const candidateBudget of [1, 2, 3, 5, 8, 13]) {
+      probes.mockClear();
+      const result = OrderManager.bestMatch(groups, { ckbValue: 0n, udtValue: L }, UNIT, {
+        feeRate: 1000n,
+        candidateBudget,
+      });
+      expect(probes.mock.calls.length).toBeLessThanOrEqual(candidateBudget);
+      expect(result.match.diagnostics?.workCount).toBeLessThanOrEqual(candidateBudget);
+    }
+    probes.mockRestore();
   });
 
   it("pairs buyers and sellers on a balanced thousand-order book within a few hundred milliseconds", () => {

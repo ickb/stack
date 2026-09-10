@@ -148,7 +148,8 @@ export function fullGain(context: BestMatchContext, matcher: OrderMatcher): bigi
 
 /**
  * Drops the orders no combination could pay: a buyer's minimum beyond the iCKB
- * allowance plus everything every seller could hand over, and the same for sellers.
+ * allowance plus everything every payable seller could hand over, and the same for
+ * sellers, until no order's supply rests on one that was dropped.
  */
 function fundableMatchers(
   context: BestMatchContext,
@@ -163,10 +164,14 @@ function fundableMatchers(
   const udtBudget = context.allowance.udtValue + supply(sellers, false);
   const ckbBudget =
     context.allowance.ckbValue - context.ckbMiningFee + supply(buyers, true);
-  return {
+  const fundable = {
     buyers: buyers.filter((matcher) => matcher.bMinMatch <= udtBudget),
     sellers: sellers.filter((matcher) => matcher.bMinMatch <= ckbBudget),
   };
+  return fundable.buyers.length === buyers.length &&
+    fundable.sellers.length === sellers.length
+    ? fundable
+    : fundableMatchers(context, fundable.buyers, fundable.sellers);
 }
 
 /**
