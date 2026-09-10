@@ -1,126 +1,38 @@
-# Current Bot Rebalancing Policy
+# Bot Policy
 
-This document describes the behavior implemented by `apps/node/src/bot/bot/turn.ts`, `packages/bot/src/runtime/`, `packages/bot/src/policy.ts`, and the `apps/bot/src/index.ts` script.
+The behaviour of `apps/node/src/bot/` as settled in decisions amendment 52: `policy.ts` decides, `runtime/transaction.ts` builds, `turn.ts` sends once and waits.
 
-## Goal
+## The policy
 
-The bot keeps enough liquid iCKB for order matching and withdrawals while leaving as much capital as practical in CKB. Each turn builds at most one completed transaction, sends it, and waits until the transaction is committed before the process exits; the service manager starts the next turn.
+Every turn, at most one transaction. The bot reads the chain, decides, sends once, waits for confirmation, and forgets everything.
 
-The bot exits when its total CKB-equivalent capital is less than or equal to `21 / 20 * depositCapacity`, where `depositCapacity` is recalculated from the live exchange ratio.
+1. **Match.** Take the best profitable match from the book, spending at most the bot's CKB minus the 1,000 CKB reserve (clamped at zero), and its iCKB. Own limit orders are ignored entirely; they are only excluded from the market book. Up to 58 partials per transaction, since the DAO 64-output limit is shared with deposits and requests. Feasibility is decided by the final net balances of the whole transaction; candidate generation may use optimistic bounds as long as they exclude no feasible match.
 
-## Runtime State
+2. **Then one of these two, never both, judged on the balances after the match:**
+   - **Deposit** one cap-sized deposit when the ring segment containing the tip lacks coverage (under half its equal share of the pool's iCKB), or when the bot holds under 2,000 iCKB, if 1,000 CKB remains after it. One deposit serves both reasons; the reason is recorded.
+   - **Otherwise withdraw** ready surplus deposits while the bot holds over 120,000 iCKB, keeping 20,000: oldest first, skipping any deposit that does not fit, as many as fit. Anchors are never touched, except under stress: when spendable CKB (CKB minus reserve) is below one fifth of a deposit, ready anchors may be taken under the same order and limits.
+   - If both fire, the deposit is tried first; if it cannot complete, the withdrawal is tried in the same turn. Priority is among fundable candidates, never a reason to send nothing. A ring roll is therefore a deposit one turn and a withdrawal the next.
 
-The runtime reads system and account state through `@ickb/sdk`, then derives the balances and pool slices used by `planRebalance(...)`.
+3. **Housekeeping rides along.** Every transaction also collects what is ready (matured withdrawals, then receipts) and sweeps the bot's loose plain and iCKB cells, largest first, up to a 64 KiB prepared-size limit. Funding for the action comes first and may draw on collectible cells. Position in the transaction is protocol-fixed: the aligned action prefix first (deposit input i to request output i, matched order cells), everything else appended.
 
-- `system`: live exchange ratio, tip header, fee rate, market order pool, and configured pool deposit snapshot from `sdk.getL1AccountState(...)`.
-- `userOrders`: the bot's order groups from `sdk.getL1AccountState(...)`.
-- `marketOrders`: resolved public `OrderGroup` entries from the system order pool.
-- `poolDeposits`: configured public pool deposit snapshot used for ring coverage.
-- `availableCkbBalance` and `availableIckbBalance`: account balances projected with collected orders available.
-- `unavailableCkbBalance`: CKB pending in not-ready withdrawals.
-- `depositCapacity`: CKB required for one standard 100,000 iCKB deposit at the live exchange ratio.
-- `minCkbBalance`: shutdown threshold set to `21 / 20 * depositCapacity`.
+4. **One acceptance check, on the completed transaction.** Matches and deposits must leave the reserve in plain CKB after fees and change; withdrawal requests must leave only fee headroom, because they bring the CKB back. No other arithmetic bound.
 
-The public pool scan uses the SDK L1 state snapshot, the bot's configured pool lock-up window, and the default CCC cell-query page size unless callers pass `cellPageSize`. Ring coverage uses that whole `poolDeposits` snapshot. Planning derives ready withdrawal candidates from each deposit's `isReady` field instead of storing a second pool slice.
+5. **If the transaction does not complete or fails the check,** shed first the sweep, then the collections, then the last item of the action core, and try again; when a deposit core is exhausted, continue with the withdrawal candidates; when no prefix of a withdrawal chain completes, drop its oldest deposit and rebuild the chain from the next one. A transaction sends only if it still carries a match, a deposit, a withdrawal request, or a collection. Compaction alone never sends. The profit gate applies to the match core only; housekeeping fees never veto a match.
 
-## Constants
+## Units
 
-- `CKB_RESERVE = 1000 CKB`: hard available-CKB floor for match allowance and the projected post-transaction reserve guard. CKB-consuming matches also keep the fixed fee headroom out of allowance so ordinary matching does not predictably build below reserve after fees. Direct-deposit gates require the same fixed fee headroom. There is no soft CKB reserve above it.
-- `MATCH_STEP_DIVISOR = 100`: matcher allowance step is `depositCapacity / 100` in CKB, converted to iCKB for CKB-to-iCKB matching.
-- `MAX_WITHDRAWAL_REQUESTS = 30`: maximum deposits named as withdrawal candidates by one rebalance action.
-- `MAX_MATCH_PARTIALS = 58`: named bound on matched partials, so a match leaves the DAO output limit room for the rest; the completion walk can shrink withdrawals but never a fixed match.
+iCKB thresholds are constants in units of the deposit cap `Q` (100,000 iCKB), compared with the iCKB balance: refill below `Q/50`, retain `Q/5`, withdraw above `Q + Q/5`. The CKB side uses one deposit `D`, which is `Q` converted at the sampled tip: stress below `D/5`, match step `D/100`. The reserve is 1,000 CKB. See `src/bot/policy/constants.ts`.
 
-## Decision Order
+## Prerequisites
 
-`planRebalance(...)` returns one of three actions: `none`, `deposit`, or `withdraw`.
+- Committed-only indexer reads: the operator's node keeps CKB's default `[indexer_v2] index_tx_pool = false`. With pool indexing on, a timed-out send can be duplicated with disjoint inputs on later turns.
+- An exclusive node.
+- Recommended funding: about 2.2 deposits total plus some plain CKB above the reserve. Below it the bot still matches what it can but may idle with a full buffer waiting for a buyer. The number derives from the thresholds (1.2 deposits of iCKB before withdrawal, one deposit plus reserve to deposit) and must be recomputed if they change.
 
-1. Let order matching spend first: iCKB allowance is the full iCKB balance, and CKB allowance is `max(0, availableCkb - CKB_RESERVE - direct deposit fee headroom)`.
-2. Derive useful post-match floors only from a complete `OrderManager.bestMatch(...)` result. An incomplete positive match uses actual post-match balances with zero optimality-dependent floors.
-3. If post-match iCKB is below the useful CKB-to-iCKB floor, return one same-transaction direct `deposit` when CKB can fund `directDepositCapacity + CKB_RESERVE + direct deposit fee headroom`.
-4. If the current full-pool ring bucket is under-covered and the same creation gates pass, return one direct `deposit`.
-5. If post-match CKB is below `CKB_RESERVE + useful UDT-to-CKB floor`, or iCKB refill is needed but cannot be funded, try reserve recovery withdrawal.
-6. If iCKB refill is still needed after reserve recovery fails, return `none`.
-7. If iCKB exceeds the useful withdrawal floor, select ready ring-surplus deposits for ordinary withdrawal.
-8. If no candidate satisfies the ring rules, return `none`.
+## Properties
 
-Runtime transaction construction applies the chosen action after order matching. For `deposit`, `logic.deposit(...)` adds the fresh deposit and the bot completes iCKB UDT balance, CKB capacity, fees, and the DAO output-limit check through `sdk.completeTransaction(...)` before the reserve guard. For `withdraw`, the plan names greedy candidates and the completion walk (`completeFirstFundable`) decides how many requests the transaction carries: prefixes of the candidate list are built into `sdk.buildBaseTransaction(...)` from the longest down, each is completed, and the first whose completed fee passes the reserve check wins. Capacity, output-limit, and representability failures advance the walk; other errors end the turn. When no prefix is accepted, the transaction without withdrawals is tried with the rebalance reported as `no_fundable_withdrawal_prefix` and the candidate count.
-
-The final CKB reserve guard uses projected `availableCkbBalance + match.ckbDelta - rebalance costs - fee`. It blocks transactions that would end below `CKB_RESERVE`, except withdrawal requests with non-negative match CKB delta. Withdrawal requests spend CKB now to restore CKB later, including ordinary `excess_ickb_balance`; they must not hide an unrelated CKB-spending match below reserve. Pending CKB from withdrawal requests still is not liquid in the current turn.
-
-The direct-deposit fee headroom is a fixed prebuild margin. Exact fee remains a runtime completion concern because it depends on selected inputs, change, and witness size.
-
-## Ring Bucket Seeding
-
-Ring bucket seeding uses a fixed 180-epoch ring model over the configured live iCKB pool snapshot. The target segment is the segment containing `tip.epoch`; this is a policy bucket, not an exact post-inclusion maturity prediction.
-
-The ring model is:
-
-- ring length: `180` epochs
-- origin: epoch `0` modulo the 180-epoch ring
-- segment count: `2^(ceil(log2(poolDepositCount)))`
-- segment index: `floor(((maturityEpoch mod 180 epochs) * segmentCount) / 180 epochs)`
-- segment density: `segmentUdtValue / segmentLength`
-- average density: `totalPoolUdt / ringLength`
-
-Because all segments are equal width, the implementation checks under-coverage as `2 * targetSegmentUdtValue * segmentCount < totalPoolUdt`. If total pool `udtValue` is zero, density-based seeding does not run.
-
-Ring seeding requires all creation gates:
-
-- `ickbBalance >= useful CKB-to-iCKB floor`
-- `ckbBalance >= directDepositCapacity + CKB_RESERVE + direct deposit fee headroom`
-
-Then the current ring bucket rule applies:
-
-- `0` pool deposits: return one direct `deposit`.
-- Non-empty pool: seed when the current target segment is under-covered.
-
-Public pool shape may admit or block direct ring seeding. If a seed is needed but `ckbBalance < directDepositCapacity + CKB_RESERVE + direct deposit fee headroom`, the bot does not use that ring need to withdraw. Public state still cannot create a future withdrawal, same-transaction rotation, retry widening, or persistent state. A known-code attacker can crowd, drain, dust, or stale-shape public deposits, but those shapes can only admit a direct deposit or block ring seeding.
-
-Far-future withdrawal, same-transaction future rotation, retry widening, and persistence are disabled.
-
-## Excess Withdrawals
-
-Ordinary excess withdrawal is independent of ring seeding. It runs only after deposit and reserve-recovery paths decline, and only when available iCKB is above the useful iCKB withdrawal floor.
-
-Normal candidates come only from ready deposits that are ring surplus in the configured live pool snapshot. Ring anchors for selected surplus deposits are passed as required live deposits.
-
-When ordinary excess withdrawal does not build, the policy-owned no-op reason distinguishes the cause: `no_ready_withdrawal_selection` for no ready withdrawal selection at all, `no_ring_surplus_ready_deposits` when ready deposits exist but all are ring anchors, and `ring_surplus_withdrawal_over_budget` when ring-surplus ready deposits exist but none fit the withdrawable iCKB budget.
-
-Pending CKB from an excess withdrawal request is not treated as liquid until a later turn reads it from account state.
-
-## Reserve Recovery
-
-Reserve recovery is bot-only anchor breaking. It runs when post-match CKB is below `CKB_RESERVE + useful UDT-to-CKB floor`, or when iCKB refill is needed but CKB cannot fund a direct deposit.
-
-The useful floor is derived from matcher diagnostics. It is a recovery trigger after matching has spent freely, not a soft reserve withheld from matching.
-
-This useful CKB floor is the urgency signal that permits reserve recovery to break ring anchors before the hard reserve is breached. Without that signal, anchors remain protected by normal withdrawal policy.
-
-Once reserve recovery is triggered, the walk first tries ring-surplus candidates, then, when no surplus prefix could be funded, any ready deposit within the available iCKB. This may break ring anchors because restoring CKB matching capability takes priority once the bot is below the useful CKB floor or cannot fund the required iCKB refill.
-
-## Ready Withdrawals
-
-Ready withdrawals run only when no deposit action has already been selected. They are labeled `reserve_recovery` when they restore matching capability and `excess_ickb_balance` otherwise.
-
-The normal selector filters ready deposits through configured-pool ring surplus. A deposit is ring surplus when its ring segment still has an anchor after removing it. The chosen anchor for selected surplus is passed as a required live deposit, so stale inclusion fails instead of silently consuming the last live representative.
-
-Candidate selection calls `selectReadyWithdrawalDeposits(...)`, a greedy walk by maturity: the deposit closest to its cycle boundary turns into CKB soonest, and each candidate that still fits under the withdrawable amount is taken, up to `MAX_WITHDRAWAL_REQUESTS`. Each prefix of the list pins its own ring anchors as live deposits.
-
-Normal ready withdrawals never spend ring anchors. The only path that can break ring anchors is reserve recovery above.
-
-## Send Turn
-
-Each process runs one turn: it builds at most one transaction, sends it through the initialization-owned signer closure, and calls the SDK transaction waiter with a 10-minute timeout and 10-second polling interval. There is no inner loop, retry budget, or sleep; the systemd unit (`Restart=always`, `RestartSec=60`) or the operator starts the next turn. Rejections and confirmation failures end the turn with a `bot.turn.failed` event whose error names the broadcast hash and status. A broadcast transaction gets that one observation window; any confirmation failure exits `1`, and the next turn rebuilds from committed state, where a still-pending transaction conflicts with the rebuilt one at the node. Only capital below the minimum exits `2`, which `RestartPreventExitStatus=2` turns into a hold. Large numeric values are logged as strings to preserve bigint precision.
-
-## Non-Goals
-
-The bot does not try to:
-
-- globally optimize the full 180-epoch pool outside the configured snapshot
-- predict the exact inclusion maturity of a pending fresh deposit
-- withdraw far-future deposits or rotate future sources in the same transaction as a fresh deposit
-- create ring inventory when the hard CKB reserve or useful iCKB floor gates fail
-- persist ring observations or retry-widen across loops
-- treat pending CKB from withdrawal requests as liquid before account state reports it
-- publish a consensus or API pool snapshot; operator diagnostics keep only the compact ring summary in the decision transcript
-- coordinate with other bots beyond the current visible chain state
+- Self-recovery: from every reachable state, including a crashed turn, a timed-out send, a reorg, or a partial collection, later stateless turns rebuild a normal state without an operator. Under committed-only reads a retry either conflicts with the pending transaction or is a second independently valid one; no durable pending state exists.
+- No stall above the recommended funding, except unvisited candidates of the match search (dust starvation is an accepted adversarial cost: the attacker pays fees and parks capital every turn). Below the recommended funding, only the documented idle.
+- No busywork beyond coverage-driven ring rolls, which are bounded by ready deposits and affordability.
+- Fund safety: signer-body check, signed fee-rate ceiling, conservation.
+- Tradeoffs, explicit: buyers are served up to current iCKB inventory plus transit; sellers up to spendable CKB; withdrawal markers may spend plain CKB down to fee headroom, after which the bot waits for maturity; a request committed after its sampled window locks for another cycle; anchors cost one segment's coverage for one cycle when taken.

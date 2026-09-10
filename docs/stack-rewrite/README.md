@@ -9,9 +9,9 @@ The work started with a whole-repository review. That review found a small numbe
 ## What is changing
 
 - Five published packages become one browser-safe `@ickb/sdk` with a single entry point.
-- Thirteen workspaces become four: `packages/{sdk,testkit}` and `apps/{node,interface}`, the latter holding the bot, tester, and sampler entrypoints.
+- Thirteen workspaces become four: `packages/{sdk,testkit}` and `apps/{node,interface}`, the latter holding the bot, stimulus generator, and sampler entrypoints.
 - The SDK exposes plain sampled state, typed planning results, stable error codes, and an explicit transaction lifecycle.
-- Bot and interface share bounded exact committed-cell scans and persist no pending transaction identity.
+- Bot and interface read committed cells through one uncached exact-lock scan per account lock, classified client-side, and persist no pending transaction identity.
 - Stack selects exact inputs and output shapes; CCC retains collection-disabled fee preparation and signing mechanics, while its cache is never input-selection authority.
 - The bot keeps the fund-safety policy and removes policy machinery that did not justify its complexity.
 - Validation is organized around contract-derived vectors, property tests, an in-memory client, testnet smoke and soak runs, and continuous operational checks.
@@ -19,14 +19,14 @@ The work started with a whole-repository review. That review found a small numbe
 
 ## Progress
 
-| Phase               | State    | Work                                                                                                                                                                                                                   |
-| ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, and the C1 matcher correction.                                                                                                                     |
-| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                 |
-| 2. SDK reshape      | Active   | Delivered: plain sampled state, typed results and errors, bounded exact committed-cell scans, and hybrid completion. Remaining: the public-surface narrowing and directory collapse of the shape slice (amendment 52). |
-| 3. Repository shape | Planned  | Plain merge of the SDK packages and of each app with its package (amendment 35); the probes built for a packed-artifact gate retire with it.                                                                           |
-| 4. Runtime          | Active   | Delivered: single-turn bot and tester under a systemd user unit with env config (amendments 32-34). Remaining: minimal policy and typed event contracts.                                                               |
-| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice. |
+| Phase               | State    | Work                                                                                                                                                                                                                     |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, and the C1 matcher correction.                                                                                                                       |
+| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                   |
+| 2. SDK reshape      | Active   | Delivered: plain sampled state, typed results and errors, uncapped exact-lock scans, and scan-free completion that compacts the account. Remaining: the joint net-delta match search and the shape slice (amendment 52). |
+| 3. Repository shape | Planned  | Plain merge of the SDK packages and of each app with its package (amendment 35); the probes built for a packed-artifact gate retire with it.                                                                             |
+| 4. Runtime          | Active   | Delivered: single-turn bot and stimulus generator under a systemd user unit with env config (amendments 32-34, 48) and the one-transaction turn policy with its typed events (amendment 52).                             |
+| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice.   |
 
 Every phase is expected to land through green slices. Required checks move with the code they protect; later CI reorganization cannot defer or weaken an earlier exit gate.
 
@@ -37,11 +37,11 @@ These are the rewrite's fund-safety requirements. Implementation proceeds only w
 - Derive the transaction hash locally and use it as the confirmation identity whatever the node returns.
 - Reject connector-returned changes to ordered inputs, outputs, or output data before fee inspection or broadcast.
 - Keep the fee ceiling on every signing path.
-- Preserve the reserve floor, projected post-transaction guard, recovery exception, match-value-beats-fee rule, 21/20 shutdown, and consensus output limits.
+- Keep the one acceptance check on the completed transaction (matches and deposits leave the reserve in plain CKB, withdrawal requests leave fee headroom), the match-gain-beats-fee rule, and the consensus output limits (amendment 52).
 - Treat ambiguous broadcast results as unresolved for one bounded observation window, then let the next turn rebuild from committed state rather than replaying persisted bytes.
 - Keep the chain identity check ahead of signing; dependency identity is enforced by `data1` code-hash pinning at the node (amendment 52).
-- Use the decision record's bounded account-scan contract: uncached exact-lock scans, client-side classification, outpoint deduplication, and typed fail-closed scan limits without anchors or connector-specific signer attestation.
-- Preserve exit-code-2 behavior through systemd so a low-capital halt does not become an automatic restart loop.
+- Read every cell through uncached exact-lock scans with client-side classification, complete and uncapped, without anchors, scan limits, or connector-specific signer attestation (amendment 52).
+- Exit `0` after a skipped or committed turn and `1` after any failure; an underfunded account skips turn after turn until funded, so no exit code halts the unit (amendment 52).
 - Keep keys out of logs and agent-readable artifacts. The signing key lives only in a mode 0600 file named by the unit; it never enters environment values or unit text.
 
 ## Reading guide
