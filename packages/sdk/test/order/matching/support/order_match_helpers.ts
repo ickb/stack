@@ -115,7 +115,6 @@ export function exhaustiveIntegerBestMatch(
   exchangeRate: { ckbScale: bigint; udtScale: bigint },
   options: {
     feeRate: bigint;
-    ckbAllowanceStep: bigint;
     maxPartials?: number;
   },
 ): Match {

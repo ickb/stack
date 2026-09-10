@@ -91,7 +91,7 @@ export interface BotActions {
 
 export type BotMatchSearchEvidence = Pick<
   Extract<MatchSearchResult, { kind: "incomplete" }>,
-  "budget" | "kind" | "reason" | "searchMode" | "truncation" | "work"
+  "budget" | "gap" | "kind" | "work"
 >;
 
 export type BuildTransactionSkipReason =

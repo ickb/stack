@@ -12,11 +12,9 @@ import {
 import { planRebalance, type RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import {
-  MATCH_STEP_DIVISOR,
   matchableCkb,
   matchedOrderOutPoints,
   MAX_MATCH_PARTIALS,
-  maxBigInt,
   summarizeBotState,
   transactionShape,
 } from "./support.ts";
@@ -116,12 +114,7 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
     state.marketOrders,
     { ckbValue: matchableCkb(state.ckb), udtValue: state.ickb },
     state.system.exchangeRatio,
-    {
-      feeRate: state.system.feeRate,
-      // The step scales with deposit capacity so tiny partials never crowd the outputs.
-      ckbAllowanceStep: maxBigInt(1n, state.depositCapacity / MATCH_STEP_DIVISOR),
-      maxPartials: MAX_MATCH_PARTIALS,
-    },
+    { feeRate: state.system.feeRate, maxPartials: MAX_MATCH_PARTIALS },
   );
   const { match } = searchResult;
   return {
@@ -316,6 +309,6 @@ function skipped(
 function incompleteSearchEvidence(
   result: Extract<MatchSearchResult, { kind: "incomplete" }>,
 ): BotMatchSearchEvidence {
-  const { kind, reason, searchMode, budget, work, truncation } = result;
-  return { kind, reason, searchMode, budget, work, truncation };
+  const { kind, budget, work, gap } = result;
+  return { kind, budget, work, gap };
 }

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { orderMatchers } from "../../../src/order/matching/order_match_sequence.ts";
+import { orderMatchers } from "../../../src/order/matching/order_match_context.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import { Info } from "../../../src/order/model/info.ts";
 import { Ratio } from "../../../src/order/model/ratio.ts";
@@ -306,7 +306,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 0n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
@@ -319,10 +318,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         ckbToUdt: { matchableCount: 0 },
         udtToCkb: { matchableCount: 1 },
       },
-      candidates: {
-        rejected: { nonPositiveGain: 0 },
-      },
     });
-    expect(match.diagnostics?.candidates.positiveGain).toBeGreaterThan(0);
+    expect(match.diagnostics?.bestGain).toBeGreaterThan(0n);
   });
 });

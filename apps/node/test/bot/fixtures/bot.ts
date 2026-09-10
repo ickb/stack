@@ -134,11 +134,9 @@ export function incompleteSearchResult(match: Match): MatchSearchResult {
   return {
     kind: "incomplete",
     match,
-    reason: "atomic_domain_exceeds_budget",
-    searchMode: "stepped",
     budget: 100_000,
-    work: 10,
-    truncation: { phase: "preflight", requiredWork: 100_001n },
+    work: 100_001,
+    gap: 1n,
   };
 }
 

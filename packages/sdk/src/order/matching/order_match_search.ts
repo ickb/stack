@@ -1,558 +1,272 @@
-import type { Match, MatchSearchPhase, MatchSearchResult } from "./match_types.ts";
-import type { BestMatchContext } from "./order_match_context.ts";
-import {
-  directionalMatchFrontier,
-  matcherAllowanceCount,
-} from "./order_match_sequence.ts";
-import {
-  hasUniquePartialOrderOutPoints,
-  partialOutPointKeys,
-} from "./order_match_uniqueness.ts";
+import { compareBigInt } from "../../utils/index.ts";
+import type { Match, MatchSearchResult } from "./match_types.ts";
+import { type BestMatchContext, fullFill, gainOf } from "./order_match_context.ts";
 import type { OrderMatcher } from "./order_matcher.ts";
 
-interface MatchPair {
-  c2u: Match;
-  u2c: Match;
+/** One order of the sorted book with what the book from it on could still add. */
+interface Node {
+  matcher: OrderMatcher;
+  full: Match;
+  key: string;
+  next: Node | undefined;
+  /** The best undecided buyer and seller from this order on whose full fill gains. */
+  nextBuyer: Node | undefined;
+  nextSeller: Node | undefined;
+  /** CKB and iCKB this order and the rest could hand the bot, ignoring fees. */
+  receivableCkb: bigint;
+  receivableUdt: bigint;
+  /** Gain this order and the rest could still add, ignoring what funds them. */
+  positiveGain: bigint;
 }
 
-interface MatchCandidate extends Match {
-  gain: bigint;
+/** The fills chosen so far, mutated along the depth-first walk and restored on return. */
+interface State {
+  ckbDelta: bigint;
+  udtDelta: bigint;
+  partials: Match["partials"];
+  used: Set<string>;
 }
 
-interface SearchState {
-  best: MatchCandidate;
-  truncation: { phase: MatchSearchPhase; requiredWork: bigint };
-}
-
-interface DirectionWorkBound {
-  inspections: bigint;
-  probes: bigint;
-  statesByPartials: bigint[];
-}
-
-interface BudgetExtensionsInput {
-  allowance: bigint;
-  base: Match;
-  direction: "c2u" | "u2c";
-  excludedOutPoints: Set<string>;
-  matchers: OrderMatcher[];
-  pair: MatchPair;
-}
-
-interface FrontierPairsInput {
-  ckb2UdtMatches: Match[];
-  searchMode: "atomic" | "stepped";
-  udt2CkbMatches: Match[];
-}
-
-export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
-  const preflightWork = atomicSearchWorkUpperBound(context);
-  const searchMode =
-    preflightWork <= BigInt(context.candidateBudget) ? "atomic" : "stepped";
-  const state: SearchState = {
-    best: { ...emptyMatch(), gain: 0n },
-    truncation: { phase: "preflight", requiredWork: preflightWork },
+/** Search progress; the walk mutates it through its own methods. */
+class Search {
+  public best: { match: Match; gain: bigint } = {
+    match: { ckbDelta: 0n, udtDelta: 0n, partials: [] },
+    gain: 0n,
   };
-  claimCandidateWork(context, state);
-  evaluateCandidate(context, state, { c2u: emptyMatch(), u2c: emptyMatch() });
+  public work = 0;
+  /** Once the budget is spent, every unvisited subtree only records its bound. */
+  public exhausted = false;
+  public unvisitedUpper = 0n;
+  public readonly context: BestMatchContext;
 
-  // Each direction is capped at what the bot could fund in the best case: its allowance
-  // plus everything the other direction's orders could hand it. States no combination
-  // can fund are never generated (decisions amendment 52).
-  const ckb2Udt = directionalMatchFrontier(context.ckbToUdtMatchers, {
-    allowanceCap: udtAllowanceCap(context),
-    allowanceStep: context.udtAllowanceStep,
-    claimWork: (count) => claimWork(context, state, "ckbToUdtFrontier", count),
-    isCkb2Udt: true,
-    maxPartials: context.maxPartials,
-    onState: (match) => {
-      evaluateCandidate(context, state, { c2u: match, u2c: emptyMatch() });
-    },
-    searchMode,
-  });
-  const diagnostics = context.diagnostics;
-  diagnostics.generatedStates.ckbToUdt = ckb2Udt.matches.length;
-  if (!ckb2Udt.completed) {
-    return incompleteResult(context, state, searchMode);
+  constructor(context: BestMatchContext) {
+    this.context = context;
   }
 
-  const udt2Ckb = directionalMatchFrontier(context.udtToCkbMatchers, {
-    allowanceCap: ckbAllowanceCap(context),
-    allowanceStep: context.ckbAllowanceStep,
-    claimWork: (count) => claimWork(context, state, "udtToCkbFrontier", count),
-    isCkb2Udt: false,
-    maxPartials: context.maxPartials,
-    onState: (match) => {
-      evaluateCandidate(context, state, { c2u: emptyMatch(), u2c: match });
-    },
-    searchMode,
-  });
-  diagnostics.generatedStates.udtToCkb = udt2Ckb.matches.length;
-  if (!udt2Ckb.completed) {
-    return incompleteResult(context, state, searchMode);
-  }
-
-  if (
-    !visitFrontierPairs(context, state, {
-      ckb2UdtMatches: ckb2Udt.matches,
-      searchMode,
-      udt2CkbMatches: udt2Ckb.matches,
-    })
-  ) {
-    return incompleteResult(context, state, searchMode);
-  }
-
-  const match = completedMatch(context, state);
-  return searchMode === "atomic"
-    ? { kind: "complete", match }
-    : {
-        kind: "incomplete",
-        match,
-        reason: "atomic_domain_exceeds_budget",
-        searchMode: "stepped",
-        budget: context.candidateBudget,
-        work: context.diagnostics.workCount,
-        truncation: { phase: "preflight", requiredWork: preflightWork },
-      };
-}
-
-function visitFrontierPairs(
-  context: BestMatchContext,
-  state: SearchState,
-  input: FrontierPairsInput,
-): boolean {
-  if (!canCombineDirections(context)) {
-    return true;
-  }
-  return (
-    (input.searchMode === "atomic" ||
-      (visitSteppedDirectionalStates(context, state, input, true) &&
-        visitSteppedDirectionalStates(context, state, input, false))) &&
-    visitCrossDirectionPairs(context, state, input)
-  );
-}
-
-function visitSteppedDirectionalStates(
-  context: BestMatchContext,
-  state: SearchState,
-  input: FrontierPairsInput,
-  isCkb2Udt: boolean,
-): boolean {
-  const empty = emptyMatch();
-  const matches = isCkb2Udt ? input.ckb2UdtMatches : input.udt2CkbMatches;
-  for (const match of matches) {
-    if (match.partials.length === 0) {
-      continue;
-    }
-    const pair = isCkb2Udt ? { c2u: match, u2c: empty } : { c2u: empty, u2c: match };
-    if (!visitFrontierPair(context, state, pair, input.searchMode)) {
+  /** Charges one node; false once the budget is spent, recording the bound left behind. */
+  public charge(upper: bigint): boolean {
+    if (this.exhausted) {
+      this.unvisitedUpper = maxBigInt(this.unvisitedUpper, upper);
       return false;
     }
-  }
-  return true;
-}
-
-function visitCrossDirectionPairs(
-  context: BestMatchContext,
-  state: SearchState,
-  input: FrontierPairsInput,
-): boolean {
-  for (const c2u of input.ckb2UdtMatches) {
-    if (c2u.partials.length === 0) {
-      continue;
-    }
-    for (const u2c of input.udt2CkbMatches) {
-      if (!claimCandidateWork(context, state)) {
-        return false;
-      }
-      if (u2c.partials.length === 0) {
-        continue;
-      }
-      if (!visitFrontierPair(context, state, { c2u, u2c }, input.searchMode)) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-function visitFrontierPair(
-  context: BestMatchContext,
-  state: SearchState,
-  pair: MatchPair,
-  searchMode: "atomic" | "stepped",
-): boolean {
-  if (!isKnownPossiblePair(context, pair)) {
-    return true;
-  }
-  const hasBothDirections = pair.c2u.partials.length > 0 && pair.u2c.partials.length > 0;
-  if (hasBothDirections) {
-    evaluateCandidate(context, state, pair);
-  }
-  return searchMode === "atomic" || visitResidualExtensions(context, state, pair);
-}
-
-function visitResidualExtensions(
-  context: BestMatchContext,
-  state: SearchState,
-  pair: MatchPair,
-): boolean {
-  const partials = pair.c2u.partials.concat(pair.u2c.partials);
-  if (context.maxPartials !== undefined && partials.length >= context.maxPartials) {
-    return true;
-  }
-  const excluded = partialOutPointKeys(partials);
-  const ckbBudget = ckbExtensionBudget(context, pair);
-  if (
-    ckbBudget !== undefined &&
-    !visitBudgetExtensions(context, state, {
-      allowance: ckbBudget,
-      base: pair.u2c,
-      direction: "u2c",
-      excludedOutPoints: excluded,
-      matchers: context.udtToCkbMatchers,
-      pair,
-    })
-  ) {
-    return false;
-  }
-  const udtBudget = udtExtensionBudget(context, pair);
-  return (
-    udtBudget === undefined ||
-    visitBudgetExtensions(context, state, {
-      allowance: udtBudget,
-      base: pair.c2u,
-      direction: "c2u",
-      excludedOutPoints: excluded,
-      matchers: context.ckbToUdtMatchers,
-      pair,
-    })
-  );
-}
-
-function visitBudgetExtensions(
-  context: BestMatchContext,
-  state: SearchState,
-  input: BudgetExtensionsInput,
-): boolean {
-  for (const matcher of input.matchers) {
-    if (!claimCandidateWork(context, state)) {
+    if (this.work === this.context.candidateBudget) {
+      this.exhausted = true;
+      this.unvisitedUpper = upper;
       return false;
     }
-    if (input.excludedOutPoints.has(matcher.group.order.cell.outPoint.toHex())) {
-      const rejected = context.diagnostics.candidates.rejected;
-      rejected.duplicateOrder += 1;
-      continue;
+    this.work += 1;
+    return true;
+  }
+
+  public record(candidate: Match): void {
+    const gain = gainOf(this.context, candidate);
+    if (gain > this.best.gain) {
+      this.best = { match: candidate, gain };
     }
-    const probe = matcher.match(input.allowance);
-    if (probe.partials.length === 0) {
-      continue;
-    }
-    const extension = {
-      ckbDelta: input.base.ckbDelta + probe.ckbDelta,
-      udtDelta: input.base.udtDelta + probe.udtDelta,
-      partials: input.base.partials.concat(probe.partials),
-    };
-    evaluateCandidate(
-      context,
-      state,
-      input.direction === "c2u"
-        ? { ...input.pair, c2u: extension }
-        : { ...input.pair, u2c: extension },
-    );
-  }
-  return true;
-}
-
-function claimCandidateWork(context: BestMatchContext, state: SearchState): boolean {
-  if (!claimWork(context, state, "candidates", 1n)) {
-    return false;
-  }
-  const candidates = context.diagnostics.candidates;
-  candidates.total += 1;
-  return true;
-}
-
-function evaluateCandidate(
-  context: BestMatchContext,
-  state: SearchState,
-  { c2u, u2c }: MatchPair,
-): void {
-  const candidate = matchCandidate(context, c2u, u2c);
-  const candidates = context.diagnostics.candidates;
-  if (!isViableMatchCandidate(context, candidate)) {
-    return;
-  }
-  candidates.viable += 1;
-  if (!isPositiveMatchCandidate(context, candidate)) {
-    return;
-  }
-  if (candidate.gain > state.best.gain) {
-    const mutableState = state;
-    mutableState.best = candidate;
   }
 }
 
-function claimWork(
-  context: BestMatchContext,
-  state: SearchState,
-  phase: MatchSearchPhase,
-  count: bigint,
-): boolean {
-  const requiredWork = BigInt(context.diagnostics.workCount) + count;
-  if (requiredWork > BigInt(context.candidateBudget)) {
-    const mutableState = state;
-    mutableState.truncation = { phase, requiredWork };
-    return false;
+// Beyond this many orders the worst-priced ones are left for the next turn: an attacker
+// who floods the book pays cell capacity for every order and only moves the bot onto the
+// better-priced ones, and the walk's recursion depth stays bounded.
+const MAX_SEARCH_ORDERS = 1000;
+
+/**
+ * Depth-first search over the orders, best margin first: each order is taken whole or
+ * skipped, and only the final net balances of the whole selection must fit the allowance,
+ * so what buyers pay funds sellers in the same transaction and vice versa, even from empty
+ * inventory. At every feasible node the leftover balances are closed by at most one
+ * partial fill per direction from the orders not yet decided (a two-constraint optimum
+ * has at most two fractional orders), one of them funded by the other's proceeds. Taking
+ * comes before skipping, so the first descent is the greedy match and later work only
+ * improves on it. A branch is pruned when even the whole remaining supply cannot make it
+ * feasible, or when its gain plus every remaining positive gain cannot beat the incumbent.
+ * The node budget ends the search with the best feasible match seen and the largest gain
+ * an unvisited branch could still hold (decisions amendment 52).
+ */
+export function searchBestMatch(context: BestMatchContext): MatchSearchResult {
+  const search = new Search(context);
+  if (context.maxPartials !== 0) {
+    visit(search, bookNodes(context), {
+      ckbDelta: 0n,
+      udtDelta: 0n,
+      partials: [],
+      used: new Set(),
+    });
   }
   const diagnostics = context.diagnostics;
-  diagnostics.workCount = Number(requiredWork);
-  return true;
-}
-
-function incompleteResult(
-  context: BestMatchContext,
-  state: SearchState,
-  searchMode: "atomic" | "stepped",
-): MatchSearchResult {
+  diagnostics.workCount = search.work;
+  diagnostics.bestGain = search.best.gain;
+  const match = { ...search.best.match, diagnostics };
+  if (!search.exhausted) {
+    diagnostics.gainUpperBound = search.best.gain;
+    return { kind: "complete", match };
+  }
+  const upper = maxBigInt(search.unvisitedUpper, search.best.gain);
+  diagnostics.gainUpperBound = upper;
   return {
     kind: "incomplete",
-    match: completedMatch(context, state),
-    reason: "candidate_budget_exhausted",
-    searchMode,
+    match,
     budget: context.candidateBudget,
-    work: context.diagnostics.workCount,
-    truncation: state.truncation,
+    work: search.work,
+    gap: upper - search.best.gain,
   };
 }
 
-function completedMatch(context: BestMatchContext, state: SearchState): Match {
-  const diagnostics = context.diagnostics;
-  diagnostics.candidates.bestGain = state.best.gain;
+/** Links the sorted book from the last order back to the first, accumulating the bounds. */
+function bookNodes(context: BestMatchContext): Node | undefined {
+  let next: Node | undefined;
+  for (const matcher of context.matchers.slice(0, MAX_SEARCH_ORDERS).toReversed()) {
+    const full = fullFill(matcher);
+    const gain = gainOf(context, full);
+    const gains = gain > 0n;
+    const node: Node = {
+      matcher,
+      full,
+      key: matcher.group.order.cell.outPoint.toHex(),
+      next,
+      nextBuyer: next?.nextBuyer,
+      nextSeller: next?.nextSeller,
+      receivableCkb: (next?.receivableCkb ?? 0n) + maxBigInt(full.ckbDelta, 0n),
+      receivableUdt: (next?.receivableUdt ?? 0n) + maxBigInt(full.udtDelta, 0n),
+      positiveGain: (next?.positiveGain ?? 0n) + maxBigInt(gain, 0n),
+    };
+    if (gains && matcher.isCkb2Udt) {
+      node.nextBuyer = node;
+    }
+    if (gains && !matcher.isCkb2Udt) {
+      node.nextSeller = node;
+    }
+    next = node;
+  }
+  return next;
+}
+
+function visit(search: Search, node: Node | undefined, state: State): void {
+  const { context } = search;
+  const upper = stateGain(context, state) + (node?.positiveGain ?? 0n);
+  if (!search.charge(upper)) {
+    return;
+  }
+  const ckbLeft =
+    context.allowance.ckbValue +
+    state.ckbDelta -
+    context.ckbMiningFee * BigInt(state.partials.length);
+  const udtLeft = context.allowance.udtValue + state.udtDelta;
+  if (ckbLeft >= 0n && udtLeft >= 0n) {
+    search.record(closed(context, node, state, ckbLeft, udtLeft));
+  }
+  if (
+    node === undefined ||
+    upper <= search.best.gain ||
+    ckbLeft + node.receivableCkb < 0n ||
+    udtLeft + node.receivableUdt < 0n
+  ) {
+    return;
+  }
+  if (!state.used.has(node.key) && hasSlot(context, state, 1)) {
+    state.used.add(node.key);
+    state.partials.push(...node.full.partials);
+    visit(search, node.next, {
+      ...state,
+      ckbDelta: state.ckbDelta + node.full.ckbDelta,
+      udtDelta: state.udtDelta + node.full.udtDelta,
+    });
+    state.partials.pop();
+    state.used.delete(node.key);
+  }
+  visit(search, node.next, state);
+}
+
+/**
+ * The state plus the best closing partials: the best undecided buyer and seller, alone or
+ * one funding the other, whichever gains most; the state alone when none fits. Each
+ * candidate is paid from the leftover balances plus what the earlier fill hands over, so
+ * it is feasible by construction. A cell taken in one direction never returns as a closer:
+ * valid dual ratios forbid crossed prices, so at most one direction of a cell gains.
+ */
+function closed(
+  context: BestMatchContext,
+  node: Node | undefined,
+  state: State,
+  ckbLeft: bigint,
+  udtLeft: bigint,
+): Match {
+  const fee = context.ckbMiningFee;
+  const buyer = node?.nextBuyer?.matcher;
+  const seller = node?.nextSeller?.matcher;
+  const buy = (udt: bigint): Match[] =>
+    buyer === undefined ? [] : fillsOf([buyer.match(cap(buyer, udt))]);
+  const sell = (ckb: bigint): Match[] =>
+    seller === undefined ? [] : fillsOf([seller.match(cap(seller, ckb))]);
+  let best = stateMatch(state);
+  let bestGain = gainOf(context, best);
+  const consider = (fills: Match[]): void => {
+    if (!hasSlot(context, state, fills.length)) {
+      return;
+    }
+    const candidate = withFills(state, fills);
+    const gain = gainOf(context, candidate);
+    if (gain > bestGain) {
+      best = candidate;
+      bestGain = gain;
+    }
+  };
+  const bought = buy(udtLeft);
+  const sold = sell(ckbLeft - fee);
+  consider(bought);
+  consider(sold);
+  for (const fill of bought) {
+    consider([fill, ...sell(ckbLeft - 2n * fee + fill.ckbDelta)]);
+  }
+  for (const fill of sold) {
+    consider([fill, ...buy(udtLeft + fill.udtDelta)]);
+  }
+  return best;
+}
+
+/** The payment a budget allows: nothing below the minimum, the whole order at most. */
+function cap(matcher: OrderMatcher, budget: bigint): bigint {
+  return budget < matcher.bMaxMatch ? budget : matcher.bMaxMatch;
+}
+
+function fillsOf(fills: Match[]): Match[] {
+  return fills.filter((fill) => fill.partials.length > 0);
+}
+
+function withFills(state: State, fills: Match[]): Match {
+  const match = stateMatch(state);
+  for (const fill of fills) {
+    match.ckbDelta += fill.ckbDelta;
+    match.udtDelta += fill.udtDelta;
+    match.partials.push(...fill.partials);
+  }
+  return match;
+}
+
+function stateMatch(state: State): Match {
   return {
-    ckbDelta: state.best.ckbDelta,
-    udtDelta: state.best.udtDelta,
-    partials: state.best.partials,
-    diagnostics,
+    ckbDelta: state.ckbDelta,
+    udtDelta: state.udtDelta,
+    partials: [...state.partials],
   };
 }
 
-function atomicSearchWorkUpperBound(context: BestMatchContext): bigint {
-  const maxPartials = Math.min(maximumPartialCount(context), context.candidateBudget);
-  if (maxPartials === 0) {
-    return 1n;
-  }
-  const limit = BigInt(context.candidateBudget) + 1n;
-  const c2u = directionWorkBound(
-    context.ckbToUdtMatchers,
-    udtAllowanceCap(context),
-    maxPartials,
-    limit,
-  );
-  const u2c = directionWorkBound(
-    context.udtToCkbMatchers,
-    ckbAllowanceCap(context),
-    maxPartials,
-    limit,
-  );
-  const cross =
-    maxPartials < 2
-      ? 0n
-      : cappedMultiply(
-          cappedStateCount(c2u.statesByPartials, 1, limit),
-          cappedStateCount(u2c.statesByPartials, 0, limit),
-          limit,
-        );
-  return cappedAdd(
-    1n,
-    cappedAdd(
-      c2u.probes + u2c.probes,
-      cappedAdd(c2u.inspections + u2c.inspections, cross, limit),
-      limit,
-    ),
-    limit,
+function stateGain(context: BestMatchContext, state: State): bigint {
+  return gainOf(context, {
+    ckbDelta: state.ckbDelta,
+    udtDelta: state.udtDelta,
+    partials: state.partials,
+  });
+}
+
+function hasSlot(context: BestMatchContext, state: State, needed: number): boolean {
+  return (
+    context.maxPartials === undefined ||
+    state.partials.length + needed <= context.maxPartials
   );
 }
 
-function directionWorkBound(
-  matchers: OrderMatcher[],
-  allowanceCap: bigint,
-  maxPartials: number,
-  limit: bigint,
-): DirectionWorkBound {
-  let statesByPartials = [1n, ...Array.from({ length: maxPartials }, () => 0n)];
-  let probes = 0n;
-  let inspections = 0n;
-  for (const matcher of matchers) {
-    const choices = matcherAllowanceCount(matcher, allowanceCap);
-    if (choices === 0n) {
-      continue;
-    }
-    probes = cappedAdd(probes, choices, limit);
-    inspections = cappedAdd(
-      inspections,
-      cappedMultiply(cappedStateCount(statesByPartials, 1, limit), choices, limit),
-      limit,
-    );
-    if (probes === limit || inspections === limit) {
-      return { inspections, probes, statesByPartials };
-    }
-    const nextStates = [1n];
-    let previous = 0n;
-    for (const [partials, current] of statesByPartials.entries()) {
-      if (partials === 0) {
-        previous = current;
-        continue;
-      }
-      const additions = cappedMultiply(previous, choices, limit);
-      nextStates.push(cappedAdd(current, additions, limit));
-      previous = current;
-    }
-    statesByPartials = nextStates;
-  }
-  return { inspections, probes, statesByPartials };
-}
-
-function cappedAdd(left: bigint, right: bigint, limit: bigint): bigint {
-  const value = left + right;
-  return value < limit ? value : limit;
-}
-
-function cappedMultiply(left: bigint, right: bigint, limit: bigint): bigint {
-  if (left === 0n || right === 0n) {
-    return 0n;
-  }
-  return left > limit / right ? limit : left * right;
-}
-
-function cappedStateCount(states: bigint[], start: number, limit: bigint): bigint {
-  let count = 0n;
-  for (const [index, state] of states.entries()) {
-    if (index < start) {
-      continue;
-    }
-    count = cappedAdd(count, state, limit);
-  }
-  return count;
-}
-
-function isKnownPossiblePair(context: BestMatchContext, pair: MatchPair): boolean {
-  const partials = pair.c2u.partials.concat(pair.u2c.partials);
-  const rejected = context.diagnostics.candidates.rejected;
-  if (context.maxPartials !== undefined && partials.length > context.maxPartials) {
-    rejected.maxPartials += 1;
-    return false;
-  }
-  if (!hasUniquePartialOrderOutPoints(partials)) {
-    rejected.duplicateOrder += 1;
-    return false;
-  }
-  return true;
-}
-
-function canCombineDirections(context: BestMatchContext): boolean {
-  return maximumPartialCount(context) >= 2;
-}
-
-function maximumPartialCount(context: BestMatchContext): number {
-  return Math.min(
-    context.maxPartials ?? context.diagnostics.orderCount,
-    context.diagnostics.orderCount,
-  );
-}
-
-function ckbExtensionBudget(
-  context: BestMatchContext,
-  { c2u, u2c }: MatchPair,
-): bigint | undefined {
-  const partialCount = c2u.partials.length + u2c.partials.length;
-  const nextPartialFee = context.ckbMiningFee * BigInt(partialCount + 1);
-  const budget =
-    context.allowance.ckbValue + c2u.ckbDelta + u2c.ckbDelta - nextPartialFee;
-  return budget > 0n && budget < context.ckbAllowanceStep ? budget : undefined;
-}
-
-function udtExtensionBudget(
-  context: BestMatchContext,
-  { c2u, u2c }: MatchPair,
-): bigint | undefined {
-  const budget = context.allowance.udtValue + c2u.udtDelta + u2c.udtDelta;
-  return budget > 0n && budget < context.udtAllowanceStep ? budget : undefined;
-}
-
-function matchCandidate(
-  context: BestMatchContext,
-  c2u: Match,
-  u2c: Match,
-): MatchCandidate {
-  const ckbDelta = c2u.ckbDelta + u2c.ckbDelta;
-  const udtDelta = c2u.udtDelta + u2c.udtDelta;
-  const partials = c2u.partials.concat(u2c.partials);
-  const ckbFee = context.ckbMiningFee * BigInt(partials.length);
-  return {
-    ckbDelta,
-    udtDelta,
-    partials,
-    gain: (ckbDelta - ckbFee) * context.ckbScale + udtDelta * context.udtScale,
-  };
-}
-
-function isViableMatchCandidate(
-  context: BestMatchContext,
-  candidate: MatchCandidate,
-): boolean {
-  return hasCandidateAllowance(context, candidate);
-}
-
-function hasCandidateAllowance(
-  context: BestMatchContext,
-  candidate: MatchCandidate,
-): boolean {
-  const rejected = context.diagnostics.candidates.rejected;
-  const ckbFee = context.ckbMiningFee * BigInt(candidate.partials.length);
-  const ckbAllowance = context.allowance.ckbValue + candidate.ckbDelta - ckbFee;
-  const udtAllowance = context.allowance.udtValue + candidate.udtDelta;
-  if (ckbAllowance < 0n) {
-    rejected.insufficientCkbAllowance += 1;
-  } else if (udtAllowance < 0n) {
-    rejected.insufficientUdtAllowance += 1;
-  }
-  return ckbAllowance >= 0n && udtAllowance >= 0n;
-}
-
-function isPositiveMatchCandidate(
-  context: BestMatchContext,
-  candidate: MatchCandidate,
-): boolean {
-  if (candidate.partials.length === 0) {
-    return true;
-  }
-  if (candidate.gain > 0n) {
-    const candidates = context.diagnostics.candidates;
-    candidates.positiveGain += 1;
-    return true;
-  }
-  const rejected = context.diagnostics.candidates.rejected;
-  rejected.nonPositiveGain += 1;
-  return false;
-}
-
-/** CKB the bot could spend on sellers: its allowance after the mining fee, plus what buyers pay it. */
-function ckbAllowanceCap(context: BestMatchContext): bigint {
-  const own = context.allowance.ckbValue - context.ckbMiningFee;
-  return (own > 0n ? own : 0n) + supply(context.ckbToUdtMatchers);
-}
-
-/** iCKB the bot could spend on buyers: its allowance plus what sellers hand it. */
-function udtAllowanceCap(context: BestMatchContext): bigint {
-  return context.allowance.udtValue + supply(context.udtToCkbMatchers);
-}
-
-/** The most the bot can receive from these orders: each order's whole offered side. */
-function supply(matchers: readonly OrderMatcher[]): bigint {
-  return matchers.reduce((sum, matcher) => sum + matcher.aIn, 0n);
-}
-
-function emptyMatch(): Match {
-  return { ckbDelta: 0n, udtDelta: 0n, partials: [] };
+function maxBigInt(left: bigint, right: bigint): bigint {
+  return compareBigInt(left, right) > 0 ? left : right;
 }

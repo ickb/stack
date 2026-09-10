@@ -9,8 +9,6 @@ export type {
   Match,
   MatchDiagnostics,
   MatchDirectionDiagnostics,
-  MatchSearchMode,
-  MatchSearchPhase,
   MatchSearchResult,
 } from "./match_types.ts";
 export type { BestMatchOptions } from "./order_match_context.ts";

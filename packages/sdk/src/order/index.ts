@@ -17,8 +17,6 @@ export {
   type Match,
   type MatchDiagnostics,
   type MatchDirectionDiagnostics,
-  type MatchSearchMode,
-  type MatchSearchPhase,
   type MatchSearchResult,
   type OrderGroupSkipReason,
 } from "./order.ts";

@@ -211,7 +211,6 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       matchingRate,
       {
         feeRate: 0n,
-        ckbAllowanceStep: 1n,
       },
     );
     const botMatch = OrderManager.bestMatch(
@@ -220,7 +219,6 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       matchingRate,
       {
         feeRate: 1n,
-        ckbAllowanceStep: 1n,
       },
     );
 

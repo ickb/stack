@@ -103,7 +103,7 @@ BOT=log/bot/events.ndjson; STIMULUS=log/stimulus/events.ndjson
 jq -r 'select(.decision) | .decision.match.reason' "$BOT" | sort | uniq -c
 jq -r 'select(.decision) | "\(.decision.core.kind) \(.decision.rebalance.deposit // "-") \(.decision.rebalance.withdrawal.stress // "-")"' "$BOT" | sort | uniq -c
 jq -r 'select(.type == "bot.decision.skipped") | .reason' "$BOT" | sort | uniq -c
-jq -r 'select(.decision.match.search) | .decision.match.search.truncation' "$BOT" | sort | uniq -c
+jq -r 'select(.decision.match.search) | .decision.match.search.gap' "$BOT" | sort | uniq -c
 jq -r '"\(.outcome) \(.draw.kind // "-") \(.draw.direction // "-") \(.skip.reason // "-")"' "$STIMULUS" | sort | uniq -c
 ```
 

@@ -26,8 +26,6 @@ export type {
   Match,
   MatchDiagnostics,
   MatchDirectionDiagnostics,
-  MatchSearchMode,
-  MatchSearchPhase,
   MatchSearchResult,
 } from "./matching/order_matching.ts";
 

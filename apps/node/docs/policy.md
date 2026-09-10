@@ -21,7 +21,7 @@ Every turn, at most one transaction. The bot reads the chain, decides, sends onc
 
 ## Units
 
-iCKB thresholds are constants in units of the deposit cap `Q` (100,000 iCKB), compared with the iCKB balance: refill below `Q/50`, retain `Q/5`, withdraw above `Q + Q/5`. The CKB side uses one deposit `D`, which is `Q` converted at the sampled tip: stress below `D/5`, match step `D/100`. The reserve is 1,000 CKB. See `src/bot/policy/constants.ts`.
+iCKB thresholds are constants in units of the deposit cap `Q` (100,000 iCKB), compared with the iCKB balance: refill below `Q/50`, retain `Q/5`, withdraw above `Q + Q/5`. The CKB side uses one deposit `D`, which is `Q` converted at the sampled tip: stress below `D/5`. The reserve is 1,000 CKB. See `src/bot/policy/constants.ts`.
 
 ## Prerequisites
 

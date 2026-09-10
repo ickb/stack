@@ -4,7 +4,6 @@ import { convert, type Match } from "@ickb/sdk";
 import { CKB_RESERVE } from "../policy/constants.ts";
 import type { BotDecision, BotState, BotStateSummary } from "./types.ts";
 
-export const MATCH_STEP_DIVISOR = 100n;
 /**
  * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
  * DAO output limit but never a fixed match, so the match keeps room for the rest.

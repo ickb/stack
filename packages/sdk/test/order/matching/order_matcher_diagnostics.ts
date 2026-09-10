@@ -30,7 +30,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 1000n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
@@ -53,7 +52,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 1000n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
@@ -67,13 +65,9 @@ describe(ORDER_MATCHER_SUITE, () => {
           ckbToUdt: { matchableCount: 0 },
           udtToCkb: { matchableCount: 1 },
         },
-        candidates: {
-          bestGain: 0n,
-          positiveGain: 0,
-        },
+        bestGain: 0n,
       },
     });
-    expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
   });
 });
 
@@ -108,7 +102,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 0n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
@@ -116,22 +109,13 @@ describe(ORDER_MATCHER_SUITE, () => {
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [],
-      diagnostics: {
-        candidates: {
-          bestGain: 0n,
-          positiveGain: 0,
-        },
-      },
+      diagnostics: { bestGain: 0n },
     });
-    expect(
-      match.diagnostics?.candidates.rejected.insufficientCkbAllowance,
-    ).toBeGreaterThan(0);
-    expect(match.diagnostics?.candidates.rejected.nonPositiveGain).toBeGreaterThan(0);
   });
 });
 
 describe(ORDER_MATCHER_SUITE, () => {
-  it("reports one primary allowance rejection reason per candidate", () => {
+  it("returns the empty match for negative allowances", () => {
     const order = makeUdtToCkbOrder();
 
     const { match } = OrderManager.bestMatch(
@@ -146,13 +130,11 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 0n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
-    const rejected = match.diagnostics?.candidates.rejected;
-    expect(rejected?.insufficientCkbAllowance).toBeGreaterThan(0);
-    expect(rejected?.insufficientUdtAllowance).toBe(0);
+    expect(match.partials).toEqual([]);
+    expect(match.diagnostics?.bestGain).toBe(0n);
   });
 });
 
@@ -187,7 +169,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       },
       {
         feeRate: 0n,
-        ckbAllowanceStep: ccc.fixedPointFrom(1),
       },
     );
 
@@ -204,29 +185,27 @@ describe(ORDER_MATCHER_SUITE, () => {
     const allowance = { ckbValue: 50n, udtValue: 50n };
 
     expect(() =>
-      OrderManager.bestMatch(
-        [],
-        allowance,
-        { ckbScale: 0n, udtScale: 1n },
-        { ckbAllowanceStep: ccc.fixedPointFrom(1) },
-      ),
+      OrderManager.bestMatch([], allowance, { ckbScale: 0n, udtScale: 1n }),
     ).toThrow("Exchange rate scales must be positive");
     expect(() =>
-      OrderManager.bestMatch(
-        [],
-        allowance,
-        { ckbScale: 1n, udtScale: 0n },
-        { ckbAllowanceStep: ccc.fixedPointFrom(1) },
-      ),
+      OrderManager.bestMatch([], allowance, { ckbScale: 1n, udtScale: 0n }),
     ).toThrow("Exchange rate scales must be positive");
     expect(() =>
       OrderManager.bestMatch(
         [],
         allowance,
         { ckbScale: 1n, udtScale: 1n },
-        { ckbAllowanceStep: 0n },
+        { candidateBudget: 0 },
       ),
-    ).toThrow("CKB allowance step must be positive");
+    ).toThrow("Candidate budget must be a positive safe integer");
+    expect(() =>
+      OrderManager.bestMatch(
+        [],
+        allowance,
+        { ckbScale: 1n, udtScale: 1n },
+        { maxPartials: -1 },
+      ),
+    ).toThrow("Maximum partials must be a non-negative safe integer");
     expect(() =>
       OrderManager.bestMatch([group], allowance, { ckbScale: 1n, udtScale: 1n }),
     ).not.toThrow();
@@ -314,7 +293,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         [projected],
         { ckbValue: 1000n, udtValue: 0n },
         { ckbScale: 3n, udtScale: 5n },
-        { feeRate: 0n, ckbAllowanceStep: ccc.fixedPointFrom(1) },
+        { feeRate: 0n },
       ),
     ).not.toThrow();
   });
@@ -340,7 +319,6 @@ describe(ORDER_MATCHER_SUITE, () => {
     const exchangeRate = { ckbScale: 3n, udtScale: 5n };
     const options = {
       feeRate: 1000n,
-      ckbAllowanceStep: ccc.fixedPointFrom(1),
     };
 
     expect(largeOrder.cell.occupiedSize).toBeGreaterThan(smallOrder.cell.occupiedSize);
@@ -393,7 +371,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         [group],
         { ckbValue: 0n, udtValue: matcher.bMaxMatch },
         { ckbScale: 1n, udtScale: 1n },
-        { feeRate: 1000n, ckbAllowanceStep: 61n },
+        { feeRate: 1000n },
       ).match.partials,
     ).toEqual([]);
   });
@@ -426,7 +404,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         [group],
         { ckbValue: 0n, udtValue: matcher.bMaxMatch },
         { ckbScale: 1n, udtScale: 1n },
-        { feeRate: 1000n, ckbAllowanceStep: 61n },
+        { feeRate: 1000n },
       ).match.partials,
     ).toEqual([]);
   });

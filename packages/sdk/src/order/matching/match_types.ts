@@ -30,41 +30,23 @@ export interface Match {
   diagnostics?: MatchDiagnostics;
 }
 
-/** Search mode used to produce an order match result. @public */
-export type MatchSearchMode = "atomic" | "stepped";
-
-/** Bounded search phase that stopped before all scheduled work completed. @public */
-export type MatchSearchPhase =
-  "preflight" | "ckbToUdtFrontier" | "udtToCkbFrontier" | "candidates";
-
-/** Result of bounded best-match search. @public */
+/** Result of the bounded best-match search. @public */
 export type MatchSearchResult =
   | {
-      /** Full atomic feasible domain was covered and the optimum is proven. */
+      /** Every branch was visited or pruned: the match is the best of the search space. */
       kind: "complete";
-      /** Proven globally optimal match. */
       match: Match;
     }
   | {
-      /** Search covered only a deterministic subset of the atomic domain. */
+      /** The work budget ended the search; the match is the best feasible one visited. */
       kind: "incomplete";
-      /** Best economically exact match among visited probes. */
       match: Match;
-      /** Why the atomic optimum could not be certified. */
-      reason: "atomic_domain_exceeds_budget" | "candidate_budget_exhausted";
-      /** Probe schedule used before returning. */
-      searchMode: MatchSearchMode;
-      /** Configured work-unit limit. */
+      /** Configured node budget. */
       budget: number;
-      /** Work units consumed by visited probes, expansions, and candidates. */
+      /** Nodes visited. */
       work: number;
-      /** Boundary proving that scheduled work remained uncovered. */
-      truncation: {
-        /** Search phase that could not be certified or completed. */
-        phase: MatchSearchPhase;
-        /** Work required to cross the reported boundary. */
-        requiredWork: bigint;
-      };
+      /** How much more gain an unvisited branch could at most have reached. */
+      gap: bigint;
     };
 
 /**
@@ -77,53 +59,23 @@ export interface MatchDiagnostics {
   orderCount: number;
   /** Original match allowance. */
   allowance: ValueComponents;
-  /** CKB allowance step used during search. */
-  ckbAllowanceStep: ccc.FixedPoint;
-  /** UDT allowance step derived from the exchange rate. */
-  udtAllowanceStep: ccc.FixedPoint;
   /** CKB fee budget reserved per matched order. */
   ckbMiningFee: ccc.FixedPoint;
-  /** Maximum total search work across frontier and candidate-phase owners. */
+  /** Maximum number of search nodes. */
   candidateBudget: number;
-  /**
-   * Total consumed work units. Frontier phases own allowance probes and prior-state
-   * inspections; an inspection includes any resulting allocation and evaluation.
-   * The candidate phase owns the initial evaluation, cross-pair inspections, and
-   * residual matcher attempts.
-   */
+  /** Search nodes visited. */
   workCount: number;
   /** Optional maximum number of partial order outputs. */
   maxPartials?: number;
-  /** Number of retained states generated in each direction. */
-  generatedStates: {
-    ckbToUdt: number;
-    udtToCkb: number;
-  };
   /** Per-direction matchability bounds. */
   directions: {
     ckbToUdt: MatchDirectionDiagnostics;
     udtToCkb: MatchDirectionDiagnostics;
   };
-  /** Candidate-phase work and rejection diagnostics from the search. */
-  candidates: {
-    /**
-     * Consumed candidate-phase units. The initial evaluation and each cross-pair
-     * inspection or residual matcher attempt increment this exactly once, including
-     * attempts filtered before economic evaluation. Directional evaluations belong
-     * to their frontier state-inspection units instead.
-     */
-    total: number;
-    viable: number;
-    positiveGain: number;
-    rejected: {
-      maxPartials: number;
-      duplicateOrder: number;
-      insufficientCkbAllowance: number;
-      insufficientUdtAllowance: number;
-      nonPositiveGain: number;
-    };
-    bestGain: bigint;
-  };
+  /** Gain of the returned match at the exchange ratio, net of fees. */
+  bestGain: bigint;
+  /** Largest gain any unvisited branch could still reach; equals `bestGain` when complete. */
+  gainUpperBound: bigint;
 }
 
 /**
