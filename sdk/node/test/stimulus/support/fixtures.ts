@@ -1,22 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  getConfig,
-  IckbSdk,
-  MasterCell,
-  OrderCell,
-  OrderData,
-  type OrderGroup,
-  Ratio,
-  type ReceiptCell,
-  ReceiptData,
-  type SystemState,
-} from "@ickb/sdk";
-import {
   committedTransactionResponse,
   headerLike,
   script,
   StubClient,
 } from "@ickb/testkit";
+import { getConfig } from "../../../../src/constants.ts";
+import type { SystemState } from "../../../../src/conversion/sdk_types.ts";
+import { ReceiptData } from "../../../../src/core/entities.ts";
+import type { ReceiptCell } from "../../../../src/core/index.ts";
+import { OrderCell, type OrderGroup, Ratio } from "../../../../src/order/index.ts";
+import { MasterCell } from "../../../../src/order/model/cells.ts";
+import { OrderData } from "../../../../src/order/model/order_data.ts";
+import { IckbSdk } from "../../../../src/sdk.ts";
 import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
 
 export const CKB = ccc.fixedPointFrom(1);
@@ -114,7 +110,7 @@ export function runtime({
   return {
     client,
     signer,
-    sdk: Object.assign(IckbSdk.fromConfig(getConfig("testnet")), {
+    sdk: Object.assign(sdkOf(getConfig("testnet")), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
         return { system, user: { orders }, account };
@@ -195,4 +191,16 @@ export async function order(
     throw new Error("Expected one resolver-produced order fixture");
   }
   return group;
+}
+
+/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
+function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
+  const { ickbUdt, ownedOwner, logic } = config.managers;
+  return new IckbSdk({
+    ickbUdt,
+    ownedOwner,
+    ickbLogic: logic,
+    order: config.managers.order,
+    bots: config.bots,
+  });
 }

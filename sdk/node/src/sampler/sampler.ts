@@ -14,7 +14,8 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { asyncBinarySearch, convert, ickbExchangeRatio } from "@ickb/sdk";
+import { convert, ickbExchangeRatio } from "../../../src/core/index.ts";
+import { asyncBinarySearch } from "../../../src/utils/index.ts";
 
 /**
  * Yields the CSV header, the genesis row, one approximate row per sample date

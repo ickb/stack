@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { getConfig, IckbSdk } from "@ickb/sdk";
+import { IckbSdk } from "@ickb/sdk";
 import { byte32FromByte } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
@@ -27,7 +27,14 @@ export function walletConfigForState(
 export function stateSdk(
   state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>,
 ): Parameters<typeof getL1State>[0]["sdk"] {
-  return new StateSdk(state);
+  const sdk = IckbSdk.fromChain("testnet");
+  vi.spyOn(sdk, "getL1AccountState").mockResolvedValue(state);
+  vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
+    ok: false,
+    reason: "nothing-to-do",
+    estimatedMaturity: state.system.tip.timestamp,
+  });
+  return sdk;
 }
 
 export function testSigner(
@@ -54,38 +61,4 @@ export function cell(capacity: bigint, lock: ccc.Script, outputData = "0x"): ccc
     cellOutput: { capacity, lock },
     outputData,
   });
-}
-
-class StateSdk extends IckbSdk {
-  private readonly state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>;
-
-  constructor(state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>) {
-    const config = getConfig("testnet");
-    super({
-      ickbUdt: config.managers.ickbUdt,
-      ownedOwner: config.managers.ownedOwner,
-      ickbLogic: config.managers.logic,
-      order: config.managers.order,
-      bots: config.bots,
-    });
-    this.state = state;
-  }
-
-  public override async getL1AccountState(): ReturnType<
-    WalletConfig["sdk"]["getL1AccountState"]
-  > {
-    await Promise.resolve();
-    return this.state;
-  }
-
-  public override async buildConversionTransaction(): ReturnType<
-    WalletConfig["sdk"]["buildConversionTransaction"]
-  > {
-    await Promise.resolve();
-    return {
-      ok: false,
-      reason: "nothing-to-do",
-      estimatedMaturity: this.state.system.tip.timestamp,
-    };
-  }
 }

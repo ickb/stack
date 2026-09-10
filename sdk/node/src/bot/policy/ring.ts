@@ -1,5 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import { type IckbDepositCell, ringSegments, ringTargetSegmentIndex } from "@ickb/sdk";
+import type { IckbDepositCell } from "../../../../src/core/index.ts";
+import {
+  ringSegments,
+  ringTargetSegmentIndex,
+} from "../../../../src/core/withdrawal_selection.ts";
 
 /** Compact evidence of the pool ring the policy evaluated, as the journal carries it. */
 export interface RingSummary {

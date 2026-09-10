@@ -3,7 +3,7 @@ import { byte32FromByte, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Relative } from "../../../src/order/model/relative.ts";
 import { OrderManager } from "../../../src/order/order.ts";
-import { defaultCellPageSize } from "../../../src/utils/index.ts";
+import { defaultCellPageSize } from "../../../src/utils/utils.ts";
 import {
   mustPageSize,
   NO_CELLS,

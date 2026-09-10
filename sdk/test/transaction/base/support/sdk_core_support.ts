@@ -1,7 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient, headerLike as testHeaderLike } from "@ickb/testkit";
+import type {
+  ConversionTransactionContext,
+  SystemState,
+} from "../../../../src/conversion/sdk_types.ts";
 import { Ratio } from "../../../../src/order/index.ts";
-import type { ConversionTransactionContext, SystemState } from "../../../../src/sdk.ts";
 
 export const hash = byte32FromByte;
 export const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });

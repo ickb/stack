@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP } from "@ickb/sdk";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
 
 export const CKB = ccc.fixedPointFrom(1);
 /** Plain CKB every match and deposit leaves behind for markers and fees. */

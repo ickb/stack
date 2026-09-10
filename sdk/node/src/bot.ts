@@ -1,10 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  getConfig,
-  IckbSdk,
-  signAndSendTransaction,
-  signerAccountLocks,
-} from "@ickb/sdk";
+import { getConfig } from "../../src/constants.ts";
+import { signerAccountLocks } from "../../src/conversion/account_locks.ts";
+import { IckbSdk } from "../../src/sdk.ts";
+import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
 import {
   BotEventEmitter,
   createRunId,
@@ -49,7 +47,7 @@ try {
     observed: preflight.observed,
     matches: preflight.matches,
   });
-  const sdk = IckbSdk.fromConfig(config);
+  const sdk = IckbSdk.fromChain(chain);
   const runtime: Runtime = {
     client,
     sdk,

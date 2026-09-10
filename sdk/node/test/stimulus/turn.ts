@@ -1,16 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
-import type * as IckbSdkModule from "@ickb/sdk";
-import {
-  expectedChainIdentity,
-  ICKB_DEPOSIT_CAP,
-  IckbError,
-  signAndSendTransaction,
-  TransactionBroadcastError,
-  TransactionWaitError,
-  waitTransaction,
-} from "@ickb/sdk";
 import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IckbError } from "../../../src/conversion/sdk_error.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
+import {
+  signAndSendTransaction,
+  TransactionBroadcastError,
+} from "../../../src/send/sign_and_send_transaction.ts";
+import {
+  TransactionWaitError,
+  waitTransaction,
+} from "../../../src/send/wait_transaction.ts";
+import { expectedChainIdentity } from "../../../src/utils/index.ts";
 import { ORDER_FEE_BASE, type Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -28,10 +29,17 @@ import {
   runtime,
 } from "./support/fixtures.ts";
 
-vi.mock(import("@ickb/sdk"), async (importOriginal) => {
-  const actual = await importOriginal<typeof IckbSdkModule>();
-  return { ...actual, signAndSendTransaction: vi.fn(), waitTransaction: vi.fn() };
-});
+vi.mock(
+  import("../../../src/send/sign_and_send_transaction.ts"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    signAndSendTransaction: vi.fn(),
+  }),
+);
+vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  waitTransaction: vi.fn(),
+}));
 
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);

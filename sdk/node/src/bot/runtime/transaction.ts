@@ -1,13 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
+import { completeFirstFundable } from "../../../../src/conversion/withdrawal_completion.ts";
 import {
-  completeFirstFundable,
   DAO_HEADER_INDEX_LIMIT,
   type IckbDepositCell,
+  receiptPhase2Capacity,
+} from "../../../../src/core/index.ts";
+import {
   type Match,
   type MatchSearchResult,
   OrderManager,
-  receiptPhase2Capacity,
-} from "@ickb/sdk";
+} from "../../../../src/order/index.ts";
 
 import { planRebalance, type RebalancePlan } from "../policy.ts";
 import { CKB_RESERVE } from "../policy/constants.ts";

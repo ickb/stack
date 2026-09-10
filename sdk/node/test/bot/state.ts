@@ -1,11 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  type IckbDepositCell,
-  type IckbSdk,
-  MasterCell,
-  OrderGroup,
-  Ratio,
-} from "@ickb/sdk";
+import type { IckbDepositCell } from "../../../src/core/index.ts";
+import { OrderGroup, Ratio } from "../../../src/order/index.ts";
+import { MasterCell } from "../../../src/order/model/cells.ts";
+import type { IckbSdk } from "../../../src/sdk.ts";
 
 import { headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";

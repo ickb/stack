@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
+import { DaoOutputLimitIndeterminateError } from "../../src/core/dao_output_limit.ts";
 import {
   assertDaoOutputLimit,
   DAO_OUTPUT_LIMIT,
   DaoManager,
   DaoOutputLimitError,
-  DaoOutputLimitIndeterminateError,
 } from "../../src/core/index.ts";
 import { cellOutputLikeFrom } from "../../src/core/transaction_shape.ts";
 import {

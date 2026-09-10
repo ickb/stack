@@ -1,6 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import { TransactionWaitError, waitTransaction } from "../../src/sdk.ts";
+import {
+  TransactionWaitError,
+  waitTransaction,
+} from "../../src/send/wait_transaction.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("91");

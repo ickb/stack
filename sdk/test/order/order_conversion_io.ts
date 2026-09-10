@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { quoteConversion } from "../../src/order/index.ts";
 import { cellInputLike, cellOutputLike } from "../../src/order/io/order_io.ts";
 import { OrderConversionRepresentabilityError } from "../../src/order/matching/order_conversion.ts";
 import { Info } from "../../src/order/model/info.ts";
-import { OrderManager } from "../../src/order/order.ts";
 import { makeOrderCell } from "./matching/support/order_order_helpers.ts";
 
 describe("order conversion and I/O", () => {
@@ -28,21 +28,21 @@ describe("order conversion and I/O", () => {
       cellOutputLike(ccc.CellOutput.from({ capacity: 1n, lock: ownerLock })).type,
     ).toBeNull();
     expect(() => {
-      OrderManager.convert(
+      quoteConversion(
         true,
         { ckbScale: 1n, udtScale: 1n },
         { ckbValue: -1n, udtValue: 0n },
       );
     }).toThrow("Order conversion amounts cannot be negative");
     expect(() => {
-      OrderManager.convert(
+      quoteConversion(
         true,
         { ckbScale: 1n, udtScale: 1n },
         { ckbValue: 0n, udtValue: 0n },
       );
     }).toThrow(OrderConversionRepresentabilityError);
     expect(() => {
-      OrderManager.convert(
+      quoteConversion(
         true,
         { ckbScale: 1n << 80n, udtScale: 1n },
         { ckbValue: 1n, udtValue: 0n },

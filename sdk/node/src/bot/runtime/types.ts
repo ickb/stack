@@ -1,15 +1,17 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { getConfig } from "../../../../src/constants.ts";
+import type { SystemState } from "../../../../src/conversion/sdk_types.ts";
 import type {
-  getConfig,
   IckbDepositCell,
-  IckbSdk,
+  ReceiptCell,
+  WithdrawalGroup,
+} from "../../../../src/core/index.ts";
+import type {
   MatchDiagnostics,
   MatchSearchResult,
   OrderGroup,
-  ReceiptCell,
-  SystemState,
-  WithdrawalGroup,
-} from "@ickb/sdk";
+} from "../../../../src/order/index.ts";
+import type { IckbSdk } from "../../../../src/sdk.ts";
 
 import type { DepositReason, RingSummary } from "../policy.ts";
 

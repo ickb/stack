@@ -1,13 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
+import { ickbDepositCellFrom, OwnerCell } from "../../../../src/core/cells.ts";
+import type { DaoWithdrawalRequestCell } from "../../../../src/core/dao_cells.ts";
+import { OwnerData, ReceiptData } from "../../../../src/core/entities.ts";
 import {
   DaoManager,
-  ickbDepositCellFrom,
-  OwnerCell,
-  OwnerData,
-  ReceiptData,
   WithdrawalGroup,
-  type DaoWithdrawalRequestCell,
   type IckbDepositCell,
   type ReceiptCell,
 } from "../../../../src/core/index.ts";

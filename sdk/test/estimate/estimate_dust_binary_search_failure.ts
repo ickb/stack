@@ -46,27 +46,24 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
     const actual = await importOriginal<typeof OrderModule>();
     return {
       ...actual,
-      OrderManager: class extends actual.OrderManager {
-        public static override convert(
-          isCkb2Udt: boolean,
-          _midpoint: unknown,
-          _amounts: unknown,
-          options?: { fee?: bigint; feeBase?: bigint },
-        ): ReturnType<typeof actual.OrderManager.convert> {
-          if (
-            !isCkb2Udt &&
-            options?.fee === blocked.fee &&
-            options.feeBase === blocked.feeBase
-          ) {
-            throw new actual.OrderConversionRepresentabilityError();
-          }
-
-          return {
-            convertedAmount: 10n,
-            ckbFee: options?.fee ?? 0n,
-            info: actual.Info.create(false, { ckbScale: 1n, udtScale: 1n }),
-          };
+      quoteConversion: (
+        isCkb2Udt: boolean,
+        _midpoint: unknown,
+        _amounts: unknown,
+        options?: { fee?: bigint; feeBase?: bigint },
+      ): ReturnType<typeof actual.quoteConversion> => {
+        if (
+          !isCkb2Udt &&
+          options?.fee === blocked.fee &&
+          options.feeBase === blocked.feeBase
+        ) {
+          throw new actual.OrderConversionRepresentabilityError();
         }
+        return {
+          convertedAmount: 10n,
+          ckbFee: options?.fee ?? 0n,
+          info: actual.Info.create(false, { ckbScale: 1n, udtScale: 1n }),
+        };
       },
     };
   });

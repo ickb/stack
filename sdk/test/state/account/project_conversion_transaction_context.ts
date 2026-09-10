@@ -1,10 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  projectConversionTransactionContext,
-  type SystemState,
-} from "../../../src/sdk.ts";
+import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
+import type { SystemState } from "../../../src/conversion/sdk_types.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,

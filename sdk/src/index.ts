@@ -1,43 +1,67 @@
 /**
- * Public SDK for planning, building, completing, and sending iCKB transactions.
+ * Public SDK for one iCKB conversion workflow: read the sampled state, quote, build and
+ * complete a conversion, sign, send, and wait (decisions amendment 52).
  *
  * @packageDocumentation
  */
 
-export { getConfig } from "./constants.ts";
-export { completeFirstFundable } from "./conversion/withdrawal_completion.ts";
-export type { FundableCompletion } from "./conversion/withdrawal_completion.ts";
-export {
-  ringSegmentAnchor,
-  ringSegments,
-  ringSurplusDepositFilter,
-  ringTargetSegmentIndex,
-  selectReadyWithdrawalDeposits,
-} from "./core/withdrawal_selection.ts";
-export type {
-  ReadyWithdrawalSelectionOptions,
-  RingSegment,
-  WithdrawalDepositCandidate,
-} from "./core/withdrawal_selection.ts";
-export {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-  IckbError,
-  IckbSdk,
-  TransactionBroadcastError,
-  TransactionWaitError,
-  isIckbError,
-  projectAccountAvailability,
-  projectConversionTransactionContext,
-  signAndSendTransaction,
-  waitTransaction,
-} from "./sdk.ts";
-export type {
-  AccountAvailabilityProjection,
+import type { ccc } from "@ckb-ccc/core";
+import type {
   AccountState,
-  BuildBaseTransactionOptions,
+  ConversionTransactionOptions,
+  ConversionTransactionResult,
+  GetL1StateOptions,
+  SystemState,
+} from "./conversion/sdk_types.ts";
+import type { OrderGroup } from "./order/model/cells.ts";
+import { IckbSdk as IckbSdkClass } from "./sdk.ts";
+import type { SupportedChain } from "./utils/chain.ts";
+
+/** The SDK an integrator drives: the state read and the conversion builder. @public */
+export interface IckbSdk {
+  /** Builds and completes a conversion, or returns a typed planning failure. */
+  buildConversionTransaction: (
+    txLike: ccc.TransactionLike,
+    options: ConversionTransactionOptions,
+  ) => Promise<ConversionTransactionResult>;
+  /** Reads system, user-order, and account state against one sampled tip. */
+  getL1AccountState: (
+    client: ccc.Client,
+    locks: ccc.Script[],
+    options?: GetL1StateOptions,
+  ) => Promise<{
+    system: SystemState;
+    user: { orders: OrderGroup[] };
+    account: AccountState;
+  }>;
+}
+
+/** Creates the SDK for one chain's deployment. @public */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor namespace intentionally share a name.
+export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
+export type { AccountAvailabilityProjection } from "./conversion/sdk_types.ts";
+export type {
+  IckbDepositCell,
+  OwnerCell,
+  ReceiptCell,
+  WithdrawalGroup,
+} from "./core/cells.ts";
+export type { DaoDepositCell, DaoWithdrawalRequestCell } from "./core/dao_cells.ts";
+export type { MasterCell, OrderCell, OrderGroup } from "./order/model/cells.ts";
+export type { Info, InfoLike } from "./order/model/info.ts";
+export type { Master, MasterLike } from "./order/model/master.ts";
+export type { OrderData, OrderDataLike } from "./order/model/order_data.ts";
+export type { Relative, RelativeLike } from "./order/model/relative.ts";
+export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+
+export { signerAccountLocks } from "./conversion/account_locks.ts";
+export { IckbError, isIckbError } from "./conversion/sdk_error.ts";
+export type { IckbErrorCode } from "./conversion/sdk_error.ts";
+export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/sdk_estimate.ts";
+export { projectConversionTransactionContext } from "./conversion/sdk_projection.ts";
+export type {
+  AccountState,
   CkbCumulative,
-  CompleteIckbTransactionOptions,
   ConversionDirection,
   ConversionMetadata,
   ConversionNotice,
@@ -48,21 +72,20 @@ export type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  IckbErrorCode,
-  IckbToCkbOrderEstimate,
-  MaturityOrderInput,
   PoolDepositRangeOptions,
   PoolDepositState,
-  SdkManagers,
   SystemState,
-  WaitTransactionOptions,
-} from "./sdk.ts";
-
+} from "./conversion/sdk_types.ts";
+export { ickbExchangeRatio } from "./core/udt.ts";
 export {
-  accountPlainCkbBalance,
-  postTransactionAccountPlainCkbBalance,
-  signerAccountLocks,
-} from "./conversion/account_locks.ts";
-export * from "./core/index.ts";
-export * from "./order/index.ts";
-export * from "./utils/index.ts";
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "./order/matching/order_conversion.ts";
+export { Ratio } from "./order/model/ratio.ts";
+export {
+  signAndSendTransaction,
+  TransactionBroadcastError,
+} from "./send/sign_and_send_transaction.ts";
+export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
+export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
+export type { SupportedChain } from "./utils/chain.ts";

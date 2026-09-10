@@ -18,7 +18,6 @@ export {
   binarySearch,
   collect,
   compareBigInt,
-  defaultCellPageSize,
   findCells,
   isPlainCapacityCell,
   unique,

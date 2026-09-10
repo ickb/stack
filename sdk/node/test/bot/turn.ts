@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager, TransactionBroadcastError } from "@ickb/sdk";
+import { OrderManager } from "../../../src/order/index.ts";
+import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 
 import {
   chainState,

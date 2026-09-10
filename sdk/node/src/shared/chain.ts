@@ -3,9 +3,9 @@ import {
   type ChainIdentity,
   expectedChainIdentity,
   type SupportedChain,
-} from "@ickb/sdk";
+} from "../../../src/utils/index.ts";
 
-export type { SupportedChain } from "@ickb/sdk";
+export type { SupportedChain } from "../../../src/utils/chain.ts";
 
 /** Public, credential-free identity for one RPC endpoint policy. */
 export interface PublicRpcEndpointIdentity {

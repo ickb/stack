@@ -1,13 +1,13 @@
 import type { ccc } from "@ckb-ccc/core";
-import {
-  accountPlainCkbBalance,
-  projectConversionTransactionContext,
-  type AccountState,
-  type ConversionTransactionContext,
-  type IckbSdk,
-  type OrderGroup,
-  type SystemState,
-} from "@ickb/sdk";
+import { accountPlainCkbBalance } from "../../../src/conversion/account_locks.ts";
+import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
+import type {
+  AccountState,
+  ConversionTransactionContext,
+  SystemState,
+} from "../../../src/conversion/sdk_types.ts";
+import type { OrderGroup } from "../../../src/order/index.ts";
+import type { IckbSdk } from "../../../src/sdk.ts";
 import type { Budgets } from "./draw.ts";
 
 /** Runtime dependencies of one stimulus turn. */

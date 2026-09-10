@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager } from "@ickb/sdk";
+import { OrderManager } from "../../../../src/order/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";

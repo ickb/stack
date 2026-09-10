@@ -8,7 +8,6 @@ import {
   resolveOrderGroup,
 } from "./io/order_scan.ts";
 import { addOrderMatch, meltOrderGroups, mintOrder } from "./io/order_transaction.ts";
-import { ceilDiv, quotePreservingRatio } from "./matching/order_conversion.ts";
 import {
   bestMatch,
   type BestMatchOptions,
@@ -17,15 +16,12 @@ import {
 } from "./matching/order_matching.ts";
 import type { OrderCell, OrderGroup } from "./model/cells.ts";
 import { Info, type InfoLike } from "./model/info.ts";
-import { Ratio } from "./model/ratio.ts";
 
-export type { OrderGroupSkipReason } from "./io/order_scan.ts";
 export { OrderConversionRepresentabilityError } from "./matching/order_conversion.ts";
 export type {
   BestMatchOptions,
   Match,
   MatchDiagnostics,
-  MatchDirectionDiagnostics,
   MatchSearchResult,
 } from "./matching/order_matching.ts";
 
@@ -59,47 +55,6 @@ export class OrderManager implements ScriptDeps {
   /** Returns true when the cell is a master cell for this manager's order script. */
   public isMaster(cell: ccc.Cell): boolean {
     return isMasterCell(cell, this.script);
-  }
-
-  /**
-   * Computes the output-side amount, CKB fee, and order info for a new order.
-   *
-   * @remarks
-   * The returned `Info` preserves the quoted amount after fee adjustment so the
-   * minted order records the executable limit price.
-   */
-  public static convert(
-    isCkb2Udt: boolean,
-    midpoint: ExchangeRatio,
-    amounts: ValueComponents,
-    options?: {
-      fee?: ccc.Num;
-      feeBase?: ccc.Num;
-      ckbMinMatchLog?: number;
-    },
-  ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-    const fee = options?.fee ?? 0n;
-    // Generic denominator for callers that pass a fee without a scale; Stack's
-    // own default pair is owned publicly by the SDK, not by this entity.
-    const feeBase = options?.feeBase ?? 100000n;
-    const base = Ratio.from(midpoint);
-    const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
-    const { aScale, bScale } = base.feeAdjustedScales(isCkb2Udt, fee, feeBase);
-    const convertedAmount = ceilDiv(amount * aScale, bScale);
-    let ckbFee = 0n;
-
-    if (amount > 0n && fee !== 0n) {
-      ckbFee = isCkb2Udt
-        ? amount - base.convert(false, convertedAmount, false)
-        : base.convert(false, amount, false) - convertedAmount;
-    }
-
-    const info = Info.create(
-      isCkb2Udt,
-      quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
-      options?.ckbMinMatchLog,
-    );
-    return { convertedAmount, ckbFee, info };
   }
 
   /**

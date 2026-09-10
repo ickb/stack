@@ -1,4 +1,4 @@
-import { OrderConversionRepresentabilityError, OrderManager } from "../order/index.ts";
+import { OrderConversionRepresentabilityError, quoteConversion } from "../order/index.ts";
 import type { ValueComponents } from "../utils/index.ts";
 import { maturity } from "./sdk_maturity.ts";
 import type { ConversionOrderEstimate, SystemState } from "./sdk_types.ts";
@@ -9,9 +9,9 @@ export function estimateConversionOrder(
   system: SystemState,
   { fee, feeBase }: { fee: bigint; feeBase: bigint },
 ): ConversionOrderEstimate | undefined {
-  let quote: ReturnType<typeof OrderManager.convert>;
+  let quote: ReturnType<typeof quoteConversion>;
   try {
-    quote = OrderManager.convert(isCkb2Udt, system.exchangeRatio, amounts, {
+    quote = quoteConversion(isCkb2Udt, system.exchangeRatio, amounts, {
       fee,
       feeBase,
     });

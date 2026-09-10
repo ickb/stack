@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
+import { quoteConversion } from "../../../src/order/index.ts";
 import { orderMatchers } from "../../../src/order/matching/order_match_context.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import { Info } from "../../../src/order/model/info.ts";
@@ -100,7 +101,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 
 describe(ORDER_MATCHER_SUITE, () => {
   it("reports UDT-to-CKB fee in CKB units", () => {
-    const result = OrderManager.convert(
+    const result = quoteConversion(
       false,
       Ratio.from({ ckbScale: 2n, udtScale: 1n }),
       { ckbValue: 0n, udtValue: 100n },
@@ -122,7 +123,7 @@ describe(ORDER_MATCHER_SUITE, () => {
       udtScale: (1n << 64n) - 2n,
     });
     const amounts = { ckbValue: 1000000n, udtValue: 0n };
-    const result = OrderManager.convert(true, midpoint, amounts, {
+    const result = quoteConversion(true, midpoint, amounts, {
       fee: 1n,
       feeBase: 100000n,
     });
@@ -146,7 +147,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
     const fee = 1185042n;
     const feeBase = 1185043n;
-    const result = OrderManager.convert(false, midpoint, amounts, {
+    const result = quoteConversion(false, midpoint, amounts, {
       fee,
       feeBase,
     });
@@ -166,7 +167,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 describe(ORDER_MATCHER_SUITE, () => {
   it("rejects zero-input quotes because they cannot mint a meaningful order ratio", () => {
     expect(() =>
-      OrderManager.convert(
+      quoteConversion(
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         { ckbValue: 0n, udtValue: 0n },
@@ -177,7 +178,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 
   it("rejects quotes whose preserving interval has no Uint64 ratio", () => {
     expect(() =>
-      OrderManager.convert(
+      quoteConversion(
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
         { ckbValue: 2n ** 80n, udtValue: 0n },
@@ -188,7 +189,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 
   it("rejects preserving fractions whose terms cannot advance", () => {
     expect(() =>
-      OrderManager.convert(
+      quoteConversion(
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 96n }),
         { ckbValue: 1n << 96n, udtValue: 0n },
@@ -201,7 +202,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     const maxUint64 = (1n << 64n) - 1n;
 
     expect(() =>
-      OrderManager.convert(
+      quoteConversion(
         true,
         Ratio.from({ ckbScale: maxUint64 * 2n + 1n, udtScale: 2n }),
         { ckbValue: 2n, udtValue: 0n },

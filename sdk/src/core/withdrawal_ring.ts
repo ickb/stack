@@ -1,5 +1,5 @@
 import type { IckbDepositCell } from "./cells.ts";
-import { ringAnchorDeposits, ringSegmentAnchor } from "./withdrawal_ring_anchor.ts";
+import { ringAnchorDeposits } from "./withdrawal_ring_anchor.ts";
 import {
   depositKey,
   ringSegments,
@@ -7,8 +7,7 @@ import {
 } from "./withdrawal_ring_core.ts";
 import type { WithdrawalDepositCandidate } from "./withdrawal_selection_types.ts";
 
-export type { RingSegment } from "./withdrawal_ring_core.ts";
-export { depositKey, ringSegmentAnchor, ringSegments, ringTargetSegmentIndex };
+export { depositKey, ringSegments, ringTargetSegmentIndex };
 
 /**
  * Returns a filter that excludes the ring anchor deposits from surplus selection.

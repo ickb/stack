@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { quoteConversion } from "../../src/order/index.ts";
 import { Ratio } from "../../src/order/model/ratio.ts";
-import { OrderManager } from "../../src/order/order.ts";
 import { RATIO_SCALE_EXCEEDS_UINT64 } from "./fixtures/order_constants.ts";
 
 const FEE_TOO_BIG = "Fee too big relative to feeBase";
@@ -39,17 +39,17 @@ describe("Ratio", () => {
     const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
     const amounts = { ckbValue: 1n, udtValue: 0n };
 
+    expect(() => quoteConversion(true, ratio, amounts, { fee: 1n, feeBase: 1n })).toThrow(
+      FEE_TOO_BIG,
+    );
+    expect(() => quoteConversion(true, ratio, amounts, { fee: 2n, feeBase: 1n })).toThrow(
+      FEE_TOO_BIG,
+    );
+    expect(() => quoteConversion(true, ratio, amounts, { fee: 0n, feeBase: 0n })).toThrow(
+      "Fee base must be positive",
+    );
     expect(() =>
-      OrderManager.convert(true, ratio, amounts, { fee: 1n, feeBase: 1n }),
-    ).toThrow(FEE_TOO_BIG);
-    expect(() =>
-      OrderManager.convert(true, ratio, amounts, { fee: 2n, feeBase: 1n }),
-    ).toThrow(FEE_TOO_BIG);
-    expect(() =>
-      OrderManager.convert(true, ratio, amounts, { fee: 0n, feeBase: 0n }),
-    ).toThrow("Fee base must be positive");
-    expect(() =>
-      OrderManager.convert(true, ratio, amounts, { fee: -1n, feeBase: 1n }),
+      quoteConversion(true, ratio, amounts, { fee: -1n, feeBase: 1n }),
     ).toThrow("Fee cannot be negative");
   });
 

@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
-import { type Info, OrderData, OrderManager, Ratio } from "../../src/order/index.ts";
-import { IckbSdk } from "../../src/sdk.ts";
+import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
+import { type Info, OrderManager, Ratio } from "../../src/order/index.ts";
+import { OrderData } from "../../src/order/model/order_data.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import {
   hash,
@@ -88,7 +88,7 @@ describe(ESTIMATE_SUITE, () => {
 
   it("throws a public representability error for unrepresentable direct estimates", () => {
     expect(() =>
-      IckbSdk.estimate(
+      estimate(
         true,
         { ckbValue: 1n << 80n, udtValue: 0n },
         system({
@@ -196,10 +196,10 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
 describe(`${ESTIMATE_SUITE} dust order validity`, () => {
   it("keeps one-sat iCKB-to-CKB dust state-valid but not bot-actionable", async () => {
-    const estimate = IckbSdk.estimate(false, { ckbValue: 0n, udtValue: 1n }, system(), {
+    const quote = estimate(false, { ckbValue: 0n, udtValue: 1n }, system(), {
       fee: 0n,
     });
-    const order = await orderFromEstimate(estimate.info, {
+    const order = await orderFromEstimate(quote.info, {
       ckbValue: 0n,
       udtValue: 1n,
     });

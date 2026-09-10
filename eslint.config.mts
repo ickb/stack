@@ -365,6 +365,9 @@ export default defineConfig(
   {
     files: ["scripts/**/*.ts", "sdk/node/**/*.ts"],
     rules: {
+      // The actors beside the SDK drive its full class by relative import; the package
+      // barrel stays the one public entry (decisions amendment 52).
+      "no-restricted-imports": "off",
       "@typescript-eslint/unbound-method": "off",
     },
   },

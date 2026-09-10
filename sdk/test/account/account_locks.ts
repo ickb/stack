@@ -5,7 +5,7 @@ import {
   accountPlainCkbBalance,
   postTransactionAccountPlainCkbBalance,
   signerAccountLocks,
-} from "../../src/index.ts";
+} from "../../src/conversion/account_locks.ts";
 
 class AddressStubSigner extends ccc.SignerCkbPrivateKey {
   private readonly addresses: ccc.Address[];

@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import { TransactionBroadcastError, waitTransaction } from "@ickb/sdk";
+import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
+import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { handleTurnFailure } from "./failure.ts";
 import { summarizeBotState, transactionShape } from "./runtime/support.ts";

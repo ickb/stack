@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  type IckbDepositCell,
-  OwnerData,
-  type ReceiptCell,
-  type WithdrawalGroup,
+import { OwnerData } from "../../../src/core/entities.ts";
+import type {
+  IckbDepositCell,
+  ReceiptCell,
+  WithdrawalGroup,
 } from "../../../src/core/index.ts";
 import {
   baseTransactionFixture,

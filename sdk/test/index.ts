@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectAccountAvailability } from "../src/conversion/sdk_projection.ts";
 import * as sdk from "../src/index.ts";
 import {
   nativeUdtCell,
@@ -6,14 +7,34 @@ import {
 } from "./conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 
 describe("sdk package barrel", () => {
-  it("exports only the concrete SDK class hierarchy entry point", () => {
-    expect(sdk.IckbSdk).toBeTypeOf("function");
-    expect(sdk.waitTransaction).toBeTypeOf("function");
-    expect(sdk).not.toHaveProperty("IckbSdkBase");
-    expect(sdk).not.toHaveProperty("IckbSdkConversion");
-    expect(sdk).not.toHaveProperty("IckbSdkL1");
-    expect(sdk).not.toHaveProperty("sendAndWaitForCommit");
-    expect(sdk).not.toHaveProperty("TransactionConfirmationError");
+  it("exports the conversion workflow and nothing of the layers beneath it", () => {
+    for (const name of [
+      "DEFAULT_ORDER_FEE",
+      "DEFAULT_ORDER_FEE_BASE",
+      "IckbError",
+      "IckbSdk",
+      "OrderConversionRepresentabilityError",
+      "Ratio",
+      "TransactionBroadcastError",
+      "TransactionWaitError",
+      "ickbExchangeRatio",
+      "isIckbError",
+      "projectConversionTransactionContext",
+      "quoteConversion",
+      "signAndSendTransaction",
+      "signerAccountLocks",
+      "waitTransaction",
+    ]) {
+      expect(sdk).toHaveProperty(name);
+    }
+    for (const name of [
+      "getConfig",
+      "OrderManager",
+      "completeFirstFundable",
+      "IckbSdkL1",
+    ]) {
+      expect(sdk).not.toHaveProperty(name);
+    }
   });
 
   it("routes runtime behavior through package exports", () => {
@@ -29,11 +50,10 @@ describe("sdk package barrel", () => {
     };
     const ckbNative = capacityCell.cellOutput.capacity;
 
-    const configured: sdk.IckbSdk = sdk.IckbSdk.fromConfig(sdk.getConfig("testnet"));
-    expect(configured).toBeInstanceOf(sdk.IckbSdk);
+    const configured: sdk.IckbSdk = sdk.IckbSdk.fromChain("testnet");
     expect(configured.constructor.name).toBe("IckbSdk");
     expect(
-      sdk.projectAccountAvailability(account, { available: [], pending: [] }),
+      projectAccountAvailability(account, { available: [], pending: [] }),
     ).toMatchObject({
       ckbNative,
       ckbAvailable: ckbNative,

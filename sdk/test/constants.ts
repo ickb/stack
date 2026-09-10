@@ -26,7 +26,7 @@ describe("getConfig", () => {
   it("builds the SDK from one coherent config object", async () => {
     const config = getConfig("testnet");
     const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
-    const sdk = IckbSdk.fromConfig(config);
+    const sdk = IckbSdk.fromChain("testnet");
     const tx = ccc.Transaction.default();
     const client = new ccc.ClientPublicTestnet({
       url: "https://example.invalid",

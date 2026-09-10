@@ -1,7 +1,7 @@
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
-  OrderManager,
+  quoteConversion,
   type Ratio,
 } from "@ickb/sdk";
 import { direction2Symbol, parseAmountInput, toText } from "./utils.ts";
@@ -28,9 +28,9 @@ export function conversionQuote(rawText: string, state: QuoteStateLike): Convers
   if (draft.amount === undefined) {
     return { outputText: draft.validationError === "" ? "..." : draft.validationError };
   }
-  let quote: ReturnType<typeof OrderManager.convert>;
+  let quote: ReturnType<typeof quoteConversion>;
   try {
-    quote = OrderManager.convert(
+    quote = quoteConversion(
       draft.isCkb2Udt,
       state.exchangeRatio,
       {

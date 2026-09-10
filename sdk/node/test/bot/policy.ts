@@ -2,11 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import {
   convert,
   ICKB_DEPOSIT_CAP,
-  ickbAccountingRatio,
   ickbExchangeRatio,
   receiptPhase2Capacity,
   type IckbDepositCell,
-} from "@ickb/sdk";
+} from "../../../src/core/index.ts";
+import { ickbAccountingRatio } from "../../../src/core/udt.ts";
 
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";

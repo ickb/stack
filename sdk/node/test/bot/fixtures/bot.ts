@@ -1,19 +1,20 @@
 import { ccc } from "@ckb-ccc/core";
+import { getConfig } from "../../../../src/constants.ts";
+import { ickbDepositCellFrom, OwnerCell } from "../../../../src/core/cells.ts";
+import { OwnerData } from "../../../../src/core/entities.ts";
 import {
   DaoManager,
-  getConfig,
   type IckbDepositCell,
-  ickbDepositCellFrom,
-  IckbSdk,
+  WithdrawalGroup,
+} from "../../../../src/core/index.ts";
+import {
   type Match,
   type MatchSearchResult,
-  OrderData,
   type OrderGroup,
-  OwnerCell,
-  OwnerData,
   Ratio,
-  WithdrawalGroup,
-} from "@ickb/sdk";
+} from "../../../../src/order/index.ts";
+import { OrderData } from "../../../../src/order/model/order_data.ts";
+import { IckbSdk } from "../../../../src/sdk.ts";
 
 import {
   byte32FromByte,
@@ -203,7 +204,7 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       ),
       logic: Object.assign(config.managers.logic, overrides.managers?.logic),
     },
-    sdk: Object.assign(IckbSdk.fromConfig(config), {
+    sdk: Object.assign(sdkOf(config), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
         await Promise.resolve();
         return l1AccountState();
@@ -373,4 +374,10 @@ class TestEpoch extends ccc.Epoch {
   public override toUnix(): bigint {
     return this.unix;
   }
+}
+
+/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
+function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
+  const { ickbUdt, ownedOwner, logic, order } = config.managers;
+  return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order, bots: config.bots });
 }

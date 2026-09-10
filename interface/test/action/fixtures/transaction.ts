@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/ccc";
 import {
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
-  getConfig,
   IckbSdk,
   Ratio,
 } from "@ickb/sdk";
@@ -27,7 +26,7 @@ export function walletConfigWith(
 ): Parameters<typeof buildTransactionPreview>[3] {
   const base = walletConfig();
   return walletConfig({
-    sdk: new TestSdk({
+    sdk: testSdk({
       buildConversionTransaction:
         overrides.sdk?.buildConversionTransaction ??
         base.sdk.buildConversionTransaction.bind(base.sdk),
@@ -48,7 +47,7 @@ function walletConfig(
     address: "ckt1test",
     accountLocks: [script("11")],
     primaryLock: script("11"),
-    sdk: new TestSdk(),
+    sdk: testSdk(),
     ...overrides,
   };
 }
@@ -134,31 +133,22 @@ function script(codeHashByte: string): ccc.Script {
   });
 }
 
-class TestSdk extends IckbSdk {
-  public override buildConversionTransaction: WalletConfig["sdk"]["buildConversionTransaction"];
-
-  constructor(
-    options: {
-      buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-    } = {},
-  ) {
-    const config = getConfig("testnet");
-    super({
-      ickbUdt: config.managers.ickbUdt,
-      ownedOwner: config.managers.ownedOwner,
-      ickbLogic: config.managers.logic,
-      order: config.managers.order,
-      bots: config.bots,
-    });
-    this.buildConversionTransaction =
-      options.buildConversionTransaction ??
+function testSdk(
+  options: {
+    buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
+  } = {},
+): WalletConfig["sdk"] {
+  const sdk = IckbSdk.fromChain("testnet");
+  vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
+    options.buildConversionTransaction ??
       vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue({
         ok: true,
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
         conversion: { kind: "order" },
-      });
-  }
+      }),
+  );
+  return sdk;
 }
 
 interface WalletConfigTestOverrides {

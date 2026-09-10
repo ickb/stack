@@ -1,4 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { ExchangeRatio, ValueComponents } from "../../utils/index.ts";
+import { Info } from "../model/info.ts";
 import { Ratio } from "../model/ratio.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
@@ -208,4 +210,47 @@ function betterBoundedFraction(
 
 function minBigInt(left: bigint, right: bigint): bigint {
   return left < right ? left : right;
+}
+
+/**
+ * Quotes a new order: the output-side amount, the CKB fee, and the order info.
+ *
+ * @remarks
+ * The returned `Info` preserves the quoted amount after fee adjustment so the
+ * minted order records the executable limit price.
+ *
+ * @public
+ */
+export function quoteConversion(
+  isCkb2Udt: boolean,
+  midpoint: ExchangeRatio,
+  amounts: ValueComponents,
+  options?: {
+    fee?: ccc.Num;
+    feeBase?: ccc.Num;
+    ckbMinMatchLog?: number;
+  },
+): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
+  const fee = options?.fee ?? 0n;
+  // Generic denominator for callers that pass a fee without a scale; Stack's
+  // own default pair is owned publicly by the SDK, not by this entity.
+  const feeBase = options?.feeBase ?? 100000n;
+  const base = Ratio.from(midpoint);
+  const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
+  const { aScale, bScale } = base.feeAdjustedScales(isCkb2Udt, fee, feeBase);
+  const convertedAmount = ceilDiv(amount * aScale, bScale);
+  let ckbFee = 0n;
+
+  if (amount > 0n && fee !== 0n) {
+    ckbFee = isCkb2Udt
+      ? amount - base.convert(false, convertedAmount, false)
+      : base.convert(false, amount, false) - convertedAmount;
+  }
+
+  const info = Info.create(
+    isCkb2Udt,
+    quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
+    options?.ckbMinMatchLog,
+  );
+  return { convertedAmount, ckbFee, info };
 }

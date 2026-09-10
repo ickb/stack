@@ -8,12 +8,10 @@ import type {
 } from "./withdrawal_selection_types.ts";
 
 export {
-  ringSegmentAnchor,
   ringSegments,
   ringSurplusDepositFilter,
   ringTargetSegmentIndex,
 } from "./withdrawal_ring.ts";
-export type { RingSegment } from "./withdrawal_ring.ts";
 export type {
   ReadyWithdrawalSelectionOptions,
   WithdrawalDepositCandidate,

@@ -1,4 +1,5 @@
-import { convert, ICKB_DEPOSIT_CAP, projectAccountAvailability } from "@ickb/sdk";
+import { projectAccountAvailability } from "../../../src/conversion/sdk_projection.ts";
+import { convert, ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy.ts";
 import type { BotState, Runtime } from "./runtime/types.ts";
 

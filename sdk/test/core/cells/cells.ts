@@ -6,11 +6,11 @@ import {
   receiptCellFrom,
   WithdrawalGroup,
 } from "../../../src/core/cells.ts";
-import {
-  DaoManager,
-  type DaoDepositCell,
-  type DaoWithdrawalRequestCell,
-} from "../../../src/core/index.ts";
+import type {
+  DaoDepositCell,
+  DaoWithdrawalRequestCell,
+} from "../../../src/core/dao_cells.ts";
+import { DaoManager } from "../../../src/core/index.ts";
 import { IckbUdt, ickbValue } from "../../../src/core/udt.ts";
 import {
   byte32FromByte,

@@ -5,12 +5,7 @@ import type { MatchSearchResult } from "./match_types.ts";
 import { createBestMatchContext, type BestMatchOptions } from "./order_match_context.ts";
 import { searchBestMatch } from "./order_match_search.ts";
 
-export type {
-  Match,
-  MatchDiagnostics,
-  MatchDirectionDiagnostics,
-  MatchSearchResult,
-} from "./match_types.ts";
+export type { Match, MatchDiagnostics, MatchSearchResult } from "./match_types.ts";
 export type { BestMatchOptions } from "./order_match_context.ts";
 
 export function bestMatch(

@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  ICKB_DEPOSIT_CAP,
-  IckbError,
-  OrderManager,
-  type IckbDepositCell,
-} from "@ickb/sdk";
+import { IckbError } from "../../../../src/conversion/sdk_error.ts";
+import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "../../../../src/core/index.ts";
+import { OrderManager } from "../../../../src/order/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_RETAIN, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";

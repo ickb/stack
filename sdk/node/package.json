@@ -16,8 +16,7 @@
     "lint": "pnpm --workspace-root exec eslint --max-warnings=0 sdk/node/src sdk/node/test"
   },
   "dependencies": {
-    "@ckb-ccc/core": "catalog:",
-    "@ickb/sdk": "workspace:*"
+    "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",

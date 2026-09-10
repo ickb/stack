@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { estimate } from "../../src/conversion/sdk_estimate.ts";
 import { estimateMaturityFeeThreshold } from "../../src/conversion/sdk_estimate_core.ts";
 import { Ratio } from "../../src/order/index.ts";
-import { IckbSdk } from "../../src/sdk.ts";
 import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
 
@@ -16,7 +16,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("omits maturity below the fee threshold", () => {
-    const result = IckbSdk.estimate(
+    const result = estimate(
       false,
       { ckbValue: 0n, udtValue: 100000n },
       system({ ckbAvailable: 100000n }),
@@ -28,7 +28,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("uses the chain tip timestamp for preview maturity", () => {
-    const result = IckbSdk.estimate(
+    const result = estimate(
       false,
       { ckbValue: 0n, udtValue: 1000000n },
       system({
@@ -43,7 +43,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("uses UDT-to-CKB fee units when deciding preview maturity", () => {
-    const result = IckbSdk.estimate(
+    const result = estimate(
       false,
       { ckbValue: 0n, udtValue: 100n },
       system({
@@ -64,7 +64,7 @@ describe(ESTIMATE_SUITE, () => {
       udtScale: 10008200000000000n,
     });
 
-    const result = IckbSdk.estimate(
+    const result = estimate(
       false,
       { ckbValue: 0n, udtValue: ccc.fixedPointFrom("100000.001") },
       system({

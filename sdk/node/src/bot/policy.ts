@@ -1,5 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
-import { compareBigInt, type IckbDepositCell, ringSurplusDepositFilter } from "@ickb/sdk";
+import type { IckbDepositCell } from "../../../src/core/index.ts";
+import { ringSurplusDepositFilter } from "../../../src/core/withdrawal_selection.ts";
+import { compareBigInt } from "../../../src/utils/index.ts";
 
 import {
   CKB_RESERVE,

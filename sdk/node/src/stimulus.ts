@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig, IckbSdk, signerAccountLocks } from "@ickb/sdk";
+import { signerAccountLocks } from "../../src/conversion/account_locks.ts";
+import { IckbSdk } from "../../src/sdk.ts";
 import {
   createPublicClient,
   logExecution,
@@ -32,7 +33,7 @@ try {
     runtime: {
       client,
       signer,
-      sdk: IckbSdk.fromConfig(getConfig(chain)),
+      sdk: IckbSdk.fromChain(chain),
       primaryLock,
       accountLocks: await signerAccountLocks(signer, primaryLock),
     },

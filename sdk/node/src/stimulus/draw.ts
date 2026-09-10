@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { convert, type ExchangeRatio } from "@ickb/sdk";
+import { convert } from "../../../src/core/index.ts";
+import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
 export type Kind = "order" | "conversion";
 export type Direction = "ckb-to-ickb" | "ickb-to-ckb";

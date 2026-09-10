@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { getConfig, IckbSdk } from "@ickb/sdk";
+import { IckbSdk } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -29,8 +29,8 @@ export const testnetClient = createClient("testnet");
 export const savedConnectionRestoreMs = 800;
 
 const sdks = {
-  mainnet: IckbSdk.fromConfig(getConfig("mainnet")),
-  testnet: IckbSdk.fromConfig(getConfig("testnet")),
+  mainnet: IckbSdk.fromChain("mainnet"),
+  testnet: IckbSdk.fromChain("testnet"),
 };
 
 export function createRootConfig(

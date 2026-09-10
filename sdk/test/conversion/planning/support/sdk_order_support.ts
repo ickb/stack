@@ -2,12 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
 import {
   Info,
-  MasterCell,
   OrderCell,
-  OrderData,
   OrderGroup,
   type OrderManager,
 } from "../../../../src/order/index.ts";
+import { MasterCell } from "../../../../src/order/model/cells.ts";
+import { OrderData } from "../../../../src/order/model/order_data.ts";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
-import { OrderManager, Ratio } from "../../src/order/index.ts";
-import { IckbSdk } from "../../src/sdk.ts";
+import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
+import { quoteConversion, Ratio } from "../../src/order/index.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
 
@@ -19,13 +18,13 @@ describe(ESTIMATE_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
 
     expect(
-      OrderManager.convert(false, exchangeRatio, amounts, {
+      quoteConversion(false, exchangeRatio, amounts, {
         fee: 1n,
         feeBase: 100000n,
       }).convertedAmount,
     ).toBe(999990n);
 
-    const result = IckbSdk.estimate(
+    const result = estimate(
       false,
       amounts,
       system({
