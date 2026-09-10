@@ -7,8 +7,8 @@
 **/temp/*.api.md
 **/*.tsbuildinfo
 /log/
-apps/*/log_*.json
-apps/node/rate.csv
+sdk/node/log_*.json
+sdk/node/rate.csv
 
 # Local runtime config files
 /config/

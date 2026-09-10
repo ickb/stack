@@ -1,0 +1,26 @@
+# iCKB testnet stimulus generator as a systemd user unit. The unit is the configuration: copy
+# it to ~/.config/systemd/user/, edit every path and value, then follow sdk/node/README.md.
+# systemd expands % specifiers in every value, so a literal % must be written %%.
+[Unit]
+Description=iCKB stimulus generator testnet
+
+[Service]
+# Type=exec makes `systemctl start` fail when the node binary cannot be executed.
+Type=exec
+WorkingDirectory=/home/user/Projects/ickb/stack
+# The user manager does not see the shell PATH, so name the node binary by absolute path.
+ExecStart=/home/user/.local/share/fnm/node-versions/v24.18.0/installation/bin/node sdk/node/src/stimulus.ts
+Environment=STIMULUS_CHAIN=testnet
+Environment="STIMULUS_RPC_URL=https://testnet.ckb.dev/"
+# The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
+Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
+# Every draw is random unless pinned; see the knobs in sdk/node/README.md.
+# Every exit starts the next turn after a minute; a turn never holds.
+Restart=always
+RestartSec=60s
+NoNewPrivileges=yes
+# The process holds a private key, so never write a core file.
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

@@ -11,17 +11,17 @@
       "project": ["scripts/**/*.ts", "!scripts/test/**!", "*.config.{ts,mts}"],
     },
     // `!` marks production entries and files: `knip --production` runs in the gate.
-    "apps/*": {
-      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
-    },
-    "packages/*": {
+    "sdk": {
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
-    "apps/node": {
+    "testkit": {
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
+    },
+    "sdk/node": {
       "entry": ["src/{bot,sampler,stimulus}.ts!"],
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
-    "apps/interface": {
+    "interface": {
       "ignoreDependencies": ["tailwindcss"],
       "project": ["src/**/*.{ts,tsx,css}!", "test/**/*.{ts,tsx}"],
     },

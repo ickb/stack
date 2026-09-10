@@ -2,5 +2,5 @@ export default {
   plugins: ["prettier-plugin-organize-imports", "prettier-plugin-tailwindcss"],
   printWidth: 90,
   proseWrap: "preserve",
-  tailwindStylesheet: "./apps/interface/index.css",
+  tailwindStylesheet: "./interface/index.css",
 };

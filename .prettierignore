@@ -7,7 +7,7 @@ coverage/
 .scratch/
 /config/
 /log/
-apps/*/log_*.json
-apps/node/rate.csv
+sdk/node/log_*.json
+sdk/node/rate.csv
 pnpm-lock.yaml
 eslint-suppressions.json

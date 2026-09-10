@@ -310,8 +310,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.ts"],
-    ignores: ["packages/testkit/src/**"],
+    files: ["{sdk,sdk/node,interface}/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -322,7 +321,7 @@ export default defineConfig(
   },
   {
     // Where the 100% coverage thresholds apply, nothing may opt a branch out of them.
-    files: ["packages/sdk/**/*.ts", "apps/node/**/*.ts"],
+    files: ["sdk/**/*.ts"],
     rules: {
       "sonarjs/comment-regex": [
         "error",
@@ -335,7 +334,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["packages/sdk/src/order/io/**/*.ts"],
+    files: ["sdk/src/order/io/**/*.ts"],
     rules: {
       "@typescript-eslint/no-restricted-types": [
         "error",
@@ -352,29 +351,29 @@ export default defineConfig(
   },
   {
     files: [
-      "packages/sdk/src/core/entities.ts",
-      "packages/sdk/src/order/model/info.ts",
-      "packages/sdk/src/order/model/order_data.ts",
-      "packages/sdk/src/order/model/ratio.ts",
-      "packages/sdk/src/order/model/relative.ts",
-      "packages/sdk/src/sdk.ts",
+      "sdk/src/core/entities.ts",
+      "sdk/src/order/model/info.ts",
+      "sdk/src/order/model/order_data.ts",
+      "sdk/src/order/model/ratio.ts",
+      "sdk/src/order/model/relative.ts",
+      "sdk/src/sdk.ts",
     ],
     rules: {
       "@typescript-eslint/method-signature-style": "off",
     },
   },
   {
-    files: ["scripts/**/*.ts", "apps/node/**/*.ts"],
+    files: ["scripts/**/*.ts", "sdk/node/**/*.ts"],
     rules: {
       "@typescript-eslint/unbound-method": "off",
     },
   },
   {
     files: [
-      "apps/interface/src/**/*.ts",
-      "apps/interface/src/**/*.tsx",
-      "apps/interface/test/**/*.ts",
-      "apps/interface/test/**/*.tsx",
+      "interface/src/**/*.ts",
+      "interface/src/**/*.tsx",
+      "interface/test/**/*.ts",
+      "interface/test/**/*.tsx",
       "src/**/*.ts",
       "src/**/*.tsx",
       "test/**/*.ts",
@@ -390,22 +389,14 @@ export default defineConfig(
     },
   },
   {
-    files: [
-      "scripts/**/*.ts",
-      "apps/*/test/**/*.{ts,tsx}",
-      "packages/*/test/**/*.{ts,tsx}",
-    ],
+    files: ["scripts/**/*.ts", "{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}"],
     rules: {
       // This rule flags only paths constructed by the repository in scripts and tests.
       "security/detect-non-literal-fs-filename": "off",
     },
   },
   {
-    files: [
-      "apps/*/test/**/*.{ts,tsx}",
-      "packages/*/test/**/*.{ts,tsx}",
-      "test/**/*.{ts,tsx}",
-    ],
+    files: ["{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
     plugins: {
       vitest,
     },
@@ -439,7 +430,7 @@ export default defineConfig(
   },
   {
     // The oracle's independence from the SDK is a dependency-cruiser rule (amendment 44).
-    files: ["packages/testkit/src/contract_oracle.ts"],
+    files: ["testkit/src/contract_oracle.ts"],
     linterOptions: { noInlineConfig: true },
     rules: {
       // The oracle mirrors deployed Rust control flow; restructuring it for this metric harms auditability.

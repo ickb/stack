@@ -22,15 +22,15 @@ Current stack flows assume user-owned cells are protected by locks whose signatu
 
 Apps:
 
-- `apps/node`: the bot, the testnet stimulus generator, and the mainnet rate sampler, three entrypoints in one Node workspace sharing chain preflight, config, and logging.
-- `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
+- `sdk/node`: the bot, the testnet stimulus generator, and the mainnet rate sampler, three entrypoints in one Node workspace sharing chain preflight, config, and logging.
+- `interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
 
 Apps are private workspace runtimes and run from source under Node 22.19+ or Vite. The supported reusable API surface lives in the packages below. Stack package `build` scripts emit `dist/` for publishing reusable packages only; local development, tests, live supervisor runs, and bot deployments use TypeScript source directly.
 
 Packages:
 
-- `packages/sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, and transaction builders; `src/dao` the Nervos DAO cell classification and deposit, request, and withdrawal helpers; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/utils` the bounded paged scans and shared helpers; and the top level composes them into account state, conversion planning with completion, sending, and confirmation.
-- `packages/testkit`: Private test helpers and fixtures for workspace tests.
+- `sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, and transaction builders; `src/dao` the Nervos DAO cell classification and deposit, request, and withdrawal helpers; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/utils` the bounded paged scans and shared helpers; and the top level composes them into account state, conversion planning with completion, sending, and confirmation.
+- `testkit`: Private test helpers and fixtures for workspace tests.
 
 ## Dependencies
 
@@ -48,13 +48,13 @@ The bot reads `BOT_CHAIN`, `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE
 export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckb.dev/ BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
 export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckb.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
 mkdir -p log/bot
-node apps/node/src/bot.ts >> log/bot/events.ndjson
-node apps/node/src/stimulus.ts
+node sdk/node/src/bot.ts >> log/bot/events.ndjson
+node sdk/node/src/stimulus.ts
 ```
 
 Each turn identifies itself first: the bot's `bot.chain.preflight` event and the generator's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn stops before acting: the bot with `bot.decision.skipped` reason `capital_below_minimum` and its `deficit`, the generator with outcome `hold`, both with exit code `2`; the turn's balances are in `bot.state.read` and the generator's `balance`.
 
-To exercise the bot, run the generator once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `apps/node/README.md`.
+To exercise the bot, run the generator once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `sdk/node/README.md`.
 
 ## Licensing
 

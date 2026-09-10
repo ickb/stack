@@ -31,17 +31,21 @@
     "sourceMap": true
   },
   "include": [
-    "packages/*/src/**/*.ts",
+    "sdk/src/**/*.ts",
+    "sdk/node/src/**/*.ts",
+    "testkit/src/**/*.ts",
     "scripts/**/*.ts",
     "eslint.config.mts",
     "prettier.config.mts",
-    "apps/node/src/**/*.ts",
     "vitest.config.mts",
-    "apps/*/vitest.config.mts",
-    "apps/*/eslint.config.mts",
-    "packages/*/vitest.config.mts",
-    "apps/interface/vite.config.ts",
-    "packages/*/test/**/*.ts",
-    "apps/node/test/**/*.ts"
+    "sdk/vitest.config.mts",
+    "sdk/node/vitest.config.mts",
+    "testkit/vitest.config.mts",
+    "interface/vitest.config.mts",
+    "interface/eslint.config.mts",
+    "interface/vite.config.ts",
+    "sdk/test/**/*.ts",
+    "sdk/node/test/**/*.ts",
+    "testkit/test/**/*.ts"
   ]
 }

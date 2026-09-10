@@ -6,7 +6,7 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const requireFromCore = Module.createRequire(`${rootDir}/packages/sdk/package.json`);
+const requireFromCore = Module.createRequire(`${rootDir}/sdk/package.json`);
 const requireFromCccCore = Module.createRequire(
   requireFromCore.resolve("@ckb-ccc/core/package.json"),
 );
@@ -47,10 +47,7 @@ function punycodeGuardLoad(originalLoad: ModuleLoad, requests: string[]): Module
 
 // eslint-disable-next-line sonarjs/assertions-in-tests -- Asserts via node:assert deepEqual on the collected punycode-require list; sonarjs does not track it through the loop.
 void test("workspace packages import directly from TypeScript source", async () => {
-  for (const modulePath of [
-    "packages/sdk/src/index.ts",
-    "packages/testkit/src/index.ts",
-  ]) {
+  for (const modulePath of ["sdk/src/index.ts", "testkit/src/index.ts"]) {
     await importFromRoot(modulePath);
   }
 });
@@ -66,11 +63,11 @@ void test("native source imports do not load deprecated builtin punycode", async
   Reflect.set(Module, "_load", loadWithPunycodeGuard);
 
   try {
-    await importFromRoot("packages/sdk/src/index.ts");
+    await importFromRoot("sdk/src/index.ts");
     requireFromCore("@ckb-ccc/core");
     requireFromCccCore("@joyid/ckb");
-    await importFromRoot("apps/node/src/bot/index.ts");
-    await importFromRoot("apps/node/src/sampler/sampler.ts");
+    await importFromRoot("sdk/node/src/bot/index.ts");
+    await importFromRoot("sdk/node/src/sampler/sampler.ts");
   } finally {
     Reflect.set(Module, "_load", originalLoad);
   }
@@ -80,8 +77,8 @@ void test("native source imports do not load deprecated builtin punycode", async
 
 void test("Node app entrypoints run from TypeScript source and fail fast without config", () => {
   for (const [modulePath, envName] of [
-    ["apps/node/src/bot.ts", "BOT_CHAIN"],
-    ["apps/node/src/stimulus.ts", "STIMULUS_CHAIN"],
+    ["sdk/node/src/bot.ts", "BOT_CHAIN"],
+    ["sdk/node/src/stimulus.ts", "STIMULUS_CHAIN"],
   ] as const) {
     const result = spawnSync(process.execPath, [modulePath], {
       cwd: rootDir,

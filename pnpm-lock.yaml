@@ -121,7 +121,7 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(vite@8.2.0(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
-  apps/interface:
+  interface:
     dependencies:
       '@ckb-ccc/ccc':
         specifier: 'catalog:'
@@ -131,7 +131,7 @@ importers:
         version: 1.1.9(@types/react@19.2.18)(react@19.2.8)(typescript@6.0.3)(zod@3.25.76)
       '@ickb/sdk':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../sdk
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)
@@ -144,7 +144,7 @@ importers:
     devDependencies:
       '@ickb/testkit':
         specifier: workspace:*
-        version: link:../../packages/testkit
+        version: link:../testkit
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.2.0(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -176,23 +176,7 @@ importers:
         specifier: ^8.2.0
         version: 8.2.0(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
 
-  apps/node:
-    dependencies:
-      '@ckb-ccc/core':
-        specifier: 'catalog:'
-        version: 1.19.1(typescript@6.0.3)(zod@3.25.76)
-      '@ickb/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-    devDependencies:
-      '@ickb/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@types/node':
-        specifier: 'catalog:'
-        version: 22.20.1
-
-  packages/sdk:
+  sdk:
     dependencies:
       '@ckb-ccc/core':
         specifier: 'catalog:'
@@ -202,7 +186,23 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
-  packages/testkit:
+  sdk/node:
+    dependencies:
+      '@ckb-ccc/core':
+        specifier: 'catalog:'
+        version: 1.19.1(typescript@6.0.3)(zod@3.25.76)
+      '@ickb/sdk':
+        specifier: workspace:*
+        version: link:..
+    devDependencies:
+      '@ickb/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
+
+  testkit:
     dependencies:
       '@ckb-ccc/core':
         specifier: 'catalog:'
@@ -4862,6 +4862,10 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.5
 
+  fdir@6.5.0(picomatch@4.0.7):
+    optionalDependencies:
+      picomatch: 4.0.7
+
   file-entry-cache@8.0.0:
     dependencies:
       flat-cache: 4.0.1
@@ -5580,8 +5584,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinyrainbow@3.1.1: {}
 
@@ -5667,7 +5671,7 @@ snapshots:
   vite@8.2.0(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       postcss: 8.5.25
       rolldown: 1.2.1
       tinyglobby: 0.2.17

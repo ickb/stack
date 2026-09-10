@@ -7,19 +7,19 @@ const fullCoverage = { lines: 100, functions: 100, branches: 100, statements: 10
 
 export default defineConfig({
   test: {
-    projects: ["packages/*", "apps/*"],
+    projects: ["sdk", "sdk/node", "testkit", "interface"],
     coverage: {
       reporter: ["text"],
-      include: ["packages/sdk/src/**/*.ts", "apps/node/src/**/*.ts"],
+      include: ["sdk/src/**/*.ts", "sdk/node/src/**/*.ts"],
       exclude: [
         // Process entrypoints are exercised by spawning them, which V8 coverage cannot see.
-        "apps/node/src/bot.ts",
-        "apps/node/src/sampler.ts",
-        "apps/node/src/stimulus.ts",
+        "sdk/node/src/bot.ts",
+        "sdk/node/src/sampler.ts",
+        "sdk/node/src/stimulus.ts",
       ],
       thresholds: {
-        "packages/sdk/src/**": fullCoverage,
-        "apps/node/src/**": fullCoverage,
+        "sdk/src/**": fullCoverage,
+        "sdk/node/src/**": fullCoverage,
       },
     },
   },

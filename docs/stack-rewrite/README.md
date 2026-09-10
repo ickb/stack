@@ -9,7 +9,7 @@ The work started with a whole-repository review. That review found a small numbe
 ## What is changing
 
 - Five published packages become one browser-safe `@ickb/sdk` with a single entry point.
-- Thirteen workspaces become four: `packages/{sdk,testkit}` and `apps/{node,interface}`, the latter holding the bot, stimulus generator, and sampler entrypoints.
+- Thirteen workspaces become four at the root: `sdk`, its `sdk/node` actors, `testkit`, and `interface`; `sdk/node` holds the bot, stimulus generator, and sampler entrypoints.
 - The SDK exposes plain sampled state, typed planning results, stable error codes, and an explicit transaction lifecycle.
 - Bot and interface read committed cells through one uncached exact-lock scan per account lock, classified client-side, and persist no pending transaction identity.
 - Stack selects exact inputs and output shapes; CCC retains collection-disabled fee preparation and signing mechanics, while its cache is never input-selection authority.
