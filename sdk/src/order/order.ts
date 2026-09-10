@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { ExchangeRatio, ScriptDeps, ValueComponents } from "../utils/index.ts";
+import type { ScriptDeps, ValueComponents } from "../utils/index.ts";
 import {
   findAllMasters,
   findSimpleOrders,
@@ -8,22 +8,12 @@ import {
   resolveOrderGroup,
 } from "./io/order_scan.ts";
 import { addOrderMatch, meltOrderGroups, mintOrder } from "./io/order_transaction.ts";
-import {
-  bestMatch,
-  type BestMatchOptions,
-  type Match,
-  type MatchSearchResult,
-} from "./matching/order_matching.ts";
+import type { Match } from "./matching/match_types.ts";
 import type { OrderCell, OrderGroup } from "./model/cells.ts";
 import { Info, type InfoLike } from "./model/info.ts";
 
+export type { Match } from "./matching/match_types.ts";
 export { OrderConversionRepresentabilityError } from "./matching/order_conversion.ts";
-export type {
-  BestMatchOptions,
-  Match,
-  MatchDiagnostics,
-  MatchSearchResult,
-} from "./matching/order_matching.ts";
 
 /**
  * Builds and scans iCKB Stack order cells for one order script deployment.
@@ -86,25 +76,6 @@ export class OrderManager implements ScriptDeps {
    */
   public addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transaction {
     return addOrderMatch(this, ccc.Transaction.from(txLike), match);
-  }
-
-  /**
-   * Finds a bounded best executable match for validated, resolved order groups.
-   *
-   * @remarks
-   * Groups preserve the genuine mint origin used by the resolver's confusion
-   * heuristic. Raw `OrderCell`s are intentionally not accepted for matching.
-   * A complete result is the best of the search space (whole fills plus one closing
-   * partial per direction); an incomplete result carries the best feasible match
-   * visited and the gain an unvisited branch could still hold.
-   */
-  public static bestMatch(
-    orderPool: OrderGroup[],
-    allowance: ValueComponents,
-    exchangeRate: ExchangeRatio,
-    options?: BestMatchOptions,
-  ): MatchSearchResult {
-    return bestMatch(orderPool, allowance, exchangeRate, options);
   }
 
   /**

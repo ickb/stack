@@ -3,6 +3,8 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
 import { type Info, OrderManager, Ratio } from "../../src/order/index.ts";
+import { partialOrderFee } from "../../src/order/io/order_io.ts";
+import { OrderMatcher } from "../../src/order/matching/order_matcher.ts";
 import { OrderData } from "../../src/order/model/order_data.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import {
@@ -205,31 +207,24 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
     });
 
     const matchingRate = { ckbScale: 1n, udtScale: 2n };
-    const match = OrderManager.bestMatch(
-      [order],
-      { ckbValue: 1n, udtValue: 0n },
-      matchingRate,
-      {
-        feeRate: 0n,
-      },
-    );
-    const botMatch = OrderManager.bestMatch(
-      [order],
-      { ckbValue: 1n, udtValue: 0n },
-      matchingRate,
-      {
-        feeRate: 1n,
-      },
-    );
+    const fill = OrderMatcher.from(order, false, 0n)?.match(1n);
+    if (fill === undefined) {
+      throw new Error("expected a fill");
+    }
 
-    expect(match.match.partials).toHaveLength(1);
-    expect(match.match.partials[0]).toMatchObject({
+    expect(fill.partials).toHaveLength(1);
+    expect(fill.partials[0]).toMatchObject({
       ckbOut: order.order.ckbValue + 1n,
       udtOut: 0n,
     });
-    expect(match.match.ckbDelta).toBe(-1n);
-    expect(match.match.udtDelta).toBe(1n);
-    expect(botMatch.match.partials).toHaveLength(0);
+    expect(fill.ckbDelta).toBe(-1n);
+    expect(fill.udtDelta).toBe(1n);
+    // The unit gains one shannon at the rate, which its own fee already consumes.
+    expect(
+      fill.ckbDelta * matchingRate.ckbScale +
+        fill.udtDelta * matchingRate.udtScale -
+        partialOrderFee([order], 1n),
+    ).toBeLessThanOrEqual(0n);
   });
 
   it("builds dust iCKB-to-CKB orders with quote-preserving Uint64 encoding", () => {

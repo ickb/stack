@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
+import { partialOrderFee } from "../../../src/order/io/order_io.ts";
 import { addOrderMatch } from "../../../src/order/io/order_transaction.ts";
-import { preparedPartialOrderSerializedSize } from "../../../src/order/matching/order_match_context.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import type { Match } from "../../../src/order/order.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
@@ -52,8 +52,9 @@ describe("prepared partial serialized size", () => {
       fullMatch([resolvedOrderGroup(first), resolvedOrderGroup(second)]),
     );
 
+    // At one shannon per byte the fee of one more partial is its prepared size.
     expect(BigInt(preparedSize(two) - preparedSize(one))).toBe(
-      preparedPartialOrderSerializedSize(first.cell.occupiedSize),
+      partialOrderFee([resolvedOrderGroup(first)], 1000n),
     );
   });
 });

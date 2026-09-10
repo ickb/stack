@@ -13,9 +13,10 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Match } from "../../../src/order/matching/match_types.ts";
-import type { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
+import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import type { OrderCell } from "../../../src/order/model/cells.ts";
 import { Info } from "../../../src/order/model/info.ts";
+import { resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import { adjudicate, mustMatcher, orderWith } from "./support/order_oracle_helpers.ts";
 
 // This package is browser-safe and loads no node types; declare the one node
@@ -190,6 +191,52 @@ describe("order matcher properties versus contract oracle", () => {
       );
     },
   );
+});
+
+describe("dual orders", () => {
+  it("never gain in both directions at one exchange rate", () => {
+    // Info.validate rejects a dual whose ratios let value be extracted, so a matcher that
+    // only takes gaining fills can never fill both directions of one cell.
+    fc.assert(
+      fc.property(
+        ratioArb,
+        ratioArb,
+        ratioArb,
+        fc.integer({ min: 0, max: 20 }),
+        fc.bigInt({ min: 1n, max: MAX_AMOUNT }),
+        fc.bigInt({ min: 1n, max: MAX_AMOUNT }),
+        feeArb,
+        allowanceArb,
+        (
+          ckbToUdt,
+          udtToCkb,
+          rate,
+          ckbMinMatchLog,
+          ckbUnoccupied,
+          udtValue,
+          fee,
+          pick,
+        ) => {
+          const info = Info.from({ ckbToUdt, udtToCkb, ckbMinMatchLog });
+          fc.pre(info.isValid());
+          const order = orderWith({ info, ckbUnoccupied, udtValue });
+          const gains = [true, false].map((isCkb2Udt) => {
+            const matcher = OrderMatcher.from(resolvedOrderGroup(order), isCkb2Udt, fee);
+            if (matcher === undefined) {
+              return 0n;
+            }
+            const band = matcher.bMaxMatch - matcher.bMinMatch;
+            const fill = matcher.match(matcher.bMinMatch + (pick % (band + 1n)));
+            return (
+              (fill.ckbDelta - fee * BigInt(fill.partials.length)) * rate.ckbScale +
+              fill.udtDelta * rate.udtScale
+            );
+          });
+          expect(gains.every((gain) => gain > 0n)).toBe(false);
+        },
+      ),
+    );
+  });
 });
 
 describe("minimum match pre-gate", () => {

@@ -6,19 +6,8 @@ import { Info } from "../../../src/order/model/info.ts";
 import { Ratio } from "../../../src/order/model/ratio.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
-import {
-  cycle02ResidualGroups,
-  exhaustiveIntegerBestMatch,
-  makeUdtToCkbOrder,
-  matchKey,
-  resolvedOrderGroup,
-  resolvedOrderGroups,
-} from "./support/order_match_helpers.ts";
-import {
-  byte32FromByte,
-  dualInfo,
-  makeOrderCell,
-} from "./support/order_order_helpers.ts";
+import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
+import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
 
 const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
@@ -97,16 +86,6 @@ describe("OrderManager no-op transaction helpers", () => {
         partials: [],
       }).inputs,
     ).toEqual([]);
-    expect(
-      OrderManager.bestMatch(
-        [],
-        { ckbValue: 1n, udtValue: 1n },
-        { ckbScale: 1n, udtScale: 1n },
-      ),
-    ).toEqual({
-      kind: "complete",
-      match: { ckbDelta: 0n, udtDelta: 0n, partials: [] },
-    });
     expect(manager.melt(ccc.Transaction.default(), []).inputs).toEqual([]);
   });
 });
@@ -364,7 +343,7 @@ function registerMeltGroupValidationTests(): void {
     }
   });
 
-  it("builds the transaction of a best match from the resolver's groups", () => {
+  it("builds the transaction of a matcher's fill from the resolver's group", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
@@ -373,17 +352,35 @@ function registerMeltGroupValidationTests(): void {
       master: { type: "absolute", value: { txHash: byte32FromByte("77"), index: 1n } },
       outPoint: { txHash: byte32FromByte("5b"), index: 0n },
     });
-    const group = resolvedOrderGroup(order);
-    // The order pays one CKB per iCKB while the rate values CKB double, so the bot gains.
-    const result = OrderManager.bestMatch(
-      [group],
-      { ckbValue: 0n, udtValue: ccc.fixedPointFrom(1000) },
-      { ckbScale: 2n, udtScale: 1n },
+    const fill = OrderMatcher.from(resolvedOrderGroup(order), true, 0n)?.match(
+      ccc.fixedPointFrom(1000),
+    );
+    if (fill === undefined) {
+      throw new Error("expected a fill");
+    }
+
+    expect(fill.partials).toHaveLength(1);
+    expect(manager.addMatch(ccc.Transaction.default(), fill).inputs).toHaveLength(1);
+  });
+
+  it("rejects a structurally valid group that was never resolver-produced", () => {
+    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      master: { type: "absolute", value: { txHash: byte32FromByte("7a"), index: 1n } },
+      outPoint: { txHash: byte32FromByte("5e"), index: 0n },
+    });
+    const resolved = resolvedOrderGroup(order);
+    const unattested = new OrderGroup(
+      resolved.master,
+      OrderCell.mustFrom(order.cell.clone()),
+      resolved.origin,
     );
 
-    expect(result.match.partials).toHaveLength(1);
-    expect(manager.addMatch(ccc.Transaction.default(), result.match).inputs).toHaveLength(
-      1,
+    expect(() => manager.melt(ccc.Transaction.default(), [unattested])).toThrow(
+      "OrderGroup was not produced by the order resolver",
     );
   });
 
@@ -452,125 +449,6 @@ function registerMatcherConstructorValidationTests(): void {
     expect(constructMatcher).toThrow("OrderMatcher aIn must be non-negative");
   });
 }
-
-describe(ORDER_MATCHER_SUITE, () => {
-  it("matches an exhaustive cross-product on a bounded pool", () => {
-    const orders = [
-      makeOrderCell({
-        ckbUnoccupied: 9n,
-        udtValue: 4n,
-        info: dualInfo(),
-        master: {
-          type: "absolute",
-          value: { txHash: byte32FromByte("33"), index: 1n },
-        },
-        outPoint: { txHash: byte32FromByte("47"), index: 0n },
-      }),
-      makeOrderCell({
-        ckbUnoccupied: 6n,
-        udtValue: 8n,
-        info: dualInfo(),
-        master: {
-          type: "absolute",
-          value: { txHash: byte32FromByte("34"), index: 1n },
-        },
-        outPoint: { txHash: byte32FromByte("48"), index: 0n },
-      }),
-      makeOrderCell({
-        ckbUnoccupied: 3n,
-        udtValue: 12n,
-        info: dualInfo(),
-        master: {
-          type: "absolute",
-          value: { txHash: byte32FromByte("35"), index: 1n },
-        },
-        outPoint: { txHash: byte32FromByte("49"), index: 0n },
-      }),
-    ];
-    const allowance = {
-      ckbValue: 16n,
-      udtValue: 12n,
-    };
-    const exchangeRate = { ckbScale: 1n, udtScale: 1n };
-    const options = {
-      feeRate: 0n,
-      maxPartials: 3,
-    };
-
-    const groups = resolvedOrderGroups(orders);
-    expect(
-      matchKey(OrderManager.bestMatch(groups, allowance, exchangeRate, options).match),
-    ).toEqual(
-      matchKey(exhaustiveIntegerBestMatch(groups, allowance, exchangeRate, options)),
-    );
-  });
-});
-
-describe(ORDER_MATCHER_SUITE, () => {
-  it("returns the best feasible match seen with its gap when the node budget ends the search", () => {
-    const specs = [
-      [119n, 210n, 2n, 13n],
-      [13n, 2n, 6n, 1n],
-      [147n, 152n, 10n, 5n],
-      [123n, 130n, 14n, 9n],
-      [217n, 116n, 2n, 13n],
-    ] as const;
-    const masterIds = ["70", "71", "72", "73", "74"] as const;
-    const orderIds = ["80", "81", "82", "83", "84"] as const;
-    const orders = specs.map(([ckbUnoccupied, udtValue, ckbScale, udtScale], index) => {
-      const ratio = Ratio.from({ ckbScale, udtScale });
-      return makeOrderCell({
-        ckbUnoccupied,
-        udtValue,
-        info: Info.from({
-          ckbToUdt: ratio,
-          udtToCkb: ratio,
-          ckbMinMatchLog: 0,
-        }),
-        master: {
-          type: "absolute",
-          value: { txHash: byte32FromByte(masterIds[index] ?? "70"), index: 1n },
-        },
-        outPoint: {
-          txHash: byte32FromByte(orderIds[index] ?? "80"),
-          index: 0n,
-        },
-      });
-    });
-    const groups = resolvedOrderGroups(orders);
-    const allowance = { ckbValue: 181n, udtValue: 0n };
-    const exchangeRate = { ckbScale: 16n, udtScale: 3n };
-    const options = { feeRate: 0n, maxPartials: 5, candidateBudget: 3 };
-
-    const result = OrderManager.bestMatch(groups, allowance, exchangeRate, options);
-
-    expect(result.kind).toBe("incomplete");
-    expect(allowance.ckbValue + result.match.ckbDelta).toBeGreaterThanOrEqual(0n);
-    expect(allowance.udtValue + result.match.udtDelta).toBeGreaterThanOrEqual(0n);
-    expect(result.match.diagnostics).toMatchObject({ candidateBudget: 3, workCount: 3 });
-    expect(result.match.diagnostics?.gainUpperBound).toBeGreaterThanOrEqual(
-      result.match.diagnostics?.bestGain ?? 0n,
-    );
-  });
-});
-
-describe(`${ORDER_MATCHER_SUITE} residual budgets`, () => {
-  it("closes the leftover balances with a partial fill the allowance can pay", () => {
-    const groups = cycle02ResidualGroups();
-    const allowance = { ckbValue: 11n, udtValue: 82n };
-    const exchangeRate = { ckbScale: 2n, udtScale: 5n };
-
-    const { match } = OrderManager.bestMatch(groups, allowance, exchangeRate, {
-      feeRate: 0n,
-      maxPartials: 3,
-    });
-
-    expect(match.partials.length).toBeGreaterThanOrEqual(1);
-    expect(match.ckbDelta * 2n + match.udtDelta * 5n).toBeGreaterThan(0n);
-    expect(allowance.ckbValue + match.ckbDelta).toBeGreaterThanOrEqual(0n);
-    expect(allowance.udtValue + match.udtDelta).toBeGreaterThanOrEqual(0n);
-  });
-});
 
 function masterCell(): ccc.Cell {
   return ccc.Cell.from({

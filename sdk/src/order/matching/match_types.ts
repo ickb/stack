@@ -1,17 +1,16 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ValueComponents } from "../../utils/index.ts";
 import type { OrderGroup } from "../model/cells.ts";
 
 /**
- * Result of matching one or more orders against available allowance.
+ * The fills of one or more orders from the matcher caller's perspective.
  *
  * @public
  */
 export interface Match {
-  /** Net CKB change from the match from the matcher caller's perspective. */
+  /** Net CKB change from the match. */
   ckbDelta: bigint;
 
-  /** Net UDT change from the match from the matcher caller's perspective. */
+  /** Net UDT change from the match. */
   udtDelta: bigint;
 
   /** Partial order outputs that must replace matched order inputs. */
@@ -25,65 +24,4 @@ export interface Match {
     /** UDT amount for the replacement partial order output. */
     udtOut: ccc.FixedPoint;
   }>;
-
-  /** Optional diagnostics produced by best-match search. */
-  diagnostics?: MatchDiagnostics;
-}
-
-/**
- * Result of the bounded best-match search: `complete` when every branch was visited or
- * pruned, so the match is the best of the search space; `incomplete` when the work
- * budget ended the search, so the match is the best feasible one visited and the
- * diagnostics bound what an unvisited branch could still have reached.
- *
- * @public
- */
-export interface MatchSearchResult {
-  kind: "complete" | "incomplete";
-  match: Match;
-}
-
-/**
- * Search diagnostics for best-match selection.
- *
- * @public
- */
-export interface MatchDiagnostics {
-  /** Number of orders inspected. */
-  orderCount: number;
-  /** Original match allowance. */
-  allowance: ValueComponents;
-  /** CKB fee budget reserved per matched order. */
-  ckbMiningFee: ccc.FixedPoint;
-  /** The work budget: nodes, closers examined, and probes. */
-  candidateBudget: number;
-  /** Work done, never beyond the budget. */
-  workCount: number;
-  /** Optional maximum number of partial order outputs. */
-  maxPartials?: number;
-  /** Per-direction matchability bounds. */
-  directions: {
-    ckbToUdt: MatchDirectionDiagnostics;
-    udtToCkb: MatchDirectionDiagnostics;
-  };
-  /** Gain of the returned match at the exchange ratio, net of fees. */
-  bestGain: bigint;
-  /** Largest gain any unvisited branch could still reach; equals `bestGain` when complete. */
-  gainUpperBound: bigint;
-  /** Directional matchers left out: no combination could pay them, or beyond the cap. */
-  truncatedMatchers: number;
-}
-
-/**
- * Matchability bounds for one order direction.
- *
- * @public
- */
-export interface MatchDirectionDiagnostics {
-  /** Number of orders matchable in this direction. */
-  matchableCount: number;
-  /** Smallest required allowance among matchable orders. */
-  minAllowance?: ccc.FixedPoint;
-  /** Largest possible match amount among matchable orders. */
-  maxMatch?: ccc.FixedPoint;
 }

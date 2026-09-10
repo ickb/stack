@@ -1,14 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import { quoteConversion } from "../../../src/order/index.ts";
-import { orderMatchers } from "../../../src/order/matching/order_match_context.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import { Info } from "../../../src/order/model/info.ts";
 import { Ratio } from "../../../src/order/model/ratio.ts";
-import {
-  OrderConversionRepresentabilityError,
-  OrderManager,
-} from "../../../src/order/order.ts";
+import { OrderConversionRepresentabilityError } from "../../../src/order/order.ts";
 import {
   ORDER_MATCHER_SUITE,
   RATIO_SCALE_EXCEEDS_UINT64,
@@ -79,10 +75,8 @@ describe(ORDER_MATCHER_SUITE, () => {
       outPoint: { txHash: byte32FromByte("43"), index: 0n },
     });
 
-    const matchers = orderMatchers(
-      resolvedOrderGroups([validA, invalidDirection, validB]),
-      true,
-      0n,
+    const matchers = resolvedOrderGroups([validA, invalidDirection, validB]).flatMap(
+      (group) => OrderMatcher.from(group, true, 0n) ?? [],
     );
 
     expect(
@@ -288,38 +282,5 @@ describe(ORDER_MATCHER_SUITE, () => {
     expect(
       OrderMatcher.from(resolvedOrderGroup(order), false, -ccc.fixedPointFrom(100)),
     ).toBeUndefined();
-  });
-});
-
-describe(ORDER_MATCHER_SUITE, () => {
-  it("lets bestMatch consume UDT-to-CKB orders", () => {
-    const order = makeUdtToCkbOrder();
-
-    const { match } = OrderManager.bestMatch(
-      [resolvedOrderGroup(order)],
-      {
-        ckbValue: 200n,
-        udtValue: 0n,
-      },
-      {
-        ckbScale: 3n,
-        udtScale: 5n,
-      },
-      {
-        feeRate: 0n,
-      },
-    );
-
-    expect(match.partials).toHaveLength(1);
-    expect(match.ckbDelta).toBeLessThan(0n);
-    expect(match.udtDelta).toBeGreaterThan(0n);
-    expect(match.diagnostics).toMatchObject({
-      orderCount: 1,
-      directions: {
-        ckbToUdt: { matchableCount: 0 },
-        udtToCkb: { matchableCount: 1 },
-      },
-    });
-    expect(match.diagnostics?.bestGain).toBeGreaterThan(0n);
   });
 });

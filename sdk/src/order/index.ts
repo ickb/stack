@@ -12,6 +12,4 @@ export {
   OrderConversionRepresentabilityError,
   OrderManager,
   type Match,
-  type MatchDiagnostics,
-  type MatchSearchResult,
 } from "./order.ts";
