@@ -196,6 +196,8 @@ describe("runStimulusTurn", () => {
     const log = await turn(target, orderDraw);
 
     expect(log).toMatchObject({
+      type: "stimulus.turn",
+      timestamp: new Date(log.timestamp ?? "").toISOString(),
       outcome: "committed",
       orders: { live: 0, fulfilled: 1, underPar: 0, stale: 0 },
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },

@@ -85,7 +85,8 @@ describe("matchTurn", () => {
     const at = (premium: bigint): TurnMatch =>
       turn([buyer("03", 2000n + premium, 2000n)], { ckb: fee, udt: 2000n });
 
-    expect(at(cost).partials).toEqual([]);
+    expect(at(cost)).toMatchObject({ partials: [], gains: 0 });
+    expect(at(cost + 1n)).toMatchObject({ gains: 1 });
     expect(at(cost + 1n).partials).toHaveLength(1);
   });
 

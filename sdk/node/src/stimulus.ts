@@ -57,7 +57,7 @@ try {
   });
 } catch (error) {
   // Connection and preflight failures get the same log line and exit code as turn failures.
-  logExecution({ outcome: "failed", error }, startTime);
+  logExecution("stimulus.turn", { outcome: "failed", error }, startTime);
   process.exitCode = 1;
 }
 process.exitCode ??= 0;

@@ -89,8 +89,12 @@ export interface BotActions {
 
 export type BuildTransactionSkipReason = "no_actions" | "no_fundable_candidate";
 
-/** Why the turn carries no match: an empty book, or no fill the balances pay that returns its cost. */
-export type BotMatchReason = "matched" | "no_market_orders" | "no_match";
+/**
+ * Why the turn carries no match: an empty book, no fill on it that returns its cost at any
+ * size, or fills that would but the balances cannot pay, which is the inventory an operator
+ * may want to top up.
+ */
+export type BotMatchReason = "matched" | "no_market_orders" | "no_gain" | "unfunded_gain";
 
 /** One action core the completion walk tries; the match and the collections ride on every one. */
 export type Core =
@@ -141,6 +145,8 @@ export interface BotDecision {
     matchedOrderOutPoints?: Array<{ txHash: ccc.Hex; index: string }>;
     /** Matchable order directions on the book, each probed at every step. */
     candidates: number;
+    /** Directions whose fill returns its cost at full size, whether or not the balances pay it. */
+    gains: number;
     /** The mining fee of one fill; a fill is taken only above ten of them. */
     fee: bigint;
     /** The shuffle seed of the turn's match. */

@@ -57,7 +57,11 @@ describe("buildTransaction matching", () => {
       state(CKB_RESERVE + ask),
     );
 
-    expect(short.decision.match).toMatchObject({ reason: "no_match", candidates: 1 });
+    expect(short.decision.match).toMatchObject({
+      reason: "unfunded_gain",
+      candidates: 1,
+      gains: 1,
+    });
     expect(enough.decision.match).toMatchObject({ reason: "matched", partialCount: 1 });
   });
 
@@ -125,23 +129,44 @@ describe("buildTransaction matching", () => {
     });
   });
 
-  it("reports no_match when the balances pay no fill", async () => {
-    const buyer = marketOrder({
-      byte: "31",
-      ckb: ccc.fixedPointFrom(200),
-      udt: 0n,
-      ratio: { ckbScale: 1n, udtScale: 2n },
-    });
+  it("tells a book that gains but the balances cannot pay from one that never gains", async () => {
+    const buyer = (ratio: {
+      ckbScale: bigint;
+      udtScale: bigint;
+    }): ReturnType<typeof marketOrder> =>
+      marketOrder({ byte: "31", ckb: ccc.fixedPointFrom(200), udt: 0n, ratio });
 
-    const result = await buildTransaction(
-      botRuntime(),
-      botState({ marketOrders: [buyer], ckb: CKB_RESERVE, ickb: 0n }),
-    );
-
-    expect(result).toMatchObject({
+    // A buyer paying two CKB per iCKB gains; the bot holds no iCKB to serve it.
+    await expect(
+      buildTransaction(
+        botRuntime(),
+        botState({
+          marketOrders: [buyer({ ckbScale: 1n, udtScale: 2n })],
+          ckb: CKB_RESERVE,
+          ickb: 0n,
+        }),
+      ),
+    ).resolves.toMatchObject({
       kind: "skipped",
       reason: "no_actions",
-      decision: { match: { reason: "no_match", partialCount: 0, candidates: 1 } },
+      decision: {
+        match: { reason: "unfunded_gain", partialCount: 0, candidates: 1, gains: 1 },
+      },
+    });
+    // A buyer at par never returns the cost of a fill, whatever the bot holds.
+    await expect(
+      buildTransaction(
+        botRuntime(),
+        botState({
+          marketOrders: [buyer({ ckbScale: 1n, udtScale: 1n })],
+          ckb: CKB_RESERVE,
+          ickb: ccc.fixedPointFrom(1000),
+        }),
+      ),
+    ).resolves.toMatchObject({
+      decision: {
+        match: { reason: "no_gain", partialCount: 0, candidates: 1, gains: 0 },
+      },
     });
   });
 

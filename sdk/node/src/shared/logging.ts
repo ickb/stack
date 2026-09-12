@@ -10,11 +10,13 @@ export interface JsonLogRecord {
   [key: string]: JsonLogValue;
 }
 
-/** Writes an execution log with its elapsed time as one JSON line. */
-export function logExecution(executionLog: object, startTime: Date): void {
+/** Writes one turn as one JSON line, `type` and `timestamp` first like the bot's events. */
+export function logExecution(type: string, executionLog: object, startTime: Date): void {
   writeJsonLine({
+    type,
+    timestamp: startTime.toISOString(),
     ...executionLog,
-    ElapsedSeconds: Math.round((Date.now() - startTime.getTime()) / 1000),
+    elapsedMs: Date.now() - startTime.getTime(),
   });
 }
 

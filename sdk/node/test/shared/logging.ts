@@ -60,21 +60,26 @@ describe("toJsonLogRecord", () => {
 });
 
 describe("JSON line logging", () => {
-  it("logs one JSON entry with elapsed seconds", () => {
+  it("logs one JSON entry with the type and timestamp envelope and its elapsed time", () => {
     vi.spyOn(Date, "now").mockReturnValue(2500);
 
     const line = writtenLine(() => {
       logExecution(
+        "stimulus.turn",
         { amount: 9007199254740993n, txHash: byte32FromByte("44") },
         new Date(1000),
       );
     });
 
     expect(line).toEqual({
+      type: "stimulus.turn",
+      timestamp: "1970-01-01T00:00:01.000Z",
       amount: "9007199254740993",
       txHash: byte32FromByte("44"),
-      ElapsedSeconds: 2,
+      elapsedMs: 1500,
     });
+    // The envelope comes first, so a reader sees the type before the payload.
+    expect(Object.keys(line)[0]).toBe("type");
   });
 
   it("serializes bigints, dates, nullish values, and functions as JSON does", () => {

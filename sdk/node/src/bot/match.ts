@@ -11,6 +11,8 @@ import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
 export interface TurnMatch extends Match {
   /** Matchable order directions on the book, each probed at every step. */
   candidates: number;
+  /** Directions whose fill returns its cost at full size, whether or not the balances pay it. */
+  gains: number;
   /** The mining fee of one fill; a fill is taken only above ten of them. */
   fee: bigint;
   /** The shuffle seed, so the choice among equal fills can be replayed. */
@@ -66,6 +68,9 @@ export function matchTurn({
     udtDelta: 0n,
     partials: [],
     candidates: matchers.length,
+    gains: matchers.filter(
+      (matcher) => netOf(matcher.match(matcher.bMaxMatch), cost, exchangeRatio) > 0n,
+    ).length,
     fee,
     seed,
   };
@@ -99,7 +104,7 @@ function bestFill(
       continue;
     }
     const fill = matcher.match(minBigInt(allowance, matcher.bMaxMatch));
-    const net = fill.ckbDelta * ckbScale + fill.udtDelta * udtScale - cost;
+    const net = netOf(fill, cost, { ckbScale, udtScale });
     const paid = matcher.isCkb2Udt
       ? -fill.udtDelta * udtScale
       : -fill.ckbDelta * ckbScale;
@@ -108,6 +113,11 @@ function bestFill(
     }
   }
   return best;
+}
+
+/** A fill's exchange value at the DAO ratio, net of the cost of taking it. */
+function netOf(fill: Match, cost: bigint, { ckbScale, udtScale }: ExchangeRatio): bigint {
+  return fill.ckbDelta * ckbScale + fill.udtDelta * udtScale - cost;
 }
 
 /** The low bits of the tip hash: a seed that changes every block and is logged with the turn. */

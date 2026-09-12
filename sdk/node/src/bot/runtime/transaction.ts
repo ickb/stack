@@ -9,7 +9,6 @@ import {
   type IckbDepositCell,
   receiptPhase2Capacity,
 } from "../../../../src/core/index.ts";
-import type { Match } from "../../../../src/order/index.ts";
 
 import { matchTurn, seedOf, type TurnMatch } from "../match.ts";
 import { planRebalance, type RebalancePlan } from "../policy.ts";
@@ -42,11 +41,14 @@ interface MatchOutcome {
  * marker cells draw on it, and nothing checks the completed transaction against it, since
  * such a check rejected every fill sized to the reserve (decisions amendment 52(i)).
  */
-function matchReason(match: Match, state: BotState): BotMatchReason {
+function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  return state.marketOrders.length === 0 ? "no_market_orders" : "no_match";
+  if (state.marketOrders.length === 0) {
+    return "no_market_orders";
+  }
+  return match.gains > 0 ? "unfunded_gain" : "no_gain";
 }
 
 export async function buildTransaction(
@@ -241,6 +243,7 @@ function buildDecision({
         ? {}
         : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
       candidates: match.candidates,
+      gains: match.gains,
       fee: match.fee,
       seed: match.seed,
     },

@@ -49,10 +49,14 @@ export type Skip =
 export type Action =
   { order: { outputs: [number, number] } } | { conversion: ConversionMetadata };
 
-/** The one JSON record a turn writes; fields fill in as the turn advances. */
+/**
+ * The one JSON record a turn writes; fields fill in as the turn advances, and the logger
+ * adds the `type` and `timestamp` envelope shared with the bot's events.
+ */
 export interface StimulusLog {
+  type?: "stimulus.turn";
+  timestamp?: string;
   identity?: StimulusIdentity;
-  startTime?: string;
   balance?: {
     CKB: { plain: string; budget: string; reserve: string };
     ICKB: { budget: string };
@@ -92,7 +96,7 @@ export async function runStimulusTurn({
   random: () => number;
 }): Promise<void> {
   const startTime = new Date();
-  const log: StimulusLog = { identity, startTime: startTime.toISOString() };
+  const log: StimulusLog = { identity };
   try {
     await stimulate(runtime, override, random, (fields) => {
       Object.assign(log, fields);
@@ -102,7 +106,7 @@ export async function runStimulusTurn({
     log.error = error;
     process.exitCode = 1;
   }
-  logExecution(log, startTime);
+  logExecution("stimulus.turn", log, startTime);
 }
 
 async function stimulate(
