@@ -1,78 +1,82 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { elementProps } from "../support/react.ts";
-import { walletConfig, walletConfigGateProps, walletSigner } from "./fixtures/data.ts";
-import {
-  queryMock,
-  resetHooks,
-  walletConfigQueryOptions,
-} from "./fixtures/environment.ts";
+import { walletConfigGateProps, walletSigner } from "./fixtures/data.ts";
+import { hookState } from "./fixtures/environment.ts";
 import { App, WalletConfigGate, WalletConfigPendingView } from "./fixtures/modules.ts";
 
-describe("hook-based wallet config gate", () => {
-  it("builds wallet config query state and renders loading, error, and success branches", async () => {
-    const signer = walletSigner(false);
-    queryMock.result = { data: undefined, error: null, isPending: true };
-    expect(WalletConfigGate(walletConfigGateProps(signer)).type).toBe(
-      WalletConfigPendingView,
-    );
-    signer.replaceCallback?.();
-    const firstConfig = await walletConfigQueryOptions().queryFn();
+/** Lets the gate's read settle: the mocked effect starts it synchronously on render. */
+async function settled(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
 
+/** Re-renders the gate with the same props, as React does after a state write. */
+function rerender(
+  props: Parameters<typeof WalletConfigGate>[0],
+): ReturnType<typeof WalletConfigGate> {
+  hookState.index = 0;
+  hookState.effects = [];
+  return WalletConfigGate(props);
+}
+
+describe("hook-based wallet config gate", () => {
+  it("reads the signer once, connecting first when needed, then renders the app", async () => {
+    const signer = walletSigner(false);
+    const props = walletConfigGateProps(signer);
+
+    expect(WalletConfigGate(props).type).toBe(WalletConfigPendingView);
+    await settled();
+    const app = rerender(props);
+
+    expect(app.type).toBe(App);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).toHaveBeenCalledTimes(1);
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.connect).toHaveBeenCalledWith();
-    expect(firstConfig.address).toBe("ckt1recommended");
-    expect(firstConfig.accountLocks).toHaveLength(2);
-    expect(firstConfig.cccClient).toBe(signer.client);
-
-    resetHooks();
-    const connectedSigner = walletSigner(true);
-    queryMock.result = { data: undefined, error: new Error("denied"), isPending: false };
-    expect(WalletConfigGate(walletConfigGateProps(connectedSigner)).type).toBe(
-      WalletConfigPendingView,
-    );
-    await walletConfigQueryOptions().queryFn();
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(connectedSigner.connect).not.toHaveBeenCalled();
-
-    resetHooks();
-    queryMock.result = { data: walletConfig(), error: null, isPending: false };
-    expect(WalletConfigGate(walletConfigGateProps(walletSigner(true))).type).toBe(App);
+    const { walletConfig } = elementProps<Parameters<typeof App>[0]>(app);
+    expect(walletConfig.address).toBe("ckt1recommended");
+    expect(walletConfig.accountLocks).toHaveLength(2);
+    expect(walletConfig.cccClient).toBe(signer.client);
   });
 
-  it("retries the exact failed query for the same signer and reaches success", () => {
+  it("shows the read's error with a retry that reads again, and skips connect when connected", async () => {
     const signer = walletSigner(true);
+    signer.getRecommendedAddressObj.mockRejectedValueOnce(new Error("denied"));
     const props = walletConfigGateProps(signer);
-    const refetch = vi.fn(async () => {
-      await Promise.resolve();
-    });
-    queryMock.result = {
-      data: undefined,
-      error: new Error("denied"),
-      isPending: false,
-      refetch,
-    };
-    const failed = WalletConfigGate(props);
-    const failedKey = walletConfigQueryOptions().queryKey;
-    const { retry: retryWalletData } =
+
+    WalletConfigGate(props);
+    await settled();
+    const failed = rerender(props);
+    expect(failed.type).toBe(WalletConfigPendingView);
+    const { error, retry } =
       elementProps<Parameters<typeof WalletConfigPendingView>[0]>(failed);
+    expect(error).toEqual(new Error("denied"));
 
-    retryWalletData?.();
+    retry?.();
+    expect(rerender(props).type).toBe(WalletConfigPendingView);
+    await settled();
+    expect(rerender(props).type).toBe(App);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
+    expect(signer.connect).not.toHaveBeenCalled();
+  });
 
-    expect(refetch).toHaveBeenCalledTimes(1);
-    expect(walletConfigQueryOptions().retry).toBe(false);
+  it("drops a read that lands after the signer changed", async () => {
+    const first = walletSigner(true);
+    const second = walletSigner(true);
+    const props = walletConfigGateProps(first);
 
-    resetHooks();
-    queryMock.result = {
-      data: walletConfig(),
-      error: null,
-      isPending: false,
-      refetch,
-    };
-    const succeeded = WalletConfigGate(props);
-
-    expect(walletConfigQueryOptions().queryKey).toEqual(failedKey);
-    expect(succeeded.type).toBe(App);
+    WalletConfigGate(props);
+    for (const effect of hookState.effects) {
+      effect();
+    }
+    await settled();
+    hookState.index = 0;
+    hookState.effects = [];
+    expect(WalletConfigGate({ ...props, signer: second }).type).toBe(
+      WalletConfigPendingView,
+    );
+    await settled();
+    const app = rerender({ ...props, signer: second });
+    expect(app.type).toBe(App);
+    expect(elementProps<Parameters<typeof App>[0]>(app).walletConfig.signer).toBe(second);
   });
 });

@@ -8,7 +8,7 @@ import type {
   transact as transactType,
 } from "../../../src/action/actionTransaction.ts";
 import type { QuoteState } from "../../../src/query/queries.ts";
-import type { TxInfo, WalletConfig } from "../../../src/shared/utils.ts";
+import type { TxInfo } from "../../../src/shared/utils.ts";
 
 interface HookState {
   effects: Array<() => void>;
@@ -210,19 +210,6 @@ export function resetHooks(): void {
   hookState.index = 0;
   hookState.nextRefCurrent = undefined;
   hookState.states = [];
-}
-
-export function walletConfigQueryOptions(): {
-  queryKey: readonly unknown[];
-  retry: false;
-  queryFn: () => Promise<WalletConfig>;
-} {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Query mock options are captured from the production hook call.
-  return queryMock.options as {
-    queryKey: readonly unknown[];
-    retry: false;
-    queryFn: () => Promise<WalletConfig>;
-  };
 }
 
 export function quoteStateOptions(): {

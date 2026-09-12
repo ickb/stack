@@ -123,12 +123,12 @@ export function walletConfigGateProps(
 
 export function walletSigner(isConnected: boolean): ccc.Signer & {
   connect: ReturnType<typeof vi.fn>;
-  replaceCallback?: () => void;
+  getRecommendedAddressObj: ReturnType<typeof vi.fn>;
 } {
   const recommendedScript = script("11");
   const alternateScript = script("22");
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Wallet config tests need a signer double with just the methods used by WalletConfigGate.
-  const signer = {
+  return {
     client: new StubClient({ addressPrefix: "ckt" }),
     type: ccc.SignerType.CKB,
     connect: vi.fn(async () => {
@@ -153,15 +153,10 @@ export function walletSigner(isConnected: boolean): ccc.Signer & {
       await Promise.resolve();
       return isConnected;
     }),
-    onReplaced: vi.fn((callback: () => void) => {
-      signer.replaceCallback = callback;
-      return (): void => undefined;
-    }),
   } as unknown as ccc.Signer & {
     connect: ReturnType<typeof vi.fn>;
-    replaceCallback?: () => void;
+    getRecommendedAddressObj: ReturnType<typeof vi.fn>;
   };
-  return signer;
 }
 
 export function quoteStateQuery(value: unknown): ReturnType<typeof useQuoteState> {

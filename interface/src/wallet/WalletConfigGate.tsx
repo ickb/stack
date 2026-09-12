@@ -1,15 +1,26 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { signerAccountLocks } from "@ickb/sdk";
 
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type JSX } from "react";
 import App from "../app/App.tsx";
 import type { QuoteState } from "../query/queries.ts";
-import { walletConfigQueryKey } from "../query/walletConfigQueryKey.ts";
-import type { RootConfig } from "../shared/utils.ts";
+import type { RootConfig, WalletConfig } from "../shared/utils.ts";
 import { WalletConfigPendingView } from "./WalletConfigPendingView.tsx";
 
-/** Builds signer-bound wallet config before rendering the connected wallet app. */
+/** One read of the signer's address and locks, tagged with what it was read for. */
+type WalletConfigRead = Readonly<
+  { rootConfig: RootConfig; signer: ccc.Signer; attempt: number } & (
+    { config: WalletConfig } | { error: unknown }
+  )
+>;
+
+/**
+ * Reads the signer-bound wallet config once per signer, then renders the connected app.
+ *
+ * @remarks The connector hands out a new signer when the wallet switches account, and
+ * nothing else changes the address, so the signer is the only freshness boundary; a
+ * background refetch would only remount the app under the user (decisions amendment 52).
+ */
 export default function WalletConfigGate({
   rootConfig,
   signer,
@@ -27,73 +38,78 @@ export default function WalletConfigGate({
   setRawText: (value: string) => void;
   quoteState?: QuoteState;
 }>): JSX.Element {
-  const [signerVersion, setSignerVersion] = useState(0);
-  // Signer replacement is the freshness boundary for a stable signer object.
-  useEffect(
-    () =>
-      signer.onReplaced(() => {
-        setSignerVersion((version) => version + 1);
-      }),
-    [signer],
-  );
-  const {
-    isPending,
-    error,
-    data: walletConfig,
-    refetch,
-  } = useQuery({
-    queryKey: walletConfigQueryKey(rootConfig, signer, signerVersion),
-    retry: false,
-    queryFn: async () => {
-      if (!(await signer.isConnected())) {
-        await signer.connect();
+  const [attempt, setAttempt] = useState(0);
+  const [read, setRead] = useState<WalletConfigRead>();
+  useEffect(() => {
+    const cancelled = new AbortController();
+    const readOnce = async (): Promise<WalletConfigRead> => {
+      try {
+        return {
+          rootConfig,
+          signer,
+          attempt,
+          config: await readWalletConfig(rootConfig, signer),
+        };
+      } catch (error: unknown) {
+        return { rootConfig, signer, attempt, error };
       }
+    };
+    void (async (): Promise<void> => {
+      const result = await readOnce();
+      if (!cancelled.signal.aborted) {
+        setRead(result);
+      }
+    })();
+    return (): void => {
+      cancelled.abort();
+    };
+  }, [rootConfig, signer, attempt]);
 
-      const recommendedAddressObj = await signer.getRecommendedAddressObj();
-      const recommendedLock = ccc.Script.from(recommendedAddressObj.script);
-      const accountLocks = await signerAccountLocks(signer, recommendedLock);
-
-      return {
-        ...rootConfig,
-        cccClient: signer.client,
-        signer,
-        address: recommendedAddressObj.toString(),
-        accountLocks,
-        primaryLock: recommendedLock,
-      };
-    },
-  });
-
-  if (isPending) {
+  if (
+    read?.rootConfig !== rootConfig ||
+    read.signer !== signer ||
+    read.attempt !== attempt
+  ) {
     return (
       <WalletConfigPendingView
         {...{ rootConfig, walletName, openWallet, rawText, setRawText, quoteState }}
       />
     );
   }
-
-  if (error !== null) {
+  if ("error" in read) {
     return (
       <WalletConfigPendingView
         {...{ rootConfig, walletName, openWallet, rawText, setRawText, quoteState }}
-        error={error}
+        error={read.error}
         retry={() => {
-          void refetch();
+          setAttempt((count) => count + 1);
         }}
       />
     );
   }
-
   return (
     <App
-      {...{
-        walletConfig,
-        walletName,
-        openWallet,
-        rawText,
-        setRawText,
-        quoteState,
-      }}
+      {...{ walletName, openWallet, rawText, setRawText, quoteState }}
+      walletConfig={read.config}
     />
   );
+}
+
+async function readWalletConfig(
+  rootConfig: RootConfig,
+  signer: ccc.Signer,
+): Promise<WalletConfig> {
+  if (!(await signer.isConnected())) {
+    await signer.connect();
+  }
+  const recommendedAddressObj = await signer.getRecommendedAddressObj();
+  const primaryLock = ccc.Script.from(recommendedAddressObj.script);
+  return {
+    ...rootConfig,
+    cccClient: signer.client,
+    signer,
+    address: recommendedAddressObj.toString(),
+    accountLocks: await signerAccountLocks(signer, primaryLock),
+    primaryLock,
+  };
 }
