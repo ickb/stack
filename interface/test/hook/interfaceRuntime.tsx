@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { ReactElement } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
 import {
   quoteStateQuery,
@@ -61,21 +61,21 @@ describe("hook-based interface runtime", () => {
   });
 
   it("exposes interface config and wallet gate state helpers", async () => {
-    const setClient = vi.fn<(client: unknown) => unknown>();
-    const root = createRootConfig("testnet", testnetClient, setClient);
+    const client = new ccc.ClientPublicTestnet({
+      url: "https://testnet.ckb.dev/",
+      fallbacks: [],
+    });
+    const cache = client.cache;
+    const root = createRootConfig("testnet", client);
     const ckbSigner = signerInfo(ccc.SignerType.CKB, "ckt");
     const btcSigner = signerInfo(ccc.SignerType.BTC, "ckt");
 
-    expect(root).toMatchObject({
-      chain: "testnet",
-      cccClient: testnetClient,
-      queryClient,
-    });
-    // A reset hands the connector a fresh client of the same chain, never the shared one.
+    expect(root).toMatchObject({ chain: "testnet", cccClient: client, queryClient });
+    // A reset swaps the cache on the same client: no new client, so nothing keyed on it remounts.
     root.resetClient();
-    expect(setClient).toHaveBeenCalledTimes(1);
-    expect(setClient.mock.calls[0]?.[0]).toBeInstanceOf(ccc.ClientPublicTestnet);
-    expect(setClient.mock.calls[0]?.[0]).not.toBe(testnetClient);
+    expect(root.cccClient).toBe(client);
+    expect(client.cache).toBeInstanceOf(ccc.ClientCacheMemory);
+    expect(client.cache).not.toBe(cache);
     expect(connectorStyle["--background"]).toBe("oklch(21% 0.006 286)");
     await expect(ckbSignerOnly(signerFilterInfo(ckbSigner))).resolves.toBe(true);
     await expect(ckbSignerOnly(signerFilterInfo(btcSigner))).resolves.toBe(false);

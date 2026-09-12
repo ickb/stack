@@ -7,10 +7,7 @@ import WalletConfigGate from "../../src/wallet/WalletConfigGate.tsx";
 
 export function WalletGate(): JSX.Element {
   const [rootConfig] = useState<RootConfig>(() =>
-    // The harness owns one private-key signer over one client; a reset has nothing to swap.
-    createRootConfig("testnet", testnetClient, (): void => {
-      // no other client exists
-    }),
+    createRootConfig("testnet", testnetClient),
   );
   const [signer, setSigner] = useState<ccc.Signer>();
   const [rawText, setRawText] = useState("C");

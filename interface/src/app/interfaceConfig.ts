@@ -36,15 +36,15 @@ const sdks = {
 export function createRootConfig(
   chain: RootConfig["chain"],
   cccClient: ccc.Client,
-  // The connector's setter returns unknown; the reset discards it.
-  setClient: (client: ccc.Client) => unknown,
 ): RootConfig {
   return {
     chain,
     queryClient,
     cccClient,
     resetClient: (): void => {
-      setClient(createClient(chain));
+      // The connector hands out a fee-rate proxy whose writes forward to the wrapped client.
+      // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
+      cccClient.cache = new ccc.ClientCacheMemory();
     },
     sdk: sdks[chain],
   };

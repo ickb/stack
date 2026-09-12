@@ -11,9 +11,10 @@ export interface RootConfig {
   cccClient: ccc.Client;
 
   /**
-   * Replaces the app-owned client with a fresh one. CCC's cache clear keeps stale block
-   * headers, so after any transaction error the interface starts over from a new client;
-   * the pending hash and the session mutex are untouched (decisions amendment 52).
+   * Replaces the client's cache in place. CCC's cache clear keeps stale block headers, so
+   * after any transaction error the interface starts over from an empty cache; the client
+   * keeps its identity, so nothing remounts and the pending hash, the failure message and
+   * the frozen preview survive (decisions amendment 52).
    */
   resetClient: () => void;
 
