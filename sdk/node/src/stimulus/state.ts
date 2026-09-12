@@ -26,7 +26,7 @@ export interface StimulusState {
   account: AccountState;
   /** Conversion context over the collectable orders only; live orders stay on the book. */
   context: ConversionTransactionContext;
-  /** Fulfilled orders plus live orders older than {@link STALE_ORDER_BLOCKS}: melted this turn. */
+  /** Fulfilled orders plus the live ones the bot will not take (see {@link staleOrders}): melted this turn. */
   collectable: OrderGroup[];
   orders: { live: number; fulfilled: number; stale: number };
   budgets: Budgets;
@@ -48,7 +48,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   );
   const fulfilled = user.orders.filter((group) => group.order.isFulfilled());
   const live = user.orders.filter((group) => group.order.isMatchable());
-  const stale = await staleOrders(runtime.client, live, system.tip.number);
+  const stale = await staleOrders(runtime.client, live, system);
   const collectable = [...fulfilled, ...stale];
   const { context } = projectConversionTransactionContext(system, account, {
     available: collectable,
@@ -70,17 +70,28 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   };
 }
 
+/**
+ * Live orders the bot will not take: a buy priced at or under the DAO ratio, which the
+ * ratio's growth only pushes further under, and any order older than
+ * {@link STALE_ORDER_BLOCKS}. A sell is never under par, since the same growth only
+ * raises what the bot earns on it (decisions amendment 52).
+ */
 async function staleOrders(
   client: ccc.Client,
   live: OrderGroup[],
-  tipNumber: bigint,
+  { exchangeRatio, tip }: SystemState,
 ): Promise<OrderGroup[]> {
   const stale: OrderGroup[] = [];
   for (const group of live) {
+    const { info } = group.order.data;
+    if (info.isCkb2Udt() && info.ckbToUdt.compare(exchangeRatio) >= 0) {
+      stale.push(group);
+      continue;
+    }
     const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
     // An origin without a block is not yet committed, so it is as fresh as an order gets.
-    const mintedAt = origin?.blockNumber ?? tipNumber;
-    if (mintedAt + STALE_ORDER_BLOCKS <= tipNumber) {
+    const mintedAt = origin?.blockNumber ?? tip.number;
+    if (mintedAt + STALE_ORDER_BLOCKS <= tip.number) {
       stale.push(group);
     }
   }

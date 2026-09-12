@@ -33,7 +33,7 @@ describe("drawTurn", () => {
   it("weights the direction by the CKB value of each side and the kind three to one", () => {
     // Direction: 0.3 of the total lands on the CKB side; then the amount bucket, the kind,
     // and the fee, each drawn from the rest of its choices before the first takes the remainder.
-    expect(drawTurn(budgets, {}, sequence([0.3, 0.9, 0.5, 0.3]))).toEqual({
+    expect(drawTurn(budgets, {}, sequence([0.3, 0.9, 0.5, 0.5]))).toEqual({
       kind: "order",
       direction: "ckb-to-ickb",
       amount: 1n,
@@ -76,7 +76,11 @@ describe("drawTurn", () => {
 
   it("falls back to the first weighted choice when the point exhausts the rest", () => {
     expect(
-      drawTurn(budgets, { direction: "ckb-to-ickb", amount: 1n }, sequence([1])),
+      drawTurn(budgets, { direction: "ickb-to-ckb", amount: 1n }, sequence([1])),
     ).toMatchObject({ kind: "order", fee: 0n });
+    // A buy never draws the zero fee: its first choice is the interface default.
+    expect(
+      drawTurn(budgets, { direction: "ckb-to-ickb", amount: 1n }, sequence([1])),
+    ).toMatchObject({ kind: "order", fee: 1n });
   });
 });

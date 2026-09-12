@@ -13,6 +13,7 @@ import { OrderCell, type OrderGroup, Ratio } from "../../../../src/order/index.t
 import { MasterCell } from "../../../../src/order/model/cells.ts";
 import { OrderData } from "../../../../src/order/model/order_data.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import type { ExchangeRatio } from "../../../../src/utils/index.ts";
 import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
 
 export const CKB = ccc.fixedPointFrom(1);
@@ -122,13 +123,16 @@ export function runtime({
   };
 }
 
+const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };
+
 /**
  * A resolver-produced order group under the testnet order scripts, so the real SDK melts
- * it; matchable orders carry 100 CKB.
+ * it; matchable orders carry 100 CKB and, by default, a buy price well above par.
  */
 export async function order(
   txHashByte: string,
   isMatchable: boolean,
+  ckbToUdt: ExchangeRatio = TWO_CKB_PER_UDT,
 ): Promise<OrderGroup> {
   const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
   const manager = getConfig("testnet").managers.order;
@@ -143,7 +147,7 @@ export async function order(
     udtValue: 0n,
     master: { type: "relative", value: { distance: 1n, padding: new Uint8Array(32) } },
     info: {
-      ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 2n }),
+      ckbToUdt: Ratio.from(ckbToUdt),
       udtToCkb: Ratio.empty(),
       ckbMinMatchLog: 0,
     },

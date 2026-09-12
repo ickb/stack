@@ -21,13 +21,15 @@ describe("readStimulusState", () => {
     const fresh = await order("a2", true);
     const stale = await order("a3", true);
     const uncommitted = await order("a4", true);
+    // A buy at par: the bot gains nothing on it and the ratio only grows past it.
+    const underPar = await order("a5", true, system.exchangeRatio);
     const tipNumber = system.tip.number;
 
     const state = await readStimulusState(
       runtime({
         system,
         account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
-        orders: [fulfilled, fresh, stale, uncommitted],
+        orders: [fulfilled, fresh, stale, uncommitted, underPar],
         originBlocks: new Map<ccc.Hex, bigint | undefined>([
           [fresh.origin.cell.outPoint.txHash, tipNumber - STALE_ORDER_BLOCKS + 1n],
           [stale.origin.cell.outPoint.txHash, tipNumber - STALE_ORDER_BLOCKS],
@@ -36,15 +38,15 @@ describe("readStimulusState", () => {
       }),
     );
 
-    expect(state.collectable).toEqual([fulfilled, stale]);
-    expect(state.orders).toEqual({ live: 3, fulfilled: 1, stale: 1 });
+    expect(state.collectable).toEqual([fulfilled, stale, underPar]);
+    expect(state.orders).toEqual({ live: 4, fulfilled: 1, stale: 2 });
     expect(state.plainCkb).toBe(1500n * CKB);
     // Plain CKB plus the two collectable groups' cells, minus the reserve; live groups
     // count only toward the total.
     expect(state.budgets.ckb).toBe(
-      1500n * CKB + fulfilled.ckbValue + stale.ckbValue - CKB_RESERVE,
+      1500n * CKB + fulfilled.ckbValue + stale.ckbValue + underPar.ckbValue - CKB_RESERVE,
     );
-    expect(state.context.availableOrders).toEqual([fulfilled, stale]);
+    expect(state.context.availableOrders).toEqual([fulfilled, stale, underPar]);
   });
 
   it("clamps the CKB budget at zero", async () => {

@@ -33,12 +33,13 @@ const CKB = ccc.fixedPointFrom(1);
 const ORDER_WEIGHT = 3;
 // Zero pays nothing, one is the interface default, ten is generous; no fixed set lands on
 // both sides of the bot's fee check for every transaction size, so `STIMULUS_FEE` is the
-// lever when a reason never shows (decisions amendment 48).
-const FEE_CHOICES: Choices<bigint> = [
-  { value: 0n, weight: 1 },
+// lever when a reason never shows (decisions amendment 48). A buy at zero fee is never
+// taken, since the DAO ratio only grows past it, so buys draw from the positive fees.
+const POSITIVE_FEE_CHOICES: Choices<bigint> = [
   { value: 1n, weight: 2 },
   { value: 10n, weight: 1 },
 ];
+const FEE_CHOICES: Choices<bigint> = [{ value: 0n, weight: 1 }, ...POSITIVE_FEE_CHOICES];
 // One draw in eight is the smallest positive amount and one in eight the whole budget;
 // the rest spread evenly across the decades from one CKB up, so dust, mid, and
 // whole-balance stimulus all recur without one crowding out the others.
@@ -79,7 +80,12 @@ export function drawTurn(
   if (kind === "conversion") {
     return { kind, direction, amount };
   }
-  const fee = override.fee ?? pickWeighted(FEE_CHOICES, random);
+  const fee =
+    override.fee ??
+    pickWeighted(
+      direction === "ckb-to-ickb" ? POSITIVE_FEE_CHOICES : FEE_CHOICES,
+      random,
+    );
   return { kind, direction, amount, fee };
 }
 

@@ -81,7 +81,7 @@ The generator is the bot's testnet counterpart: each turn it draws one random ac
 Each turn reads the account, then:
 
 1. draws a kind (`order` three times in four, otherwise `conversion`), a direction weighted by the CKB value spendable on each side, an amount, and for an order a fee numerator from `{0, 1, 10}` over `100000` with `1` twice as likely; the amount is the smallest positive one in one draw out of eight, the whole budget in another, and otherwise spread evenly across the decades from one CKB up, so dust, mid-size, and whole-balance stimulus all recur;
-2. mints the order on a transaction that also collects the account's fulfilled orders and cancels live orders older than thirty days (the bot has had every chance by then), or asks the SDK for the conversion with the same collections in its context; with five hundred own orders live it stops minting (testnet hygiene, not safety) and only collects;
+2. mints the order on a transaction that also collects the account's fulfilled orders and cancels live orders the bot will not take: buys priced at or under the DAO ratio, which only grows past them, and any order older than thirty days (the bot has had every chance by then), or asks the SDK for the conversion with the same collections in its context; with five hundred own orders live it stops minting (testnet hygiene, not safety) and only collects;
 3. skips a transaction that the completer cannot fund, or whose amount the order format cannot represent; whenever the drawn action is refused and there is anything to collect (fulfilled or stale orders, receipts, ready withdrawals), it sends the collection alone instead;
 4. signs, sends, waits up to ten minutes, and exits `0` on commit or skip and `1` on any failure.
 
