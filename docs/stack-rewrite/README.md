@@ -37,7 +37,7 @@ These are the rewrite's fund-safety requirements. Implementation proceeds only w
 - Derive the transaction hash locally and use it as the confirmation identity whatever the node returns.
 - Reject connector-returned changes to ordered inputs, outputs, or output data before fee inspection or broadcast.
 - Keep the fee ceiling on every signing path.
-- Keep the one acceptance check on the completed transaction (matches and deposits leave the reserve in plain CKB, withdrawal requests leave fee headroom), the match-gain-beats-fee rule, and the consensus output limits (amendment 52).
+- Keep the reserve as a sizing line for matches and deposits (no check on the completed transaction, amendment 52(i)), the match-gain-beats-fee rule, and the consensus output limits (amendment 52).
 - Treat ambiguous broadcast results as unresolved for one bounded observation window, then let the next turn rebuild from committed state rather than replaying persisted bytes.
 - Keep the chain identity check ahead of signing; dependency identity is enforced by `data1` code-hash pinning at the node (amendment 52).
 - Read every cell through uncached exact-lock scans with client-side classification, complete and uncapped, without anchors, scan limits, or connector-specific signer attestation (amendment 52).

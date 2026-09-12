@@ -52,7 +52,7 @@ node sdk/node/src/bot.ts >> log/bot/events.ndjson
 node sdk/node/src/stimulus.ts
 ```
 
-Each turn identifies itself first: the bot's `bot.chain.preflight` event and the generator's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn stops before acting: the bot with `bot.decision.skipped` reason `capital_below_minimum` and its `deficit`, the generator with outcome `hold`, both with exit code `2`; the turn's balances are in `bot.state.read` and the generator's `balance`.
+Each turn identifies itself first: the bot's `bot.chain.preflight` event and the generator's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn skips: the bot with `bot.decision.skipped` reason `no_actions`, the generator with outcome `skipped` and reason `nothing-to-spend`, both with exit code `0`, turn after turn until funded; the turn's balances are in `bot.state.read` and the generator's `balance`.
 
 To exercise the bot, run the generator once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `sdk/node/README.md`.
 

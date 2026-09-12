@@ -106,11 +106,10 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
 }
 
 /**
- * Deposit first, then every withdrawal chain: the greedy fit from the oldest candidate,
- * longest prefix first, then the same rebuilt without the oldest, and so on; `none` last so
- * collections and the match still send when no rebalance can be funded.
+ * The cores to try in order: deposit first, then every withdrawal chain (the greedy fit from
+ * the oldest candidate, longest prefix first, then the same rebuilt without the oldest), then
+ * `none`, a candidate only when a match or a collection rides on it.
  */
-/** The cores to try in order; an empty core is a candidate only when a match or a collection rides on it. */
 function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
   const cores: Core[] = [];
   if (plan.deposit !== undefined) {
