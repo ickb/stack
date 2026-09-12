@@ -164,7 +164,7 @@ describe("buildConversionTransaction fundable walk", () => {
 describe("completeFirstFundable", () => {
   const tx = ccc.Transaction.default();
 
-  it("skips unrepresentable candidates, advances past policy rejections, and keeps the last error", async () => {
+  it("skips unrepresentable candidates, advances past fundability failures, and keeps the last error", async () => {
     const attempts: number[] = [];
     const complete = async (candidate: ccc.Transaction): Promise<ccc.Transaction> => {
       await Promise.resolve();
@@ -174,25 +174,17 @@ describe("completeFirstFundable", () => {
       return candidate;
     };
 
-    const accepted = await completeFirstFundable(
-      [3, 2, 1, 0],
+    const funded = await completeFirstFundable(
+      [3, 2, 1],
       (count) => {
         attempts.push(count);
         return count === 2 ? undefined : transactionWithOutputs(count, script("11"));
       },
       complete,
-      (_, count) => count === 0,
-    );
-    const rejected = await completeFirstFundable(
-      [1],
-      () => tx,
-      complete,
-      () => false,
     );
 
-    expect(attempts).toEqual([3, 2, 1, 0]);
-    expect(accepted).toMatchObject({ candidate: 0 });
-    expect(rejected).toBeUndefined();
+    expect(attempts).toEqual([3, 2, 1]);
+    expect(funded).toMatchObject({ candidate: 1 });
     await expect(
       completeFirstFundable([3], () => transactionWithOutputs(3, script("11")), complete),
     ).rejects.toMatchObject({ name: "DaoOutputLimitError" });

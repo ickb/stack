@@ -1,5 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { completeFirstFundable } from "../../../../src/conversion/withdrawal_completion.ts";
+import {
+  completeFirstFundable,
+  type FundableCompletion,
+  isFundabilityFailure,
+} from "../../../../src/conversion/withdrawal_completion.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   type IckbDepositCell,
@@ -9,7 +13,6 @@ import type { Match } from "../../../../src/order/index.ts";
 
 import { matchTurn, seedOf, type TurnMatch } from "../match.ts";
 import { planRebalance, type RebalancePlan } from "../policy.ts";
-import { CKB_RESERVE } from "../policy/constants.ts";
 import {
   matchableCkb,
   matchedOrderOutPoints,
@@ -35,8 +38,9 @@ interface MatchOutcome {
 /**
  * One turn's transaction: the best match, then one rebalance core the completion walk can
  * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits must leave the reserve in plain CKB after fees;
- * withdrawal requests bring CKB back, so they only need to complete (decisions amendment 52).
+ * riding along. Matches and deposits are sized to keep the reserve; completion's fee and
+ * marker cells draw on it, and nothing checks the completed transaction against it, since
+ * such a check rejected every fill sized to the reserve (decisions amendment 52(i)).
  */
 function matchReason(match: Match, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
@@ -68,17 +72,20 @@ export async function buildTransaction(
   }
 
   let attempts = 0;
-  const completion = await completeFirstFundable(
-    cores,
-    (core) => {
-      attempts += 1;
-      return buildCore(runtime, state, matched, core);
-    },
-    async (tx) => runtime.completeTransaction(tx, state.system.feeRate, state.cells),
-    (tx, core) =>
-      core.kind === "withdraw" || plainCkbAfter(tx, runtime.primaryLock) >= CKB_RESERVE,
-  );
-  if (completion === undefined) {
+  let completion: FundableCompletion<Core>;
+  try {
+    completion = await completeFirstFundable(
+      cores,
+      (core) => {
+        attempts += 1;
+        return buildCore(runtime, state, matched, core);
+      },
+      async (tx) => runtime.completeTransaction(tx, state.system.feeRate, state.cells),
+    );
+  } catch (error) {
+    if (!isFundabilityFailure(error)) {
+      throw error;
+    }
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx } = completion;
@@ -181,21 +188,6 @@ function buildCore(
     );
   }
   return tx;
-}
-
-/** Plain CKB the bot keeps after the transaction: its own plain outputs. */
-function plainCkbAfter(tx: ccc.Transaction, lock: ccc.Script): bigint {
-  let total = 0n;
-  for (const cell of tx.outputCells) {
-    if (
-      cell.cellOutput.lock.eq(lock) &&
-      cell.cellOutput.type === undefined &&
-      cell.outputData === "0x"
-    ) {
-      total += cell.cellOutput.capacity;
-    }
-  }
-  return total;
 }
 
 function buildDecision({

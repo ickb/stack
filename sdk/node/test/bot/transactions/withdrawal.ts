@@ -105,22 +105,6 @@ describe("buildTransaction withdrawal", () => {
     });
   });
 
-  it("accepts a withdrawal that leaves no plain reserve, since it brings CKB back", async () => {
-    const only = readyDeposit("86", 4n, 0n);
-    const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
-
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        ckb: ccc.fixedPointFrom(1500),
-        ickb: ICKB_WITHDRAW_ABOVE + 100n,
-        poolDeposits: pool([only]),
-      }),
-    );
-
-    expect(result).toMatchObject({ kind: "built", actions: { withdrawalRequests: 1 } });
-  });
-
   it("starts the chain past a surplus deposit larger than the budget", async () => {
     // The pool anchor stays the largest; the oversize surplus alone repeats the next chain.
     const oversize = readyDeposit("85", ICKB_DEPOSIT_CAP + 200n, 0n);

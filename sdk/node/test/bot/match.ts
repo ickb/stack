@@ -102,13 +102,13 @@ describe("matchTurn", () => {
     expect(match).toMatchObject({ ckbDelta: 1500n * CKB, udtDelta: 0n });
   });
 
-  it("reserves the fee before sizing a fill paid in CKB", () => {
-    const ask = 100n * CKB;
-    const orders = [seller("06", 2n * ask, ask, 44)];
-    const fee = partialOrderFee(orders, FEE_RATE);
+  it("serves a buyer with no CKB to spare, since the fill brings the fee in", () => {
+    const orders = [buyer("06", 200n * CKB, 100n * CKB)];
 
-    expect(turn(orders, { ckb: ask + fee - 1n, udt: 0n }).partials).toEqual([]);
-    expect(turn(orders, { ckb: ask + fee, udt: 0n }).partials).toHaveLength(1);
+    expect(turn(orders, { ckb: 0n, udt: 40n * CKB })).toMatchObject({
+      ckbDelta: 80n * CKB,
+      udtDelta: -40n * CKB,
+    });
   });
 
   it("lets a whole order beyond the balances wait", () => {

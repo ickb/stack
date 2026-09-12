@@ -1,7 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
+import { TESTNET_SCRIPTS } from "@ckb-ccc/core/advanced";
 import { OrderManager } from "../../../../src/order/index.ts";
 import { partialOrderFee } from "../../../../src/order/io/order_io.ts";
 
+import { chainState, FakeClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
@@ -9,6 +11,7 @@ import {
   BAND_ICKB_BALANCE,
   botRuntime,
   botState,
+  hash,
   marketOrder,
   testWithdrawal,
 } from "../fixtures/bot.ts";
@@ -32,7 +35,7 @@ function completing(change = RESERVE_CHANGE): Parameters<typeof botRuntime>[0] {
 }
 
 describe("buildTransaction matching", () => {
-  it("offers the CKB above the reserve, less the fill's fee, to a seller", async () => {
+  it("offers the CKB above the reserve to a seller", async () => {
     // The seller hands over twice its CKB ask in iCKB, whole only.
     const ask = ccc.fixedPointFrom(4000);
     const seller = marketOrder({
@@ -42,21 +45,68 @@ describe("buildTransaction matching", () => {
       ratio: { ckbScale: 2n, udtScale: 1n },
       ckbMinMatchLog: 44,
     });
-    const fee = partialOrderFee([seller], 1n);
     const state = (ckb: bigint): ReturnType<typeof botState> =>
       botState({ marketOrders: [seller], ckb, ickb: BAND_ICKB_BALANCE });
 
     const short = await buildTransaction(
       botRuntime(completing()),
-      state(CKB_RESERVE + ask + fee - 1n),
+      state(CKB_RESERVE + ask - 1n),
     );
     const enough = await buildTransaction(
       botRuntime(completing()),
-      state(CKB_RESERVE + ask + fee),
+      state(CKB_RESERVE + ask),
     );
 
     expect(short.decision.match).toMatchObject({ reason: "no_match", candidates: 1 });
     expect(enough.decision.match).toMatchObject({ reason: "matched", partialCount: 1 });
+  });
+
+  it("funds a fill sized to the whole matchable CKB through the real completer", async () => {
+    // The completed transaction's fee and the bot's new iCKB cell come out of the reserve;
+    // testnet's fee rate, so the fee is far above one partial's (N20, amendment 52(i)).
+    const feeRate = 33_222n;
+    const ask = ccc.fixedPointFrom(4000);
+    const seller = marketOrder({
+      byte: "34",
+      ckb: 0n,
+      udt: 2n * ask,
+      ratio: { ckbScale: 2n, udtScale: 1n },
+      ckbMinMatchLog: 44,
+    });
+    const chain = chainState().cell(seller.order.cell).cell(seller.master.cell);
+    for (const known of Object.values(ccc.KnownScript)) {
+      chain.knownScript(known, TESTNET_SCRIPTS[known]);
+    }
+    const client = new FakeClient(chain);
+    const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
+    const { script: primaryLock } = await signer.getRecommendedAddressObj();
+    const plain = ccc.Cell.from({
+      outPoint: { txHash: hash("35"), index: 0n },
+      cellOutput: { capacity: CKB_RESERVE + ask, lock: primaryLock },
+      outputData: "0x",
+    });
+    chain.cell(plain);
+    const runtime = botRuntime({
+      client,
+      primaryLock,
+      completeTransaction: async (tx, rate, cells) =>
+        runtime.sdk.completeTransaction(tx, { signer, feeRate: rate, cells }),
+    });
+    const base = botState({});
+
+    const result = await buildTransaction(
+      runtime,
+      botState({
+        marketOrders: [seller],
+        ckb: plain.cellOutput.capacity,
+        ickb: BAND_ICKB_BALANCE,
+        cells: [plain],
+        system: { ...base.system, feeRate },
+      }),
+    );
+
+    expect(result.decision.match).toMatchObject({ reason: "matched", partialCount: 1 });
+    expect(result.kind).toBe("built");
   });
 
   it("skips with no_actions when the book, the collections, and the rebalance are all empty", async () => {
@@ -103,6 +153,28 @@ describe("buildTransaction matching", () => {
     await expect(buildTransaction(botRuntime(), botState({}))).rejects.toThrow(
       "match failed",
     );
+  });
+
+  it("propagates completion failures that are not about fundability", async () => {
+    const runtime = botRuntime({
+      completeTransaction: async () => {
+        await Promise.resolve();
+        throw new TypeError("fetch failed");
+      },
+    });
+    const buyer = marketOrder({
+      byte: "36",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+
+    await expect(
+      buildTransaction(
+        runtime,
+        botState({ marketOrders: [buyer], ckb: CKB_RESERVE, ickb: BAND_ICKB_BALANCE }),
+      ),
+    ).rejects.toThrow("fetch failed");
   });
 
   it("builds a gaining match with its evidence", async () => {

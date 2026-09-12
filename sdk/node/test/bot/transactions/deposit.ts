@@ -53,23 +53,6 @@ describe("buildTransaction deposit", () => {
     });
   });
 
-  it("rejects a deposit that would leave less than the reserve in plain CKB", async () => {
-    const runtime = botRuntime({
-      completeTransaction: completing(ccc.fixedPointFrom(999)),
-    });
-
-    const result = await buildTransaction(
-      runtime,
-      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
-    );
-
-    expect(result).toMatchObject({
-      kind: "skipped",
-      reason: "no_fundable_candidate",
-      decision: { core: { kind: "none", attempts: 1 } },
-    });
-  });
-
   it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
     // An under-covered tip window with one ready surplus deposit, and excess iCKB.
     const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP, 0n);

@@ -21,11 +21,12 @@ export interface TurnMatch extends Match {
  * The turn's match, one fill at a time: from the balances, take the fill that returns
  * most per unit of value paid, then again from the balances it leaves, until nothing
  * returns or the partial cap is reached. A fill is sized to the largest payment the
- * balances cover with the fee reserved, and returns its exchange value net of ten fees,
- * the buffer for the rebalancing it commits the bot to, so dust never ranks above
- * zero. Nothing is taken that the balances cannot pay: buyers and sellers fund each
- * other only across steps, whole orders beyond the balances wait for a later turn, and
- * losing orders are never bridges. Orders are shuffled once by the seed so equal fills
+ * balances cover, and returns its exchange value net of ten fees, the buffer for the
+ * rebalancing it commits the bot to, so dust never ranks above zero. Nothing is taken
+ * that the balances cannot pay: buyers and sellers fund each other only across steps,
+ * whole orders beyond the balances wait for a later turn, and losing orders are never
+ * bridges. The mining fee is paid by the reserve the balances exclude, so a bot with no
+ * CKB to spare still serves buyers. Orders are shuffled once by the seed so equal fills
  * fall in no fixed order (decisions amendment 52).
  */
 export function matchTurn({
@@ -70,12 +71,12 @@ export function matchTurn({
   };
   const balances = { ckb, udt };
   while (match.partials.length < maxPartials) {
-    const best = bestFill(matchers, balances, fee, cost, exchangeRatio);
+    const best = bestFill(matchers, balances, cost, exchangeRatio);
     if (best === undefined) {
       break;
     }
     matchers.splice(best.index, 1);
-    balances.ckb += best.fill.ckbDelta - fee;
+    balances.ckb += best.fill.ckbDelta;
     balances.udt += best.fill.udtDelta;
     match.ckbDelta += best.fill.ckbDelta;
     match.udtDelta += best.fill.udtDelta;
@@ -88,15 +89,13 @@ export function matchTurn({
 function bestFill(
   matchers: OrderMatcher[],
   balances: { ckb: bigint; udt: bigint },
-  fee: bigint,
   cost: bigint,
   { ckbScale, udtScale }: ExchangeRatio,
 ): { index: number; fill: Match } | undefined {
   let best: { index: number; fill: Match; net: bigint; paid: bigint } | undefined;
   for (const [index, matcher] of matchers.entries()) {
-    // The fee is reserved before sizing, so a taken fill always leaves CKB for it.
-    const allowance = matcher.isCkb2Udt ? balances.udt : balances.ckb - fee;
-    if (balances.ckb < fee || allowance < matcher.bMinMatch) {
+    const allowance = matcher.isCkb2Udt ? balances.udt : balances.ckb;
+    if (allowance < matcher.bMinMatch) {
       continue;
     }
     const fill = matcher.match(minBigInt(allowance, matcher.bMaxMatch));
