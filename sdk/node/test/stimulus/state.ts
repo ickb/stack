@@ -38,15 +38,15 @@ describe("readStimulusState", () => {
       }),
     );
 
-    expect(state.collectable).toEqual([fulfilled, stale, underPar]);
-    expect(state.orders).toEqual({ live: 4, fulfilled: 1, stale: 2 });
+    expect(state.collectable).toEqual([fulfilled, underPar, stale]);
+    expect(state.orders).toEqual({ live: 4, fulfilled: 1, underPar: 1, stale: 1 });
     expect(state.plainCkb).toBe(1500n * CKB);
     // Plain CKB plus the two collectable groups' cells, minus the reserve; live groups
     // count only toward the total.
     expect(state.budgets.ckb).toBe(
       1500n * CKB + fulfilled.ckbValue + stale.ckbValue + underPar.ckbValue - CKB_RESERVE,
     );
-    expect(state.context.availableOrders).toEqual([fulfilled, stale, underPar]);
+    expect(state.context.availableOrders).toEqual([fulfilled, underPar, stale]);
   });
 
   it("clamps the CKB budget at zero", async () => {

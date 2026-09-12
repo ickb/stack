@@ -26,9 +26,10 @@ export interface StimulusState {
   account: AccountState;
   /** Conversion context over the collectable orders only; live orders stay on the book. */
   context: ConversionTransactionContext;
-  /** Fulfilled orders plus the live ones the bot will not take (see {@link staleOrders}): melted this turn. */
+  /** Fulfilled orders plus the live ones the bot will not take (see {@link abandonedOrders}): melted this turn. */
   collectable: OrderGroup[];
-  orders: { live: number; fulfilled: number; stale: number };
+  /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
+  orders: { live: number; fulfilled: number; underPar: number; stale: number };
   budgets: Budgets;
   plainCkb: bigint;
 }
@@ -48,11 +49,11 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   );
   const fulfilled = user.orders.filter((group) => group.order.isFulfilled());
   const live = user.orders.filter((group) => group.order.isMatchable());
-  const stale = await staleOrders(runtime.client, live, system);
-  const collectable = [...fulfilled, ...stale];
+  const { underPar, stale } = await abandonedOrders(runtime.client, live, system);
+  const collectable = [...fulfilled, ...underPar, ...stale];
   const { context } = projectConversionTransactionContext(system, account, {
     available: collectable,
-    pending: live.filter((group) => !stale.includes(group)),
+    pending: live.filter((group) => !collectable.includes(group)),
   });
   const ckbBudget = context.ckbAvailable - CKB_RESERVE;
   return {
@@ -60,7 +61,12 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     account,
     context,
     collectable,
-    orders: { live: live.length, fulfilled: fulfilled.length, stale: stale.length },
+    orders: {
+      live: live.length,
+      fulfilled: fulfilled.length,
+      underPar: underPar.length,
+      stale: stale.length,
+    },
     budgets: {
       ckb: ckbBudget > 0n ? ckbBudget : 0n,
       ickb: context.ickbAvailable,
@@ -71,21 +77,23 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
 }
 
 /**
- * Live orders the bot will not take: a buy priced at or under the DAO ratio, which the
- * ratio's growth only pushes further under, and any order older than
- * {@link STALE_ORDER_BLOCKS}. A sell is never under par, since the same growth only
- * raises what the bot earns on it (decisions amendment 52).
+ * Live orders the bot will not take, counted apart because they mean different things:
+ * `underPar` is a buy priced at or under the DAO ratio, which the ratio's growth only
+ * pushes further under; `stale` is any order older than {@link STALE_ORDER_BLOCKS}, which
+ * a running bot should never let happen. A sell is never under par, since the same growth
+ * only raises what the bot earns on it (decisions amendment 52).
  */
-async function staleOrders(
+async function abandonedOrders(
   client: ccc.Client,
   live: OrderGroup[],
   { exchangeRatio, tip }: SystemState,
-): Promise<OrderGroup[]> {
+): Promise<{ underPar: OrderGroup[]; stale: OrderGroup[] }> {
+  const underPar: OrderGroup[] = [];
   const stale: OrderGroup[] = [];
   for (const group of live) {
     const { info } = group.order.data;
     if (info.isCkb2Udt() && info.ckbToUdt.compare(exchangeRatio) >= 0) {
-      stale.push(group);
+      underPar.push(group);
       continue;
     }
     const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
@@ -95,5 +103,5 @@ async function staleOrders(
       stale.push(group);
     }
   }
-  return stale;
+  return { underPar, stale };
 }
