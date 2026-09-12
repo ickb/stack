@@ -1,6 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/sdk_error.ts";
-import { ICKB_DEPOSIT_CAP, type IckbDepositCell } from "../../../../src/core/index.ts";
+import {
+  DAO_HEADER_INDEX_LIMIT,
+  ICKB_DEPOSIT_CAP,
+  type IckbDepositCell,
+} from "../../../../src/core/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_RETAIN, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
@@ -157,6 +161,41 @@ describe("buildTransaction withdrawal", () => {
     await expect(buildTransaction(runtime, botState(state))).resolves.toMatchObject({
       kind: "skipped",
       reason: "no_fundable_candidate",
+    });
+  });
+
+  it("collects as many ready withdrawals as the DAO script can address; the rest wait a turn", async () => {
+    const ready = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, (_, index) =>
+      testWithdrawal("00", index + 1),
+    );
+    const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
+
+    // Nothing else pushes a header, so every slot goes to a withdrawal's deposit header;
+    // the fixtures share one request header, pushed after them.
+    await expect(
+      buildTransaction(
+        runtime,
+        botState({ ckb: ccc.fixedPointFrom(500_000), readyWithdrawals: ready }),
+      ),
+    ).resolves.toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
+      decision: { transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 1 } },
+    });
+    // A withdrawal request's deposit header takes the first slot.
+    await expect(
+      buildTransaction(
+        runtime,
+        botState({
+          ckb: ccc.fixedPointFrom(500_000),
+          ickb: ICKB_WITHDRAW_ABOVE + 100n,
+          poolDeposits: pool([readyDeposit("81", 4n, 0n)]),
+          readyWithdrawals: ready,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT - 1 },
     });
   });
 });

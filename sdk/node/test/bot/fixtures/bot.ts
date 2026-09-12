@@ -163,12 +163,20 @@ export function marketOrder({
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */
-export function testWithdrawal(byte: string): WithdrawalGroup {
+export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup {
   const { dao, ownedOwner } = getConfig("testnet").managers;
-  const depositHeader = headerLike({ number: 1n, hash: hash("d0") });
+  // `distinct` numbers the request and its deposit header past what one byte can, so a
+  // test can hold more withdrawals than the DAO script addresses in one transaction.
+  const txHash =
+    distinct === undefined ? hash(byte) : ccc.hexFrom(ccc.numToBytes(distinct, 32));
+  const depositHash =
+    distinct === undefined
+      ? hash("d0")
+      : ccc.hexFrom(ccc.numToBytes(distinct + 1_000_000, 32));
+  const depositHeader = headerLike({ number: 1n, hash: depositHash });
   const requestHeader = headerLike({ number: 2n, hash: hash("d1") });
   const cell = ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
+    outPoint: { txHash, index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100_082),
       lock: ownedOwner.script,
@@ -179,7 +187,7 @@ export function testWithdrawal(byte: string): WithdrawalGroup {
   const owned: TestWithdrawalRequestCell = {
     cell,
     headers: [
-      { header: depositHeader, txHash: hash("d0") },
+      { header: depositHeader, txHash: depositHash },
       { header: requestHeader, txHash: cell.outPoint.txHash },
     ],
     interests: 0n,
@@ -191,7 +199,7 @@ export function testWithdrawal(byte: string): WithdrawalGroup {
   };
   const owner = new OwnerCell(
     ccc.Cell.from({
-      outPoint: { txHash: hash(byte), index: 1n },
+      outPoint: { txHash, index: 1n },
       cellOutput: {
         capacity: ccc.fixedPointFrom(100),
         lock: script("11"),
