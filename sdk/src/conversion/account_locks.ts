@@ -35,42 +35,6 @@ export function accountPlainCkbBalance(
   );
 }
 
-/**
- * Projects account plain CKB capacity after applying a transaction's inputs and outputs.
- *
- * @public
- */
-export function postTransactionAccountPlainCkbBalance(
-  tx: ccc.Transaction,
-  capacityCells: readonly ccc.Cell[],
-  accountLocks: readonly ccc.Script[],
-): bigint {
-  if (tx.outputs.length !== tx.outputsData.length) {
-    throw new Error(
-      `Malformed transaction: outputs count ${String(tx.outputs.length)} differs from outputsData count ${String(tx.outputsData.length)}`,
-    );
-  }
-
-  const accountLockHexes = new Set(accountLocks.map((lock) => lock.toHex()));
-  const spentOutPoints = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  const unspentCapacity = capacityCells.reduce(
-    (total, cell) =>
-      spentOutPoints.has(cell.outPoint.toHex())
-        ? total
-        : total + plainCapacity(cell.cellOutput, cell.outputData, accountLockHexes),
-    0n,
-  );
-  const outputCapacity = tx.outputs.reduce((total, output, index) => {
-    const outputData = tx.outputsData[index];
-    if (outputData === undefined) {
-      throw new Error("Malformed transaction: missing output data");
-    }
-    return total + plainCapacity(output, outputData, accountLockHexes);
-  }, 0n);
-
-  return unspentCapacity + outputCapacity;
-}
-
 function plainCapacity(
   output: ccc.CellOutput,
   outputData: string,

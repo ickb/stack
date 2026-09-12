@@ -174,7 +174,7 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it("mints one order on the collection base, accepts the reserve, and commits", async () => {
+  it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
     const request = vi.fn<Runtime["sdk"]["request"]>(
       async (txLike, _lock, info, amounts) => {
@@ -228,24 +228,6 @@ describe("runStimulusTurn", () => {
     });
   });
 
-  it("skips a transaction that breaks the reserve and lowers plain CKB", async () => {
-    const log = await turn(
-      runtime({ account: fundedAccount, sdk: completing(500n * CKB) }),
-      orderDraw,
-    );
-
-    expect(log).toMatchObject({
-      outcome: "skipped",
-      skip: {
-        reason: "post-tx-ckb-reserve",
-        reserve: "1000",
-        preTxCkbBalance: "6000",
-        postTxCkbBalance: "500",
-      },
-    });
-    expect(sendMock).not.toHaveBeenCalled();
-  });
-
   it("falls back to collecting when the drawn action is refused", async () => {
     const stale = await order("a3", true);
     const buildConversionTransaction = vi.fn<
@@ -273,13 +255,13 @@ describe("runStimulusTurn", () => {
         originBlocks: new Map([[stale.origin.cell.outPoint.txHash, 1n]]),
         sdk: { ...completing(500n * CKB), buildConversionTransaction },
       }),
-      orderDraw,
+      { ...orderDraw, amount: 0n },
     );
 
     expect(log).toMatchObject({
       outcome: "committed",
       draw: { kind: "collect-only" },
-      skip: { reason: "post-tx-ckb-reserve" },
+      skip: { reason: "unrepresentable-amount" },
       action: { conversion: { kind: "collect-only" } },
     });
   });

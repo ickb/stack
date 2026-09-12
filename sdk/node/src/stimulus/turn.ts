@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { postTransactionAccountPlainCkbBalance } from "../../../src/conversion/account_locks.ts";
 import { isIckbError } from "../../../src/conversion/sdk_error.ts";
 import { estimate } from "../../../src/conversion/sdk_estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/sdk_types.ts";
@@ -44,13 +43,7 @@ export type Skip =
   | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
   | { reason: "unfundable"; error: unknown }
-  | { reason: "conversion-not-buildable"; conversion: string }
-  | {
-      reason: "post-tx-ckb-reserve";
-      reserve: string;
-      preTxCkbBalance: string;
-      postTxCkbBalance: string;
-    };
+  | { reason: "conversion-not-buildable"; conversion: string };
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
 export type Action =
@@ -128,7 +121,7 @@ async function stimulate(
   } else if (draw.kind === "order" && state.orders.live >= MAX_LIVE_ORDERS) {
     built = { skip: { reason: "live-order-cap", live: state.orders.live } };
   } else {
-    built = acceptReserve(runtime, state, await build(runtime, state, draw));
+    built = await build(runtime, state, draw);
   }
   // Whatever stopped the drawn action, collecting what the account has keeps it liquid;
   // the SDK's zero-amount conversion is exactly that transaction.
@@ -215,29 +208,6 @@ function unfundableOrThrow(error: unknown): Built {
     return { skip: { reason: "unfundable", error } };
   }
   throw error;
-}
-
-/** Skips a transaction that would leave plain CKB below the reserve and lower than before. */
-function acceptReserve(runtime: Runtime, state: StimulusState, built: Built): Built {
-  if ("skip" in built) {
-    return built;
-  }
-  const postTxCkbBalance = postTransactionAccountPlainCkbBalance(
-    built.tx,
-    state.account.capacityCells,
-    runtime.accountLocks,
-  );
-  if (postTxCkbBalance >= CKB_RESERVE || postTxCkbBalance >= state.plainCkb) {
-    return built;
-  }
-  return {
-    skip: {
-      reason: "post-tx-ckb-reserve",
-      reserve: formatCkb(CKB_RESERVE),
-      preTxCkbBalance: formatCkb(state.plainCkb),
-      postTxCkbBalance: formatCkb(postTxCkbBalance),
-    },
-  };
 }
 
 async function send(
