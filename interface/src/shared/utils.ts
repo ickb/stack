@@ -169,6 +169,10 @@ export function errorMessageOf(error: unknown): string {
   }
 
   if (typeof error === "object" && error !== null) {
+    // Wallet providers reject with plain objects such as {code: 4001, message: "..."}.
+    if ("message" in error && typeof error.message === "string" && error.message !== "") {
+      return error.message;
+    }
     try {
       return JSON.stringify(error);
     } catch {

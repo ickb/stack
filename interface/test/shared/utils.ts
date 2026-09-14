@@ -69,7 +69,10 @@ describe("errorMessageOf", () => {
     expect(errorMessageOf(undefined)).toBe("Unknown error");
   });
 
-  it("stringifies object errors when possible", () => {
+  it("uses a plain object's message and stringifies the rest", () => {
+    expect(errorMessageOf({ code: 4001, message: "User rejected the request." })).toBe(
+      "User rejected the request.",
+    );
     expect(errorMessageOf({ reason: "bad" })).toBe('{"reason":"bad"}');
   });
 
