@@ -18,7 +18,6 @@ import {
   actionMessage,
   canPreviewTx,
   currentTxInfo,
-  failureForPreview,
   isTxInfoValid,
   shownMaturityText,
   transactionIntentMessage,
@@ -71,7 +70,17 @@ export default function Action({
   retryState: () => void;
 }>): JSX.Element {
   const [message, setMessage] = useState("");
-  const [failure, setFailureState] = useState({ identity: "", message: "" });
+  // The last attempt's result, kept until the next attempt or an edit of the draft: React's
+  // pattern for state that depends on a prop, so a stale "enter a larger amount" never
+  // advises on a draft the user has already changed (decisions amendment 52(t)).
+  const draft = `${isCkb2Udt ? "C" : "I"}:${amountIdentity(amount, amountError)}`;
+  const [failure, setFailureFor] = useState({ draft, message: "" });
+  if (failure.message !== "" && failure.draft !== draft) {
+    setFailureFor({ draft, message: "" });
+  }
+  const setFailure = (text: string): void => {
+    setFailureFor({ draft, message: text });
+  };
   const [frozenPreview, setFrozenPreview] = useState<RefreshedTransactionPreview>();
   const mountedRef = useRef(false);
   const attemptRef = useRef<AbortController | null>(null);
@@ -93,15 +102,6 @@ export default function Action({
   const isFrozen = frozenPreview !== undefined;
   const isLocked = isPreparing || isFrozen;
   const stateId = previewStateIdentity(frozenPreview, l1State);
-  const amountKey = amountIdentity(amount, amountError);
-  const previewIdentity = previewIdentityFor(walletConfig, stateId, isCkb2Udt, amountKey);
-  const scopedFailure = failureForPreview(failure, previewIdentity);
-  const setFailure = (failureMessage: string, failureStateId = stateId): void => {
-    setFailureState({
-      identity: previewIdentityFor(walletConfig, failureStateId, isCkb2Udt, amountKey),
-      message: failureMessage,
-    });
-  };
   const transactionHash =
     pendingTransaction?.status === "pending" ? pendingTransaction.txHash : undefined;
   const isSubmitting = pendingTransaction?.status === "submitting";
@@ -145,13 +145,12 @@ export default function Action({
     hasCollectable,
   );
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
-  const showFailure = scopedFailure !== "";
   const messageText = actionMessage({
     amount,
     amountError,
     conversionKind: txInfo.conversionKind,
     conversionNotice: txInfo.conversionNotice,
-    failure: scopedFailure,
+    failure: failure.message,
     hasActivity,
     hasCollectable,
     isFrozen,
@@ -160,7 +159,6 @@ export default function Action({
     isTxPreviewFetching: txPreviewQuery.isFetching,
     isValid,
     message,
-    showFailure,
     txError: txInfo.error,
     unavailableMessage,
   });
@@ -314,21 +312,6 @@ function useSettled<T>(value: T, delayMs: number): T {
 
 function amountIdentity(amount: bigint | undefined, amountError: string): string {
   return amount?.toString() ?? `invalid:${amountError}`;
-}
-
-function previewIdentityFor(
-  walletConfig: Pick<WalletConfig, "chain" | "address">,
-  stateId: string,
-  isCkb2Udt: boolean,
-  amountKey: string,
-): string {
-  return [
-    walletConfig.chain,
-    walletConfig.address,
-    stateId,
-    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-    amountKey,
-  ].join(":");
 }
 
 async function buildPreview(

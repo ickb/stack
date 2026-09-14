@@ -262,7 +262,7 @@ function registerActionRejectionTests(): void {
       params.lockIntent();
       const { build, ...state } = await params.refreshPreview();
       params.freezePreview({ ...state, txInfo: await build() });
-      params.setFailure(failure, state.stateId);
+      params.setFailure(failure);
       clearPendingTransaction(params.pendingStore);
       params.freezePreview(undefined);
       attempted.resolve(undefined);
@@ -324,7 +324,6 @@ function registerFreshFailureIdentityTests(): void {
       } catch (error) {
         params.setFailure(
           error instanceof Error ? error.message : "Fresh preview failed",
-          freshState.stateId,
         );
         params.freezePreview(undefined);
       }

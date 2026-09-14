@@ -37,7 +37,7 @@ export interface RefreshedTransactionPreview extends RefreshedTransactionStateMe
 interface TransactionCallbacks {
   readonly freezePreview: (preview: RefreshedTransactionPreview | undefined) => void;
   readonly setMessage: (message: string) => void;
-  readonly setFailure: (message: string, stateId?: string) => void;
+  readonly setFailure: (message: string) => void;
   readonly setIsPreparing: (isPreparing: boolean) => void;
   readonly setIsConfirming: (isConfirming: boolean) => void;
   readonly formReset: () => void;
@@ -75,7 +75,6 @@ export async function transact({
   ...callbacks
 }: TransactParams): Promise<void> {
   let txHash: ccc.Hex | undefined;
-  let stateId: string | undefined;
 
   try {
     assertCurrent(signal);
@@ -85,7 +84,6 @@ export async function transact({
     callbacks.setMessage("Refreshing transaction preview...");
     const { build, ...previewState } = await abortable(refreshPreview(), signal);
     assertCurrent(signal);
-    stateId = previewState.stateId;
     const txInfo = await abortable(build(), signal);
     assertCurrent(signal);
     callbacks.freezePreview({ txInfo, ...previewState });
@@ -113,7 +111,7 @@ export async function transact({
     if (signal.aborted || error instanceof AttemptAbortedError) {
       return;
     }
-    callbacks.setFailure(transactionFailureMessage(error, txHash), stateId);
+    callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
     callbacks.walletConfig.resetClient();
     if (error instanceof TransactionWaitError) {

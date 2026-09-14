@@ -16,7 +16,6 @@ interface ActionMessageParams {
   readonly isTxPreviewFetching: boolean;
   readonly isValid: boolean;
   readonly message: string;
-  readonly showFailure: boolean;
   readonly txError: string;
   readonly unavailableMessage: string;
 }
@@ -36,12 +35,11 @@ export function actionMessage({
   isTxPreviewFetching,
   isValid,
   message,
-  showFailure,
   txError,
   unavailableMessage,
 }: Readonly<ActionMessageParams>): string {
-  if (showFailure) {
-    return failureMessage(failure, unavailableMessage);
+  if (failure !== "") {
+    return failureMessage(failure);
   }
 
   if (isFrozen) {
@@ -55,7 +53,7 @@ export function actionMessage({
   if (amount === undefined) {
     return amountError === ""
       ? "Finish entering the amount."
-      : failureMessage(amountError, "");
+      : failureMessage(amountError);
   }
 
   const pendingMessage = actionPendingMessage(
@@ -96,7 +94,11 @@ function previewMessage({
   unavailableMessage: string;
 }>): string {
   if (txError !== "") {
-    return failureMessage(txError, unavailableMessage);
+    // The preview lags the typed amount by the settle delay, so an availability error is
+    // worded for the amount on screen, not the one the preview was built for.
+    return isAvailabilityMessage(txError)
+      ? `${unavailableMessage}.`
+      : failureMessage(txError);
   }
 
   if (!hasActivity) {
@@ -127,12 +129,12 @@ export function transactionIntentMessage(
     .join(" ");
 }
 
-function failureMessage(failure: string, unavailableMessage: string): string {
-  if (isAvailabilityMessage(failure)) {
-    return `${unavailableMessage}.`;
-  }
-
+function failureMessage(failure: string): string {
   return `⚠️ ${failure}`;
+}
+
+function isAvailabilityMessage(message: string): boolean {
+  return message === noCollectionMessage || message === noRequestMessage;
 }
 
 function actionPendingMessage(
@@ -178,10 +180,6 @@ export function conversionIntentText(
     "direct-plus-order": "Direct conversion plus a standing order for the remainder.",
   };
   return `Intent: ${intent[kind]}`;
-}
-
-export function isAvailabilityMessage(message: string): boolean {
-  return message === noCollectionMessage || message === noRequestMessage;
 }
 
 function checkingMessage(amount: bigint): string {
@@ -239,14 +237,6 @@ export function unavailableConversionMessage(amount: bigint): string {
   }
 
   return noCollectionMessage;
-}
-
-/** Keeps an attempt failure visible only while its transaction preview identity matches. */
-export function failureForPreview(
-  failure: Readonly<{ identity: string; message: string }>,
-  previewIdentity: string,
-): string {
-  return failure.identity === previewIdentity ? failure.message : "";
 }
 
 export function actionDisabled(

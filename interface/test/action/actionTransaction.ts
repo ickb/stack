@@ -86,7 +86,6 @@ describe("finite-window confirmation", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith(
       `Transaction ${txHash} is still unconfirmed after 60s. It may still confirm; check again.`,
-      freshStateId,
     );
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
@@ -141,7 +140,7 @@ describe("transact fresh preview boundary", () => {
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith("refresh failed", undefined);
+    expect(calls.setFailure).toHaveBeenCalledWith("refresh failed");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
     expect(calls.formReset).not.toHaveBeenCalled();
@@ -161,7 +160,7 @@ describe("transact fresh preview boundary", () => {
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith(failure, freshStateId);
+    expect(calls.setFailure).toHaveBeenCalledWith(failure);
     expect(calls.freezePreview).toHaveBeenNthCalledWith(1, preview);
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
@@ -198,10 +197,7 @@ describe("transact post-broadcast outcomes", () => {
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `${rpcUnavailable}. Hash: ${txHash}`,
-      freshStateId,
-    );
+    expect(calls.setFailure).toHaveBeenCalledWith(`${rpcUnavailable}. Hash: ${txHash}`);
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
@@ -233,7 +229,6 @@ describe("transact broadcast identity and rejection", () => {
     expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     expect(calls.setFailure).toHaveBeenCalledWith(
       `Transaction ${txHash} broadcast outcome is unresolved`,
-      freshStateId,
     );
     expect(waitTransaction).not.toHaveBeenCalled();
   });
@@ -251,7 +246,6 @@ describe("transact broadcast identity and rejection", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith(
       `Transaction rejected: validation failed. Hash: ${txHash}`,
-      freshStateId,
     );
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(calls.formReset).not.toHaveBeenCalled();
@@ -573,7 +567,7 @@ function transactionCalls(
     }),
     freezePreview: vi.fn<(value: RefreshedTransactionPreview | undefined) => void>(),
     setMessage: vi.fn<(message: string) => void>(),
-    setFailure: vi.fn<(failure: string, stateId?: string) => void>(),
+    setFailure: vi.fn<(failure: string) => void>(),
     setIsPreparing: vi.fn<(isPreparing: boolean) => void>(),
     setIsConfirming: vi.fn<(isConfirming: boolean) => void>(),
     formReset: vi.fn<() => void>(),

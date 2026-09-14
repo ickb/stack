@@ -7,8 +7,6 @@ import {
   canPreviewTx,
   conversionIntentText,
   currentTxInfo,
-  failureForPreview,
-  isAvailabilityMessage,
   isTxInfoValid,
   shownMaturityText,
   unavailableConversionMessage,
@@ -24,23 +22,13 @@ const requestConversion = "request conversion";
 const l1State = {} as Parameters<typeof canPreviewTx>[1];
 
 describe("action status", () => {
-  it("prioritizes stored failures and availability messages", () => {
-    expect(
-      actionMessage({
-        ...messageParams(),
-        failure: walletRejected,
-        showFailure: true,
-      }),
-    ).toBe("⚠️ wallet rejected");
-    expect(
-      actionMessage({
-        ...messageParams(),
-        failure: noRequestMessage,
-        showFailure: true,
-      }),
-    ).toBe(`${noRequestMessage}.`);
-    expect(isAvailabilityMessage(noCollectionMessage)).toBe(true);
-    expect(isAvailabilityMessage(walletRejected)).toBe(false);
+  it("shows the last attempt's failure as recorded", () => {
+    expect(actionMessage({ ...messageParams(), failure: walletRejected })).toBe(
+      "⚠️ wallet rejected",
+    );
+    expect(actionMessage({ ...messageParams(), failure: noRequestMessage })).toBe(
+      `⚠️ ${noRequestMessage}`,
+    );
   });
 
   it("shows frozen, pending, and preview messages", () => {
@@ -188,14 +176,6 @@ describe("action status", () => {
     expect(actionDone(true, false)).toBe(false);
     expect(actionDone(false, true)).toBe(false);
   });
-
-  it("scopes attempt failures to the exact preview identity", () => {
-    const failure = { identity: "state-a:C:1", message: walletRejected };
-    expect(failureForPreview(failure, "state-a:C:1")).toBe(walletRejected);
-    expect(failureForPreview(failure, "state-a:C:2")).toBe("");
-    expect(failureForPreview(failure, "state-a:I:1")).toBe("");
-    expect(failureForPreview(failure, "state-b:C:1")).toBe("");
-  });
 });
 
 describe("timeUntilMaturity", () => {
@@ -227,7 +207,6 @@ function messageParams(): Parameters<typeof actionMessage>[0] {
     isTxPreviewFetching: false,
     isValid: true,
     message: "",
-    showFailure: false,
     txError: "",
     unavailableMessage: noRequestMessage,
   };
