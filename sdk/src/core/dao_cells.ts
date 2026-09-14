@@ -4,6 +4,7 @@ import {
   type TransactionHeader,
   type ValueComponents,
 } from "../utils/index.ts";
+import { getTransactionHeader } from "./transaction_header.ts";
 /**
  * Represents a live Nervos DAO deposit cell.
  */
@@ -70,22 +71,13 @@ const defaultMinLockUp = ccc.Epoch.from([0n, 1n, 24n]); // 10 minutes
 const defaultMaxLockUp = ccc.Epoch.from([18n, 0n, 1n]); // 3 days
 
 /**
- * Result shape returned by `ccc.Client.getTransactionWithHeader`.
- *
- */
-type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
-
-/**
  * Batch-scoped caches for DAO cell conversion reads.
  */
 export interface DaoCellFromCache {
   /** Reuses block-header reads by block number across DAO cell conversions in one batch. */
   headerCache?: Map<ccc.Num, Promise<ccc.ClientBlockHeader | undefined>>;
-  /** Reuses transaction-with-header reads by transaction hash across DAO cell conversions in one batch. */
-  transactionCache?: Map<
-    ccc.Hex,
-    Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
-  >;
+  /** Reuses transaction-header reads by transaction hash across DAO cell conversions in one batch. */
+  transactionCache?: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>;
 }
 
 type DaoCell = DaoDepositCell | DaoWithdrawalRequestCell;
@@ -191,19 +183,19 @@ async function depositHeaders(
   options: DaoCellFromOptions,
 ): Promise<[TransactionHeader, TransactionHeader]> {
   const txHash = cell.outPoint.txHash;
-  let txWithHeader: Awaited<ReturnType<typeof getCachedTransactionWithHeader>>;
+  let header: ccc.ClientBlockHeader | undefined;
   try {
-    txWithHeader = await getCachedTransactionWithHeader(options, txHash);
+    header = await getCachedTransactionHeader(options, txHash);
   } catch (error) {
     throw new Error(
       `Failed to load transaction header for txHash ${txHash} at ${cell.outPoint.toHex()}`,
       { cause: error },
     );
   }
-  if (txWithHeader?.header === undefined) {
+  if (header === undefined) {
     throw new Error(`Header not found for txHash ${txHash} at ${cell.outPoint.toHex()}`);
   }
-  return [{ header: txWithHeader.header, txHash }, { header: options.tip }];
+  return [{ header, txHash }, { header: options.tip }];
 }
 
 async function withdrawalRequestHeaders(
@@ -225,20 +217,20 @@ async function withdrawalRequestHeaders(
     options,
     depositBlockNumber,
   );
-  const txWithHeaderPromise = getWithdrawalTransactionWithHeader(cell, options, txHash);
-  const [depositHeader, txWithHeader] = await Promise.all([
+  const txHeaderPromise = getWithdrawalTransactionHeader(cell, options, txHash);
+  const [depositHeader, txHeader] = await Promise.all([
     depositHeaderPromise,
-    txWithHeaderPromise,
+    txHeaderPromise,
   ]);
   if (depositHeader === undefined) {
     throw new Error(
       `Header not found for block number ${String(depositBlockNumber)} at ${cell.outPoint.toHex()}`,
     );
   }
-  if (txWithHeader?.header === undefined) {
+  if (txHeader === undefined) {
     throw new Error(`Header not found for txHash ${txHash} at ${cell.outPoint.toHex()}`);
   }
-  return [{ header: depositHeader }, { header: txWithHeader.header, txHash }];
+  return [{ header: depositHeader }, { header: txHeader, txHash }];
 }
 
 async function getWithdrawalDepositHeader(
@@ -256,13 +248,13 @@ async function getWithdrawalDepositHeader(
   }
 }
 
-async function getWithdrawalTransactionWithHeader(
+async function getWithdrawalTransactionHeader(
   cell: ccc.Cell,
   options: DaoCellFromOptions,
   txHash: ccc.Hex,
-): Promise<TransactionWithHeader> {
+): Promise<ccc.ClientBlockHeader | undefined> {
   try {
-    return await getCachedTransactionWithHeader(options, txHash);
+    return await getCachedTransactionHeader(options, txHash);
   } catch (error) {
     throw new Error(
       `Failed to load transaction header for txHash ${txHash} at ${cell.outPoint.toHex()}`,
@@ -312,13 +304,13 @@ async function getCachedHeaderByNumber(
   return promise;
 }
 
-async function getCachedTransactionWithHeader(
+async function getCachedTransactionHeader(
   options: DaoCellFromOptions,
   txHash: ccc.Hex,
-): Promise<TransactionWithHeader> {
+): Promise<ccc.ClientBlockHeader | undefined> {
   let promise = options.transactionCache?.get(txHash);
   if (promise === undefined) {
-    promise = options.client.getTransactionWithHeader(txHash);
+    promise = getTransactionHeader(options.client, txHash);
     options.transactionCache?.set(txHash, promise);
   }
   return promise;

@@ -66,6 +66,44 @@ export function offlineTransport(): ccc.JsonRpcTransport {
   };
 }
 
+/**
+ * Answers the SDK's status-only `get_transaction` from the stub's `getTransactionWithHeader`
+ * handler and remembers the header for the follow-up lookup by number, so a test stubs one
+ * typed method, not the wire; everything else is offline.
+ */
+function stubTransport(
+  raw: { client?: StubClient },
+  headers: Map<bigint, ccc.ClientBlockHeader>,
+): ccc.JsonRpcTransport {
+  return {
+    request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
+      if (
+        raw.client === undefined ||
+        payload.method !== "get_transaction" ||
+        typeof txHash !== "string"
+      ) {
+        return offlineTransport().request(payload);
+      }
+      const header = (await raw.client.getTransactionWithHeader(txHash))?.header;
+      if (header !== undefined) {
+        headers.set(header.number, header);
+      }
+      return {
+        id: payload.id,
+        jsonrpc: "2.0",
+        result: {
+          transaction: null,
+          tx_status:
+            header === undefined
+              ? { status: "unknown" }
+              : { status: "committed", block_number: ccc.numToHex(header.number) },
+        },
+      };
+    },
+  };
+}
+
 /** A testnet client on the offline transport. */
 export function offlineTestnetClient(): ccc.ClientPublicTestnet {
   return ccc.ClientPublicTestnet.new({ transport: offlineTransport() });
@@ -73,6 +111,7 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
 
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly handlers: StubClientHandlers;
+  private readonly rememberedHeaders: Map<bigint, ccc.ClientBlockHeader>;
   private readonly findCellsHandler: ClientMethod<"findCells">;
   private readonly findCellsOnChainHandler: ClientMethod<"findCellsOnChain">;
   private readonly findCellsPagedHandler: ClientMethod<"findCellsPaged"> | undefined;
@@ -89,10 +128,20 @@ export class StubClient extends ccc.ClientPublicTestnet {
    * Creates a stub client using the supplied method overrides.
    */
   constructor(handlers: StubClientHandlers = {}) {
+    // The SDK reads a transaction's header through two raw calls on a JSON-RPC client; the
+    // stub answers them from its own handlers so a test stubs one method, not the wire.
+    const raw: { client?: StubClient } = {};
+    const rememberedHeaders = new Map<bigint, ccc.ClientBlockHeader>();
     // A subclass has no factory, so the deprecated constructor is the only super call; the
     // offline transport keeps every unstubbed method off the network.
     // eslint-disable-next-line sonarjs/deprecation, @typescript-eslint/no-deprecated -- No non-deprecated constructor exists for a subclass.
-    super({ requestor: ccc.RequestorJsonRpc.new({ transport: offlineTransport() }) });
+    super({
+      requestor: ccc.RequestorJsonRpc.new({
+        transport: stubTransport(raw, rememberedHeaders),
+      }),
+    });
+    raw.client = this;
+    this.rememberedHeaders = rememberedHeaders;
     const baseFindCellsPagedNoCache = this.findCellsPagedNoCache.bind(this);
     this.handlers = handlers;
     if (handlers.cache !== undefined) {
@@ -182,11 +231,18 @@ export class StubClient extends ccc.ClientPublicTestnet {
     return this.getCellHandler(...args);
   }
 
-  /** Delegates block-header lookup to the configured handler or the base client. */
+  /**
+   * Serves the header a stubbed transaction lookup already produced, so the SDK's follow-up
+   * by number lands on that header even when a test stubs the lookup with one fixed answer;
+   * otherwise delegates to the configured handler or the base client.
+   */
   public override async getHeaderByNumber(
     ...args: Parameters<ClientMethod<"getHeaderByNumber">>
   ): ReturnType<ClientMethod<"getHeaderByNumber">> {
-    return this.getHeaderByNumberHandler(...args);
+    return (
+      this.rememberedHeaders.get(ccc.numFrom(args[0])) ??
+      this.getHeaderByNumberHandler(...args)
+    );
   }
 
   /** Delegates transaction lookup to the configured handler or the base client. */

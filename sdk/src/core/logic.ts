@@ -190,7 +190,7 @@ export class LogicManager implements ScriptDeps {
   ): Promise<ReceiptCell[]> {
     const transactionCache = new Map<
       ccc.Hex,
-      Promise<Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>>
+      Promise<ccc.ClientBlockHeader | undefined>
     >();
     return Promise.all(
       cells

@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import type { TransactionHeader, ValueComponents } from "../utils/index.ts";
 import type { DaoDepositCell, DaoWithdrawalRequestCell } from "./dao_cells.ts";
 import { OwnerData, ReceiptData } from "./entities.ts";
+import { getTransactionHeader } from "./transaction_header.ts";
 import { ickbValue } from "./udt.ts";
 
 // Symbol marker keeps the runtime tag off the public shape except by this module.
@@ -50,11 +51,9 @@ export interface ReceiptCell extends ValueComponents {
   header: TransactionHeader;
 }
 
-type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
-
 interface ReceiptCellFromCache {
-  /** Reuses transaction-with-header reads across receipt conversions in one scan. */
-  transactionCache?: Map<ccc.Hex, Promise<TransactionWithHeader>>;
+  /** Reuses transaction-header reads across receipt conversions in one scan. */
+  transactionCache?: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>;
 }
 
 /**
@@ -68,19 +67,16 @@ export async function receiptCellFrom(
   const { cell } = options;
 
   const txHash = cell.outPoint.txHash;
-  let txWithHeaderPromise = options.transactionCache?.get(txHash);
-  if (txWithHeaderPromise === undefined) {
-    txWithHeaderPromise = getReceiptTransactionWithHeader(options.client, cell.outPoint);
-    options.transactionCache?.set(txHash, txWithHeaderPromise);
+  let headerPromise = options.transactionCache?.get(txHash);
+  if (headerPromise === undefined) {
+    headerPromise = getReceiptTransactionHeader(options.client, cell.outPoint);
+    options.transactionCache?.set(txHash, headerPromise);
   }
-  const txWithHeader = await txWithHeaderPromise;
-  if (txWithHeader?.header === undefined) {
+  const depositHeader = await headerPromise;
+  if (depositHeader === undefined) {
     throw new Error(`Header not found for txHash ${txHash} at ${cell.outPoint.toHex()}`);
   }
-  const header: TransactionHeader = {
-    header: txWithHeader.header,
-    txHash,
-  };
+  const header: TransactionHeader = { header: depositHeader, txHash };
   let receipt: ReturnType<typeof ReceiptData.decodePrefix>;
   try {
     receipt = ReceiptData.decodePrefix(cell.outputData);
@@ -100,12 +96,12 @@ export async function receiptCellFrom(
   };
 }
 
-async function getReceiptTransactionWithHeader(
+async function getReceiptTransactionHeader(
   client: ccc.Client,
   outPoint: ccc.OutPoint,
-): Promise<TransactionWithHeader> {
+): Promise<ccc.ClientBlockHeader | undefined> {
   try {
-    return await client.getTransactionWithHeader(outPoint.txHash);
+    return await getTransactionHeader(client, outPoint.txHash);
   } catch (error) {
     throw new Error(
       `Failed to load transaction header for txHash ${outPoint.txHash} at ${outPoint.toHex()}`,

@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "../utils/index.ts";
 import type { DaoManager } from "./dao.ts";
 import { ReceiptData } from "./entities.ts";
+import { getTransactionHeader } from "./transaction_header.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
 const udtDataSize = 16;
@@ -14,8 +15,6 @@ const xudtOwnerMode = 0x80000000n;
  * Soft per-deposit iCKB value cap used before applying the excess discount.
  */
 export const ICKB_DEPOSIT_CAP = ccc.fixedPointFrom(100000); // 100,000 iCKB
-
-type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>;
 
 /**
  * The iCKB xUDT token: its scripts, code cells, and the iCKB accounting of a
@@ -122,7 +121,10 @@ export class IckbUdt {
    * minus the first-phase deposits it re-mints. Final withdrawal inputs carry none.
    */
   public async inputBalance(tx: ccc.Transaction, client: ccc.Client): Promise<ccc.Num> {
-    const transactionCache = new Map<ccc.Hex, Promise<TransactionWithHeader>>();
+    const transactionCache = new Map<
+      ccc.Hex,
+      Promise<ccc.ClientBlockHeader | undefined>
+    >();
     const cells = await Promise.all(
       tx.inputs.map(async (input) => {
         try {
@@ -159,7 +161,7 @@ export class IckbUdt {
   private async inputContribution(
     cell: ccc.CellAny,
     client: ccc.Client,
-    transactionCache: Map<ccc.Hex, Promise<TransactionWithHeader>>,
+    transactionCache: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>,
   ): Promise<ccc.Num> {
     if (this.isUdt(cell)) {
       return decodeUdtBalance(cell.outputData);
@@ -191,9 +193,11 @@ export class IckbUdt {
       return ccc.Zero;
     }
 
-    const header = (
-      await getCachedTransactionWithHeader(client, cell.outPoint, transactionCache)
-    )?.header;
+    const header = await getCachedTransactionHeader(
+      client,
+      cell.outPoint,
+      transactionCache,
+    );
     if (header === undefined) {
       throw new Error(
         `Header not found for txHash ${cell.outPoint.txHash} at ${cell.outPoint.toHex()}`,
@@ -204,26 +208,26 @@ export class IckbUdt {
   }
 }
 
-async function getCachedTransactionWithHeader(
+async function getCachedTransactionHeader(
   client: ccc.Client,
   outPoint: ccc.OutPoint,
-  transactionCache: Map<ccc.Hex, Promise<TransactionWithHeader>>,
-): Promise<TransactionWithHeader> {
+  transactionCache: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>,
+): Promise<ccc.ClientBlockHeader | undefined> {
   const txHash = outPoint.txHash;
   let promise = transactionCache.get(txHash);
   if (promise === undefined) {
-    promise = getTransactionWithHeader(client, outPoint);
+    promise = loadTransactionHeader(client, outPoint);
     transactionCache.set(txHash, promise);
   }
   return promise;
 }
 
-async function getTransactionWithHeader(
+async function loadTransactionHeader(
   client: ccc.Client,
   outPoint: ccc.OutPoint,
-): Promise<TransactionWithHeader> {
+): Promise<ccc.ClientBlockHeader | undefined> {
   try {
-    return await client.getTransactionWithHeader(outPoint.txHash);
+    return await getTransactionHeader(client, outPoint.txHash);
   } catch (error) {
     throw new Error(
       `Failed to load transaction header for txHash ${outPoint.txHash} at ${outPoint.toHex()}`,
