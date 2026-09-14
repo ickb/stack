@@ -90,20 +90,23 @@ async function abandonedOrders(
   live: OrderGroup[],
   { exchangeRatio, feeRate, tip }: SystemState,
 ): Promise<{ refused: OrderGroup[]; stale: OrderGroup[] }> {
-  const refused: OrderGroup[] = [];
-  const stale: OrderGroup[] = [];
-  for (const group of live) {
-    const { info } = group.order.data;
-    if (info.isCkb2Udt() && !fillsWhole(group, true, exchangeRatio, feeRate)) {
-      refused.push(group);
-      continue;
-    }
-    const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
-    // An origin without a block is not yet committed, so it is as fresh as an order gets.
-    const mintedAt = origin?.blockNumber ?? tip.number;
-    if (mintedAt + STALE_ORDER_BLOCKS <= tip.number) {
-      stale.push(group);
-    }
-  }
+  const refused = live.filter(
+    (group) =>
+      group.order.data.info.isCkb2Udt() &&
+      !fillsWhole(group, true, exchangeRatio, feeRate),
+  );
+  // One origin read per live order, all at once: in turn they cost the turn seconds.
+  const ages = await Promise.all(
+    live
+      .filter((group) => !refused.includes(group))
+      .map(async (group) => {
+        const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
+        // An origin without a block is not yet committed, so it is as fresh as an order gets.
+        return { group, mintedAt: origin?.blockNumber ?? tip.number };
+      }),
+  );
+  const stale = ages
+    .filter(({ mintedAt }) => mintedAt + STALE_ORDER_BLOCKS <= tip.number)
+    .map(({ group }) => group);
   return { refused, stale };
 }
