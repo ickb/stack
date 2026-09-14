@@ -10,8 +10,6 @@ import {
 } from "./fixtures/data.ts";
 import { queryMock, quoteStateOptions } from "./fixtures/environment.ts";
 import {
-  activeChain,
-  activeConnectedChain,
   appName,
   ckbSignerOnly,
   connectorStyle,
@@ -20,7 +18,6 @@ import {
   liveQuoteStatus,
   mainnetClient,
   queryClient,
-  selectedClient,
   signerClientChain,
   testnetClient,
   useQuoteState,
@@ -79,13 +76,7 @@ describe("hook-based interface runtime", () => {
     expect(connectorStyle["--background"]).toBe("oklch(21% 0.006 286)");
     await expect(ckbSignerOnly(signerFilterInfo(ckbSigner))).resolves.toBe(true);
     await expect(ckbSignerOnly(signerFilterInfo(btcSigner))).resolves.toBe(false);
-    expect(activeChain(undefined, undefined, "mainnet")).toBe("mainnet");
-    expect(activeChain(ckbSigner, "testnet", "mainnet")).toBe("testnet");
     expect(signerClientChain(ckbSigner)).toBe("testnet");
-    expect(selectedClient(undefined, mainnetClient, testnetClient)).toBe(testnetClient);
-    expect(selectedClient(ckbSigner, mainnetClient, testnetClient)).toBe(mainnetClient);
-    expect(activeConnectedChain(undefined, "testnet")).toBeUndefined();
-    expect(activeConnectedChain(ckbSigner, "testnet")).toBe("testnet");
     expect(walletLabel("JoyID", "CKB")).toBe("JoyID CKB");
     expect(walletLabel(undefined, undefined)).toBe("Wallet");
   });

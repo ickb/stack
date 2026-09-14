@@ -1,60 +1,33 @@
 import { useCcc, useSigner } from "@ckb-ccc/connector-react";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import {
-  createRootConfig,
-  isCkbSigner,
-  mainnetClient,
-  testnetClient,
-} from "../app/interfaceConfig.ts";
+import { useEffect, useMemo, useState, type JSX } from "react";
+import { createRootConfig, isCkbSigner } from "../app/interfaceConfig.ts";
 import { useQuoteState } from "../query/quoteState.ts";
-import { savedSelectedChain, saveSelectedChain } from "./cccConnection.ts";
+import { saveSelectedChain } from "./cccConnection.ts";
 import { chainFromClient } from "./chain.ts";
 import { LandingPage, TestnetHint } from "./interfaceLanding.tsx";
 import WalletConfigGate from "./WalletConfigGate.tsx";
-import {
-  activeChain,
-  activeConnectedChain,
-  selectedClient,
-  signerClientChain,
-  walletLabel,
-} from "./walletGateState.ts";
+import { signerClientChain, walletLabel } from "./walletGateState.ts";
 import {
   CkbSignerRequired,
   SwitchingWalletNetwork,
   UnsupportedNetwork,
 } from "./walletGateSupport.tsx";
 
+/**
+ * The connector's client is the one source of the chain: the landing tabs and the wallet
+ * modal's network switch both set it, so a switch that leaves no signer on the new chain
+ * (a wallet connected on one network only) still shows the landing page on that chain.
+ */
 export function WalletGate(): JSX.Element {
-  const { client, close, open, setClient, wallet, signerInfo } = useCcc();
+  const { client, open, setClient, wallet, signerInfo } = useCcc();
   const signer = useSigner();
-  const [draftChain, setDraftChain] = useState<
-    NonNullable<ReturnType<typeof savedSelectedChain>>
-  >(() => savedSelectedChain() ?? "mainnet");
-  const previousConnectedChain = useRef<ReturnType<typeof savedSelectedChain>>(undefined);
-  const clientChain = chainFromClient(client);
-  const chain = activeChain(signer, clientChain, draftChain);
+  const chain = chainFromClient(client);
   const [rawText, setRawText] = useState("C");
-  const draftClient = draftChain === "mainnet" ? mainnetClient : testnetClient;
-  const activeClient = selectedClient(signer, client, draftClient);
   const rootConfig = useMemo(
-    () => (chain === undefined ? undefined : createRootConfig(chain, activeClient)),
-    [activeClient, chain],
+    () => (chain === undefined ? undefined : createRootConfig(chain, client)),
+    [client, chain],
   );
-  const testnetHint = chain === "testnet" ? <TestnetHint /> : null;
   const quoteStateQuery = useQuoteState(rootConfig);
-
-  useEffect(() => {
-    if (
-      signer !== undefined &&
-      clientChain !== undefined &&
-      previousConnectedChain.current !== undefined &&
-      previousConnectedChain.current !== clientChain
-    ) {
-      close();
-    }
-
-    previousConnectedChain.current = activeConnectedChain(signer, clientChain);
-  }, [clientChain, close, signer]);
 
   useEffect(() => {
     if (chain !== undefined) {
@@ -62,21 +35,17 @@ export function WalletGate(): JSX.Element {
     }
   }, [chain]);
 
+  if (rootConfig === undefined) {
+    return <UnsupportedNetwork addressPrefix={client.addressPrefix} open={open} />;
+  }
+
   if (signer === undefined) {
     return (
       <>
         <LandingPage
-          {...{
-            open,
-            setClient,
-            rootConfig: createRootConfig(draftChain, draftClient),
-            rawText,
-            setRawText,
-            quoteStateQuery,
-            setDraftChain,
-          }}
+          {...{ open, setClient, rootConfig, rawText, setRawText, quoteStateQuery }}
         />
-        {testnetHint}
+        {chain === "testnet" ? <TestnetHint /> : null}
       </>
     );
   }
@@ -85,13 +54,7 @@ export function WalletGate(): JSX.Element {
     return <CkbSignerRequired open={open} />;
   }
 
-  if (rootConfig === undefined) {
-    return <UnsupportedNetwork addressPrefix={client.addressPrefix} open={open} />;
-  }
-
-  const signerChain = signerClientChain(signer);
-
-  if (signerChain !== chain) {
+  if (signerClientChain(signer) !== chain) {
     return <SwitchingWalletNetwork open={open} />;
   }
 

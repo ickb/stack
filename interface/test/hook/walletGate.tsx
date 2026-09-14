@@ -30,7 +30,6 @@ import {
 interface LandingPageTestContext {
   open: ReturnType<typeof vi.fn<() => void>>;
   setClient: ReturnType<typeof vi.fn<(client: unknown) => void>>;
-  setDraftChain: ReturnType<typeof vi.fn<(chain: RootConfig["chain"]) => void>>;
   setRawText: ReturnType<typeof vi.fn<(value: string) => void>>;
 }
 
@@ -67,14 +66,12 @@ function registerWalletGateBranchTests(): void {
     expect(WalletGate().type).toBe(SwitchingWalletNetwork);
 
     resetHooks();
-    hookState.nextRefCurrent = "mainnet";
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckt");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckt" });
     connectorMock.ccc.wallet = { name: "JoyID" };
     connectorMock.ccc.signerInfo = { name: "CKB" };
     expect(WalletGate().type).toBe(WalletConfigGate);
-    expect(connectorMock.ccc.close).toHaveBeenCalledTimes(1);
-    expect(connectorMock.ccc.close).toHaveBeenCalledWith();
+    // The chain follows the connector's client, connected or not.
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
   });
 }
@@ -108,11 +105,10 @@ function registerLandingPageStateTests(): void {
       props.open();
     }).not.toThrow();
     expect(context.open).toHaveBeenCalledTimes(1);
-    expect(context.setClient).toHaveBeenCalledWith(mainnetClient);
     expect(() => {
       props.selectChain("testnet");
     }).not.toThrow();
-    expect(context.setDraftChain).toHaveBeenCalledWith("testnet");
+    expect(context.setClient).toHaveBeenCalledWith(testnetClient);
   });
 }
 
@@ -122,7 +118,6 @@ function landingPageTestContext(): LandingPageTestContext {
     open: vi.fn<() => void>(),
     setClient: vi.fn<(client: unknown) => void>(),
     setRawText: vi.fn<(value: string) => void>(),
-    setDraftChain: vi.fn<(chain: RootConfig["chain"]) => void>(),
   };
 }
 
@@ -131,7 +126,7 @@ function assertInitialLandingBranch(context: LandingPageTestContext): void {
   props.open();
   expect(context.open).toHaveBeenCalledTimes(1);
   expect(context.open).toHaveBeenCalledWith();
-  expect(context.setClient).toHaveBeenCalledWith(mainnetClient);
+  expect(context.setClient).not.toHaveBeenCalled();
   expect(props.liveStatus).toBe("");
   runEffectCleanups();
 }
@@ -164,8 +159,7 @@ function assertChainSelectionBranch(
   renderLandingPage(context, "testnet", { data: undefined, isError: false }).open();
   restoringProps.selectChain("mainnet");
   vi.runAllTimers();
-  expect(context.setClient).toHaveBeenCalledWith(testnetClient);
-  expect(context.setDraftChain).toHaveBeenCalledWith("mainnet");
+  expect(context.setClient).toHaveBeenCalledWith(mainnetClient);
   expect(restoringProps.liveStatus).toBe("Loading live exchange rate...");
   expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
 }
@@ -183,7 +177,6 @@ function renderLandingPage(
       rawText: "C1",
       setRawText: context.setRawText,
       quoteStateQuery: quoteStateQuery(liveQuote),
-      setDraftChain: context.setDraftChain,
     }),
   );
 }

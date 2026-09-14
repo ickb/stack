@@ -8,7 +8,7 @@ import {
 import { liveQuoteStatus, type QuoteStateQuery } from "../query/quoteState.ts";
 import type { RootConfig } from "../shared/utils.ts";
 import { WalletAppShell } from "../view/staticWalletApp.tsx";
-import { hasSavedCccConnection, saveSelectedChain } from "./cccConnection.ts";
+import { hasSavedCccConnection } from "./cccConnection.ts";
 
 export function LandingPage({
   open,
@@ -17,7 +17,6 @@ export function LandingPage({
   rawText,
   setRawText,
   quoteStateQuery,
-  setDraftChain,
 }: Readonly<{
   open: () => unknown;
   setClient: (client: ccc.Client) => unknown;
@@ -25,7 +24,6 @@ export function LandingPage({
   rawText: string;
   setRawText: (value: string) => void;
   quoteStateQuery: QuoteStateQuery;
-  setDraftChain: (chain: RootConfig["chain"]) => void;
 }>): JSX.Element {
   const pendingOpen = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(
     undefined,
@@ -51,17 +49,15 @@ export function LandingPage({
     [],
   );
 
-  const connect = (selectedChain: RootConfig["chain"], client: ccc.Client): void => {
+  const connect = (): void => {
     clearPendingOpen();
-    saveSelectedChain(selectedChain);
-    setClient(client);
     if (!hasSavedCccConnection()) {
       setRestoringChain(undefined);
       open();
       return;
     }
 
-    setRestoringChain(selectedChain);
+    setRestoringChain(chain);
     pendingOpen.current = globalThis.setTimeout(() => {
       setRestoringChain(undefined);
       open();
@@ -70,8 +66,7 @@ export function LandingPage({
   const selectChain = (nextChain: RootConfig["chain"]): void => {
     clearPendingOpen();
     setRestoringChain(undefined);
-    saveSelectedChain(nextChain);
-    setDraftChain(nextChain);
+    setClient(nextChain === "mainnet" ? mainnetClient : testnetClient);
   };
 
   return (
@@ -80,9 +75,7 @@ export function LandingPage({
       liveStatus={
         quoteStateQuery.data !== undefined ? "" : liveQuoteStatus(quoteStateQuery)
       }
-      open={() => {
-        connect(chain, chain === "mainnet" ? mainnetClient : testnetClient);
-      }}
+      open={connect}
       quoteState={quoteStateQuery.data}
     />
   );
