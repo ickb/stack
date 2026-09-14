@@ -115,21 +115,19 @@ export class OrderManager implements ScriptDeps {
       rawGroup.orders.push(order);
     }
 
-    const foundGroups: OrderGroup[] = [];
-    for (const { master, orders } of rawGroups.values()) {
-      if (orders.length === 0) {
-        continue;
+    // Each group's origin is one transaction read; resolving them together turns a book of
+    // fifty orders from seconds of round trips into one.
+    const resolved = await Promise.all(
+      [...rawGroups.values()]
+        .filter(({ orders }) => orders.length > 0)
+        .map(async ({ master, orders }) =>
+          resolveOrderGroup(client, master, orders, (cell) => this.isOrder(cell)),
+        ),
+    );
+    for (const orderGroup of resolved) {
+      if (orderGroup.ok) {
+        yield orderGroup.group;
       }
-      const orderGroup = await resolveOrderGroup(client, master, orders, (cell) =>
-        this.isOrder(cell),
-      );
-      if (!orderGroup.ok) {
-        continue;
-      }
-      foundGroups.push(orderGroup.group);
-    }
-    for (const group of foundGroups) {
-      yield group;
     }
   }
 }
