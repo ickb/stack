@@ -46,18 +46,20 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
 });
 
 function clientWithFeeRateStatistics(feeRateStatistics: () => unknown): ccc.Client {
-  return new ccc.ClientPublicTestnet({
-    fallbacks: [],
+  return ccc.ClientPublicTestnet.new({
     transport: {
-      request: async (payload): Promise<{ id: number; result: unknown; error: null }> => {
+      request: async (payload): Promise<ccc.JsonRpcResponse> => {
         await Promise.resolve();
         if (payload.method === "get_fee_rate_statistics") {
-          return { id: payload.id, result: feeRateStatistics(), error: null };
+          return { id: payload.id, jsonrpc: "2.0", result: feeRateStatistics() };
         }
-        return { id: payload.id, result: await responseFor(payload.method), error: null };
+        return {
+          id: payload.id,
+          jsonrpc: "2.0",
+          result: await responseFor(payload.method),
+        };
       },
     },
-    url: "https://example.invalid",
   });
 }
 

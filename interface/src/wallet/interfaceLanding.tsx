@@ -1,10 +1,6 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import { useEffect, useRef, useState, type JSX } from "react";
-import {
-  mainnetClient,
-  savedConnectionRestoreMs,
-  testnetClient,
-} from "../app/interfaceConfig.ts";
+import { lendClient, savedConnectionRestoreMs } from "../app/interfaceConfig.ts";
 import { liveQuoteStatus, type QuoteStateQuery } from "../query/quoteState.ts";
 import type { RootConfig } from "../shared/utils.ts";
 import { WalletAppShell } from "../view/staticWalletApp.tsx";
@@ -19,7 +15,7 @@ export function LandingPage({
   quoteStateQuery,
 }: Readonly<{
   open: () => unknown;
-  setClient: (client: ccc.Client) => unknown;
+  setClient: (client: ccc.Owner<ccc.Client>) => unknown;
   rootConfig: RootConfig;
   rawText: string;
   setRawText: (value: string) => void;
@@ -66,7 +62,7 @@ export function LandingPage({
   const selectChain = (nextChain: RootConfig["chain"]): void => {
     clearPendingOpen();
     setRestoringChain(undefined);
-    setClient(nextChain === "mainnet" ? mainnetClient : testnetClient);
+    setClient(lendClient(nextChain));
   };
 
   return (

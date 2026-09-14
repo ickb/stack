@@ -55,9 +55,11 @@ describe("runtime config env", () => {
     await expect(readConfig({ BOT_CHAIN: undefined })).rejects.toThrow(
       "Empty env BOT_CHAIN",
     );
-    await expect(readConfig({ BOT_RPC_URL: "" })).rejects.toThrow(
-      "Empty env BOT_RPC_URL",
-    );
+    // No RPC URL means CCC's public pool.
+    await expect(readConfig({ BOT_RPC_URL: "" })).resolves.toEqual({
+      chain: "testnet",
+      privateKey: VALID_PRIVATE_KEY,
+    });
     await expect(readConfig({ BOT_PRIVATE_KEY_FILE: undefined })).rejects.toThrow(
       "Empty env BOT_PRIVATE_KEY_FILE",
     );

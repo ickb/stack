@@ -7,28 +7,31 @@ import {
 
 export type { SupportedChain } from "../../../src/utils/chain.ts";
 
-/** Public, credential-free identity for one RPC endpoint policy. */
-export interface PublicRpcEndpointIdentity {
-  mode: "exclusive";
-  protocol: "http:" | "https:";
-  hostname: string;
-  port: string;
-  pathname: string;
-}
+/** Credential-free identity of the RPC endpoint: one configured node, or CCC's public pool. */
+export type PublicRpcEndpointIdentity =
+  | {
+      mode: "exclusive";
+      protocol: "http:" | "https:" | "ws:" | "wss:";
+      hostname: string;
+      port: string;
+      pathname: string;
+    }
+  | { mode: "default" };
 
 /** Reduces a configured RPC URL to the public fields needed for runtime identity. */
-export function publicRpcEndpointIdentity(rpcUrl: string): PublicRpcEndpointIdentity {
+export function publicRpcEndpointIdentity(
+  rpcUrl: string | undefined,
+): PublicRpcEndpointIdentity {
+  if (rpcUrl === undefined) {
+    return { mode: "default" };
+  }
   let url: URL;
   try {
     url = new URL(rpcUrl);
   } catch {
     throw invalidRpcEndpointIdentity();
   }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== ""
-  ) {
+  if (!isRpcProtocol(url.protocol) || url.username !== "" || url.password !== "") {
     throw invalidRpcEndpointIdentity();
   }
   return {
@@ -38,6 +41,12 @@ export function publicRpcEndpointIdentity(rpcUrl: string): PublicRpcEndpointIden
     port: url.port,
     pathname: url.pathname,
   };
+}
+
+function isRpcProtocol(
+  protocol: string,
+): protocol is "http:" | "https:" | "ws:" | "wss:" {
+  return ["http:", "https:", "ws:", "wss:"].includes(protocol);
 }
 
 /** Public chain preflight evidence returned after identity verification. */
@@ -81,17 +90,20 @@ export async function verifyChainPreflight(
 }
 
 /**
- * Creates a CCC public client for the selected chain and required RPC URL.
- *
- * @remarks `rpcUrl` is the exclusive endpoint pool (`fallbacks: []`); CCC
- * would otherwise retain public fallbacks beside a custom primary URL.
+ * Opens the public client for one chain, owned by the caller: a configured `rpcUrl` is the
+ * only endpoint (an operator's own node), otherwise CCC's public pool for the chain,
+ * WebSocket first with HTTPS fallbacks. The caller disposes the owner at the end of the
+ * turn so the sockets close and the process can exit.
  */
-export function createPublicClient(chain: SupportedChain, rpcUrl: string): ccc.Client {
+export function createPublicClient(
+  chain: SupportedChain,
+  rpcUrl?: string,
+): ccc.Owner<ccc.Client> {
   publicRpcEndpointIdentity(rpcUrl);
-  const config = { url: rpcUrl, fallbacks: [] };
-  return chain === "mainnet"
-    ? new ccc.ClientPublicMainnet(config)
-    : new ccc.ClientPublicTestnet(config);
+  const config = rpcUrl === undefined ? {} : { urls: [rpcUrl] as const };
+  return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open(
+    config,
+  );
 }
 
 async function readChainPreflight(

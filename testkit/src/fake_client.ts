@@ -26,8 +26,6 @@ export class FakeClientError extends Error {
 export interface FakeClientOverrides {
   /** Address prefix reported by {@link FakeClient.addressPrefix}. */
   addressPrefix?: string;
-  /** URL reported by {@link FakeClient.url}; never dialed. */
-  url?: string;
   /** Cache implementation; defaults to a fresh `ccc.ClientCacheMemory`. */
   cache?: ccc.ClientCache;
   estimateCycles?: ClientMethod<"estimateCycles">;
@@ -73,12 +71,12 @@ export class FakeClient extends ccc.Client {
     this.overrides = overrides;
   }
 
-  /** Fake URL with no network meaning. */
+  /** Testnet-style address prefix. */
+  /** Implements the abstract member; a fake has no endpoint. */
   public override get url(): string {
-    return this.overrides.url ?? "fake://chain-state";
+    return "fake://chain-state";
   }
 
-  /** Testnet-style address prefix. */
   public override get addressPrefix(): string {
     return this.overrides.addressPrefix ?? "ckt";
   }

@@ -6,7 +6,7 @@ import {
   Ratio,
 } from "@ickb/sdk";
 
-import { byte32FromByte, headerLike } from "@ickb/testkit";
+import { byte32FromByte, headerLike, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type {
@@ -118,7 +118,7 @@ export function context(overrides: Partial<TransactionContext> = {}): Transactio
 }
 
 function testClient(): ccc.Client {
-  return new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+  return offlineTestnetClient();
 }
 
 function testSigner(client: ccc.Client): ccc.Signer {

@@ -8,6 +8,12 @@ auditConfig:
   ignoreCves:
     # Unpatched upstream: @joyid/ckb -> @nervosnetwork/ckb-sdk-utils -> elliptic.
     - CVE-2025-14505
+  ignoreGhsas:
+    # No patched version exists. image-size sits under Metro, React Native's build tool,
+    # pulled in by @ckb-ccc/connector 2.x through @libp2p/webrtc -> react-native-webrtc; it
+    # never runs in the browser bundle.
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq
 
 overrides:
   # Security pins for vulnerable transitive ranges not yet lifted by upstreams.
@@ -17,7 +23,7 @@ overrides:
   form-data@>=4.0.0 <4.0.6: 4.0.6
   nanoid@<3.3.18: 3.3.18
   vitest@<4.1.0: 4.1.8
-  ws@>=8.0.0 <8.20.1: 8.20.1
+  ws@>=8.0.0 <8.21.1: 8.21.1
   # eslint-plugin-react-hooks imports this subpath, but pnpm can otherwise pick
   # 3.5.4 from its union range, which does not export `zod-validation-error/v4`.
   zod-validation-error@^3.5.0 || ^4.0.0: 4.0.2
@@ -26,12 +32,14 @@ overrides:
   "@ckb-ccc/connector-react>react": 19.2.8
 
 catalog:
-  "@ckb-ccc/ccc": ^1.3.0
-  "@ckb-ccc/connector-react": ^1.1.9
-  "@ckb-ccc/core": ^1.19.1
+  "@ckb-ccc/ccc": ^1.3.1
+  "@ckb-ccc/connector-react": ^2.0.0
+  "@ckb-ccc/core": ^1.20.0
   "@types/node": ~22.20.1
 
-minimumReleaseAge: 10080
+# Three days while the stack is unpublished and follows CCC closely; restore 10080
+# (seven days) before the fork (user decision 2026-09-14).
+minimumReleaseAge: 4320
 minimumReleaseAgeStrict: true
 
 patchedDependencies:

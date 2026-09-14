@@ -21,8 +21,10 @@ import {
 const { chain, privateKey, rpcUrl } = await readBotRuntimeConfig(process.env);
 const events = new BotEventEmitter({ chain, runId: createRunId() });
 events.emit({ type: "bot.turn.started" });
+let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  const client = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, rpcUrl);
+  const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   const config = getConfig(chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
@@ -62,11 +64,13 @@ try {
   await runBotTurn({ events, runtime });
 } catch (error) {
   handleTurnFailure(events, error);
+} finally {
+  // Closes the sockets the client opened, so nothing keeps the finished turn alive.
+  await clientOwner?.dispose();
 }
 process.exitCode ??= 0;
-// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would keep
-// this finished turn alive. Pipes and sockets are asynchronous on POSIX, so exit only once both
-// output streams have drained; a bare process.exit() truncates pending output.
+// Pipes and sockets are asynchronous on POSIX, so exit only once both output streams have
+// drained; a bare process.exit() truncates pending output.
 await Promise.all(
   [process.stdout, process.stderr].map(
     async (stream) =>

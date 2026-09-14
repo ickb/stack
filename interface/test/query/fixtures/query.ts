@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { IckbSdk } from "@ickb/sdk";
-import { byte32FromByte } from "@ickb/testkit";
+import { byte32FromByte, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type { getL1State } from "../../../src/query/queries.ts";
@@ -37,14 +37,12 @@ export function stateSdk(
   return sdk;
 }
 
-export function testSigner(
-  client: ccc.Client = new ccc.ClientPublicTestnet({ url: "https://example.invalid" }),
-): ccc.Signer {
+export function testSigner(client: ccc.Client = offlineTestnetClient()): ccc.Signer {
   return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
 }
 
 export function testClient(): ccc.Client {
-  return new ccc.ClientPublicTestnet({ url: "https://example.invalid" });
+  return offlineTestnetClient();
 }
 
 export function script(codeHashByte: string): ccc.Script {

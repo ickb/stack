@@ -19,13 +19,20 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
-export function createClient(chain: RootConfig["chain"]): ccc.Client {
-  return chain === "mainnet"
-    ? new ccc.ClientPublicMainnet({ url: "https://mainnet.ckb.dev/", fallbacks: [] })
-    : new ccc.ClientPublicTestnet({ url: "https://testnet.ckbapp.dev/", fallbacks: [] });
+// One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), owned here
+// for the app's lifetime: the connector's network list borrows them, and a chain tab lends
+// the chosen one through an Owner the Provider may dispose without effect.
+const clients = {
+  mainnet: ccc.ClientPublicMainnet.open(),
+  testnet: ccc.ClientPublicTestnet.open(),
+};
+export const mainnetClient = clients.mainnet.value;
+export const testnetClient = clients.testnet.value;
+export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
+  return new ccc.OwnerUnique(clients[chain].value, () => {
+    // Borrowed: the app keeps the client for its lifetime.
+  });
 }
-export const mainnetClient = createClient("mainnet");
-export const testnetClient = createClient("testnet");
 export const savedConnectionRestoreMs = 800;
 
 const sdks = {

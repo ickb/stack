@@ -15,11 +15,16 @@ if (address === null || typeof address === "string") {
   throw new TypeError("Expected a local TCP server address");
 }
 
-const client = createPublicClient("testnet", `http://127.0.0.1:${String(address.port)}`);
+const clientOwner = createPublicClient(
+  "testnet",
+  `http://127.0.0.1:${String(address.port)}`,
+);
+const client = clientOwner.value;
 if (!(client instanceof ccc.ClientJsonRpc)) {
   throw new TypeError("Expected a JSON-RPC public client");
 }
 await client.requestor.request("test", []);
+await clientOwner.dispose();
 await new Promise<void>((resolve, reject) => {
   server.close((error) => {
     if (error === undefined) {

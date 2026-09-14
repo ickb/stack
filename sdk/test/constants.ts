@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { script as typeScript } from "@ickb/testkit";
+import { offlineTestnetClient, script as typeScript } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
@@ -28,9 +28,7 @@ describe("getConfig", () => {
     const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
     const sdk = IckbSdk.fromChain("testnet");
     const tx = ccc.Transaction.default();
-    const client = new ccc.ClientPublicTestnet({
-      url: "https://example.invalid",
-    });
+    const client = offlineTestnetClient();
     const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
     vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockResolvedValue([0, false]);
 

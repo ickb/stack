@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
+import { offlineTestnetClient } from "@ickb/testkit";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
@@ -58,10 +59,7 @@ describe("hook-based interface runtime", () => {
   });
 
   it("exposes interface config and wallet gate state helpers", async () => {
-    const client = new ccc.ClientPublicTestnet({
-      url: "https://testnet.ckbapp.dev/",
-      fallbacks: [],
-    });
+    const client = offlineTestnetClient();
     const cache = client.cache;
     const root = createRootConfig("testnet", client);
     const ckbSigner = signerInfo(ccc.SignerType.CKB, "ckt");

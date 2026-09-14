@@ -32,62 +32,47 @@ describe("public clients and preflight identity", () => {
       port: "8443",
       pathname: "/ckb",
     });
-    for (const value of [
-      "",
-      "invalid",
-      "wss://rpc.example/ws",
-      "https://user@rpc.example/",
-    ]) {
+    expect(publicRpcEndpointIdentity("wss://rpc.example/ws")).toMatchObject({
+      mode: "exclusive",
+      protocol: "wss:",
+    });
+    expect(publicRpcEndpointIdentity(undefined)).toEqual({ mode: "default" });
+    for (const value of ["", "invalid", "https://user@rpc.example/"]) {
       expect(() => publicRpcEndpointIdentity(value)).toThrow(
         INVALID_RPC_ENDPOINT_IDENTITY,
       );
     }
   });
 
-  it("creates network-specific public clients with explicit RPC URLs", () => {
+  it("opens network-specific public clients owned by the caller", async () => {
+    const testnetUrl = "http://127.0.0.1:8114/";
     const mainnet = createPublicClient("mainnet", MAINNET_RPC_URL);
-    const testnetUrl = "http://127.0.0.1:8114/";
     const testnet = createPublicClient("testnet", testnetUrl);
 
-    expect(mainnet).toBeInstanceOf(ccc.ClientPublicMainnet);
-    expect(testnet).toBeInstanceOf(ccc.ClientPublicTestnet);
-    expect(mainnet.addressPrefix).toBe("ckb");
-    expect(testnet.addressPrefix).toBe("ckt");
-    expect(mainnet.url).toBe(MAINNET_RPC_URL);
-    expect(testnet.url).toBe(testnetUrl);
+    expect(mainnet.value).toBeInstanceOf(ccc.ClientPublicMainnet);
+    expect(testnet.value).toBeInstanceOf(ccc.ClientPublicTestnet);
+    expect(mainnet.value.addressPrefix).toBe("ckb");
+    expect(testnet.value.addressPrefix).toBe("ckt");
+    // A configured URL is the only endpoint: an operator's node gets no public fallbacks.
+    expect(endpointPoolUrls(mainnet.value)).toEqual([MAINNET_RPC_URL]);
+    expect(endpointPoolUrls(testnet.value)).toEqual([testnetUrl]);
+    await mainnet.dispose();
+    expect(mainnet.isValid).toBe(false);
+    await testnet.dispose();
   });
 
-  it("makes a configured RPC URL the exclusive endpoint pool", () => {
-    const mainnetUrl = MAINNET_RPC_URL;
-    const testnetUrl = "http://127.0.0.1:8114/";
-    const mainnet = createPublicClient("mainnet", mainnetUrl);
-    const testnet = createPublicClient("testnet", testnetUrl);
-    const exclusiveMainnet = new ccc.ClientPublicMainnet({
-      url: mainnetUrl,
-      fallbacks: [],
-    });
-    const exclusiveTestnet = new ccc.ClientPublicTestnet({
-      url: testnetUrl,
-      fallbacks: [],
-    });
+  it("takes CCC's public pool when no RPC URL is configured", async () => {
+    const testnet = createPublicClient("testnet");
 
-    expect(endpointPoolUrls(mainnet)).toEqual(endpointPoolUrls(exclusiveMainnet));
-    expect(endpointPoolUrls(testnet)).toEqual(endpointPoolUrls(exclusiveTestnet));
-    expect(endpointPoolUrls(mainnet)).toEqual([mainnetUrl]);
-    expect(endpointPoolUrls(testnet)).toEqual([testnetUrl]);
+    expect(testnet.value).toBeInstanceOf(ccc.ClientPublicTestnet);
+    expect(endpointPoolUrls(testnet.value).length).toBeGreaterThan(1);
+    await testnet.dispose();
   });
 
-  it("rejects omitted and empty RPC URLs instead of selecting CCC defaults", () => {
+  it("rejects an empty RPC URL", () => {
     expect(() => createPublicClient("testnet", "")).toThrow(
       INVALID_RPC_ENDPOINT_IDENTITY,
     );
-    expect(() =>
-      createPublicClient(
-        "testnet",
-        // @ts-expect-error Runtime callers must fail closed too.
-        undefined,
-      ),
-    ).toThrow(INVALID_RPC_ENDPOINT_IDENTITY);
   });
 });
 describe("finite public clients", () => {

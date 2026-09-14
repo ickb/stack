@@ -56,6 +56,21 @@ export interface TransactionWithHeader {
  * invalid host. Tests should override every method expected to cross the RPC
  * boundary.
  */
+/** A transport that rejects every request: for clients a test never lets reach the network. */
+export function offlineTransport(): ccc.JsonRpcTransport {
+  return {
+    request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      await Promise.resolve();
+      throw new Error(`Offline test client received ${payload.method}`);
+    },
+  };
+}
+
+/** A testnet client on the offline transport. */
+export function offlineTestnetClient(): ccc.ClientPublicTestnet {
+  return ccc.ClientPublicTestnet.new({ transport: offlineTransport() });
+}
+
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly handlers: StubClientHandlers;
   private readonly findCellsHandler: ClientMethod<"findCells">;
@@ -74,9 +89,10 @@ export class StubClient extends ccc.ClientPublicTestnet {
    * Creates a stub client using the supplied method overrides.
    */
   constructor(handlers: StubClientHandlers = {}) {
-    // No fallbacks: CCC would otherwise fill in its public testnet endpoints, and any method a
-    // test leaves unstubbed would reach the live network.
-    super({ url: "https://example.invalid", fallbacks: [] });
+    // A subclass has no factory, so the deprecated constructor is the only super call; the
+    // offline transport keeps every unstubbed method off the network.
+    // eslint-disable-next-line sonarjs/deprecation, @typescript-eslint/no-deprecated -- No non-deprecated constructor exists for a subclass.
+    super({ requestor: ccc.RequestorJsonRpc.new({ transport: offlineTransport() }) });
     const baseFindCellsPagedNoCache = this.findCellsPagedNoCache.bind(this);
     this.handlers = handlers;
     if (handlers.cache !== undefined) {

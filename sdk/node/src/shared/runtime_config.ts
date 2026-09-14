@@ -13,13 +13,13 @@ export interface RuntimeConfig {
   /** Secp256k1 private key used only for signing. */
   privateKey: `0x${string}`;
 
-  /** Exclusive RPC URL for the selected public chain. */
-  rpcUrl: string;
+  /** RPC URL of one node, the only endpoint when set; absent means CCC's public pool. */
+  rpcUrl?: string;
 }
 
 /**
- * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private key held in the
- * file named by `<prefix>_PRIVATE_KEY_FILE`.
+ * Reads and validates `<prefix>_CHAIN`, the optional `<prefix>_RPC_URL`, and the private key
+ * held in the file named by `<prefix>_PRIVATE_KEY_FILE`.
  *
  * @remarks
  * The key lives in a file rather than a variable so it never sits in a unit file, an
@@ -32,15 +32,24 @@ export async function readRuntimeConfigEnv(
   prefix: string,
 ): Promise<RuntimeConfig> {
   const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
-  const rpcUrl = parseRpcUrl(requireEnv(env, `${prefix}_RPC_URL`));
+  const rpcUrl = optionalEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
   const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
-  return { chain, privateKey, rpcUrl };
+  return {
+    chain,
+    privateKey,
+    ...(rpcUrl === undefined ? {} : { rpcUrl: parseRpcUrl(rpcUrl) }),
+  };
 }
 
 interface EnvValue {
   name: string;
   value: string;
+}
+
+function optionalEnv(env: NodeJS.ProcessEnv, name: string): EnvValue | undefined {
+  const value = env[name];
+  return value === undefined || value === "" ? undefined : { name, value };
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): EnvValue {
@@ -104,7 +113,7 @@ function parseRpcUrl({ name, value }: EnvValue): string {
   } catch {
     throw invalidEnvError(name);
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
+  if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol)) {
     throw invalidEnvError(name);
   }
   if (url.username !== "" || url.password !== "") {

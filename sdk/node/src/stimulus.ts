@@ -19,8 +19,10 @@ if (process.argv.length > 2) {
 const { chain, privateKey, rpcUrl } = await readStimulusConfig(process.env);
 const override = readStimulusOverride(process.env);
 const startTime = new Date();
+let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  const client = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, rpcUrl);
+  const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
@@ -59,11 +61,13 @@ try {
   // Connection and preflight failures get the same log line and exit code as turn failures.
   logExecution("stimulus.turn", { outcome: "failed", error }, startTime);
   process.exitCode = 1;
+} finally {
+  // Closes the sockets the client opened, so nothing keeps the finished turn alive.
+  await clientOwner?.dispose();
 }
 process.exitCode ??= 0;
-// CCC's fetch transport leaves its 30 s abort timer armed after a failed request, which would keep
-// this finished turn alive. Pipes and sockets are asynchronous on POSIX, so exit only once both
-// output streams have drained; a bare process.exit() truncates pending output.
+// Pipes and sockets are asynchronous on POSIX, so exit only once both output streams have
+// drained; a bare process.exit() truncates pending output.
 await Promise.all(
   [process.stdout, process.stderr].map(
     async (stream) =>

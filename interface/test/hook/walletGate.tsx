@@ -108,7 +108,7 @@ function registerLandingPageStateTests(): void {
     expect(() => {
       props.selectChain("testnet");
     }).not.toThrow();
-    expect(context.setClient).toHaveBeenCalledWith(testnetClient);
+    expect(lendsClient(context, testnetClient)).toBe(true);
   });
 }
 
@@ -159,7 +159,7 @@ function assertChainSelectionBranch(
   renderLandingPage(context, "testnet", { data: undefined, isError: false }).open();
   restoringProps.selectChain("mainnet");
   vi.runAllTimers();
-  expect(context.setClient).toHaveBeenCalledWith(mainnetClient);
+  expect(lendsClient(context, mainnetClient)).toBe(true);
   expect(restoringProps.liveStatus).toBe("Loading live exchange rate...");
   expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
 }
@@ -193,6 +193,12 @@ function runEffectCleanups(): void {
   for (const cleanup of hookState.effects) {
     cleanup();
   }
+}
+
+/** Whether the landing tabs last lent the connector an Owner of this client. */
+function lendsClient(context: LandingPageTestContext, client: unknown): boolean {
+  const owner: unknown = context.setClient.mock.lastCall?.[0];
+  return ccc.Owner.is(owner) && owner.value === client;
 }
 
 function landingShellProps(element: ReactElement): Parameters<typeof WalletAppShell>[0] {

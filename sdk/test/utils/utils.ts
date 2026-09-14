@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { offlineTestnetClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
@@ -11,8 +12,6 @@ import {
   unique,
 } from "../../src/utils/utils.ts";
 
-const invalidRpcUrl = "https://example.invalid";
-
 describe("compareBigInt", () => {
   it("orders bigint values", () => {
     expect(compareBigInt(1n, 2n)).toBe(-1);
@@ -23,7 +22,7 @@ describe("compareBigInt", () => {
 
 describe("findCells", () => {
   it("collects every page and stops on the first short page", async () => {
-    const client = new ccc.ClientPublicTestnet({ url: invalidRpcUrl });
+    const client = offlineTestnetClient();
     const cell = testCell({ type: undefined, outputData: "0x" });
     const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
     const afters: Array<string | undefined> = [];
@@ -53,7 +52,7 @@ describe("findCells", () => {
   });
 
   it("completes after an empty first page", async () => {
-    const client = new ccc.ClientPublicTestnet({ url: invalidRpcUrl });
+    const client = offlineTestnetClient();
     const noCache = vi
       .spyOn(client, "findCellsPagedNoCache")
       .mockResolvedValue({ cells: [], lastCursor: "" });

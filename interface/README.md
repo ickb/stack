@@ -30,7 +30,7 @@ pnpm --filter ./interface dev
 
 The interface resolves workspace `@ickb/*` packages to source during local development. CCC is resolved from installed package dependencies.
 
-The app-owned mainnet and testnet clients use `https://mainnet.ckb.dev/` and `https://testnet.ckbapp.dev/` respectively, with no fallback endpoints. After any transaction error the interface gives the client a new, empty cache rather than clearing it, because CCC's clear keeps block headers and a deep reorg is possible on CKB, where one pool holds a majority of the hash power; the client keeps its identity, so the pending hash, the failure message and the frozen preview survive. The preview builds a completed transaction, so it follows the amount field only once typing has settled for 300 ms; acting refreshes and rebuilds regardless.
+The app owns one client per chain on CCC's public endpoints, WebSocket first with HTTPS fallbacks. After any transaction error the interface gives the client a new, empty cache rather than clearing it, because CCC's clear keeps block headers and a deep reorg is possible on CKB, where one pool holds a majority of the hash power; the client keeps its identity, so the pending hash, the failure message and the frozen preview survive. The preview builds a completed transaction, so it follows the amount field only once typing has settled for 300 ms; acting refreshes and rebuilds regardless.
 
 5. Build the interface when you want a production bundle:
 

@@ -209,9 +209,9 @@ describe("waitTransaction terminal rejection", () => {
       { tx_status: { status: 1, reason: 1 } },
     ]) {
       const { client, request } = jsonRpcClient({});
-      request.mockImplementation(async (payload) => {
+      request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
         await Promise.resolve();
-        return { id: payload.id, result, error: null };
+        return { id: payload.id, jsonrpc: "2.0", result };
       });
 
       // The window must outlast one poll so the malformed record is parsed.
@@ -275,7 +275,7 @@ describe("waitTransaction option domains", () => {
 
     await expect(
       waitTransaction(client, "not-a-hash", { signal: controller.signal }),
-    ).rejects.toThrow("Invalid bytes");
+    ).rejects.toThrow("Invalid Hex");
 
     expect(request).not.toHaveBeenCalled();
     expect(addEventListener).not.toHaveBeenCalled();
@@ -575,9 +575,7 @@ function nonJsonClient(): {
   return { client, getTransactionNoCache };
 }
 
-type JsonRpcRequest = (
-  payload: Parameters<ccc.RequestorJsonRpc["requestPayload"]>[0],
-) => Promise<{ id: number; result: unknown; error: null }>;
+type JsonRpcRequest = (payload: ccc.JsonRpcPayload) => Promise<ccc.JsonRpcResponse>;
 
 function jsonRpcClient(
   txStatus: unknown,
@@ -587,27 +585,21 @@ function jsonRpcClient(
   request: Mock<JsonRpcRequest>;
 } {
   const request = vi.fn<JsonRpcRequest>(
-    async (
-      payload: Parameters<ccc.RequestorJsonRpc["requestPayload"]>[0],
-    ): Promise<{ id: number; result: unknown; error: null }> => {
+    async (payload: ccc.JsonRpcPayload): Promise<ccc.JsonRpcResponse> => {
       if (gate !== undefined) {
         await gate;
       }
       await Promise.resolve();
       return {
         id: payload.id,
+        jsonrpc: "2.0",
         result: { transaction: null, tx_status: txStatus },
-        error: null,
       };
     },
   );
-  const requestor = new ccc.RequestorJsonRpc("https://example.invalid", {
-    transport: { request },
-  });
   return {
-    client: new ccc.ClientPublicTestnet({
-      url: "https://example.invalid",
-      requestor,
+    client: ccc.ClientPublicTestnet.new({
+      transport: { request },
       cache: new ccc.ClientCacheMemory(),
     }),
     request,

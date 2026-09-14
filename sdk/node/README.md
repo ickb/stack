@@ -12,10 +12,10 @@ Order directions in logs and diagnostics are the on-chain order owner's directio
 
 ## Runtime Config
 
-The bot reads three environment variables:
+The bot reads these environment variables:
 
 - `BOT_CHAIN`: `testnet` or `mainnet`.
-- `BOT_RPC_URL`: the exclusive HTTP(S) RPC URL for that chain; the client keeps no CCC public fallbacks beside it. Userinfo, whitespace, and control characters are rejected.
+- `BOT_RPC_URL` (optional): one node's HTTP(S) or WebSocket RPC URL, used as the only endpoint. Absent, the bot uses CCC's public endpoints for the chain, WebSocket first with HTTPS fallbacks, and the journal's `rpcEndpoint` reads `{"mode":"default"}`. Userinfo, whitespace, and control characters are rejected.
 - `BOT_PRIVATE_KEY_FILE`: path of a mode `0600` file holding only the signing key as lowercase `0x` plus 64 lowercase hex characters. Surrounding whitespace, such as an editor's final newline, is ignored. A relative path resolves against `INIT_CWD` when pnpm sets it, otherwise the working directory.
 
 The key lives in a file rather than a variable because unit files, `systemctl show`, and every child process expose environment values. Invalid values fail with `Invalid env <NAME>` and never echo the value.
@@ -29,7 +29,7 @@ From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as
 ```bash
 pnpm install
 mkdir -p config && (umask 077 && $EDITOR config/testnet.key)
-export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckbapp.dev/ BOT_PRIVATE_KEY_FILE=config/testnet.key
+export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=config/testnet.key
 pnpm --filter ./sdk/node bot
 ```
 
@@ -90,7 +90,7 @@ Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|convers
 Each turn writes one JSON line with the bot's envelope, `type` `stimulus.turn` and `timestamp` first, then `identity` (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), `balance`, `orders` (live, fulfilled, under-par, and stale counts; a stale count above zero means the bot left an order for thirty days and deserves a look), `draw`, and `outcome`: `committed`, `unresolved` (sent, but the wait window closed), `rejected` (the node refused it), `skipped` with its `skip` reason, or `failed` with `error`. A sent transaction carries `action` (the order and master output indices of a mint, or the SDK's conversion kind), `transactionShape`, `txFee`, and `txHash`; only `committed` proves the stimulus reached the chain. The order outpoints the bot logs in `decision.match.matchedOrderOutPoints` are `txHash` plus the logged output index, so the two journals join.
 
 ```bash
-export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckbapp.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
+export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
 pnpm --filter ./sdk/node stimulus
 ```
 

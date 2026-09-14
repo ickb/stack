@@ -301,15 +301,10 @@ describe("FakeClient scripting and identity", () => {
   });
 
   it("reports fake identity without any network meaning", () => {
-    const client = new FakeClient(chainState());
-    expect(client.url).toBe("fake://chain-state");
-    expect(client.addressPrefix).toBe("ckt");
-    const overridden = new FakeClient(chainState(), {
-      addressPrefix: "ckb",
-      url: "fake://other",
-    });
-    expect(overridden.addressPrefix).toBe("ckb");
-    expect(overridden.url).toBe("fake://other");
+    expect(new FakeClient(chainState()).addressPrefix).toBe("ckt");
+    expect(new FakeClient(chainState(), { addressPrefix: "ckb" }).addressPrefix).toBe(
+      "ckb",
+    );
   });
 
   it("blanks output data when live cells are fetched without data", async () => {
