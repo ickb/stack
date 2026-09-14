@@ -44,7 +44,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           ickbAvailable: 1n,
         }),
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
       estimatedMaturity: 0n,
@@ -72,7 +72,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           ickbAvailable: 0n,
         }),
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
       estimatedMaturity: 0n,

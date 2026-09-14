@@ -12,8 +12,14 @@ import {
 export function conversionFailure(
   reason: ConversionTransactionFailureReason,
   estimatedMaturity: bigint,
+  minimum?: bigint,
 ): ConversionTransactionResult {
-  return { ok: false, reason, estimatedMaturity };
+  return {
+    ok: false,
+    reason,
+    estimatedMaturity,
+    ...(minimum === undefined ? {} : { minimum }),
+  };
 }
 
 export function baseTransactionOptions(

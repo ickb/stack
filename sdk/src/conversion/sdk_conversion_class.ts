@@ -11,6 +11,7 @@ import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
 } from "./sdk_conversion_plans.ts";
+import { minimumOrderAmount } from "./sdk_estimate.ts";
 import type {
   CkbToIckbConversionPlan,
   ConversionTransactionOptions,
@@ -86,7 +87,11 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     // A plan is dropped only for an unrepresentable remainder order.
     const plans = ckbToIckbConversionPlans(options);
     if (plans.length === 0) {
-      return conversionFailure("amount-too-small", context.estimatedMaturity);
+      return conversionFailure(
+        "amount-too-small",
+        context.estimatedMaturity,
+        minimumOrderAmount(true, context.system),
+      );
     }
     const completion = await completeFirstFundable(
       plans,
@@ -123,7 +128,11 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     const { context, lock } = options;
     const plans = ickbToCkbConversionPlans(options, context.system.poolDeposits);
     if (plans.length === 0) {
-      return conversionFailure("amount-too-small", context.estimatedMaturity);
+      return conversionFailure(
+        "amount-too-small",
+        context.estimatedMaturity,
+        minimumOrderAmount(false, context.system),
+      );
     }
     const completion = await completeFirstFundable(
       plans,

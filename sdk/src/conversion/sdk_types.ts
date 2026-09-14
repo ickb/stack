@@ -140,6 +140,11 @@ export type ConversionTransactionResult =
       reason: ConversionTransactionFailureReason;
       /** Best available maturity estimate from the input context. */
       estimatedMaturity: bigint;
+      /**
+       * For `amount-too-small`: the smallest amount this direction accepts at the current fee
+       * rate, in the request's unit (CKB shannons or iCKB), so a caller can name it.
+       */
+      minimum?: bigint;
     };
 
 /**

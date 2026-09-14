@@ -123,6 +123,27 @@ describe("buildTransactionPreview failure messages", () => {
     }
   });
 
+  it("names the rounded-up minimum when the SDK reports one", async () => {
+    for (const [isCkb2Udt, minimum, message] of [
+      [true, 33_222_000_000n, "Enter at least 340 CKB"],
+      [true, 1_040_000_000n, "Enter at least 11 CKB"],
+      [false, 95n, "Enter at least 0.00000095 iCKB"],
+    ] as const) {
+      const config = walletConfigWith({
+        sdk: {
+          buildConversionTransaction: buildConversionTransactionMock({
+            ...failedPlan("amount-too-small", 77n),
+            minimum,
+          }),
+        },
+      });
+
+      await expect(
+        buildTransactionPreview(context({ ckbAvailable: 1n }), isCkb2Udt, 1n, config),
+      ).resolves.toMatchObject({ error: message });
+    }
+  });
+
   it("describes SDK no-op plans by requested amount", async () => {
     for (const [amount, message] of [
       [0n, "Nothing to do"],

@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { OrderConversionRepresentabilityError } from "../order/index.ts";
+import { ceilDiv } from "../order/matching/order_conversion.ts";
 import type { ValueComponents } from "../utils/index.ts";
 import {
   estimateConversionOrder,
@@ -35,6 +36,22 @@ export function estimate(
   }
 
   return conversion;
+}
+
+/**
+ * The smallest request one direction accepts as an order at the current fee rate. A
+ * CKB-to-iCKB remainder pays the default order fee, which must cover the maturity threshold
+ * of ten mining fees; an iCKB-to-CKB remainder can give its whole CKB value as the dust
+ * fee, so its value must exceed the threshold. The extra unit covers the quote's rounding,
+ * as the dust search's boundary shows; callers round up further for display.
+ */
+export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): bigint {
+  const threshold = estimateMaturityFeeThreshold(system) + 1n;
+  if (isCkb2Udt) {
+    return ceilDiv(threshold * DEFAULT_ORDER_FEE_BASE, DEFAULT_ORDER_FEE);
+  }
+  const { ckbScale, udtScale } = system.exchangeRatio;
+  return ceilDiv(threshold * ckbScale, udtScale);
 }
 
 export function estimateIckbToCkbOrder(

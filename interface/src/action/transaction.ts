@@ -5,6 +5,7 @@ import type {
 } from "@ickb/sdk";
 import {
   errorMessageOf,
+  toText,
   txInfoPadding,
   type TxInfo,
   type WalletConfig,
@@ -49,7 +50,7 @@ export async function buildTransactionPreview(
     );
     if (!result.ok) {
       return txInfoWithError(
-        conversionFailureMessage(result.reason, amount),
+        conversionFailureMessage(result, amount, isCkb2Udt),
         result.estimatedMaturity,
       );
     }
@@ -79,12 +80,26 @@ function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
 }
 
 function conversionFailureMessage(
-  reason: ConversionTransactionFailureReason,
+  { reason, minimum }: { reason: ConversionTransactionFailureReason; minimum?: bigint },
   amount: bigint,
+  isCkb2Udt: boolean,
 ): string {
   if (reason === "nothing-to-do") {
     return amount === 0n ? noCollectionMessage : noRequestMessage;
   }
+  if (reason === "amount-too-small" && minimum !== undefined) {
+    return `Enter at least ${toText(roundUpToTwoDigits(minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
+  }
 
   return conversionFailureMessages[reason];
+}
+
+/** Rounds up to two significant digits, so a minimum reads as a round figure and still holds. */
+function roundUpToTwoDigits(amount: bigint): bigint {
+  const digits = amount.toString().length;
+  if (digits <= 2) {
+    return amount;
+  }
+  const unit = 10n ** BigInt(digits - 2);
+  return ((amount + unit - 1n) / unit) * unit;
 }

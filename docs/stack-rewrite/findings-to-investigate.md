@@ -18,7 +18,6 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 - Resolve npm version and registry handling before publication.
 - Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
 - Decide whether order migration ever accepts the deployed resolver's confusion-attack residual; keep orders action-required until then.
-- The `amount-too-small` failure should carry the minimum (user, 2026-09-14). A CKB-to-iCKB remainder order below about `10 × feeRate × 100000` shannons (10 CKB at a 1000 fee rate, 332 CKB at testnet's 33222) is refused because its 0.001% fee would not cover the matcher's ten mining fees; the SDK computes that threshold, so the failure can carry the minimum and the interface can say "Enter at least 340 CKB" (rounded up to two significant figures, unit by direction) instead of "Enter a larger amount" (wording user-ratified 2026-09-14). No fee escalation for this direction (user decision 2026-09-14); the iCKB-to-CKB dust path stays as it is.
 
 ## Investigation order
 
