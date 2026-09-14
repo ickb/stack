@@ -19,14 +19,14 @@ The work started with a whole-repository review. That review found a small numbe
 
 ## Progress
 
-| Phase               | State    | Work                                                                                                                                                                                                                     |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, and the C1 matcher correction.                                                                                                                       |
-| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                   |
-| 2. SDK reshape      | Active   | Delivered: plain sampled state, typed results and errors, uncapped exact-lock scans, and scan-free completion that compacts the account. Remaining: the joint net-delta match search and the shape slice (amendment 52). |
-| 3. Repository shape | Planned  | Plain merge of the SDK packages and of each app with its package (amendment 35); the probes built for a packed-artifact gate retire with it.                                                                             |
-| 4. Runtime          | Active   | Delivered: single-turn bot and stimulus generator under a systemd user unit with env config (amendments 32-34, 48) and the one-transaction turn policy with its typed events (amendment 52).                             |
-| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice.   |
+| Phase               | State    | Work                                                                                                                                                                                                                   |
+| ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Foundations      | Complete | Dependency and toolchain pins, repository hygiene, contract oracle, and the C1 matcher correction.                                                                                                                     |
+| 1. Test bed         | Complete | Golden vectors, property tests, `FakeClient`, tree-shaking checks, and the API Extractor entity probe.                                                                                                                 |
+| 2. SDK reshape      | Complete | Plain sampled state, typed results and errors, uncapped exact-lock scans, scan-free completion that compacts the account, and the one-transaction match search (amendment 52). The shape slice follows the fork.       |
+| 3. Repository shape | Complete | The SDK packages merged into `@ickb/sdk` and each app into its package (amendment 35); the packed-artifact probes, export manifest, and release tags retired (52(r)).                                                  |
+| 4. Runtime          | Active   | Delivered: single-turn bot and stimulus generator under a systemd user unit with env config (amendments 32-34, 48) and the one-transaction turn policy with its typed events (amendment 52).                           |
+| 5. Depth            | Planned  | Real-header fixtures, mutation spot checks, live smoke wiring, and the selected resolved-balance, position-visibility, and planner-derived iCKB Max scope. Connected-destination iCKB migration remains a later slice. |
 
 Every phase is expected to land through green slices. Required checks move with the code they protect; later CI reorganization cannot defer or weaken an earlier exit gate.
 

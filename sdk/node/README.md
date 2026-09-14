@@ -80,9 +80,9 @@ The generator is the bot's testnet counterpart: each turn it draws one random ac
 
 Each turn reads the account, then:
 
-1. draws a kind (`order` three times in four, otherwise `conversion`), a direction weighted by the CKB value spendable on each side, an amount, and for an order a fee numerator from `{0, 1, 10}` over `100000` with `1` twice as likely; the amount is the smallest positive one in one draw out of eight, the whole budget in another, and otherwise spread evenly across the decades from one CKB up, so dust, mid-size, and whole-balance stimulus all recur;
+1. draws a kind (`order` three times in four, otherwise `conversion`), a direction weighted by the CKB value spendable on each side, an amount, and for an order a fee numerator over `100000` from `{0, 1, 10}` for a sell and `{1, 10}` for a buy, `1` twice as likely as `10` (a zero-fee buy is one the bot never takes); the amount is the smallest positive one in one draw out of eight, the whole budget in another, and otherwise spread evenly across the decades from one CKB up, so dust, mid-size, and whole-balance stimulus all recur;
 2. mints the order on a transaction that also collects the account's fulfilled orders and cancels live orders the bot will not take: buys the bot's own matcher would refuse to fill whole today (the DAO ratio only grows past them), and any order older than thirty days (the bot has had every chance by then), or asks the SDK for the conversion with the same collections in its context; with five hundred own orders live it stops minting (testnet hygiene, not safety) and only collects;
-3. skips a transaction that the completer cannot fund, or whose amount the order format cannot represent; whenever the drawn action is refused and there is anything to collect (fulfilled or stale orders, receipts, ready withdrawals), it sends the collection alone instead;
+3. skips a transaction that the completer cannot fund, or whose amount the order format cannot represent; whenever the drawn action is refused and there is anything to collect (fulfilled, refused, or stale orders, receipts, ready withdrawals), it sends the collection alone instead;
 4. signs, sends, waits up to ten minutes, and exits `0` on commit or skip and `1` on any failure.
 
 Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|conversion`, `STIMULUS_DIRECTION=ckb-to-ickb|ickb-to-ckb`, `STIMULUS_AMOUNT=<whole CKB or iCKB, up to eight decimals>|max`, and `STIMULUS_FEE=<numerator below 100000>`. A pinned amount is used as drawn even when it exceeds the budget; the completer's refusal is then the evidence.
@@ -99,7 +99,7 @@ pnpm --filter ./sdk/node stimulus
 Neither program carries a notification channel: a run is one turn, and anything worth an operator's attention is a run of turns, which only the journal sees. Both journals are JSON lines with `type` and `timestamp` first, so a watcher is a pipe. Consecutive `bot.turn.failed` lines, or `bot.decision.skipped` lines whose `decision.match.reason` is `unfunded_gain`, are the two conditions worth forwarding; a `stale` count above zero in the generator's `orders` is a third. Put the destination in an environment file with mode `0600` next to the key, since a Telegram or ntfy URL carries the token, and let `curl` encode the message:
 
 ```bash
-journalctl -f -u ickb-bot-testnet -o cat | jq -c 'fromjson? | select(.type == "bot.turn.failed")' \
+journalctl -f --user -u ickb-bot-testnet.service -o cat | jq -R -c 'fromjson? | select(.type == "bot.turn.failed")' \
   | while read -r line; do curl -sG --data-urlencode "text=$line" "$ALERT_URL" >/dev/null; done
 ```
 

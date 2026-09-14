@@ -15,14 +15,10 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 
 - Verify the golden-vector generator commit against the deployed ELF fixture authority. Current documentation cites contracts commit `ae8a11f` and deployed `ickb_logic` commit `454cfa96` for different evidence roles.
 - Add durable provenance enforcement for generated protocol vectors rather than relying on prose alone.
-- Decide whether manifest history needs mechanical enforcement; the current amendment rule is review-governed.
 - Resolve npm version and registry handling before publication.
 - Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
 - Decide whether order migration ever accepts the deployed resolver's confusion-attack residual; keep orders action-required until then.
 
 ## Investigation order
 
-1. Ratify or reject the ring preference change.
-2. Bind generated-vector provenance to executable fixture evidence.
-
-- Floors are computed from the pre-match book (amendment 40(d)); decide at coding time whether residual-book floors after matching are worth the change, given the spurious-refill and incomplete-search consequences recorded there.
+1. Bind generated-vector provenance to executable fixture evidence.
