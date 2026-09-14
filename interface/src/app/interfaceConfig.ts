@@ -22,7 +22,7 @@ export const queryClient = new QueryClient();
 export function createClient(chain: RootConfig["chain"]): ccc.Client {
   return chain === "mainnet"
     ? new ccc.ClientPublicMainnet({ url: "https://mainnet.ckb.dev/", fallbacks: [] })
-    : new ccc.ClientPublicTestnet({ url: "https://testnet.ckb.dev/", fallbacks: [] });
+    : new ccc.ClientPublicTestnet({ url: "https://testnet.ckbapp.dev/", fallbacks: [] });
 }
 export const mainnetClient = createClient("mainnet");
 export const testnetClient = createClient("testnet");

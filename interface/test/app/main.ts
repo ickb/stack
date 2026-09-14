@@ -24,7 +24,7 @@ vi.mock(import("../../src/app/Interface.tsx"), () => ({
 describe("main entrypoint", () => {
   it("uses explicit app-owned HTTPS RPC endpoints", () => {
     expect(mainnetClient.url).toBe("https://mainnet.ckb.dev/");
-    expect(testnetClient.url).toBe("https://testnet.ckb.dev/");
+    expect(testnetClient.url).toBe("https://testnet.ckbapp.dev/");
   });
 
   it("renders the interface directly into the wallet app mount", async () => {

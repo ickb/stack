@@ -45,8 +45,8 @@ Validation is operator-driven. Each actor runs one turn as a process and exits w
 The bot reads `BOT_CHAIN`, `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the stimulus generator reads the same three under `STIMULUS_` and refuses any chain but testnet. Key files under the ignored `config/` directory hold one lowercase `0x` key each. The RPC URL is exclusive, with no CCC public fallbacks. Private keys are for signing only and never reach events, errors, or logs.
 
 ```bash
-export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckb.dev/ BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
-export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckb.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
+export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckbapp.dev/ BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
+export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckbapp.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
 mkdir -p log/bot
 node sdk/node/src/bot.ts >> log/bot/events.ndjson
 node sdk/node/src/stimulus.ts

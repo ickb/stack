@@ -29,7 +29,7 @@ From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as
 ```bash
 pnpm install
 mkdir -p config && (umask 077 && $EDITOR config/testnet.key)
-export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckb.dev/ BOT_PRIVATE_KEY_FILE=config/testnet.key
+export BOT_CHAIN=testnet BOT_RPC_URL=https://testnet.ckbapp.dev/ BOT_PRIVATE_KEY_FILE=config/testnet.key
 pnpm --filter ./sdk/node bot
 ```
 
@@ -90,7 +90,7 @@ Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|convers
 Each turn writes one JSON line with the bot's envelope, `type` `stimulus.turn` and `timestamp` first, then `identity` (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), `balance`, `orders` (live, fulfilled, under-par, and stale counts; a stale count above zero means the bot left an order for thirty days and deserves a look), `draw`, and `outcome`: `committed`, `unresolved` (sent, but the wait window closed), `rejected` (the node refused it), `skipped` with its `skip` reason, or `failed` with `error`. A sent transaction carries `action` (the order and master output indices of a mint, or the SDK's conversion kind), `transactionShape`, `txFee`, and `txHash`; only `committed` proves the stimulus reached the chain. The order outpoints the bot logs in `decision.match.matchedOrderOutPoints` are `txHash` plus the logged output index, so the two journals join.
 
 ```bash
-export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckb.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
+export STIMULUS_CHAIN=testnet STIMULUS_RPC_URL=https://testnet.ckbapp.dev/ STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
 pnpm --filter ./sdk/node stimulus
 ```
 

@@ -59,7 +59,7 @@ describe("hook-based interface runtime", () => {
 
   it("exposes interface config and wallet gate state helpers", async () => {
     const client = new ccc.ClientPublicTestnet({
-      url: "https://testnet.ckb.dev/",
+      url: "https://testnet.ckbapp.dev/",
       fallbacks: [],
     });
     const cache = client.cache;
