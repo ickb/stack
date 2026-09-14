@@ -11,7 +11,8 @@ WorkingDirectory=/home/user/Projects/ickb/stack
 # The user manager does not see the shell PATH, so name the node binary by absolute path.
 ExecStart=/home/user/.local/share/fnm/node-versions/v24.18.0/installation/bin/node sdk/node/src/stimulus.ts
 Environment=STIMULUS_CHAIN=testnet
-# Set STIMULUS_RPC_URL to use one node instead of CCC's public endpoints.
+# Without STIMULUS_RPC_URL the client uses CCC's public endpoints; testnet.ckb.dev is degraded (2026-09-14).
+Environment="STIMULUS_RPC_URL=https://testnet.ckbapp.dev/"
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
 # Every draw is random unless pinned; see the knobs in sdk/node/README.md.
