@@ -8,8 +8,6 @@ const MasterCodec = mol.union({
 
 /**
  * Master pointer before normalization.
- *
- * @public
  */
 export type MasterLike =
   | { type: "relative"; value: RelativeLike }
@@ -17,8 +15,6 @@ export type MasterLike =
 
 /**
  * Master pointer stored in order data.
- *
- * @public
  */
 export type Master =
   { type: "relative"; value: Relative } | { type: "absolute"; value: ccc.OutPoint };

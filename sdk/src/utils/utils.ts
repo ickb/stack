@@ -5,8 +5,6 @@ import { ccc } from "@ckb-ccc/core";
  *
  * This page size is aligned with Nervos CKB's pull request #4576
  * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
- *
- * @public
  */
 export const defaultCellPageSize = 400;
 
@@ -16,8 +14,6 @@ export const defaultCellPageSize = 400;
  *
  * @remarks The operator's node is trusted: CKB's indexers advance the cursor on
  * every non-empty page, so no progress guard exists here (decisions amendment 52).
- *
- * @public
  */
 export async function findCells(
   client: ccc.Client,
@@ -43,8 +39,6 @@ export async function findCells(
 
 /**
  * Local transaction inclusion metadata.
- *
- * @public
  */
 export interface TransactionHeader {
   /**
@@ -60,8 +54,6 @@ export interface TransactionHeader {
 
 /**
  * CKB and UDT amounts carried by a cell, order, or planned value.
- *
- * @public
  */
 export interface ValueComponents {
   /** CKB-side amount as a `ccc.FixedPoint`. */
@@ -77,8 +69,6 @@ export interface ValueComponents {
  * @remarks
  * CKB-to-UDT conversions multiply by `ckbScale` and divide by `udtScale`.
  * UDT-to-CKB conversions swap the scales. Callers choose the rounding policy.
- *
- * @public
  */
 export interface ExchangeRatio {
   /** Numerator scale for CKB-side values. */
@@ -90,8 +80,6 @@ export interface ExchangeRatio {
 
 /**
  * Script plus cell dependencies needed to build transactions that use it.
- *
- * @public
  */
 export interface ScriptDeps {
   /**
@@ -111,8 +99,6 @@ export interface ScriptDeps {
  * @remarks
  * This is a structural filter for plain capacity cells. Spendability still
  * depends on the lock script, live cell state, and transaction context.
- *
- * @public
  */
 export function isPlainCapacityCell(cell: ccc.Cell): boolean {
   return cell.cellOutput.type === undefined && cell.outputData === "0x";
@@ -136,8 +122,6 @@ export function isPlainCapacityCell(cell: ccc.Cell): boolean {
  *
  * @example
  * `binarySearch(10, (i) => i > 5)` returns `6`.
- *
- * @public
  */
 export function binarySearch(n: number, f: (i: number) => boolean): number {
   // Define f(-1) == false and f(n) == true.
@@ -171,8 +155,6 @@ export function binarySearch(n: number, f: (i: number) => boolean): number {
  *
  * @remarks Adapted from Go's standard library search implementation:
  * {@link https://go.dev/src/sort/search.go}
- *
- * @public
  */
 export async function asyncBinarySearch(
   n: number,
@@ -203,8 +185,6 @@ export async function asyncBinarySearch(
  * @typeParam T - The type of elements in the input iterable.
  * @param inputs - The asynchronous iterable to convert into an array.
  * @returns A promise that resolves to an array of elements.
- *
- * @public
  */
 export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   const res = [];
@@ -218,8 +198,6 @@ export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
  * Compares two bigint values using sort-compatible ordering.
  *
  * @returns `-1` when `left` is smaller, `1` when `left` is larger, and `0` when equal.
- *
- * @public
  */
 export function compareBigInt(left: bigint, right: bigint): number {
   if (left < right) {
@@ -243,8 +221,6 @@ export function compareBigInt(left: bigint, right: bigint): number {
  * @param items - An iterable collection of items of type T.
  * @returns A generator that yields items from the iterable, ensuring that each item's
  *          hex representation (via toHex()) is unique.
- *
- * @public
  */
 export function* unique<T extends ccc.Entity>(items: Iterable<T>): Generator<T> {
   const set = new Set<string>();

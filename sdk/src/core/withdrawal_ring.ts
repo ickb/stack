@@ -11,8 +11,6 @@ export { depositKey, ringSegments, ringTargetSegmentIndex };
 
 /**
  * Returns a filter that excludes the ring anchor deposits from surplus selection.
- *
- * @public
  */
 export function ringSurplusDepositFilter<
   T extends WithdrawalDepositCandidate = IckbDepositCell,

@@ -11,8 +11,6 @@ const resolvedOrderGroups = new WeakMap<ccc.Cell, OrderGroup>();
  *
  * Implements `ValueComponents` to expose the cell's raw data and its
  * value breakdown (CKB and UDT).
- *
- * @public
  */
 export class OrderCell implements ValueComponents {
   /** Raw live cell that carries the order lock and UDT type. */
@@ -348,8 +346,6 @@ function compareOrderScore(left: OrderCell, right: OrderCell): number {
 
 /**
  * Represents a master cell
- *
- * @public
  */
 export class MasterCell implements ValueComponents {
   /** Raw live master cell that anchors an order group. */
@@ -408,8 +404,6 @@ export class MasterCell implements ValueComponents {
 
 /**
  * Represents a group of orders associated with a master cell.
- *
- * @public
  */
 export class OrderGroup implements ValueComponents {
   /** Master cell that authorizes and anchors the current order. */

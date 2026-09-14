@@ -20,8 +20,6 @@ const phase2TxFeeReserve = ccc.One;
 /**
  * Manages logic related to deposits and receipts in the blockchain.
  * Implements the ScriptDeps interface.
- *
- * @public
  */
 export class LogicManager implements ScriptDeps {
   /** The iCKB Logic script used as receipt type and DAO deposit lock. */
@@ -279,8 +277,6 @@ export class LogicManager implements ScriptDeps {
  * @remarks The value is sized with the actual user lock because lock args affect
  * occupied capacity. It includes one plain output, one xUDT output, and the
  * phase-2 fee reserve.
- *
- * @public
  */
 export function receiptPhase2Capacity(lock: ccc.Script): ccc.FixedPoint {
   // Capacity is measured with the actual user lock. Lock args are wallet-specific

@@ -30,8 +30,6 @@ export function estimateConversionOrder(
 
 /**
  * Returns the CKB fee threshold above which order maturity is worth estimating.
- *
- * @public
  */
 export function estimateMaturityFeeThreshold(
   system: Pick<SystemState, "feeRate">,

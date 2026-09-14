@@ -6,8 +6,6 @@ const RING_EPOCHS = 180n;
 
 /**
  * Ring segment of pool deposits grouped by maturity around the DAO cycle.
- *
- * @public
  */
 export interface RingSegment<T extends WithdrawalDepositCandidate = IckbDepositCell> {
   /** Segment index in the ring. */
@@ -22,8 +20,6 @@ export interface RingSegment<T extends WithdrawalDepositCandidate = IckbDepositC
 
 /**
  * Returns the segment index containing the sampled tip epoch.
- *
- * @public
  */
 export function ringTargetSegmentIndex(
   tip: ccc.ClientBlockHeader,
@@ -34,8 +30,6 @@ export function ringTargetSegmentIndex(
 
 /**
  * Splits pool deposits into power-of-two maturity ring segments.
- *
- * @public
  */
 export function ringSegments<T extends WithdrawalDepositCandidate = IckbDepositCell>(
   poolDeposits: readonly T[],

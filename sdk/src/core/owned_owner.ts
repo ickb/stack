@@ -8,8 +8,6 @@ import { OwnerData } from "./entities.ts";
 
 /**
  * Builds and finds Owned Owner withdrawal groups for an iCKB deployment.
- *
- * @public
  */
 export class OwnedOwnerManager implements ScriptDeps {
   /** The Owned Owner script used as owner marker type and withdrawal request lock. */

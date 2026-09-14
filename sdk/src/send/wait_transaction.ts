@@ -4,7 +4,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_INTERVAL_MS = 2_000;
 
-/** Error reported when CKB gives a terminal non-committed transaction status. @public */
+/** Error reported when CKB gives a terminal non-committed transaction status. */
 export class TransactionWaitError extends Error {
   /** Hash of the transaction that reached a terminal status. */
   public readonly txHash: ccc.Hex;
@@ -28,7 +28,7 @@ export class TransactionWaitError extends Error {
   }
 }
 
-/** One bounded observation window for an already-broadcast transaction. @public */
+/** One bounded observation window for an already-broadcast transaction. */
 export interface WaitTransactionOptions {
   /** Absolute budget in milliseconds for the whole wait. Defaults to 60000. */
   timeout?: number;
@@ -50,8 +50,6 @@ export interface WaitTransactionOptions {
  * operations, but CCC transports cannot be cancelled and may finish after this
  * function rejects. Nothing here mutates the client cache: later attempts rebuild
  * from exact committed reads.
- *
- * @public
  */
 export async function waitTransaction(
   client: ccc.Client,

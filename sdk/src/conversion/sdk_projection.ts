@@ -12,8 +12,6 @@ import type {
  * Builds the conversion planner context from account state and the caller's own orders,
  * split by what it will melt: `available` orders are collected and budgeted as account
  * value, `pending` ones stay on the book.
- *
- * @public
  */
 export function projectConversionTransactionContext(
   system: SystemState,
@@ -47,8 +45,6 @@ export function projectConversionTransactionContext(
 
 /**
  * Splits wallet-owned CKB and iCKB into immediately available and pending value.
- *
- * @public
  */
 export function projectAccountAvailability(
   account: AccountState,

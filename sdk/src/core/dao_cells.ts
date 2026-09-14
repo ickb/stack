@@ -6,8 +6,6 @@ import {
 } from "../utils/index.ts";
 /**
  * Represents a live Nervos DAO deposit cell.
- *
- * @public
  */
 export interface DaoDepositCell extends ValueComponents {
   /** The DAO cell. */
@@ -43,8 +41,6 @@ export interface DaoDepositCell extends ValueComponents {
 
 /**
  * Represents a live Nervos DAO withdrawal request cell.
- *
- * @public
  */
 export type DaoWithdrawalRequestCell = Omit<DaoDepositCell, "isDeposit"> & {
   /** Discriminates this decoded DAO cell as a withdrawal request. */
@@ -81,8 +77,6 @@ type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHe
 
 /**
  * Batch-scoped caches for DAO cell conversion reads.
- *
- * @public
  */
 export interface DaoCellFromCache {
   /** Reuses block-header reads by block number across DAO cell conversions in one batch. */
@@ -98,8 +92,6 @@ type DaoCell = DaoDepositCell | DaoWithdrawalRequestCell;
 
 /**
  * Options required to decode a DAO cell and calculate readiness.
- *
- * @public
  */
 export type DaoCellFromOptions = {
   /** Client used for transaction and header lookups. */

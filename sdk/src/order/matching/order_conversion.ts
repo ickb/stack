@@ -39,8 +39,6 @@ export function quotePreservingRatio(
 
 /**
  * Error thrown when an exact quote cannot be represented by the order ratio format.
- *
- * @public
  */
 export class OrderConversionRepresentabilityError extends Error {
   /** Creates a representability error with the default public conversion message. */
@@ -218,8 +216,6 @@ function minBigInt(left: bigint, right: bigint): bigint {
  * @remarks
  * The returned `Info` preserves the quoted amount after fee adjustment so the
  * minted order records the executable limit price.
- *
- * @public
  */
 export function quoteConversion(
   isCkb2Udt: boolean,

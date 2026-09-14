@@ -5,8 +5,6 @@ import { Ratio } from "./ratio.ts";
 
 /**
  * Wire shape for an order's directional ratios and minimum CKB match.
- *
- * @public
  */
 export interface InfoLike {
   /** Populated when the order can trade CKB for UDT; empty otherwise. */
@@ -32,8 +30,6 @@ const InfoBase = ccc.Entity.Base<InfoLike, Info>();
  * Exactly one populated ratio describes a directional order. Two populated
  * ratios describe a dual-ratio order. Validation rejects empty/invalid pairs and
  * ratio pairs that allow value extraction.
- *
- * @public
  */
 export interface Info {
   /** Ratio for CKB-to-UDT matching, or empty when unavailable. */
@@ -189,7 +185,7 @@ const InfoImplementation = class Info extends InfoBase {
   }
 };
 
-/** CCC-backed order-info constructor and codec. @public */
+/** CCC-backed order-info constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const Info: {
   byteLength?: number;

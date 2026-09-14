@@ -164,8 +164,6 @@ export abstract class IckbSdkBase {
  * @remarks Measured as CCC charges fees, `toBytes().length + 4`. About a tenth of a
  * block; it admits roughly 1,400 inputs, so it outpaces one cellbase cell per block
  * from a miner paying the bot and is never reached after the first sweep.
- *
- * @public
  */
 export const TRANSACTION_SIZE_BUDGET = 64 * 1024;
 

@@ -2,16 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 
 /**
  * Maximum output count accepted by the Nervos DAO validator path.
- *
- * @public
  */
 export const DAO_OUTPUT_LIMIT = 64;
 
 /**
  * Throws when a completed transaction using the configured DAO script exceeds
  * the Nervos DAO output limit.
- *
- * @public
  */
 export function assertDaoOutputLimit(
   txLike: ccc.TransactionLike | ccc.Transaction,
@@ -36,8 +32,6 @@ export function assertDaoOutputLimit(
 
 /**
  * Error thrown when a DAO transaction exceeds the protocol output limit.
- *
- * @public
  */
 export class DaoOutputLimitError extends Error {
   /**
@@ -57,16 +51,12 @@ export class DaoOutputLimitError extends Error {
  *
  * @remarks The script reads one byte of the u64 field (RFC 0023 erratum,
  * nervosnetwork/rfcs pull 456).
- *
- * @public
  */
 export const DAO_HEADER_INDEX_LIMIT = 256;
 
 /**
  * Error thrown when a phase-2 withdrawal would reference a deposit header the
  * deployed DAO script cannot address.
- *
- * @public
  */
 export class DaoHeaderIndexError extends Error {
   /**
@@ -83,8 +73,6 @@ export class DaoHeaderIndexError extends Error {
 
 /**
  * Error thrown when unresolved inputs prevent a safe DAO output-limit check.
- *
- * @public
  */
 export class DaoOutputLimitIndeterminateError extends Error {
   /**

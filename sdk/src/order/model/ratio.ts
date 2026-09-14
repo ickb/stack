@@ -17,8 +17,6 @@ const RatioBase = ccc.Entity.Base<ExchangeRatio, Ratio>();
  * @remarks
  * A ratio is either empty (`0, 0`) or populated with both scales greater than
  * zero. Mixed empty/populated values are invalid.
- *
- * @public
  */
 export interface Ratio extends ExchangeRatio {
   /** Applies a directional fee and returns the reduced adjusted ratio. */
@@ -206,7 +204,7 @@ const RatioImplementation = class Ratio extends RatioBase {
   }
 };
 
-/** CCC-backed ratio constructor and codec. @public */
+/** CCC-backed ratio constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const Ratio: {
   byteLength?: number;

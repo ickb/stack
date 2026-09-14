@@ -14,8 +14,6 @@ const maxUint128 = (1n << 128n) - 1n;
 
 /**
  * Wire shape for order cell data.
- *
- * @public
  */
 export interface OrderDataLike {
   /** UDT amount held by the order cell. */
@@ -36,8 +34,6 @@ const OrderBase = ccc.Entity.Base<OrderDataLike, OrderData>();
 
 /**
  * Serialized order cell payload.
- *
- * @public
  */
 export interface OrderData {
   /** UDT amount held by the order cell. */
@@ -128,7 +124,7 @@ const OrderDataImplementation = class OrderData extends OrderBase {
   }
 };
 
-/** CCC-backed order-data constructor and codec. @public */
+/** CCC-backed order-data constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const OrderData: {
   byteLength?: number;

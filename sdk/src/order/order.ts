@@ -17,8 +17,6 @@ export { OrderConversionRepresentabilityError } from "./matching/order_conversio
 
 /**
  * Builds and scans iCKB Stack order cells for one order script deployment.
- *
- * @public
  */
 export class OrderManager implements ScriptDeps {
   /** Order lock script this manager scans and builds for. */

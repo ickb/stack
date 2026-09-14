@@ -13,10 +13,10 @@ import type {
   SystemState,
 } from "./sdk_types.ts";
 
-/** Default order-fee numerator used by Stack conversion quotes and plans. @public */
+/** Default order-fee numerator used by Stack conversion quotes and plans. */
 export const DEFAULT_ORDER_FEE = 1n;
 
-/** Default order-fee denominator used by Stack conversion quotes and plans. @public */
+/** Default order-fee denominator used by Stack conversion quotes and plans. */
 export const DEFAULT_ORDER_FEE_BASE = 100000n;
 
 export function estimate(

@@ -10,8 +10,6 @@ import { cellOutputLike } from "./order_io.ts";
 
 /**
  * Reason an observed order/master candidate could not form a valid group.
- *
- * @public
  */
 export type OrderGroupSkipReason =
   /** Order cell points to a master out point that was not found in the master scan. */

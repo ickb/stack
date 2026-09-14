@@ -17,7 +17,7 @@ import type { OrderGroup } from "./order/model/cells.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
 import type { SupportedChain } from "./utils/chain.ts";
 
-/** The SDK an integrator drives: the state read and the conversion builder. @public */
+/** The SDK an integrator drives: the state read and the conversion builder. */
 export interface IckbSdk {
   /** Builds and completes a conversion, or returns a typed planning failure. */
   buildConversionTransaction: (
@@ -36,7 +36,7 @@ export interface IckbSdk {
   }>;
 }
 
-/** Creates the SDK for one chain's deployment. @public */
+/** Creates the SDK for one chain's deployment. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor namespace intentionally share a name.
 export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
 export type { AccountAvailabilityProjection } from "./conversion/sdk_types.ts";

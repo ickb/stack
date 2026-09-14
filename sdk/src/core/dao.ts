@@ -16,8 +16,6 @@ import { cellInputLikeFrom, cellOutputLikeFrom } from "./transaction_shape.ts";
 
 /**
  * Builds and finds Nervos DAO deposit and withdrawal transactions.
- *
- * @public
  */
 export class DaoManager implements ScriptDeps {
   /** The deployed Nervos DAO type script managed by this instance. */

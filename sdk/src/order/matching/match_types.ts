@@ -3,8 +3,6 @@ import type { OrderGroup } from "../model/cells.ts";
 
 /**
  * The fills of one or more orders from the matcher caller's perspective.
- *
- * @public
  */
 export interface Match {
   /** Net CKB change from the match. */

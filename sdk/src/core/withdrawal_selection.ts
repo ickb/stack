@@ -25,8 +25,6 @@ export type {
  * user feels, so candidates are walked from the earliest maturity and each one that still
  * fits under `maxAmount` is taken (decisions amendment 40). How many of the selected
  * deposits one transaction can carry is decided later by completion, not here.
- *
- * @public
  */
 export function selectReadyWithdrawalDeposits<
   T extends WithdrawalDepositCandidate = IckbDepositCell,

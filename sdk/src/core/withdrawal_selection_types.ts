@@ -2,8 +2,6 @@ import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "./cells.ts";
 /**
  * Minimal deposit shape accepted by withdrawal selection helpers.
- *
- * @public
  */
 export interface WithdrawalDepositCandidate {
   /** Deposit out point used for identity and duplicate filtering. */
@@ -21,8 +19,6 @@ export interface WithdrawalDepositCandidate {
 
 /**
  * Options for selecting ready deposits for one withdrawal request transaction.
- *
- * @public
  */
 export interface ReadyWithdrawalSelectionOptions<
   T extends WithdrawalDepositCandidate = IckbDepositCell,

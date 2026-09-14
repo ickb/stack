@@ -67,7 +67,7 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
   }
 };
 
-/** Concrete iCKB SDK constructor and static estimators. @public */
+/** Concrete iCKB SDK constructor and static estimators. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const IckbSdk: {
   new (managers: SdkManagers): IckbSdk;

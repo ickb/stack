@@ -12,8 +12,6 @@ const xudtOwnerMode = 0x80000000n;
 
 /**
  * Soft per-deposit iCKB value cap used before applying the excess discount.
- *
- * @public
  */
 export const ICKB_DEPOSIT_CAP = ccc.fixedPointFrom(100000); // 100,000 iCKB
 
@@ -23,8 +21,6 @@ type TransactionWithHeader = Awaited<ReturnType<ccc.Client["getTransactionWithHe
  * The iCKB xUDT token: its scripts, code cells, and the iCKB accounting of a
  * transaction's inputs. Inputs carry iCKB as xUDT balances, as receipt value,
  * and negatively as the first-phase deposits a transaction re-mints.
- *
- * @public
  */
 export class IckbUdt {
   /** The iCKB xUDT type script. */
@@ -274,8 +270,6 @@ export function ickbValue(
  * @param amount - The amount to convert.
  * @param ratio - The CKB and iCKB scales to use.
  * @returns The converted amount in the target unit as a `ccc.FixedPoint`.
- *
- * @public
  */
 export function convert(
   isCkb2Udt: boolean,
@@ -295,8 +289,6 @@ export function convert(
  *
  * @param header - The block header whose DAO accumulated rate is used.
  * @returns An object containing the CKB and UDT scales.
- *
- * @public
  */
 export function ickbAccountingRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
   return {
@@ -310,8 +302,6 @@ export function ickbAccountingRatio(header: ccc.ClientBlockHeader): ExchangeRati
  *
  * @remarks Includes the standard deposit's 82 CKB occupied capacity spread
  * over the 100,000 iCKB reference amount.
- *
- * @public
  */
 export function ickbExchangeRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
   return {

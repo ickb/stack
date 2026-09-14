@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 
-/** Public CKB networks supported by Stack consumers. @public */
+/** Public CKB networks supported by Stack consumers. */
 export type SupportedChain = "mainnet" | "testnet";
 
-/** Canonical public identity of one supported CKB network. @public */
+/** Canonical public identity of one supported CKB network. */
 export interface ChainIdentity {
   /** Stack network selector represented by this identity. */
   readonly chain: SupportedChain;
@@ -41,7 +41,7 @@ const chainIdentities = Object.freeze({
   }),
 } as const satisfies Record<SupportedChain, ChainIdentity>);
 
-/** Returns the immutable canonical identity for one supported chain. @public */
+/** Returns the immutable canonical identity for one supported chain. */
 export function expectedChainIdentity(chain: SupportedChain): ChainIdentity {
   return chainIdentities[chain];
 }

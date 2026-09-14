@@ -2,8 +2,6 @@ import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedInt32LE, CheckedUint32LE, CheckedUint64LE } from "../utils/index.ts";
 /**
  * Represents a permissive data structure of the owner data of the owned owner script.
- *
- * @public
  */
 export interface OwnerDataLike {
   /** The signed distance between owner and owned cell in the mint transaction. */
@@ -18,8 +16,6 @@ const OwnerEntityBase = ccc.Entity.Base<OwnerDataLike, OwnerData>();
 
 /**
  * Encodes the owned-owner marker data that links an owner cell to its owned cell.
- *
- * @public
  */
 export interface OwnerData {
   /** Signed output-index distance from the owner marker to the owned cell. */
@@ -82,7 +78,7 @@ const OwnerDataImplementation = class OwnerData extends OwnerEntityBase {
   }
 };
 
-/** CCC-backed owner-data constructor and codec. @public */
+/** CCC-backed owner-data constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const OwnerData: {
   byteLength?: number;
@@ -96,8 +92,6 @@ export const OwnerData: {
 
 /**
  * Represents a permissive data structure of the data structure for a receipt.
- *
- * @public
  */
 export interface ReceiptDataLike {
   /** The quantity of deposits. */
@@ -115,8 +109,6 @@ const ReceiptEntityBase = ccc.Entity.Base<ReceiptDataLike, ReceiptData>();
 
 /**
  * Encodes the receipt payload for one or more identical iCKB deposits.
- *
- * @public
  */
 export interface ReceiptData {
   /** Number of identical deposits represented by this receipt. */
@@ -189,7 +181,7 @@ const ReceiptDataImplementation = class ReceiptData extends ReceiptEntityBase {
   }
 };
 
-/** CCC-backed receipt-data constructor and codec. @public */
+/** CCC-backed receipt-data constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const ReceiptData: {
   byteLength?: number;

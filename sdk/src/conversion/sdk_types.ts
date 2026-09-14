@@ -14,15 +14,11 @@ export const NOTHING_TO_DO_REASON: ConversionTransactionFailureReason = "nothing
 
 /**
  * Direction requested by a conversion transaction.
- *
- * @public
  */
 export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
 
 /**
  * Public pool deposit scan used by conversion planning.
- *
- * @public
  */
 export interface PoolDepositState {
   /** All scanned iCKB pool deposits, with readiness evaluated against the sampled tip. */
@@ -34,8 +30,6 @@ export interface PoolDepositState {
 
 /**
  * Optional DAO readiness window for pool deposit scans.
- *
- * @public
  */
 export interface PoolDepositRangeOptions {
   /** Optional lower bound for deposit renewal readiness. */
@@ -47,8 +41,6 @@ export interface PoolDepositRangeOptions {
 
 /**
  * Snapshot used to plan one wallet conversion transaction.
- *
- * @public
  */
 export interface ConversionTransactionContext {
   /** Public system state sampled for conversion planning. */
@@ -71,8 +63,6 @@ export interface ConversionTransactionContext {
 
 /**
  * Inputs and policy limits for building one conversion transaction.
- *
- * @public
  */
 export interface ConversionTransactionOptions {
   /** Conversion direction to build. */
@@ -93,8 +83,6 @@ export interface ConversionTransactionOptions {
 
 /**
  * Reason a conversion transaction could not be built without throwing.
- *
- * @public
  */
 export type ConversionTransactionFailureReason =
   | "amount-negative"
@@ -105,8 +93,6 @@ export type ConversionTransactionFailureReason =
 
 /**
  * Non-fatal conversion notice for callers to surface in UI or logs.
- *
- * @public
  */
 export interface ConversionNotice {
   /** Notice category. */
@@ -127,8 +113,6 @@ export interface ConversionNotice {
 
 /**
  * High-level conversion composition used by a built transaction.
- *
- * @public
  */
 export interface ConversionMetadata {
   /** Composition category selected for the built conversion. */
@@ -137,8 +121,6 @@ export interface ConversionMetadata {
 
 /**
  * Result of attempting to build a conversion transaction.
- *
- * @public
  */
 export type ConversionTransactionResult =
   | {
@@ -162,8 +144,6 @@ export type ConversionTransactionResult =
 
 /**
  * Options for completing a partial iCKB transaction before signing and sending.
- *
- * @public
  */
 export interface CompleteIckbTransactionOptions {
   /** Signer whose recommended lock receives change and which prepares the transaction. */
@@ -178,8 +158,6 @@ export interface CompleteIckbTransactionOptions {
 
 /**
  * Options for scanning L1 state.
- *
- * @public
  */
 export interface GetL1StateOptions {
   /** Optional readiness window for public pool deposit scans. */
@@ -188,8 +166,6 @@ export interface GetL1StateOptions {
 
 /**
  * Estimate for the order leg of an iCKB-to-CKB conversion.
- *
- * @public
  */
 export interface IckbToCkbOrderEstimate {
   /** Order conversion estimate for the market leg. */
@@ -202,8 +178,6 @@ export interface IckbToCkbOrderEstimate {
 
 /**
  * Quote details for one order-based conversion path.
- *
- * @public
  */
 export interface ConversionOrderEstimate {
   /** Output amount after applying the order ratio and fee. */
@@ -218,8 +192,6 @@ export interface ConversionOrderEstimate {
 
 /**
  * Input accepted by maturity estimation, either a live order cell or raw order data plus values.
- *
- * @public
  */
 export type MaturityOrderInput =
   | OrderCell
@@ -230,8 +202,6 @@ export type MaturityOrderInput =
 
 /**
  * Raw wallet-owned cells and grouped iCKB state sampled from L1.
- *
- * @public
  */
 export interface AccountState {
   /** Plain capacity cells owned by the account locks. */
@@ -250,8 +220,6 @@ export interface AccountState {
 
 /**
  * Account balances split into available, pending, and order/withdrawal buckets.
- *
- * @public
  */
 export interface AccountAvailabilityProjection {
   /** Native CKB directly controlled by the account. */
@@ -285,8 +253,6 @@ export interface AccountAvailabilityProjection {
 
 /**
  * Combined projection and transaction-planning context for one sampled account state.
- *
- * @public
  */
 export interface ConversionTransactionContextProjection {
   /** User-facing availability projection. */
@@ -297,8 +263,6 @@ export interface ConversionTransactionContextProjection {
 
 /**
  * Public sampled system state used for quotes, maturity, and conversion planning.
- *
- * @public
  */
 export interface SystemState {
   /** The fee rate for transactions. */
@@ -319,8 +283,6 @@ export interface SystemState {
 
 /**
  * Cumulative CKB maturity bucket used for maturity estimation.
- *
- * @public
  */
 export interface CkbCumulative {
   /** The cumulative CKB value (as FixedPoint) up to this maturity. */
@@ -329,7 +291,7 @@ export interface CkbCumulative {
   maturity: ccc.Num;
 }
 
-/** Manager set that builds one iCKB SDK instance. @public */
+/** Manager set that builds one iCKB SDK instance. */
 export interface SdkManagers {
   /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
   ickbUdt: IckbUdt;
@@ -345,8 +307,6 @@ export interface SdkManagers {
 
 /**
  * Optional components to collect into a base iCKB transaction.
- *
- * @public
  */
 export interface BuildBaseTransactionOptions {
   /** DAO withdrawal request inputs/outputs to add before other collect steps. */

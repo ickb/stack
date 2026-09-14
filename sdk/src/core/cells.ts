@@ -9,8 +9,6 @@ const isIckbDepositSymbol = Symbol("isIckbDeposit");
 
 /**
  * Represents a DAO deposit cell with its iCKB value computed from the deposit header.
- *
- * @public
  */
 export interface IckbDepositCell extends DaoDepositCell {
   /**
@@ -22,8 +20,6 @@ export interface IckbDepositCell extends DaoDepositCell {
 
 /**
  * Converts a DAO deposit cell into an iCKB deposit cell.
- *
- * @public
  */
 export function ickbDepositCellFrom(
   daoCell: DaoDepositCell,
@@ -45,8 +41,6 @@ export function ickbDepositCellFrom(
 
 /**
  * Represents a receipt cell containing the receipt for iCKB Deposits.
- *
- * @public
  */
 export interface ReceiptCell extends ValueComponents {
   /** The cell associated with the receipt. */
@@ -122,8 +116,6 @@ async function getReceiptTransactionWithHeader(
 
 /**
  * Pairs an owned DAO withdrawal request with the owner marker cell that points to it.
- *
- * @public
  */
 export class WithdrawalGroup implements ValueComponents {
   /** The decoded DAO withdrawal request controlled by this owner marker. */
@@ -155,8 +147,6 @@ export class WithdrawalGroup implements ValueComponents {
 
 /**
  * Wraps an owner marker cell that references an owned withdrawal request.
- *
- * @public
  */
 export class OwnerCell implements ValueComponents {
   /** The live owner marker cell whose output data points to the owned request. */

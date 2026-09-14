@@ -3,8 +3,6 @@ import { unique } from "../utils/index.ts";
 
 /**
  * Returns the primary lock plus all signer address locks, deduplicated by script hash.
- *
- * @public
  */
 export async function signerAccountLocks(
   signer: ccc.Signer,
@@ -20,8 +18,6 @@ export async function signerAccountLocks(
 
 /**
  * Sums currently live plain CKB capacity controlled by the account locks.
- *
- * @public
  */
 export function accountPlainCkbBalance(
   capacityCells: readonly ccc.Cell[],

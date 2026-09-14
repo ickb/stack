@@ -1,7 +1,7 @@
-/** Stable machine-readable failures owned by the Phase-2 SDK. @public */
+/** Stable machine-readable failures owned by the Phase-2 SDK. */
 export type IckbErrorCode = "insufficient_capacity" | "insufficient_ickb";
 
-/** Typed SDK failure with a stable machine-readable code. @public */
+/** Typed SDK failure with a stable machine-readable code. */
 export class IckbError extends Error {
   /** Stable failure code for callers and observability. */
   public readonly code: IckbErrorCode;
@@ -17,7 +17,7 @@ export class IckbError extends Error {
   }
 }
 
-/** Returns whether a value is an SDK failure. @public */
+/** Returns whether a value is an SDK failure. */
 export function isIckbError(error: unknown): error is IckbError {
   return error instanceof IckbError;
 }

@@ -9,8 +9,6 @@
  * Example output (CSV):
  * BlockNumber, Date, CkbPerIckb, Note
  * 0, 2019-11-15T21:09:50.812Z, 1.00082, Genesis
- *
- * @public
  */
 
 import { ccc } from "@ckb-ccc/core";
@@ -24,8 +22,6 @@ import { asyncBinarySearch } from "../../../src/utils/index.ts";
  *
  * @remarks The tip is read once and bounds every search. A missing probed header
  * moves the search left; a missing genesis or selected header throws.
- *
- * @public
  */
 export async function* sampleRows(
   client: ccc.Client,
@@ -134,8 +130,6 @@ function row(header: ccc.ClientBlockHeader, note: string): string {
  *          code may sort again for global ordering (the caller does so).
  *
  * @throws Error if `endMs < startMs` or if `n` is not a positive safe integer.
- *
- * @public
  */
 export function samples(startMs: bigint, endMs: bigint, n: number): Date[] {
   if (endMs < startMs) {

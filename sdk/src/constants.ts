@@ -156,8 +156,6 @@ const TESTNET_KNOWN_BOTS = [
  * @remarks Builders still return partial transactions. `IckbSdk` owns the
  * shared iCKB completion path as `sdk.completeTransaction(...)`, which callers
  * should invoke explicitly before send.
- *
- * @public
  */
 export function getConfig(
   d: "mainnet" | "testnet",

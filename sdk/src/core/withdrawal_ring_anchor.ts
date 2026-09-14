@@ -4,8 +4,6 @@ import type { WithdrawalDepositCandidate } from "./withdrawal_selection_types.ts
 
 /**
  * Returns the selected anchor deposit for each withdrawal ring segment.
- *
- * @public
  */
 export function ringAnchorDeposits<
   T extends WithdrawalDepositCandidate = IckbDepositCell,
@@ -17,8 +15,6 @@ export function ringAnchorDeposits<
 
 /**
  * Selects the live anchor deposit for one withdrawal ring segment.
- *
- * @public
  */
 export function ringSegmentAnchor<T extends WithdrawalDepositCandidate>(
   deposits: readonly T[],

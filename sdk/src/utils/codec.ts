@@ -7,8 +7,6 @@ import { ccc } from "@ckb-ccc/core";
  * The encoder rejects numeric values outside the signed 32-bit range before
  * writing bytes. Decoding reads a signed little-endian integer from the bytes
  * after CCC byte normalization.
- *
- * @public
  */
 export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   byteLength: 4,
@@ -31,16 +29,16 @@ export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   },
 });
 
-/** Checked codec for 8-bit unsigned integers. @public */
+/** Checked codec for 8-bit unsigned integers. */
 export const CheckedUint8 = checkedUintLE(1);
 
-/** Checked codec for little-endian 32-bit unsigned integers. @public */
+/** Checked codec for little-endian 32-bit unsigned integers. */
 export const CheckedUint32LE = checkedUintLE(4);
 
-/** Checked codec for little-endian 64-bit unsigned integers. @public */
+/** Checked codec for little-endian 64-bit unsigned integers. */
 export const CheckedUint64LE = checkedUintLE(8);
 
-/** Checked codec for little-endian 128-bit unsigned integers. @public */
+/** Checked codec for little-endian 128-bit unsigned integers. */
 export const CheckedUint128LE = checkedUintLE(16);
 
 function checkedUintLE(byteLength: number): ccc.Codec<ccc.NumLike, ccc.Num> {

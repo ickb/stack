@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 
-/** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. @public */
+/** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
 export class TransactionBroadcastError extends Error {
   /** Chain transaction hash computed from the signed transaction before broadcast. */
   public readonly txHash: ccc.Hex;
@@ -28,8 +28,6 @@ export class TransactionBroadcastError extends Error {
  * exact transaction is an acceptance; any other send failure remains ambiguous
  * and throws `TransactionBroadcastError`. The client cache is never marked:
  * later attempts rebuild from exact committed reads.
- *
- * @public
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,

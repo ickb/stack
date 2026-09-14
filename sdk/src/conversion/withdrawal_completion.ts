@@ -5,8 +5,6 @@ import { isIckbError } from "./sdk_error.ts";
 
 /**
  * One attempt of a completion walk: the candidate it was built from and the completed transaction.
- *
- * @public
  */
 export interface FundableCompletion<T> {
   candidate: T;
@@ -23,8 +21,6 @@ export interface FundableCompletion<T> {
  * represent. Capacity, DAO output-limit, DAO header-index, and representability failures
  * advance the walk; transport, scan, signer, and malformed-transaction errors propagate. Exhausting the
  * candidates throws the last advancing failure.
- *
- * @public
  */
 export async function completeFirstFundable<T>(
   candidates: Iterable<T>,

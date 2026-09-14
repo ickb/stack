@@ -7,8 +7,6 @@ const maxInt32 = (1n << 31n) - 1n;
 
 /**
  * Wire shape for a relative master pointer.
- *
- * @public
  */
 export interface RelativeLike {
   /** Must be the 32-byte zero padding used by the standard encoding. */
@@ -26,8 +24,6 @@ const RelativeBase = ccc.Entity.Base<RelativeLike, Relative>();
 
 /**
  * Relative pointer from an order output to its master output.
- *
- * @public
  */
 export interface Relative {
   /** Standard zero padding. */
@@ -104,7 +100,7 @@ const RelativeImplementation = class Relative extends RelativeBase {
   }
 };
 
-/** CCC-backed relative-pointer constructor and codec. @public */
+/** CCC-backed relative-pointer constructor and codec. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
 export const Relative: {
   byteLength?: number;
