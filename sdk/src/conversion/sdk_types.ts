@@ -270,9 +270,12 @@ export interface AccountAvailabilityProjection {
   ckbBalance: bigint;
   /** Total iCKB balance including pending positions. */
   ickbBalance: bigint;
-  /** Withdrawal groups ready to complete. */
+  /**
+   * Matured withdrawal groups one transaction can complete: at most the deposit-header slots
+   * the DAO script addresses (`DAO_HEADER_INDEX_LIMIT`) left after the receipts' headers.
+   */
   readyWithdrawals: WithdrawalGroup[];
-  /** Withdrawal groups still waiting for DAO maturity. */
+  /** Withdrawal groups still waiting for DAO maturity or for a header slot in a later turn. */
   pendingWithdrawals: WithdrawalGroup[];
   /** Order groups available for collection or budgeting as account value. */
   availableOrders: OrderGroup[];

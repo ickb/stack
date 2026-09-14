@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectAccountAvailability } from "../../../src/conversion/sdk_projection.ts";
+import { DAO_HEADER_INDEX_LIMIT } from "../../../src/core/index.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,
@@ -69,6 +70,32 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     expect(projection.ickbBalance).toBe(
       projection.ickbAvailable + projection.ickbPending,
     );
+  });
+
+  it("keeps ready the matured withdrawals that fit the header slots left after the receipts", () => {
+    const matured = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, () =>
+      withdrawalValue({ ckbValue: 11n, udtValue: 13n, isReady: true, byte: "32" }),
+    );
+    const receipt = receiptValue(41n, 43n);
+
+    const projection = projectAccountAvailability(
+      {
+        capacityCells: [],
+        nativeUdtCells: [],
+        nativeUdtCapacity: 0n,
+        nativeUdtBalance: 0n,
+        receipts: [receipt],
+        withdrawalGroups: matured,
+      },
+      { available: [], pending: [] },
+    );
+
+    // The receipt's deposit header takes one slot; the last two withdrawals wait a turn.
+    expect(projection.readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT - 1);
+    expect(projection.pendingWithdrawals).toHaveLength(2);
+    expect(projection.ckbAvailable).toBe(41n + 11n * BigInt(DAO_HEADER_INDEX_LIMIT - 1));
+    expect(projection.ckbPending).toBe(22n);
+    expect(projection.ckbBalance).toBe(41n + 11n * BigInt(matured.length));
   });
 
   it("derives native iCKB from xUDT cells instead of the redundant total", () => {

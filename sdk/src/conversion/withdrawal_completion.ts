@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoOutputLimitError } from "../core/index.ts";
+import { DaoHeaderIndexError, DaoOutputLimitError } from "../core/index.ts";
 import { OrderConversionRepresentabilityError } from "../order/index.ts";
 import { isIckbError } from "./sdk_error.ts";
 
@@ -20,8 +20,8 @@ export interface FundableCompletion<T> {
  * Only completion knows what a transaction costs once markers, remainder orders, change, and
  * fee are in, so no count is computed up front: each candidate is built and completed in turn
  * (decisions amendment 41). A builder returning `undefined` skips a candidate it cannot
- * represent. Capacity, DAO output-limit, and representability failures advance the walk;
- * transport, scan, signer, and malformed-transaction errors propagate. Exhausting the
+ * represent. Capacity, DAO output-limit, DAO header-index, and representability failures
+ * advance the walk; transport, scan, signer, and malformed-transaction errors propagate. Exhausting the
  * candidates throws the last advancing failure.
  *
  * @public
@@ -49,12 +49,16 @@ export async function completeFirstFundable<T>(
   throw error ?? new Error("No candidate could be completed");
 }
 
-/** A failure the walk advances past: the candidate costs more than the account funds. */
+/**
+ * A failure the walk advances past: the candidate costs more than the account funds, or
+ * needs more DAO outputs or deposit-header slots than one transaction has.
+ */
 export function isFundabilityFailure(error: unknown): error is Error {
   return (
     isIckbError(error) ||
     error instanceof ccc.ErrorTransactionInsufficientCapacity ||
     error instanceof DaoOutputLimitError ||
+    error instanceof DaoHeaderIndexError ||
     error instanceof OrderConversionRepresentabilityError
   );
 }

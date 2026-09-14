@@ -9,6 +9,7 @@ export { DaoManager } from "./dao.ts";
 export {
   DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
+  DaoHeaderIndexError,
   DaoOutputLimitError,
   assertDaoOutputLimit,
 } from "./dao_output_limit.ts";

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { WithdrawalGroup } from "../core/index.ts";
+import { DAO_HEADER_INDEX_LIMIT, type WithdrawalGroup } from "../core/index.ts";
 import type { OrderGroup } from "../order/index.ts";
 import type {
   AccountAvailabilityProjection,
@@ -59,6 +59,7 @@ export function projectAccountAvailability(
 ): AccountAvailabilityProjection {
   const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
     account.withdrawalGroups,
+    DAO_HEADER_INDEX_LIMIT - account.receipts.length,
   );
   const ckbNative = sumValues(account.capacityCells, (cell) => cell.cellOutput.capacity);
   const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
@@ -93,14 +94,22 @@ export function maxMaturity(left: bigint, right: bigint): bigint {
   return left > right ? left : right;
 }
 
-function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
+/**
+ * `ready` is the batch one transaction can complete: the deployed DAO script addresses a
+ * withdrawal's deposit header only below `DAO_HEADER_INDEX_LIMIT`, and the receipts' deposit
+ * headers take slots first, so matured withdrawals past the remaining slots wait a turn.
+ */
+function splitWithdrawals(
+  withdrawalGroups: readonly WithdrawalGroup[],
+  headerSlots: number,
+): {
   readyWithdrawals: WithdrawalGroup[];
   pendingWithdrawals: WithdrawalGroup[];
 } {
   const readyWithdrawals: WithdrawalGroup[] = [];
   const pendingWithdrawals: WithdrawalGroup[] = [];
   for (const group of withdrawalGroups) {
-    if (group.owned.isReady) {
+    if (group.owned.isReady && readyWithdrawals.length < headerSlots) {
       readyWithdrawals.push(group);
     } else {
       pendingWithdrawals.push(group);

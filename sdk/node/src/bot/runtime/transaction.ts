@@ -5,7 +5,6 @@ import {
   isFundabilityFailure,
 } from "../../../../src/conversion/withdrawal_completion.ts";
 import {
-  DAO_HEADER_INDEX_LIMIT,
   type IckbDepositCell,
   receiptPhase2Capacity,
 } from "../../../../src/core/index.ts";
@@ -66,29 +65,21 @@ export async function buildTransaction(
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
   const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
-  const decision = (
-    core: Core,
-    attempts: number,
-    tx?: ccc.Transaction,
-    withdrawals = 0,
-  ): BotDecision =>
-    buildDecision({ state, matched, plan, core, attempts, tx, withdrawals });
+  const decision = (core: Core, attempts: number, tx?: ccc.Transaction): BotDecision =>
+    buildDecision({ state, matched, plan, core, attempts, tx });
 
   if (cores.length === 0) {
     return skipped("no_actions", decision({ kind: "none" }, 0));
   }
 
   let attempts = 0;
-  let withdrawals = 0;
   let completion: FundableCompletion<Core>;
   try {
     completion = await completeFirstFundable(
       cores,
       (core) => {
         attempts += 1;
-        const built = buildCore(runtime, state, matched, core);
-        withdrawals = built.withdrawals;
-        return built.tx;
+        return buildCore(runtime, state, matched, core);
       },
       async (tx) => runtime.completeTransaction(tx, state.system.feeRate, state.cells),
     );
@@ -99,7 +90,7 @@ export async function buildTransaction(
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx } = completion;
-  const built = decision(core, attempts, tx, withdrawals);
+  const built = decision(core, attempts, tx);
   return { kind: "built", tx, actions: built.actions, decision: built };
 }
 
@@ -174,28 +165,24 @@ function greedyFit(
 }
 
 /**
- * The match and every collection ride on each core; the builders mutate their input.
- * Returns how many ready withdrawals the transaction carries.
+ * The match and every collection ride on each core; the builders mutate their input. The
+ * projection already sized the ready batch to the deposit-header slots left after the
+ * receipts; a withdrawal request that would push a header past the limit fails the core as
+ * unfundable, so the walk falls back to a shorter chain or to `none`.
  */
 function buildCore(
   runtime: Runtime,
   state: BotState,
   matched: MatchOutcome,
   core: Core,
-): { tx: ccc.Transaction; withdrawals: number } {
+): ccc.Transaction {
   let tx = runtime.sdk.buildBaseTransaction(matched.tx.clone(), {
     ...(core.kind === "withdraw"
       ? { withdrawalRequest: { deposits: core.deposits, lock: runtime.primaryLock } }
       : {}),
     receipts: state.receipts,
+    readyWithdrawals: state.readyWithdrawals,
   });
-  // The deployed DAO script addresses a withdrawal's deposit header only below the index
-  // limit, and the requests' and receipts' headers hold the first slots; the rest wait a turn.
-  const readyWithdrawals = state.readyWithdrawals.slice(
-    0,
-    Math.max(0, DAO_HEADER_INDEX_LIMIT - tx.headerDeps.length),
-  );
-  tx = runtime.sdk.buildBaseTransaction(tx, { readyWithdrawals });
   if (core.kind === "deposit") {
     tx = runtime.managers.logic.deposit(
       tx,
@@ -204,7 +191,7 @@ function buildCore(
       runtime.primaryLock,
     );
   }
-  return { tx, withdrawals: readyWithdrawals.length };
+  return tx;
 }
 
 function buildDecision({
@@ -214,7 +201,6 @@ function buildDecision({
   core,
   attempts,
   tx,
-  withdrawals,
 }: {
   state: BotState;
   matched: MatchOutcome;
@@ -222,7 +208,6 @@ function buildDecision({
   core: Core;
   attempts: number;
   tx?: ccc.Transaction;
-  withdrawals: number;
 }): BotDecision {
   const { match } = matched;
   const actions: BotActions = {
@@ -230,7 +215,7 @@ function buildDecision({
     deposits: core.kind === "deposit" ? 1 : 0,
     withdrawalRequests: core.kind === "withdraw" ? core.deposits.length : 0,
     completedDeposits: tx === undefined ? 0 : state.receipts.length,
-    withdrawals,
+    withdrawals: tx === undefined ? 0 : state.readyWithdrawals.length,
   };
   return {
     ...summarizeBotState(state),

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/sdk_error.ts";
+import { projectAccountAvailability } from "../../../../src/conversion/sdk_projection.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   ICKB_DEPOSIT_CAP,
@@ -14,6 +15,7 @@ import {
   botRuntime,
   botState,
   FUNDED_CHANGE,
+  l1AccountState,
   readyDeposit,
   testWithdrawal,
 } from "../fixtures/bot.ts";
@@ -164,25 +166,35 @@ describe("buildTransaction withdrawal", () => {
     });
   });
 
-  it("collects as many ready withdrawals as the DAO script can address; the rest wait a turn", async () => {
-    const ready = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, (_, index) =>
-      testWithdrawal("00", index + 1),
+  it("collects the projection's ready batch; a request that would push a deposit header past the limit is shed", async () => {
+    // One more matured withdrawal than the DAO script addresses; the projection keeps the
+    // last one pending for the next turn (no receipts, so every slot is a withdrawal's).
+    const withdrawalGroups = Array.from(
+      { length: DAO_HEADER_INDEX_LIMIT + 1 },
+      (_, index) => testWithdrawal("00", index + 1),
     );
+    const { readyWithdrawals, pendingWithdrawals } = projectAccountAvailability(
+      { ...l1AccountState().account, withdrawalGroups },
+      { available: [], pending: [] },
+    );
+    expect(readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT);
+    expect(pendingWithdrawals).toHaveLength(1);
     const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
+    const collections = { readyWithdrawals, notReadyWithdrawals: pendingWithdrawals };
 
-    // Nothing else pushes a header, so every slot goes to a withdrawal's deposit header;
-    // the fixtures share one request header, pushed after them.
+    // The fixtures share one request header, pushed after the deposit headers.
     await expect(
       buildTransaction(
         runtime,
-        botState({ ckb: ccc.fixedPointFrom(500_000), readyWithdrawals: ready }),
+        botState({ ckb: ccc.fixedPointFrom(500_000), ...collections }),
       ),
     ).resolves.toMatchObject({
       kind: "built",
       actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
       decision: { transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 1 } },
     });
-    // A withdrawal request's deposit header takes the first slot.
+    // A withdrawal request's deposit header takes the first slot, so the last withdrawal's
+    // header lands on the limit: the withdraw core is unfundable and `none` carries the batch.
     await expect(
       buildTransaction(
         runtime,
@@ -190,12 +202,13 @@ describe("buildTransaction withdrawal", () => {
           ckb: ccc.fixedPointFrom(500_000),
           ickb: ICKB_WITHDRAW_ABOVE + 100n,
           poolDeposits: pool([readyDeposit("81", 4n, 0n)]),
-          readyWithdrawals: ready,
+          ...collections,
         }),
       ),
     ).resolves.toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT - 1 },
+      actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
+      decision: { core: { kind: "none", attempts: 2 } },
     });
   });
 });
