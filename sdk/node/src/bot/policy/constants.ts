@@ -15,9 +15,3 @@ export const ICKB_RETAIN = ICKB_DEPOSIT_CAP / 5n;
 export const ICKB_WITHDRAW_ABOVE = ICKB_DEPOSIT_CAP + ICKB_RETAIN;
 /** Anchors may be withdrawn only when spendable CKB is below this fraction of a deposit. */
 export const STRESS_DIVISOR = 5n;
-/**
- * What a fill must return before it is taken, in mining fees of its own: the buffer for
- * the deposits and withdrawals that rebalance the inventory it moves (user decision
- * 2026-09-10, tuned on testnet).
- */
-export const FILL_COST_FEES = 10n;

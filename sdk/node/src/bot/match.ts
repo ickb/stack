@@ -4,7 +4,7 @@ import { partialOrderFee } from "../../../src/order/io/order_io.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
-import { FILL_COST_FEES } from "./policy/constants.ts";
+import { fillCost, netOf, returnsCost } from "../shared/index.ts";
 import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
 
 /** One turn's match and how it was chosen. */
@@ -49,7 +49,7 @@ export function matchTurn({
   maxPartials?: number;
 }): TurnMatch {
   const fee = partialOrderFee(orders, feeRate);
-  const cost = FILL_COST_FEES * fee * exchangeRatio.ckbScale;
+  const cost = fillCost(fee, exchangeRatio);
   const pool = [
     ...new Map(
       orders.map((group) => [group.order.cell.outPoint.toHex(), group]),
@@ -68,9 +68,7 @@ export function matchTurn({
     udtDelta: 0n,
     partials: [],
     candidates: matchers.length,
-    gains: matchers.filter(
-      (matcher) => netOf(matcher.match(matcher.bMaxMatch), cost, exchangeRatio) > 0n,
-    ).length,
+    gains: matchers.filter((matcher) => returnsCost(matcher, cost, exchangeRatio)).length,
     fee,
     seed,
   };
@@ -113,11 +111,6 @@ function bestFill(
     }
   }
   return best;
-}
-
-/** A fill's exchange value at the DAO ratio, net of the cost of taking it. */
-function netOf(fill: Match, cost: bigint, { ckbScale, udtScale }: ExchangeRatio): bigint {
-  return fill.ckbDelta * ckbScale + fill.udtDelta * udtScale - cost;
 }
 
 /** The low bits of the tip hash: a seed that changes every block and is logged with the turn. */

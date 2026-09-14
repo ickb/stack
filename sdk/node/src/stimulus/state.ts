@@ -8,6 +8,7 @@ import type {
 } from "../../../src/conversion/sdk_types.ts";
 import type { OrderGroup } from "../../../src/order/index.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
+import { fillsWhole } from "../shared/index.ts";
 import type { Budgets } from "./draw.ts";
 
 /** Runtime dependencies of one stimulus turn. */
@@ -29,7 +30,7 @@ export interface StimulusState {
   /** Fulfilled orders plus the live ones the bot will not take (see {@link abandonedOrders}): melted this turn. */
   collectable: OrderGroup[];
   /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
-  orders: { live: number; fulfilled: number; underPar: number; stale: number };
+  orders: { live: number; fulfilled: number; refused: number; stale: number };
   budgets: Budgets;
   plainCkb: bigint;
 }
@@ -49,8 +50,8 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   );
   const fulfilled = user.orders.filter((group) => group.order.isFulfilled());
   const live = user.orders.filter((group) => group.order.isMatchable());
-  const { underPar, stale } = await abandonedOrders(runtime.client, live, system);
-  const collectable = [...fulfilled, ...underPar, ...stale];
+  const { refused, stale } = await abandonedOrders(runtime.client, live, system);
+  const collectable = [...fulfilled, ...refused, ...stale];
   const { context } = projectConversionTransactionContext(system, account, {
     available: collectable,
     pending: live.filter((group) => !collectable.includes(group)),
@@ -64,7 +65,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     orders: {
       live: live.length,
       fulfilled: fulfilled.length,
-      underPar: underPar.length,
+      refused: refused.length,
       stale: stale.length,
     },
     budgets: {
@@ -78,22 +79,23 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
 
 /**
  * Live orders the bot will not take, counted apart because they mean different things:
- * `underPar` is a buy priced at or under the DAO ratio, which the ratio's growth only
- * pushes further under; `stale` is any order older than {@link STALE_ORDER_BLOCKS}, which
- * a running bot should never let happen. A sell is never under par, since the same growth
- * only raises what the bot earns on it (decisions amendment 52).
+ * `refused` is a buy the bot's own matcher would not fill whole today, which the DAO
+ * ratio's growth only pushes further from filling; `stale` is any order older than
+ * {@link STALE_ORDER_BLOCKS}, which a running bot should never let happen. A sell is never
+ * refused, since the same growth only raises what the bot earns on it, so a sell the bot
+ * does not take yet may still be taken later (decisions amendment 52).
  */
 async function abandonedOrders(
   client: ccc.Client,
   live: OrderGroup[],
-  { exchangeRatio, tip }: SystemState,
-): Promise<{ underPar: OrderGroup[]; stale: OrderGroup[] }> {
-  const underPar: OrderGroup[] = [];
+  { exchangeRatio, feeRate, tip }: SystemState,
+): Promise<{ refused: OrderGroup[]; stale: OrderGroup[] }> {
+  const refused: OrderGroup[] = [];
   const stale: OrderGroup[] = [];
   for (const group of live) {
     const { info } = group.order.data;
-    if (info.isCkb2Udt() && info.ckbToUdt.compare(exchangeRatio) >= 0) {
-      underPar.push(group);
+    if (info.isCkb2Udt() && !fillsWhole(group, true, exchangeRatio, feeRate)) {
+      refused.push(group);
       continue;
     }
     const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
@@ -103,5 +105,5 @@ async function abandonedOrders(
       stale.push(group);
     }
   }
-  return { underPar, stale };
+  return { refused, stale };
 }

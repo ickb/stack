@@ -3,7 +3,7 @@ import { partialOrderFee } from "../../../src/order/io/order_io.ts";
 
 import { describe, expect, it } from "vitest";
 import { matchTurn, seedOf, type TurnMatch } from "../../src/bot/match.ts";
-import { FILL_COST_FEES } from "../../src/bot/policy/constants.ts";
+import { fillCost } from "../../src/shared/index.ts";
 import { hash, marketOrder } from "./fixtures/bot.ts";
 
 const CKB = ccc.fixedPointFrom(1);
@@ -81,7 +81,7 @@ describe("matchTurn", () => {
 
   it("takes a fill only when it returns its cost in fees", () => {
     const fee = partialOrderFee([buyer("03", 2000n, 2000n)], FEE_RATE);
-    const cost = FILL_COST_FEES * fee;
+    const cost = fillCost(fee, UNIT);
     const at = (premium: bigint): TurnMatch =>
       turn([buyer("03", 2000n + premium, 2000n)], { ckb: fee, udt: 2000n });
 

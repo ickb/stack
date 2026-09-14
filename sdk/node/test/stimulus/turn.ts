@@ -152,7 +152,7 @@ describe("runStimulusTurn", () => {
     expect(request).not.toHaveBeenCalled();
     expect(log).toMatchObject({
       outcome: "committed",
-      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, underPar: 0, stale: 0 },
+      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
       skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
       draw: { kind: "collect-only" },
       balance: { CKB: { budget: "5100" }, ICKB: { budget: "50" } },
@@ -199,7 +199,7 @@ describe("runStimulusTurn", () => {
       type: "stimulus.turn",
       timestamp: new Date(log.timestamp ?? "").toISOString(),
       outcome: "committed",
-      orders: { live: 0, fulfilled: 1, underPar: 0, stale: 0 },
+      orders: { live: 0, fulfilled: 1, refused: 0, stale: 0 },
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 3, outputs: 3 },
