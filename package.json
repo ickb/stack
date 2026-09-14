@@ -9,7 +9,7 @@
     "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./interface lint:typecheck",
     "lint:format": "prettier --check .",
-    "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript sdk testkit interface scripts",
+    "lint:duplication": "jscpd --min-lines 12 --min-tokens 100 --threshold 0.1 --reporters console --format typescript,tsx sdk testkit interface scripts",
     "lint:knip": "knip --no-progress && knip --production --no-progress",
     "lint:architecture": "depcruise --config .dependency-cruiser.jsonc sdk testkit interface scripts",
     "lint:api": "pnpm build && pnpm --filter @ickb/sdk lint:api",

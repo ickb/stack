@@ -12,10 +12,9 @@ import {
   createPendingTransactionStore,
   type PendingTransactionState,
 } from "../../src/action/pendingTransaction.ts";
-import type { L1StateType } from "../../src/query/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
-import { txWithInput } from "../action/fixtures/transaction.ts";
 import { waitCallOptions } from "../support/wait.ts";
+import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
 
 class TestElement {
   public readonly nodeType = 1;
@@ -236,39 +235,6 @@ function currentLayout(): Parameters<typeof ActionLayout>[0] {
   return mocks.layout;
 }
 
-function activeTxInfo(): TxInfo {
-  return {
-    tx: txWithInput("11"),
-    error: "",
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "order",
-  };
-}
-
-function l1State(): L1StateType {
-  const candidate: unknown = {
-    ckbNative: 0n,
-    ickbNative: 0n,
-    ckbBalance: 0n,
-    ickbBalance: 0n,
-    ckbAvailable: 0n,
-    ickbAvailable: 0n,
-    tipTimestamp: 0n,
-    system: {},
-    stateId: "state",
-    txBuilder: async () => {
-      await Promise.resolve();
-      return activeTxInfo();
-    },
-    hasCollectable: false,
-  };
-  if (!isL1State(candidate)) {
-    throw new Error("L1 state fixture is invalid");
-  }
-  return candidate;
-}
-
 function walletConfig(
   queryClient: QueryClient,
   sendTransaction: ReturnType<typeof vi.fn>,
@@ -305,10 +271,6 @@ function isWalletConfig(value: unknown): value is WalletConfig {
     "queryClient" in value &&
     "signer" in value
   );
-}
-
-function isL1State(value: unknown): value is L1StateType {
-  return typeof value === "object" && value !== null && "txBuilder" in value;
 }
 
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- The wait double never settles except on abort.

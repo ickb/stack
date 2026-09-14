@@ -9,8 +9,5 @@ export default defineConfig({
   },
   test: {
     include: ["test/{action,app,hook,query,shared,view,wallet}/*.{ts,tsx}"],
-    coverage: {
-      include: ["src/**/*.{ts,tsx}"],
-    },
   },
 });
