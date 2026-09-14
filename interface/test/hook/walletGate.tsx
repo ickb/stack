@@ -71,8 +71,10 @@ function registerWalletGateBranchTests(): void {
     connectorMock.ccc.wallet = { name: "JoyID" };
     connectorMock.ccc.signerInfo = { name: "CKB" };
     expect(WalletGate().type).toBe(WalletConfigGate);
-    // The chain follows the connector's client, connected or not.
+    // The chain follows the connector's client, connected or not, and a client pick in the
+    // modal closes it.
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
+    expect(connectorMock.ccc.close).toHaveBeenCalledWith();
   });
 }
 

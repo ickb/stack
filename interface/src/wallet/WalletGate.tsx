@@ -19,7 +19,7 @@ import {
  * (a wallet connected on one network only) still shows the landing page on that chain.
  */
 export function WalletGate(): JSX.Element {
-  const { client, open, setClient, wallet, signerInfo } = useCcc();
+  const { client, close, open, setClient, wallet, signerInfo } = useCcc();
   const signer = useSigner();
   const chain = chainFromClient(client);
   const [rawText, setRawText] = useState("C");
@@ -34,6 +34,11 @@ export function WalletGate(): JSX.Element {
       saveSelectedChain(chain);
     }
   }, [chain]);
+  // A network or fee-rate pick in the wallet modal replaces the client; the connector would
+  // leave its list open afterwards, so the pick closes the modal.
+  useEffect(() => {
+    close();
+  }, [client, close]);
 
   if (rootConfig === undefined) {
     return <UnsupportedNetwork addressPrefix={client.addressPrefix} open={open} />;
