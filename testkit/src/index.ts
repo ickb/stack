@@ -74,7 +74,9 @@ export class StubClient extends ccc.ClientPublicTestnet {
    * Creates a stub client using the supplied method overrides.
    */
   constructor(handlers: StubClientHandlers = {}) {
-    super({ url: "https://example.invalid" });
+    // No fallbacks: CCC would otherwise fill in its public testnet endpoints, and any method a
+    // test leaves unstubbed would reach the live network.
+    super({ url: "https://example.invalid", fallbacks: [] });
     const baseFindCellsPagedNoCache = this.findCellsPagedNoCache.bind(this);
     this.handlers = handlers;
     if (handlers.cache !== undefined) {

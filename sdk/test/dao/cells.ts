@@ -181,7 +181,12 @@ it(
       },
       outputData: DaoManager.depositData(),
     });
+    // Only the transaction is missing; the deposit header by number is served.
     const missingTransactionClient = new StubClient({
+      getHeaderByNumber: async (): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+        await Promise.resolve();
+        return ccc.ClientBlockHeader.from(headerLike([180n, 0n, 1n], 1n));
+      },
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {

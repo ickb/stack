@@ -133,6 +133,10 @@ export function ownedWithdrawalCell({
 
 export function clientForDepositHeader(depositHeader: ccc.ClientBlockHeader): ccc.Client {
   return new StubClient({
+    getHeaderByNumber: async (): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+      await Promise.resolve();
+      return depositHeader;
+    },
     getTransactionWithHeader: async (): ReturnType<
       ccc.Client["getTransactionWithHeader"]
     > => {
