@@ -210,5 +210,23 @@ describe("buildTransaction withdrawal", () => {
       actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
       decision: { core: { kind: "none", attempts: 2 } },
     });
+    // One fewer ready withdrawal leaves the request its slot: the header overflow was the
+    // only reason the withdraw core failed.
+    await expect(
+      buildTransaction(
+        runtime,
+        botState({
+          ckb: ccc.fixedPointFrom(500_000),
+          ickb: ICKB_WITHDRAW_ABOVE + 100n,
+          poolDeposits: pool([readyDeposit("81", 4n, 0n)]),
+          readyWithdrawals: readyWithdrawals.slice(1),
+          notReadyWithdrawals: pendingWithdrawals,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      kind: "built",
+      actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT - 1 },
+      decision: { core: { kind: "withdraw", attempts: 1 } },
+    });
   });
 });
