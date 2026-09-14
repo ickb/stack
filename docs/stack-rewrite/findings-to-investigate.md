@@ -18,6 +18,7 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 - Resolve npm version and registry handling before publication.
 - Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
 - Decide whether order migration ever accepts the deployed resolver's confusion-attack residual; keep orders action-required until then.
+- Small CKB-to-iCKB requests are stuck (user, 2026-09-14). The iCKB-to-CKB path escalates the order fee for a small amount until it covers the matcher's ten-mining-fee threshold (`estimateDustIckbToCkbOrder` in `sdk/src/conversion/sdk_estimate.ts`), so a small sell is still placeable at a worse price; the CKB-to-iCKB path only tries the default 0.001% fee and reports `amount-too-small` below about `10 × feeRate × 100000` shannons (10 CKB at a 1000 fee rate, 332 CKB at testnet's 33222). Evaluate: (a) the same fee escalation for CKB-to-iCKB remainder orders, so any amount is placeable and the user sees the price before signing; (b) failing that, the SDK's `amount-too-small` failure carrying the minimum it computed, so the interface can say "enter at least N CKB" instead of "enter a larger amount".
 
 ## Investigation order
 
