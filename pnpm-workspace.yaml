@@ -4,11 +4,11 @@ packages:
   - testkit
   - interface
 
-auditConfig:
-  ignoreCves:
-    # Unpatched upstream: @joyid/ckb -> @nervosnetwork/ckb-sdk-utils -> elliptic.
-    - CVE-2025-14505
-  ignoreGhsas:
+audit:
+  ignore:
+    # Unpatched upstream: @joyid/ckb -> @nervosnetwork/ckb-sdk-utils -> elliptic
+    # (CVE-2025-14505; pnpm 11+ filters by GHSA only).
+    - GHSA-848j-6mx2-7j84
     # No patched version exists. image-size sits under Metro, React Native's build tool,
     # pulled in by @ckb-ccc/connector 2.x through @libp2p/webrtc -> react-native-webrtc; it
     # never runs in the browser bundle.
@@ -50,3 +50,9 @@ patchedDependencies:
   # pnpm still resolves JoyID's original cross-fetch dependency in the lockfile;
   # scripts/test/build/native-source-smoke.ts guards the runtime path so it stays dormant.
   "@joyid/ckb@1.1.4": patches/@joyid__ckb@1.1.4.patch
+# pnpm 12 refuses unreviewed build scripts. Neither is needed: esbuild runs from its
+# platform package and core-js's postinstall only prints a funding notice; both were
+# ignored with a warning under pnpm 10 and the gate was green.
+allowBuilds:
+  core-js: false
+  esbuild: false
