@@ -29,7 +29,7 @@ overrides:
   zod-validation-error@^3.5.0 || ^4.0.0: 4.0.2
   # Keep CCC React connector on the app's React instance; otherwise pnpm may
   # auto-install a second peer copy and React hooks fail at runtime.
-  "@ckb-ccc/connector-react>react": 19.2.8
+  "@ckb-ccc/connector-react>react": 19.3.0
 
 catalog:
   "@ckb-ccc/ccc": ^1.3.1
