@@ -1,3 +1,4 @@
+import { Ratio } from "@ickb/sdk";
 import type { ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -211,6 +212,19 @@ describe("view components", () => {
         />,
       ),
     ).toContain("0+");
+    // The unit rate beside the switch: both sides at two decimals, "..." without a quote.
+    expect(renderToStaticMarkup(element)).toContain("1.00 CKB");
+    expect(renderToStaticMarkup(element)).toContain("...");
+    expect(
+      renderToStaticMarkup(
+        <Form
+          rawText="C1"
+          setRawText={setRawText}
+          isFrozen={false}
+          quoteState={{ exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }) }}
+        />,
+      ),
+    ).toContain("1.00 iCKB");
     expect(
       renderToStaticMarkup(<Form rawText="I" setRawText={setRawText} isFrozen={true} />),
     ).toContain('disabled=""');

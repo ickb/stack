@@ -1,5 +1,4 @@
 import type { JSX } from "react";
-import { chartAmountText } from "../chart/rateChartText.ts";
 import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
 import {
   CKB,
@@ -53,12 +52,13 @@ export default function Form({
   const typedQuote = text === "" ? "" : `${amountQuote} ${b.name}`;
   const quoteLine = hasAmountError ? amountQuote : typedQuote;
   // The rate for one unit sits beside the direction switch, where the conversion happens.
+  // Both figures carry two decimals, so the two sides of the switch are the same length.
   const unitAmount =
     quoteState === undefined
       ? undefined
       : conversionQuote(`${symbol}1`, quoteState).convertedAmount;
   const unitRate =
-    unitAmount === undefined ? "..." : `${chartAmountText(unitAmount)} ${b.name}`;
+    unitAmount === undefined ? "..." : `${twoDecimals(unitAmount)} ${b.name}`;
 
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
@@ -88,20 +88,27 @@ export default function Form({
       <span className="col-span-3 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4">
         <span aria-hidden="true" className="h-px bg-ickb-border/70" />
         <span className="inline-grid h-11 grid-cols-[1fr_auto_1fr] items-center gap-x-3 text-sm font-medium tracking-normal whitespace-nowrap text-ickb-muted normal-case">
-          <span className="justify-self-end">1 {a.name}</span>
+          <span className="justify-self-end">1.00 {a.name}</span>
           <button
-            className="relative h-11 w-11 cursor-pointer rounded border-0 bg-transparent text-3xl leading-none text-ickb-action transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded border-0 bg-transparent text-ickb-action transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
             disabled={isFrozen}
             onClick={toggle}
             aria-label="Switch conversion direction"
             title="Switch conversion direction"
           >
-            <span
+            {/* Drawn, not typed: a glyph's ink sits off its box, an SVG centres exactly. */}
+            <svg
               aria-hidden="true"
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              viewBox="0 0 24 24"
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              ⇅
-            </span>
+              <path d="M7 20V4M3 8l4-4 4 4M17 4v16M13 16l4 4 4-4" />
+            </svg>
           </button>
           <span className="justify-self-start" title={unitRate}>
             {unitRate}
@@ -216,4 +223,9 @@ function display(shannons: bigint, label: string, isMaturing: boolean): JSX.Elem
       </span>
     </span>
   );
+}
+
+function twoDecimals(shannons: bigint): string {
+  const cents = (shannons + CKB / 200n) / (CKB / 100n);
+  return `${String(cents / 100n)}.${String(cents % 100n).padStart(2, "0")}`;
 }
