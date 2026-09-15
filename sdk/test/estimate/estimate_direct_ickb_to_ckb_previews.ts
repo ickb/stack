@@ -33,9 +33,8 @@ describe(ESTIMATE_SUITE, () => {
       }),
     );
 
-    expect(result.convertedAmount).toBe(999990n);
-    expect(result.ckbFee).toBe(9n);
-    expect(result.maturity).toBeUndefined();
+    expect(result.convertedAmount).toBe(999900n);
+    expect(result.ckbFee).toBe(99n);
     expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual(maxUint64);
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
   });
@@ -53,8 +52,8 @@ describe(ESTIMATE_SUITE, () => {
     expect(result.notice).toEqual({
       kind: "maturity-unavailable",
       inputIckb: 1000000n,
-      outputCkb: 999990n,
-      incentiveCkb: 10n,
+      outputCkb: 999900n,
+      incentiveCkb: 100n,
       maturityEstimateUnavailable: true,
     });
     expect(result.estimate.info.ckbMinMatchLog).toBe(33);

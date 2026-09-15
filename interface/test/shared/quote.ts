@@ -30,13 +30,13 @@ describe("quoteDraft", () => {
 describe("conversionQuote", () => {
   it("estimates CKB to iCKB without wallet-specific state", () => {
     expect(conversionQuote("C2", system())).toMatchObject({
-      outputText: "1.99998",
+      outputText: "1.9998",
     });
   });
 
   it("estimates iCKB to CKB using quote-preserving Uint64 encoding", () => {
     expect(conversionQuote("I2", system())).toMatchObject({
-      outputText: "1.99998",
+      outputText: "1.9998",
     });
   });
 

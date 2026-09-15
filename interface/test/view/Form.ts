@@ -25,7 +25,7 @@ describe("amountQuoteText", () => {
       amountQuoteText(2n * CKB, "C2", {
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       }),
-    ).toBe("1.99998");
+    ).toBe("1.9998");
   });
 });
 

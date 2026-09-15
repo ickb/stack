@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/sdk_estimate.ts";
 import { readRuntimeConfigEnv, type RuntimeConfig } from "../shared/index.ts";
-import { type Direction, type Kind, ORDER_FEE_BASE, type Override } from "./draw.ts";
+import type { Direction, Kind, Override } from "./draw.ts";
 
 /**
  * Reads `STIMULUS_CHAIN`, `STIMULUS_RPC_URL`, and the key file named by
@@ -43,9 +44,9 @@ export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
   const fee = env["STIMULUS_FEE"];
   if (fee !== undefined) {
     const numerator = parseUnsigned(fee, "STIMULUS_FEE");
-    if (numerator >= ORDER_FEE_BASE) {
+    if (numerator >= DEFAULT_ORDER_FEE_BASE) {
       throw new Error(
-        `Invalid env STIMULUS_FEE: expected less than ${ORDER_FEE_BASE.toString()}`,
+        `Invalid env STIMULUS_FEE: expected less than ${DEFAULT_ORDER_FEE_BASE.toString()}`,
       );
     }
     override.fee = numerator;

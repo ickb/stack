@@ -172,7 +172,8 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
       { ckbValue: 0n, udtValue: 100000n },
       system({
         ckbAvailable: 100000n,
-        feeRate: 1n,
+        // The default fee pays 10 here; a threshold of 20 sends the estimate to the dust search.
+        feeRate: 2n,
         tip: headerLike(0n, { timestamp: 1234n }),
       }),
     );

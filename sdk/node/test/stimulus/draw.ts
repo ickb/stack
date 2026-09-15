@@ -37,7 +37,7 @@ describe("drawTurn", () => {
       kind: "order",
       direction: "ckb-to-ickb",
       amount: 1n,
-      fee: 1n,
+      fee: 10n,
     });
     expect(drawTurn(budgets, {}, sequence([0.9, 0.1, 0.2]))).toEqual({
       kind: "conversion",
@@ -81,6 +81,6 @@ describe("drawTurn", () => {
     // A buy never draws the zero fee: its first choice is the interface default.
     expect(
       drawTurn(budgets, { direction: "ckb-to-ickb", amount: 1n }, sequence([1])),
-    ).toMatchObject({ kind: "order", fee: 1n });
+    ).toMatchObject({ kind: "order", fee: 10n });
   });
 });

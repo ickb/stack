@@ -19,11 +19,12 @@ describe(ESTIMATE_SUITE, () => {
     const result = estimate(
       false,
       { ckbValue: 0n, udtValue: 100000n },
-      system({ ckbAvailable: 100000n }),
+      // The default fee pays 10 here; a threshold of 20 keeps the maturity out.
+      system({ ckbAvailable: 100000n, feeRate: 2n }),
     );
 
-    expect(result.convertedAmount).toBe(99999n);
-    expect(result.ckbFee).toBe(1n);
+    expect(result.convertedAmount).toBe(99990n);
+    expect(result.ckbFee).toBe(10n);
     expect(result.maturity).toBeUndefined();
   });
 
@@ -37,8 +38,8 @@ describe(ESTIMATE_SUITE, () => {
       }),
     );
 
-    expect(result.convertedAmount).toBe(999990n);
-    expect(result.ckbFee).toBe(10n);
+    expect(result.convertedAmount).toBe(999900n);
+    expect(result.ckbFee).toBe(100n);
     expect(result.maturity).toBe(601234n);
   });
 

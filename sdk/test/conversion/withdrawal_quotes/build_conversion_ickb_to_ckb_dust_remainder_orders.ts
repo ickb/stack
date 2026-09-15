@@ -52,6 +52,8 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       context: conversionContext({
         system: {
           exchangeRatio,
+          // The default fee pays 10 on this remainder; a threshold of 20 makes it a dust order.
+          feeRate: 2n,
           ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
           poolDeposits: {
             deposits: [directDeposit, ringAnchor],
@@ -68,8 +70,8 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       conversionNotice: {
         kind: DUST_ICKB_TO_CKB,
         inputIckb: 100000n,
-        outputCkb: 100072n,
-        incentiveCkb: 10n,
+        outputCkb: 100062n,
+        incentiveCkb: 20n,
         maturityEstimateUnavailable: false,
       },
     });

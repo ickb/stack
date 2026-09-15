@@ -1,11 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
+import { DEFAULT_ORDER_FEE } from "../../../src/conversion/sdk_estimate.ts";
 import { convert } from "../../../src/core/index.ts";
 import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
 export type Kind = "order" | "conversion";
 export type Direction = "ckb-to-ickb" | "ickb-to-ckb";
 
-/** One turn's random choices; `fee` is the order's incentive numerator over {@link ORDER_FEE_BASE}. */
+/** One turn's random choices; `fee` is the order's incentive numerator over the SDK's fee base. */
 export type Draw =
   | { kind: "order"; direction: Direction; amount: bigint; fee: bigint }
   | { kind: "conversion"; direction: Direction; amount: bigint };
@@ -25,19 +26,19 @@ export interface Budgets {
   ratio: ExchangeRatio;
 }
 
-export const ORDER_FEE_BASE = 100000n;
 export const RANDOM_BITS = 52n;
 const CKB = ccc.fixedPointFrom(1);
 // Three kinds of order per conversion: orders are what the bot matches, conversions are
 // what it competes with.
 const ORDER_WEIGHT = 3;
-// Zero pays nothing, one is the interface default, ten is generous; no fixed set lands on
-// both sides of the bot's fee check for every transaction size, so `STIMULUS_FEE` is the
-// lever when a reason never shows (decisions amendment 48). A buy at zero fee is never
-// taken, since the DAO ratio only grows past it, so buys draw from the positive fees.
+// Zero pays nothing, the SDK default is what a user's order pays, ten times it is
+// generous; no fixed set lands on both sides of the bot's fee check for every transaction
+// size, so `STIMULUS_FEE` is the lever when a reason never shows (decisions amendment 48).
+// A buy at zero fee is never taken, since the DAO ratio only grows past it, so buys draw
+// from the positive fees.
 const POSITIVE_FEE_CHOICES: Choices<bigint> = [
-  { value: 1n, weight: 2 },
-  { value: 10n, weight: 1 },
+  { value: DEFAULT_ORDER_FEE, weight: 2 },
+  { value: 10n * DEFAULT_ORDER_FEE, weight: 1 },
 ];
 const FEE_CHOICES: Choices<bigint> = [{ value: 0n, weight: 1 }, ...POSITIVE_FEE_CHOICES];
 // One draw in eight is the smallest positive amount and one in eight the whole budget;

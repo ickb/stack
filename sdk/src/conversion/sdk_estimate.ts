@@ -14,8 +14,12 @@ import type {
   SystemState,
 } from "./sdk_types.ts";
 
-/** Default order-fee numerator used by Stack conversion quotes and plans. */
-export const DEFAULT_ORDER_FEE = 1n;
+/**
+ * Default order-fee numerator used by Stack conversion quotes and plans: 0.01%, about two
+ * days of DAO yield, which is how long a CKB-to-iCKB order stays fillable as the DAO ratio
+ * grows past it (decisions amendment 52(z)).
+ */
+export const DEFAULT_ORDER_FEE = 10n;
 
 /** Default order-fee denominator used by Stack conversion quotes and plans. */
 export const DEFAULT_ORDER_FEE_BASE = 100000n;

@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IckbError } from "../../../src/conversion/sdk_error.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/sdk_estimate.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import {
   signAndSendTransaction,
@@ -12,7 +13,7 @@ import {
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
 import { expectedChainIdentity } from "../../../src/utils/index.ts";
-import { ORDER_FEE_BASE, type Override } from "../../src/stimulus/draw.ts";
+import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
   runStimulusTurn,
@@ -374,7 +375,7 @@ describe("runStimulusTurn", () => {
   it("fails with exit 1 on any other error", async () => {
     const invalidFee = await turn(runtime({ account: fundedAccount }), {
       ...orderDraw,
-      fee: ORDER_FEE_BASE,
+      fee: DEFAULT_ORDER_FEE_BASE,
     });
     lines = [];
     const log = await turn(

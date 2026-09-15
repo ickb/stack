@@ -1,7 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import { isIckbError } from "../../../src/conversion/sdk_error.ts";
-import { estimate } from "../../../src/conversion/sdk_estimate.ts";
+import {
+  DEFAULT_ORDER_FEE_BASE,
+  estimate,
+} from "../../../src/conversion/sdk_estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/sdk_types.ts";
 import { OrderConversionRepresentabilityError } from "../../../src/order/index.ts";
 import {
@@ -18,7 +21,7 @@ import {
   logExecution,
   type PublicRpcEndpointIdentity,
 } from "../shared/index.ts";
-import { type Draw, drawTurn, ORDER_FEE_BASE, type Override } from "./draw.ts";
+import { type Draw, drawTurn, type Override } from "./draw.ts";
 import {
   MAX_LIVE_ORDERS,
   readStimulusState,
@@ -152,7 +155,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   try {
     info = estimate(isCkb2Udt, amounts, state.system, {
       fee: draw.fee,
-      feeBase: ORDER_FEE_BASE,
+      feeBase: DEFAULT_ORDER_FEE_BASE,
     }).info;
   } catch (error) {
     if (error instanceof OrderConversionRepresentabilityError) {

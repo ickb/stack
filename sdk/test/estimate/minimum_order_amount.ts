@@ -26,8 +26,8 @@ describe(`${ESTIMATE_SUITE} minimum order amount`, () => {
           estimate(true, { ckbValue: minimum / 2n, udtValue: 0n }, state).maturity,
         ).toBeUndefined();
         // Ten mining fees at 0.001%: about a million times the fee rate.
-        expect(minimum).toBeGreaterThan(feeRate * 1_000_000n);
-        expect(minimum).toBeLessThan(feeRate * 1_000_000n + 200_000n);
+        expect(minimum).toBeGreaterThan(feeRate * 100_000n);
+        expect(minimum).toBeLessThan(feeRate * 100_000n + 20_000n);
       }
     }
   });

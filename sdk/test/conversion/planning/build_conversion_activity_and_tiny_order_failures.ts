@@ -84,7 +84,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       reason: AMOUNT_TOO_SMALL,
       estimatedMaturity: 0n,
       // Ten mining fees at fee rate 1, plus one, at the 0.001% order fee.
-      minimum: 1_100_000n,
+      minimum: 110_000n,
     });
   });
 
