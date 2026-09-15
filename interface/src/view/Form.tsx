@@ -83,11 +83,12 @@ export default function Form({
       />
       {/* The whole rate row is the direction switch: the unit rate takes the balance
           columns, each figure under the balance above it, the arrows take the middle column,
-          and the row is outlined in the section-divider line, a full-width target on a phone. */}
+          and the row is outlined in the section-divider line, a full-width target on a phone,
+          inset 4px a side so the section's clipping edge never crops the outline or the focus ring. */}
       <button
         // The main button's look (buttonStyles.ts) written out, since its own utilities would
         // win over a smaller height, no side padding, and the asset names' case.
-        className="col-span-3 grid h-11 w-full cursor-pointer grid-cols-3 items-center justify-items-center rounded border border-ickb-border/70 text-sm leading-relaxed font-bold tracking-wider text-ickb-action normal-case transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action active:bg-ickb-action/15 disabled:cursor-default disabled:opacity-50"
+        className="col-span-3 grid h-11 w-[calc(100%-0.5rem)] cursor-pointer grid-cols-3 items-center justify-items-center rounded border border-ickb-border/70 text-sm leading-relaxed font-bold tracking-wider text-ickb-action normal-case transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action active:bg-ickb-action/15 disabled:cursor-default disabled:opacity-50"
         disabled={isFrozen}
         onClick={toggle}
         aria-label="Switch conversion direction"
@@ -107,7 +108,7 @@ export default function Form({
       <span
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}
-        className={`col-span-3 max-w-full text-center normal-case ${isPlaceholder ? "text-ickb-action/35" : "text-ickb-action"} ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
+        className={`col-span-3 max-w-full text-center normal-case ${isPlaceholder ? "text-ickb-text/35" : "text-ickb-text"} ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
         title={quoteLine}
       >
         {quoteLine}

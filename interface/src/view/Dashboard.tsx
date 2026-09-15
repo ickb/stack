@@ -78,6 +78,9 @@ function AddressField({
   // every width instead of at the far edge of a full-width box.
   return (
     <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-1 text-center">
+      {/* "to" and the underline say this is the destination and that it is editable; the
+          tooltip alone never shows on a phone. */}
+      <span className="text-ickb-muted">to</span>
       <input
         value={shown}
         placeholder={shortAddress(ownAddress)}
@@ -104,7 +107,7 @@ function AddressField({
         aria-invalid={!isValid}
         aria-label="Destination address"
         title="Every cell the next transaction creates for you belongs to this address"
-        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded border-0 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action/70 hover:opacity-80 focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default"
+        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded-none border-0 border-b border-ickb-border/70 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action/70 hover:border-ickb-action/60 focus:border-ickb-action focus-visible:outline-none disabled:cursor-default"
       />
       <a
         href={href}

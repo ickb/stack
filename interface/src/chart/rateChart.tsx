@@ -77,13 +77,14 @@ export default function RateChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
-              className="text-ickb-action"
+              // The curve is a fact, not a control: it wears the muted ink, not the accent.
+              className="text-ickb-muted"
             />
           </svg>
           {/* Unscaled end-dot marks the live tip of the curve. */}
           <span
             aria-hidden="true"
-            className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ickb-action ring-2 ring-ickb-panel"
+            className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ickb-text ring-2 ring-ickb-panel"
             style={{
               left: `${String((scaleX(tip.date.getTime(), minX, maxX) / chartWidth) * 100)}%`,
               top: `${String((scaleY(tip.value, minY, maxY) / chartHeight) * 100)}%`,

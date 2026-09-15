@@ -71,18 +71,19 @@ export function WalletAppView({
             }}
           />
         </WalletSection>
+        {/* The button follows the form; the chart is context and comes last (52(ag)). */}
+        <WalletSection>
+          <Action
+            key={`${walletConfig.chain}:${walletConfig.address}:${String(objectIdentityKey(walletConfig))}`}
+            {...actionParams}
+          />
+        </WalletSection>
         <WalletSection>
           <RateChart
             chain={walletConfig.chain}
             isCkb2Udt={isCkb2Udt}
             amount={amount}
             quoteState={quoteState}
-          />
-        </WalletSection>
-        <WalletSection>
-          <Action
-            key={`${walletConfig.chain}:${walletConfig.address}:${String(objectIdentityKey(walletConfig))}`}
-            {...actionParams}
           />
         </WalletSection>
       </WalletSections>

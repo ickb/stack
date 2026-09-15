@@ -46,9 +46,6 @@ export function WalletConfigPendingView({
           <Form {...{ rawText, setRawText, quoteState, isFrozen: false }} />
         </WalletSection>
         <WalletSection>
-          <RateChart chain={rootConfig.chain} {...{ isCkb2Udt, amount, quoteState }} />
-        </WalletSection>
-        <WalletSection>
           <ActionLayout
             action={hasError ? "Retry wallet data" : "Connect wallet"}
             disabled={!hasError || retry === undefined}
@@ -62,6 +59,9 @@ export function WalletConfigPendingView({
             fee="..."
             maturity="..."
           />
+        </WalletSection>
+        <WalletSection>
+          <RateChart chain={rootConfig.chain} {...{ isCkb2Udt, amount, quoteState }} />
         </WalletSection>
       </WalletSections>
     </>

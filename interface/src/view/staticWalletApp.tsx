@@ -51,9 +51,6 @@ export function WalletAppShell({
           />
         </WalletSection>
         <WalletSection>
-          <RateChart {...{ chain, isCkb2Udt, amount, quoteState }} />
-        </WalletSection>
-        <WalletSection>
           <ActionLayout
             action={action}
             disabled={isRestoring}
@@ -63,6 +60,9 @@ export function WalletAppShell({
             fee="..."
             maturity="..."
           />
+        </WalletSection>
+        <WalletSection>
+          <RateChart {...{ chain, isCkb2Udt, amount, quoteState }} />
         </WalletSection>
       </WalletSections>
     </>
