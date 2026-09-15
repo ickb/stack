@@ -2,8 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import { partialOrderFee } from "../../../src/order/io/order_io.ts";
 
 import { describe, expect, it } from "vitest";
+import { fillCost } from "../../../src/order/matching/fill.ts";
 import { matchTurn, seedOf, type TurnMatch } from "../../src/bot/match.ts";
-import { fillCost } from "../../src/shared/index.ts";
 import { hash, marketOrder } from "./fixtures/bot.ts";
 
 const CKB = ccc.fixedPointFrom(1);

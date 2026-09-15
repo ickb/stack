@@ -78,6 +78,7 @@ export type {
   SystemState,
 } from "./conversion/sdk_types.ts";
 export { ickbExchangeRatio } from "./core/udt.ts";
+export { isRefused } from "./order/matching/fill.ts";
 export {
   OrderConversionRepresentabilityError,
   quoteConversion,

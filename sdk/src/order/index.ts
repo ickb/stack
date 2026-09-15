@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 
+export { isRefused } from "./matching/fill.ts";
 export { quoteConversion } from "./matching/order_conversion.ts";
 export { OrderCell, OrderGroup } from "./model/cells.ts";
 export { Info } from "./model/info.ts";

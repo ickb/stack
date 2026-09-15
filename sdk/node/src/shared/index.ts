@@ -14,7 +14,6 @@ export type {
   PublicRpcEndpointIdentity,
   SupportedChain,
 } from "./chain.ts";
-export { fillCost, fillsWhole, netOf, returnsCost } from "./fill.ts";
 export { formatCkb } from "./format.ts";
 export { logExecution, toJsonLogRecord, writeJsonLine } from "./logging.ts";
 export type { JsonLogRecord } from "./logging.ts";

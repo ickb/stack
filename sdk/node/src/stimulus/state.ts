@@ -6,9 +6,8 @@ import type {
   ConversionTransactionContext,
   SystemState,
 } from "../../../src/conversion/sdk_types.ts";
-import type { OrderGroup } from "../../../src/order/index.ts";
+import { isRefused, type OrderGroup } from "../../../src/order/index.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
-import { fillsWhole } from "../shared/index.ts";
 import type { Budgets } from "./draw.ts";
 
 /** Runtime dependencies of one stimulus turn. */
@@ -76,22 +75,15 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
 
 /**
  * Live orders the bot will not take, counted apart because they mean different things:
- * `refused` is a buy the bot's own matcher would not fill whole today, which the DAO
- * ratio's growth only pushes further from filling; `stale` is any order older than
- * {@link STALE_ORDER_BLOCKS}, which a running bot should never let happen. A sell is never
- * refused, since the same growth only raises what the bot earns on it, so a sell the bot
- * does not take yet may still be taken later (decisions amendment 52).
+ * `refused` is an order the market will never fill (the SDK's rule); `stale` is any order
+ * older than {@link STALE_ORDER_BLOCKS}, which a running bot should never let happen.
  */
 async function abandonedOrders(
   client: ccc.Client,
   live: OrderGroup[],
   { exchangeRatio, feeRate, tip }: SystemState,
 ): Promise<{ refused: OrderGroup[]; stale: OrderGroup[] }> {
-  const refused = live.filter(
-    (group) =>
-      group.order.data.info.isCkb2Udt() &&
-      !fillsWhole(group, true, exchangeRatio, feeRate),
-  );
+  const refused = live.filter((group) => isRefused(group, { exchangeRatio, feeRate }));
   // One origin read per live order, all at once: in turn they cost the turn seconds.
   const ages = await Promise.all(
     live

@@ -1,5 +1,6 @@
 import {
   ickbExchangeRatio,
+  isRefused,
   projectConversionTransactionContext,
   Ratio,
   type SystemState,
@@ -94,13 +95,17 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     walletConfig.accountLocks,
   );
   const { system, user, account } = sdkState;
-  // Fulfilled orders are collected on the next transaction; live ones stay on the book.
+  // Fulfilled orders and orders the market will never fill are collected on the next
+  // transaction, which melts the latter and returns their funds; live fillable orders stay
+  // on the book (decisions amendment 52(z)).
+  const collectable = (group: (typeof user.orders)[number]): boolean =>
+    group.order.isFulfilled() || isRefused(group, system);
   const { projection, context: conversionContext } = projectConversionTransactionContext(
     system,
     account,
     {
-      available: user.orders.filter((group) => group.order.isFulfilled()),
-      pending: user.orders.filter((group) => group.order.isMatchable()),
+      available: user.orders.filter(collectable),
+      pending: user.orders.filter((group) => !collectable(group)),
     },
   );
   const { ckbNative, ickbNative, ckbBalance, ickbBalance, ckbAvailable, ickbAvailable } =

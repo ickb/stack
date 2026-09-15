@@ -4,7 +4,7 @@ import { partialOrderFee } from "../../../src/order/io/order_io.ts";
 import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
 import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
-import { fillCost, netOf, returnsCost } from "../shared/index.ts";
+import { fillCost, netOf, returnsCost } from "../../../src/order/matching/fill.ts";
 import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
 
 /** One turn's match and how it was chosen. */

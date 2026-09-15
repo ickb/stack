@@ -1,13 +1,15 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { Match, OrderGroup } from "../../../src/order/index.ts";
-import { partialOrderFee } from "../../../src/order/io/order_io.ts";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import type { ExchangeRatio } from "../../../src/utils/index.ts";
+import type { ExchangeRatio } from "../../utils/index.ts";
+import { partialOrderFee } from "../io/order_io.ts";
+import type { OrderGroup } from "../model/cells.ts";
+import type { Match } from "../order.ts";
+import { OrderMatcher } from "./order_matcher.ts";
 
 /**
  * What a fill must return before the bot takes it, in mining fees of its own: the buffer
  * for the deposits and withdrawals that rebalance the inventory it moves (user decision
- * 2026-09-10, tuned on testnet). Shared so the generator melts by the bot's own rule.
+ * 2026-09-10, tuned on testnet). One rule for the bot, the generator's melts, and the
+ * interface's collection of orders the market will never fill (decisions amendment 52(z)).
  */
 const FILL_COST_FEES = 10n;
 
@@ -50,5 +52,20 @@ export function fillsWhole(
   return (
     matcher !== undefined &&
     returnsCost(matcher, fillCost(fee, exchangeRatio), exchangeRatio)
+  );
+}
+
+/**
+ * Whether the market will never fill this order: a CKB-to-iCKB order the bot's own matcher
+ * would not fill whole today, which the DAO ratio's growth only pushes further from
+ * filling. An iCKB-to-CKB order is never refused, since the same growth only raises what
+ * the bot earns on it (decisions amendment 52(q)).
+ */
+export function isRefused(
+  group: OrderGroup,
+  { exchangeRatio, feeRate }: { exchangeRatio: ExchangeRatio; feeRate: ccc.Num },
+): boolean {
+  return (
+    group.order.data.info.isCkb2Udt() && !fillsWhole(group, true, exchangeRatio, feeRate)
   );
 }
