@@ -16,11 +16,7 @@ import type {
   PoolDepositState,
   SystemState,
 } from "./sdk_types.ts";
-import {
-  cumulativeCkbMaturing,
-  poolDepositCkb,
-  poolDepositsKey,
-} from "./sdk_value_helpers.ts";
+import { cumulativeCkbMaturing, poolDepositCkb } from "./sdk_value_helpers.ts";
 
 /** Plain CKB each known bot keeps for its own cells and fees, excluded from the maturity estimate. */
 const botCkbReserve = ccc.fixedPointFrom("2000");
@@ -104,7 +100,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
         ...(range?.maxLockUp === undefined ? {} : { maxLockUp: range.maxLockUp }),
       }),
     );
-    return { deposits, id: poolDepositsKey(deposits, tip) };
+    return { deposits };
   }
 
   private async readLockCells(

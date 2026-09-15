@@ -2,16 +2,12 @@ import { ccc } from "@ckb-ccc/ccc";
 import {
   TransactionBroadcastError,
   TransactionWaitError,
+  hasTransactionActivity,
   signAndSendTransaction,
   waitTransaction,
 } from "@ickb/sdk";
 import { l1StateQueryKey } from "../query/l1StateQueryKey.ts";
-import {
-  errorMessageOf,
-  hasTransactionActivity,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import {
   clearPendingTransaction,
   submitPendingTransaction,

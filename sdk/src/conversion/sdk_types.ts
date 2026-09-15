@@ -23,9 +23,6 @@ export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
 export interface PoolDepositState {
   /** All scanned iCKB pool deposits, with readiness evaluated against the sampled tip. */
   deposits: IckbDepositCell[];
-
-  /** Opaque scan identity suitable for preview and cache keys. */
-  id: string;
 }
 
 /**

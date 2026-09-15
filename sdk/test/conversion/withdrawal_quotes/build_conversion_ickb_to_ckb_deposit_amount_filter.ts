@@ -45,7 +45,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
             poolDeposits: {
               deposits: [oversized, fitting],
-              id: "pool",
             },
           },
           ckbAvailable: 0n,

@@ -35,7 +35,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             ckbAvailable: 1n,
             poolDeposits: {
               deposits: [],
-              id: "pool",
             },
           },
           ckbAvailable: 0n,

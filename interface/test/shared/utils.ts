@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   direction2Symbol,
   errorMessageOf,
-  hasTransactionActivity,
   maxShannons,
   parseAmountInput,
   symbol2Direction,
   toText,
 } from "../../src/shared/utils.ts";
-import { transactionWith } from "./fixtures/transaction.ts";
 
 describe("amount utilities", () => {
   it("maps display symbols", () => {
@@ -81,13 +79,5 @@ describe("errorMessageOf", () => {
     error["self"] = error;
 
     expect(errorMessageOf(error)).toBe("Unknown error");
-  });
-});
-
-describe("hasTransactionActivity", () => {
-  it("detects transactions with inputs or outputs", () => {
-    expect(hasTransactionActivity(transactionWith(0, 0))).toBe(false);
-    expect(hasTransactionActivity(transactionWith(1, 0))).toBe(true);
-    expect(hasTransactionActivity(transactionWith(0, 1))).toBe(true);
   });
 });

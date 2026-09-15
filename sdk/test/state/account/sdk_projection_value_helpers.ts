@@ -6,8 +6,6 @@ import {
 import {
   cumulativeCkbMaturing,
   poolDepositCkb,
-  poolDepositsKey,
-  sortDepositsByMaturity,
   sumDirectWithdrawalSurplus,
   sumUdtValue,
 } from "../../../src/conversion/sdk_value_helpers.ts";
@@ -40,7 +38,6 @@ describe("sdk projection value helpers", () => {
       poolDepositCkb(
         {
           deposits: [readyDeposit, pendingDeposit],
-          id: "p",
         },
         baseTip,
       ),
@@ -48,11 +45,6 @@ describe("sdk projection value helpers", () => {
       ready: 50n,
       maturing: [{ ckbValue: 70n, maturity: 60n }],
     });
-    expect(poolDepositsKey([pendingDeposit, readyDeposit], baseTip)).toContain("pending");
-    expect(sortDepositsByMaturity([pendingDeposit, readyDeposit], baseTip)).toEqual([
-      readyDeposit,
-      pendingDeposit,
-    ]);
     expect(sumDirectWithdrawalSurplus([readyDeposit], ratio)).toBe(45n);
     expect(sumUdtValue([readyDeposit, pendingDeposit])).toBe(12n);
   });

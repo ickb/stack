@@ -1,22 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import type { OrderGroup } from "../model/cells.ts";
 
-export function cellInputLike(cell: ccc.Cell): ccc.CellInputLike {
-  return {
-    outPoint: cell.outPoint,
-    cellOutput: cellOutputLike(cell.cellOutput),
-    outputData: cell.outputData,
-  };
-}
-
-export function cellOutputLike(output: ccc.CellOutput): ccc.CellOutputLike {
-  return {
-    capacity: output.capacity,
-    lock: output.lock,
-    type: output.type ?? null,
-  };
-}
-
 const CELL_INPUT_SERIALIZED_SIZE = 44;
 // CellOutput table/script wrappers plus DynVec offset; output data Bytes plus offset.
 const CELL_OUTPUT_SERIALIZATION_OVERHEAD = 60;

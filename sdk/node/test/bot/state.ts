@@ -31,7 +31,6 @@ describe("readBotState pool snapshot", () => {
         feeRate: 1n,
         poolDeposits: {
           deposits: [ready, tooEarly, nearReady, future],
-          id: "pool",
         },
         ckbAvailable: 0n,
         ckbMaturing: [],
@@ -88,7 +87,7 @@ describe("readBotState", () => {
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         orderPool: [marketOrder],
         feeRate: 1n,
-        poolDeposits: { deposits: [], id: "pool" },
+        poolDeposits: { deposits: [] },
         ckbAvailable: 0n,
         ckbMaturing: [],
       },

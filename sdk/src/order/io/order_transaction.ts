@@ -1,11 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
+import { cellInputLikeFrom } from "../../core/transaction_shape.ts";
 import type { ValueComponents } from "../../utils/index.ts";
 import type { Match } from "../matching/match_types.ts";
 import { OrderGroup, validatedOrderGroup } from "../model/cells.ts";
 import type { Info } from "../model/info.ts";
 import { OrderData } from "../model/order_data.ts";
 import { Relative } from "../model/relative.ts";
-import { cellInputLike } from "./order_io.ts";
 import { isOrderCell } from "./order_scan.ts";
 
 interface OrderTransactionContext {
@@ -84,7 +84,7 @@ export function addOrderMatch(
   for (const partial of partials) {
     const { group, ckbOut, udtOut } = partial;
     const { order } = group;
-    tx.addInput(cellInputLike(order.cell));
+    tx.addInput(cellInputLikeFrom(order.cell));
     tx.addOutput(
       { lock: script, type: udtScript, capacity: ckbOut },
       OrderData.from({
@@ -113,8 +113,8 @@ export function meltOrderGroups(
   tx.addCellDeps(context.cellDeps);
 
   for (const group of selectedGroups) {
-    tx.addInput(cellInputLike(group.order.cell));
-    tx.addInput(cellInputLike(group.master.cell));
+    tx.addInput(cellInputLikeFrom(group.order.cell));
+    tx.addInput(cellInputLikeFrom(group.master.cell));
   }
   return tx;
 }

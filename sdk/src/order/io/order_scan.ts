@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { cellOutputLikeFrom } from "../../core/transaction_shape.ts";
 import { findCells } from "../../utils/index.ts";
 import {
   attestResolvedOrderGroup,
@@ -6,7 +7,6 @@ import {
   OrderCell,
   OrderGroup,
 } from "../model/cells.ts";
-import { cellOutputLike } from "./order_io.ts";
 
 /**
  * Reason an observed order/master candidate could not form a valid group.
@@ -202,7 +202,7 @@ function originOrderAt({
   }
 
   const cell = ccc.Cell.from({
-    cellOutput: cellOutputLike(output.cellOutput),
+    cellOutput: cellOutputLikeFrom(output.cellOutput),
     outputData: output.outputData,
     outPoint: { txHash, index },
   });

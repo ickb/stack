@@ -55,6 +55,7 @@ export type { Relative, RelativeLike } from "./order/model/relative.ts";
 export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
 
 export { signerAccountLocks } from "./conversion/account_locks.ts";
+export { hasTransactionActivity } from "./conversion/sdk_conversion_common.ts";
 export { IckbError, isIckbError } from "./conversion/sdk_error.ts";
 export type { IckbErrorCode } from "./conversion/sdk_error.ts";
 export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/sdk_estimate.ts";

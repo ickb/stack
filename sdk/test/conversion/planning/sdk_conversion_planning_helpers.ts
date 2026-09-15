@@ -45,7 +45,6 @@ describe("sdk conversion planning helpers", () => {
       },
       {
         deposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
-        id: "pool",
       },
     );
 
@@ -78,7 +77,7 @@ describe("sdk conversion planning helpers", () => {
           ickbAvailable: 4n * unit,
         }),
       },
-      { deposits: [anchor, ...now, later], id: "pool" },
+      { deposits: [anchor, ...now, later] },
     );
 
     // Every prefix with a remainder order matures now (bucket 0); the full prefix waits
@@ -99,7 +98,6 @@ describe("sdk conversion planning helpers", () => {
         },
         {
           deposits: [],
-          id: "pool",
         },
       ),
     ).toEqual([]);

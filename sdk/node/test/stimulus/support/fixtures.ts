@@ -27,7 +27,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     orderPool: [],
     ckbAvailable: 0n,
     ckbMaturing: [],
-    poolDeposits: { deposits: [], id: "pool-fixture" },
+    poolDeposits: { deposits: [] },
     ...overrides,
   };
 }

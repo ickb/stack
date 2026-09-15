@@ -49,7 +49,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
             poolDeposits: {
               deposits: [extra, protectedAnchor],
-              id: "pool",
             },
           },
           ckbAvailable: 0n,

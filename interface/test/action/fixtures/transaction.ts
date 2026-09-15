@@ -102,7 +102,7 @@ export function context(overrides: Partial<TransactionContext> = {}): Transactio
       tip: headerLike({ timestamp: 0n }),
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
-      poolDeposits: { deposits: [], id: "" },
+      poolDeposits: { deposits: [] },
       ckbAvailable: 0n,
       ckbMaturing: [],
     },

@@ -54,7 +54,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
             ckbAvailable: 10n,
             poolDeposits: {
               deposits: [laterHigherGain, earlier],
-              id: "pool",
             },
           },
           ckbAvailable: 0n,

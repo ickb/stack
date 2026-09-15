@@ -190,7 +190,3 @@ export function errorMessageOf(error: unknown): string {
 
   return "Unknown error";
 }
-
-export function hasTransactionActivity(tx: ccc.Transaction): boolean {
-  return tx.inputs.length > 0 || tx.outputs.length > 0;
-}

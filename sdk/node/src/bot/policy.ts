@@ -1,7 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../../../src/core/index.ts";
-import { ringSurplusDepositFilter } from "../../../src/core/withdrawal_selection.ts";
-import { compareBigInt } from "../../../src/utils/index.ts";
+import {
+  ringSurplusDepositFilter,
+  sortByMaturity,
+} from "../../../src/core/withdrawal_selection.ts";
 
 import {
   CKB_RESERVE,
@@ -65,11 +67,10 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
   if (ickb > ICKB_WITHDRAW_ABOVE) {
     const isSurplus = ringSurplusDepositFilter(poolDeposits);
     const stress = ckb - CKB_RESERVE < depositCost / STRESS_DIVISOR;
-    const ready = poolDeposits
-      .filter((deposit) => deposit.isReady)
-      .toSorted((left, right) =>
-        compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip)),
-      );
+    const ready = sortByMaturity(
+      poolDeposits.filter((deposit) => deposit.isReady),
+      tip,
+    );
     const candidates = [
       ...ready.filter(isSurplus),
       ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),

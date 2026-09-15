@@ -52,7 +52,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           feeRate: 33222n,
           poolDeposits: {
             deposits: [directDeposit, ringAnchor],
-            id: "pool",
           },
         },
         ckbAvailable: 0n,

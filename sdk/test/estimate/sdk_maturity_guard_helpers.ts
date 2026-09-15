@@ -23,7 +23,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       ],
       ckbAvailable: 0n,
       ckbMaturing: [{ ckbCumulative: 100n, maturity: 500n }],
-      poolDeposits: { deposits: [], id: "" },
+      poolDeposits: { deposits: [] },
     };
 
     expect(

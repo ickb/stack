@@ -73,7 +73,7 @@ function conversion(
     context: conversionContext({
       system: {
         ckbAvailable: ccc.fixedPointFrom(1_000_000),
-        poolDeposits: { deposits: readyPool(fixture), id: "pool" },
+        poolDeposits: { deposits: readyPool(fixture) },
       },
       cells,
       ickbAvailable: amount,

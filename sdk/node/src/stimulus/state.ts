@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { accountPlainCkbBalance } from "../../../src/conversion/account_locks.ts";
 import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
 import type {
   AccountState,
@@ -52,7 +51,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   const live = user.orders.filter((group) => group.order.isMatchable());
   const { refused, stale } = await abandonedOrders(runtime.client, live, system);
   const collectable = [...fulfilled, ...refused, ...stale];
-  const { context } = projectConversionTransactionContext(system, account, {
+  const { context, projection } = projectConversionTransactionContext(system, account, {
     available: collectable,
     pending: live.filter((group) => !collectable.includes(group)),
   });
@@ -73,7 +72,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
       ickb: context.ickbAvailable,
       ratio: system.exchangeRatio,
     },
-    plainCkb: accountPlainCkbBalance(account.capacityCells, runtime.accountLocks),
+    plainCkb: projection.ckbNative,
   };
 }
 

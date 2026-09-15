@@ -1,10 +1,10 @@
 import type { ccc } from "@ckb-ccc/ccc";
+import { hasTransactionActivity } from "@ickb/sdk";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { L1StateType } from "../query/queries.ts";
 import {
   errorMessageOf,
-  hasTransactionActivity,
   toText,
   txInfoPadding,
   type TxInfo,

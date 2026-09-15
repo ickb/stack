@@ -5,6 +5,7 @@ import type { DaoManager } from "./dao.ts";
 import type { DaoCellFromCache } from "./dao_cells.ts";
 import { assertDaoOutputLimit } from "./dao_output_limit.ts";
 import { OwnerData } from "./entities.ts";
+import { cellInputLikeFrom } from "./transaction_shape.ts";
 
 /**
  * Builds and finds Owned Owner withdrawal groups for an iCKB deployment.
@@ -249,16 +250,4 @@ function assertWithdrawalGroupLinked(group: WithdrawalGroup): void {
       `Withdrawal owner ${group.owner.cell.outPoint.toHex()} points to ${linkedOutPoint.toHex()} but group owned cell is ${ownedOutPoint.toHex()}`,
     );
   }
-}
-
-function cellInputLikeFrom(cell: ccc.Cell): ccc.CellInputLike {
-  return {
-    outPoint: cell.outPoint,
-    cellOutput: {
-      capacity: cell.cellOutput.capacity,
-      lock: cell.cellOutput.lock,
-      ...(cell.cellOutput.type === undefined ? {} : { type: cell.cellOutput.type }),
-    },
-    outputData: cell.outputData,
-  };
 }

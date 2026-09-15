@@ -64,7 +64,8 @@ export function assertReadyWithdrawalDeposits(
   }
 }
 
-function sortByMaturity<T extends WithdrawalDepositCandidate>(
+/** Earliest maturity first: the deposit that turns into CKB soonest. */
+export function sortByMaturity<T extends WithdrawalDepositCandidate>(
   deposits: readonly T[],
   tip: ccc.ClientBlockHeader,
 ): T[] {

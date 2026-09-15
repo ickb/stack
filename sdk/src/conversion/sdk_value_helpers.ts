@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { convert, type IckbDepositCell } from "../core/index.ts";
+import { sortByMaturity } from "../core/withdrawal_selection.ts";
 import type { Ratio } from "../order/index.ts";
 import { compareBigInt } from "../utils/index.ts";
 import {
@@ -54,7 +55,7 @@ export function readyPoolDeposits(
   poolDeposits: PoolDepositState,
   tip: ccc.ClientBlockHeader,
 ): IckbDepositCell[] {
-  return sortDepositsByMaturity(
+  return sortByMaturity(
     poolDeposits.deposits.filter((deposit) => deposit.isReady),
     tip,
   );
@@ -65,33 +66,6 @@ export function directWithdrawalSurplus(
   exchangeRatio: Ratio,
 ): bigint {
   return deposit.ckbValue - convert(false, deposit.udtValue, exchangeRatio);
-}
-
-export function poolDepositsKey(
-  deposits: readonly IckbDepositCell[],
-  tip: ccc.ClientBlockHeader,
-): string {
-  return deposits
-    .map((deposit) =>
-      [
-        deposit.cell.outPoint.toHex(),
-        deposit.isReady ? "ready" : "pending",
-        String(deposit.ckbValue),
-        String(deposit.udtValue),
-        String(deposit.maturity.toUnix(tip)),
-      ].join("@"),
-    )
-    .toSorted((left, right) => left.localeCompare(right))
-    .join(",");
-}
-
-export function sortDepositsByMaturity(
-  deposits: readonly IckbDepositCell[],
-  tip: ccc.ClientBlockHeader,
-): IckbDepositCell[] {
-  return deposits.toSorted((left, right) =>
-    compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip)),
-  );
 }
 
 export function sumUdtValue(values: ReadonlyArray<{ udtValue: bigint }>): bigint {

@@ -230,7 +230,6 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
           ckbAvailable: 10n,
           poolDeposits: {
             deposits: options.deposits,
-            id: "pool",
           },
         },
         ckbAvailable: 0n,

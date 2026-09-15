@@ -55,7 +55,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
           poolDeposits: {
             deposits: [directDeposit, ringAnchor],
-            id: "pool",
           },
         },
         ckbAvailable: 0n,
