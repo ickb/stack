@@ -81,7 +81,7 @@ describe("action status", () => {
         },
       }),
     ).toBe(
-      "This small request converts 1 iCKB to about 2 CKB with a 0.25 CKB matcher incentive.",
+      "This small request converts 1 iCKB to about 2 CKB and pays 0.25 CKB for the variable time.",
     );
     expect(actionMessage({ ...messageParams(), amount: 0n })).toBe("");
     expect(actionMessage({ ...messageParams(), hasCollectable: true })).toBe(
@@ -102,7 +102,7 @@ describe("action status", () => {
         hasCollectable: true,
       }),
     ).toBe(
-      "Intent: Direct conversion plus a standing order for the remainder. Also collects converted funds.",
+      "Intent: Part converts at a fixed time, the rest at a variable time. Also collects converted funds.",
     );
     expect(
       actionMessage({ ...messageParams(), amount: undefined, amountError: "Bad amount" }),
@@ -120,11 +120,11 @@ describe("action status", () => {
 
   it.each([
     ["collect-only", "Intent: Collect converted funds."],
-    ["direct", "Intent: Direct conversion."],
-    ["order", "Intent: Create a standing order."],
+    ["direct", "Intent: Converts at a fixed time."],
+    ["order", "Intent: Converts at a variable time."],
     [
       "direct-plus-order",
-      "Intent: Direct conversion plus a standing order for the remainder.",
+      "Intent: Part converts at a fixed time, the rest at a variable time.",
     ],
   ] as const)("describes %s intent exactly", (kind, expected) => {
     expect(conversionIntentText(kind)).toBe(expected);

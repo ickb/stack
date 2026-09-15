@@ -159,7 +159,7 @@ function conversionNoticeText(notice: NonNullable<TxInfo["conversionNotice"]>): 
   const incentiveCkb = toText(notice.incentiveCkb);
   return notice.kind === "maturity-unavailable"
     ? `This request converts ${inputIckb} iCKB to about ${outputCkb} CKB. Timing is not available yet.`
-    : `This small request converts ${inputIckb} iCKB to about ${outputCkb} CKB with a ${incentiveCkb} CKB matcher incentive.`;
+    : `This small request converts ${inputIckb} iCKB to about ${outputCkb} CKB and pays ${incentiveCkb} CKB for the variable time.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {
@@ -175,9 +175,9 @@ export function conversionIntentText(
 ): string {
   const intent: Record<NonNullable<TxInfo["conversionKind"]>, string> = {
     "collect-only": "Collect converted funds.",
-    direct: "Direct conversion.",
-    order: "Create a standing order.",
-    "direct-plus-order": "Direct conversion plus a standing order for the remainder.",
+    direct: "Converts at a fixed time.",
+    order: "Converts at a variable time.",
+    "direct-plus-order": "Part converts at a fixed time, the rest at a variable time.",
   };
   return `Intent: ${intent[kind]}`;
 }

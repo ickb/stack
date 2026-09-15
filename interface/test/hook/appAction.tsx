@@ -398,7 +398,7 @@ function registerActionConfirmationTests(): void {
     expect(waiting.fee).toBe("0.00000009 CKB");
     expect(waiting.maturity).toBe("⏳ 3 minutes");
     expect(waiting.message).toContain(
-      "Intent: Direct conversion plus a standing order for the remainder.",
+      "Intent: Part converts at a fixed time, the rest at a variable time.",
     );
 
     confirmation.resolve(undefined);
