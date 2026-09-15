@@ -23,6 +23,8 @@ export interface RateChartViewState {
   readonly amountText: string;
   readonly title: string;
   readonly caption: string;
+  /** What the amount is worth today, the headline the curve sits under. */
+  readonly tipValueText: string;
   readonly description: string;
   readonly samples: IckbWorthSamples;
   readonly first: IckbWorthSample;
@@ -69,6 +71,7 @@ export function rateChartView({
     targetSymbol,
     chartAmount,
     amountText,
+    tipValueText,
     title: `${amountText} ${sourceSymbol} worth over time:`,
     caption: isCkb2Udt
       ? "Gross standard-deposit value follows NervosDAO compensation, so CKB converts to less iCKB over time."

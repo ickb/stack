@@ -227,6 +227,7 @@ describe("view components", () => {
     );
 
     expect(chart).toContain("1 CKB worth over time");
+    expect(chart).toContain("today");
     expect(chart).toContain("polyline");
     expect(
       renderToStaticMarkup(<>{unscaledTimeLabels(0, Date.UTC(2030, 0, 1))}</>),

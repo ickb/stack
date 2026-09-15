@@ -254,8 +254,9 @@ export default function Action({
         }
       }}
       message={messageText}
-      fee={`${toText(txInfo.fee)} CKB`}
-      maturity={shownMaturity}
+      // Maturity and fee describe a transaction; before a valid preview there is none.
+      fee={isValid ? `${toText(txInfo.fee)} CKB` : "—"}
+      maturity={isValid ? shownMaturity : "—"}
     />
   );
 }

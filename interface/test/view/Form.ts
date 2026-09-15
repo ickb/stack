@@ -77,8 +77,8 @@ describe("formAssets", () => {
         true,
       ),
     ).toMatchObject([
-      { name: "CKB", status: "⏳" },
-      { name: "iCKB", status: "✅" },
+      { name: "CKB", status: "maturing" },
+      { name: "iCKB", status: "locked" },
     ]);
     expect(
       formAssets(
@@ -92,7 +92,7 @@ describe("formAssets", () => {
         },
         true,
       )[0],
-    ).toMatchObject({ name: "CKB", status: "⌛️" });
+    ).toMatchObject({ name: "CKB", status: "collectable" });
   });
 
   it("returns bare asset labels until balances load", () => {

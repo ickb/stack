@@ -82,14 +82,15 @@ function minBigint(left: bigint, right: bigint): bigint {
   return right;
 }
 
+/** The word beside the locked figure: what the non-native part of the balance is doing. */
 function maturityStatus(balance: bigint, native: bigint, available: bigint): string {
   if (balance === native) {
-    return "✅";
+    return "locked";
   }
 
   if (balance === available) {
-    return "⌛️";
+    return "collectable";
   }
 
-  return "⏳";
+  return "maturing";
 }

@@ -47,6 +47,10 @@ export default function Form({
   const [a, b] = formAssets(balances, isCkb2Udt);
   const selectMax = maxSelector(a, symbol, setRawText);
   const selectReverseMax = maxSelector(b, direction2Symbol(!isCkb2Udt), setRawText);
+  // The quote row stays empty while the amount box shows its placeholder, so the form
+  // does not open on two stacked zeros; a typed amount reads as input above, output below.
+  const typedQuote = text === "" ? "" : `≈ ${amountQuote} ${b.name}`;
+  const quoteLine = hasAmountError ? amountQuote : typedQuote;
 
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
@@ -74,21 +78,22 @@ export default function Form({
         disabled={isFrozen}
         onClick={toggle}
         aria-label="Switch conversion direction"
+        title="Switch conversion direction"
       >
         <span
           aria-hidden="true"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[54%] tracking-[-0.2em]"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl"
         >
-          ↿⇂
+          ⇅
         </span>
       </button>
       <span
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}
-        className={`col-span-3 max-w-full text-center text-ickb-action ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal normal-case" : "overflow-hidden text-3xl text-ellipsis whitespace-nowrap"}`}
-        title={amountQuote}
+        className={`col-span-3 max-w-full text-center text-ickb-action normal-case ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
+        title={quoteLine}
       >
-        ⏳{amountQuote}
+        {quoteLine}
       </span>
       {nativeBalanceDisplay(b, isFrozen, selectReverseMax)}
       <span className="text-2xl whitespace-nowrap text-ickb-text normal-case">
@@ -108,7 +113,7 @@ function nativeBalanceDisplay(
     return <span aria-hidden="true" />;
   }
 
-  const renderedBalance = display(asset.available, "✅");
+  const renderedBalance = display(asset.available, "available", false);
   if (selectMax === undefined) {
     return (
       <span
@@ -166,23 +171,27 @@ function lockedBalanceDisplay(asset: AssetDisplay): JSX.Element {
 
   return (
     <span className="cursor-wait whitespace-nowrap text-ickb-muted">
-      {display(asset.locked, asset.status)}
+      {display(asset.locked, asset.status, asset.status === "maturing")}
     </span>
   );
 }
 
-function display(shannons: bigint, prefix: string): JSX.Element {
-  const isMaturing = prefix === "⏳";
+/** A figure and the word that says what it is; a maturing figure pulses. */
+function display(shannons: bigint, label: string, isMaturing: boolean): JSX.Element {
   return (
-    <span className={`flex flex-row ${isMaturing ? "cursor-wait" : ""}`}>
+    <span
+      className={`flex flex-row items-baseline gap-x-1 ${isMaturing ? "cursor-wait" : ""}`}
+    >
       <span className={isMaturing ? "animate-pulse motion-reduce:animate-none" : ""}>
-        {prefix}
+        <span className="sm:hidden">
+          {String(shannons / CKB)}
+          {shannons % CKB === 0n ? "" : "+"}
+        </span>
+        <span className="hidden sm:block">{toText(shannons)}</span>
       </span>
-      <span className="sm:hidden">
-        {String(shannons / CKB)}
-        {shannons % CKB === 0n ? "" : "+"}
+      <span className="text-xs font-medium tracking-normal normal-case opacity-80">
+        {label}
       </span>
-      <span className="hidden sm:block">{toText(shannons)}</span>
     </span>
   );
 }
