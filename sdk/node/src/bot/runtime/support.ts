@@ -2,7 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import { convert } from "../../../../src/core/index.ts";
 import type { Match } from "../../../../src/order/index.ts";
 
-import { CKB_RESERVE } from "../policy/constants.ts";
+import { CKB_RESERVE } from "../../../../src/constants.ts";
 import type { BotDecision, BotState, BotStateSummary } from "./types.ts";
 
 /**

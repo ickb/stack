@@ -5,7 +5,7 @@ import { partialOrderFee } from "../../../../src/order/io/order_io.ts";
 
 import { chainState, FakeClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE } from "../../../src/bot/policy/constants.ts";
+import { CKB_RESERVE } from "../../../../src/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
 import {
   BAND_ICKB_BALANCE,

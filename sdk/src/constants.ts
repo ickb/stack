@@ -122,6 +122,12 @@ const TESTNET_DEP_GROUP = ccc.CellDep.from({
 });
 
 /**
+ * Plain CKB an actor keeps for its own cells and fees: the bot's sizing line for matches
+ * and deposits, and what the liquidity estimate nets out of each known bot.
+ */
+export const CKB_RESERVE = ccc.fixedPointFrom(1000);
+
+/**
  * Array of known bot scripts on the mainnet.
  */
 const MAINNET_KNOWN_BOTS = [

@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import { CKB_RESERVE } from "../../../src/constants.ts";
 import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
 import type {
   AccountState,
@@ -34,9 +35,6 @@ export interface StimulusState {
   plainCkb: bigint;
 }
 
-const CKB = 100_000_000n;
-/** Plain CKB the account keeps for its own cells and fees. */
-export const CKB_RESERVE = 1000n * CKB;
 /** Thirty days of eight-second blocks: an order the bot left that long is cancelled. */
 export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
 /** Testnet hygiene, not safety: with this many own orders live, the turn stops minting. */

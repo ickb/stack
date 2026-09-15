@@ -10,9 +10,9 @@ import { ickbAccountingRatio } from "../../../src/core/udt.ts";
 
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { CKB_RESERVE } from "../../../src/constants.ts";
 import { planRebalance, type RebalanceInput } from "../../src/bot/policy.ts";
 import {
-  CKB_RESERVE,
   ICKB_REFILL_BELOW,
   ICKB_RETAIN,
   ICKB_WITHDRAW_ABOVE,

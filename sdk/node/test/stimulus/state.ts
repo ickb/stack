@@ -1,10 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import {
-  CKB_RESERVE,
-  readStimulusState,
-  STALE_ORDER_BLOCKS,
-} from "../../src/stimulus/state.ts";
+import { CKB_RESERVE } from "../../../src/constants.ts";
+import { readStimulusState, STALE_ORDER_BLOCKS } from "../../src/stimulus/state.ts";
 import {
   accountState,
   CKB,

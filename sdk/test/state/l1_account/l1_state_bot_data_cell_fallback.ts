@@ -83,8 +83,8 @@ describe(L1_STATE_SUITE, () => {
     const state = await sdk.getL1AccountState(client, []);
 
     expect(state.user.orders).toEqual([]);
-    // The plain bot cell counts net of the 2,000 CKB the bot keeps; the data cell is ignored.
-    expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(3000));
+    // The plain bot cell counts net of the 1,000 CKB the bot keeps; the data cell is ignored.
+    expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(4000));
     expect(state.system.ckbMaturing).toHaveLength(1);
     expect(state.system.ckbMaturing[0]?.ckbCumulative).toBe(ccc.fixedPointFrom(100082));
   });

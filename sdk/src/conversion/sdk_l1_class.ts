@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { CKB_RESERVE } from "../constants.ts";
 import {
   ickbExchangeRatio,
   type ReceiptCell,
@@ -8,6 +9,7 @@ import { Info, Ratio, type OrderGroup } from "../order/index.ts";
 import { collect, findCells, isPlainCapacityCell, unique } from "../utils/index.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
 import { orderGroupWithMaturity } from "./sdk_maturity_order_group.ts";
+import { projectAccountAvailability } from "./sdk_projection.ts";
 import type {
   AccountState,
   GetL1StateOptions,
@@ -17,9 +19,6 @@ import type {
   SystemState,
 } from "./sdk_types.ts";
 import { cumulativeCkbMaturing, poolDepositCkb } from "./sdk_value_helpers.ts";
-
-/** Plain CKB each known bot keeps for its own cells and fees, excluded from the maturity estimate. */
-const botCkbReserve = ccc.fixedPointFrom("2000");
 
 /** Every Stack cell one lock owns, classified from a single exact-lock scan. */
 interface LockCells {
@@ -136,23 +135,21 @@ export class IckbSdkL1 extends IckbSdkConversion {
     const poolCkb = poolDepositCkb(poolDeposits, tip);
     let ckbAvailable = poolCkb.ready;
     const maturing: MaturingCkb[] = [...poolCkb.maturing];
+    // A bot spends what its own turn projects for it, less the reserve it keeps.
     for (const bot of lockCells.filter(({ lock }) => this.bots.some((b) => b.eq(lock)))) {
-      let ready = -botCkbReserve;
-      for (const cell of bot.capacityCells) {
-        ready += cell.cellOutput.capacity;
-      }
-      for (const group of bot.withdrawalGroups) {
-        if (group.owned.isReady) {
-          ready += group.ckbValue;
-        } else {
-          maturing.push({
-            ckbValue: group.ckbValue,
-            maturity: group.owned.maturity.toUnix(tip),
-          });
-        }
-      }
+      const projection = projectAccountAvailability(accountState([bot]), {
+        available: [],
+        pending: [],
+      });
+      const ready = projection.ckbAvailable - CKB_RESERVE;
       if (ready > 0n) {
         ckbAvailable += ready;
+      }
+      for (const group of projection.pendingWithdrawals) {
+        maturing.push({
+          ckbValue: group.ckbValue,
+          maturity: group.owned.maturity.toUnix(tip),
+        });
       }
     }
     return { ckbAvailable, ckbMaturing: cumulativeCkbMaturing(maturing) };

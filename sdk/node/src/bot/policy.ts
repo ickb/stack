@@ -5,8 +5,8 @@ import {
   sortByMaturity,
 } from "../../../src/core/withdrawal_selection.ts";
 
+import { CKB_RESERVE } from "../../../src/constants.ts";
 import {
-  CKB_RESERVE,
   ICKB_REFILL_BELOW,
   ICKB_RETAIN,
   ICKB_WITHDRAW_ABOVE,

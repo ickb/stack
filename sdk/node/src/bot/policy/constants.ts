@@ -1,9 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
 
-export const CKB = ccc.fixedPointFrom(1);
-/** Plain CKB every match and deposit leaves behind for markers and fees. */
-export const CKB_RESERVE = 1000n * CKB;
 export const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
 export const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 

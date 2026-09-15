@@ -150,13 +150,16 @@ describe(L1_STATE_SUITE, () => {
       pendingOwner,
     ]);
 
-    // The bot estimate reuses the account's scan: its plain CKB and ready withdrawal
-    // count net of the 2,000 CKB reserve, and the other bot's plain CKB counts too.
+    // The bot estimate is the bot's own projection net of the 1,000 CKB reserve: plain
+    // CKB, the receipt, and the ready withdrawal; the other bot's plain CKB counts too.
     const [withdrawal, pending] = account.withdrawalGroups;
     expect(withdrawal?.owned.isReady).toBe(true);
     expect(pending?.owned.isReady).toBe(false);
     expect(system.ckbAvailable).toBe(
-      1000n * CKB + (withdrawal?.ckbValue ?? 0n) + 3000n * CKB,
+      2000n * CKB +
+        (account.receipts[0]?.ckbValue ?? 0n) +
+        (withdrawal?.ckbValue ?? 0n) +
+        4000n * CKB,
     );
     expect(system.ckbMaturing).toEqual([
       { ckbCumulative: pending?.ckbValue, maturity: pending?.owned.maturity.toUnix(tip) },

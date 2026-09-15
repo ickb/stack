@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { CKB_RESERVE } from "../../../src/constants.ts";
 import { isIckbError } from "../../../src/conversion/sdk_error.ts";
 import { estimate } from "../../../src/conversion/sdk_estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/sdk_types.ts";
@@ -19,7 +20,6 @@ import {
 } from "../shared/index.ts";
 import { type Draw, drawTurn, ORDER_FEE_BASE, type Override } from "./draw.ts";
 import {
-  CKB_RESERVE,
   MAX_LIVE_ORDERS,
   readStimulusState,
   type Runtime,
