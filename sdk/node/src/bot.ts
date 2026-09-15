@@ -49,7 +49,13 @@ try {
     observed: preflight.observed,
     matches: preflight.matches,
   });
-  const sdk = IckbSdk.fromChain(chain);
+  const sdk = new IckbSdk({
+    ickbUdt: config.managers.ickbUdt,
+    ownedOwner: config.managers.ownedOwner,
+    ickbLogic: config.managers.logic,
+    order: config.managers.order,
+    bots: config.bots,
+  });
   const runtime: Runtime = {
     client,
     sdk,
