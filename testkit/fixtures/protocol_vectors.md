@@ -14,6 +14,13 @@ TypeScript reimplementations. Do not edit the JSON by hand; regenerate it.
   cargo run --release -- /var/home/user/Projects/ickb/stack/testkit/fixtures/protocol_vectors.json
   ```
 
+Deployed-binary check (2026-09-15): `scripts/build/release/{ickb_logic,limit_order,owned_owner,xudt}`
+at that commit hash (`ccc.hashCkb`) to the four `data1` code hashes in `sdk/src/constants.ts`,
+and every code cell in the mainnet and testnet dep groups carries data with those hashes.
+The blobs are byte-identical at deployed commit `454cfa96`, whose only source difference from
+`ae8a11f` is the test crate's `Cargo.lock`. Recreate with `git cat-file blob <commit>:<path>`
+piped into `ccc.hashCkb`, and `getCell` on each dep-group entry.
+
 Provenance mechanism: `utils/src/c256.rs` (checked 256-bit arithmetic) and
 `ickb_logic/src/constants.rs` are compiled directly from the contract sources via
 `#[path]`. The two protocol functions, `deposit_to_ickb`

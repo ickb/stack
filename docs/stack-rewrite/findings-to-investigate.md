@@ -13,7 +13,6 @@ That review was read-only. Later maintainer decisions superseded its signed-stor
 
 ## Additional follow-ups
 
-- Verify the golden-vector generator commit against the deployed ELF fixture authority. Current documentation cites contracts commit `ae8a11f` and deployed `ickb_logic` commit `454cfa96` for different evidence roles.
 - Add durable provenance enforcement for generated protocol vectors rather than relying on prose alone.
 - Resolve npm version and registry handling before publication.
 - Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
