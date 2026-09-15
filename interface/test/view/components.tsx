@@ -82,6 +82,7 @@ describe("view components", () => {
       ),
       walletName: "Neuron",
       openWallet,
+      destination: ownDestination(),
     });
     const walletButton = findElement(
       dashboard,
@@ -93,9 +94,7 @@ describe("view components", () => {
     elementProps<{ onClick: () => void }>(walletButton).onClick();
     expect(openWallet).toHaveBeenCalledTimes(1);
     expect(openWallet).toHaveBeenCalledWith();
-    expect(renderToStaticMarkup(dashboard)).toContain(
-      "testnet.explorer.nervos.org/faucet",
-    );
+    expect(renderToStaticMarkup(dashboard)).toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(dashboard)).toContain("ckt1qxy2kg...xqd5v3my");
     expect(
       renderToStaticMarkup(
@@ -103,6 +102,7 @@ describe("view components", () => {
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
+          destination={ownDestination()}
         />,
       ),
     ).not.toContain("/faucet");
@@ -112,6 +112,7 @@ describe("view components", () => {
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
+          destination={ownDestination()}
           disabled={true}
         />,
       ),
@@ -392,4 +393,13 @@ function pendingRootConfig(
 ): Parameters<typeof WalletConfigPendingView>[0]["rootConfig"] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Pending view only reads rootConfig.chain in these branches.
   return { chain } as Parameters<typeof WalletConfigPendingView>[0]["rootConfig"];
+}
+
+function ownDestination(): Parameters<typeof Dashboard>[0]["destination"] {
+  return {
+    text: "",
+    setText: vi.fn<(value: string) => void>(),
+    isValid: true,
+    isForeign: false,
+  };
 }

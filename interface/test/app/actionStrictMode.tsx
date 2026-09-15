@@ -275,10 +275,6 @@ function PendingHost({
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    destinationField: {
-      text: walletConfig.address,
-      setText: vi.fn<(value: string) => void>(),
-    },
     refreshPreview: async (): Promise<RefreshedTransactionState> => {
       await Promise.resolve();
       return {

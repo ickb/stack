@@ -32,9 +32,9 @@ export default function App({
   quoteState?: QuoteState;
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
-  // The destination of the next transaction, the wallet's own address until edited; it
+  // The destination of the next transaction, the wallet's own address while empty; it
   // lives with this App, so a reload or a wallet switch resets it (amendment 52(af)).
-  const [destinationText, setDestinationText] = useState(walletConfig.address);
+  const [destinationText, setDestinationText] = useState("");
   const { destination, error: destinationError } = useDestination(
     destinationText,
     walletConfig,
@@ -103,16 +103,18 @@ export default function App({
         amount: amountInput.amount ?? 0n,
         l1State,
       }}
+      destinationField={{
+        text: destinationText,
+        setText: setDestinationText,
+        isValid: destination !== undefined,
+        isForeign: destination?.moveTo !== undefined,
+      }}
       actionParams={{
         isCkb2Udt,
         amount: amountInput.amount,
         amountError: amountInput.error,
         destination,
         destinationError,
-        destinationField: {
-          text: destinationText,
-          setText: setDestinationText,
-        },
         refreshPreview,
         freeze,
         formReset,

@@ -518,6 +518,12 @@ function registerWalletViewTests(): void {
       quoteState: quoteState(),
       formQuoteState: quoteState(),
       isFrozen: false,
+      destinationField: {
+        text: "",
+        setText: vi.fn<(value: string) => void>(),
+        isValid: true,
+        isForeign: false,
+      },
       actionParams: actionProps(),
       isCkb2Udt: true,
       amount: CKB,

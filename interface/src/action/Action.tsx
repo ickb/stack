@@ -10,7 +10,7 @@ import {
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
-import { ActionLayout, type DestinationField } from "./ActionLayout.tsx";
+import { ActionLayout } from "./ActionLayout.tsx";
 import {
   actionDisabled,
   actionDone,
@@ -44,7 +44,6 @@ export default function Action({
   amountError,
   destination,
   destinationError,
-  destinationField,
   refreshPreview,
   freeze,
   formReset,
@@ -61,7 +60,6 @@ export default function Action({
   amountError: string;
   destination: Destination | undefined;
   destinationError: string;
-  destinationField: Pick<DestinationField, "text" | "setText">;
   refreshPreview: (
     isCkb2Udt: boolean,
     amount: bigint,
@@ -258,11 +256,6 @@ export default function Action({
       message={messageText}
       fee={`${toText(txInfo.fee)} CKB`}
       maturity={shownMaturity}
-      destination={{
-        ...destinationField,
-        disabled: isLocked || isSubmitting || isConfirming,
-        invalid: destination === undefined && destinationError !== "",
-      }}
     />
   );
 }

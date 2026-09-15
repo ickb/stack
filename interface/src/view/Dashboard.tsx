@@ -1,4 +1,5 @@
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
+import { shortAddress, type DestinationField } from "../action/destination.ts";
 import { buttonClass } from "../shared/buttonStyles.ts";
 import type { RootConfig, WalletConfig } from "../shared/utils.ts";
 
@@ -6,16 +7,16 @@ export function Dashboard({
   walletConfig,
   walletName,
   openWallet,
+  destination,
   disabled = false,
 }: Readonly<{
   walletConfig: WalletConfig;
   walletName: string;
   openWallet: () => unknown;
+  destination: DestinationField;
   disabled?: boolean;
 }>): JSX.Element {
   const { chain, address } = walletConfig;
-  const href = `https://${chain !== "mainnet" ? "testnet." : ""}explorer.nervos.org/address/${address}`;
-  const shownAddress = shortenAddress(address);
   const isTestnet = chain === "testnet";
   const networkName = isTestnet ? "Testnet" : "Mainnet";
   return (
@@ -23,7 +24,7 @@ export function Dashboard({
       <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
         {isTestnet ? (
           <a
-            href="https://testnet.explorer.nervos.org/faucet"
+            href="https://faucet.nervos.org/"
             className="rounded text-xl text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
             aria-label="Open testnet faucet"
             title="Open testnet faucet"
@@ -42,18 +43,71 @@ export function Dashboard({
           {walletName} on {networkName}
         </button>
       </span>
-      <span className="w-full max-w-full min-w-0 text-center">
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
-          title={address}
-        >
-          {shownAddress}
-        </a>
-      </span>
+      <AddressField {...{ destination, chain, disabled }} ownAddress={address} />
     </HeaderGrid>
+  );
+}
+
+/**
+ * The wallet's address, doubling as the destination of the next transaction: the own
+ * address as the placeholder of the empty field, a pasted one shortened at rest and in
+ * full while editing, marked with an arrow once it points elsewhere (decisions amendment
+ * 52(af)). The link opens the shown address in the explorer.
+ */
+function AddressField({
+  destination,
+  ownAddress,
+  chain,
+  disabled,
+}: Readonly<{
+  destination: DestinationField;
+  ownAddress: string;
+  chain: RootConfig["chain"];
+  disabled: boolean;
+}>): JSX.Element {
+  const [isEditing, setIsEditing] = useState(false);
+  const { text, setText, isValid, isForeign } = destination;
+  const marker = isForeign ? "→ " : "";
+  const atRest = text === "" ? "" : `${marker}${shortAddress(text)}`;
+  const shown = isEditing || !isValid ? text : atRest;
+  const explorerAddress = isValid && text !== "" ? text.trim() : ownAddress;
+  const href = `https://${chain !== "mainnet" ? "testnet." : ""}explorer.nervos.org/address/${explorerAddress}`;
+  // The input sizes to its text, so the explorer link sits right after the address at
+  // every width instead of at the far edge of a full-width box.
+  return (
+    <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-1 text-center">
+      <input
+        value={shown}
+        placeholder={shortAddress(ownAddress)}
+        disabled={disabled}
+        onFocus={() => {
+          setIsEditing(true);
+        }}
+        onBlur={() => {
+          setIsEditing(false);
+        }}
+        onChange={(event) => {
+          setText(event.target.value);
+        }}
+        autoComplete="off"
+        spellCheck={false}
+        type="text"
+        aria-invalid={!isValid}
+        aria-label="Destination address"
+        title="Every cell the next transaction creates for you belongs to this address"
+        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded border-0 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action hover:opacity-80 focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default"
+      />
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+        aria-label="Open the address in the explorer"
+        title={explorerAddress}
+      >
+        ↗
+      </a>
+    </span>
   );
 }
 
@@ -98,14 +152,6 @@ export function PendingDashboard({
       <span className="text-center text-ickb-muted">Loading address</span>
     </HeaderGrid>
   );
-}
-
-function shortenAddress(address: string): string {
-  if (address.length <= 21) {
-    return address;
-  }
-
-  return `${address.slice(0, 10)}...${address.slice(-8)}`;
 }
 
 function HeaderGrid({ children }: Readonly<{ children: React.ReactNode }>): JSX.Element {

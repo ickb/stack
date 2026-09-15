@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import Action from "../action/Action.tsx";
+import type { DestinationField } from "../action/destination.ts";
 import RateChart from "../chart/rateChart.tsx";
 import type { L1StateType, QuoteState } from "../query/queries.ts";
 import { objectIdentityKey } from "../query/rootConfigQueryKey.ts";
@@ -18,6 +19,7 @@ export function WalletAppView({
   quoteState,
   formQuoteState,
   isFrozen,
+  destinationField,
   actionParams,
   isCkb2Udt,
   amount,
@@ -31,6 +33,7 @@ export function WalletAppView({
   quoteState?: QuoteState;
   formQuoteState: Parameters<typeof Form>[0]["quoteState"];
   isFrozen: boolean;
+  destinationField: DestinationField;
   actionParams: ActionParams;
   isCkb2Udt: boolean;
   amount: bigint;
@@ -39,7 +42,11 @@ export function WalletAppView({
   return (
     <>
       <WalletHeaderPortal>
-        <Dashboard {...{ walletConfig, walletName, openWallet }} disabled={isFrozen} />
+        <Dashboard
+          {...{ walletConfig, walletName, openWallet }}
+          destination={destinationField}
+          disabled={isFrozen}
+        />
       </WalletHeaderPortal>
       <WalletSections>
         <WalletSection>

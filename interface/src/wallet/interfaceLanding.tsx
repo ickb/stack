@@ -82,7 +82,7 @@ export function TestnetHint(): JSX.Element {
     <p className="text-sm leading-relaxed text-ickb-muted">
       Need testnet CKB?{" "}
       <a
-        href="https://testnet.explorer.nervos.org/faucet"
+        href="https://faucet.nervos.org/"
         className="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
       >
         Faucet

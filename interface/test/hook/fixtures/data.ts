@@ -30,7 +30,6 @@ export function actionProps(): Parameters<typeof Action>[0] {
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    destinationField: { text: "ckt1test", setText: vi.fn<(value: string) => void>() },
     refreshPreview: vi.fn(async () => {
       await Promise.resolve();
       return {

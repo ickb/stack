@@ -20,6 +20,12 @@ function renderDashboardAddress(address: string): string {
       walletConfig: dashboardWalletConfig(address),
       walletName: "JoyID",
       openWallet: (): undefined => undefined,
+      destination: {
+        text: "",
+        setText: (): undefined => undefined,
+        isValid: true,
+        isForeign: false,
+      },
     }),
   );
 }

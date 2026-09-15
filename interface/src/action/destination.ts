@@ -14,23 +14,31 @@ export interface Destination {
   readonly moveTo?: string;
 }
 
+/** The address field as the header shows it: the text, its setter, and what it resolved to. */
+export interface DestinationField {
+  readonly text: string;
+  readonly setText: (value: string) => void;
+  readonly isValid: boolean;
+  readonly isForeign: boolean;
+}
+
 type DestinationRead = Readonly<
   { text: string } & ({ destination: Destination } | { error: string })
 >;
 
 /**
  * Parses a pasted address on the wallet's chain into the destination of the next
- * transaction; the wallet's own address, the field's initial text, needs no parsing.
+ * transaction; empty text means the wallet's own address, like an empty amount means zero.
  */
 export function useDestination(
   text: string,
   walletConfig: WalletConfig,
 ): { destination?: Destination; error: string } {
   const [read, setRead] = useState<DestinationRead>();
-  const isOwnAddress = text === walletConfig.address;
+  const isEmpty = text === "";
   useEffect(() => {
     const cancelled = new AbortController();
-    if (!isOwnAddress) {
+    if (!isEmpty) {
       void (async (): Promise<void> => {
         let next: DestinationRead;
         try {
@@ -46,9 +54,9 @@ export function useDestination(
     return (): void => {
       cancelled.abort();
     };
-  }, [text, walletConfig, isOwnAddress]);
+  }, [text, walletConfig, isEmpty]);
 
-  if (isOwnAddress) {
+  if (isEmpty) {
     return { destination: { lock: walletConfig.primaryLock }, error: "" };
   }
   if (read?.text !== text) {
@@ -78,6 +86,10 @@ export async function parseDestination(
     : { lock, moveTo: shortAddress(address.toString()) };
 }
 
+/** Both ends of an address with the middle elided; a short one stays intact. */
 export function shortAddress(address: string): string {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
+  if (address.length <= 21) {
+    return address;
+  }
+  return `${address.slice(0, 10)}...${address.slice(-8)}`;
 }

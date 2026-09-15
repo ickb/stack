@@ -46,16 +46,19 @@ describe("parseDestination", () => {
   });
 
   it("shortens an address to its ends", () => {
-    expect(shortAddress("ckt1qzdabcdefghijklmnopqrstuvwxyz")).toBe("ckt1qzda…uvwxyz");
+    expect(shortAddress("ckt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhxqd5v3my")).toBe(
+      "ckt1qxy2kg...xqd5v3my",
+    );
+    expect(shortAddress("ckt1short")).toBe("ckt1short");
   });
 });
 
 describe("useDestination", () => {
-  it("takes the wallet's own address without parsing", async () => {
+  it("takes empty text as the wallet's own address without parsing", async () => {
     resetHooks();
     const config = walletConfig();
 
-    expect(useDestination(config.address, config)).toEqual({
+    expect(useDestination("", config)).toEqual({
       destination: { lock: config.primaryLock },
       error: "",
     });
