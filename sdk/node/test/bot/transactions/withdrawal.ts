@@ -8,7 +8,7 @@ import {
 } from "../../../../src/core/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_RETAIN, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
+import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
 import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
 import type { Runtime } from "../../../src/bot/runtime/types.ts";
 import {
@@ -74,40 +74,6 @@ describe("buildTransaction withdrawal", () => {
         rebalance: { withdrawal: { candidateCount: 3, stress: false } },
         core: { kind: "withdraw", withdrawalRequests: 2, attempts: 2 },
       },
-    });
-  });
-
-  it("rebuilds the chain from the next oldest deposit when the first chain cannot complete", async () => {
-    const big = readyDeposit("84", ICKB_DEPOSIT_CAP, 0n);
-    const small = readyDeposit("85", ICKB_DEPOSIT_CAP / 2n, 5n * MINUTE);
-    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      if (tx.inputs.some((input) => input.previousOutput.eq(big.cell.outPoint))) {
-        throw new IckbError("the big deposit does not fit", {
-          code: "insufficient_capacity",
-        });
-      }
-      return tx;
-    });
-    const runtime = botRuntime({ completeTransaction });
-    const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
-    // Budget takes the big deposit alone; the small one only fits once the big one is dropped.
-    const ickb = ICKB_RETAIN + ICKB_DEPOSIT_CAP + ICKB_DEPOSIT_CAP / 4n;
-
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        ckb: ccc.fixedPointFrom(500_000),
-        ickb,
-        poolDeposits: pool([big, small]),
-      }),
-    );
-
-    expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([small]);
-    expect(result).toMatchObject({
-      kind: "built",
-      decision: { core: { kind: "withdraw", withdrawalRequests: 1, attempts: 2 } },
     });
   });
 

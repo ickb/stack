@@ -128,26 +128,23 @@ function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
 }
 
 /**
- * Every prefix of the greedy chain from every start, longest first, so completion can fall
- * back to a shorter or later chain. A start whose own deposit exceeds the budget repeats
- * the next start's chain, so it is skipped.
+ * Every prefix of the greedy chain, longest first, so completion can fall back to a shorter
+ * one. One chain only: a shorter prefix needs fewer markers and less iCKB, and a chain
+ * from a later start would only fund where this one's prefixes did not when the sweep
+ * cannot reach iCKB the projection counted (decisions amendment 52(y)); trying every start
+ * made the walk quadratic in ready deposits.
  */
 function withdrawalCores({
   candidates,
   budget,
   stress,
 }: NonNullable<RebalancePlan["withdrawal"]>): Core[] {
-  const cores: Core[] = [];
-  for (const [start, first] of candidates.entries()) {
-    if (first.udtValue > budget) {
-      continue;
-    }
-    const chain = greedyFit(candidates.slice(start), budget);
-    for (let length = chain.length; length > 0; length -= 1) {
-      cores.push({ kind: "withdraw", deposits: chain.slice(0, length), stress });
-    }
-  }
-  return cores;
+  const chain = greedyFit(candidates, budget);
+  return chain.map((_, index) => ({
+    kind: "withdraw",
+    deposits: chain.slice(0, chain.length - index),
+    stress,
+  }));
 }
 
 function greedyFit(
