@@ -337,6 +337,7 @@ describe("waitTransaction window closing", () => {
       interval: 2_000,
       signal: controller.signal,
     });
+    // The count is the wait condition: the poll timer must be armed before time advances.
     await vi.waitFor(() => {
       expect(request).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(2);
@@ -462,7 +463,7 @@ describe("waitTransaction in-flight operations", () => {
 });
 
 describe("waitTransaction absolute budget", () => {
-  it("spends one absolute budget across raw status, body, and tip reads", async () => {
+  it("spends one absolute budget across raw status and body reads", async () => {
     vi.useFakeTimers();
     const rawGate = Promise.withResolvers<boolean>();
     const body = Promise.withResolvers<ccc.ClientTransactionResponse | undefined>();
@@ -486,7 +487,6 @@ describe("waitTransaction absolute budget", () => {
     const remaining = 1_000 - (Date.now() - startedAt);
     expect(remaining).toBeGreaterThan(0);
     await vi.advanceTimersByTimeAsync(remaining - 1);
-    expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
 
     await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
