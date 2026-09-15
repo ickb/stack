@@ -24,11 +24,7 @@ export const queryClient = new QueryClient();
 // the chosen one through an Owner the Provider may dispose without effect.
 const clients = {
   mainnet: ccc.ClientPublicMainnet.open(),
-  // testnet.ckb.dev's front ends are degraded (2026-09-14, amendment 52(u)); ckbapp first
-  // until they recover, then the default pool.
-  testnet: ccc.ClientPublicTestnet.open({
-    urls: ["https://testnet.ckbapp.dev/", "https://testnet.ckb.dev/"],
-  }),
+  testnet: ccc.ClientPublicTestnet.open(),
 };
 export const mainnetClient = clients.mainnet.value;
 export const testnetClient = clients.testnet.value;
