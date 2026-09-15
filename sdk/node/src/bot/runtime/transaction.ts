@@ -36,9 +36,11 @@ interface MatchOutcome {
 /**
  * One turn's transaction: the best match, then one rebalance core the completion walk can
  * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits are sized to keep the reserve; completion's fee and
- * marker cells draw on it, and nothing checks the completed transaction against it, since
- * such a check rejected every fill sized to the reserve (decisions amendment 52(i)).
+ * riding along. Matches and deposits are sized to keep the reserve; completion's fee,
+ * iCKB change cell, and receipt draw on it by a bounded amount, withdrawal owner markers
+ * by chain length (chains are sized in iCKB), and nothing checks the completed transaction
+ * against it, since such a check rejected every fill sized to the reserve (decisions
+ * amendment 52(i)).
  */
 function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
