@@ -83,6 +83,8 @@ export function TestnetHint(): JSX.Element {
       Need testnet CKB?{" "}
       <a
         href="https://faucet.nervos.org/"
+        target="_blank"
+        rel="noopener noreferrer"
         className="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
       >
         Faucet

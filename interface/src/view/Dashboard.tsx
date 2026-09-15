@@ -25,6 +25,8 @@ export function Dashboard({
         {isTestnet ? (
           <a
             href="https://faucet.nervos.org/"
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded text-xl text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
             aria-label="Open testnet faucet"
             title="Open testnet faucet"
@@ -89,13 +91,20 @@ function AddressField({
         onChange={(event) => {
           setText(event.target.value);
         }}
+        // A paste is the whole edit: leaving the field shows the address shortened at once.
+        onPaste={(event) => {
+          const element = event.currentTarget;
+          setTimeout(() => {
+            element.blur();
+          }, 0);
+        }}
         autoComplete="off"
         spellCheck={false}
         type="text"
         aria-invalid={!isValid}
         aria-label="Destination address"
         title="Every cell the next transaction creates for you belongs to this address"
-        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded border-0 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action hover:opacity-80 focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default"
+        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded border-0 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action/70 hover:opacity-80 focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default"
       />
       <a
         href={href}

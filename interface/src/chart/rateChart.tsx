@@ -28,9 +28,7 @@ export default function RateChart({
 }: RateChartProps): JSX.Element {
   const {
     sourceSymbol,
-    targetSymbol,
     amountText,
-    tipValueText,
     title,
     caption,
     description,
@@ -45,17 +43,12 @@ export default function RateChart({
 
   return (
     <figure className="grid h-full grid-rows-[2rem_minmax(0,1fr)_4.5rem] sm:grid-rows-[2rem_minmax(0,1fr)_3.25rem]">
-      {/* The headline is today's rate; the curve below is its context. */}
       <figcaption className="flex items-end justify-center text-center">
-        <span className="text-xl font-medium text-ickb-muted">
-          <span className="font-bold text-ickb-text">
+        <span className="text-lg font-medium text-ickb-text/90">
+          <span className="text-xl font-bold text-ickb-text">
             {amountText} {sourceSymbol}
           </span>{" "}
-          ={" "}
-          <span className="font-bold text-ickb-text">
-            {tipValueText} {targetSymbol}
-          </span>{" "}
-          today
+          worth over time
         </span>
       </figcaption>
       <div className="grid min-h-0 grid-cols-[4.75rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[6.5rem_minmax(0,1fr)]">

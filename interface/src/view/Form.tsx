@@ -1,5 +1,6 @@
 import type { JSX } from "react";
-import type { QuoteStateLike } from "../shared/quote.ts";
+import { chartAmountText } from "../chart/rateChartText.ts";
+import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
 import {
   CKB,
   direction2Symbol,
@@ -49,8 +50,15 @@ export default function Form({
   const selectReverseMax = maxSelector(b, direction2Symbol(!isCkb2Udt), setRawText);
   // The quote row stays empty while the amount box shows its placeholder, so the form
   // does not open on two stacked zeros; a typed amount reads as input above, output below.
-  const typedQuote = text === "" ? "" : `≈ ${amountQuote} ${b.name}`;
+  const typedQuote = text === "" ? "" : `${amountQuote} ${b.name}`;
   const quoteLine = hasAmountError ? amountQuote : typedQuote;
+  // The rate for one unit sits beside the direction switch, where the conversion happens.
+  const unitAmount =
+    quoteState === undefined
+      ? undefined
+      : conversionQuote(`${symbol}1`, quoteState).convertedAmount;
+  const unitRate =
+    unitAmount === undefined ? "..." : `${chartAmountText(unitAmount)} ${b.name}`;
 
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
@@ -73,20 +81,34 @@ export default function Form({
         className="col-span-3 w-full rounded border-0 bg-transparent text-center text-3xl text-ickb-action outline-none placeholder:text-ickb-action/35 focus:text-ickb-action disabled:cursor-default"
         aria-label="Amount to be converted"
       />
-      <button
-        className="relative col-span-3 h-11 w-11 cursor-pointer rounded border-0 bg-transparent text-3xl leading-none text-ickb-action transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
-        disabled={isFrozen}
-        onClick={toggle}
-        aria-label="Switch conversion direction"
-        title="Switch conversion direction"
-      >
-        <span
-          aria-hidden="true"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl"
-        >
-          ⇅
+      {/* The unit rate and the switch sit between two hairlines, the card's own divider
+          language, so the rate reads as one fact apart from the balances above and below;
+          equal side columns keep the switch on the form's centre line whatever the two
+          figures' widths. */}
+      <span className="col-span-3 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4">
+        <span aria-hidden="true" className="h-px bg-ickb-border/70" />
+        <span className="inline-grid h-11 grid-cols-[1fr_auto_1fr] items-center gap-x-3 text-sm font-medium tracking-normal whitespace-nowrap text-ickb-muted normal-case">
+          <span className="justify-self-end">1 {a.name}</span>
+          <button
+            className="relative h-11 w-11 cursor-pointer rounded border-0 bg-transparent text-3xl leading-none text-ickb-action transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+            disabled={isFrozen}
+            onClick={toggle}
+            aria-label="Switch conversion direction"
+            title="Switch conversion direction"
+          >
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            >
+              ⇅
+            </span>
+          </button>
+          <span className="justify-self-start" title={unitRate}>
+            {unitRate}
+          </span>
         </span>
-      </button>
+        <span aria-hidden="true" className="h-px bg-ickb-border/70" />
+      </span>
       <span
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}

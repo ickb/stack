@@ -116,10 +116,10 @@ describe("rateChartView", () => {
 
   it("describes the visible direction", () => {
     expect(view(100000000n, true).caption).toBe(
-      "Gross standard-deposit value follows NervosDAO compensation, so CKB converts to less iCKB over time.",
+      "iCKB earns NervosDAO compensation, so 1 CKB buys a little less iCKB every day.",
     );
     expect(view(100000000n, false).caption).toBe(
-      "Gross standard-deposit value includes recoverable occupied capacity and grows with NervosDAO compensation.",
+      "iCKB earns NervosDAO compensation, so 1 iCKB is worth a little more CKB every day.",
     );
   });
 

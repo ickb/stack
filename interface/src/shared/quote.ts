@@ -14,6 +14,8 @@ interface QuoteDraft {
 
 export interface ConversionQuote {
   outputText: string;
+  /** The quoted output in shannons, when the draft quoted at all. */
+  convertedAmount?: bigint;
 }
 
 export interface QuoteStateLike {
@@ -48,6 +50,7 @@ export function conversionQuote(rawText: string, state: QuoteStateLike): Convers
 
   return {
     outputText: toText(quote.convertedAmount),
+    convertedAmount: quote.convertedAmount,
   };
 }
 

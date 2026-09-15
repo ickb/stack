@@ -40,12 +40,17 @@ export function ActionLayout({
       >
         {hasMessage ? message : "Status"}
       </span>
+      {/* An empty fact means no transaction to describe: the row keeps its space. */}
       <span className="col-span-2 grid w-full grid-cols-1 items-center justify-items-center gap-3 text-center min-[34rem]:grid-cols-2">
-        <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+        <span
+          className={`max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${maturity === "" ? "invisible" : ""}`}
+        >
           <span className="leading-relaxed font-bold tracking-wider">Maturity:</span>{" "}
           <span title={maturity}>{maturity}</span>
         </span>
-        <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+        <span
+          className={`max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${fee === "" ? "invisible" : ""}`}
+        >
           <span className="leading-relaxed font-bold tracking-wider">Fee:</span>{" "}
           <span title={fee}>{fee}</span>
         </span>
