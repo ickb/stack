@@ -36,6 +36,8 @@ Packages:
 
 CCC packages are normal package dependencies resolved through `pnpm-workspace.yaml` catalog entries and `pnpm-lock.yaml`. From a plain checkout, run `pnpm install`; no local CCC fork, build step, or workspace alias is required.
 
+A release is a merge to the default branch that changes a package's `version` field: `sdk` then publishes to npm through trusted publishing with provenance, and `interface` deploys to GitHub Pages; both from the check workflow, after the gate passed on that commit. Other merges release nothing.
+
 `pnpm check` is the validation gate: the audit, the full `pnpm lint` (typecheck, format, duplication, knip, architecture, forgotten exports, publish check, coverage, ESLint, Node script tests), and the interface build, all with `CI=true`. It runs against the installed dependencies; CI installs them from the pinned lockfile in a fresh checkout first.
 
 ## Live Testnet Validation

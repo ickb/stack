@@ -11,11 +11,16 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      interface: ${{ steps.releases.outputs.interface }}
+      sdk: ${{ steps.releases.outputs.sdk }}
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
+          # The release rule below reads the previous commit.
+          fetch-depth: 2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           # The declared Node floor; the example units run the current release.
@@ -26,19 +31,30 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run pnpm check
         run: pnpm check
-      # The interface bundle the gate just built is the production release candidate;
-      # only a push to the default branch carries it forward to the deploy job.
-      - if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+
+      # A release is a push to the default branch whose commit changes a package's version
+      # field (decisions amendment 52(ad)). Every such push is one squash commit, so the
+      # previous commit is the comparison; a path absent there counts as changed.
+      - id: releases
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          released() {
+            now=$(node -p "require('./$1/package.json').version")
+            before=$(git show "HEAD^:$1/package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || echo none)
+            if [ "$now" != "$before" ]; then echo true; else echo false; fi
+          }
+          echo "interface=$(released interface)" >> "$GITHUB_OUTPUT"
+          echo "sdk=$(released sdk)" >> "$GITHUB_OUTPUT"
+      - if: steps.releases.outputs.interface == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: interface/dist
 
-  # Every merge to the default branch is a production release of the interface at
-  # ickb.org (decisions amendment 52(ab)). It deploys only after the gate passed on the
-  # same commit; a failed run leaves the previous deployment live.
+  # The interface bundle the gate just built goes live at ickb.org (decisions amendment
+  # 52(ab)); a failed run leaves the previous deployment live.
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: needs.build.outputs.interface == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -50,3 +66,30 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+
+  # npm trusted publishing: the id token stands in for a registry token, and npm records
+  # the provenance of this run with the package (decisions amendment 52(ad)).
+  publish:
+    needs: build
+    if: needs.build.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.19.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build the SDK
+        run: pnpm build
+      # The checkout is a detached commit, so pnpm's branch and remote checks do not apply.
+      - name: Publish @ickb/sdk
+        run: pnpm --filter @ickb/sdk publish --provenance --access public --no-git-checks
