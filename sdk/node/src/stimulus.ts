@@ -65,18 +65,5 @@ try {
   // Closes the sockets the client opened, so nothing keeps the finished turn alive.
   await clientOwner?.dispose();
 }
+// The disposed client leaves nothing on the event loop, so the turn ends here on its own.
 process.exitCode ??= 0;
-// Pipes and sockets are asynchronous on POSIX, so exit only once both output streams have
-// drained; a bare process.exit() truncates pending output.
-await Promise.all(
-  [process.stdout, process.stderr].map(
-    async (stream) =>
-      new Promise<void>((resolve) => {
-        stream.write("", () => {
-          resolve();
-        });
-      }),
-  ),
-);
-// eslint-disable-next-line unicorn/no-process-exit -- The turn is over and its output is flushed.
-process.exit();

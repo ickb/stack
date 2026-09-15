@@ -14,6 +14,9 @@ Environment=STIMULUS_CHAIN=testnet
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
 # Every draw is random unless pinned; see the knobs in sdk/node/README.md.
+# A turn is a slow read plus at most the ten-minute wait window; a process still alive at
+# thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
+RuntimeMaxSec=30min
 # Every exit starts the next turn after a minute; a turn never holds.
 Restart=always
 RestartSec=60s
