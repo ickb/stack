@@ -9,6 +9,7 @@ export function ActionLayout({
   message,
   fee,
   maturity,
+  destination,
 }: Readonly<{
   action: string;
   disabled: boolean;
@@ -17,6 +18,8 @@ export function ActionLayout({
   message: string;
   fee: string;
   maturity: string;
+  /** The editable destination address; absent before a wallet is connected. */
+  destination?: DestinationField;
 }>): JSX.Element {
   const messageId = useId();
   const hasMessage = message !== "";
@@ -50,8 +53,31 @@ export function ActionLayout({
           <span title={fee}>{fee}</span>
         </span>
       </span>
+      {destination === undefined ? null : (
+        <input
+          value={destination.text}
+          disabled={destination.disabled}
+          onChange={(event) => {
+            destination.setText(event.target.value);
+          }}
+          autoComplete="off"
+          spellCheck={false}
+          type="text"
+          aria-invalid={destination.invalid}
+          aria-label="Destination address"
+          title="Every cell this transaction creates for you belongs to this address"
+          className="col-span-2 w-full rounded border-0 bg-transparent px-3 text-center font-mono text-xs text-ickb-muted outline-none focus:text-ickb-action disabled:cursor-default"
+        />
+      )}
     </span>
   );
+}
+
+export interface DestinationField {
+  readonly text: string;
+  readonly setText: (value: string) => void;
+  readonly disabled: boolean;
+  readonly invalid: boolean;
 }
 
 function Progress({

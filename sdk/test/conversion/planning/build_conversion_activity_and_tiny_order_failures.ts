@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -93,15 +94,45 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const tx = ccc.Transaction.default();
     tx.addOutput({ lock }, "0x");
 
+    // No lock given: the signer's recommended lock is the owner.
     await expect(
       sdk.buildConversionTransaction(tx, {
         direction: CKB_TO_ICKB,
         amount: 0n,
-        lock,
         signer: stubSigner,
         context: conversionContext(),
       }),
     ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
+  });
+
+  it("moves the liquid cells when the empty collection is for another lock", async () => {
+    const { sdk } = testSdk();
+    const foreign = script("77");
+    const cell = ccc.Cell.from({
+      outPoint: { txHash: `0x${"78".repeat(32)}`, index: 0 },
+      cellOutput: { capacity: ccc.fixedPointFrom(200), lock: script("11") },
+      outputData: "0x",
+    });
+
+    await expect(
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+        direction: CKB_TO_ICKB,
+        amount: 0n,
+        lock: foreign,
+        signer: stubSigner,
+        context: conversionContext({ cells: [cell] }),
+      }),
+    ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
+    // Nothing liquid to move is nothing to do, whatever the lock.
+    await expect(
+      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+        direction: CKB_TO_ICKB,
+        amount: 0n,
+        lock: foreign,
+        signer: stubSigner,
+        context: conversionContext(),
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "nothing-to-do" });
   });
 });
 

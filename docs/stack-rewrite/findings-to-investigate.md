@@ -11,13 +11,4 @@ The authority review used Stack branch `wip` at commit `d38532248c8ed1e573bebea2
 
 That review was read-only. Later maintainer decisions superseded its signed-store, replay, pending-overlay, global-fence, and rollback-store proposals. The review remains evidence for defects in those rejected designs, not authority to rebuild them.
 
-## Additional follow-ups
-
-- Add durable provenance enforcement for generated protocol vectors rather than relying on prose alone.
-- Resolve npm version and registry handling before publication.
-- Define a completion-aware owner before selecting fee-safe CKB Max; `ckbAvailable` alone does not reserve output capacity or fees.
-- Decide whether order migration ever accepts the deployed resolver's confusion-attack residual; keep orders action-required until then.
-
-## Investigation order
-
-1. Bind generated-vector provenance to executable fixture evidence.
+The follow-ups once listed here are closed: vector provenance enforcement and test depth were struck as polish without an observed failure (amendment 52(ae)), npm handling is settled (52(ad)), fee-safe CKB Max was deleted (52(z)), and existing orders stay where they are under the destination field (52(af)); this file keeps only the evidence pins above.

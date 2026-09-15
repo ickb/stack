@@ -54,21 +54,30 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
     }
 
     const baseTx = ccc.Transaction.from(txLike);
+    const resolved = {
+      ...options,
+      lock: options.lock ?? (await options.signer.getRecommendedAddressObj()).script,
+    };
     if (amount === 0n) {
-      return this.buildCollectOnlyConversion(baseTx, options);
+      return this.buildCollectOnlyConversion(baseTx, resolved);
     }
     return direction === "ckb-to-ickb"
-      ? this.buildCkbToIckbConversion(baseTx, options)
-      : this.buildIckbToCkbConversion(baseTx, options);
+      ? this.buildCkbToIckbConversion(baseTx, resolved)
+      : this.buildIckbToCkbConversion(baseTx, resolved);
   }
 
   private async buildCollectOnlyConversion(
     baseTx: ccc.Transaction,
-    options: ConversionTransactionOptions,
+    options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { context } = options;
+    const { context, lock, signer } = options;
     const tx = this.buildBaseTransaction(baseTx, baseTransactionOptions(context));
-    if (!hasTransactionActivity(tx)) {
+    // An empty collection to a lock of the signer's own would only compact the account;
+    // to another lock it moves the liquid cells, which completion builds from the sweep.
+    if (
+      !hasTransactionActivity(tx) &&
+      (context.cells.length === 0 || (await isOwnLock(signer, lock)))
+    ) {
       return conversionFailure(NOTHING_TO_DO_REASON, context.estimatedMaturity);
     }
     return {
@@ -81,7 +90,7 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
 
   private async buildCkbToIckbConversion(
     baseTx: ccc.Transaction,
-    options: ConversionTransactionOptions,
+    options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock } = options;
     // A plan is dropped only for an unrepresentable remainder order.
@@ -123,7 +132,7 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
 
   private async buildIckbToCkbConversion(
     baseTx: ccc.Transaction,
-    options: ConversionTransactionOptions,
+    options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock } = options;
     const plans = ickbToCkbConversionPlans(options, context.system.poolDeposits);
@@ -164,12 +173,20 @@ export abstract class IckbSdkConversion extends IckbSdkBase {
 
   private async completeConversion(
     tx: ccc.Transaction,
-    options: ConversionTransactionOptions,
+    options: ResolvedConversionOptions,
   ): Promise<ccc.Transaction> {
     return this.completeTransaction(tx, {
       signer: options.signer,
+      lock: options.lock,
       feeRate: options.context.system.feeRate,
       cells: options.context.cells,
     });
   }
+}
+
+/** The options with the lock resolved to the signer's recommended one when absent. */
+type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
+
+async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {
+  return (await signer.getAddressObjs()).some(({ script }) => script.eq(lock));
 }

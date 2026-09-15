@@ -133,10 +133,11 @@ describe("action status", () => {
   it("derives action state from preview and fetch status", () => {
     const txInfo = activeTxInfo();
 
-    expect(canPreviewTx(false, l1State, 1n)).toBe(true);
-    expect(canPreviewTx(true, l1State, 1n)).toBe(false);
-    expect(canPreviewTx(false, undefined, 1n)).toBe(false);
-    expect(canPreviewTx(false, l1State, undefined)).toBe(false);
+    expect(canPreviewTx(false, l1State, 1n, true)).toBe(true);
+    expect(canPreviewTx(true, l1State, 1n, true)).toBe(false);
+    expect(canPreviewTx(false, undefined, 1n, true)).toBe(false);
+    expect(canPreviewTx(false, l1State, undefined, true)).toBe(false);
+    expect(canPreviewTx(false, l1State, 1n, false)).toBe(false);
     expect(currentTxInfo(true, txInfo, undefined)).toBe(txInfo);
     expect(currentTxInfo(false, txInfo, undefined)).toBe(txInfoPadding);
     expect(currentTxInfo(false, txInfoPadding, txInfo)).toBe(txInfo);
@@ -162,10 +163,43 @@ describe("action status", () => {
     ).toBe("Waiting for CKB liquidity");
   });
 
+  it("waits for the destination and names an invalid one", () => {
+    expect(actionMessage({ ...messageParams(), hasDestination: false })).toBe(
+      "Checking the destination address...",
+    );
+    expect(
+      actionMessage({
+        ...messageParams(),
+        hasDestination: false,
+        destinationError: "Enter a valid Testnet address",
+      }),
+    ).toBe("⚠️ Enter a valid Testnet address");
+  });
+
+  it("says a move replaces the collection and follows a conversion", () => {
+    const moveTo = "ckt1qzda…abcdef";
+    expect(
+      actionMessage({ ...messageParams(), conversionKind: "collect-only", moveTo }),
+    ).toBe("Moves everything to ckt1qzda…abcdef.");
+    expect(
+      actionMessage({
+        ...messageParams(),
+        conversionKind: "collect-only",
+        hasCollectable: true,
+        moveTo,
+      }),
+    ).toBe("Also collects converted funds. Moves everything to ckt1qzda…abcdef.");
+    expect(actionMessage({ ...messageParams(), conversionKind: "order", moveTo })).toBe(
+      "Intent: Converts at a variable time. Moves everything to ckt1qzda…abcdef.",
+    );
+  });
+
   it("labels action availability and completion", () => {
-    expect(actionLabel(0n, true)).toBe("collect converted funds");
-    expect(actionLabel(0n, false)).toBe("request conversion");
-    expect(actionLabel(1n, true)).toBe(requestConversion);
+    expect(actionLabel(0n, true, false)).toBe("collect converted funds");
+    expect(actionLabel(0n, false, false)).toBe("request conversion");
+    expect(actionLabel(1n, true, false)).toBe(requestConversion);
+    expect(actionLabel(1n, true, true)).toBe("move everything");
+    expect(actionLabel(0n, false, true)).toBe("move everything");
     expect(unavailableConversionMessage(1n)).toBe(noRequestMessage);
     expect(unavailableConversionMessage(0n)).toBe(noCollectionMessage);
     expect(actionDisabled(true, false, true)).toBe(true);
@@ -198,15 +232,18 @@ function messageParams(): Parameters<typeof actionMessage>[0] {
     amountError: "",
     conversionKind: undefined,
     conversionNotice: undefined,
+    destinationError: "",
     failure: "",
     hasActivity: true,
     hasCollectable: false,
+    hasDestination: true,
     isFrozen: false,
     isPreparing: false,
     isStateFetching: false,
     isTxPreviewFetching: false,
     isValid: true,
     message: "",
+    moveTo: undefined,
     txError: "",
     unavailableMessage: noRequestMessage,
   };

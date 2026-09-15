@@ -1,3 +1,4 @@
+import { script } from "@ickb/testkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, Fragment, StrictMode, useState, type ReactElement } from "react";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -272,6 +273,12 @@ function PendingHost({
     isCkb2Udt: true,
     amount: 1n,
     amountError: "",
+    destination: { lock: script("11") },
+    destinationError: "",
+    destinationField: {
+      text: walletConfig.address,
+      setText: vi.fn<(value: string) => void>(),
+    },
     refreshPreview: async (): Promise<RefreshedTransactionState> => {
       await Promise.resolve();
       return {

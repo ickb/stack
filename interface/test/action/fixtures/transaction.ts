@@ -23,7 +23,7 @@ type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
 export function walletConfigWith(
   overrides: WalletConfigTestOverrides,
-): Parameters<typeof buildTransactionPreview>[3] {
+): Parameters<typeof buildTransactionPreview>[4] {
   const base = walletConfig();
   return walletConfig({
     sdk: testSdk({
@@ -35,8 +35,8 @@ export function walletConfigWith(
 }
 
 function walletConfig(
-  overrides: Partial<Parameters<typeof buildTransactionPreview>[3]> = {},
-): Parameters<typeof buildTransactionPreview>[3] {
+  overrides: Partial<Parameters<typeof buildTransactionPreview>[4]> = {},
+): Parameters<typeof buildTransactionPreview>[4] {
   const cccClient = testClient();
   return {
     chain: "testnet",

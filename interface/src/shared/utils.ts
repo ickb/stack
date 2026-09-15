@@ -51,6 +51,8 @@ export type TxInfo = Readonly<{
   fee: bigint;
   estimatedMaturity: bigint;
   conversionKind?: ConversionMetadata["kind"];
+  /** The shortened destination when the transaction moves everything to another lock. */
+  moveTo?: string;
   conversionNotice?: {
     kind: "dust-ickb-to-ckb" | "maturity-unavailable";
     inputIckb: bigint;

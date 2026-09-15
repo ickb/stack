@@ -1,3 +1,4 @@
+import { script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import {
@@ -68,7 +69,9 @@ function registerAppStateTests(): void {
 
     props.actionParams.formReset();
     props.actionParams.retryState();
-    const refreshedState = await props.actionParams.refreshPreview(false, 2n * CKB);
+    const refreshedState = await props.actionParams.refreshPreview(false, 2n * CKB, {
+      lock: script("11"),
+    });
 
     expect(props.isCkb2Udt).toBe(false);
     expect(props.amount).toBe(2n * CKB);
@@ -81,7 +84,9 @@ function registerAppStateTests(): void {
     });
     expect(loadedState.txBuilder).not.toHaveBeenCalled();
     await expect(refreshedState.build()).resolves.toBe(txInfoPadding);
-    expect(loadedState.txBuilder).toHaveBeenCalledWith(false, 2n * CKB);
+    expect(loadedState.txBuilder).toHaveBeenCalledWith(false, 2n * CKB, {
+      lock: script("11"),
+    });
     expect(refetch).toHaveBeenCalledTimes(2);
 
     resetHooks();
@@ -129,7 +134,9 @@ function registerAppRefreshTests(): void {
         }),
       );
 
-      await expect(props.actionParams.refreshPreview(true, CKB)).rejects.toThrow(message);
+      await expect(
+        props.actionParams.refreshPreview(true, CKB, { lock: script("11") }),
+      ).rejects.toThrow(message);
     }
 
     resetHooks();
@@ -148,9 +155,9 @@ function registerAppRefreshTests(): void {
         setRawText: vi.fn<(value: string) => void>(),
       }),
     );
-    await expect(rejected.actionParams.refreshPreview(true, CKB)).rejects.toThrow(
-      "Unable to refresh wallet data: transport failed",
-    );
+    await expect(
+      rejected.actionParams.refreshPreview(true, CKB, { lock: script("11") }),
+    ).rejects.toThrow("Unable to refresh wallet data: transport failed");
   });
 }
 
@@ -337,7 +344,7 @@ function registerFreshFailureIdentityTests(): void {
       Action({ ...actionParams, l1State: stateB }),
     );
 
-    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB);
+    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, { lock: script("11") });
     expect(recovered.message).toBe("⚠️ fresh build failed");
     expect(recovered.disabled).toBe(false);
     expect(freeze).toHaveBeenLastCalledWith(false);

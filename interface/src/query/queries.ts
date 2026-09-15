@@ -5,6 +5,7 @@ import {
   Ratio,
   type SystemState,
 } from "@ickb/sdk";
+import type { Destination } from "../action/destination.ts";
 import {
   buildTransactionPreview,
   type TransactionContext,
@@ -28,7 +29,11 @@ export interface L1StateType {
   tipTimestamp: bigint;
   system: SystemState;
   stateId: string;
-  txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
+  txBuilder: (
+    isCkb2Udt: boolean,
+    amount: bigint,
+    destination: Destination,
+  ) => Promise<TxInfo>;
   hasCollectable: boolean;
 }
 
@@ -123,8 +128,8 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     tipTimestamp: system.tip.timestamp,
     system,
     stateId: String(objectIdentityKey(sdkState)),
-    txBuilder: async (isCkb2Udt, amount) =>
-      buildTransactionPreview(txContext, isCkb2Udt, amount, walletConfig),
+    txBuilder: async (isCkb2Udt, amount, destination) =>
+      buildTransactionPreview(txContext, isCkb2Udt, amount, destination, walletConfig),
     hasCollectable:
       conversionContext.availableOrders.length > 0 ||
       conversionContext.receipts.length > 0 ||

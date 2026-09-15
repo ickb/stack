@@ -43,7 +43,7 @@ function registerFundingTests(): void {
     expect(tx.inputs).toHaveLength(0);
   });
 
-  it("changes to the recommended lock whatever lock the cells carry", async () => {
+  it("changes to the given lock, else the recommended one, whatever lock the cells carry", async () => {
     const { sdk } = testSdk({ completion: "real" });
     const recommended = script("11");
     const secondary = script("12");
@@ -60,10 +60,19 @@ function registerFundingTests(): void {
       feeRate: 1_000n,
       cells,
     });
+    const toSecondary = await sdk.completeTransaction(tx, {
+      signer,
+      lock: secondary,
+      feeRate: 1_000n,
+      cells,
+    });
 
     expect(completed.inputs).toHaveLength(2);
     expect(
       Array.from(completed.outputCells).at(-1)?.cellOutput.lock.eq(recommended),
+    ).toBe(true);
+    expect(
+      Array.from(toSecondary.outputCells).at(-1)?.cellOutput.lock.eq(secondary),
     ).toBe(true);
   });
 

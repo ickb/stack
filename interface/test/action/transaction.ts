@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { ConversionMetadata, ConversionTransactionFailureReason } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Destination } from "../../src/action/destination.ts";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import {
@@ -40,7 +41,13 @@ describe("buildTransactionPreview", () => {
     });
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-    const txInfo = await buildTransactionPreview(txContext, true, 7n, config);
+    const txInfo = await buildTransactionPreview(
+      txContext,
+      true,
+      7n,
+      own(config),
+      config,
+    );
 
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
     expect(buildConversionTransaction.mock.calls[0]?.[0]).toBeInstanceOf(ccc.Transaction);
@@ -65,7 +72,13 @@ describe("buildTransactionPreview", () => {
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
-    await buildTransactionPreview(context({ ickbAvailable: 5n }), false, 5n, config);
+    await buildTransactionPreview(
+      context({ ickbAvailable: 5n }),
+      false,
+      5n,
+      own(config),
+      config,
+    );
 
     expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({
       direction: "ickb-to-ckb",
@@ -89,7 +102,7 @@ describe("buildTransactionPreview", () => {
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await expect(
-      buildTransactionPreview(context(), true, 0n, config),
+      buildTransactionPreview(context(), true, 0n, own(config), config),
     ).resolves.toMatchObject({
       conversionKind: kind,
     });
@@ -115,7 +128,13 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
+        buildTransactionPreview(
+          context({ ckbAvailable: 1n }),
+          true,
+          1n,
+          own(config),
+          config,
+        ),
       ).resolves.toMatchObject({
         error: message,
         estimatedMaturity: 77n,
@@ -139,7 +158,13 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), isCkb2Udt, 1n, config),
+        buildTransactionPreview(
+          context({ ckbAvailable: 1n }),
+          isCkb2Udt,
+          1n,
+          own(config),
+          config,
+        ),
       ).resolves.toMatchObject({ error: message });
     }
   });
@@ -158,9 +183,39 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, amount, config),
+        buildTransactionPreview(
+          context({ ckbAvailable: 1n }),
+          true,
+          amount,
+          own(config),
+          config,
+        ),
       ).resolves.toMatchObject({ error: message, estimatedMaturity: 77n });
     }
+  });
+});
+
+describe("buildTransactionPreview destination", () => {
+  it("hands the destination lock to the SDK and names a move in the preview", async () => {
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const lock = ccc.Script.from({
+      codeHash: config.primaryLock.codeHash,
+      hashType: config.primaryLock.hashType,
+      args: "0x22",
+    });
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+
+    const txInfo = await buildTransactionPreview(
+      context(),
+      true,
+      0n,
+      { lock, moveTo: "ckt1qzda…abcdef" },
+      config,
+    );
+
+    expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({ lock });
+    expect(txInfo.moveTo).toBe("ckt1qzda…abcdef");
   });
 });
 
@@ -171,11 +226,13 @@ describe("buildTransactionPreview completion", () => {
       .mockResolvedValue([0, false]);
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
+    const config = walletConfigWith({});
     await buildTransactionPreview(
       context({ ckbAvailable: 1n }),
       true,
       1n,
-      walletConfigWith({}),
+      own(config),
+      config,
     );
 
     expect(completeFeeBy).not.toHaveBeenCalled();
@@ -192,7 +249,17 @@ describe("buildTransactionPreview thrown failures", () => {
       },
     });
     await expect(
-      buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, plannerFailure),
+      buildTransactionPreview(
+        context({ ckbAvailable: 1n }),
+        true,
+        1n,
+        own(plannerFailure),
+        plannerFailure,
+      ),
     ).resolves.toMatchObject({ error: "planner failed" });
   });
 });
+
+function own(config: Parameters<typeof buildTransactionPreview>[4]): Destination {
+  return { lock: config.primaryLock };
+}

@@ -30,7 +30,10 @@ describe("getConfig", () => {
     const tx = ccc.Transaction.default();
     const client = offlineTestnetClient();
     const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-    vi.spyOn(ccc.Transaction.prototype, "completeFeeBy").mockResolvedValue([0, false]);
+    vi.spyOn(ccc.Transaction.prototype, "completeFeeChangeToLock").mockResolvedValue([
+      0,
+      false,
+    ]);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
     expect(logic.daoManager).toBe(dao);

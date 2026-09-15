@@ -54,7 +54,7 @@ export abstract class IckbSdkBase {
   ): Promise<ccc.Transaction> {
     const { signer, feeRate } = options;
     const tx = this.ickbUdt.addCellDeps(ccc.Transaction.from(txLike).clone());
-    const { script: changeLock } = await signer.getRecommendedAddressObj();
+    const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
     const spent = new Set(tx.inputs.map(({ previousOutput }) => previousOutput.toHex()));
     const unspent = options.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
     const ickbCells = unspent
@@ -69,7 +69,7 @@ export abstract class IckbSdkBase {
     await this.completeIckb(tx, signer.client, changeLock, ickbCells);
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the budget.
     const swept = sweep(tx, plainCells);
-    await completeFee(tx, signer, feeRate, plainCells.slice(swept));
+    await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
     assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
     return tx;
   }
@@ -192,13 +192,16 @@ function sweep(tx: ccc.Transaction, cells: readonly ccc.Cell[]): number {
 async function completeFee(
   tx: ccc.Transaction,
   signer: ccc.Signer,
+  changeLock: ccc.Script,
   feeRate: ccc.Num,
   reserve: readonly ccc.Cell[],
 ): Promise<void> {
   const remaining = [...reserve];
   for (;;) {
     try {
-      await tx.completeFeeBy(signer, feeRate, undefined, { shouldAddInputs: false });
+      await tx.completeFeeChangeToLock(signer, changeLock, feeRate, undefined, {
+        shouldAddInputs: false,
+      });
       return;
     } catch (error) {
       if (!(error instanceof ccc.ErrorTransactionInsufficientCapacity)) {

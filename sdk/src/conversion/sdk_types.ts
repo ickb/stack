@@ -68,8 +68,13 @@ export interface ConversionTransactionOptions {
   /** Requested input amount in the source asset. */
   amount: bigint;
 
-  /** User lock for newly created user-owned outputs. */
-  lock: ccc.Script;
+  /**
+   * Lock that owns every cell the transaction creates for the user, the conversion outputs
+   * and the change; the signer's recommended lock by default. Completion sweeps the liquid
+   * cells along, so a lock that is not the signer's own moves everything liquid to it
+   * (decisions amendment 52(af)).
+   */
+  lock?: ccc.Script;
 
   /** Signer whose committed cells fund the completed transaction. */
   signer: ccc.Signer;
@@ -148,8 +153,11 @@ export type ConversionTransactionResult =
  * Options for completing a partial iCKB transaction before signing and sending.
  */
 export interface CompleteIckbTransactionOptions {
-  /** Signer whose recommended lock receives change and which prepares the transaction. */
+  /** Signer that prepares the transaction; its recommended lock owns the change by default. */
   signer: ccc.Signer;
+
+  /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
+  lock?: ccc.Script;
 
   /** Fee rate passed to CCC fee completion. */
   feeRate: ccc.Num;

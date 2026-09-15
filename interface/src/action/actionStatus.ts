@@ -7,7 +7,9 @@ interface ActionMessageParams {
   readonly amountError: string;
   readonly conversionKind: TxInfo["conversionKind"];
   readonly conversionNotice: TxInfo["conversionNotice"];
+  readonly destinationError: string;
   readonly failure: string;
+  readonly hasDestination: boolean;
   readonly hasActivity: boolean;
   readonly hasCollectable: boolean;
   readonly isFrozen: boolean;
@@ -16,6 +18,7 @@ interface ActionMessageParams {
   readonly isTxPreviewFetching: boolean;
   readonly isValid: boolean;
   readonly message: string;
+  readonly moveTo: TxInfo["moveTo"];
   readonly txError: string;
   readonly unavailableMessage: string;
 }
@@ -26,15 +29,18 @@ export function actionMessage({
   amountError,
   conversionKind,
   conversionNotice,
+  destinationError,
   failure,
   hasActivity,
   hasCollectable,
+  hasDestination,
   isFrozen,
   isPreparing,
   isStateFetching,
   isTxPreviewFetching,
   isValid,
   message,
+  moveTo,
   txError,
   unavailableMessage,
 }: Readonly<ActionMessageParams>): string {
@@ -56,6 +62,12 @@ export function actionMessage({
       : failureMessage(amountError);
   }
 
+  if (!hasDestination) {
+    return destinationError === ""
+      ? "Checking the destination address..."
+      : failureMessage(destinationError);
+  }
+
   const pendingMessage = actionPendingMessage(
     amount,
     isStateFetching,
@@ -71,6 +83,7 @@ export function actionMessage({
     hasActivity,
     hasCollectable,
     isValid,
+    moveTo,
     txError,
     unavailableMessage,
   });
@@ -82,6 +95,7 @@ function previewMessage({
   hasActivity,
   hasCollectable,
   isValid,
+  moveTo,
   txError,
   unavailableMessage,
 }: Readonly<{
@@ -90,6 +104,7 @@ function previewMessage({
   hasActivity: boolean;
   hasCollectable: boolean;
   isValid: boolean;
+  moveTo: TxInfo["moveTo"];
   txError: string;
   unavailableMessage: string;
 }>): string {
@@ -109,21 +124,33 @@ function previewMessage({
     return "Transaction preview is not ready.";
   }
 
-  return transactionIntentMessage({ conversionKind, conversionNotice }, hasCollectable);
+  return transactionIntentMessage(
+    { conversionKind, conversionNotice, moveTo },
+    hasCollectable,
+  );
 }
 
+/**
+ * A move to another address replaces the collect-only intent, since the sweep is the
+ * transaction, and follows any conversion, since the conversion's outputs move too.
+ */
 export function transactionIntentMessage(
-  txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice">,
+  txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "moveTo">,
   hasCollectable: boolean,
 ): string {
+  const isMove = txInfo.moveTo !== undefined;
   return [
-    txInfo.conversionKind === undefined
+    txInfo.conversionKind === undefined ||
+    (isMove && txInfo.conversionKind === "collect-only")
       ? ""
       : conversionIntentText(txInfo.conversionKind),
     txInfo.conversionNotice === undefined
       ? ""
       : conversionNoticeText(txInfo.conversionNotice),
-    txInfo.conversionKind === "collect-only" ? "" : collectableNotice(hasCollectable),
+    txInfo.conversionKind === "collect-only" && !isMove
+      ? ""
+      : collectableNotice(hasCollectable),
+    isMove ? `Moves everything to ${txInfo.moveTo}.` : "",
   ]
     .filter((text) => text !== "")
     .join(" ");
@@ -194,8 +221,9 @@ export function canPreviewTx(
   isFrozen: boolean,
   l1State: L1StateType | undefined,
   amount: bigint | undefined,
+  hasDestination: boolean,
 ): boolean {
-  return !isFrozen && l1State !== undefined && amount !== undefined;
+  return !isFrozen && l1State !== undefined && amount !== undefined && hasDestination;
 }
 
 export function currentTxInfo(
@@ -223,7 +251,14 @@ export function shownMaturityText(txInfo: TxInfo, maturity: string): string {
   return maturity;
 }
 
-export function actionLabel(amount: bigint | undefined, hasCollectable: boolean): string {
+export function actionLabel(
+  amount: bigint | undefined,
+  hasCollectable: boolean,
+  isMove: boolean,
+): string {
+  if (isMove) {
+    return "move everything";
+  }
   if (amount === 0n && hasCollectable) {
     return "collect converted funds";
   }

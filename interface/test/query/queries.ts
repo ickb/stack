@@ -172,7 +172,7 @@ it("loads display balances from an SDK account snapshot", async () => {
   expect(state.ckbBalance).toBe(nativeCapacity);
   expect(state.ickbBalance).toBe(11n);
   expect(state.stateId).toMatch(/^\d+$/u);
-  await expect(state.txBuilder(true, 1n)).resolves.toMatchObject({
+  await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
     error: "No conversion request available for this amount",
     estimatedMaturity: 10n,
   });

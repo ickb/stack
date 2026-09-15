@@ -10,6 +10,7 @@ import {
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
+import type { Destination } from "./destination.ts";
 
 export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
@@ -35,6 +36,7 @@ export async function buildTransactionPreview(
   context: TransactionContext,
   isCkb2Udt: boolean,
   amount: bigint,
+  destination: Destination,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
   try {
@@ -43,7 +45,7 @@ export async function buildTransactionPreview(
       {
         direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
         amount,
-        lock: walletConfig.primaryLock,
+        lock: destination.lock,
         signer: walletConfig.signer,
         context,
       },
@@ -62,6 +64,7 @@ export async function buildTransactionPreview(
       fee: await result.tx.getFee(walletConfig.signer.client),
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversion.kind,
+      ...(destination.moveTo === undefined ? {} : { moveTo: destination.moveTo }),
       ...(result.conversionNotice === undefined
         ? {}
         : { conversionNotice: result.conversionNotice }),

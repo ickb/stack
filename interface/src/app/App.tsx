@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
 import type { RefreshedTransactionState } from "../action/actionTransaction.ts";
+import { useDestination, type Destination } from "../action/destination.ts";
 import {
   createPendingTransactionStore,
   type PendingTransactionState,
@@ -31,6 +32,13 @@ export default function App({
   quoteState?: QuoteState;
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
+  // The destination of the next transaction, the wallet's own address until edited; it
+  // lives with this App, so a reload or a wallet switch resets it (amendment 52(af)).
+  const [destinationText, setDestinationText] = useState(walletConfig.address);
+  const { destination, error: destinationError } = useDestination(
+    destinationText,
+    walletConfig,
+  );
   // The pending transaction lives with the wallet session: it survives the action
   // remounting on a preview change and ends with this App (decisions amendment 46(i)).
   const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
@@ -51,6 +59,7 @@ export default function App({
   const refreshPreview = async (
     refreshedIsCkb2Udt: boolean,
     refreshedAmount: bigint,
+    refreshedDestination: Destination,
   ): Promise<RefreshedTransactionState> => {
     let result: Awaited<ReturnType<typeof l1StateQuery.refetch>>;
     try {
@@ -74,7 +83,8 @@ export default function App({
       stateId: freshState.stateId,
       tipTimestamp: freshState.tipTimestamp,
       hasCollectable: freshState.hasCollectable,
-      build: async () => freshState.txBuilder(refreshedIsCkb2Udt, refreshedAmount),
+      build: async () =>
+        freshState.txBuilder(refreshedIsCkb2Udt, refreshedAmount, refreshedDestination),
     };
   };
 
@@ -97,6 +107,12 @@ export default function App({
         isCkb2Udt,
         amount: amountInput.amount,
         amountError: amountInput.error,
+        destination,
+        destinationError,
+        destinationField: {
+          text: destinationText,
+          setText: setDestinationText,
+        },
         refreshPreview,
         freeze,
         formReset,

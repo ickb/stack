@@ -10,7 +10,7 @@ import {
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
-import { ActionLayout } from "./ActionLayout.tsx";
+import { ActionLayout, type DestinationField } from "./ActionLayout.tsx";
 import {
   actionDisabled,
   actionDone,
@@ -30,6 +30,7 @@ import {
   type RefreshedTransactionPreview,
   type RefreshedTransactionState,
 } from "./actionTransaction.ts";
+import type { Destination } from "./destination.ts";
 import type {
   PendingTransactionState,
   PendingTransactionStore,
@@ -41,6 +42,9 @@ export default function Action({
   isCkb2Udt,
   amount,
   amountError,
+  destination,
+  destinationError,
+  destinationField,
   refreshPreview,
   freeze,
   formReset,
@@ -55,9 +59,13 @@ export default function Action({
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   amountError: string;
+  destination: Destination | undefined;
+  destinationError: string;
+  destinationField: Pick<DestinationField, "text" | "setText">;
   refreshPreview: (
     isCkb2Udt: boolean,
     amount: bigint,
+    destination: Destination,
   ) => Promise<RefreshedTransactionState>;
   freeze: (value: boolean) => void;
   formReset: () => void;
@@ -73,7 +81,7 @@ export default function Action({
   // The last attempt's result, kept until the next attempt or an edit of the draft: React's
   // pattern for state that depends on a prop, so a stale "enter a larger amount" never
   // advises on a draft the user has already changed (decisions amendment 52(t)).
-  const draft = `${isCkb2Udt ? "C" : "I"}:${amountIdentity(amount, amountError)}`;
+  const draft = `${isCkb2Udt ? "C" : "I"}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
   const [failure, setFailureFor] = useState({ draft, message: "" });
   if (failure.message !== "" && failure.draft !== draft) {
     setFailureFor({ draft, message: "" });
@@ -115,9 +123,10 @@ export default function Action({
       stateId,
       isCkb2Udt,
       amountIdentity(settledAmount, amountError),
+      destinationIdentity(destination),
     ],
-    queryFn: async () => buildPreview(l1State, isCkb2Udt, settledAmount),
-    enabled: canPreviewTx(isLocked, l1State, settledAmount),
+    queryFn: async () => buildPreview(l1State, isCkb2Udt, settledAmount, destination),
+    enabled: canPreviewTx(isLocked, l1State, settledAmount, destination !== undefined),
     retry: false,
   });
   if (l1State === undefined) {
@@ -143,6 +152,7 @@ export default function Action({
     isConfirming,
     amount,
     hasCollectable,
+    destination?.moveTo !== undefined,
   );
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
   const messageText = actionMessage({
@@ -150,20 +160,23 @@ export default function Action({
     amountError,
     conversionKind: txInfo.conversionKind,
     conversionNotice: txInfo.conversionNotice,
+    destinationError,
     failure: failure.message,
     hasActivity,
     hasCollectable,
+    hasDestination: destination !== undefined,
     isFrozen,
     isPreparing,
     isStateFetching,
     isTxPreviewFetching: txPreviewQuery.isFetching,
     isValid,
     message,
+    moveTo: txInfo.moveTo,
     txError: txInfo.error,
     unavailableMessage,
   });
   const isActionDisabled = transactionActionDisabled({
-    hasAmount: amount !== undefined,
+    hasAmount: amount !== undefined && destination !== undefined,
     isConfirming,
     isPreparing,
     isSubmitting,
@@ -212,14 +225,14 @@ export default function Action({
         const attempt = new AbortController();
         let operation: Promise<void> | undefined;
         if (cachedTransactionHash === undefined) {
-          if (amount !== undefined) {
+          if (amount !== undefined && destination !== undefined) {
             attemptRef.current = attempt;
             operation = transact({
               ...transactionCallbacks,
               lockIntent: () => {
                 freeze(true);
               },
-              refreshPreview: async () => refreshPreview(isCkb2Udt, amount),
+              refreshPreview: async () => refreshPreview(isCkb2Udt, amount, destination),
               signal: attempt.signal,
               unavailableMessage,
             });
@@ -245,6 +258,11 @@ export default function Action({
       message={messageText}
       fee={`${toText(txInfo.fee)} CKB`}
       maturity={shownMaturity}
+      destination={{
+        ...destinationField,
+        disabled: isLocked || isSubmitting || isConfirming,
+        invalid: destination === undefined && destinationError !== "",
+      }}
     />
   );
 }
@@ -314,13 +332,18 @@ function amountIdentity(amount: bigint | undefined, amountError: string): string
   return amount?.toString() ?? `invalid:${amountError}`;
 }
 
+function destinationIdentity(destination: Destination | undefined): string {
+  return destination?.lock.hash() ?? "invalid";
+}
+
 async function buildPreview(
   l1State: L1StateType | undefined,
   isCkb2Udt: boolean,
   amount: bigint | undefined,
+  destination: Destination | undefined,
 ): Promise<TxInfo> {
-  return l1State !== undefined && amount !== undefined
-    ? l1State.txBuilder(isCkb2Udt, amount)
+  return l1State !== undefined && amount !== undefined && destination !== undefined
+    ? l1State.txBuilder(isCkb2Udt, amount, destination)
     : txInfoPadding;
 }
 
@@ -329,9 +352,10 @@ function transactionActionLabel(
   isConfirming: boolean,
   amount: bigint | undefined,
   hasCollectable: boolean,
+  isMove: boolean,
 ): string {
   if (transactionHash === undefined) {
-    return actionLabel(amount, hasCollectable);
+    return actionLabel(amount, hasCollectable, isMove);
   }
   return isConfirming ? "stop waiting" : "retry confirmation";
 }

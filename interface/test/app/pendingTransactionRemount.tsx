@@ -3,6 +3,7 @@ import type {
   signAndSendTransaction as sdkSignAndSendTransaction,
   waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
+import { script } from "@ickb/testkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, Fragment, useState, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -206,6 +207,12 @@ function actionProps(
     isCkb2Udt: true,
     amount: 1n,
     amountError: "",
+    destination: { lock: script("11") },
+    destinationError: "",
+    destinationField: {
+      text: walletConfig.address,
+      setText: vi.fn<(value: string) => void>(),
+    },
     refreshPreview: async (): Promise<RefreshedTransactionState> => {
       await Promise.resolve();
       return {
