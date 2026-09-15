@@ -59,7 +59,7 @@ describe(`${FIND_DEPOSITS_SUITE} concurrent decoding`, () => {
     const { promise: secondFetch, resolve: resolveSecond } =
       Promise.withResolvers<TransactionWithHeader>();
     const testClient = new StubClient({
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
+      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield firstDeposit;
         yield secondDeposit;
@@ -105,7 +105,7 @@ describe(`${FIND_DEPOSITS_SUITE} single-lock cache reuse`, () => {
     const secondDeposit = depositCell(manager, lock, txHash, 1n);
     let transactionCalls = 0;
     const testClient = new StubClient({
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
+      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield firstDeposit;
         yield secondDeposit;
@@ -138,7 +138,7 @@ describe(`${FIND_DEPOSITS_SUITE} multi-lock cache reuse`, () => {
     const secondDeposit = depositCell(manager, secondLock, txHash, 1n);
     let transactionCalls = 0;
     const testClient = new StubClient({
-      async *findCells(query): ReturnType<ccc.Client["findCells"]> {
+      async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield ccc.Script.from(query.script).eq(firstLock) ? firstDeposit : secondDeposit;
       },

@@ -31,9 +31,7 @@ type ClientMethod<K extends keyof ccc.Client> = Extract<
 interface StubClientHandlers {
   addressPrefix?: string;
   cache?: ccc.Client["cache"];
-  findCells?: ClientMethod<"findCells">;
   findCellsOnChain?: ClientMethod<"findCellsOnChain">;
-  findCellsPaged?: ClientMethod<"findCellsPaged">;
   findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
   getCell?: ClientMethod<"getCell">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
@@ -112,9 +110,7 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly handlers: StubClientHandlers;
   private readonly rememberedHeaders: Map<bigint, ccc.ClientBlockHeader>;
-  private readonly findCellsHandler: ClientMethod<"findCells">;
   private readonly findCellsOnChainHandler: ClientMethod<"findCellsOnChain">;
-  private readonly findCellsPagedHandler: ClientMethod<"findCellsPaged"> | undefined;
   private readonly legacyCellScanHandler: ClientMethod<"findCellsOnChain"> | undefined;
   private readonly getCellHandler: ClientMethod<"getCell">;
   private readonly getHeaderByNumberHandler: ClientMethod<"getHeaderByNumber">;
@@ -147,20 +143,12 @@ export class StubClient extends ccc.ClientPublicTestnet {
     if (handlers.cache !== undefined) {
       this.cache = handlers.cache;
     }
-    this.findCellsHandler = handlers.findCells ?? super.findCells.bind(this);
     this.findCellsOnChainHandler =
       handlers.findCellsOnChain ?? super.findCellsOnChain.bind(this);
-    this.findCellsPagedHandler = handlers.findCellsPaged;
-    const findCells = handlers.findCells;
-    this.legacyCellScanHandler =
-      findCells === undefined
-        ? handlers.findCellsOnChain
-        : (key, order, limit): ReturnType<ClientMethod<"findCellsOnChain">> =>
-            findCells(key, order, limit);
+    this.legacyCellScanHandler = handlers.findCellsOnChain;
     const findCellsPagedNoCache =
       handlers.findCellsPagedNoCache ??
-      (this.findCellsPagedHandler === undefined &&
-      this.legacyCellScanHandler === undefined
+      (this.legacyCellScanHandler === undefined
         ? baseFindCellsPagedNoCache
         : this.findCellsPaged.bind(this));
     this.findCellsPagedNoCache = async (
@@ -187,13 +175,6 @@ export class StubClient extends ccc.ClientPublicTestnet {
     return this.handlers.addressPrefix ?? super.addressPrefix;
   }
 
-  /** Delegates cell scans to the configured handler or the base client. */
-  public override findCells(
-    ...args: Parameters<ClientMethod<"findCells">>
-  ): ReturnType<ClientMethod<"findCells">> {
-    return this.findCellsHandler(...args);
-  }
-
   /** Delegates on-chain cell scans to the configured handler or the base client. */
   public override findCellsOnChain(
     ...args: Parameters<ClientMethod<"findCellsOnChain">>
@@ -205,9 +186,6 @@ export class StubClient extends ccc.ClientPublicTestnet {
   public override async findCellsPaged(
     ...args: Parameters<ClientMethod<"findCellsPaged">>
   ): ReturnType<ClientMethod<"findCellsPaged">> {
-    if (this.findCellsPagedHandler !== undefined) {
-      return this.findCellsPagedHandler(...args);
-    }
     if (this.legacyCellScanHandler === undefined) {
       // A test double must never fall through to the real network.
       throw new Error("StubClient has no cell scan handler");
@@ -258,37 +236,6 @@ export class StubClient extends ccc.ClientPublicTestnet {
   ): ReturnType<ClientMethod<"getTransactionWithHeader">> {
     return this.getTransactionWithHeaderHandler(...args);
   }
-}
-
-/**
- * Creates a stub client whose on-chain scans serve full pages forever.
- *
- * @remarks Only a scan budget can end a scan against this client, so tests can
- * prove a bounded scan fails instead of paging without end. `pages` counts the
- * page requests served, including the one a budget rejects.
- *
- * @param cell - Cell repeated to fill every served page.
- */
-export function endlessCellPageClient(cell: ccc.Cell): {
-  client: StubClient;
-  pages: () => number;
-} {
-  let pages = 0;
-  const client = new StubClient({
-    findCellsPagedNoCache: async (
-      _key,
-      _order,
-      limit,
-    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-      await Promise.resolve();
-      pages += 1;
-      return {
-        cells: Array.from({ length: Number(limit) }, () => cell),
-        lastCursor: `page:${String(pages)}`,
-      };
-    },
-  });
-  return { client, pages: (): number => pages };
 }
 
 /**

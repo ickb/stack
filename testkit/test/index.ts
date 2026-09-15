@@ -111,10 +111,6 @@ describe("StubClient", () => {
     const withHeader = transactionWithHeader(headerLike({ number: 3n }));
     const header = headerLike({ number: 4n });
     const client = new StubClient({
-      async *findCells(): ReturnType<ccc.Client["findCells"]> {
-        await Promise.resolve();
-        yield cell;
-      },
       async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
         await Promise.resolve();
         yield cell;
@@ -141,7 +137,6 @@ describe("StubClient", () => {
       scriptSearchMode: "exact",
     } as const;
 
-    await expect(collect(client.findCells(searchKey, "asc", 1))).resolves.toEqual([cell]);
     await expect(collect(client.findCellsOnChain(searchKey, "asc", 1))).resolves.toEqual([
       cell,
     ]);
