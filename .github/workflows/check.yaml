@@ -26,3 +26,27 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run pnpm check
         run: pnpm check
+      # The interface bundle the gate just built is the production release candidate;
+      # only a push to the default branch carries it forward to the deploy job.
+      - if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: interface/dist
+
+  # Every merge to the default branch is a production release of the interface at
+  # ickb.org (decisions amendment 52(ab)). It deploys only after the gate passed on the
+  # same commit; a failed run leaves the previous deployment live.
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
