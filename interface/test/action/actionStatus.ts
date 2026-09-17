@@ -102,7 +102,7 @@ describe("action status", () => {
         hasCollectable: true,
       }),
     ).toBe(
-      "Part converts on the date below, the rest when liquidity is found. Also collects converted funds.",
+      "Part converts at a fixed time, the rest when liquidity is found. Also collects converted funds.",
     );
     expect(
       actionMessage({ ...messageParams(), amount: undefined, amountError: "Bad amount" }),
@@ -120,11 +120,11 @@ describe("action status", () => {
 
   it.each([
     ["collect-only", "Collects your converted funds."],
-    ["direct", "Converts on the date below."],
-    ["order", "Converts when liquidity is found; the date below is an estimate."],
+    ["direct", "Converts at a fixed time."],
+    ["order", "Converts when liquidity is found."],
     [
       "direct-plus-order",
-      "Part converts on the date below, the rest when liquidity is found.",
+      "Part converts at a fixed time, the rest when liquidity is found.",
     ],
   ] as const)("describes %s intent exactly", (kind, expected) => {
     expect(conversionIntentText(kind)).toBe(expected);
@@ -190,7 +190,7 @@ describe("action status", () => {
       }),
     ).toBe("Also collects converted funds. Moves everything to ckt1qzda…abcdef.");
     expect(actionMessage({ ...messageParams(), conversionKind: "order", moveTo })).toBe(
-      "Converts when liquidity is found; the date below is an estimate. Moves everything to ckt1qzda…abcdef.",
+      "Converts when liquidity is found. Moves everything to ckt1qzda…abcdef.",
     );
   });
 
