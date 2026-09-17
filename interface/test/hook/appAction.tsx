@@ -403,7 +403,7 @@ function registerActionConfirmationTests(): void {
     expect(waiting.action).toBe("stop waiting");
     expect(waiting.disabled).toBe(false);
     expect(waiting.fee).toBe("0.00000009 CKB");
-    expect(waiting.maturity).toBe("⏳ 3 minutes");
+    expect(waiting.maturity).toBe("in 3 minutes");
     expect(waiting.message).toContain(
       "Part converts at a fixed time, the rest at a variable time, estimated below.",
     );

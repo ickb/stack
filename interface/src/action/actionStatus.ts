@@ -200,7 +200,7 @@ function collectableNotice(hasCollectable: boolean): string {
 export function conversionIntentText(
   kind: NonNullable<TxInfo["conversionKind"]>,
 ): string {
-  // What the signed transaction does, in the user's terms. "Below" is the "Ready by" line,
+  // What the signed transaction does, in the user's terms. "Below" is the "Ready:" line,
   // the SDK's latest-of-everything estimate, pending positions included, so the mixed case
   // points at it for both parts and no sentence calls it one part's date.
   const intent: Record<NonNullable<TxInfo["conversionKind"]>, string> = {
@@ -250,7 +250,7 @@ export function isTxInfoValid(txInfo: TxInfo, hasActivity: boolean): boolean {
 
 export function shownMaturityText(txInfo: TxInfo, maturity: string): string {
   if (txInfo.conversionNotice?.maturityEstimateUnavailable === true) {
-    return "Waiting for CKB liquidity";
+    return "waiting for CKB liquidity";
   }
 
   return maturity;

@@ -160,7 +160,7 @@ describe("action status", () => {
         },
         "Ready",
       ),
-    ).toBe("Waiting for CKB liquidity");
+    ).toBe("waiting for CKB liquidity");
   });
 
   it("waits for the destination and names an invalid one", () => {
@@ -218,11 +218,11 @@ describe("timeUntilMaturity", () => {
     const hour = 60n * minute;
     const day = 24n * hour;
 
-    expect(timeUntilMaturity(9n, 10n)).toBe("⌛️ Ready");
-    expect(timeUntilMaturity(10n, 10n)).toBe("⌛️ Ready");
-    expect(timeUntilMaturity(10n + minute + 1n, 10n)).toBe("⏳ 2 minutes");
-    expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("⏳ 2 hours");
-    expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("⏳ 2 days");
+    expect(timeUntilMaturity(9n, 10n)).toBe("now");
+    expect(timeUntilMaturity(10n, 10n)).toBe("now");
+    expect(timeUntilMaturity(10n + minute + 1n, 10n)).toBe("in 2 minutes");
+    expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("in 2 hours");
+    expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("in 2 days");
   });
 });
 
