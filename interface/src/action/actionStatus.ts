@@ -200,16 +200,17 @@ function collectableNotice(hasCollectable: boolean): string {
 export function conversionIntentText(
   kind: NonNullable<TxInfo["conversionKind"]>,
 ): string {
-  // What the signed transaction does, in the user's terms. The maturity line under it is
-  // the SDK's latest-of-everything estimate, pending positions included, so no sentence
-  // points at it as the date of one part.
+  // What the signed transaction does, in the user's terms. "Below" is the "Ready by" line,
+  // the SDK's latest-of-everything estimate, pending positions included, so the mixed case
+  // points at it for both parts and no sentence calls it one part's date.
   const intent: Record<NonNullable<TxInfo["conversionKind"]>, string> = {
     "collect-only": "Collects your converted funds.",
-    direct: "Converts at a fixed time.",
-    order: "Converts when liquidity is found.",
+    direct: "Converts at a fixed time, shown below.",
+    order: "Converts at a variable time, estimated below.",
     "direct-plus-order":
-      "Part converts at a fixed time, the rest when liquidity is found.",
+      "Part converts at a fixed time, the rest at a variable time, estimated below.",
   };
+
   return intent[kind];
 }
 
