@@ -43,8 +43,15 @@ describe("formAssets", () => {
       false,
     );
 
-    expect(source).toMatchObject({ name: "iCKB", available: 0n, locked: 350n * CKB });
+    // Max sets the SDK's bound, collectable orders included; CKB has no Max (52(z)).
+    expect(source).toMatchObject({
+      name: "iCKB",
+      available: 0n,
+      locked: 350n * CKB,
+      max: 350n * CKB,
+    });
     expect(target).toMatchObject({ name: "CKB", available: 1000n * CKB });
+    expect(target.max).toBeUndefined();
   });
 
   it("keeps native iCKB selectable because spending it releases cell capacity", () => {
@@ -77,8 +84,8 @@ describe("formAssets", () => {
         true,
       ),
     ).toMatchObject([
-      { name: "CKB", status: "maturing" },
-      { name: "iCKB", status: "locked" },
+      { name: "CKB", status: "converting" },
+      { name: "iCKB", status: "converting" },
     ]);
     expect(
       formAssets(

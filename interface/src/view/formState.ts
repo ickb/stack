@@ -14,6 +14,8 @@ export interface AssetDisplay {
   available?: bigint;
   locked?: bigint;
   status?: string;
+  /** What the Max control sets: the SDK's own bound, native plus collectable. iCKB only. */
+  max?: bigint;
 }
 
 export function formAssets(
@@ -64,26 +66,23 @@ export function amountQuoteText(
 function assetDisplay(
   name: AssetDisplay["name"],
   native: bigint,
-  available: bigint,
+  bound: bigint,
   balance: bigint,
 ): AssetDisplay {
   return {
     name,
     available: native,
     locked: balance - native,
-    status: maturityStatus(balance, native, available),
+    status: maturityStatus(balance, native, bound),
+    // No CKB Max: a request at the CKB bound never funds (decisions amendment 52(z)).
+    ...(name === "iCKB" ? { max: bound } : {}),
   };
 }
 
-/** The word beside the locked figure: what the non-native part of the balance is doing. */
-function maturityStatus(balance: bigint, native: bigint, available: bigint): string {
-  if (balance === native) {
-    return "locked";
-  }
-
-  if (balance === available) {
-    return "collectable";
-  }
-
-  return "maturing";
+/**
+ * The word beside the non-native figure: "collectable" when every part of it returns with the
+ * next transaction, else "converting", the middle of a two-step conversion (or nothing at all).
+ */
+function maturityStatus(balance: bigint, native: bigint, bound: bigint): string {
+  return balance !== native && balance === bound ? "collectable" : "converting";
 }

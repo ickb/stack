@@ -45,8 +45,6 @@ export default function Form({
   };
 
   const [a, b] = formAssets(balances, isCkb2Udt);
-  const selectMax = maxSelector(a, symbol, setRawText);
-  const selectReverseMax = maxSelector(b, direction2Symbol(!isCkb2Udt), setRawText);
   // While the amount box shows its "0" placeholder the quote row shows its own, at the same
   // tint, so the empty form reads as two placeholders rather than two stacked zeros.
   const isPlaceholder = text === "" && !hasAmountError;
@@ -62,8 +60,12 @@ export default function Form({
 
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
-      {nativeBalanceDisplay(a, isFrozen, selectMax)}
-      <span className="text-2xl text-ickb-text normal-case">{a.name}</span>
+      {nativeBalanceDisplay(a)}
+      {/* The name stays centred in its column; "max" sits just under it. */}
+      <span className="relative text-2xl text-ickb-text normal-case">
+        {a.name}
+        {maxButton(a, symbol, setRawText, isFrozen)}
+      </span>
       {lockedBalanceDisplay(a)}
       <input
         placeholder="0"
@@ -113,7 +115,7 @@ export default function Form({
       >
         {quoteLine}
       </span>
-      {nativeBalanceDisplay(b, isFrozen, selectReverseMax)}
+      {nativeBalanceDisplay(b)}
       <span className="text-2xl whitespace-nowrap text-ickb-text normal-case">
         {b.name}
       </span>
@@ -122,52 +124,48 @@ export default function Form({
   );
 }
 
-function nativeBalanceDisplay(
-  asset: AssetDisplay,
-  isFrozen: boolean,
-  selectMax: (() => void) | undefined,
-): JSX.Element {
+function nativeBalanceDisplay(asset: AssetDisplay): JSX.Element {
   if (!hasBalance(asset)) {
     return <span aria-hidden="true" />;
   }
 
-  const renderedBalance = display(asset.available, "available", false);
-  if (selectMax === undefined) {
-    return (
-      <span
-        className="whitespace-nowrap text-ickb-action"
-        aria-label={`Available ${asset.name}: ${toText(asset.available)}`}
-      >
-        {renderedBalance}
-      </span>
-    );
+  return (
+    <span
+      className="whitespace-nowrap text-ickb-text"
+      aria-label={`${asset.name} in wallet: ${toText(asset.available)}`}
+    >
+      {display(asset.available, "in wallet", false)}
+    </span>
+  );
+}
+
+/**
+ * The Max control beside the source asset's name: sets the SDK's own bound for it, native
+ * plus collectable. Only the source has one, so it appears while converting from iCKB.
+ */
+function maxButton(
+  asset: AssetDisplay,
+  symbol: string,
+  setRawText: (value: string) => void,
+  isFrozen: boolean,
+): JSX.Element | undefined {
+  const max = asset.max;
+  if (max === undefined) {
+    return undefined;
   }
 
   return (
     <button
-      className="cursor-pointer rounded whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+      className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1 cursor-pointer rounded text-xs leading-none font-medium tracking-normal text-ickb-action normal-case hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
       disabled={isFrozen}
-      onClick={selectMax}
-      aria-label={`Use maximum ${asset.name}: ${toText(asset.available)}`}
+      onClick={() => {
+        setRawText(symbol + toText(max));
+      }}
+      aria-label={`Use maximum ${asset.name}: ${toText(max)}`}
     >
-      {renderedBalance}
+      max
     </button>
   );
-}
-
-function maxSelector(
-  asset: AssetDisplay,
-  symbol: string,
-  setRawText: (value: string) => void,
-): (() => void) | undefined {
-  if (asset.name !== "iCKB" || asset.available === undefined) {
-    return undefined;
-  }
-  const available = asset.available;
-
-  return (): void => {
-    setRawText(symbol + toText(available));
-  };
 }
 
 function hasBalance(asset: AssetDisplay): asset is Required<AssetDisplay> {
@@ -188,19 +186,23 @@ function lockedBalanceDisplay(asset: AssetDisplay): JSX.Element {
   }
 
   return (
-    <span className="cursor-wait whitespace-nowrap text-ickb-muted">
-      {display(asset.locked, asset.status, asset.status === "maturing")}
+    <span className="whitespace-nowrap text-ickb-muted">
+      {display(
+        asset.locked,
+        asset.status,
+        asset.status === "converting" && asset.locked > 0n,
+      )}
     </span>
   );
 }
 
-/** A figure and the word that says what it is; a maturing figure pulses. */
-function display(shannons: bigint, label: string, isMaturing: boolean): JSX.Element {
+/** A figure and the word that says what it is; a converting figure pulses. */
+function display(shannons: bigint, label: string, isConverting: boolean): JSX.Element {
   return (
     <span
-      className={`flex flex-row items-baseline gap-x-1 ${isMaturing ? "cursor-wait" : ""}`}
+      className={`flex flex-row items-baseline gap-x-1 ${isConverting ? "cursor-wait" : ""}`}
     >
-      <span className={isMaturing ? "animate-pulse motion-reduce:animate-none" : ""}>
+      <span className={isConverting ? "animate-pulse motion-reduce:animate-none" : ""}>
         <span className="sm:hidden">
           {String(shannons / CKB)}
           {shannons % CKB === 0n ? "" : "+"}

@@ -152,19 +152,15 @@ describe("view components", () => {
 
   it("renders form edits, direction changes, and balance selectors", () => {
     const setRawText = vi.fn<(value: string) => void>();
-    const element = Form({
-      rawText: "C1.5",
-      setRawText,
-      isFrozen: false,
-      balances: {
-        ckbNative: 3n * CKB,
-        ickbNative: 2n * CKB,
-        ckbAvailable: 4n * CKB,
-        ickbAvailable: 2n * CKB,
-        ckbBalance: 5n * CKB,
-        ickbBalance: 3n * CKB,
-      },
-    });
+    const balances = {
+      ckbNative: 3n * CKB,
+      ickbNative: 2n * CKB,
+      ckbAvailable: 4n * CKB,
+      ickbAvailable: 2n * CKB,
+      ckbBalance: 5n * CKB,
+      ickbBalance: 3n * CKB,
+    };
+    const element = Form({ rawText: "C1.5", setRawText, isFrozen: false, balances });
     const input = findElement(element, (node) => node.type === "input");
     const buttons = findElements(element, (node) => node.type === "button");
 
@@ -175,7 +171,7 @@ describe("view components", () => {
       elementProps<{ onClick?: () => void }>(button).onClick?.();
     }
 
-    expect(setRawText.mock.calls).toEqual([["C.25abc"], ["I1.5"], ["I2"]]);
+    expect(setRawText.mock.calls).toEqual([["C.25abc"], ["I1.5"]]);
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
     const invalidMarkup = renderToStaticMarkup(
       <Form rawText="C1e2" setRawText={setRawText} isFrozen={false} />,
@@ -191,10 +187,23 @@ describe("view components", () => {
     expect(invalidMarkup).toContain('role="alert"');
     expect(invalidMarkup).toContain("break-words whitespace-normal");
     expect(invalidMarkup).not.toContain("text-ellipsis whitespace-nowrap text-base");
-    expect(renderToStaticMarkup(element)).toContain("Available CKB: 3");
+    expect(renderToStaticMarkup(element)).toContain("CKB in wallet: 3");
     expect(renderToStaticMarkup(element)).toContain("motion-reduce:animate-none");
-    expect(renderToStaticMarkup(element)).not.toContain("Use maximum CKB");
-    expect(renderToStaticMarkup(element)).toContain("Use maximum iCKB: 2");
+    // Max exists only while converting from iCKB: no CKB Max (52(z)), none on the target.
+    expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
+    const fromIckb = Form({ rawText: "I1.5", setRawText, isFrozen: false, balances });
+    expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
+    elementProps<{ onClick?: () => void }>(
+      findElement(
+        fromIckb,
+        (node) =>
+          node.type === "button" &&
+          elementProps<{ "aria-label"?: string }>(node)["aria-label"]?.startsWith(
+            "Use maximum",
+          ) === true,
+      ),
+    ).onClick?.();
+    expect(setRawText.mock.lastCall).toEqual(["I2"]);
     expect(
       renderToStaticMarkup(
         <Form
