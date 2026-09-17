@@ -38,8 +38,6 @@ export function accountState(
   return {
     capacityCells: [],
     nativeUdtCells: [],
-    nativeUdtCapacity: 0n,
-    nativeUdtBalance: 0n,
     receipts: [],
     withdrawalGroups: [],
     ...overrides,

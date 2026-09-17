@@ -1,5 +1,9 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ConversionMetadata, ConversionTransactionFailureReason } from "@ickb/sdk";
+import {
+  IckbError,
+  type ConversionMetadata,
+  type ConversionTransactionFailureReason,
+} from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Destination } from "../../src/action/destination.ts";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
@@ -257,6 +261,30 @@ describe("buildTransactionPreview thrown failures", () => {
         plannerFailure,
       ),
     ).resolves.toMatchObject({ error: "planner failed" });
+  });
+
+  it("maps completion shortfalls to the same copy as the planner's checks", async () => {
+    for (const [code, message] of [
+      ["insufficient_capacity", "Not enough available CKB for this amount"],
+      ["insufficient_ickb", "Not enough available iCKB for this amount"],
+    ] as const) {
+      const config = walletConfigWith({
+        sdk: {
+          buildConversionTransaction: vi
+            .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+            .mockRejectedValue(new IckbError("Insufficient CKB, need 61 more", { code })),
+        },
+      });
+      await expect(
+        buildTransactionPreview(
+          context({ ckbAvailable: 1n }),
+          true,
+          1n,
+          own(config),
+          config,
+        ),
+      ).resolves.toMatchObject({ error: message });
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../constants.ts";
 import {
   ickbExchangeRatio,
@@ -157,18 +157,9 @@ export class IckbSdkL1 extends IckbSdkConversion {
 }
 
 function accountState(lockCells: readonly LockCells[]): AccountState {
-  const nativeUdtCells = lockCells.flatMap((cells) => cells.nativeUdtCells);
   return {
     capacityCells: lockCells.flatMap((cells) => cells.capacityCells),
-    nativeUdtCells,
-    nativeUdtCapacity: nativeUdtCells.reduce(
-      (sum, cell) => sum + cell.cellOutput.capacity,
-      0n,
-    ),
-    nativeUdtBalance: nativeUdtCells.reduce(
-      (sum, cell) => sum + ccc.udtBalanceFrom(cell.outputData),
-      0n,
-    ),
+    nativeUdtCells: lockCells.flatMap((cells) => cells.nativeUdtCells),
     receipts: lockCells.flatMap((cells) => cells.receipts),
     withdrawalGroups: lockCells.flatMap((cells) => cells.withdrawalGroups),
   };

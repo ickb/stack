@@ -21,9 +21,23 @@ export function formAssets(
   isCkb2Udt: boolean,
 ): readonly [AssetDisplay, AssetDisplay] {
   const ckb: AssetDisplay =
-    balances === undefined ? { name: "CKB" } : ckbDisplay(balances);
+    balances === undefined
+      ? { name: "CKB" }
+      : assetDisplay(
+          "CKB",
+          balances.ckbNative,
+          balances.ckbAvailable,
+          balances.ckbBalance,
+        );
   const ickb: AssetDisplay =
-    balances === undefined ? { name: "iCKB" } : ickbDisplay(balances);
+    balances === undefined
+      ? { name: "iCKB" }
+      : assetDisplay(
+          "iCKB",
+          balances.ickbNative,
+          balances.ickbAvailable,
+          balances.ickbBalance,
+        );
   return isCkb2Udt ? [ckb, ickb] : [ickb, ckb];
 }
 
@@ -47,39 +61,18 @@ export function amountQuoteText(
   return conversionQuote(rawText, quoteState).outputText;
 }
 
-function ckbDisplay(balances: FormBalances): AssetDisplay {
-  const available = minBigint(balances.ckbAvailable, balances.ckbNative);
+function assetDisplay(
+  name: AssetDisplay["name"],
+  native: bigint,
+  available: bigint,
+  balance: bigint,
+): AssetDisplay {
   return {
-    name: "CKB",
-    available,
-    locked: balances.ckbBalance - available,
-    status: maturityStatus(
-      balances.ckbBalance,
-      balances.ckbNative,
-      balances.ckbAvailable,
-    ),
+    name,
+    available: native,
+    locked: balance - native,
+    status: maturityStatus(balance, native, available),
   };
-}
-
-function ickbDisplay(balances: FormBalances): AssetDisplay {
-  return {
-    name: "iCKB",
-    available: balances.ickbNative,
-    locked: balances.ickbBalance - balances.ickbNative,
-    status: maturityStatus(
-      balances.ickbBalance,
-      balances.ickbNative,
-      balances.ickbAvailable,
-    ),
-  };
-}
-
-function minBigint(left: bigint, right: bigint): bigint {
-  if (left < right) {
-    return left;
-  }
-
-  return right;
 }
 
 /** The word beside the locked figure: what the non-native part of the balance is doing. */

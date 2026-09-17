@@ -373,8 +373,6 @@ export function l1AccountState(
     account: {
       capacityCells: [],
       nativeUdtCells: [],
-      nativeUdtCapacity: 0n,
-      nativeUdtBalance: 0n,
       receipts: [],
       withdrawalGroups: [],
       ...account,

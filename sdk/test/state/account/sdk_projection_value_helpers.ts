@@ -69,8 +69,6 @@ describe("sdk projection account availability", () => {
       {
         capacityCells: [plainCapacityCell(11n)],
         nativeUdtCells: [nativeUdt],
-        nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-        nativeUdtBalance: 13n,
         receipts: [],
         withdrawalGroups: [],
       },

@@ -69,8 +69,6 @@ describe("projectConversionTransactionContext", () => {
     const account = {
       capacityCells: [plainCapacityCell(nativeCkb)],
       nativeUdtCells: [nativeUdt],
-      nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-      nativeUdtBalance: 7n,
       receipts: [receipt],
       withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
     };
@@ -109,8 +107,6 @@ describe("projectConversionTransactionContext", () => {
       {
         capacityCells: [],
         nativeUdtCells: [],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 0n,
         receipts: [],
         withdrawalGroups: [],
       },

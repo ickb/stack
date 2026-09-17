@@ -43,12 +43,10 @@ describe("sdk package barrel", () => {
     const account = {
       capacityCells: [capacityCell],
       nativeUdtCells: [udtCell],
-      nativeUdtCapacity: udtCell.cellOutput.capacity,
-      nativeUdtBalance: 7n,
       receipts: [],
       withdrawalGroups: [],
     };
-    const ckbNative = capacityCell.cellOutput.capacity;
+    const ckbNative = capacityCell.cellOutput.capacity + udtCell.cellOutput.capacity;
 
     const configured: sdk.IckbSdk = sdk.IckbSdk.fromChain("testnet");
     expect(configured.constructor.name).toBe("IckbSdk");

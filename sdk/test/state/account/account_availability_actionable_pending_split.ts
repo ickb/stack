@@ -48,8 +48,6 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       {
         capacityCells: [plainCapacityCell(nativeCkb)],
         nativeUdtCells: [nativeUdt],
-        nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-        nativeUdtBalance: 7n,
         receipts: [receiptValue(41n, 43n)],
         withdrawalGroups: [readyWithdrawal, pendingWithdrawal],
       },
@@ -60,9 +58,10 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     expect(projection.pendingWithdrawals).toEqual([pendingWithdrawal]);
     expect(projection.availableOrders).toEqual([availableOrder]);
     expect(projection.pendingOrders).toEqual([pendingOrder]);
-    expect(projection.ckbNative).toBe(nativeCkb);
+    const liquidCkb = nativeCkb + nativeUdt.cellOutput.capacity;
+    expect(projection.ckbNative).toBe(liquidCkb);
     expect(projection.ickbNative).toBe(7n);
-    expect(projection.ckbAvailable).toBe(nativeCkb + 41n + 11n + 23n);
+    expect(projection.ckbAvailable).toBe(liquidCkb + 41n + 11n + 23n);
     expect(projection.ickbAvailable).toBe(7n + 43n + 29n);
     expect(projection.ckbPending).toBe(17n + 31n);
     expect(projection.ickbPending).toBe(37n);
@@ -82,8 +81,6 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       {
         capacityCells: [],
         nativeUdtCells: [],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 0n,
         receipts: [receipt],
         withdrawalGroups: matured,
       },
@@ -105,8 +102,6 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       {
         capacityCells: [],
         nativeUdtCells: [nativeUdt],
-        nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-        nativeUdtBalance: 99n,
         receipts: [],
         withdrawalGroups: [],
       },

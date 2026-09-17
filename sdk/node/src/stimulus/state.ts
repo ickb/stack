@@ -31,7 +31,7 @@ export interface StimulusState {
   /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
   orders: { live: number; fulfilled: number; refused: number; stale: number };
   budgets: Budgets;
-  plainCkb: bigint;
+  liquidCkb: bigint;
 }
 
 /** Thirty days of eight-second blocks: an order the bot left that long is cancelled. */
@@ -69,7 +69,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
       ickb: context.ickbAvailable,
       ratio: system.exchangeRatio,
     },
-    plainCkb: projection.ckbNative,
+    liquidCkb: projection.ckbNative,
   };
 }
 

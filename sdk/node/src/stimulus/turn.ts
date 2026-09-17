@@ -61,7 +61,7 @@ export interface StimulusLog {
   timestamp?: string;
   identity?: StimulusIdentity;
   balance?: {
-    CKB: { plain: string; budget: string; reserve: string };
+    CKB: { liquid: string; budget: string; reserve: string };
     ICKB: { budget: string };
   };
   orders?: StimulusState["orders"];
@@ -270,7 +270,7 @@ function hasCollectible({ context }: StimulusState): boolean {
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      plain: formatCkb(state.plainCkb),
+      liquid: formatCkb(state.liquidCkb),
       budget: formatCkb(state.budgets.ckb),
       reserve: formatCkb(CKB_RESERVE),
     },

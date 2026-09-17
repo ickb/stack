@@ -218,10 +218,6 @@ export interface AccountState {
   capacityCells: ccc.Cell[];
   /** Native iCKB xUDT cells owned by the account locks. */
   nativeUdtCells: ccc.Cell[];
-  /** Total capacity in native iCKB cells. */
-  nativeUdtCapacity: bigint;
-  /** Total iCKB balance in native iCKB cells. */
-  nativeUdtBalance: bigint;
   /** Receipt cells owned by the account. */
   receipts: ReceiptCell[];
   /** Withdrawal groups owned by the account. */
@@ -232,13 +228,17 @@ export interface AccountState {
  * Account balances split into available, pending, and order/withdrawal buckets.
  */
 export interface AccountAvailabilityProjection {
-  /** Native CKB directly controlled by the account. */
+  /**
+   * CKB in the account's liquid cells, plain and iCKB alike: what the wallet shows and what
+   * the next transaction spends, before the change cells, an order's master cell and the
+   * fee it must fund on top (decisions amendment 52(ah)).
+   */
   ckbNative: bigint;
-  /** Native iCKB directly controlled by the account. */
+  /** iCKB in the account's native iCKB cells. */
   ickbNative: bigint;
-  /** CKB available for new conversion inputs. */
+  /** `ckbNative` plus the CKB the receipts, ready withdrawals and collectable orders return. */
   ckbAvailable: bigint;
-  /** iCKB available for new conversion inputs. */
+  /** `ickbNative` plus the iCKB the receipts and collectable orders return. */
   ickbAvailable: bigint;
   /** CKB pending in withdrawals or orders. */
   ckbPending: bigint;

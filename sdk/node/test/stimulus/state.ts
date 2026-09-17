@@ -37,7 +37,7 @@ describe("readStimulusState", () => {
 
     expect(state.collectable).toEqual([fulfilled, refused, stale]);
     expect(state.orders).toEqual({ live: 4, fulfilled: 1, refused: 1, stale: 1 });
-    expect(state.plainCkb).toBe(1500n * CKB);
+    expect(state.liquidCkb).toBe(1500n * CKB);
     // Plain CKB plus the two collectable groups' cells, minus the reserve; live groups
     // count only toward the total.
     expect(state.budgets.ckb).toBe(

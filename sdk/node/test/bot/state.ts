@@ -39,8 +39,6 @@ describe("readBotState pool snapshot", () => {
       account: {
         capacityCells: [],
         nativeUdtCells: [],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 0n,
         receipts: [],
         withdrawalGroups: [],
       },
@@ -95,8 +93,6 @@ describe("readBotState", () => {
       account: {
         capacityCells: [capacityCell],
         nativeUdtCells: [nativeUdtCell],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 11n,
         receipts: [],
         withdrawalGroups: [],
       },
@@ -106,7 +102,9 @@ describe("readBotState", () => {
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
     expect(state.marketOrders).toEqual([marketOrder]);
-    expect(state.ckb).toBe(capacityCell.cellOutput.capacity);
+    expect(state.ckb).toBe(
+      capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
+    );
     expect(state.ickb).toBe(11n);
     expect(state.pendingCkb).toBe(0n);
     expect(state.cells).toEqual([capacityCell, nativeUdtCell]);

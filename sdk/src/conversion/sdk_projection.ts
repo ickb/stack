@@ -57,7 +57,11 @@ export function projectAccountAvailability(
     account.withdrawalGroups,
     DAO_HEADER_INDEX_LIMIT - account.receipts.length,
   );
-  const ckbNative = sumValues(account.capacityCells, (cell) => cell.cellOutput.capacity);
+  // An iCKB cell's capacity is the owner's CKB too: completion spends it like a plain cell.
+  const ckbNative = sumValues(
+    [...account.capacityCells, ...account.nativeUdtCells],
+    (cell) => cell.cellOutput.capacity,
+  );
   const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
     ccc.udtBalanceFrom(cell.outputData),
   );

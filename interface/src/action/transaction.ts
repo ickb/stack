@@ -1,7 +1,9 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type {
-  ConversionTransactionContext,
-  ConversionTransactionFailureReason,
+import {
+  isIckbError,
+  type ConversionTransactionContext,
+  type ConversionTransactionFailureReason,
+  type IckbErrorCode,
 } from "@ickb/sdk";
 import {
   errorMessageOf,
@@ -23,6 +25,13 @@ const conversionFailureMessages: Record<
   "insufficient-ckb": "Not enough available CKB for this amount",
   "insufficient-ickb": "Not enough available iCKB for this amount",
   "amount-too-small": "Enter a larger amount",
+};
+
+// Completion fails past the SDK's pre-check when the change cells, an order's master cell or
+// the fee do not fit: the same shortfall in the user's terms, not CCC's message.
+const completionFailureMessages: Record<IckbErrorCode, string> = {
+  insufficient_capacity: conversionFailureMessages["insufficient-ckb"],
+  insufficient_ickb: conversionFailureMessages["insufficient-ickb"],
 };
 
 export type TransactionContext = ConversionTransactionContext;
@@ -70,7 +79,10 @@ export async function buildTransactionPreview(
         : { conversionNotice: result.conversionNotice }),
     });
   } catch (error) {
-    return txInfoWithError(errorMessageOf(error), context.estimatedMaturity);
+    return txInfoWithError(
+      isIckbError(error) ? completionFailureMessages[error.code] : errorMessageOf(error),
+      context.estimatedMaturity,
+    );
   }
 }
 

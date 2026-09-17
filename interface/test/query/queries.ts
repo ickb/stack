@@ -55,8 +55,6 @@ function itPollsLiveStateUnlessFrozen(): void {
         account: {
           capacityCells: [],
           nativeUdtCells: [],
-          nativeUdtCapacity: 0n,
-          nativeUdtBalance: 0n,
           receipts: [],
           withdrawalGroups: [],
         },
@@ -87,8 +85,6 @@ function itRunsL1StateOptionsQuery(): void {
         account: {
           capacityCells: [],
           nativeUdtCells: [],
-          nativeUdtCapacity: 0n,
-          nativeUdtBalance: 0n,
           receipts: [],
           withdrawalGroups: [],
         },
@@ -156,8 +152,6 @@ it("loads display balances from an SDK account snapshot", async () => {
     account: {
       capacityCells: [capacityCell],
       nativeUdtCells: [nativeUdtCell],
-      nativeUdtCapacity: 7n,
-      nativeUdtBalance: 11n,
       receipts: [],
       withdrawalGroups: [],
     },
@@ -165,11 +159,13 @@ it("loads display balances from an SDK account snapshot", async () => {
 
   const state = await getL1State(walletConfig);
 
-  expect(state.ckbNative).toBe(nativeCapacity);
+  // The iCKB cell's capacity is the account's CKB too (decisions amendment 52(ah)).
+  const liquidCapacity = nativeCapacity + nativeUdtCell.cellOutput.capacity;
+  expect(state.ckbNative).toBe(liquidCapacity);
   expect(state.ickbNative).toBe(11n);
-  expect(state.ckbAvailable).toBe(nativeCapacity);
+  expect(state.ckbAvailable).toBe(liquidCapacity);
   expect(state.ickbAvailable).toBe(11n);
-  expect(state.ckbBalance).toBe(nativeCapacity);
+  expect(state.ckbBalance).toBe(liquidCapacity);
   expect(state.ickbBalance).toBe(11n);
   expect(state.stateId).toMatch(/^\d+$/u);
   await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
@@ -194,8 +190,6 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
       nativeUdtCells: [],
-      nativeUdtCapacity: 0n,
-      nativeUdtBalance: 0n,
       receipts: [],
       withdrawalGroups: [],
     },

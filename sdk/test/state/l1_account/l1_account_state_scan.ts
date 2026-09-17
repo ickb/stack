@@ -143,7 +143,6 @@ describe(L1_STATE_SUITE, () => {
 
     expect(account.capacityCells).toEqual([plain]);
     expect(account.nativeUdtCells).toEqual([nativeUdt]);
-    expect(account.nativeUdtBalance).toBe(7n);
     expect(account.receipts.map((found) => found.cell)).toEqual([receipt]);
     expect(account.withdrawalGroups.map((group) => group.owner.cell)).toEqual([
       owner,
@@ -151,12 +150,14 @@ describe(L1_STATE_SUITE, () => {
     ]);
 
     // The bot estimate is the bot's own projection net of the 1,000 CKB reserve: plain
-    // CKB, the receipt, and the ready withdrawal; the other bot's plain CKB counts too.
+    // CKB, the iCKB cell's capacity, the receipt, and the ready withdrawal; the other
+    // bot's plain CKB counts too.
     const [withdrawal, pending] = account.withdrawalGroups;
     expect(withdrawal?.owned.isReady).toBe(true);
     expect(pending?.owned.isReady).toBe(false);
     expect(system.ckbAvailable).toBe(
       2000n * CKB +
+        nativeUdt.cellOutput.capacity +
         (account.receipts[0]?.ckbValue ?? 0n) +
         (withdrawal?.ckbValue ?? 0n) +
         4000n * CKB,

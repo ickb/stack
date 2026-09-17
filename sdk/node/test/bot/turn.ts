@@ -362,7 +362,6 @@ function fundedAccount(
         outputData: ccc.numLeToBytes(ickb, 16),
       }),
     ],
-    nativeUdtBalance: ickb,
     withdrawalGroups: options.withdrawal === true ? [testWithdrawal("62")] : [],
   });
 }

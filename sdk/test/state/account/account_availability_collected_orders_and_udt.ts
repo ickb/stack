@@ -26,8 +26,6 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       {
         capacityCells: [],
         nativeUdtCells: [],
-        nativeUdtCapacity: 0n,
-        nativeUdtBalance: 0n,
         receipts: [],
         withdrawalGroups: [],
       },
@@ -42,24 +40,23 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     expect(projection.ickbPending).toBe(0n);
   });
 
-  it("does not count native UDT capacity as spendable CKB", () => {
+  it("counts native UDT capacity as the account's CKB", () => {
     const nativeCkb = ccc.fixedPointFrom(50);
     const nativeUdt = nativeUdtCell(7n, { capacity: 5n });
     const projection = projectAccountAvailability(
       {
         capacityCells: [plainCapacityCell(nativeCkb)],
         nativeUdtCells: [nativeUdt],
-        nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-        nativeUdtBalance: 7n,
         receipts: [],
         withdrawalGroups: [],
       },
       { available: [], pending: [] },
     );
 
-    expect(projection.ckbNative).toBe(nativeCkb);
-    expect(projection.ckbAvailable).toBe(nativeCkb);
-    expect(projection.ckbBalance).toBe(nativeCkb);
+    const liquidCkb = nativeCkb + nativeUdt.cellOutput.capacity;
+    expect(projection.ckbNative).toBe(liquidCkb);
+    expect(projection.ckbAvailable).toBe(liquidCkb);
+    expect(projection.ckbBalance).toBe(liquidCkb);
   });
 
   it("does not count withdrawal UDT as available or pending iCKB", () => {
@@ -68,8 +65,6 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       {
         capacityCells: [],
         nativeUdtCells: [nativeUdt],
-        nativeUdtCapacity: nativeUdt.cellOutput.capacity,
-        nativeUdtBalance: 7n,
         receipts: [],
         withdrawalGroups: [
           withdrawalValue({
@@ -89,7 +84,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       { available: [], pending: [] },
     );
 
-    expect(projection.ckbAvailable).toBe(11n);
+    expect(projection.ckbAvailable).toBe(nativeUdt.cellOutput.capacity + 11n);
     expect(projection.ckbPending).toBe(17n);
     expect(projection.ickbAvailable).toBe(7n);
     expect(projection.ickbPending).toBe(0n);
