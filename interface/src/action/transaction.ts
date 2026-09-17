@@ -22,15 +22,16 @@ const conversionFailureMessages: Record<
   string
 > = {
   "amount-negative": "Amount cannot be negative",
-  "insufficient-ckb": "Not enough available CKB for this amount",
-  "insufficient-ickb": "Not enough available iCKB for this amount",
+  "insufficient-ckb": "More CKB than you have",
+  "insufficient-ickb": "More iCKB than you have",
   "amount-too-small": "Enter a larger amount",
 };
 
 // Completion fails past the SDK's pre-check when the change cells, an order's master cell or
-// the fee do not fit: the same shortfall in the user's terms, not CCC's message.
+// the fee do not fit: the amount was within the balance, so the message names what ran out.
 const completionFailureMessages: Record<IckbErrorCode, string> = {
-  insufficient_capacity: conversionFailureMessages["insufficient-ckb"],
+  insufficient_capacity:
+    "Lower the amount a little: the change cells and the fee need CKB too",
   insufficient_ickb: conversionFailureMessages["insufficient-ickb"],
 };
 

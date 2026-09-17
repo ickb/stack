@@ -107,7 +107,8 @@ html {
 }
 
 .ickb-wallet-header-mount {
-  min-height: 3rem;
+  /* Reserves the wide header's one row before it mounts; a taller mount pushed the title up. */
+  min-height: 1.75rem;
 }
 
 .ickb-app-mount {

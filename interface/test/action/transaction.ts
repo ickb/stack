@@ -118,8 +118,8 @@ describe("buildTransactionPreview failure messages", () => {
     const cases: Array<[ConversionTransactionFailureReason, string]> = [
       ["amount-too-small", "Enter a larger amount"],
       ["amount-negative", "Amount cannot be negative"],
-      ["insufficient-ckb", "Not enough available CKB for this amount"],
-      ["insufficient-ickb", "Not enough available iCKB for this amount"],
+      ["insufficient-ckb", "More CKB than you have"],
+      ["insufficient-ickb", "More iCKB than you have"],
     ];
 
     for (const [reason, message] of cases) {
@@ -263,10 +263,13 @@ describe("buildTransactionPreview thrown failures", () => {
     ).resolves.toMatchObject({ error: "planner failed" });
   });
 
-  it("maps completion shortfalls to the same copy as the planner's checks", async () => {
+  it("names what ran out when completion fails past the planner's checks", async () => {
     for (const [code, message] of [
-      ["insufficient_capacity", "Not enough available CKB for this amount"],
-      ["insufficient_ickb", "Not enough available iCKB for this amount"],
+      [
+        "insufficient_capacity",
+        "Lower the amount a little: the change cells and the fee need CKB too",
+      ],
+      ["insufficient_ickb", "More iCKB than you have"],
     ] as const) {
       const config = walletConfigWith({
         sdk: {
