@@ -5,21 +5,21 @@ import {
   ickbWorthAt,
   ickbWorthSamples,
 } from "../../src/chart/rateChartData.ts";
-import { graphAmountText } from "../../src/chart/rateChartText.ts";
 import { rateChartView } from "../../src/chart/rateChartView.ts";
+import { graphAmountText } from "../../src/shared/figures.ts";
 
 const sampledMainnetTipDate = new Date("2026-06-07T18:43:08.091Z");
-const sampledMainnetTipGrossValue = 1.19704741 + 0.00082;
+const sampledMainnetTipDaoRate = 1.19704741;
 const liveTipDateIso = "2026-06-10T00:00:00.000Z";
 const oneIckbWorthTitle = "1 iCKB worth over time";
 
 describe("ickbWorthSamples", () => {
-  it("starts with the gross standard-deposit recoverable value", () => {
+  it("starts one to one at genesis", () => {
     const samples = ickbWorthSamples("mainnet", undefined, sampledMainnetTipDate);
 
     expect(samples[0]).toEqual({
       date: new Date("2019-11-15T21:09:50.812Z"),
-      value: 1.00082,
+      value: 1,
     });
   });
 
@@ -31,9 +31,7 @@ describe("ickbWorthSamples", () => {
 
   it("stays close to sampled mainnet DAO history", () => {
     expect(
-      Math.abs(
-        ickbWorthAt(sampledMainnetTipDate, "mainnet") - sampledMainnetTipGrossValue,
-      ),
+      Math.abs(ickbWorthAt(sampledMainnetTipDate, "mainnet") - sampledMainnetTipDaoRate),
     ).toBeLessThan(0.0005);
   });
 
@@ -49,7 +47,8 @@ describe("ickbWorthSamples", () => {
     const tip = samples.at(-1);
 
     expect(tip?.date).toEqual(new Date(liveTipDateIso));
-    expect(tip?.value).toBeCloseTo(1.25082);
+    // The live ratio is gross of the deposit's occupied capacity; the curve is not.
+    expect(tip?.value).toBeCloseTo(1.25);
   });
 
   it("ignores invalid live tip values", () => {
@@ -92,11 +91,13 @@ describe("rateChartView", () => {
     expect(view(250000000n, false).title).toBe("2.5 iCKB worth over time:");
   });
 
-  it("keeps graph amounts to three significant digits", () => {
+  it("keeps the caption amount in the ticks' compact style", () => {
     expect(view(12200000000n, false).title).toBe("122 iCKB worth over time:");
     expect(view(1233400000n, false).title).toBe("12.3 iCKB worth over time:");
+    expect(view(100000000000n, false).title).toBe("1K iCKB worth over time:");
+    expect(view(123456789000000n, false).title).toBe("1.23M iCKB worth over time:");
     expect(view(123456789n, false).title).toBe("1.23 iCKB worth over time:");
-    expect(view(100000000n, true).description).toContain("0.83 iCKB");
+    expect(view(100000000n, true).description).toContain("0.84 iCKB");
     expect(view(100000000n, true).description).not.toContain("0.835");
   });
 
@@ -143,7 +144,7 @@ describe("graphAmountText", () => {
 
   it("formats deduplicated grid labels without suffixes", () => {
     expect(view(123400000n, false).gridMarks.map(({ label }) => label)).toContain(
-      "1.24 CKB",
+      "1.23 CKB",
     );
   });
 });

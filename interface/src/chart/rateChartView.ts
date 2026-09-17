@@ -1,4 +1,5 @@
 import type { QuoteState } from "../query/queries.ts";
+import { chartAmountText, graphAmountText } from "../shared/figures.ts";
 import { CKB, clampShannons, type RootConfig } from "../shared/utils.ts";
 import {
   conversionWorthSamples,
@@ -6,7 +7,7 @@ import {
   type IckbWorthSamples,
 } from "./rateChartData.ts";
 import { scaleX, scaleY } from "./rateChartScale.ts";
-import { chartAmountText, graphAmountText, valueGridMarks } from "./rateChartText.ts";
+import { valueGridMarks } from "./rateChartText.ts";
 
 interface RateChartViewParams {
   readonly chain: RootConfig["chain"];
@@ -80,7 +81,9 @@ export function rateChartView({
       String(first.date.getUTCFullYear()),
       " to ",
       String(tip.date.getUTCFullYear()),
-      ", showing 1 ",
+      ", showing ",
+      amountText,
+      " ",
       sourceSymbol,
       " changing from ",
       firstValueText,

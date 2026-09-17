@@ -4,7 +4,7 @@ import {
   quoteConversion,
   type Ratio,
 } from "@ickb/sdk";
-import { direction2Symbol, parseAmountInput, toText } from "./utils.ts";
+import { direction2Symbol, parseAmountInput, twoDecimals } from "./utils.ts";
 
 interface QuoteDraft {
   isCkb2Udt: boolean;
@@ -48,8 +48,9 @@ export function conversionQuote(rawText: string, state: QuoteStateLike): Convers
     throw error;
   }
 
+  // The quote is an estimate: two decimals on screen, the exact figure beside it.
   return {
-    outputText: toText(quote.convertedAmount),
+    outputText: twoDecimals(quote.convertedAmount),
     convertedAmount: quote.convertedAmount,
   };
 }

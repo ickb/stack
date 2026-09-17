@@ -95,7 +95,6 @@ describe("view components", () => {
     elementProps<{ onClick: () => void }>(walletButton).onClick();
     expect(openWallet).toHaveBeenCalledTimes(1);
     expect(openWallet).toHaveBeenCalledWith();
-    expect(renderToStaticMarkup(dashboard)).toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(dashboard)).toContain("ckt1qxy2kg...xqd5v3my");
     expect(
       renderToStaticMarkup(
@@ -106,7 +105,7 @@ describe("view components", () => {
           destination={ownDestination()}
         />,
       ),
-    ).not.toContain("/faucet");
+    ).not.toContain("faucet");
     expect(
       renderToStaticMarkup(
         <Dashboard
@@ -160,21 +159,44 @@ describe("view components", () => {
       ckbBalance: 5n * CKB,
       ickbBalance: 3n * CKB,
     };
-    const element = Form({ rawText: "C1.5", setRawText, isFrozen: false, balances });
+    const element = Form({
+      rawText: "C1.5",
+      setRawText,
+      isFrozen: false,
+      balances,
+      chain: "testnet",
+    });
     const input = findElement(element, (node) => node.type === "input");
     const buttons = findElements(element, (node) => node.type === "button");
 
-    elementProps<{ onChange: (event: { target: { value: string } }) => void }>(
-      input,
-    ).onChange({ target: { value: ".25abc" } });
+    type Change = (event: {
+      target: { value: string; selectionStart: number; setSelectionRange: () => void };
+    }) => void;
+    const typed = (value: string, selectionStart: number): Parameters<Change>[0] => ({
+      target: { value, selectionStart, setSelectionRange: vi.fn<() => void>() },
+    });
+    elementProps<{ onChange: Change }>(input).onChange(typed(".25abc", 6));
     for (const button of buttons) {
       elementProps<{ onClick?: () => void }>(button).onClick?.();
     }
 
-    expect(setRawText.mock.calls).toEqual([["C.25abc"], ["I1.5"]]);
+    // Commas in the box never reach the raw text.
+    elementProps<{ onChange: Change }>(input).onChange(typed("1,234,5", 7));
+    expect(setRawText.mock.calls).toEqual([["C.25abc"], ["I1.5"], ["C12345"]]);
+    expect(
+      renderToStaticMarkup(
+        Form({
+          rawText: "C1234567.5",
+          setRawText,
+          isFrozen: false,
+          balances,
+          chain: "testnet",
+        }),
+      ),
+    ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
     const invalidMarkup = renderToStaticMarkup(
-      <Form rawText="C1e2" setRawText={setRawText} isFrozen={false} />,
+      <Form rawText="C1e2" setRawText={setRawText} isFrozen={false} chain="testnet" />,
     );
     expect(invalidMarkup).toContain("Enter a decimal amount with up to 8 decimal places");
     expect(invalidMarkup).toContain('aria-invalid="true"');
@@ -191,8 +213,28 @@ describe("view components", () => {
     expect(renderToStaticMarkup(element)).toContain("motion-reduce:animate-none");
     // Max exists only while converting from iCKB: no CKB Max (52(z)), none on the target.
     expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
-    const fromIckb = Form({ rawText: "I1.5", setRawText, isFrozen: false, balances });
+    const fromIckb = Form({
+      rawText: "I1.5",
+      setRawText,
+      isFrozen: false,
+      chain: "testnet",
+      balances,
+    });
     expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
+    // The faucet sits under "CKB" on testnet, wherever CKB is, and nowhere on mainnet.
+    expect(renderToStaticMarkup(element)).toContain("faucet.nervos.org");
+    expect(renderToStaticMarkup(fromIckb)).toContain("faucet.nervos.org");
+    expect(
+      renderToStaticMarkup(
+        Form({
+          rawText: "C1.5",
+          setRawText,
+          isFrozen: false,
+          balances,
+          chain: "mainnet",
+        }),
+      ),
+    ).not.toContain("faucet");
     elementProps<{ onClick?: () => void }>(
       findElement(
         fromIckb,
@@ -207,6 +249,7 @@ describe("view components", () => {
     expect(
       renderToStaticMarkup(
         <Form
+          chain="testnet"
           rawText="C1"
           setRawText={setRawText}
           isFrozen={false}
@@ -227,6 +270,7 @@ describe("view components", () => {
     expect(
       renderToStaticMarkup(
         <Form
+          chain="testnet"
           rawText="C1"
           setRawText={setRawText}
           isFrozen={false}
@@ -235,7 +279,9 @@ describe("view components", () => {
       ),
     ).toContain("1.00 iCKB");
     expect(
-      renderToStaticMarkup(<Form rawText="I" setRawText={setRawText} isFrozen={true} />),
+      renderToStaticMarkup(
+        <Form chain="testnet" rawText="I" setRawText={setRawText} isFrozen={true} />,
+      ),
     ).toContain('disabled=""');
   });
 

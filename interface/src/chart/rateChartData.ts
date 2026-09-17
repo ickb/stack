@@ -42,7 +42,7 @@ export function conversionWorthSamples(
 /**
  * Builds approximate historical iCKB worth samples from chain genesis to the current tip or clock time.
  *
- * @remarks Historical samples include the standard deposit's gross recoverable occupied capacity; when quote state is available, the final sample uses its live iCKB exchange ratio.
+ * @remarks The curve is the DAO rate alone, one to one at genesis: the live exchange ratio is gross of the standard deposit's occupied capacity, so the final sample, the live tip when quote state is available, has that constant taken back out.
  */
 export function ickbWorthSamples(
   chain: RootConfig["chain"],
@@ -66,7 +66,7 @@ export function ickbWorthSamples(
   ];
 
   if (liveTip !== undefined) {
-    // Anchor the approximation to the observed gross exchange ratio.
+    // Anchor the approximation to the observed exchange ratio, net of the occupied capacity.
     samples[samples.length - 1] = liveTip;
   }
 
@@ -81,7 +81,7 @@ export function ickbWorthAt(date: Date, chain: RootConfig["chain"]): number {
     0,
     (date.getTime() - chainGenesis[chain]) / millisecondsPerYear,
   );
-  return accumulatedDaoRate(elapsedYears) + standardDepositOccupiedCapacityPerIckb;
+  return accumulatedDaoRate(elapsedYears);
 }
 
 function liveTipSample(
@@ -92,8 +92,12 @@ function liveTipSample(
   }
 
   const timestamp = Number(quoteState.tipTimestamp);
+  // The ratio counts the standard deposit's occupied capacity a redeemer gets back; the
+  // curve does not, so genesis reads one to one.
   const value =
-    Number(quoteState.exchangeRatio.udtScale) / Number(quoteState.exchangeRatio.ckbScale);
+    Number(quoteState.exchangeRatio.udtScale) /
+      Number(quoteState.exchangeRatio.ckbScale) -
+    standardDepositOccupiedCapacityPerIckb;
   if (!Number.isFinite(timestamp) || !Number.isFinite(value)) {
     return undefined;
   }

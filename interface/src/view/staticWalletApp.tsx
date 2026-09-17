@@ -47,6 +47,7 @@ export function WalletAppShell({
               setRawText,
               quoteState,
               isFrozen: false,
+              chain,
             }}
           />
         </WalletSection>

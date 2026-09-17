@@ -94,7 +94,7 @@ describe("action status", () => {
         conversionKind: "collect-only",
         hasCollectable: true,
       }),
-    ).toBe("Intent: Collect converted funds.");
+    ).toBe("Collects your converted funds.");
     expect(
       actionMessage({
         ...messageParams(),
@@ -102,7 +102,7 @@ describe("action status", () => {
         hasCollectable: true,
       }),
     ).toBe(
-      "Intent: Part converts at a fixed time, the rest at a variable time. Also collects converted funds.",
+      "Part converts on the date below, the rest when liquidity is found. Also collects converted funds.",
     );
     expect(
       actionMessage({ ...messageParams(), amount: undefined, amountError: "Bad amount" }),
@@ -119,12 +119,12 @@ describe("action status", () => {
   });
 
   it.each([
-    ["collect-only", "Intent: Collect converted funds."],
-    ["direct", "Intent: Converts at a fixed time."],
-    ["order", "Intent: Converts at a variable time."],
+    ["collect-only", "Collects your converted funds."],
+    ["direct", "Converts on the date below."],
+    ["order", "Converts when liquidity is found; the date below is an estimate."],
     [
       "direct-plus-order",
-      "Intent: Part converts at a fixed time, the rest at a variable time.",
+      "Part converts on the date below, the rest when liquidity is found.",
     ],
   ] as const)("describes %s intent exactly", (kind, expected) => {
     expect(conversionIntentText(kind)).toBe(expected);
@@ -190,7 +190,7 @@ describe("action status", () => {
       }),
     ).toBe("Also collects converted funds. Moves everything to ckt1qzda…abcdef.");
     expect(actionMessage({ ...messageParams(), conversionKind: "order", moveTo })).toBe(
-      "Intent: Converts at a variable time. Moves everything to ckt1qzda…abcdef.",
+      "Converts when liquidity is found; the date below is an estimate. Moves everything to ckt1qzda…abcdef.",
     );
   });
 

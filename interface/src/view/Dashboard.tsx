@@ -22,18 +22,6 @@ export function Dashboard({
   return (
     <HeaderGrid>
       <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
-        {isTestnet ? (
-          <a
-            href="https://faucet.nervos.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded text-xl text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
-            aria-label="Open testnet faucet"
-            title="Open testnet faucet"
-          >
-            🚰
-          </a>
-        ) : null}
         <button
           className="block max-w-full min-w-0 cursor-pointer overflow-hidden rounded text-center font-medium text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
           onClick={() => {

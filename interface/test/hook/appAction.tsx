@@ -405,7 +405,7 @@ function registerActionConfirmationTests(): void {
     expect(waiting.fee).toBe("0.00000009 CKB");
     expect(waiting.maturity).toBe("⏳ 3 minutes");
     expect(waiting.message).toContain(
-      "Intent: Part converts at a fixed time, the rest at a variable time.",
+      "Part converts on the date below, the rest when liquidity is found.",
     );
 
     confirmation.resolve(undefined);

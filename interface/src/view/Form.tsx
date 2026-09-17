@@ -1,18 +1,19 @@
 import type { JSX } from "react";
+import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
 import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
 import {
-  CKB,
   direction2Symbol,
   parseAmountInput,
+  type RootConfig,
   symbol2Direction,
   toText,
+  twoDecimals,
 } from "../shared/utils.ts";
 import {
   amountQuoteText,
-  figureText,
-  formAssets,
-  phoneFigureText,
   type AssetDisplay,
+  caretAfter,
+  formAssets,
   type FormBalances,
 } from "./formState.ts";
 
@@ -24,12 +25,14 @@ export default function Form({
   quoteState,
   isFrozen,
   balances,
+  chain,
 }: Readonly<{
   rawText: string;
   setRawText: (value: string) => void;
   quoteState?: QuoteStateLike;
   isFrozen: boolean;
   balances?: FormBalances;
+  chain: RootConfig["chain"];
 }>): JSX.Element {
   const symbol = rawText.startsWith("I") ? "I" : direction2Symbol(true);
   const text = rawText.slice(1);
@@ -63,19 +66,35 @@ export default function Form({
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
       {nativeBalanceDisplay(a)}
-      {/* The name stays centred in its column; "max" sits just under it. */}
+      {/* The name stays centred in its column; its control, "max" under the source iCKB
+          or "faucet" under CKB on testnet, sits just under it. */}
       <span className="relative text-2xl text-ickb-text normal-case">
         {a.name}
-        {maxButton(a, symbol, setRawText, isFrozen)}
+        {a.name === "iCKB"
+          ? maxButton(a, symbol, setRawText, isFrozen)
+          : faucetLink(chain)}
       </span>
       {lockedBalanceDisplay(a)}
       <input
         placeholder="0"
         disabled={isFrozen}
         autoFocus={true}
-        value={text}
+        value={groupDigits(text)}
+        // The box shows the digits grouped; the commas never reach the raw text. A comma
+        // appearing or vanishing mid-string would throw the caret to the end, so once the
+        // synchronous re-render has set the grouped value, the caret goes back after the
+        // same count of non-comma characters it followed. A microtask runs before paint.
         onChange={(event) => {
-          setRawText(symbol + event.target.value);
+          const { target } = event;
+          const { value, selectionStart } = target;
+          const count = value
+            .slice(0, selectionStart ?? value.length)
+            .replaceAll(",", "").length;
+          setRawText(symbol + value.replaceAll(",", ""));
+          queueMicrotask(() => {
+            const position = caretAfter(target.value, count);
+            target.setSelectionRange(position, position);
+          });
         }}
         autoComplete="off"
         inputMode="decimal"
@@ -113,13 +132,13 @@ export default function Form({
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}
         className={`col-span-3 max-w-full text-center normal-case ${isPlaceholder ? "text-ickb-text/35" : "text-ickb-text"} ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
-        title={quoteLine}
       >
         {quoteLine}
       </span>
       {nativeBalanceDisplay(b)}
-      <span className="text-2xl whitespace-nowrap text-ickb-text normal-case">
+      <span className="relative text-2xl whitespace-nowrap text-ickb-text normal-case">
         {b.name}
+        {b.name === "CKB" ? faucetLink(chain) : undefined}
       </span>
       {lockedBalanceDisplay(b)}
     </div>
@@ -141,6 +160,29 @@ function nativeBalanceDisplay(asset: AssetDisplay): JSX.Element {
   );
 }
 
+/** The small accent control under an asset's name, centred, in the label style. */
+const underNameClass =
+  "absolute top-full left-1/2 -translate-x-1/2 -translate-y-1 cursor-pointer rounded text-xs leading-none font-medium tracking-normal text-ickb-action normal-case hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action";
+
+/** Testnet CKB comes from the faucet, so the link sits under "CKB" wherever it is. */
+function faucetLink(chain: RootConfig["chain"]): JSX.Element | undefined {
+  if (chain !== "testnet") {
+    return undefined;
+  }
+
+  return (
+    <a
+      href="https://faucet.nervos.org/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className={underNameClass}
+      aria-label="Open testnet faucet"
+    >
+      faucet
+    </a>
+  );
+}
+
 /**
  * The Max control beside the source asset's name: sets the SDK's own bound for it, native
  * plus collectable. Only the source has one, so it appears while converting from iCKB.
@@ -158,7 +200,7 @@ function maxButton(
 
   return (
     <button
-      className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1 cursor-pointer rounded text-xs leading-none font-medium tracking-normal text-ickb-action normal-case hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50"
+      className={`${underNameClass} disabled:cursor-default disabled:opacity-50`}
       disabled={isFrozen}
       onClick={() => {
         setRawText(symbol + toText(max));
@@ -216,9 +258,4 @@ function display(shannons: bigint, label: string, isConverting: boolean): JSX.El
       </span>
     </span>
   );
-}
-
-function twoDecimals(shannons: bigint): string {
-  const cents = (shannons + CKB / 200n) / (CKB / 100n);
-  return `${String(cents / 100n)}.${String(cents % 100n).padStart(2, "0")}`;
 }

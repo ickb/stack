@@ -1,12 +1,8 @@
 import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
+import { figureText, groupDigits, phoneFigureText } from "../../src/shared/figures.ts";
 import { CKB } from "../../src/shared/utils.ts";
-import {
-  amountQuoteText,
-  figureText,
-  formAssets,
-  phoneFigureText,
-} from "../../src/view/formState.ts";
+import { amountQuoteText, caretAfter, formAssets } from "../../src/view/formState.ts";
 
 describe("amountQuoteText", () => {
   it("shows zero output for empty or zero input without waiting for a quote", () => {
@@ -30,7 +26,33 @@ describe("amountQuoteText", () => {
       amountQuoteText(2n * CKB, "C2", {
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       }),
-    ).toBe("1.9998");
+    ).toBe("2.00");
+  });
+
+  it("groups the quoted thousands", () => {
+    expect(
+      amountQuoteText(2_000_000n * CKB, "C2000000", {
+        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+      }),
+    ).toBe("1,999,800.00");
+  });
+});
+
+describe("groupDigits", () => {
+  it("groups a typed or quoted decimal and leaves anything else alone", () => {
+    expect(groupDigits("")).toBe("");
+    expect(groupDigits("999")).toBe("999");
+    expect(groupDigits("1234567.12345678")).toBe("1,234,567.12345678");
+    expect(groupDigits("1234.")).toBe("1,234.");
+    expect(groupDigits(".5")).toBe(".5");
+    expect(groupDigits("1e2")).toBe("1e2");
+  });
+
+  it("puts the caret back after the same non-comma characters", () => {
+    expect(caretAfter("1,234", 1)).toBe(1);
+    expect(caretAfter("1,234", 2)).toBe(3);
+    expect(caretAfter("1,234,567.5", 7)).toBe(9);
+    expect(caretAfter("1,234", 4)).toBe(5);
   });
 });
 
@@ -124,6 +146,9 @@ describe("balance figures", () => {
     expect(phoneFigureText(9999999n * CKB + 1n)).toBe("9,999,999+");
     expect(phoneFigureText(12345678n * CKB)).toBe("12.3M");
     expect(phoneFigureText(123456789n * CKB + 1n)).toBe("123M");
-    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23B");
+    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23G");
+    // The chart caption compacts a digit earlier.
+    expect(phoneFigureText(999999n * CKB + 1n, 1_000_000n)).toBe("999,999+");
+    expect(phoneFigureText(1234567n * CKB, 1_000_000n)).toBe("1.23M");
   });
 });

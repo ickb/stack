@@ -43,7 +43,15 @@ export function WalletConfigPendingView({
       </WalletHeaderPortal>
       <WalletSections>
         <WalletSection>
-          <Form {...{ rawText, setRawText, quoteState, isFrozen: false }} />
+          <Form
+            {...{
+              rawText,
+              setRawText,
+              quoteState,
+              isFrozen: false,
+              chain: rootConfig.chain,
+            }}
+          />
         </WalletSection>
         <WalletSection>
           <ActionLayout

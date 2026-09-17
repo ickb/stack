@@ -56,6 +56,7 @@ export function WalletAppView({
               setRawText,
               quoteState: formQuoteState,
               isFrozen,
+              chain: walletConfig.chain,
               ...(l1State !== undefined
                 ? {
                     balances: {

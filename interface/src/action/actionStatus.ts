@@ -200,13 +200,16 @@ function collectableNotice(hasCollectable: boolean): string {
 export function conversionIntentText(
   kind: NonNullable<TxInfo["conversionKind"]>,
 ): string {
+  // What the signed transaction does, in the user's terms: the maturity line under it
+  // carries the date, so the sentence points at it instead of naming a timing category.
   const intent: Record<NonNullable<TxInfo["conversionKind"]>, string> = {
-    "collect-only": "Collect converted funds.",
-    direct: "Converts at a fixed time.",
-    order: "Converts at a variable time.",
-    "direct-plus-order": "Part converts at a fixed time, the rest at a variable time.",
+    "collect-only": "Collects your converted funds.",
+    direct: "Converts on the date below.",
+    order: "Converts when liquidity is found; the date below is an estimate.",
+    "direct-plus-order":
+      "Part converts on the date below, the rest when liquidity is found.",
   };
-  return `Intent: ${intent[kind]}`;
+  return intent[kind];
 }
 
 function checkingMessage(amount: bigint): string {
