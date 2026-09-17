@@ -1,4 +1,5 @@
 import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
+import { CKB, toText } from "../shared/utils.ts";
 
 export interface FormBalances {
   ckbNative: bigint;
@@ -85,4 +86,26 @@ function assetDisplay(
  */
 function maturityStatus(balance: bigint, native: bigint, bound: bigint): string {
   return balance !== native && balance === bound ? "collectable" : "converting";
+}
+
+/** The figure at full precision with thousands grouped, for a wide screen. */
+export function figureText(shannons: bigint): string {
+  const [whole = "0", fraction] = toText(shannons).split(".");
+  const grouped = BigInt(whole).toLocaleString("en-US");
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
+/**
+ * The figure a phone column holds: whole units, "+" for any fraction, and a compact form
+ * from eight digits (the column is about 100px; "1,234,567+" is 90px, one digit more fills it).
+ */
+export function phoneFigureText(shannons: bigint): string {
+  const whole = shannons / CKB;
+  if (whole >= 10_000_000n) {
+    return new Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumSignificantDigits: 3,
+    }).format(whole);
+  }
+  return `${whole.toLocaleString("en-US")}${shannons % CKB === 0n ? "" : "+"}`;
 }

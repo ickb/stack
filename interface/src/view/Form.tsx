@@ -9,7 +9,9 @@ import {
 } from "../shared/utils.ts";
 import {
   amountQuoteText,
+  figureText,
   formAssets,
+  phoneFigureText,
   type AssetDisplay,
   type FormBalances,
 } from "./formState.ts";
@@ -196,20 +198,20 @@ function lockedBalanceDisplay(asset: AssetDisplay): JSX.Element {
   );
 }
 
-/** A figure and the word that says what it is; a converting figure pulses. */
+/**
+ * A figure and the word that says what it is; a converting figure pulses. On a phone the
+ * word sits under the figure, since a 100px column cannot hold both side by side.
+ */
 function display(shannons: bigint, label: string, isConverting: boolean): JSX.Element {
   return (
     <span
-      className={`flex flex-row items-baseline gap-x-1 ${isConverting ? "cursor-wait" : ""}`}
+      className={`flex flex-col items-center leading-none sm:flex-row sm:items-baseline sm:gap-x-1 sm:leading-relaxed ${isConverting ? "cursor-wait" : ""}`}
     >
       <span className={isConverting ? "animate-pulse motion-reduce:animate-none" : ""}>
-        <span className="sm:hidden">
-          {String(shannons / CKB)}
-          {shannons % CKB === 0n ? "" : "+"}
-        </span>
-        <span className="hidden sm:block">{toText(shannons)}</span>
+        <span className="sm:hidden">{phoneFigureText(shannons)}</span>
+        <span className="hidden sm:block">{figureText(shannons)}</span>
       </span>
-      <span className="text-xs font-medium tracking-normal normal-case opacity-80">
+      <span className="text-[10px] font-medium tracking-normal normal-case opacity-80 sm:text-xs">
         {label}
       </span>
     </span>

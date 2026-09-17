@@ -40,7 +40,7 @@ export function ActionLayout({
       >
         {hasMessage ? message : "Status"}
       </span>
-      <span className="col-span-2 grid w-full grid-cols-1 items-center justify-items-center gap-3 text-center min-[34rem]:grid-cols-2">
+      <span className="col-span-2 grid w-full grid-cols-1 items-center justify-items-center gap-4.5 text-center min-[34rem]:grid-cols-2">
         <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
           <span className="leading-relaxed font-bold tracking-wider">Maturity:</span>{" "}
           <span title={maturity}>{maturity}</span>

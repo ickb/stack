@@ -168,7 +168,7 @@ export function PendingDashboard({
 
 function HeaderGrid({ children }: Readonly<{ children: React.ReactNode }>): JSX.Element {
   return (
-    <div className="grid grid-cols-1 items-center justify-items-center gap-3 text-center text-sm min-[34rem]:grid-cols-2 sm:text-base">
+    <div className="grid grid-cols-1 items-center justify-items-center gap-5 text-center text-sm min-[34rem]:grid-cols-2 sm:text-base">
       {children}
     </div>
   );

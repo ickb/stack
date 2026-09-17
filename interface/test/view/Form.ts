@@ -1,7 +1,12 @@
 import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
 import { CKB } from "../../src/shared/utils.ts";
-import { amountQuoteText, formAssets } from "../../src/view/formState.ts";
+import {
+  amountQuoteText,
+  figureText,
+  formAssets,
+  phoneFigureText,
+} from "../../src/view/formState.ts";
 
 describe("amountQuoteText", () => {
   it("shows zero output for empty or zero input without waiting for a quote", () => {
@@ -104,5 +109,21 @@ describe("formAssets", () => {
 
   it("returns bare asset labels until balances load", () => {
     expect(formAssets(undefined, true)).toEqual([{ name: "CKB" }, { name: "iCKB" }]);
+  });
+});
+
+describe("balance figures", () => {
+  it("groups thousands and keeps every decimal on a wide screen", () => {
+    expect(figureText(0n)).toBe("0");
+    expect(figureText(1234567n * CKB + 12345678n)).toBe("1,234,567.12345678");
+    expect(figureText(100000000000n * CKB)).toBe("100,000,000,000");
+  });
+
+  it("shows whole units with a plus on a phone, compact from eight digits", () => {
+    expect(phoneFigureText(0n)).toBe("0");
+    expect(phoneFigureText(9999999n * CKB + 1n)).toBe("9,999,999+");
+    expect(phoneFigureText(12345678n * CKB)).toBe("12.3M");
+    expect(phoneFigureText(123456789n * CKB + 1n)).toBe("123M");
+    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23B");
   });
 });
