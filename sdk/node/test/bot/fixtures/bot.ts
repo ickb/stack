@@ -406,5 +406,5 @@ class TestEpoch extends ccc.Epoch {
 /** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
 function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
   const { ickbUdt, ownedOwner, logic, order } = config.managers;
-  return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order, bots: config.bots });
+  return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order });
 }

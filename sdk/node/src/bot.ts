@@ -54,7 +54,6 @@ try {
     ownedOwner: config.managers.ownedOwner,
     ickbLogic: config.managers.logic,
     order: config.managers.order,
-    bots: config.bots,
   });
   const runtime: Runtime = {
     client,

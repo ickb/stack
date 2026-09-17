@@ -21,9 +21,8 @@ import {
 const CKB = ccc.fixedPointFrom(1);
 
 describe(L1_STATE_SUITE, () => {
-  it("reads each account and known-bot lock with one unfiltered exact scan and classifies it", async () => {
+  it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
-    const otherBot = script("12");
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -33,7 +32,6 @@ describe(L1_STATE_SUITE, () => {
       ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
       ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
       order: new OrderManager(script("55"), [], udt),
-      bots: [accountLock, otherBot],
     });
     const plain = cell("81", accountLock, 3000n * CKB);
     const dataCell = cell("82", accountLock, 100n * CKB, undefined, "0xaa");
@@ -73,13 +71,11 @@ describe(L1_STATE_SUITE, () => {
       daoScript: dao,
       depositHeaderNumber: 5n,
     });
-    const otherBotPlain = cell("87", otherBot, 5000n * CKB);
     const cellsByLock = new Map([
       [
         accountLock.hash(),
         [plain, dataCell, nativeUdt, udtPrefixExtension, receipt, owner, pendingOwner],
       ],
-      [otherBot.hash(), [otherBotPlain]],
     ]);
     const headersByNumber = new Map([
       [1n, headerLike(1n)],
@@ -128,18 +124,16 @@ describe(L1_STATE_SUITE, () => {
       accountLock,
     ]);
 
-    // One scan per distinct lock, each exact and unfiltered; the other three are public.
-    for (const lock of [accountLock, otherBot]) {
-      const lockScans = scans.filter((key) => key.script.eq(lock));
-      expect(lockScans).toHaveLength(1);
-      expect(lockScans[0]).toMatchObject({
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-        withData: true,
-      });
-      expect(lockScans[0]?.filter).toBeUndefined();
-    }
-    expect(scans).toHaveLength(5);
+    // One scan per distinct lock, exact and unfiltered; the other three are public.
+    const lockScans = scans.filter((key) => key.script.eq(accountLock));
+    expect(lockScans).toHaveLength(1);
+    expect(lockScans[0]).toMatchObject({
+      scriptType: "lock",
+      scriptSearchMode: "exact",
+      withData: true,
+    });
+    expect(lockScans[0]?.filter).toBeUndefined();
+    expect(scans).toHaveLength(4);
 
     expect(account.capacityCells).toEqual([plain]);
     expect(account.nativeUdtCells).toEqual([nativeUdt]);
@@ -149,22 +143,12 @@ describe(L1_STATE_SUITE, () => {
       pendingOwner,
     ]);
 
-    // The bot estimate is the bot's own projection net of the 1,000 CKB reserve: plain
-    // CKB, the iCKB cell's capacity, the receipt, and the ready withdrawal; the other
-    // bot's plain CKB counts too.
+    // Account cells never count as system liquidity: the pool is empty here.
     const [withdrawal, pending] = account.withdrawalGroups;
     expect(withdrawal?.owned.isReady).toBe(true);
     expect(pending?.owned.isReady).toBe(false);
-    expect(system.ckbAvailable).toBe(
-      2000n * CKB +
-        nativeUdt.cellOutput.capacity +
-        (account.receipts[0]?.ckbValue ?? 0n) +
-        (withdrawal?.ckbValue ?? 0n) +
-        4000n * CKB,
-    );
-    expect(system.ckbMaturing).toEqual([
-      { ckbCumulative: pending?.ckbValue, maturity: pending?.owned.maturity.toUnix(tip) },
-    ]);
+    expect(system.ckbAvailable).toBe(0n);
+    expect(system.ckbMaturing).toEqual([]);
   });
 });
 

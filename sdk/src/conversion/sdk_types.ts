@@ -311,8 +311,6 @@ export interface SdkManagers {
   ickbLogic: LogicManager;
   /** Limit order manager. */
   order: OrderManager;
-  /** Bot lock scripts whose CKB balances and withdrawals count as bot liquidity. */
-  bots: ccc.Script[];
 }
 
 /**

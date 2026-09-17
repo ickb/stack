@@ -6,7 +6,7 @@ This note describes the current stack-owned contract for estimating iCKB-to-CKB 
 
 This is an off-chain stack mechanism, not protocol law.
 
-- `sdk/node` (the bot) owns bot liquidity and withdrawal-request production.
+- `sdk/node` (the bot) fills orders and produces withdrawal requests; the estimate does not model it.
 - `@ickb/sdk` owns the summary that interface consumers read as `system.ckbAvailable` and `system.ckbMaturing`.
 - `interface` renders that summary into conversion-time estimates.
 
@@ -16,16 +16,12 @@ The current SDK estimate path does **not** use a bot-written pool snapshot.
 
 This direct-scan path assumes the deposit pool is still small enough that interface-side maturity estimates can afford a live scan when needed.
 
-Instead, `sdk/src/sdk.ts` builds the estimate from:
+Instead, `getL1AccountState` builds the estimate from direct scans of pool deposits via `LogicManager.findDeposits(...)`.
 
-- bot plain-capacity cells
-- bot-owned ready and pending withdrawal requests
-- direct scans of pool deposits via `LogicManager.findDeposits(...)`
-
-Ready deposits are counted as immediately available CKB.
+Ready deposits, those whose claim epoch lies within the readiness window (three days by default), are counted as immediately available CKB.
 Not-ready deposits remain in the future maturity buckets.
 
-These scans use the configured `cellPageSize` as the CCC cell-query page size. The page size tunes paging without changing how many total deposits can be collected.
+The bot's own working capital is not counted: the SDK used to carry one hardcoded bot lock per network for this, but that capital only matters when no pool deposit matures inside the window, and a published library should not name one operator's wallet (decisions amendment 52(ai)).
 
 The result is eventually consistent rather than snapshot-atomic: the targeted indexer scans can observe different indexer progress while sharing one sampled tip. The SDK does not reread them to manufacture snapshot semantics.
 

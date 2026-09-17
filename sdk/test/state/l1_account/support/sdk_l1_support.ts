@@ -63,12 +63,10 @@ export function defaultL1Sdk(): IckbSdk {
     ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
     ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
     order: new OrderManager(order, [], udt),
-    bots: [],
   });
 }
 
 export function l1SdkWithManagers(options: {
-  botLock?: ccc.Script;
   logicManager?: LogicManager;
   ownedOwnerManager?: OwnedOwnerManager;
   orderManager?: OrderManager;
@@ -87,6 +85,5 @@ export function l1SdkWithManagers(options: {
     ownedOwner: ownedOwnerManager,
     ickbLogic: logicManager,
     order: orderManager,
-    bots: options.botLock === undefined ? [] : [options.botLock],
   });
 }

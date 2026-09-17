@@ -203,6 +203,5 @@ function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
     ownedOwner,
     ickbLogic: logic,
     order: config.managers.order,
-    bots: config.bots,
   });
 }

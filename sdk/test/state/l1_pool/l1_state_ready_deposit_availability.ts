@@ -20,7 +20,6 @@ afterEach(() => {
 
 describe(L1_STATE_SUITE, () => {
   it("treats ready deposits as available CKB instead of future maturity", async () => {
-    const botLock = script("11");
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -34,7 +33,6 @@ describe(L1_STATE_SUITE, () => {
       .spyOn(logicManager, "findDeposits")
       .mockImplementation(() => repeat(1, readyDeposit));
     const sdk = l1SdkWithManagers({
-      botLock,
       ownedOwnerManager,
       logicManager,
     });

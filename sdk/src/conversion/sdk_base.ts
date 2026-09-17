@@ -28,14 +28,12 @@ export abstract class IckbSdkBase {
   protected readonly ownedOwner: OwnedOwnerManager;
   protected readonly ickbLogic: LogicManager;
   protected readonly order: OrderManager;
-  protected readonly bots: ccc.Script[];
 
-  constructor({ ickbUdt, ownedOwner, ickbLogic, order, bots }: SdkManagers) {
+  constructor({ ickbUdt, ownedOwner, ickbLogic, order }: SdkManagers) {
     this.ickbUdt = ickbUdt;
     this.ownedOwner = ownedOwner;
     this.ickbLogic = ickbLogic;
     this.order = order;
-    this.bots = bots;
   }
 
   /**

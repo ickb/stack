@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DaoManager, IckbUdt, LogicManager, OwnedOwnerManager } from "./core/index.ts";
 import { OrderManager } from "./order/index.ts";
-import { unique, type ScriptDeps } from "./utils/index.ts";
+import type { ScriptDeps } from "./utils/index.ts";
 /** Script deps plus the direct code out point for scripts used as direct code deps. */
 interface CodeScriptDeps extends ScriptDeps {
   codeOutPoint: ccc.OutPointLike;
@@ -13,11 +13,6 @@ interface DeploymentConfig {
   ownedOwner: ScriptDeps;
   order: ScriptDeps;
   dao: ScriptDeps;
-}
-
-interface ResolvedDeploymentConfig {
-  deployment: DeploymentConfig;
-  bots: ccc.ScriptLike[];
 }
 
 /**
@@ -122,51 +117,23 @@ const TESTNET_DEP_GROUP = ccc.CellDep.from({
 });
 
 /**
- * Plain CKB an actor keeps for its own cells and fees: the bot's sizing line for matches
- * and deposits, and what the liquidity estimate nets out of each known bot.
+ * Plain CKB the bot keeps for its own cells and fees: its sizing line for matches and deposits.
  */
 export const CKB_RESERVE = ccc.fixedPointFrom(1000);
 
 /**
- * Array of known bot scripts on the mainnet.
- */
-const MAINNET_KNOWN_BOTS = [
-  {
-    codeHash: "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
-    hashType: "type",
-    args: "0xd096cb29e2f68a85a46bd6bf6cbee6327959ba64",
-  },
-];
-
-/**
- * Array of known bot scripts on the testnet.
- */
-const TESTNET_KNOWN_BOTS = [
-  {
-    codeHash: "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
-    hashType: "type",
-    args: "0xb4380110f7679ac31cefe4925485645d82bf619f",
-  },
-];
-
-/**
  * Retrieves the configuration for the given deployment environment.
  *
- * It sets up various managers (UDT, Logic, OwnedOwner, Order, Dao) and also
- * aggregates a unique list of known bot scripts.
+ * It sets up the managers (UDT, Logic, OwnedOwner, Order, Dao).
  *
  * @param d - Network identifier ("mainnet" or "testnet").
- * @param bots - An optional array of bot script-like objects to augment the list of known bots.
- * @returns An object containing the instantiated managers and bots.
+ * @returns An object containing the instantiated managers.
  *
  * @remarks Builders still return partial transactions. `IckbSdk` owns the
  * shared iCKB completion path as `sdk.completeTransaction(...)`, which callers
  * should invoke explicitly before send.
  */
-export function getConfig(
-  d: "mainnet" | "testnet",
-  bots: ccc.ScriptLike[] = [],
-): {
+export function getConfig(d: "mainnet" | "testnet"): {
   managers: {
     dao: DaoManager;
     ickbUdt: IckbUdt;
@@ -174,9 +141,8 @@ export function getConfig(
     ownedOwner: OwnedOwnerManager;
     order: OrderManager;
   };
-  bots: ccc.Script[];
 } {
-  const { deployment, bots: knownBots } = resolveDeploymentConfig(d, bots);
+  const deployment = resolveDeploymentConfig(d);
 
   const dao = new DaoManager(deployment.dao.script, deployment.dao.cellDeps);
 
@@ -210,14 +176,10 @@ export function getConfig(
       ownedOwner,
       order,
     },
-    bots: [...unique(knownBots.map((b) => ccc.Script.from(b)))],
   };
 }
 
-function resolveDeploymentConfig(
-  d: unknown,
-  bots: ccc.ScriptLike[],
-): ResolvedDeploymentConfig {
+function resolveDeploymentConfig(d: unknown): DeploymentConfig {
   if (d !== "mainnet" && d !== "testnet") {
     throw new TypeError("unsupported iCKB network");
   }
@@ -225,16 +187,12 @@ function resolveDeploymentConfig(
   const depGroup = d === "mainnet" ? MAINNET_DEP_GROUP : TESTNET_DEP_GROUP;
   const udtCode = d === "mainnet" ? MAINNET_XUDT_CODE : TESTNET_XUDT_CODE;
   const logicCode = d === "mainnet" ? MAINNET_LOGIC_CODE : TESTNET_LOGIC_CODE;
-  const networkBots = d === "mainnet" ? MAINNET_KNOWN_BOTS : TESTNET_KNOWN_BOTS;
   return {
-    deployment: {
-      udt: fromWithCode(UDT, udtCode, depGroup),
-      logic: fromWithCode(ICKB_LOGIC, logicCode, depGroup),
-      ownedOwner: from(OWNED_OWNER, depGroup),
-      order: from(ORDER, depGroup),
-      dao: from(DAO, depGroup),
-    },
-    bots: bots.concat(networkBots),
+    udt: fromWithCode(UDT, udtCode, depGroup),
+    logic: fromWithCode(ICKB_LOGIC, logicCode, depGroup),
+    ownedOwner: from(OWNED_OWNER, depGroup),
+    order: from(ORDER, depGroup),
+    dao: from(DAO, depGroup),
   };
 }
 

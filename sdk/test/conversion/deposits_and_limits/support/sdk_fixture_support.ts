@@ -77,7 +77,6 @@ export function baseTransactionFixture(
         ownedOwner: ownedOwnerManager,
         ickbLogic: logicManager,
         order: orderManager,
-        bots: [botLock],
       }),
       options.completion,
     ),
@@ -133,7 +132,6 @@ export function testSdk(
     ownedOwner: ownedOwnerManager,
     ickbLogic: logicManager,
     order: orderManager,
-    bots: [],
   });
   withCompletion(sdk, options.completion);
   return { sdk, ickbUdt, logicManager, ownedOwnerManager, orderManager, lock };

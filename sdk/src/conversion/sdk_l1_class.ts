@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../constants.ts";
 import {
   ickbExchangeRatio,
   type ReceiptCell,
@@ -9,11 +8,9 @@ import { Info, Ratio, type OrderGroup } from "../order/index.ts";
 import { collect, findCells, isPlainCapacityCell, unique } from "../utils/index.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
 import { orderGroupWithMaturity } from "./sdk_maturity_order_group.ts";
-import { projectAccountAvailability } from "./sdk_projection.ts";
 import type {
   AccountState,
   GetL1StateOptions,
-  MaturingCkb,
   PoolDepositRangeOptions,
   PoolDepositState,
   SystemState,
@@ -33,10 +30,9 @@ interface LockCells {
  * SDK layer that reads public and account L1 state.
  *
  * @remarks Every read is complete and uncapped: a large book or pool costs a
- * slower read, never a partial or failed one. Each account lock and each known
- * bot lock is enumerated by one uncached unfiltered exact-lock scan and
- * classified client-side, so the account read and the bot maturity estimate
- * share one observation of the same cells (decisions amendment 52).
+ * slower read, never a partial or failed one. Each account lock is enumerated
+ * by one uncached unfiltered exact-lock scan and classified client-side
+ * (decisions amendment 52).
  */
 export class IckbSdkL1 extends IckbSdkConversion {
   /**
@@ -58,32 +54,25 @@ export class IckbSdkL1 extends IckbSdkConversion {
       collect(this.order.findOrders(client)),
       getFeeRate(client),
       Promise.all(
-        [...unique([...locks, ...this.bots])].map(async (lock) =>
-          this.readLockCells(client, lock, tip),
-        ),
+        [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),
     ]);
-    const { ckbAvailable, ckbMaturing } = this.ckbProjection(
-      lockCells,
-      poolDeposits,
-      tip,
-    );
+    // The CKB that can fill orders is the public pool: ready deposits now, the rest at maturity.
+    const poolCkb = poolDepositCkb(poolDeposits, tip);
     const { systemOrders, userOrders } = partitionOrders(orders, locks, exchangeRatio);
     const system = {
       feeRate,
       tip,
       exchangeRatio,
       orderPool: systemOrders,
-      ckbAvailable,
-      ckbMaturing,
+      ckbAvailable: poolCkb.ready,
+      ckbMaturing: cumulativeCkbMaturing(poolCkb.maturing),
       poolDeposits,
     };
     return {
       system,
       user: { orders: userOrders.map((group) => orderGroupWithMaturity(group, system)) },
-      account: accountState(
-        lockCells.filter(({ lock }) => locks.some((l) => l.eq(lock))),
-      ),
+      account: accountState(lockCells),
     };
   }
 
@@ -124,35 +113,6 @@ export class IckbSdkL1 extends IckbSdkConversion {
       receipts,
       withdrawalGroups,
     };
-  }
-
-  /** CKB the system can pay out: ready pool deposits plus each known bot's spendable CKB. */
-  private ckbProjection(
-    lockCells: readonly LockCells[],
-    poolDeposits: PoolDepositState,
-    tip: ccc.ClientBlockHeader,
-  ): Pick<SystemState, "ckbAvailable" | "ckbMaturing"> {
-    const poolCkb = poolDepositCkb(poolDeposits, tip);
-    let ckbAvailable = poolCkb.ready;
-    const maturing: MaturingCkb[] = [...poolCkb.maturing];
-    // A bot spends what its own turn projects for it, less the reserve it keeps.
-    for (const bot of lockCells.filter(({ lock }) => this.bots.some((b) => b.eq(lock)))) {
-      const projection = projectAccountAvailability(accountState([bot]), {
-        available: [],
-        pending: [],
-      });
-      const ready = projection.ckbAvailable - CKB_RESERVE;
-      if (ready > 0n) {
-        ckbAvailable += ready;
-      }
-      for (const group of projection.pendingWithdrawals) {
-        maturing.push({
-          ckbValue: group.ckbValue,
-          maturity: group.owned.maturity.toUnix(tip),
-        });
-      }
-    }
-    return { ckbAvailable, ckbMaturing: cumulativeCkbMaturing(maturing) };
   }
 }
 

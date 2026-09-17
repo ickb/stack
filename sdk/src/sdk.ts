@@ -61,9 +61,8 @@ const IckbSdkImplementation = class IckbSdk extends IckbSdkL1 {
   public static fromChain(chain: SupportedChain): IckbSdk {
     const {
       managers: { ickbUdt, ownedOwner, logic, order },
-      bots,
     } = getConfig(chain);
-    return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order, bots });
+    return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order });
   }
 };
 

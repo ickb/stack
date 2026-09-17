@@ -1,16 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { offlineTestnetClient, script as typeScript } from "@ickb/testkit";
+import { offlineTestnetClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: typeScript(byte).codeHash,
-    hashType: "data1",
-    args: "0x",
-  });
-}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,11 +44,9 @@ describe("getConfig", () => {
 });
 
 describe("getConfig defaults", () => {
-  it("resolves mainnet defaults and appends custom bot locks", () => {
-    const customBot = script("aa");
-    const config = getConfig("mainnet", [customBot]);
+  it("resolves mainnet defaults", () => {
+    const config = getConfig("mainnet");
     const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
-    const customBots = config.bots.filter((bot) => bot.eq(customBot));
     const logicScript =
       "0x350000001000000030000000310000002a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd30200000000";
     const udtScript =
@@ -83,7 +73,5 @@ describe("getConfig defaults", () => {
     for (const manager of [dao, logic, ownedOwner, order]) {
       expect(manager.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
     }
-    expect(customBots).toHaveLength(1);
-    expect(config.bots).toHaveLength(2);
   });
 });
