@@ -1,8 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import { convert } from "../../../../src/core/index.ts";
-import type { Match } from "../../../../src/order/index.ts";
+import type { Match } from "../../../../src/order/matcher.ts";
 
 import { CKB_RESERVE } from "../../../../src/constants.ts";
+import { maxBigInt } from "../../../../src/utils/index.ts";
 import type { BotDecision, BotState, BotStateSummary } from "./types.ts";
 
 /**
@@ -61,10 +62,6 @@ export function transactionShape(tx: ccc.Transaction): BotDecision["transactionS
 /** CKB a match may spend: what is available above the reserve. */
 export function matchableCkb(ckb: bigint): bigint {
   return maxBigInt(0n, ckb - CKB_RESERVE);
-}
-
-export function maxBigInt(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
 }
 
 export function matchedOrderOutPoints(

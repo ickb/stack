@@ -6,7 +6,8 @@ import type {
   ConversionTransactionContext,
   SystemState,
 } from "../../../src/conversion/sdk_types.ts";
-import { isRefused, type OrderGroup } from "../../../src/order/index.ts";
+import type { OrderGroup } from "../../../src/order/cells.ts";
+import { isRefused } from "../../../src/order/fill.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import type { Budgets } from "./draw.ts";
 

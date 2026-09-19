@@ -4,10 +4,10 @@ import {
   type ReceiptCell,
   type WithdrawalGroup,
 } from "../core/index.ts";
-import { Info, Ratio, type OrderGroup } from "../order/index.ts";
+import type { OrderGroup } from "../order/cells.ts";
+import { Ratio } from "../order/ratio.ts";
 import { collect, findCells, isPlainCapacityCell, unique } from "../utils/index.ts";
 import { IckbSdkConversion } from "./sdk_conversion_class.ts";
-import { orderGroupWithMaturity } from "./sdk_maturity_order_group.ts";
 import type {
   AccountState,
   GetL1StateOptions,
@@ -51,7 +51,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const [poolDeposits, orders, feeRate, lockCells] = await Promise.all([
       this.getPoolDeposits(client, tip, options?.poolDeposits),
-      collect(this.order.findOrders(client)),
+      this.order.findOrders(client),
       getFeeRate(client),
       Promise.all(
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
@@ -71,7 +71,7 @@ export class IckbSdkL1 extends IckbSdkConversion {
     };
     return {
       system,
-      user: { orders: userOrders.map((group) => orderGroupWithMaturity(group, system)) },
+      user: { orders: userOrders },
       account: accountState(lockCells),
     };
   }
@@ -130,7 +130,6 @@ function partitionOrders(
   locks: readonly ccc.Script[],
   exchangeRatio: Ratio,
 ): { systemOrders: OrderGroup[]; userOrders: OrderGroup[] } {
-  const midInfo = new Info(exchangeRatio, exchangeRatio, 1);
   const userOrders: OrderGroup[] = [];
   const systemOrders: OrderGroup[] = [];
   for (const group of orders) {
@@ -141,8 +140,8 @@ function partitionOrders(
     const { order } = group;
     const info = order.data.info;
     if (
-      (order.isCkb2UdtMatchable() && info.ckb2UdtCompare(midInfo) < 0) ||
-      (order.isUdt2CkbMatchable() && info.udt2CkbCompare(midInfo) < 0)
+      (order.isCkb2UdtMatchable() && info.ckbToUdt.compare(exchangeRatio) < 0) ||
+      (order.isUdt2CkbMatchable() && exchangeRatio.compare(info.udtToCkb) < 0)
     ) {
       systemOrders.push(group);
     }

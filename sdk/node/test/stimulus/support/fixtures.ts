@@ -9,9 +9,9 @@ import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/sdk_types.ts";
 import { ReceiptData } from "../../../../src/core/entities.ts";
 import type { ReceiptCell } from "../../../../src/core/index.ts";
-import { OrderCell, type OrderGroup, Ratio } from "../../../../src/order/index.ts";
-import { MasterCell } from "../../../../src/order/model/cells.ts";
-import { OrderData } from "../../../../src/order/model/order_data.ts";
+import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
+import { OrderData } from "../../../../src/order/order_data.ts";
+import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import type { ExchangeRatio } from "../../../../src/utils/index.ts";
 import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
@@ -136,11 +136,13 @@ export async function order(
   const manager = getConfig("testnet").managers.order;
   const { udtScript, script: orderLock } = manager;
   const ckbValue = isMatchable ? 100n * CKB : 0n;
-  const master = MasterCell.from({
-    outPoint: { txHash, index: 1n },
-    cellOutput: { lock: orderLock, type: orderLock },
-    outputData: "0x",
-  });
+  const master = new MasterCell(
+    ccc.Cell.from({
+      outPoint: { txHash, index: 1n },
+      cellOutput: { lock: orderLock, type: orderLock },
+      outputData: "0x",
+    }),
+  );
   const outputData = OrderData.from({
     udtValue: 0n,
     master: { type: "relative", value: { distance: 1n, padding: new Uint8Array(32) } },
@@ -184,10 +186,7 @@ export async function order(
       return committedTransactionResponse(transaction);
     },
   });
-  const groups: OrderGroup[] = [];
-  for await (const group of manager.findOrders(client)) {
-    groups.push(group);
-  }
+  const groups = await manager.findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");

@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { partialOrderFee } from "../../../src/order/io/order_io.ts";
-import { addOrderMatch } from "../../../src/order/io/order_transaction.ts";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import type { Match } from "../../../src/order/order.ts";
+import { partialOrderFee } from "../../../src/order/fee.ts";
+import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
+import { OrderManager } from "../../../src/order/order.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 
 function fullMatch(groups: Array<ReturnType<typeof resolvedOrderGroup>>): Match {
@@ -40,14 +39,12 @@ describe("prepared partial serialized size", () => {
     if (udtScript === undefined) {
       throw new Error("expected a UDT type script");
     }
-    const context = { script: first.cell.cellOutput.lock, cellDeps: [], udtScript };
-    const one = addOrderMatch(
-      context,
+    const manager = new OrderManager(first.cell.cellOutput.lock, [], udtScript);
+    const one = manager.addMatch(
       ccc.Transaction.default(),
       fullMatch([resolvedOrderGroup(first)]),
     );
-    const two = addOrderMatch(
-      context,
+    const two = manager.addMatch(
       ccc.Transaction.default(),
       fullMatch([resolvedOrderGroup(first), resolvedOrderGroup(second)]),
     );

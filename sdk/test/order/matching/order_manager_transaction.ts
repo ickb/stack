@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import { OrderCell, OrderGroup } from "../../../src/order/model/cells.ts";
-import { Info } from "../../../src/order/model/info.ts";
-import { Ratio } from "../../../src/order/model/ratio.ts";
+import { OrderCell, OrderGroup } from "../../../src/order/cells.ts";
+import { Info } from "../../../src/order/info.ts";
+import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { OrderManager } from "../../../src/order/order.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
@@ -77,8 +77,8 @@ describe("OrderManager no-op transaction helpers", () => {
       outPoint: { txHash: byte32FromByte("55"), index: 0n },
     });
 
-    expect(manager.isMaster(master)).toBe(true);
-    expect(manager.isMaster(order.cell)).toBe(false);
+    expect(manager.isOrder(order.cell)).toBe(true);
+    expect(manager.isOrder(master)).toBe(false);
     expect(
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
@@ -93,12 +93,10 @@ describe("OrderManager no-op transaction helpers", () => {
 describe("OrderManager match and melt transaction helpers", () => {
   registerMatchMeltSuccessTests();
   registerMintTransactionValidationTests();
-  registerMatchInputValidationTests();
   registerMatchAccountingValidationTests();
   registerMatchPartialValidationTests();
   registerOrderGroupProvenanceTests();
   registerMeltGroupValidationTests();
-  registerMatcherConstructorValidationTests();
 });
 
 function registerMatchMeltSuccessTests(): void {
@@ -184,30 +182,6 @@ function registerMintTransactionValidationTests(): void {
   });
 }
 
-function registerMatchInputValidationTests(): void {
-  it("rejects a match order already present in transaction inputs", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 10n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("54"), index: 0n },
-    });
-    const tx = ccc.Transaction.default();
-    tx.addInput(order.cell);
-    const group = resolvedOrderGroup(order);
-
-    expect(() =>
-      manager.addMatch(tx, {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [{ group, ckbOut: order.ckbValue, udtOut: order.udtValue }],
-      }),
-    ).toThrow(`Match order ${order.cell.outPoint.toHex()} is already being spent`);
-  });
-}
-
 function registerMatchAccountingValidationTests(): void {
   it("rejects mismatched aggregate deltas without mutating the transaction", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
@@ -259,16 +233,6 @@ function registerMatchPartialValidationTests(): void {
     const group = resolvedOrderGroup(order);
     const foreignGroup = resolvedOrderGroup(foreign);
 
-    expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [
-          { group, ckbOut: order.ckbValue, udtOut: order.udtValue },
-          { group, ckbOut: order.ckbValue, udtOut: order.udtValue },
-        ],
-      }),
-    ).toThrow(`Match contains duplicate order cells: ${order.cell.outPoint.toHex()}`);
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
@@ -332,7 +296,11 @@ function registerMeltGroupValidationTests(): void {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      info: Info.from({
+        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
       master: { type: "absolute", value: { txHash: byte32FromByte("79"), index: 1n } },
       outPoint: { txHash: byte32FromByte("5d"), index: 0n },
     });
@@ -348,7 +316,11 @@ function registerMeltGroupValidationTests(): void {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      info: Info.from({
+        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
       master: { type: "absolute", value: { txHash: byte32FromByte("77"), index: 1n } },
       outPoint: { txHash: byte32FromByte("5b"), index: 0n },
     });
@@ -368,7 +340,11 @@ function registerMeltGroupValidationTests(): void {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      info: Info.from({
+        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
       master: { type: "absolute", value: { txHash: byte32FromByte("7a"), index: 1n } },
       outPoint: { txHash: byte32FromByte("5e"), index: 0n },
     });
@@ -399,54 +375,6 @@ function registerMeltGroupValidationTests(): void {
     expect(() => manager.melt(ccc.Transaction.default(), [foreignOrderGroup])).toThrow(
       WRONG_MANAGER_ERROR,
     );
-  });
-
-  it("rejects duplicated or already-spent melt inputs", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("5a"), index: 0n },
-    });
-    const group = resolvedOrderGroup(order);
-    const tx = ccc.Transaction.default();
-    tx.addInput(order.cell);
-
-    expect(() => manager.melt(ccc.Transaction.default(), [group, group])).toThrow(
-      `Melt order ${order.cell.outPoint.toHex()} is duplicated`,
-    );
-    expect(() => manager.melt(tx, [group])).toThrow(
-      `Melt order ${order.cell.outPoint.toHex()} is already being spent`,
-    );
-  });
-}
-
-function registerMatcherConstructorValidationTests(): void {
-  it("rejects negative order matcher constructor values", () => {
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("59"), index: 0n },
-    });
-    const constructMatcher = (): OrderMatcher =>
-      new OrderMatcher(resolvedOrderGroup(order), true, {
-        aScale: 1n,
-        bScale: 1n,
-        aIn: -1n,
-        bIn: 0n,
-        aMin: 0n,
-        bMinMatch: 0n,
-        bMaxMatch: 0n,
-        bMaxOut: 0n,
-        realRatioNumerator: 1n,
-        realRatioDenominator: 1n,
-      });
-
-    expect(constructMatcher).toThrow("OrderMatcher aIn must be non-negative");
   });
 }
 

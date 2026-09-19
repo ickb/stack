@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Ratio } from "../../../src/order/index.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import {
   conversionContext,
   hash,

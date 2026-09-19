@@ -6,7 +6,7 @@ import {
   estimate,
 } from "../../../src/conversion/sdk_estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/sdk_types.ts";
-import { OrderConversionRepresentabilityError } from "../../../src/order/index.ts";
+import { OrderConversionRepresentabilityError } from "../../../src/order/conversion.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,

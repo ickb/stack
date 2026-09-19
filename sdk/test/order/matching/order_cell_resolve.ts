@@ -1,36 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { OrderCell } from "../../../src/order/model/cells.ts";
-import { Relative } from "../../../src/order/model/relative.ts";
+import { OrderCell } from "../../../src/order/cells.ts";
 import { OrderManager } from "../../../src/order/order.ts";
+import { Relative } from "../../../src/order/relative.ts";
 import { ORDER_CELL_RESOLVE_SUITE } from "../fixtures/order_constants.ts";
-import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import {
   directionalInfo,
   dualInfo,
   makeOrderCell,
 } from "./support/order_order_helpers.ts";
-describe("OrderManager.addMatch", () => {
-  it("rejects duplicate partials for the same order cell", () => {
-    const manager = new OrderManager(script("11"), [], script("22"));
-    const order = makeUdtToCkbOrder();
-    const partial = {
-      group: resolvedOrderGroup(order),
-      ckbOut: order.ckbValue,
-      udtOut: order.udtValue,
-    };
-
-    expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [partial, partial],
-      }),
-    ).toThrow(`Match contains duplicate order cells: ${order.cell.outPoint.toHex()}`);
-  });
-});
-
 describe("OrderManager.mint", () => {
   it("creates an order output with the requested CKB value plus occupied capacity", () => {
     const lock = script("11");

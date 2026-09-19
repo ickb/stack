@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { TESTNET_SCRIPTS } from "@ckb-ccc/core/advanced";
-import { OrderManager } from "../../../../src/order/index.ts";
-import { partialOrderFee } from "../../../../src/order/io/order_io.ts";
+import { partialOrderFee } from "../../../../src/order/fee.ts";
+import { OrderManager } from "../../../../src/order/order.ts";
 
 import { chainState, FakeClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";

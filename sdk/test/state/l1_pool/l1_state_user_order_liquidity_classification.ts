@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OrderCell, OrderGroup, OrderManager } from "../../../src/order/index.ts";
+import { OrderManager } from "../../../src/order/order.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -33,19 +33,6 @@ describe(L1_STATE_SUITE, () => {
       ownerLock: userLock,
       txHashByte: "a1",
     });
-    // A stale maturity on the yielded group must not leak into the state's fresh parse.
-    const staleGroup = new OrderGroup(
-      ownerOrder.group.master,
-      new OrderCell({
-        cell: ownerOrder.group.order.cell,
-        data: ownerOrder.group.order.data,
-        ckbUnoccupied: ownerOrder.group.order.ckbUnoccupied,
-        absTotal: ownerOrder.group.order.absTotal,
-        absProgress: ownerOrder.group.order.absProgress,
-        maturity: 999n,
-      }),
-      ownerOrder.group.origin,
-    );
     const marketOrder = makeOrderGroup({
       orderScript,
       udtScript: udt,
@@ -56,11 +43,10 @@ describe(L1_STATE_SUITE, () => {
       orderCapacity: ccc.fixedPointFrom(300),
       udtValue: 1n,
     });
-    vi.spyOn(orderManager, "findOrders").mockImplementation(async function* () {
-      yield staleGroup;
-      yield marketOrder.group;
-      await Promise.resolve();
-    });
+    vi.spyOn(orderManager, "findOrders").mockResolvedValue([
+      ownerOrder.group,
+      marketOrder.group,
+    ]);
 
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(headerLike(1n)),
@@ -69,12 +55,7 @@ describe(L1_STATE_SUITE, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock]);
 
-    expect(state.user.orders).toHaveLength(1);
-    expect(state.user.orders[0]).not.toBe(ownerOrder.group);
-    expect(state.user.orders[0]?.master).toBe(ownerOrder.group.master);
-    expect(state.user.orders[0]?.origin).toBe(ownerOrder.group.origin);
-    expect(state.user.orders[0]?.order).not.toBe(ownerOrder.group.order);
-    expect(state.user.orders[0]?.order.maturity).toBe(0n);
+    expect(state.user.orders).toEqual([ownerOrder.group]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 });
@@ -133,10 +114,7 @@ function l1StateWithMarketOrder({
     orderCapacity: ccc.fixedPointFrom(300),
     udtValue: 1n,
   });
-  vi.spyOn(orderManager, "findOrders").mockImplementation(async function* () {
-    yield marketOrder.group;
-    await Promise.resolve();
-  });
+  vi.spyOn(orderManager, "findOrders").mockResolvedValue([marketOrder.group]);
 
   const client = new FeeRateStubClient({
     getTipHeader: tipHeaderHandler(headerLike(1n)),

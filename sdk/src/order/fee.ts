@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import type { OrderGroup } from "../model/cells.ts";
+import { ceilDiv } from "../utils/index.ts";
+import type { OrderGroup } from "./cells.ts";
 
 const CELL_INPUT_SERIALIZED_SIZE = 44;
 // CellOutput table/script wrappers plus DynVec offset; output data Bytes plus offset.
@@ -25,5 +26,5 @@ export function partialOrderFee(orderPool: OrderGroup[], feeRate: ccc.Num): bigi
     0,
   );
   const bytes = ccc.numFrom(orderSize + PREPARED_PARTIAL_SERIALIZATION_OVERHEAD);
-  return (bytes * feeRate + 999n) / 1000n;
+  return ceilDiv(bytes * feeRate, 1000n);
 }

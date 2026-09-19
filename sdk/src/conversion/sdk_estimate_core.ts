@@ -1,4 +1,7 @@
-import { OrderConversionRepresentabilityError, quoteConversion } from "../order/index.ts";
+import {
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "../order/conversion.ts";
 import type { ValueComponents } from "../utils/index.ts";
 import { maturity } from "./sdk_maturity.ts";
 import type { ConversionOrderEstimate, SystemState } from "./sdk_types.ts";

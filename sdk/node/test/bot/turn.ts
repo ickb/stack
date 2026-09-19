@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager } from "../../../src/order/index.ts";
+import { OrderManager } from "../../../src/order/order.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 
 import {

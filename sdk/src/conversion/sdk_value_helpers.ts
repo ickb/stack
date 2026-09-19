@@ -1,7 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
 import { convert, type IckbDepositCell } from "../core/index.ts";
 import { sortByMaturity } from "../core/withdrawal_selection.ts";
-import type { Ratio } from "../order/index.ts";
+import type { Ratio } from "../order/ratio.ts";
 import { compareBigInt } from "../utils/index.ts";
 import {
   CONVERSION_MATURITY_BUCKET_MS,

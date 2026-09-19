@@ -1,13 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
-import {
-  Info,
-  OrderCell,
-  OrderGroup,
-  type OrderManager,
-} from "../../../../src/order/index.ts";
-import { MasterCell } from "../../../../src/order/model/cells.ts";
-import { OrderData } from "../../../../src/order/model/order_data.ts";
+import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
+import { Info } from "../../../../src/order/info.ts";
+import type { OrderManager } from "../../../../src/order/order.ts";
+import { OrderData } from "../../../../src/order/order_data.ts";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {
@@ -30,10 +26,6 @@ class ProjectionOrderCell extends OrderCell {
   ) {
     super(fields);
     this.projection = projection;
-  }
-
-  public override isDualRatio(): boolean {
-    return this.projection.isDualRatio;
   }
 
   public override isMatchable(): boolean {
@@ -64,7 +56,6 @@ class ProjectionOrderGroup extends OrderGroup {
       absProgress: projection.isMatchable
         ? 0n
         : projection.ckbValue + projection.udtValue,
-      maturity: undefined,
     });
     super(
       new MasterCell(
@@ -178,10 +169,7 @@ export async function resolveOrderGroupFixture(
         : undefined;
     },
   });
-  const groups: OrderGroup[] = [];
-  for await (const group of orderManager.findOrders(client)) {
-    groups.push(group);
-  }
+  const groups = await orderManager.findOrders(client);
   if (groups.length !== 1 || groups[0] === undefined) {
     throw new Error(
       `Expected one resolved order group, received ${groups.length.toString()}`,

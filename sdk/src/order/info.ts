@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedUint8, type ExchangeRatio } from "../../utils/index.ts";
+import { CheckedUint8, type ExchangeRatio } from "../utils/index.ts";
 import { isValidEntity } from "./entity_validity.ts";
 import { Ratio } from "./ratio.ts";
 
@@ -38,8 +38,6 @@ export interface Info {
   udtToCkb: Ratio;
   /** Base-2 exponent for the minimum CKB match amount. */
   ckbMinMatchLog: number;
-  /** Compares the effective CKB-to-UDT price with another order's price. */
-  ckb2UdtCompare(other: Info): number;
   /** Creates a copy of this order info. */
   clone(): Info;
   /** Returns whether another value has the same order info. */
@@ -60,8 +58,6 @@ export interface Info {
   toBytes(): ccc.Bytes;
   /** Serializes the order info to full-width hexadecimal. */
   toHex(): ccc.Hex;
-  /** Compares UDT-to-CKB prices in the order book's reverse price order. */
-  udt2CkbCompare(other: Info): number;
   /** Throws if the ratios or minimum-match exponent are invalid. */
   validate(): void;
 }
@@ -71,7 +67,7 @@ export interface Info {
 // Orders under twice that (about 1,375 CKB, about 1,150 iCKB) are taken whole or left;
 // that band must stay under the bot's refill line (`ICKB_REFILL_BELOW`, 2,000 iCKB) so a
 // buyer the bot cannot complete always fires the refill deposit: 37 would break it.
-const CKB_MIN_MATCH_LOG_DEFAULT = 36;
+export const CKB_MIN_MATCH_LOG_DEFAULT = 36;
 
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const InfoImplementation = class Info extends InfoBase {
@@ -104,16 +100,12 @@ const InfoImplementation = class Info extends InfoBase {
     return new Info(Ratio.from(ckbToUdt), Ratio.from(udtToCkb), Number(ckbMinMatchLog));
   }
 
-  /** Creates directional order info from one ratio. */
-  public static create(
-    isCkb2Udt: boolean,
-    ratioLike: ExchangeRatio,
-    ckbMinMatchLog = Info.ckbMinMatchLogDefault(),
-  ): Info {
+  /** Creates directional order info from one ratio, at the default minimum match. */
+  public static create(isCkb2Udt: boolean, ratioLike: ExchangeRatio): Info {
     return Info.from({
       ckbToUdt: isCkb2Udt ? ratioLike : Ratio.empty(),
       udtToCkb: isCkb2Udt ? Ratio.empty() : ratioLike,
-      ckbMinMatchLog,
+      ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT,
     });
   }
 
@@ -175,21 +167,6 @@ const InfoImplementation = class Info extends InfoBase {
   public isDualRatio(): boolean {
     return this.isCkb2Udt() && this.isUdt2Ckb();
   }
-
-  /** Compares the CKB-to-UDT side against another order info. */
-  public ckb2UdtCompare(other: Info): number {
-    return this.ckbToUdt.compare(other.ckbToUdt);
-  }
-
-  /** Compares the UDT-to-CKB side against another order info. */
-  public udt2CkbCompare(other: Info): number {
-    return other.udtToCkb.compare(this.udtToCkb);
-  }
-
-  /** Returns the default minimum CKB match exponent for newly created orders. */
-  public static ckbMinMatchLogDefault(): number {
-    return CKB_MIN_MATCH_LOG_DEFAULT;
-  }
 };
 
 /** CCC-backed order-info constructor and codec. */
@@ -197,8 +174,7 @@ const InfoImplementation = class Info extends InfoBase {
 export const Info: {
   byteLength?: number;
   new (ckbToUdt: Ratio, udtToCkb: Ratio, ckbMinMatchLog: number): Info;
-  ckbMinMatchLogDefault: () => number;
-  create: (isCkb2Udt: boolean, ratioLike: ExchangeRatio, ckbMinMatchLog?: number) => Info;
+  create: (isCkb2Udt: boolean, ratioLike: ExchangeRatio) => Info;
   decode: (encoded: ccc.BytesLike) => Info;
   encode: (info: InfoLike) => ccc.Bytes;
   from: (info: InfoLike) => Info;

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../../../src/core/index.ts";
-import { OrderGroup, Ratio } from "../../../src/order/index.ts";
-import { MasterCell } from "../../../src/order/model/cells.ts";
+import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 
 import { headerLike, script } from "@ickb/testkit";

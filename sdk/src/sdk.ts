@@ -11,7 +11,8 @@ import type {
   SdkManagers,
   SystemState,
 } from "./conversion/sdk_types.ts";
-import type { Info, OrderGroup } from "./order/index.ts";
+import type { OrderGroup } from "./order/cells.ts";
+import type { Info } from "./order/info.ts";
 import type { SupportedChain, ValueComponents } from "./utils/index.ts";
 
 /**

@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedUint64LE, compareBigInt, type ExchangeRatio } from "../../utils/index.ts";
+import { CheckedUint64LE, compareBigInt, type ExchangeRatio } from "../utils/index.ts";
 import { isValidEntity } from "./entity_validity.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
@@ -19,8 +19,6 @@ const RatioBase = ccc.Entity.Base<ExchangeRatio, Ratio>();
  * zero. Mixed empty/populated values are invalid.
  */
 export interface Ratio extends ExchangeRatio {
-  /** Applies a directional fee and returns the reduced adjusted ratio. */
-  applyFee(isCkb2Udt: boolean, fee: ccc.Num, feeBase: ccc.Num): Ratio;
   /** Creates a copy of this ratio. */
   clone(): Ratio;
   /** Compares effective CKB-to-UDT prices, returning their numeric ordering. */
@@ -29,12 +27,6 @@ export interface Ratio extends ExchangeRatio {
   convert(isCkb2Udt: boolean, amount: ccc.FixedPoint, mustCeil: boolean): ccc.FixedPoint;
   /** Returns whether another value has the same scales. */
   eq(other: ExchangeRatio): boolean;
-  /** Returns reduced direction-oriented scales after applying the fee fraction. */
-  feeAdjustedScales(
-    isCkb2Udt: boolean,
-    fee: ccc.Num,
-    feeBase: ccc.Num,
-  ): { aScale: ccc.Num; bScale: ccc.Num };
   /** Returns the CKB hash of the serialized ratio. */
   hash(): ccc.Hex;
   /** Returns whether both scales are zero. */
@@ -125,60 +117,6 @@ const RatioImplementation = class Ratio extends RatioBase {
     }
 
     return compareBigInt(this.ckbScale * other.udtScale, other.ckbScale * this.udtScale);
-  }
-
-  /** Returns a fee-adjusted ratio for one conversion direction. */
-  // eslint-disable-next-line @typescript-eslint/prefer-return-this-type -- A nonzero fee returns a distinct base Ratio.
-  public applyFee(isCkb2Udt: boolean, fee: ccc.Num, feeBase: ccc.Num): Ratio {
-    if (fee >= feeBase) {
-      throw new Error("Fee too big relative to feeBase");
-    }
-    if (fee === 0n) {
-      return this;
-    }
-    const { aScale, bScale } = this.feeAdjustedScales(isCkb2Udt, fee, feeBase);
-
-    if (aScale > maxUint64 || bScale > maxUint64) {
-      throw new Error("Ratio scale exceeds Uint64");
-    }
-
-    return Ratio.from({
-      ckbScale: isCkb2Udt ? aScale : bScale,
-      udtScale: isCkb2Udt ? bScale : aScale,
-    });
-  }
-
-  /** Computes reduced direction-specific scales after applying a fee. */
-  public feeAdjustedScales(
-    isCkb2Udt: boolean,
-    fee: ccc.Num,
-    feeBase: ccc.Num,
-  ): { aScale: ccc.Num; bScale: ccc.Num } {
-    if (fee < 0n) {
-      throw new Error("Fee cannot be negative");
-    }
-    if (feeBase <= 0n) {
-      throw new Error("Fee base must be positive");
-    }
-    if (fee >= feeBase) {
-      throw new Error("Fee too big relative to feeBase");
-    }
-    if (!this.isPopulated()) {
-      throw new Error("Invalid ExchangeRatio");
-    }
-
-    let { ckbScale: aScale, udtScale: bScale } = this;
-    if (!isCkb2Udt) {
-      [aScale, bScale] = [bScale, aScale];
-    }
-
-    aScale *= feeBase - fee;
-    bScale *= feeBase;
-    const divisor = ccc.gcd(aScale, bScale);
-    return {
-      aScale: aScale / divisor,
-      bScale: bScale / divisor,
-    };
   }
 
   /** Converts an amount in the requested direction with optional ceiling. */

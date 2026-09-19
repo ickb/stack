@@ -7,13 +7,16 @@ import {
   type IckbDepositCell,
   WithdrawalGroup,
 } from "../../../../src/core/index.ts";
-import { Info, type Match, OrderGroup, Ratio } from "../../../../src/order/index.ts";
 import {
   attestResolvedOrderGroup,
   MasterCell,
   OrderCell,
-} from "../../../../src/order/model/cells.ts";
-import { OrderData } from "../../../../src/order/model/order_data.ts";
+  OrderGroup,
+} from "../../../../src/order/cells.ts";
+import { Info } from "../../../../src/order/info.ts";
+import type { Match } from "../../../../src/order/matcher.ts";
+import { OrderData } from "../../../../src/order/order_data.ts";
+import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 
 import {
@@ -343,10 +346,7 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
       return committedTransactionResponse(mint);
     },
   });
-  const groups: OrderGroup[] = [];
-  for await (const group of manager.findOrders(client)) {
-    groups.push(group);
-  }
+  const groups = await manager.findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");

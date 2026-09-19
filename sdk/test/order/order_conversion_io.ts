@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { quoteConversion } from "../../src/order/index.ts";
-import { OrderConversionRepresentabilityError } from "../../src/order/matching/order_conversion.ts";
+import {
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "../../src/order/conversion.ts";
 
 describe("order conversion and I/O", () => {
   it("rejects unrepresentable quotes", () => {

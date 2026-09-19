@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { DaoHeaderIndexError, DaoOutputLimitError } from "../core/index.ts";
-import { OrderConversionRepresentabilityError } from "../order/index.ts";
+import { OrderConversionRepresentabilityError } from "../order/conversion.ts";
 import { isIckbError } from "./sdk_error.ts";
 
 /**

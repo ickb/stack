@@ -1,5 +1,5 @@
-import { ccc } from "@ckb-ccc/core";
-import type { ValueComponents } from "../../utils/index.ts";
+import type { ccc } from "@ckb-ccc/core";
+import type { ValueComponents } from "../utils/index.ts";
 import { OrderData } from "./order_data.ts";
 
 // The resolver's own group, keyed by its order cell: matching and transactions use this
@@ -23,35 +23,25 @@ export class OrderCell implements ValueComponents {
   public readonly absTotal: ccc.Num;
   /** Absolute matched progress in the order's comparison units. */
   public readonly absProgress: ccc.Num;
-  /** Estimated completion maturity, `0n` for complete orders, or `undefined` when unavailable. */
-  public readonly maturity: bigint | undefined;
 
-  /**
-   * Creates an instance of OrderCell. Core parsing sets `maturity` to `undefined` for
-   * in-progress or dual orders and `0n` for completed directional orders; higher-level
-   * state may replace it with an estimated Unix timestamp in milliseconds.
-   */
   constructor({
     cell,
     data,
     ckbUnoccupied,
     absTotal,
     absProgress,
-    maturity,
   }: {
     cell: ccc.Cell;
     data: OrderData;
     ckbUnoccupied: ccc.FixedPoint;
     absTotal: ccc.Num;
     absProgress: ccc.Num;
-    maturity: bigint | undefined;
   }) {
     this.cell = cell;
     this.data = data;
     this.ckbUnoccupied = ckbUnoccupied;
     this.absTotal = absTotal;
     this.absProgress = absProgress;
-    this.maturity = maturity;
   }
 
   /**
@@ -134,19 +124,7 @@ export class OrderCell implements ValueComponents {
       udtToCkbCkbScale: udtToCkb.ckbScale,
     });
 
-    // Maturity: undefined if in-progress or dual; zero if complete
-    const maturity = isDualRatio || absTotal !== absProgress ? undefined : 0n;
-
-    return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress, maturity });
-  }
-
-  /**
-   * Checks if the order is is dual ratio.
-   *
-   * @returns True if the order is dual ratio (liquidity provider), otherwise false.
-   */
-  public isDualRatio(): boolean {
-    return this.data.info.isDualRatio();
+    return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress });
   }
 
   /**
@@ -375,15 +353,6 @@ export class MasterCell implements ValueComponents {
    */
   public get ckbValue(): ccc.FixedPoint {
     return this.cell.cellOutput.capacity;
-  }
-
-  /**
-   * Creates a MasterCell instance from a cell-like object.
-   * @param cellLike - An object that can be converted to a ccc.Cell.
-   * @returns A new instance of MasterCell.
-   */
-  public static from(cellLike: ccc.CellLike): MasterCell {
-    return new MasterCell(ccc.Cell.from(cellLike));
   }
 
   /**

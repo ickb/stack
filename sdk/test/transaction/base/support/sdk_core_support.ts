@@ -4,7 +4,7 @@ import type {
   ConversionTransactionContext,
   SystemState,
 } from "../../../../src/conversion/sdk_types.ts";
-import { Ratio } from "../../../../src/order/index.ts";
+import { Ratio } from "../../../../src/order/ratio.ts";
 
 export const hash = byte32FromByte;
 export const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });

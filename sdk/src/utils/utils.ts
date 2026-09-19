@@ -194,6 +194,19 @@ export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
   return res;
 }
 
+export function minBigInt(left: bigint, right: bigint): bigint {
+  return left < right ? left : right;
+}
+
+export function maxBigInt(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
+}
+
+/** `numerator / denominator` rounded up; the denominator is positive. */
+export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
 /**
  * Compares two bigint values using sort-compatible ordering.
  *

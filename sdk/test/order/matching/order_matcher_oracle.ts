@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import type { OrderCell } from "../../../src/order/model/cells.ts";
-import { Info } from "../../../src/order/model/info.ts";
-import { Ratio } from "../../../src/order/model/ratio.ts";
+import type { OrderCell } from "../../../src/order/cells.ts";
+import { Info } from "../../../src/order/info.ts";
+import type { OrderMatcher } from "../../../src/order/matcher.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import { adjudicate, mustMatcher, orderWith } from "./support/order_oracle_helpers.ts";
 
 /**
@@ -102,61 +102,5 @@ describe("order matcher versus contract oracle", () => {
     const full = matcher.match(matcher.bMaxMatch);
     expect(full.partials).toHaveLength(1);
     expect(adjudicate(order, full)).toEqual(["ok"]);
-  });
-});
-
-describe("defense-in-depth guard on direct construction", () => {
-  it("rejects sub-minimum partials when bMinMatch is desynced from the order info", () => {
-    const info = infoFrom({
-      ckbToUdt: { ckbScale: 2n, udtScale: 1n },
-      ckbMinMatchLog: 3,
-    });
-    const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
-    const sound = mustMatcher(order, true);
-
-    // The public from() path derives bMinMatch = 16 from the info; a direct
-    // construction may desync them, which is exactly what the entry.rs:116
-    // mirror defends against: an admitted 4-UDT allowance moves only 2 CKB.
-    const desynced = new OrderMatcher(sound.group, true, {
-      aScale: sound.aScale,
-      bScale: sound.bScale,
-      aIn: sound.aIn,
-      bIn: sound.bIn,
-      aMin: sound.aMin,
-      bMinMatch: 1n,
-      bMaxMatch: sound.bMaxMatch,
-      bMaxOut: sound.bMaxOut,
-      realRatioNumerator: sound.realRatioNumerator,
-      realRatioDenominator: sound.realRatioDenominator,
-    });
-    expect(desynced.match(4n).partials).toHaveLength(0);
-    expect(sound.match(16n).partials).toHaveLength(1);
-  });
-
-  it("rejects a seller partial whose UDT is worth less than the minimum when bMinMatch is desynced", () => {
-    // Three CKB buy one UDT and the minimum is one CKB, so from() rounds bMinMatch up
-    // to 3; a direct construction admitting 1 CKB moves no UDT at all.
-    const info = infoFrom({
-      udtToCkb: { ckbScale: 1n, udtScale: 3n },
-      ckbMinMatchLog: 0,
-    });
-    const order = orderWith({ info, ckbUnoccupied: 0n, udtValue: 1_000n });
-    const sound = mustMatcher(order, false);
-    expect(sound.bMinMatch).toBe(3n);
-
-    const desynced = new OrderMatcher(sound.group, false, {
-      aScale: sound.aScale,
-      bScale: sound.bScale,
-      aIn: sound.aIn,
-      bIn: sound.bIn,
-      aMin: sound.aMin,
-      bMinMatch: 1n,
-      bMaxMatch: sound.bMaxMatch,
-      bMaxOut: sound.bMaxOut,
-      realRatioNumerator: sound.realRatioNumerator,
-      realRatioDenominator: sound.realRatioDenominator,
-    });
-    expect(desynced.match(1n).partials).toHaveLength(0);
-    expect(sound.match(3n).partials).toHaveLength(1);
   });
 });

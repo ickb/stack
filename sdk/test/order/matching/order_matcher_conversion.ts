@@ -1,14 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { quoteConversion } from "../../../src/order/index.ts";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import { Info } from "../../../src/order/model/info.ts";
-import { Ratio } from "../../../src/order/model/ratio.ts";
-import { OrderConversionRepresentabilityError } from "../../../src/order/order.ts";
 import {
-  ORDER_MATCHER_SUITE,
-  RATIO_SCALE_EXCEEDS_UINT64,
-} from "../fixtures/order_constants.ts";
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "../../../src/order/conversion.ts";
+import { Info } from "../../../src/order/info.ts";
+import { OrderMatcher } from "../../../src/order/matcher.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
+import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import {
   exactAdjustedConversion,
   fullMatchOutput,
@@ -18,40 +17,6 @@ import {
 } from "./support/order_match_helpers.ts";
 import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
 describe(ORDER_MATCHER_SUITE, () => {
-  it("sorts effective ratios exactly beyond Number precision", () => {
-    const order = makeUdtToCkbOrder({ udtValue: 100n });
-    const group = resolvedOrderGroup(order);
-    const scale = 2n ** 60n;
-    const better = new OrderMatcher(group, true, {
-      aScale: 1n,
-      bScale: 1n,
-      aIn: 0n,
-      bIn: 0n,
-      aMin: 0n,
-      bMinMatch: 0n,
-      bMaxMatch: 0n,
-      bMaxOut: 0n,
-      realRatioNumerator: scale + 1n,
-      realRatioDenominator: scale,
-    });
-    const worse = new OrderMatcher(group, true, {
-      aScale: 1n,
-      bScale: 1n,
-      aIn: 0n,
-      bIn: 0n,
-      aMin: 0n,
-      bMinMatch: 0n,
-      bMaxMatch: 0n,
-      bMaxOut: 0n,
-      realRatioNumerator: scale,
-      realRatioDenominator: scale,
-    });
-
-    expect(Number(scale + 1n) / Number(scale)).toBe(1);
-    expect(OrderMatcher.compareRealRatioDesc(better, worse)).toBeLessThan(0);
-    expect(OrderMatcher.compareRealRatioDesc(worse, better)).toBeGreaterThan(0);
-  });
-
   it("drops unmatchable orders before returning sorted matchers", () => {
     const validA = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -83,13 +48,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       matchers.map((matcher) => matcher.group.order.cell.outPoint.toHex()),
     ).not.toContain(invalidDirection.cell.outPoint.toHex());
     expect(matchers).toHaveLength(2);
-    const [firstMatcher, secondMatcher] = matchers;
-    if (firstMatcher === undefined || secondMatcher === undefined) {
-      throw new Error("Expected two matchers");
-    }
-    expect(
-      OrderMatcher.compareRealRatioDesc(firstMatcher, secondMatcher),
-    ).toBeLessThanOrEqual(0);
   });
 });
 
@@ -122,9 +80,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       feeBase: 100000n,
     });
 
-    expect(() => midpoint.applyFee(true, 1n, 100000n)).toThrow(
-      RATIO_SCALE_EXCEEDS_UINT64,
-    );
     expect(result.convertedAmount).toBe(
       exactAdjustedConversion(true, midpoint, amounts.ckbValue, 1n, 100000n),
     );
@@ -146,9 +101,6 @@ describe(ORDER_MATCHER_SUITE, () => {
       feeBase,
     });
 
-    expect(() => midpoint.applyFee(false, fee, feeBase)).toThrow(
-      RATIO_SCALE_EXCEEDS_UINT64,
-    );
     expect(result.convertedAmount).toBe(
       exactAdjustedConversion(false, midpoint, amounts.udtValue, fee, feeBase),
     );
@@ -222,42 +174,15 @@ describe(ORDER_MATCHER_SUITE, () => {
     expect(matcher.bMaxMatch).toBeGreaterThan(0n);
   });
 
-  it("rejects invalid direct matcher construction", () => {
-    const order = makeUdtToCkbOrder();
-    const group = resolvedOrderGroup(order);
-    const valid = {
-      aScale: 1n,
-      bScale: 1n,
-      aIn: 0n,
-      bIn: 0n,
-      aMin: 0n,
-      bMinMatch: 0n,
-      bMaxMatch: 0n,
-      bMaxOut: 0n,
-      realRatioNumerator: 1n,
-      realRatioDenominator: 1n,
-    };
-    const rejections: Array<[Partial<typeof valid>, string]> = [
-      [{ aScale: 0n }, "OrderMatcher scales must be positive"],
-      [
-        { bMinMatch: 2n, bMaxMatch: 1n },
-        "OrderMatcher maximum match must be at least the minimum match",
-      ],
-      [{ realRatioNumerator: 0n }, "OrderMatcher real ratio terms must be positive"],
-    ];
-
-    for (const [overrides, message] of rejections) {
-      expect(() => new OrderMatcher(group, true, { ...valid, ...overrides })).toThrow(
-        message,
-      );
-    }
-  });
-
   it("rejects orders whose fee leaves no spendable input", () => {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1),
       udtValue: 0n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0),
+      info: Info.from({
+        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
       master: {
         type: "absolute",
         value: {
@@ -273,14 +198,6 @@ describe(ORDER_MATCHER_SUITE, () => {
 
     expect(
       OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(2)),
-    ).toBeUndefined();
-  });
-
-  it("rejects matcher parameters with a non-positive effective denominator", () => {
-    const order = makeUdtToCkbOrder();
-
-    expect(
-      OrderMatcher.from(resolvedOrderGroup(order), false, -ccc.fixedPointFrom(100)),
     ).toBeUndefined();
   });
 });

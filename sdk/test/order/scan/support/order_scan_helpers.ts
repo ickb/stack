@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, committedTransactionResponse, StubClient } from "@ickb/testkit";
-import type { OrderGroup } from "../../../../src/order/model/cells.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
 import type {
   FindCellsOnChainQuery,
@@ -8,17 +7,6 @@ import type {
   GetTransactionHash,
   GetTransactionReturn,
 } from "../../fixtures/order_constants.ts";
-
-export async function collectOrders(
-  manager: OrderManager,
-  client: ccc.Client,
-): Promise<OrderGroup[]> {
-  const groups: OrderGroup[] = [];
-  for await (const group of manager.findOrders(client)) {
-    groups.push(group);
-  }
-  return groups;
-}
 
 export interface FindOrdersFixture {
   manager: OrderManager;

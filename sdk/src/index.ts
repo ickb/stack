@@ -13,7 +13,7 @@ import type {
   GetL1StateOptions,
   SystemState,
 } from "./conversion/sdk_types.ts";
-import type { OrderGroup } from "./order/model/cells.ts";
+import type { OrderGroup } from "./order/cells.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
 import type { SupportedChain } from "./utils/chain.ts";
 
@@ -47,11 +47,11 @@ export type {
   WithdrawalGroup,
 } from "./core/cells.ts";
 export type { DaoDepositCell, DaoWithdrawalRequestCell } from "./core/dao_cells.ts";
-export type { MasterCell, OrderCell, OrderGroup } from "./order/model/cells.ts";
-export type { Info, InfoLike } from "./order/model/info.ts";
-export type { Master, MasterLike } from "./order/model/master.ts";
-export type { OrderData, OrderDataLike } from "./order/model/order_data.ts";
-export type { Relative, RelativeLike } from "./order/model/relative.ts";
+export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
+export type { Info, InfoLike } from "./order/info.ts";
+export type { Master, MasterLike } from "./order/master.ts";
+export type { OrderData, OrderDataLike } from "./order/order_data.ts";
+export type { Relative, RelativeLike } from "./order/relative.ts";
 export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
 
 export { signerAccountLocks } from "./conversion/account_locks.ts";
@@ -78,12 +78,12 @@ export type {
   SystemState,
 } from "./conversion/sdk_types.ts";
 export { ickbExchangeRatio } from "./core/udt.ts";
-export { isRefused } from "./order/matching/fill.ts";
 export {
   OrderConversionRepresentabilityError,
   quoteConversion,
-} from "./order/matching/order_conversion.ts";
-export { Ratio } from "./order/model/ratio.ts";
+} from "./order/conversion.ts";
+export { isRefused } from "./order/fill.ts";
+export { Ratio } from "./order/ratio.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,

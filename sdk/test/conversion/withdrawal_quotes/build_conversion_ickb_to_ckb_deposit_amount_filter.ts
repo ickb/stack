@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
-import { Ratio } from "../../../src/order/index.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,

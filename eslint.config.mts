@@ -352,10 +352,10 @@ export default defineConfig(
   {
     files: [
       "sdk/src/core/entities.ts",
-      "sdk/src/order/model/info.ts",
-      "sdk/src/order/model/order_data.ts",
-      "sdk/src/order/model/ratio.ts",
-      "sdk/src/order/model/relative.ts",
+      "sdk/src/order/info.ts",
+      "sdk/src/order/order_data.ts",
+      "sdk/src/order/ratio.ts",
+      "sdk/src/order/relative.ts",
       "sdk/src/sdk.ts",
     ],
     rules: {

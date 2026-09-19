@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { estimateConversionOrder } from "../../src/conversion/sdk_estimate.ts";
 import { maturity } from "../../src/conversion/sdk_maturity.ts";
 import { ringTargetSegmentIndex } from "../../src/core/withdrawal_selection.ts";
-import { Info } from "../../src/order/index.ts";
+import { Info } from "../../src/order/info.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import { headerLike, ratio } from "../transaction/base/support/sdk_core_support.ts";
 

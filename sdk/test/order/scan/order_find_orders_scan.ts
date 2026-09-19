@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { Relative } from "../../../src/order/model/relative.ts";
 import { OrderManager } from "../../../src/order/order.ts";
+import { Relative } from "../../../src/order/relative.ts";
 import { defaultCellPageSize } from "../../../src/utils/utils.ts";
 import {
   mustPageSize,
@@ -22,7 +22,6 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  collectOrders,
   dummyCell,
   findOrdersFixture,
   masterCell,
@@ -159,7 +158,7 @@ async function expectDefaultPageSizeScan(
     },
   });
 
-  await expect(collectOrders(manager, client)).resolves.toEqual([]);
+  await expect(manager.findOrders(client)).resolves.toEqual([]);
   expect(requestedPageSize).toBe(defaultCellPageSize);
 }
 
@@ -212,7 +211,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(1);
   });

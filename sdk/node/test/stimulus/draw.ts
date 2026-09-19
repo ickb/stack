@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { Ratio } from "../../../src/order/index.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import { type Budgets, drawTurn } from "../../src/stimulus/draw.ts";
 
 const CKB = ccc.fixedPointFrom(1);

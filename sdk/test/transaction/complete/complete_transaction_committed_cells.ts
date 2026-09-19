@@ -96,6 +96,19 @@ function registerFundingTests(): void {
       additional.outPoint.toHex(),
     ]);
   });
+
+  it("names an input the builders spent twice", async () => {
+    const { sdk, lock } = testSdk({ completion: "real" });
+    const existing = plainCell("89", lock, ccc.fixedPointFrom(200));
+    const { signer } = fundedSigner([], [lock]);
+    const tx = ccc.Transaction.default();
+    tx.addInput(existing);
+    tx.addInput(existing);
+
+    await expect(
+      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [] }),
+    ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
+  });
 }
 
 function registerSweepTests(): void {

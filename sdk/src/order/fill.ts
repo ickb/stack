@@ -1,9 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ExchangeRatio } from "../../utils/index.ts";
-import { partialOrderFee } from "../io/order_io.ts";
-import type { OrderGroup } from "../model/cells.ts";
-import type { Match } from "../order.ts";
-import { OrderMatcher } from "./order_matcher.ts";
+import type { ExchangeRatio } from "../utils/index.ts";
+import type { OrderGroup } from "./cells.ts";
+import { partialOrderFee } from "./fee.ts";
+import { type Match, OrderMatcher } from "./matcher.ts";
 
 /**
  * What a fill must return before the bot takes it, in mining fees of its own: the buffer

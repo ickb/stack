@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { StubClient } from "@ickb/testkit";
 
-export const RATIO_SCALE_EXCEEDS_UINT64 = "Ratio scale exceeds Uint64";
 export const ORDER_MATCHER_SUITE = "OrderMatcher";
 export const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
 export const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";

@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE } from "../../utils/index.ts";
+import { CheckedInt32LE } from "../utils/index.ts";
 import { isValidEntity } from "./entity_validity.ts";
 
 const minInt32 = -(1n << 31n);

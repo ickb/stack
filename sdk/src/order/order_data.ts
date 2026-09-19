@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedUint128LE } from "../../utils/index.ts";
+import { CheckedUint128LE } from "../utils/index.ts";
 import { isValidEntity } from "./entity_validity.ts";
 import { Info, type InfoLike } from "./info.ts";
 import {

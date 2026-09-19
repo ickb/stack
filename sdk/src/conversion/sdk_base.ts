@@ -6,7 +6,9 @@ import {
   type OwnedOwnerManager,
 } from "../core/index.ts";
 import { assertReadyWithdrawalDeposits } from "../core/withdrawal_selection.ts";
-import type { Info, OrderGroup, OrderManager } from "../order/index.ts";
+import type { OrderGroup } from "../order/cells.ts";
+import type { Info } from "../order/info.ts";
+import type { OrderManager } from "../order/order.ts";
 import {
   compareBigInt,
   isPlainCapacityCell,
@@ -53,7 +55,17 @@ export abstract class IckbSdkBase {
     const { signer, feeRate } = options;
     const tx = this.ickbUdt.addCellDeps(ccc.Transaction.from(txLike).clone());
     const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
-    const spent = new Set(tx.inputs.map(({ previousOutput }) => previousOutput.toHex()));
+    // Inputs come from one state read, each cell once, and each action spends its own
+    // cell kind, so a repeated out point is a builder bug: this is the one place that
+    // names it, the node would refuse the transaction anyway (decisions amendment 52(y)).
+    const spent = new Set<string>();
+    for (const { previousOutput } of tx.inputs) {
+      const key = previousOutput.toHex();
+      if (spent.has(key)) {
+        throw new Error(`Input ${key} is spent twice`);
+      }
+      spent.add(key);
+    }
     const unspent = options.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
     const ickbCells = unspent
       .filter((cell) => this.ickbUdt.isUdt(cell))

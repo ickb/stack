@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
-import { Info, quoteConversion, Ratio } from "../../src/order/index.ts";
+import { quoteConversion } from "../../src/order/conversion.ts";
+import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
+import { Ratio } from "../../src/order/ratio.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
 
@@ -56,6 +58,6 @@ describe(ESTIMATE_SUITE, () => {
       incentiveCkb: 100n,
       maturityEstimateUnavailable: true,
     });
-    expect(result.estimate.info.ckbMinMatchLog).toBe(Info.ckbMinMatchLogDefault());
+    expect(result.estimate.info.ckbMinMatchLog).toBe(CKB_MIN_MATCH_LOG_DEFAULT);
   });
 });

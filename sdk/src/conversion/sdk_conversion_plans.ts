@@ -8,13 +8,12 @@ import {
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
 } from "../core/withdrawal_selection.ts";
-import { compareBigInt } from "../utils/index.ts";
+import { compareBigInt, maxBigInt } from "../utils/index.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
   estimateConversionOrder,
   estimateIckbToCkbOrder,
-  maxMaturity,
 } from "./sdk_estimate.ts";
 import type {
   CkbToIckbConversionPlan,
@@ -104,7 +103,7 @@ function ckbToIckbConversionPlan(
     if (estimate?.maturity === undefined) {
       return undefined;
     }
-    estimatedMaturity = maxMaturity(estimatedMaturity, estimate.maturity);
+    estimatedMaturity = maxBigInt(estimatedMaturity, estimate.maturity);
     order = { amounts, estimate };
   }
 
@@ -135,7 +134,7 @@ function ickbToCkbConversionPlan(
     );
     remainder -= directUdtValue;
     for (const deposit of selectedDeposits) {
-      estimatedMaturity = maxMaturity(
+      estimatedMaturity = maxBigInt(
         estimatedMaturity,
         deposit.maturity.toUnix(context.system.tip),
       );
@@ -175,7 +174,7 @@ function orderForIckbRemainder(
   }
   const { estimate, maturity, notice } = preview;
   const updatedMaturity =
-    maturity === undefined ? estimatedMaturity : maxMaturity(estimatedMaturity, maturity);
+    maturity === undefined ? estimatedMaturity : maxBigInt(estimatedMaturity, maturity);
   return {
     order: {
       amounts,

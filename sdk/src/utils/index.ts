@@ -16,10 +16,13 @@ export {
 export {
   asyncBinarySearch,
   binarySearch,
+  ceilDiv,
   collect,
   compareBigInt,
   findCells,
   isPlainCapacityCell,
+  maxBigInt,
+  minBigInt,
   unique,
 } from "./utils.ts";
 export type {

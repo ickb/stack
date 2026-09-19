@@ -100,8 +100,6 @@ describe("projectConversionTransactionContext", () => {
       isDualRatio: false,
       isMatchable: true,
     });
-    Object.defineProperty(matchable.order, "maturity", { value: 7000n });
-
     const { context } = projectConversionTransactionContext(
       system({ tip: headerLike(0n, { timestamp: 1000n }) }),
       {
@@ -113,6 +111,7 @@ describe("projectConversionTransactionContext", () => {
       { available: [], pending: [matchable] },
     );
 
-    expect(context.estimatedMaturity).toBe(7000n);
+    // A CKB-to-iCKB order on an empty book: ten minutes from the tip.
+    expect(context.estimatedMaturity).toBe(1000n + 600_000n);
   });
 });

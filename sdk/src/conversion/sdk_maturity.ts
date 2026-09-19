@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { convert } from "../core/index.ts";
-import { Info } from "../order/index.ts";
+import type { Info } from "../order/info.ts";
+import type { Ratio } from "../order/ratio.ts";
 import { binarySearch, type ValueComponents } from "../utils/index.ts";
 import type { CkbCumulative, MaturityOrderInput, SystemState } from "./sdk_types.ts";
 
@@ -40,8 +41,7 @@ function orderSideAmount(isCkb2Udt: boolean, amounts: ValueComponents): bigint {
 }
 
 function ckbToIckbOrderMaturity(info: Info, amount: bigint, system: SystemState): bigint {
-  const ratio = info.ckbToUdt;
-  const pressure = orderPoolPressure(true, new Info(ratio, ratio, 1), system);
+  const pressure = orderPoolPressure(true, info.ckbToUdt, system);
   const ckb = amount + pressure.ckb - convert(false, pressure.udt, system.exchangeRatio);
   const baseMaturity = 10n * 60n * 1000n;
   const maturityValue =
@@ -56,7 +56,7 @@ function ickbToCkbOrderMaturity(
   system: SystemState,
 ): bigint | undefined {
   const ratio = info.udtToCkb;
-  const pressure = orderPoolPressure(false, new Info(ratio, ratio, 1), system);
+  const pressure = orderPoolPressure(false, ratio, system);
   const orderCkb = amounts.ckbValue - ratio.convert(false, amount, true);
   const ckb =
     orderCkb +
@@ -73,7 +73,7 @@ function ickbToCkbOrderMaturity(
 
 function orderPoolPressure(
   isCkb2Udt: boolean,
-  reference: Info,
+  reference: Ratio,
   system: SystemState,
 ): { ckb: bigint; udt: bigint } {
   let ckb = 0n;
@@ -90,12 +90,12 @@ function orderPoolPressure(
   return { ckb, udt };
 }
 
-function shouldCountCkbOrder(isCkb2Udt: boolean, info: Info, reference: Info): boolean {
-  return info.isCkb2Udt() && (!isCkb2Udt || info.ckb2UdtCompare(reference) < 0);
+function shouldCountCkbOrder(isCkb2Udt: boolean, info: Info, reference: Ratio): boolean {
+  return info.isCkb2Udt() && (!isCkb2Udt || info.ckbToUdt.compare(reference) < 0);
 }
 
-function shouldCountUdtOrder(isCkb2Udt: boolean, info: Info, reference: Info): boolean {
-  return !info.isCkb2Udt() && (isCkb2Udt || info.udt2CkbCompare(reference) < 0);
+function shouldCountUdtOrder(isCkb2Udt: boolean, info: Info, reference: Ratio): boolean {
+  return !info.isCkb2Udt() && (isCkb2Udt || reference.compare(info.udtToCkb) < 0);
 }
 
 function firstCkbMaturityAtOrAbove(

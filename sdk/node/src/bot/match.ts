@@ -1,10 +1,10 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { Match, OrderGroup } from "../../../src/order/index.ts";
-import { partialOrderFee } from "../../../src/order/io/order_io.ts";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import type { ExchangeRatio } from "../../../src/utils/index.ts";
+import type { OrderGroup } from "../../../src/order/cells.ts";
+import { partialOrderFee } from "../../../src/order/fee.ts";
+import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
+import { minBigInt, type ExchangeRatio } from "../../../src/utils/index.ts";
 
-import { fillCost, netOf, returnsCost } from "../../../src/order/matching/fill.ts";
+import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
 import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
 
 /** One turn's match and how it was chosen. */
@@ -138,8 +138,4 @@ function shuffled<T>(items: T[], seed: number): T[] {
     .map((item) => ({ item, key: next() }))
     .toSorted((left, right) => left.key - right.key)
     .map(({ item }) => item);
-}
-
-function minBigInt(left: bigint, right: bigint): bigint {
-  return left < right ? left : right;
 }

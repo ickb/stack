@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
-import { OrderCell } from "../../../../src/order/model/cells.ts";
-import { Info } from "../../../../src/order/model/info.ts";
-import { OrderData } from "../../../../src/order/model/order_data.ts";
-import { Ratio } from "../../../../src/order/model/ratio.ts";
+import { OrderCell } from "../../../../src/order/cells.ts";
+import { Info } from "../../../../src/order/info.ts";
+import { OrderData } from "../../../../src/order/order_data.ts";
+import { Ratio } from "../../../../src/order/ratio.ts";
 
 export { byte32FromByte } from "@ickb/testkit";
 

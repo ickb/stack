@@ -1,9 +1,8 @@
 import { validateMatch, type OracleInfo, type OrderState } from "@ickb/testkit";
-import type { Match } from "../../../../src/order/matching/match_types.ts";
-import { OrderMatcher } from "../../../../src/order/matching/order_matcher.ts";
-import type { OrderCell } from "../../../../src/order/model/cells.ts";
-import type { Info } from "../../../../src/order/model/info.ts";
-import type { Ratio } from "../../../../src/order/model/ratio.ts";
+import type { OrderCell } from "../../../../src/order/cells.ts";
+import type { Info } from "../../../../src/order/info.ts";
+import { OrderMatcher, type Match } from "../../../../src/order/matcher.ts";
+import type { Ratio } from "../../../../src/order/ratio.ts";
 import { resolvedOrderGroup } from "./order_match_helpers.ts";
 import { makeOrderCell } from "./order_order_helpers.ts";
 

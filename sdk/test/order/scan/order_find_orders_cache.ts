@@ -1,9 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { Info } from "../../../src/order/model/info.ts";
-import { OrderData } from "../../../src/order/model/order_data.ts";
-import { Relative } from "../../../src/order/model/relative.ts";
+import { Info } from "../../../src/order/info.ts";
+import { OrderData } from "../../../src/order/order_data.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
+import { Relative } from "../../../src/order/relative.ts";
 import {
   ORDER_MANAGER_FIND_ORDERS_SUITE,
   type FindCellsOnChainQuery,
@@ -15,7 +16,6 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  collectOrders,
   findOrdersFixture,
   masterCell,
   originLookupClient,
@@ -68,7 +68,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     }
     expect(trueOrigin.data.master.value.distance).toBe(2n);
     expect(trueOrigin.getMaster().eq(originMaster)).toBe(true);
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.origin.cell.outPoint.eq(trueOrigin.cell.outPoint)).toBe(true);
@@ -122,7 +122,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: tx,
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -157,7 +157,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(1);
     expect(fetched).toBe(false);
@@ -232,7 +232,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(firstOrigin.getMaster().eq(originMaster)).toBe(true);
     expect(secondOrigin.getMaster().eq(originMaster)).toBe(true);
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -258,7 +258,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: ccc.Transaction.default(),
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -309,7 +309,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -330,7 +330,11 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const liveOrder = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
-      info: Info.create(true, { ckbScale: 2n, udtScale: 1n }, 0),
+      info: Info.from({
+        ckbToUdt: { ckbScale: 2n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog: 0,
+      }),
       master: { type: "absolute", value: originMaster },
       lock: orderScript,
       outPoint: { txHash: byte32FromByte("6d"), index: 0n },
@@ -343,7 +347,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: transactionWithOutputs([origin.cell, liveMaster]),
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(0);
   });

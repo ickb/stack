@@ -1,13 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
-import { OrderConversionRepresentabilityError } from "../order/index.ts";
-import { ceilDiv } from "../order/matching/order_conversion.ts";
-import type { ValueComponents } from "../utils/index.ts";
+import { OrderConversionRepresentabilityError } from "../order/conversion.ts";
+import { ceilDiv, type ValueComponents } from "../utils/index.ts";
 import {
   estimateConversionOrder,
   estimateMaturityFeeThreshold,
 } from "./sdk_estimate_core.ts";
 import { maturity } from "./sdk_maturity.ts";
-import { maxMaturity } from "./sdk_projection.ts";
 import type {
   ConversionOrderEstimate,
   IckbToCkbOrderEstimate,
@@ -93,7 +91,6 @@ export function estimateIckbToCkbOrder(
 }
 
 export { estimateConversionOrder } from "./sdk_estimate_core.ts";
-export { maxMaturity };
 
 function estimateIckbToCkbOrderDefaultFee(
   amounts: ValueComponents,

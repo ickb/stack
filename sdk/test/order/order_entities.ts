@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { MasterCell, OrderCell, OrderGroup } from "../../src/order/model/cells.ts";
-import { Info } from "../../src/order/model/info.ts";
-import { OrderData } from "../../src/order/model/order_data.ts";
-import { Ratio } from "../../src/order/model/ratio.ts";
-import { Relative } from "../../src/order/model/relative.ts";
+import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
+import { Info } from "../../src/order/info.ts";
+import { OrderData } from "../../src/order/order_data.ts";
+import { Ratio } from "../../src/order/ratio.ts";
+import { Relative } from "../../src/order/relative.ts";
 import { resolvedOrderGroup } from "./matching/support/order_match_helpers.ts";
 
 const ORDER_SCRIPT = script("11");
@@ -122,12 +122,8 @@ describe("order entity validation", () => {
     expect(dual.isValid()).toBe(true);
     expect(dual.isDualRatio()).toBe(true);
     expect(dual.getCkbMinMatch()).toBe(4n);
-    expect(dual.ckb2UdtCompare(Info.create(true, { ckbScale: 4n, udtScale: 1n }))).toBe(
-      -1,
-    );
-    expect(dual.udt2CkbCompare(Info.create(false, { ckbScale: 2n, udtScale: 1n }))).toBe(
-      -1,
-    );
+    expect(dual.ckbToUdt.compare(Ratio.from({ ckbScale: 4n, udtScale: 1n }))).toBe(-1);
+    expect(Ratio.from({ ckbScale: 2n, udtScale: 1n }).compare(dual.udtToCkb)).toBe(-1);
     expect(() => {
       Info.from({ ckbToUdt, udtToCkb, ckbMinMatchLog: 65 }).validate();
     }).toThrow("ckbMinMatchLog invalid");
@@ -176,11 +172,11 @@ describe("order entity wire bounds", () => {
       }).not.toThrow();
     }
     for (const ckbMinMatchLog of [0, 64]) {
-      const info = Info.create(
-        true,
-        { ckbScale: maxUint64, udtScale: maxUint64 },
+      const info = Info.from({
+        ckbToUdt: { ckbScale: maxUint64, udtScale: maxUint64 },
+        udtToCkb: Ratio.empty(),
         ckbMinMatchLog,
-      );
+      });
       expect(info.isValid()).toBe(true);
       expect(() => {
         info.toBytes();
@@ -210,7 +206,11 @@ describe("order entity wire bounds", () => {
 
   it("enforces the semantic Info integer range", () => {
     for (const ckbMinMatchLog of [-1, 65, 0.5, NaN]) {
-      const info = Info.create(true, { ckbScale: 1n, udtScale: 1n }, ckbMinMatchLog);
+      const info = Info.from({
+        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+        udtToCkb: Ratio.empty(),
+        ckbMinMatchLog,
+      });
       expect(info.isValid()).toBe(false);
       expect(() => {
         info.validate();
@@ -223,7 +223,11 @@ describe("order data wire bounds", () => {
   const maxUint128 = (1n << 128n) - 1n;
 
   it("accepts and rejects exact Uint128 and Int32 boundaries", () => {
-    const info = Info.create(true, { ckbScale: 1n, udtScale: 1n }, 0);
+    const info = Info.from({
+      ckbToUdt: { ckbScale: 1n, udtScale: 1n },
+      udtToCkb: Ratio.empty(),
+      ckbMinMatchLog: 0,
+    });
     for (const udtValue of [0n, maxUint128]) {
       const data = OrderData.from({
         udtValue,
@@ -283,12 +287,12 @@ describe("order cells", () => {
       udtValue: 0n,
       info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
     });
-    const master = MasterCell.from(masterCell());
+    const master = new MasterCell(masterCell());
     const group = resolvedOrderGroup(order);
 
     expect(order.ckbValue).toBe(order.cell.cellOutput.capacity);
     expect(order.udtValue).toBe(10n);
-    expect(order.isDualRatio()).toBe(false);
+    expect(order.data.info.isDualRatio()).toBe(false);
     expect(order.isMatchable()).toBe(true);
     expect(order.isFulfilled()).toBe(false);
     expect(fulfilled.isMatchable()).toBe(false);
@@ -470,7 +474,7 @@ describe("order groups", () => {
       outPointIndex: 0n,
     });
 
-    const master = MasterCell.from(masterCell());
+    const master = new MasterCell(masterCell());
     expect(OrderGroup.tryFrom(master, origin, origin)?.isValid()).toBe(true);
     expect(
       OrderGroup.tryFrom(

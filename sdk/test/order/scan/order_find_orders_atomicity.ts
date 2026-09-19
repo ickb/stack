@@ -1,8 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import type { OrderGroup } from "../../../src/order/model/cells.ts";
-import { Relative } from "../../../src/order/model/relative.ts";
+import { Relative } from "../../../src/order/relative.ts";
 import {
   ORDER_MANAGER_FIND_ORDERS_SUITE,
   type FindCellsOnChainQuery,
@@ -15,7 +14,6 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  collectOrders,
   findOrdersFixture,
   masterCell,
   transactionResponse,
@@ -28,7 +26,7 @@ describe(`${ORDER_MANAGER_FIND_ORDERS_SUITE} resolution atomicity`, () => {
   it("resolves every scanned group", async () => {
     const { manager, client } = twoGroupScan({ failingMasterTxHash: undefined });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(2);
   });
@@ -40,19 +38,10 @@ describe(`${ORDER_MANAGER_FIND_ORDERS_SUITE} resolution atomicity`, () => {
     const { manager: failingManager, client: failingClient } = twoGroupScan({
       failingMasterTxHash: secondMasterTxHash,
     });
-    const groups: OrderGroup[] = [];
-
-    await expect(
-      (async (): Promise<void> => {
-        for await (const group of failingManager.findOrders(failingClient)) {
-          groups.push(group);
-        }
-      })(),
-    ).rejects.toThrow(ORIGIN_LOOKUP_FAILURE);
-
-    // The first group resolves before the failure, so only buffering hides it.
-    expect(groups).toEqual([]);
-    await expect(collectOrders(manager, client)).resolves.toHaveLength(2);
+    await expect(failingManager.findOrders(failingClient)).rejects.toThrow(
+      ORIGIN_LOOKUP_FAILURE,
+    );
+    await expect(manager.findOrders(client)).resolves.toHaveLength(2);
   });
 });
 

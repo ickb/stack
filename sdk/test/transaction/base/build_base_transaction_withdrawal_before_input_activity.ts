@@ -5,7 +5,7 @@ import type {
   LogicManager,
   OwnedOwnerManager,
 } from "../../../src/core/index.ts";
-import type { OrderManager } from "../../../src/order/index.ts";
+import type { OrderManager } from "../../../src/order/order.ts";
 import {
   baseTransactionFixture,
   BUILD_BASE_TRANSACTION_SUITE,

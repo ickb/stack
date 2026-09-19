@@ -7,7 +7,10 @@ import type {
   ReceiptCell,
   WithdrawalGroup,
 } from "../core/index.ts";
-import type { Info, OrderCell, OrderGroup, OrderManager, Ratio } from "../order/index.ts";
+import type { OrderCell, OrderGroup } from "../order/cells.ts";
+import type { Info } from "../order/info.ts";
+import type { OrderManager } from "../order/order.ts";
+import type { Ratio } from "../order/ratio.ts";
 import type { ValueComponents } from "../utils/index.ts";
 export const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
 export const NOTHING_TO_DO_REASON: ConversionTransactionFailureReason = "nothing-to-do";

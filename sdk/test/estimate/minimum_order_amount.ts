@@ -4,7 +4,7 @@ import {
   estimateIckbToCkbOrder,
   minimumOrderAmount,
 } from "../../src/conversion/sdk_estimate.ts";
-import { Ratio } from "../../src/order/index.ts";
+import { Ratio } from "../../src/order/ratio.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
 

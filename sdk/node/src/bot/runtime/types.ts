@@ -6,7 +6,7 @@ import type {
   ReceiptCell,
   WithdrawalGroup,
 } from "../../../../src/core/index.ts";
-import type { OrderGroup } from "../../../../src/order/index.ts";
+import type { OrderGroup } from "../../../../src/order/cells.ts";
 import type { IckbSdk } from "../../../../src/sdk.ts";
 
 import type { DepositReason, RingSummary } from "../policy.ts";

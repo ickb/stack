@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_HEADER_INDEX_LIMIT, type WithdrawalGroup } from "../core/index.ts";
-import type { OrderGroup } from "../order/index.ts";
+import type { OrderGroup } from "../order/cells.ts";
+import { maxBigInt } from "../utils/index.ts";
+import { maturity } from "./sdk_maturity.ts";
 import type {
   AccountAvailabilityProjection,
   AccountState,
@@ -24,9 +26,9 @@ export function projectConversionTransactionContext(
       group.owned.maturity.toUnix(system.tip),
     ),
     ...projection.pendingOrders
-      .map((group) => group.order.maturity)
-      .filter((maturity): maturity is bigint => maturity !== undefined),
-  ].reduce(maxMaturity, system.tip.timestamp);
+      .map((group) => maturity(group.order, system))
+      .filter((estimate): estimate is bigint => estimate !== undefined),
+  ].reduce(maxBigInt, system.tip.timestamp);
 
   return {
     projection,
@@ -88,10 +90,6 @@ export function projectAccountAvailability(
     availableOrders,
     pendingOrders,
   };
-}
-
-export function maxMaturity(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
 }
 
 /**

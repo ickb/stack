@@ -16,7 +16,8 @@ import {
   OwnedOwnerManager,
   type IckbDepositCell,
 } from "../../../../src/core/index.ts";
-import { OrderManager, type Ratio } from "../../../../src/order/index.ts";
+import { OrderManager } from "../../../../src/order/order.ts";
+import type { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { headerLike } from "../../../core/cells/support/cells_support.ts";
 import {

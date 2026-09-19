@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import type { OrderGroup } from "../../src/order/model/cells.ts";
-import { Info } from "../../src/order/model/info.ts";
-import { Ratio } from "../../src/order/model/ratio.ts";
+import type { OrderGroup } from "../../src/order/cells.ts";
+import { Info } from "../../src/order/info.ts";
 import { OrderManager } from "../../src/order/order.ts";
+import { Ratio } from "../../src/order/ratio.ts";
 import { byte32FromByte } from "./matching/support/order_order_helpers.ts";
 
 const UDT_SCRIPT = script("22");
@@ -21,7 +21,7 @@ describe("order transaction boundary validation", () => {
         udtDelta: 0n,
         partials: [{ group: unresolved, ckbOut: 0n, udtOut: 0n }],
       }),
-    ).toThrow("Match partial is missing resolved order provenance");
+    ).toThrow("Matching requires resolved OrderGroups from findOrders()");
     expect(() => manager.melt(ccc.Transaction.default(), [unresolved])).toThrow(
       "Matching requires resolved OrderGroups from findOrders()",
     );

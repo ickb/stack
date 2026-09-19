@@ -5,7 +5,7 @@ import {
   baseTransactionOptions,
   conversionKind,
 } from "../../../src/conversion/sdk_conversion_common.ts";
-import { Info } from "../../../src/order/index.ts";
+import { Info } from "../../../src/order/info.ts";
 import {
   conversionContext,
   ratio,

@@ -12,10 +12,10 @@
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { Match } from "../../../src/order/matching/match_types.ts";
-import { OrderMatcher } from "../../../src/order/matching/order_matcher.ts";
-import type { OrderCell } from "../../../src/order/model/cells.ts";
-import { Info } from "../../../src/order/model/info.ts";
+import type { OrderCell } from "../../../src/order/cells.ts";
+import { Info } from "../../../src/order/info.ts";
+import { type Match, OrderMatcher } from "../../../src/order/matcher.ts";
+import { Ratio } from "../../../src/order/ratio.ts";
 import { resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import { adjudicate, mustMatcher, orderWith } from "./support/order_oracle_helpers.ts";
 
@@ -74,7 +74,11 @@ function orderArb(isCkb2Udt: boolean, ckbMiningFee = 0n): fc.Arbitrary<OrderCell
     })
     .map(({ ratio, ckbMinMatchLog, ckbUnoccupied, udtValue }) =>
       orderWith({
-        info: Info.create(isCkb2Udt, ratio, ckbMinMatchLog),
+        info: Info.from({
+          ckbToUdt: isCkb2Udt ? ratio : Ratio.empty(),
+          udtToCkb: isCkb2Udt ? Ratio.empty() : ratio,
+          ckbMinMatchLog,
+        }),
         ckbUnoccupied,
         udtValue,
       }),
@@ -270,78 +274,15 @@ describe("minimum match pre-gate", () => {
   it("rounds a seller's minimum up to the first payment whose UDT covers it", () => {
     // Three CKB buy one UDT; a minimum of one CKB moves no whole UDT, so the first
     // payment the contract accepts is three CKB.
-    const info = Info.create(false, { ckbScale: 1n, udtScale: 3n }, 0);
+    const info = Info.from({
+      ckbToUdt: Ratio.empty(),
+      udtToCkb: { ckbScale: 1n, udtScale: 3n },
+      ckbMinMatchLog: 0,
+    });
     const order = orderWith({ info, ckbUnoccupied: 0n, udtValue: 1_000n });
     const matcher = mustMatcher(order, false);
     expect(matcher.bMinMatch).toBe(3n);
     expect(matcher.match(2n).partials).toHaveLength(0);
     expect(adjudicate(order, matcher.match(3n))).toEqual(["ok"]);
-  });
-});
-
-describe("ckb2udt entry.rs:116 post-guard reachability", () => {
-  it("admitted partial-band allowances clear the plain-CKB minimum at any fee", () => {
-    // The post-guard fires only when a partial moves less than ckbMinMatch
-    // plain CKB. This property samples that the bMinMatch pre-gate already
-    // excludes that for every admitted allowance, at any fee; the
-    // deterministic test below carries the actual unreachability argument.
-    fc.assert(
-      fc.property(orderAndFeeArb(true), allowanceArb, ({ order, ckbMiningFee }, pick) => {
-        const matcher = mustMatcher(order, true, ckbMiningFee);
-        const band = matcher.bMaxMatch - matcher.bMinMatch;
-        if (band === 0n) {
-          return; // Only full fills exist; the partial branch is empty.
-        }
-        // Probe the exact bMinMatch edge plus a drawn in-band allowance.
-        for (const bAllowance of [matcher.bMinMatch, matcher.bMinMatch + (pick % band)]) {
-          const match = matcher.match(bAllowance);
-          expect(match.partials).toHaveLength(1);
-          expect(match.ckbDelta).toBeGreaterThanOrEqual(order.data.info.getCkbMinMatch());
-        }
-      }),
-    );
-  });
-
-  // Attempted witness: an allowance the bMinMatch pre-gate admits but the
-  // post-guard rejects. None exists, at any fee: ckbMiningFee never enters
-  // aOut, bMinMatch, or bMaxMatch (only matcher admission and real-ratio
-  // ordering), and in the partial branch the plain CKB delta is
-  // floor(bAllowance * udtScale / ckbScale), which is at least ckbMinMatch
-  // exactly when bAllowance >= ceil(ckbMinMatch * ckbScale / udtScale) =
-  // bMinMatch. The pre-gate is the guard's own bound applied earlier, so the
-  // post-guard is dead code. This test pins that equivalence on a concrete
-  // fee-bearing order by sweeping every allowance up to the full fill.
-  it("the pre-gate rejects exactly the partials the guard protects against", () => {
-    const info = Info.create(true, { ckbScale: 2n, udtScale: 1n }, 3); // min 8 CKB
-    const order = orderWith({ info, ckbUnoccupied: 10_000n, udtValue: 0n });
-    const matcher = mustMatcher(order, true, 1_000n);
-    expect(matcher.bMinMatch).toBe(16n); // ceil(8 * 2 / 1)
-
-    // Below the gate the matcher emits nothing, and rightly so: the would-be
-    // partial (aOut via the matcher's own nonDecreasing rounding) moves
-    // 1..7 CKB and the contract rejects it as an insufficient match.
-    for (let bAllowance = 2n; bAllowance < 16n; bAllowance += 1n) {
-      expect(matcher.match(bAllowance).partials).toHaveLength(0);
-      const bOut = matcher.bIn + bAllowance;
-      const aOut =
-        (matcher.bScale * (matcher.bIn - bOut) +
-          matcher.aScale * (matcher.aIn + 1n) -
-          1n) /
-        matcher.aScale;
-      const wouldBe: Match = {
-        ckbDelta: matcher.aIn - aOut,
-        udtDelta: matcher.bIn - bOut,
-        partials: [{ group: matcher.group, ckbOut: aOut, udtOut: bOut }],
-      };
-      expect(adjudicate(order, wouldBe)).toEqual(["InsufficientMatch"]);
-    }
-
-    // Past the gate the guard never fires: the whole partial band emits, and
-    // every partial moves at least the 8-CKB minimum the guard checks for.
-    for (let bAllowance = 16n; bAllowance < matcher.bMaxMatch; bAllowance += 1n) {
-      const match = matcher.match(bAllowance);
-      expect(match.partials).toHaveLength(1);
-      expect(match.ckbDelta).toBeGreaterThanOrEqual(8n);
-    }
   });
 });

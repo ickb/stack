@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  maxMaturity,
-  projectAccountAvailability,
-} from "../../../src/conversion/sdk_projection.ts";
+import { projectAccountAvailability } from "../../../src/conversion/sdk_projection.ts";
 import {
   cumulativeCkbMaturing,
   poolDepositCkb,
@@ -81,7 +78,5 @@ describe("sdk projection account availability", () => {
     expect(projection.ickbBalance).toBe(
       projection.ickbAvailable + projection.ickbPending,
     );
-    expect(maxMaturity(1n, 2n)).toBe(2n);
-    expect(maxMaturity(3n, 2n)).toBe(3n);
   });
 });

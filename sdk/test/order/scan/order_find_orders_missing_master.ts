@@ -5,11 +5,7 @@ import {
   directionalInfo,
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
-import {
-  collectOrders,
-  findOrdersFixture,
-  transactionResponse,
-} from "./support/order_scan_helpers.ts";
+import { findOrdersFixture, transactionResponse } from "./support/order_scan_helpers.ts";
 
 describe("OrderManager.findOrders missing master", () => {
   it("reports order cells whose master was not found", async () => {
@@ -35,7 +31,7 @@ describe("OrderManager.findOrders missing master", () => {
       },
     });
 
-    const groups = await collectOrders(manager, client);
+    const groups = await manager.findOrders(client);
 
     expect(groups).toEqual([]);
   });

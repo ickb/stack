@@ -2,10 +2,12 @@ import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
-import { type Info, OrderManager, Ratio } from "../../src/order/index.ts";
-import { partialOrderFee } from "../../src/order/io/order_io.ts";
-import { OrderMatcher } from "../../src/order/matching/order_matcher.ts";
-import { OrderData } from "../../src/order/model/order_data.ts";
+import { partialOrderFee } from "../../src/order/fee.ts";
+import type { Info } from "../../src/order/info.ts";
+import { OrderMatcher } from "../../src/order/matcher.ts";
+import { OrderManager } from "../../src/order/order.ts";
+import { OrderData } from "../../src/order/order_data.ts";
+import { Ratio } from "../../src/order/ratio.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import {
   hash,

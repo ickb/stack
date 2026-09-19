@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { partialOrderFee } from "../../../src/order/io/order_io.ts";
+import { partialOrderFee } from "../../../src/order/fee.ts";
 
 import { describe, expect, it } from "vitest";
-import { fillCost } from "../../../src/order/matching/fill.ts";
+import { fillCost } from "../../../src/order/fill.ts";
 import { matchTurn, seedOf, type TurnMatch } from "../../src/bot/match.ts";
 import { hash, marketOrder } from "./fixtures/bot.ts";
 
