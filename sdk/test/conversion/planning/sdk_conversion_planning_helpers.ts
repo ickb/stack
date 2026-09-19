@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
-} from "../../../src/conversion/sdk_conversion_plans.ts";
+} from "../../../src/conversion/plans.ts";
 import type { IckbDepositCell } from "../../../src/core/index.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
@@ -43,9 +43,7 @@ describe("sdk conversion planning helpers", () => {
         signer: stubSigner,
         context: conversionContext({ ickbAvailable: 2n }),
       },
-      {
-        deposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
-      },
+      [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
     );
 
     expect(zeroCapacityPlans).toEqual([]);
@@ -58,7 +56,7 @@ describe("sdk conversion planning helpers", () => {
     ]);
   });
 
-  it("ranks prefixes by maturity bucket first, so a late deposit sorts its prefix last", () => {
+  it("plans every prefix of the greedy selection, longest first", () => {
     const lock = script("11");
     const unit = ccc.fixedPointFrom(1000);
     // The largest deposit is the segment anchor; the other four are surplus.
@@ -77,12 +75,11 @@ describe("sdk conversion planning helpers", () => {
           ickbAvailable: 4n * unit,
         }),
       },
-      { deposits: [anchor, ...now, later] },
+      [anchor, ...now, later],
     );
 
-    // Every prefix with a remainder order matures now (bucket 0); the full prefix waits
-    // for the late deposit and sorts last despite being the longest.
-    expect(plans.map((plan) => plan.selectedDeposits.length)).toEqual([3, 2, 1, 0, 4]);
+    // The most direct plan comes first whatever its date: free and certain beats fast.
+    expect(plans.map((plan) => plan.selectedDeposits.length)).toEqual([4, 3, 2, 1, 0]);
   });
 
   it("derives ready pool deposits from the concrete pool sample", () => {
@@ -96,9 +93,7 @@ describe("sdk conversion planning helpers", () => {
           signer: stubSigner,
           context: conversionContext({ ickbAvailable: 2n }),
         },
-        {
-          deposits: [],
-        },
+        [],
       ),
     ).toEqual([]);
   });

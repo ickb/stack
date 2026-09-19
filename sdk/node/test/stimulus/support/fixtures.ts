@@ -6,7 +6,7 @@ import {
   StubClient,
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/sdk_types.ts";
+import type { SystemState } from "../../../../src/conversion/types.ts";
 import { ReceiptData } from "../../../../src/core/entities.ts";
 import type { ReceiptCell } from "../../../../src/core/index.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
@@ -27,7 +27,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     orderPool: [],
     ckbAvailable: 0n,
     ckbMaturing: [],
-    poolDeposits: { deposits: [] },
+    poolDeposits: [],
     ...overrides,
   };
 }
@@ -88,12 +88,14 @@ export function runtime({
   orders = [],
   originBlocks = new Map<ccc.Hex, bigint | undefined>(),
   sdk = {},
+  order = getConfig("testnet").managers.order,
 }: {
   system?: SystemState;
   account?: StimulusState["account"];
   orders?: OrderGroup[];
   originBlocks?: Map<ccc.Hex, bigint | undefined>;
   sdk?: Partial<Runtime["sdk"]>;
+  order?: Runtime["order"];
 } = {}): Runtime {
   const client = new StubClient({
     getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
@@ -116,6 +118,7 @@ export function runtime({
       },
       ...sdk,
     }),
+    order,
     primaryLock: PRIMARY_LOCK,
     accountLocks: [PRIMARY_LOCK],
   };

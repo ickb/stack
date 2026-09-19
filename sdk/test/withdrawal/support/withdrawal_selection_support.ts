@@ -1,43 +1,60 @@
 import { ccc } from "@ckb-ccc/core";
-import { headerLike } from "@ickb/testkit";
+import { headerLike, script } from "@ickb/testkit";
+import { ickbDepositCellFrom } from "../../../src/core/cells.ts";
+import { DaoManager, type IckbDepositCell } from "../../../src/core/index.ts";
 
 export const TIP = headerLike();
 
-export interface TestDeposit {
-  cell: { outPoint: { toHex: () => string } };
-  isReady: boolean;
-  udtValue: bigint;
-  maturity: ccc.Epoch;
-}
-
+/** A ready deposit whose claim date is `maturityUnix`, keyed by its out point. */
 export function readyDeposit(
   udtValue: bigint,
   maturityUnix: bigint,
   key = `ready-${String(maturityUnix)}`,
-): TestDeposit {
-  return {
-    cell: depositCell(key),
-    isReady: true,
-    udtValue,
-    maturity: epochAtUnix(maturityUnix),
-  };
+): IckbDepositCell {
+  return deposit(udtValue, epochAtUnix(maturityUnix), true, key);
 }
 
+/** A deposit at a whole epoch, for ring segment tests. */
 export function ringDeposit(
   udtValue: bigint,
   epoch: bigint,
   options?: { isReady?: boolean; key?: string },
-): TestDeposit {
-  return {
-    cell: depositCell(options?.key ?? `ring-${String(epoch)}-${String(udtValue)}`),
-    isReady: options?.isReady ?? true,
+): IckbDepositCell {
+  return deposit(
     udtValue,
-    maturity: ccc.Epoch.from([epoch, 0n, 1n]),
-  };
+    ccc.Epoch.from([epoch, 0n, 1n]),
+    options?.isReady ?? true,
+    options?.key ?? `ring-${String(epoch)}-${String(udtValue)}`,
+  );
 }
 
-export function depositCell(key: string): { outPoint: { toHex: () => string } } {
-  return { outPoint: { toHex: () => key } };
+function deposit(
+  udtValue: bigint,
+  maturity: ccc.Epoch,
+  isReady: boolean,
+  key: string,
+): IckbDepositCell {
+  const logic = script("22");
+  const cell = ccc.Cell.from({
+    outPoint: { txHash: ccc.hashCkb(ccc.bytesFrom(key, "utf8")), index: 0n },
+    cellOutput: { capacity: udtValue, lock: logic, type: script("33") },
+    outputData: DaoManager.depositData(),
+  });
+  const result = ickbDepositCellFrom(
+    {
+      cell,
+      headers: [{ header: TIP, txHash: cell.outPoint.txHash }, { header: TIP }],
+      interests: 0n,
+      maturity,
+      isReady,
+      isDeposit: true,
+      ckbValue: udtValue,
+      udtValue: 0n,
+    },
+    logic,
+  );
+  Object.assign(result, { udtValue });
+  return result;
 }
 
 function epochAtUnix(maturityUnix: bigint): ccc.Epoch {

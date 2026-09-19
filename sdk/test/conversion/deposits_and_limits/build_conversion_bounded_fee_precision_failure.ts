@@ -33,9 +33,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
               udtScale: 1n,
             }),
             ckbAvailable: 1n,
-            poolDeposits: {
-              deposits: [],
-            },
+            poolDeposits: [],
           },
           ckbAvailable: 0n,
           ickbAvailable: 1n,

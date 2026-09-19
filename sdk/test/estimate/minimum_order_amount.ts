@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  estimate,
   estimateIckbToCkbOrder,
   minimumOrderAmount,
-} from "../../src/conversion/sdk_estimate.ts";
+} from "../../src/conversion/estimate.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
-import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
+import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
 
 describe(`${ESTIMATE_SUITE} minimum order amount`, () => {
   const ratios = [
@@ -42,7 +41,7 @@ describe(`${ESTIMATE_SUITE} minimum order amount`, () => {
           { ckbValue: 0n, udtValue: minimum },
           state,
         );
-        expect(accepted?.estimate.ckbFee).toBeGreaterThanOrEqual(0n);
+        expect(accepted?.ckbFee).toBeGreaterThanOrEqual(0n);
         // Exact: one unit less and the dust search finds no fee that reaches the threshold.
         expect(
           estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: minimum - 1n }, state),

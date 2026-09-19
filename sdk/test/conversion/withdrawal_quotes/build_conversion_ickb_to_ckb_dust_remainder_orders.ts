@@ -56,9 +56,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           // The default fee pays 10 on this remainder; a threshold of 20 makes it a dust order.
           feeRate: 2n,
           ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
-          poolDeposits: {
-            deposits: [directDeposit, ringAnchor],
-          },
+          poolDeposits: [directDeposit, ringAnchor],
         },
         ckbAvailable: 0n,
         ickbAvailable: amount,

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbError } from "../../../../src/conversion/sdk_error.ts";
-import { projectAccountAvailability } from "../../../../src/conversion/sdk_projection.ts";
+import { IckbError } from "../../../../src/conversion/error.ts";
+import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   ICKB_DEPOSIT_CAP,

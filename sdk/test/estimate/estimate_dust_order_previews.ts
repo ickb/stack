@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimate, estimateIckbToCkbOrder } from "../../src/conversion/sdk_estimate.ts";
+import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
 import { partialOrderFee } from "../../src/order/fee.ts";
 import type { Info } from "../../src/order/info.ts";
 import { OrderMatcher } from "../../src/order/matcher.ts";
@@ -14,7 +14,7 @@ import {
   headerLike,
   system,
 } from "../transaction/base/support/sdk_core_support.ts";
-import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
+import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -255,9 +255,9 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       inputIckb: 1000000n,
       maturityEstimateUnavailable: false,
     });
-    expect(result.estimate.ckbFee).toBeGreaterThanOrEqual(332220n);
-    expect(result.estimate.convertedAmount).toBeGreaterThan(0n);
-    expect(result.estimate.info.udtToCkb.ckbScale).toBeLessThanOrEqual(maxUint64);
-    expect(result.estimate.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
+    expect(result.ckbFee).toBeGreaterThanOrEqual(332220n);
+    expect(result.convertedAmount).toBeGreaterThan(0n);
+    expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual(maxUint64);
+    expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
   });
 });

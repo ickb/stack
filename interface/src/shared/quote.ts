@@ -1,6 +1,7 @@
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
+  OrderConversionRepresentabilityError,
   quoteConversion,
   type Ratio,
 } from "@ickb/sdk";
@@ -42,7 +43,7 @@ export function conversionQuote(rawText: string, state: QuoteStateLike): Convers
       { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
     );
   } catch (error) {
-    if (error instanceof Error && error.name === "OrderConversionRepresentabilityError") {
+    if (error instanceof OrderConversionRepresentabilityError) {
       return { outputText: "..." };
     }
     throw error;

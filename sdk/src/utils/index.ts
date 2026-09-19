@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-export { expectedChainIdentity } from "./chain.ts";
+export { chainIdentities } from "./chain.ts";
 export type { ChainIdentity, SupportedChain } from "./chain.ts";
 export {
   CheckedInt32LE,

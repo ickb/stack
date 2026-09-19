@@ -3,7 +3,7 @@ import { byte32FromByte, StubClient, headerLike as testHeaderLike } from "@ickb/
 import type {
   ConversionTransactionContext,
   SystemState,
-} from "../../../../src/conversion/sdk_types.ts";
+} from "../../../../src/conversion/types.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 
 export const hash = byte32FromByte;
@@ -65,7 +65,7 @@ export function system(overrides: Partial<SystemState> = {}): SystemState {
     orderPool: [],
     ckbAvailable: 0n,
     ckbMaturing: [],
-    poolDeposits: { deposits: [] },
+    poolDeposits: [],
     ...overrides,
   };
 }

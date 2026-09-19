@@ -1,6 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/sdk_types.ts";
+import type { SystemState } from "../../../../src/conversion/types.ts";
 import type {
   IckbDepositCell,
   ReceiptCell,

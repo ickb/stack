@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
-import type { SystemState } from "../../../src/conversion/sdk_types.ts";
+import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
+import type { SystemState } from "../../../src/conversion/types.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,
@@ -36,7 +36,7 @@ function system(overrides: Partial<SystemState> = {}): SystemState {
     orderPool: [],
     ckbAvailable: 0n,
     ckbMaturing: [],
-    poolDeposits: { deposits: [] },
+    poolDeposits: [],
     ...overrides,
   };
 }

@@ -19,7 +19,8 @@ export interface ChainIdentity {
   readonly addressPrefix: "ckb" | "ckt";
 }
 
-const chainIdentities = Object.freeze({
+/** The immutable canonical identity of each supported chain. */
+export const chainIdentities = Object.freeze({
   mainnet: Object.freeze({
     chain: "mainnet",
     networkName: "ckb",
@@ -40,8 +41,3 @@ const chainIdentities = Object.freeze({
     addressPrefix: "ckt",
   }),
 } as const satisfies Record<SupportedChain, ChainIdentity>);
-
-/** Returns the immutable canonical identity for one supported chain. */
-export function expectedChainIdentity(chain: SupportedChain): ChainIdentity {
-  return chainIdentities[chain];
-}

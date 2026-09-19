@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
-} from "../../src/conversion/sdk_estimate.ts";
+} from "../../src/conversion/estimate.ts";
 import type * as ConversionModule from "../../src/order/conversion.ts";
 import { Info } from "../../src/order/info.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
@@ -19,8 +19,7 @@ describe("IckbSdk.estimate dust fee search", () => {
   it("uses a dust quote when the default quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE });
 
-    const { estimateIckbToCkbOrder } =
-      await import("../../src/conversion/sdk_estimate.ts");
+    const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
       estimateIckbToCkbOrder(
@@ -36,8 +35,7 @@ describe("IckbSdk.estimate dust fee search", () => {
   it("stops when an intermediate dust fee quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: 5n, feeBase: 11n });
 
-    const { estimateIckbToCkbOrder } =
-      await import("../../src/conversion/sdk_estimate.ts");
+    const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
       estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, system({ feeRate: 1n })),

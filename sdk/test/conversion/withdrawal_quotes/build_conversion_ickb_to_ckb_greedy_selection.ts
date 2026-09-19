@@ -21,7 +21,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
-  it("preserves iCKB-to-CKB maturity-bucket priority before direct surplus", async () => {
+  it("takes the earliest-maturing ready deposit before a later one with more surplus", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const earlier = projectionReadyDeposit(8n * unit, 30n * 60n * 1000n, {
@@ -52,9 +52,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           system: {
             exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
             ckbAvailable: 10n,
-            poolDeposits: {
-              deposits: [laterHigherGain, earlier],
-            },
+            poolDeposits: [laterHigherGain, earlier],
           },
           ckbAvailable: 0n,
           ickbAvailable: ICKB_DEPOSIT_CAP,
@@ -69,7 +67,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
-  it("prefers more direct deposits when value and surplus tie", async () => {
+  it("walks the greedy selection, so two small deposits beat one large anchor", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const large = projectionReadyDeposit(8n * unit, 0n, { id: "c1" });

@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { TRANSACTION_SIZE_BUDGET } from "../../../src/conversion/sdk_base.ts";
 import { DaoOutputLimitError } from "../../../src/core/index.ts";
+import { TRANSACTION_SIZE_BUDGET } from "../../../src/sdk.ts";
 import {
   fundedSigner,
   testSdk,
@@ -272,7 +272,6 @@ function registerFailureTests(): void {
     ).rejects.toMatchObject({
       name: "IckbError",
       code: "insufficient_capacity",
-      retryable: false,
     });
     expect(tx.toHex()).toBe(original);
   });

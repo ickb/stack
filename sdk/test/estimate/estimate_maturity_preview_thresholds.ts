@@ -1,10 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimate } from "../../src/conversion/sdk_estimate.ts";
-import { estimateMaturityFeeThreshold } from "../../src/conversion/sdk_estimate_core.ts";
+import { estimateMaturityFeeThreshold } from "../../src/conversion/estimate.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
-import { ESTIMATE_SUITE } from "./support/estimate_support.ts";
+import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -1,20 +1,20 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE } from "../../../src/conversion/sdk_estimate.ts";
+import { DEFAULT_ORDER_FEE } from "../../../src/conversion/estimate.ts";
+import type { ConversionDirection } from "../../../src/conversion/types.ts";
 import { convert } from "../../../src/core/index.ts";
 import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
 export type Kind = "order" | "conversion";
-export type Direction = "ckb-to-ickb" | "ickb-to-ckb";
 
 /** One turn's random choices; `fee` is the order's incentive numerator over the SDK's fee base. */
 export type Draw =
-  | { kind: "order"; direction: Direction; amount: bigint; fee: bigint }
-  | { kind: "conversion"; direction: Direction; amount: bigint };
+  | { kind: "order"; direction: ConversionDirection; amount: bigint; fee: bigint }
+  | { kind: "conversion"; direction: ConversionDirection; amount: bigint };
 
 /** Knobs that pin one draw each; see `readStimulusOverride`. */
 export interface Override {
   kind?: Kind;
-  direction?: Direction;
+  direction?: ConversionDirection;
   amount?: bigint | "max";
   fee?: bigint;
 }
@@ -57,7 +57,7 @@ export function drawTurn(
   override: Override,
   random: () => number,
 ): Draw | undefined {
-  const direction = override.direction ?? drawDirection(budgets, random);
+  const direction = override.direction ?? drawConversionDirection(budgets, random);
   if (direction === undefined) {
     return undefined;
   }
@@ -90,7 +90,10 @@ export function drawTurn(
   return { kind, direction, amount, fee };
 }
 
-function drawDirection(budgets: Budgets, random: () => number): Direction | undefined {
+function drawConversionDirection(
+  budgets: Budgets,
+  random: () => number,
+): ConversionDirection | undefined {
   const ckbWeight = budgets.ckb;
   const ickbWeight = convert(false, budgets.ickb, budgets.ratio);
   const total = ckbWeight + ickbWeight;

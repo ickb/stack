@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   completeFirstFundable,
-  type FundableCompletion,
   isFundabilityFailure,
-} from "../../../../src/conversion/withdrawal_completion.ts";
+} from "../../../../src/conversion/fundable_walk.ts";
 import {
   type IckbDepositCell,
   receiptPhase2Capacity,
@@ -75,7 +74,7 @@ export async function buildTransaction(
   }
 
   let attempts = 0;
-  let completion: FundableCompletion<Core>;
+  let completion: Awaited<ReturnType<typeof completeFirstFundable<Core>>>;
   try {
     completion = await completeFirstFundable(
       cores,
@@ -175,13 +174,17 @@ function buildCore(
   matched: MatchOutcome,
   core: Core,
 ): ccc.Transaction {
-  let tx = runtime.sdk.buildBaseTransaction(matched.tx.clone(), {
-    ...(core.kind === "withdraw"
-      ? { withdrawalRequest: { deposits: core.deposits, lock: runtime.primaryLock } }
-      : {}),
-    receipts: state.receipts,
-    readyWithdrawals: state.readyWithdrawals,
-  });
+  let tx = runtime.sdk.buildBaseTransaction(
+    matched.tx.clone(),
+    {
+      availableOrders: [],
+      receipts: state.receipts,
+      readyWithdrawals: state.readyWithdrawals,
+    },
+    core.kind === "withdraw"
+      ? { deposits: core.deposits, lock: runtime.primaryLock }
+      : undefined,
+  );
   if (core.kind === "deposit") {
     tx = runtime.managers.logic.deposit(
       tx,

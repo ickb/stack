@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { completeFirstFundable } from "../../../src/conversion/withdrawal_completion.ts";
+import { completeFirstFundable } from "../../../src/conversion/fundable_walk.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
@@ -73,7 +73,7 @@ function conversion(
     context: conversionContext({
       system: {
         ckbAvailable: ccc.fixedPointFrom(1_000_000),
-        poolDeposits: { deposits: readyPool(fixture) },
+        poolDeposits: readyPool(fixture),
       },
       cells,
       ickbAvailable: amount,
@@ -169,7 +169,7 @@ describe("buildConversionTransaction fundable walk", () => {
 describe("completeFirstFundable", () => {
   const tx = ccc.Transaction.default();
 
-  it("skips unrepresentable candidates, advances past fundability failures, and keeps the last error", async () => {
+  it("advances past fundability failures and keeps the last error", async () => {
     const attempts: number[] = [];
     const complete = async (candidate: ccc.Transaction): Promise<ccc.Transaction> => {
       await Promise.resolve();
@@ -183,13 +183,13 @@ describe("completeFirstFundable", () => {
       [3, 2, 1],
       (count) => {
         attempts.push(count);
-        return count === 2 ? undefined : transactionWithOutputs(count, script("11"));
+        return transactionWithOutputs(count, script("11"));
       },
       complete,
     );
 
-    expect(attempts).toEqual([3, 2, 1]);
-    expect(funded).toMatchObject({ candidate: 1 });
+    expect(attempts).toEqual([3, 2]);
+    expect(funded).toMatchObject({ candidate: 2 });
     await expect(
       completeFirstFundable([3], () => transactionWithOutputs(3, script("11")), complete),
     ).rejects.toMatchObject({ name: "DaoOutputLimitError" });

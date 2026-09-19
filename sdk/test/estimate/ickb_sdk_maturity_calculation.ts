@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { maturity } from "../../src/conversion/sdk_maturity.ts";
+import { maturity } from "../../src/conversion/maturity.ts";
 import { Info } from "../../src/order/info.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import {

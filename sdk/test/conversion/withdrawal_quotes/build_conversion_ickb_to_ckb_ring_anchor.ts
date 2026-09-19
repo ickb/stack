@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
-  it("prefers better direct iCKB-to-CKB economic surplus within a maturity bucket", async () => {
+  it("leaves the segment anchor and withdraws the surplus deposit", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const largerLowerGain = projectionReadyDeposit(9n * unit, 0n, {
@@ -42,7 +42,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     expect(mint).toHaveBeenCalledTimes(1);
   });
 
-  it("prefers an earlier iCKB-to-CKB maturity bucket over a marginally larger withdrawal", async () => {
+  it("leaves the largest deposit as the anchor and takes the two earlier surplus ones", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const smallEarlier = projectionReadyDeposit(4n * unit, 0n);

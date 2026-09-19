@@ -72,13 +72,11 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
       return tx;
     });
 
-    const tx = sdk.buildBaseTransaction(baseTx, {
-      withdrawalRequest: {
-        deposits: [requestedDeposit],
-        lock: botLock,
-      },
-      orders: [placeholderOrder],
-    });
+    const tx = sdk.buildBaseTransaction(
+      baseTx,
+      { availableOrders: [placeholderOrder], receipts: [], readyWithdrawals: [] },
+      { deposits: [requestedDeposit], lock: botLock },
+    );
 
     expect(tx.inputs).toHaveLength(3);
     expect(tx.outputs).toHaveLength(2);

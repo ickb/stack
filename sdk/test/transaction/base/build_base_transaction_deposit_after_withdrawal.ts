@@ -11,6 +11,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const NO_COLLECT = { availableOrders: [], receipts: [], readyWithdrawals: [] };
+
 describe(BUILD_BASE_TRANSACTION_SUITE, () => {
   it("lets callers append a deposit after the withdrawal request path", () => {
     const { botLock, dao, logic, logicManager, ownedOwnerManager, sdk } =
@@ -47,11 +49,9 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
       return tx;
     });
 
-    let tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
-      withdrawalRequest: {
-        deposits: [requestedDeposit],
-        lock: botLock,
-      },
+    let tx = sdk.buildBaseTransaction(ccc.Transaction.default(), NO_COLLECT, {
+      deposits: [requestedDeposit],
+      lock: botLock,
     });
     tx = logicManager.deposit(tx, 1, 2n, botLock);
 
@@ -72,11 +72,9 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
     );
 
     expect(() =>
-      sdk.buildBaseTransaction(tx, {
-        withdrawalRequest: {
-          deposits: [depositCell("85", logic, dao, baseTip, baseTip, { isReady: true })],
-          lock: botLock,
-        },
+      sdk.buildBaseTransaction(tx, NO_COLLECT, {
+        deposits: [depositCell("85", logic, dao, baseTip, baseTip, { isReady: true })],
+        lock: botLock,
       }),
     ).toThrow("Transaction has different inputs and outputs lengths");
   });

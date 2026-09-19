@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  IckbError,
-  isIckbError,
-  type IckbErrorCode,
-} from "../../src/conversion/sdk_error.ts";
+import { IckbError, type IckbErrorCode } from "../../src/conversion/error.ts";
 
 describe("IckbError", () => {
   it.each<IckbErrorCode>(["insufficient_capacity"])(
@@ -16,14 +12,8 @@ describe("IckbError", () => {
         name: "IckbError",
         message: "SDK operation failed",
         code,
-        retryable: false,
         cause,
       });
-      expect(isIckbError(error)).toBe(true);
     },
   );
-
-  it("rejects unrelated errors", () => {
-    expect(isIckbError(new Error("scan stopped"))).toBe(false);
-  });
 });

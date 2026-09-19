@@ -47,9 +47,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         context: conversionContext({
           system: {
             exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
-            poolDeposits: {
-              deposits: [extra, protectedAnchor],
-            },
+            poolDeposits: [extra, protectedAnchor],
           },
           ckbAvailable: 0n,
           ickbAvailable: 1n,

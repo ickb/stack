@@ -184,29 +184,6 @@ export function fakeIckbUdt(
   return new TestIckbUdt(udt, logic, daoManager);
 }
 
-export function signerWithLock(lock: ccc.Script): ccc.Signer {
-  return new TestSigner(undefined, lock);
-}
-
-class TestSigner extends ccc.SignerCkbScriptReadonly {
-  public override sendTransaction: ccc.Signer["sendTransaction"];
-
-  constructor(
-    sendTransaction: ccc.Signer["sendTransaction"] = defaultSendTransaction,
-    lock = script("11"),
-  ) {
-    super(baseClient, lock);
-    this.sendTransaction = sendTransaction;
-  }
-}
-
-async function defaultSendTransaction(): Promise<
-  Awaited<ReturnType<ccc.Signer["sendTransaction"]>>
-> {
-  await Promise.resolve();
-  return hash("ff");
-}
-
 export function mockPassthroughMint(orderManager: OrderManager): void {
   vi.spyOn(orderManager, "mint").mockImplementation(passthroughTransaction);
 }
@@ -227,9 +204,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
         system: {
           exchangeRatio: options.exchangeRatio,
           ckbAvailable: 10n,
-          poolDeposits: {
-            deposits: options.deposits,
-          },
+          poolDeposits: options.deposits,
         },
         ckbAvailable: 0n,
         ickbAvailable: ICKB_DEPOSIT_CAP,

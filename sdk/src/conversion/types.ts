@@ -12,21 +12,11 @@ import type { Info } from "../order/info.ts";
 import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { ValueComponents } from "../utils/index.ts";
-export const CONVERSION_MATURITY_BUCKET_MS = 60n * 60n * 1000n;
-export const NOTHING_TO_DO_REASON: ConversionTransactionFailureReason = "nothing-to-do";
 
 /**
  * Direction requested by a conversion transaction.
  */
 export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
-
-/**
- * Public pool deposit scan used by conversion planning.
- */
-export interface PoolDepositState {
-  /** All scanned iCKB pool deposits, with readiness evaluated against the sampled tip. */
-  deposits: IckbDepositCell[];
-}
 
 /**
  * Optional DAO readiness window for pool deposit scans.
@@ -57,7 +47,10 @@ export interface ConversionTransactionContext {
   ckbAvailable: bigint;
   /** Projected iCKB available to the wallet after pending state is considered. */
   ickbAvailable: bigint;
-  /** Best available maturity estimate for the requested conversion context. */
+  /**
+   * The latest date at which everything the wallet has converting, plus this request, is
+   * collectable; an amount of zero is the collection itself (decisions amendment 52(ai)).
+   */
   estimatedMaturity: bigint;
 }
 
@@ -178,18 +171,6 @@ export interface GetL1StateOptions {
 }
 
 /**
- * Estimate for the order leg of an iCKB-to-CKB conversion.
- */
-export interface IckbToCkbOrderEstimate {
-  /** Order conversion estimate for the market leg. */
-  estimate: ConversionOrderEstimate;
-  /** Estimated maturity for the output CKB, or `undefined` when unavailable. */
-  maturity: bigint | undefined;
-  /** Optional non-fatal notice associated with the estimate. */
-  notice?: ConversionNotice;
-}
-
-/**
  * Quote details for one order-based conversion path.
  */
 export interface ConversionOrderEstimate {
@@ -201,6 +182,8 @@ export interface ConversionOrderEstimate {
   info: Info;
   /** Estimated maturity timestamp, or `undefined` when it cannot be estimated. */
   maturity: ccc.Num | undefined;
+  /** A non-fatal notice about the path this estimate took, for the caller to surface. */
+  notice?: ConversionNotice;
 }
 
 /**
@@ -284,14 +267,14 @@ export interface SystemState {
   tip: ccc.ClientBlockHeader;
   /** The exchange ratio between CKB and UDT. */
   exchangeRatio: Ratio;
-  /** The order pool containing resolved groups matching system criteria. */
+  /** Every order past par on the book, the wallet's own included: what the bot can fill. */
   orderPool: OrderGroup[];
   /** The total available CKB (as FixedPoint). */
   ckbAvailable: ccc.FixedPoint;
   /** Array of CKB maturing entries with cumulative amounts and maturity timestamps. */
   ckbMaturing: CkbCumulative[];
-  /** Public pool deposit scan evaluated against this tip for conversion planning. */
-  poolDeposits: PoolDepositState;
+  /** Every iCKB pool deposit, its readiness evaluated against this tip. */
+  poolDeposits: IckbDepositCell[];
 }
 
 /**
@@ -316,33 +299,9 @@ export interface SdkManagers {
   order: OrderManager;
 }
 
-/**
- * Optional components to collect into a base iCKB transaction.
- */
-export interface BuildBaseTransactionOptions {
-  /** DAO withdrawal request inputs/outputs to add before other collect steps. */
-  withdrawalRequest?: {
-    /** Deposits to spend into owned withdrawal requests. */
-    deposits: IckbDepositCell[];
-
-    /** User lock for owner marker outputs. */
-    lock: ccc.Script;
-  };
-
-  /** Fulfilled or selected order groups to melt. */
-  orders?: OrderGroup[];
-
-  /** Receipt cells to spend for deposit completion. */
-  receipts?: ReceiptCell[];
-
-  /** Ready owned withdrawal groups to complete. */
-  readyWithdrawals?: WithdrawalGroup[];
-}
-
 export interface ConversionOrder {
   amounts: ValueComponents;
   estimate: ConversionOrderEstimate;
-  conversionNotice?: ConversionNotice;
 }
 
 export interface CkbToIckbConversionPlan {
@@ -353,19 +312,7 @@ export interface CkbToIckbConversionPlan {
 }
 
 export interface IckbToCkbConversionPlan {
-  directSurplusCkb: bigint;
-  directUdtValue: bigint;
   estimatedMaturity: bigint;
   order?: ConversionOrder;
   selectedDeposits: IckbDepositCell[];
-}
-
-export interface MaturingCkb {
-  ckbValue: ccc.FixedPoint;
-  maturity: ccc.Num;
-}
-
-export interface CkbProjection {
-  ready: ccc.FixedPoint;
-  maturing: MaturingCkb[];
 }

@@ -2,13 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import { DAO_HEADER_INDEX_LIMIT, type WithdrawalGroup } from "../core/index.ts";
 import type { OrderGroup } from "../order/cells.ts";
 import { maxBigInt } from "../utils/index.ts";
-import { maturity } from "./sdk_maturity.ts";
+import { maturity } from "./maturity.ts";
 import type {
   AccountAvailabilityProjection,
   AccountState,
   ConversionTransactionContextProjection,
   SystemState,
-} from "./sdk_types.ts";
+} from "./types.ts";
 
 /**
  * Builds the conversion planner context from account state and the caller's own orders,
@@ -116,11 +116,11 @@ function splitWithdrawals(
   return { readyWithdrawals, pendingWithdrawals };
 }
 
-function sumCkb(items: Array<{ ckbValue: bigint }>): bigint {
+function sumCkb(items: ReadonlyArray<{ ckbValue: bigint }>): bigint {
   return sumValues(items, (item) => item.ckbValue);
 }
 
-function sumUdt(items: Array<{ udtValue: bigint }>): bigint {
+export function sumUdt(items: ReadonlyArray<{ udtValue: bigint }>): bigint {
   return sumValues(items, (item) => item.udtValue);
 }
 

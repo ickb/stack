@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectAccountAvailability } from "../src/conversion/sdk_projection.ts";
+import { projectAccountAvailability } from "../src/conversion/projection.ts";
 import * as sdk from "../src/index.ts";
 import {
   nativeUdtCell,
@@ -12,13 +12,13 @@ describe("sdk package barrel", () => {
       "DEFAULT_ORDER_FEE",
       "DEFAULT_ORDER_FEE_BASE",
       "IckbError",
+      "hasTransactionActivity",
       "IckbSdk",
       "OrderConversionRepresentabilityError",
       "Ratio",
       "TransactionBroadcastError",
       "TransactionWaitError",
       "ickbExchangeRatio",
-      "isIckbError",
       "projectConversionTransactionContext",
       "quoteConversion",
       "signAndSendTransaction",
@@ -31,7 +31,7 @@ describe("sdk package barrel", () => {
       "getConfig",
       "OrderManager",
       "completeFirstFundable",
-      "IckbSdkL1",
+      "estimateConversionOrder",
     ]) {
       expect(sdk).not.toHaveProperty(name);
     }

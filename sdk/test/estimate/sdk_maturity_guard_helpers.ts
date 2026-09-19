@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import { estimateConversionOrder } from "../../src/conversion/sdk_estimate.ts";
-import { maturity } from "../../src/conversion/sdk_maturity.ts";
-import { ringTargetSegmentIndex } from "../../src/core/withdrawal_selection.ts";
+import { estimateConversionOrder } from "../../src/conversion/estimate.ts";
+import { maturity } from "../../src/conversion/maturity.ts";
+import { ringSegmentIndex } from "../../src/conversion/withdrawal_ring.ts";
 import { Info } from "../../src/order/info.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import { headerLike, ratio } from "../transaction/base/support/sdk_core_support.ts";
@@ -23,7 +23,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       ],
       ckbAvailable: 0n,
       ckbMaturing: [{ ckbCumulative: 100n, maturity: 500n }],
-      poolDeposits: { deposits: [] },
+      poolDeposits: [],
     };
 
     expect(
@@ -69,10 +69,8 @@ describe("sdk maturity and withdrawal guard helpers", () => {
 
   it("rejects invalid ring target epochs", () => {
     expect(() =>
-      ringTargetSegmentIndex(
-        headerLike(0n, {
-          epoch: ccc.Epoch.from({ integer: 0n, numerator: 0n, denominator: 0n }),
-        }),
+      ringSegmentIndex(
+        ccc.Epoch.from({ integer: 0n, numerator: 0n, denominator: 0n }),
         1,
       ),
     ).toThrow("Epoch denominator must be positive");

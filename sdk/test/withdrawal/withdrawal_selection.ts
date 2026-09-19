@@ -4,8 +4,8 @@ import {
   ringSegments,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
-} from "../../src/core/withdrawal_selection.ts";
-import { depositCell, ringDeposit, TIP } from "./support/withdrawal_selection_support.ts";
+} from "../../src/conversion/withdrawal_ring.ts";
+import { ringDeposit, TIP } from "./support/withdrawal_selection_support.ts";
 
 describe("selectReadyWithdrawalDeposits ring segments", () => {
   it("keeps adaptive segments above the integer ring length", () => {
@@ -21,26 +21,21 @@ describe("selectReadyWithdrawalDeposits ring segments", () => {
     const otherAnchor = ringDeposit(6n, 100n);
 
     expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [surplus, anchor, otherAnchor],
-        tip: TIP,
-        maxAmount: 4n,
-        canSelectDeposit: ringSurplusDepositFilter([surplus, anchor, otherAnchor]),
-      }),
+      selectReadyWithdrawalDeposits(
+        [surplus, anchor, otherAnchor].filter(
+          ringSurplusDepositFilter([surplus, anchor, otherAnchor]),
+        ),
+        4n,
+        TIP,
+      ),
     ).toEqual([surplus]);
   });
 
   it("rejects malformed epoch denominators", () => {
-    expect(() =>
-      ringSegments([
-        {
-          cell: depositCell("bad-epoch"),
-          isReady: true,
-          udtValue: 1n,
-          maturity: ccc.Epoch.from([1n, 0n, 0n]),
-        },
-      ]),
-    ).toThrow("Epoch denominator must be positive");
+    const deposit = ringDeposit(1n, 1n);
+    Object.assign(deposit, { maturity: ccc.Epoch.from([1n, 0n, 0n]) });
+
+    expect(() => ringSegments([deposit])).toThrow("Epoch denominator must be positive");
   });
 });
 
@@ -49,12 +44,11 @@ describe("selectReadyWithdrawalDeposits ring exclusions", () => {
     const anchor = ringDeposit(4n, 1n);
 
     expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [anchor],
-        tip: TIP,
-        maxAmount: 4n,
-        canSelectDeposit: ringSurplusDepositFilter([anchor]),
-      }),
+      selectReadyWithdrawalDeposits(
+        [anchor].filter(ringSurplusDepositFilter([anchor])),
+        4n,
+        TIP,
+      ),
     ).toEqual([]);
   });
 
@@ -63,12 +57,11 @@ describe("selectReadyWithdrawalDeposits ring exclusions", () => {
     const readyAnchor = ringDeposit(4n, 1n, { key: "anchor" });
 
     expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [readyAnchor],
-        tip: TIP,
-        maxAmount: 4n,
-        canSelectDeposit: ringSurplusDepositFilter([poolAnchor]),
-      }),
+      selectReadyWithdrawalDeposits(
+        [readyAnchor].filter(ringSurplusDepositFilter([poolAnchor])),
+        4n,
+        TIP,
+      ),
     ).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbError } from "../../../../src/conversion/sdk_error.ts";
+import { IckbError } from "../../../../src/conversion/error.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";

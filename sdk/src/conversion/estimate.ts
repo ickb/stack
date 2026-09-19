@@ -1,16 +1,10 @@
-import type { ccc } from "@ckb-ccc/core";
-import { OrderConversionRepresentabilityError } from "../order/conversion.ts";
-import { ceilDiv, type ValueComponents } from "../utils/index.ts";
 import {
-  estimateConversionOrder,
-  estimateMaturityFeeThreshold,
-} from "./sdk_estimate_core.ts";
-import { maturity } from "./sdk_maturity.ts";
-import type {
-  ConversionOrderEstimate,
-  IckbToCkbOrderEstimate,
-  SystemState,
-} from "./sdk_types.ts";
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "../order/conversion.ts";
+import { ceilDiv, type ValueComponents } from "../utils/index.ts";
+import { maturity } from "./maturity.ts";
+import type { ConversionOrderEstimate, SystemState } from "./types.ts";
 
 /**
  * Default order-fee numerator used by Stack conversion quotes and plans: 0.01%, about two
@@ -22,22 +16,36 @@ export const DEFAULT_ORDER_FEE = 10n;
 /** Default order-fee denominator used by Stack conversion quotes and plans. */
 export const DEFAULT_ORDER_FEE_BASE = 100000n;
 
-export function estimate(
+/** The quote and its maturity estimate, or `undefined` when no order ratio represents it. */
+export function estimateConversionOrder(
   isCkb2Udt: boolean,
   amounts: ValueComponents,
   system: SystemState,
-  options?: { fee?: ccc.Num; feeBase?: ccc.Num },
-): ConversionOrderEstimate {
-  const conversion = estimateConversionOrder(isCkb2Udt, amounts, system, {
-    fee: DEFAULT_ORDER_FEE,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-    ...options,
-  });
-  if (conversion === undefined) {
-    throw new OrderConversionRepresentabilityError();
+  { fee, feeBase }: { fee: bigint; feeBase: bigint },
+): ConversionOrderEstimate | undefined {
+  let quote: ReturnType<typeof quoteConversion>;
+  try {
+    quote = quoteConversion(isCkb2Udt, system.exchangeRatio, amounts, { fee, feeBase });
+  } catch (error) {
+    if (error instanceof OrderConversionRepresentabilityError) {
+      return undefined;
+    }
+    throw error;
   }
+  const estimatedMaturity =
+    quote.ckbFee >= estimateMaturityFeeThreshold(system)
+      ? maturity({ info: quote.info, amounts }, system)
+      : undefined;
+  return { ...quote, maturity: estimatedMaturity };
+}
 
-  return conversion;
+/**
+ * Returns the CKB fee threshold above which order maturity is worth estimating.
+ */
+export function estimateMaturityFeeThreshold(
+  system: Pick<SystemState, "feeRate">,
+): bigint {
+  return 10n * system.feeRate;
 }
 
 /**
@@ -56,67 +64,48 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
   return ceilDiv(threshold * ckbScale, udtScale);
 }
 
+/**
+ * The order leg of an iCKB-to-CKB conversion: at the default fee when that fee clears the
+ * maturity threshold, else the smallest fee that does (a dust order, noticed), else the
+ * default-fee quote with a maturity-unavailable notice.
+ */
 export function estimateIckbToCkbOrder(
-  amounts: { ckbValue: bigint; udtValue: bigint },
+  amounts: ValueComponents,
   system: SystemState,
-): IckbToCkbOrderEstimate | undefined {
-  const baseEstimate = estimateIckbToCkbOrderDefaultFee(amounts, system);
-  if (baseEstimate === undefined) {
-    const dustEstimate = estimateDustIckbToCkbOrder(amounts, system);
-    return dustEstimate === undefined
-      ? undefined
-      : dustIckbToCkbOrderEstimate(amounts, system, dustEstimate);
+): ConversionOrderEstimate | undefined {
+  const base = estimateConversionOrder(false, amounts, system, {
+    fee: DEFAULT_ORDER_FEE,
+    feeBase: DEFAULT_ORDER_FEE_BASE,
+  });
+  if (base?.maturity !== undefined) {
+    return base;
   }
-  if (baseEstimate.maturity !== undefined) {
-    return { estimate: baseEstimate, maturity: baseEstimate.maturity };
-  }
-  if (baseEstimate.ckbFee >= estimateMaturityFeeThreshold(system)) {
+  if (base !== undefined && base.ckbFee >= estimateMaturityFeeThreshold(system)) {
     return {
-      estimate: baseEstimate,
-      maturity: undefined,
+      ...base,
       notice: {
         kind: "maturity-unavailable",
         inputIckb: amounts.udtValue,
-        outputCkb: baseEstimate.convertedAmount,
-        incentiveCkb: positiveFee(baseEstimate.ckbFee),
+        outputCkb: base.convertedAmount,
+        incentiveCkb: positiveFee(base.ckbFee),
         maturityEstimateUnavailable: true,
       },
     };
   }
 
-  const dustEstimate = estimateDustIckbToCkbOrder(amounts, system);
-  return dustEstimate === undefined
-    ? undefined
-    : dustIckbToCkbOrderEstimate(amounts, system, dustEstimate);
-}
-
-export { estimateConversionOrder } from "./sdk_estimate_core.ts";
-
-function estimateIckbToCkbOrderDefaultFee(
-  amounts: ValueComponents,
-  system: SystemState,
-): ConversionOrderEstimate | undefined {
-  return estimateConversionOrder(false, amounts, system, {
-    fee: DEFAULT_ORDER_FEE,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-  });
-}
-
-function dustIckbToCkbOrderEstimate(
-  amounts: ValueComponents,
-  system: SystemState,
-  orderEstimate: ConversionOrderEstimate,
-): IckbToCkbOrderEstimate {
-  const estimatedMaturity = maturity({ info: orderEstimate.info, amounts }, system);
-
+  const dust = estimateDustIckbToCkbOrder(amounts, system);
+  if (dust === undefined) {
+    return undefined;
+  }
+  const estimatedMaturity = maturity({ info: dust.info, amounts }, system);
   return {
-    estimate: orderEstimate,
+    ...dust,
     maturity: estimatedMaturity,
     notice: {
       kind: "dust-ickb-to-ckb",
       inputIckb: amounts.udtValue,
-      outputCkb: orderEstimate.convertedAmount,
-      incentiveCkb: positiveFee(orderEstimate.ckbFee),
+      outputCkb: dust.convertedAmount,
+      incentiveCkb: positiveFee(dust.ckbFee),
       maturityEstimateUnavailable: estimatedMaturity === undefined,
     },
   };

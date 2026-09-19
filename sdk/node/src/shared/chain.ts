@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  chainIdentities,
   type ChainIdentity,
-  expectedChainIdentity,
   type SupportedChain,
 } from "../../../src/utils/index.ts";
 
@@ -110,7 +110,7 @@ async function readChainPreflight(
   client: ccc.Client,
   chain: SupportedChain,
 ): Promise<ChainPreflightEvidence> {
-  const expected = expectedChainIdentity(chain);
+  const expected = chainIdentities[chain];
   const [genesis, tip] = await Promise.all([
     client.getHeaderByNumber(0n),
     client.getTipHeader(),

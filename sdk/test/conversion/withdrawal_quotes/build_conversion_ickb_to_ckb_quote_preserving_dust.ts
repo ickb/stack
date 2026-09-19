@@ -50,9 +50,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           exchangeRatio,
           ckbAvailable: ccc.fixedPointFrom("3102.81677146"),
           feeRate: 33222n,
-          poolDeposits: {
-            deposits: [directDeposit, ringAnchor],
-          },
+          poolDeposits: [directDeposit, ringAnchor],
         },
         ckbAvailable: 0n,
         ickbAvailable: amount,

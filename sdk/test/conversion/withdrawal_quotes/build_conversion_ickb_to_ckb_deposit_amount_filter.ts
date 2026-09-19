@@ -43,9 +43,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         context: conversionContext({
           system: {
             exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-            poolDeposits: {
-              deposits: [oversized, fitting],
-            },
+            poolDeposits: [oversized, fitting],
           },
           ckbAvailable: 0n,
           ickbAvailable: ICKB_DEPOSIT_CAP,

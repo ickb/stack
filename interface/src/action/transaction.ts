@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
-  isIckbError,
+  IckbError,
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
   type IckbErrorCode,
@@ -81,7 +81,9 @@ export async function buildTransactionPreview(
     });
   } catch (error) {
     return txInfoWithError(
-      isIckbError(error) ? completionFailureMessages[error.code] : errorMessageOf(error),
+      error instanceof IckbError
+        ? completionFailureMessages[error.code]
+        : errorMessageOf(error),
       context.estimatedMaturity,
     );
   }

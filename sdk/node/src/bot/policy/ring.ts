@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../../../../src/core/index.ts";
 import {
+  ringSegmentIndex,
   ringSegments,
-  ringTargetSegmentIndex,
-} from "../../../../src/core/withdrawal_selection.ts";
+} from "../../../../src/conversion/withdrawal_ring.ts";
+import type { IckbDepositCell } from "../../../../src/core/index.ts";
 
 /** Compact evidence of the pool ring the policy evaluated, as the journal carries it. */
 export interface RingSummary {
@@ -23,8 +23,8 @@ export function ringCoverage(
   tip: ccc.ClientBlockHeader,
 ): { needsSeed: boolean; summary: RingSummary } {
   const segments = ringSegments(poolDeposits);
-  const targetSegmentIndex = ringTargetSegmentIndex(tip, segments.length);
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringTargetSegmentIndex returns 0 <= index < segmentCount, and ringSegments always returns at least one segment.
+  const targetSegmentIndex = ringSegmentIndex(tip.epoch, segments.length);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringSegmentIndex returns 0 <= index < segmentCount, and ringSegments always returns at least one segment.
   const target = segments[targetSegmentIndex]!;
   const totalPoolUdt = segments.reduce((sum, segment) => sum + segment.udtValue, 0n);
   return {

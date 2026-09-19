@@ -1,9 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IckbError } from "../../../src/conversion/sdk_error.ts";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/sdk_estimate.ts";
+import { getConfig } from "../../../src/constants.ts";
+import { IckbError } from "../../../src/conversion/error.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
+import { Info } from "../../../src/order/info.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -12,7 +14,7 @@ import {
   TransactionWaitError,
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
-import { expectedChainIdentity } from "../../../src/utils/index.ts";
+import { chainIdentities } from "../../../src/utils/index.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -57,9 +59,9 @@ const identity: StimulusIdentity = {
     pathname: "/",
   },
   preflight: {
-    expected: expectedChainIdentity("testnet"),
+    expected: chainIdentities.testnet,
     observed: {
-      genesisHash: expectedChainIdentity("testnet").genesisHash,
+      genesisHash: chainIdentities.testnet.genesisHash,
       addressPrefix: "ckt",
       tip: { hash: byte32FromByte("02"), number: 1n, timestamp: 0n },
     },
@@ -124,7 +126,8 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    const request = vi.fn<Runtime["sdk"]["request"]>();
+    const orderManager = getConfig("testnet").managers.order;
+    const mint = vi.spyOn(orderManager, "mint");
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
     >(async (_txLike, options) => {
@@ -145,12 +148,13 @@ describe("runStimulusTurn", () => {
         }),
         orders: live,
         originBlocks: new Map([[fresh.origin.cell.outPoint.txHash, 1_000_000n]]),
-        sdk: { request, buildConversionTransaction },
+        sdk: { buildConversionTransaction },
+        order: orderManager,
       }),
       orderDraw,
     );
 
-    expect(request).not.toHaveBeenCalled();
+    expect(mint).not.toHaveBeenCalled();
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
@@ -177,21 +181,22 @@ describe("runStimulusTurn", () => {
 
   it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
-    const request = vi.fn<Runtime["sdk"]["request"]>(
-      async (txLike, _lock, info, amounts) => {
-        await Promise.resolve();
+    const orderManager = getConfig("testnet").managers.order;
+    const mint = vi
+      .spyOn(orderManager, "mint")
+      .mockImplementation((txLike, _lock, info, amounts) => {
         const tx = ccc.Transaction.from(txLike);
-        expect(info.ckbToUdt.isPopulated()).toBe(true);
+        expect(Info.from(info).ckbToUdt.isPopulated()).toBe(true);
         expect(amounts).toEqual({ ckbValue: 5n * CKB, udtValue: 0n });
         tx.addOutput({ capacity: 200n * CKB, lock: PRIMARY_LOCK });
         tx.addOutput({ capacity: 74n * CKB, lock: PRIMARY_LOCK });
         return tx;
-      },
-    );
+      });
     const target = runtime({
       account: fundedAccount,
       orders: [fulfilled],
-      sdk: { request, ...completing(5500n * CKB) },
+      sdk: completing(5500n * CKB),
+      order: orderManager,
     });
 
     const log = await turn(target, orderDraw);
@@ -208,7 +213,7 @@ describe("runStimulusTurn", () => {
     });
     expect(log).not.toHaveProperty("skip");
     // The base carries the fulfilled order's two melt inputs before the mint.
-    expect(request.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
+    expect(mint.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
     expect(waitMock).toHaveBeenCalledWith(target.client, TX_HASH, { timeout: 600_000 });
     expect(process.exitCode).toBeUndefined();
   });

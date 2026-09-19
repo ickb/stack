@@ -12,7 +12,7 @@ import type {
   ConversionTransactionResult,
   GetL1StateOptions,
   SystemState,
-} from "./conversion/sdk_types.ts";
+} from "./conversion/types.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
 import type { SupportedChain } from "./utils/chain.ts";
@@ -39,34 +39,18 @@ export interface IckbSdk {
 /** Creates the SDK for one chain's deployment. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor namespace intentionally share a name.
 export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
-export type { AccountAvailabilityProjection } from "./conversion/sdk_types.ts";
-export type {
-  IckbDepositCell,
-  OwnerCell,
-  ReceiptCell,
-  WithdrawalGroup,
-} from "./core/cells.ts";
-export type { DaoDepositCell, DaoWithdrawalRequestCell } from "./core/dao_cells.ts";
-export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
-export type { Info, InfoLike } from "./order/info.ts";
-export type { Master, MasterLike } from "./order/master.ts";
-export type { OrderData, OrderDataLike } from "./order/order_data.ts";
-export type { Relative, RelativeLike } from "./order/relative.ts";
-export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
 
-export { signerAccountLocks } from "./conversion/account_locks.ts";
-export { hasTransactionActivity } from "./conversion/sdk_conversion_common.ts";
-export { IckbError, isIckbError } from "./conversion/sdk_error.ts";
-export type { IckbErrorCode } from "./conversion/sdk_error.ts";
-export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/sdk_estimate.ts";
-export { projectConversionTransactionContext } from "./conversion/sdk_projection.ts";
+export { IckbError } from "./conversion/error.ts";
+export type { IckbErrorCode } from "./conversion/error.ts";
+export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/estimate.ts";
+export { projectConversionTransactionContext } from "./conversion/projection.ts";
 export type {
+  AccountAvailabilityProjection,
   AccountState,
   CkbCumulative,
   ConversionDirection,
   ConversionMetadata,
   ConversionNotice,
-  ConversionOrderEstimate,
   ConversionTransactionContext,
   ConversionTransactionContextProjection,
   ConversionTransactionFailureReason,
@@ -74,16 +58,29 @@ export type {
   ConversionTransactionResult,
   GetL1StateOptions,
   PoolDepositRangeOptions,
-  PoolDepositState,
   SystemState,
-} from "./conversion/sdk_types.ts";
+} from "./conversion/types.ts";
+export type {
+  IckbDepositCell,
+  OwnerCell,
+  ReceiptCell,
+  WithdrawalGroup,
+} from "./core/cells.ts";
+export type { DaoDepositCell, DaoWithdrawalRequestCell } from "./core/dao_cells.ts";
 export { ickbExchangeRatio } from "./core/udt.ts";
+export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "./order/conversion.ts";
 export { isRefused } from "./order/fill.ts";
+export type { Info, InfoLike } from "./order/info.ts";
+export type { Master, MasterLike } from "./order/master.ts";
+export type { OrderData, OrderDataLike } from "./order/order_data.ts";
 export { Ratio } from "./order/ratio.ts";
+export type { Relative, RelativeLike } from "./order/relative.ts";
+export { hasTransactionActivity } from "./sdk.ts";
+export { signerAccountLocks } from "./send/account_locks.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -91,3 +88,4 @@ export {
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export type { SupportedChain } from "./utils/chain.ts";
+export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";

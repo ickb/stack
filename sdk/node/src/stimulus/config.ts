@@ -1,7 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/sdk_estimate.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
+import type { ConversionDirection } from "../../../src/conversion/types.ts";
 import { readRuntimeConfigEnv, type RuntimeConfig } from "../shared/index.ts";
-import type { Direction, Kind, Override } from "./draw.ts";
+import type { Kind, Override } from "./draw.ts";
 
 /**
  * Reads `STIMULUS_CHAIN`, `STIMULUS_RPC_URL`, and the key file named by
@@ -31,7 +32,7 @@ export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
   }
   const direction = env["STIMULUS_DIRECTION"];
   if (direction !== undefined) {
-    override.direction = parseChoice<Direction>(
+    override.direction = parseChoice<ConversionDirection>(
       direction,
       ["ckb-to-ickb", "ickb-to-ckb"],
       "STIMULUS_DIRECTION",

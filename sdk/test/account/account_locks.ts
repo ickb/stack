@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { signerAccountLocks } from "../../src/conversion/account_locks.ts";
+import { signerAccountLocks } from "../../src/send/account_locks.ts";
 
 class AddressStubSigner extends ccc.SignerCkbPrivateKey {
   private readonly addresses: ccc.Address[];

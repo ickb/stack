@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../../../src/core/index.ts";
 import {
   ringSurplusDepositFilter,
   sortByMaturity,
-} from "../../../src/core/withdrawal_selection.ts";
+} from "../../../src/conversion/withdrawal_ring.ts";
+import type { IckbDepositCell } from "../../../src/core/index.ts";
 
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import {

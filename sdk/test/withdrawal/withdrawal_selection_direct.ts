@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectReadyWithdrawalDeposits } from "../../src/core/withdrawal_selection.ts";
+import { selectReadyWithdrawalDeposits } from "../../src/conversion/withdrawal_ring.ts";
 import { readyDeposit, TIP } from "./support/withdrawal_selection_support.ts";
 
 const MINUTE_MS = 60n * 1000n;
@@ -14,13 +14,10 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
     ];
 
     // 6 fits, 5 would exceed 10, 5 again, then 4 fits.
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-      }),
-    ).toEqual([deposits[0], deposits[3]]);
+    expect(selectReadyWithdrawalDeposits(deposits, 10n, TIP)).toEqual([
+      deposits[0],
+      deposits[3],
+    ]);
   });
 
   it("takes every fitting deposit with no count cap of its own", () => {
@@ -28,11 +25,7 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
       readyDeposit(1n, BigInt(index) * MINUTE_MS, `d-${String(index)}`),
     );
 
-    const selected = selectReadyWithdrawalDeposits({
-      readyDeposits: deposits,
-      tip: TIP,
-      maxAmount: 40n,
-    });
+    const selected = selectReadyWithdrawalDeposits(deposits, 40n, TIP);
 
     expect(selected).toHaveLength(40);
   });
@@ -41,73 +34,18 @@ describe("selectReadyWithdrawalDeposits greedy walk", () => {
     const earlier = readyDeposit(5n, 20n * MINUTE_MS);
     const later = readyDeposit(5n, 45n * MINUTE_MS);
 
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [later, earlier],
-        tip: TIP,
-        maxAmount: 5n,
-      }),
-    ).toEqual([earlier]);
+    expect(selectReadyWithdrawalDeposits([later, earlier], 5n, TIP)).toEqual([earlier]);
   });
 
   it("does not select a ready deposit above the requested amount", () => {
     const deposits = [readyDeposit(11n, 0n), readyDeposit(10n, 15n * MINUTE_MS)];
 
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: deposits,
-        tip: TIP,
-        maxAmount: 10n,
-      }),
-    ).toEqual([deposits[1]]);
+    expect(selectReadyWithdrawalDeposits(deposits, 10n, TIP)).toEqual([deposits[1]]);
   });
 
   it("returns no deposits for a non-positive amount", () => {
     const deposits = [readyDeposit(1n, 0n)];
 
-    expect(
-      selectReadyWithdrawalDeposits({ readyDeposits: deposits, tip: TIP, maxAmount: 0n }),
-    ).toEqual([]);
-  });
-
-  it("filters candidates before walking them", () => {
-    const blocked = readyDeposit(5n, 0n, "blocked");
-    const allowed = readyDeposit(5n, 1n, "allowed");
-
-    expect(
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [blocked, allowed],
-        tip: TIP,
-        maxAmount: 5n,
-        canSelectDeposit: (deposit) => deposit !== blocked,
-      }),
-    ).toEqual([allowed]);
-  });
-});
-
-describe("selectReadyWithdrawalDeposits input checks", () => {
-  it("rejects non-ready deposits with the offending outpoint", () => {
-    const nonReady = { ...readyDeposit(1n, 0n, "not-ready"), isReady: false };
-
-    expect(() =>
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [nonReady],
-        tip: TIP,
-        maxAmount: 1n,
-      }),
-    ).toThrow("Withdrawal deposit not-ready is not ready");
-  });
-
-  it("rejects duplicate deposits with the offending outpoint", () => {
-    const first = readyDeposit(1n, 0n, "duplicate");
-    const second = readyDeposit(1n, 1n, "duplicate");
-
-    expect(() =>
-      selectReadyWithdrawalDeposits({
-        readyDeposits: [first, second],
-        tip: TIP,
-        maxAmount: 2n,
-      }),
-    ).toThrow("Withdrawal deposit duplicate is duplicated");
+    expect(selectReadyWithdrawalDeposits(deposits, 0n, TIP)).toEqual([]);
   });
 });

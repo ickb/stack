@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
-import { isIckbError } from "../../../src/conversion/sdk_error.ts";
+import { IckbError } from "../../../src/conversion/error.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
+import type { ConversionMetadata } from "../../../src/conversion/types.ts";
 import {
-  DEFAULT_ORDER_FEE_BASE,
-  estimate,
-} from "../../../src/conversion/sdk_estimate.ts";
-import type { ConversionMetadata } from "../../../src/conversion/sdk_types.ts";
-import { OrderConversionRepresentabilityError } from "../../../src/order/conversion.ts";
+  OrderConversionRepresentabilityError,
+  quoteConversion,
+} from "../../../src/order/conversion.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -151,9 +151,9 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   const amounts = isCkb2Udt
     ? { ckbValue: draw.amount, udtValue: 0n }
     : { ckbValue: 0n, udtValue: draw.amount };
-  let info: ReturnType<typeof estimate>["info"];
+  let info: ReturnType<typeof quoteConversion>["info"];
   try {
-    info = estimate(isCkb2Udt, amounts, state.system, {
+    info = quoteConversion(isCkb2Udt, state.system.exchangeRatio, amounts, {
       fee: draw.fee,
       feeBase: DEFAULT_ORDER_FEE_BASE,
     }).info;
@@ -164,13 +164,13 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     throw error;
   }
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    orders: state.collectable,
+    availableOrders: state.collectable,
     receipts: state.context.receipts,
     readyWithdrawals: state.context.readyWithdrawals,
   });
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
-  const tx = await runtime.sdk.request(base, runtime.primaryLock, info, amounts);
+  const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
   try {
     return {
       tx: await runtime.sdk.completeTransaction(tx, {
@@ -211,7 +211,10 @@ async function buildConversion(
 }
 
 function unfundableOrThrow(error: unknown): Built {
-  if (isIckbError(error) || error instanceof ccc.ErrorTransactionInsufficientCapacity) {
+  if (
+    error instanceof IckbError ||
+    error instanceof ccc.ErrorTransactionInsufficientCapacity
+  ) {
     return { skip: { reason: "unfundable", error } };
   }
   throw error;

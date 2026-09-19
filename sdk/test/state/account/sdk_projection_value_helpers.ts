@@ -1,49 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { projectAccountAvailability } from "../../../src/conversion/sdk_projection.ts";
+import { poolCkb } from "../../../src/conversion/maturity.ts";
 import {
-  cumulativeCkbMaturing,
-  poolDepositCkb,
-  sumDirectWithdrawalSurplus,
-  sumUdtValue,
-} from "../../../src/conversion/sdk_value_helpers.ts";
+  projectAccountAvailability,
+  sumUdt,
+} from "../../../src/conversion/projection.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,
   plainCapacityCell,
   projectionReadyDeposit,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, ratio } from "../../transaction/base/support/sdk_core_support.ts";
+import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
 
 describe("sdk projection value helpers", () => {
-  it("covers CKB projection helper branches", () => {
+  it("splits the pool into ready CKB and cumulative maturing buckets", () => {
     const readyDeposit = projectionReadyDeposit(5n, 40n, { ckbValue: 50n, id: "43" });
-    const pendingDeposit = projectionReadyDeposit(7n, 60n, {
+    const later = projectionReadyDeposit(7n, 60n, {
       ckbValue: 70n,
       id: "44",
       isReady: false,
     });
-    expect(
-      cumulativeCkbMaturing([
-        { ckbValue: 2n, maturity: 2n },
-        { ckbValue: 3n, maturity: 1n },
-      ]),
-    ).toEqual([
-      { ckbCumulative: 3n, maturity: 1n },
-      { ckbCumulative: 5n, maturity: 2n },
-    ]);
-    expect(
-      poolDepositCkb(
-        {
-          deposits: [readyDeposit, pendingDeposit],
-        },
-        baseTip,
-      ),
-    ).toEqual({
-      ready: 50n,
-      maturing: [{ ckbValue: 70n, maturity: 60n }],
+    const earlier = projectionReadyDeposit(2n, 50n, {
+      ckbValue: 20n,
+      id: "45",
+      isReady: false,
     });
-    expect(sumDirectWithdrawalSurplus([readyDeposit], ratio)).toBe(45n);
-    expect(sumUdtValue([readyDeposit, pendingDeposit])).toBe(12n);
+
+    expect(poolCkb([readyDeposit, later, earlier], baseTip)).toEqual({
+      ready: 50n,
+      maturing: [
+        { ckbCumulative: 20n, maturity: 50n },
+        { ckbCumulative: 90n, maturity: 60n },
+      ],
+    });
+    expect(sumUdt([readyDeposit, later])).toBe(12n);
   });
 });
 

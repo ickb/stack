@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
-import { signerAccountLocks } from "../../src/conversion/account_locks.ts";
 import { IckbSdk } from "../../src/sdk.ts";
+import { signerAccountLocks } from "../../src/send/account_locks.ts";
 import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
 import {
   BotEventEmitter,

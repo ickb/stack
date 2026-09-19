@@ -1,13 +1,14 @@
 import type { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
-import { projectConversionTransactionContext } from "../../../src/conversion/sdk_projection.ts";
+import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type {
   AccountState,
   ConversionTransactionContext,
   SystemState,
-} from "../../../src/conversion/sdk_types.ts";
+} from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
 import { isRefused } from "../../../src/order/fill.ts";
+import type { OrderManager } from "../../../src/order/order.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import type { Budgets } from "./draw.ts";
 
@@ -17,6 +18,8 @@ export interface Runtime {
   /** Private-key signer; signing is its only secret-bearing purpose. */
   signer: ccc.SignerCkbPrivateKey;
   sdk: IckbSdk;
+  /** The order manager, for the mint the SDK's conversion workflow does not expose. */
+  order: OrderManager;
   primaryLock: ccc.Script;
   accountLocks: ccc.Script[];
 }

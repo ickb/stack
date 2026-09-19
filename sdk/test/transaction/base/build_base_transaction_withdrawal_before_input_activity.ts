@@ -113,12 +113,15 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
       steps,
     });
 
-    const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
-      withdrawalRequest: { deposits: [requestedDeposit], lock: botLock },
-      orders: [placeholderOrder],
-      receipts: [placeholderReceipt],
-      readyWithdrawals: [placeholderWithdrawal],
-    });
+    const tx = sdk.buildBaseTransaction(
+      ccc.Transaction.default(),
+      {
+        availableOrders: [placeholderOrder],
+        receipts: [placeholderReceipt],
+        readyWithdrawals: [placeholderWithdrawal],
+      },
+      { deposits: [requestedDeposit], lock: botLock },
+    );
 
     expect(steps).toEqual(["request", "orders", "receipts", "withdrawals"]);
     expect(tx.inputs).toHaveLength(4);

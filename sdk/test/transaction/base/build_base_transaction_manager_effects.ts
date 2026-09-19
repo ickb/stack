@@ -92,12 +92,11 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
     const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal");
 
     expect(() =>
-      sdk.buildBaseTransaction(ccc.Transaction.default(), {
-        withdrawalRequest: {
-          deposits: [requestedDeposit],
-          lock: botLock,
-        },
-      }),
+      sdk.buildBaseTransaction(
+        ccc.Transaction.default(),
+        { availableOrders: [], receipts: [], readyWithdrawals: [] },
+        { deposits: [requestedDeposit], lock: botLock },
+      ),
     ).toThrow(
       `Withdrawal deposit ${requestedDeposit.cell.outPoint.toHex()} is not ready`,
     );
@@ -142,12 +141,15 @@ async function buildRealBaseTransactionCase(): Promise<
     withdrawalHeader,
   });
 
-  const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    withdrawalRequest: { deposits: [requestedDeposit], lock: botLock },
-    orders: [orderGroup],
-    receipts: [receipt],
-    readyWithdrawals: [withdrawalGroup],
-  });
+  const tx = sdk.buildBaseTransaction(
+    ccc.Transaction.default(),
+    {
+      availableOrders: [orderGroup],
+      receipts: [receipt],
+      readyWithdrawals: [withdrawalGroup],
+    },
+    { deposits: [requestedDeposit], lock: botLock },
+  );
 
   return {
     tx,

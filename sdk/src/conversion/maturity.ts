@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { convert } from "../core/index.ts";
+import { convert, type IckbDepositCell } from "../core/index.ts";
 import type { Info } from "../order/info.ts";
 import type { Ratio } from "../order/ratio.ts";
-import { binarySearch, type ValueComponents } from "../utils/index.ts";
-import type { CkbCumulative, MaturityOrderInput, SystemState } from "./sdk_types.ts";
+import { binarySearch, compareBigInt, type ValueComponents } from "../utils/index.ts";
+import type { CkbCumulative, MaturityOrderInput, SystemState } from "./types.ts";
 
 export function maturity(o: MaturityOrderInput, system: SystemState): bigint | undefined {
   const { info, amounts } = maturityOrderParts(o);
@@ -112,4 +112,35 @@ function firstCkbMaturityAtOrAbove(
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- index is checked against ckbMaturing.length above.
   return ckbMaturing[index]!.maturity;
+}
+
+/**
+ * The CKB the pool can fill orders with: ready deposits now, the rest as cumulative
+ * buckets at their claim dates, earliest first.
+ */
+export function poolCkb(
+  poolDeposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+): { ready: bigint; maturing: CkbCumulative[] } {
+  let ready = 0n;
+  const maturing = poolDeposits
+    .filter((deposit) => !deposit.isReady)
+    .map((deposit) => ({
+      ckbValue: deposit.ckbValue,
+      maturity: deposit.maturity.toUnix(tip),
+    }))
+    .toSorted((left, right) => compareBigInt(left.maturity, right.maturity));
+  for (const deposit of poolDeposits) {
+    if (deposit.isReady) {
+      ready += deposit.ckbValue;
+    }
+  }
+  let cumulative = 0n;
+  return {
+    ready,
+    maturing: maturing.map(({ ckbValue, maturity: at }) => {
+      cumulative += ckbValue;
+      return { ckbCumulative: cumulative, maturity: at };
+    }),
+  };
 }

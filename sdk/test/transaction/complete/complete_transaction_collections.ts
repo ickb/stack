@@ -24,6 +24,8 @@ describe("completeTransaction with collections", () => {
     const { signer } = fundedSigner([], [botLock]);
     const feeRate = 1000n;
     const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
+      availableOrders: [],
+      receipts: [],
       readyWithdrawals: [group],
     });
     expect(tx.inputs).toHaveLength(2);
