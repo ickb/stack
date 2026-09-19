@@ -14,7 +14,7 @@ import {
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { chainIdentities } from "../../../src/utils/index.ts";
+import { chainIdentities } from "../../../src/utils/chain.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {

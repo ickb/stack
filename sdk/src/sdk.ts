@@ -25,13 +25,8 @@ import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
 import { ickbExchangeRatio, type IckbUdt } from "./udt.ts";
-import {
-  compareBigInt,
-  findCells,
-  isPlainCapacityCell,
-  unique,
-  type SupportedChain,
-} from "./utils/index.ts";
+import type { SupportedChain } from "./utils/chain.ts";
+import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 
 /**
  * The whole SDK, which the Node actors drive by relative import; the package barrel

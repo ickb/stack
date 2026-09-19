@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ValueComponents } from "../utils/index.ts";
+import type { ValueComponents } from "../utils/utils.ts";
 import { OrderData } from "./order_data.ts";
 
 // The resolver's own group, keyed by its order cell: matching and transactions use this

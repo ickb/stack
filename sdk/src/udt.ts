@@ -1,12 +1,8 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { isDaoDeposit } from "./dao.ts";
-import {
-  CheckedUint128LE,
-  CheckedUint32LE,
-  CheckedUint64LE,
-  type ExchangeRatio,
-} from "./utils/index.ts";
+import { CheckedUint128LE, CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
 import { transactionHeaders } from "./utils/transaction_header.ts";
+import type { ExchangeRatio } from "./utils/utils.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
 const udtDataSize = 16;

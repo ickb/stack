@@ -13,7 +13,7 @@
 
 import { ccc } from "@ckb-ccc/core";
 import { convert, ickbExchangeRatio } from "../../../src/udt.ts";
-import { asyncBinarySearch } from "../../../src/utils/index.ts";
+import { asyncBinarySearch } from "../../../src/utils/utils.ts";
 
 /**
  * Yields the CSV header, the genesis row, one approximate row per sample date

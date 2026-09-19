@@ -1,5 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedInt32LE } from "../utils/index.ts";
+import { CheckedInt32LE } from "../utils/codec.ts";
 
 const minInt32 = -(1n << 31n);
 const maxInt32 = (1n << 31n) - 1n;

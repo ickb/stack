@@ -1,6 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
-import { compareBigInt } from "../utils/index.ts";
+import { compareBigInt } from "../utils/utils.ts";
 
 const RING_EPOCHS = 180n;
 

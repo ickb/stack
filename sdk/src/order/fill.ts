@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ExchangeRatio } from "../utils/index.ts";
+import type { ExchangeRatio } from "../utils/utils.ts";
 import type { OrderGroup } from "./cells.ts";
 import { partialOrderFee } from "./fee.ts";
 import { type Match, OrderMatcher } from "./matcher.ts";

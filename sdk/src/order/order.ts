@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { findCells, type ScriptDeps, type ValueComponents } from "../utils/index.ts";
+import { findCells, type ScriptDeps, type ValueComponents } from "../utils/utils.ts";
 import {
   attestResolvedOrderGroup,
   MasterCell,

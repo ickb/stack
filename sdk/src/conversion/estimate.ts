@@ -3,7 +3,7 @@ import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../order/conversion.ts";
-import { ceilDiv, type ValueComponents } from "../utils/index.ts";
+import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
 import type { ConversionOrderEstimate, SystemState } from "./types.ts";
 

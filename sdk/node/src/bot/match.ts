@@ -2,7 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import type { OrderGroup } from "../../../src/order/cells.ts";
 import { partialOrderFee } from "../../../src/order/fee.ts";
 import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
-import { minBigInt, type ExchangeRatio } from "../../../src/utils/index.ts";
+import { minBigInt, type ExchangeRatio } from "../../../src/utils/utils.ts";
 
 import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
 import { MAX_MATCH_PARTIALS } from "./support.ts";

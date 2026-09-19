@@ -1,7 +1,7 @@
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP, convert } from "../udt.ts";
-import { maxBigInt } from "../utils/index.ts";
+import { maxBigInt } from "../utils/utils.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,

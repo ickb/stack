@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { CheckedUint64LE } from "./utils/index.ts";
+import { CheckedUint64LE } from "./utils/codec.ts";
 
 /**
  * Maximum output count accepted by the Nervos DAO validator path.

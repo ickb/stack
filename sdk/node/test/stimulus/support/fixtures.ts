@@ -14,7 +14,7 @@ import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { encodeReceiptData } from "../../../../src/udt.ts";
-import type { ExchangeRatio } from "../../../../src/utils/index.ts";
+import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
 
 export const CKB = ccc.fixedPointFrom(1);

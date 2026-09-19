@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { ceilDiv } from "../utils/index.ts";
+import { ceilDiv } from "../utils/utils.ts";
 import type { OrderGroup } from "./cells.ts";
 
 const CELL_INPUT_SERIALIZED_SIZE = 44;

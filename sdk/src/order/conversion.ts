@@ -4,7 +4,7 @@ import {
   minBigInt,
   type ExchangeRatio,
   type ValueComponents,
-} from "../utils/index.ts";
+} from "../utils/utils.ts";
 import { Info } from "./info.ts";
 import { Ratio } from "./ratio.ts";
 

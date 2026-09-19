@@ -6,7 +6,7 @@ import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
 import type { IckbUdt } from "../udt.ts";
-import type { ValueComponents } from "../utils/index.ts";
+import type { ValueComponents } from "../utils/utils.ts";
 
 /**
  * Direction requested by a conversion transaction.

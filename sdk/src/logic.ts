@@ -16,13 +16,13 @@ import {
   receiptDataBytes,
   type ReceiptData,
 } from "./udt.ts";
+import { transactionHeaders } from "./utils/transaction_header.ts";
 import {
   findCells,
   type ScriptDeps,
   type TransactionHeader,
   type ValueComponents,
-} from "./utils/index.ts";
-import { transactionHeaders } from "./utils/transaction_header.ts";
+} from "./utils/utils.ts";
 
 const maxDepositQuantity = 63;
 // Receipts must carry enough capacity for phase 2 when the wallet has no other

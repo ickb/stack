@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { greatestBoundedFractionAtMost } from "../../src/order/conversion.ts";
-import { minBigInt } from "../../src/utils/index.ts";
+import { minBigInt } from "../../src/utils/utils.ts";
 
 const MAX_UINT64 = (1n << 64n) - 1n;
 

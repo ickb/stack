@@ -1,5 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedUint8, type ExchangeRatio } from "../utils/index.ts";
+import { CheckedUint8 } from "../utils/codec.ts";
+import type { ExchangeRatio } from "../utils/utils.ts";
 import { Ratio } from "./ratio.ts";
 
 /**

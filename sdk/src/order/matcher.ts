@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import { ceilDiv, minBigInt } from "../utils/index.ts";
+import { ceilDiv, minBigInt } from "../utils/utils.ts";
 import type { OrderCell, OrderGroup } from "./cells.ts";
 
 /**

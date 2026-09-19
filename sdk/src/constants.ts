@@ -4,7 +4,7 @@ import { LogicManager } from "./logic.ts";
 import { OrderManager } from "./order/order.ts";
 import { OwnedOwnerManager } from "./owned_owner.ts";
 import { IckbUdt } from "./udt.ts";
-import type { SupportedChain } from "./utils/index.ts";
+import type { SupportedChain } from "./utils/chain.ts";
 
 /** Nervos DAO type script. */
 const DAO = ccc.Script.from({

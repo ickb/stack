@@ -1,9 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
+import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { transactionShape } from "../shared/format.ts";
 import type { BotEventEmitter } from "./events.ts";
-import { readBotState } from "./state.ts";
+import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy.ts";
 import { summarizeBotState } from "./support.ts";
 import { buildTransaction } from "./transaction.ts";
 import type { BotState, BuildTransactionResult, Runtime } from "./types.ts";
@@ -29,6 +31,35 @@ export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
  * wait. Any failure propagates to the entry point, which journals it and exits 1.
  */
+/**
+ * Reads bot-owned account state and public market state for one planning attempt.
+ *
+ * @remarks The bot places no orders, so nothing here counts or collects any; the market
+ * side of the state is every order past par (decisions amendment 52(ak)).
+ */
+export async function readBotState(runtime: Runtime): Promise<BotState> {
+  const { system, account } = await runtime.sdk.getL1AccountState(
+    runtime.client,
+    runtime.accountLocks,
+    { poolDeposits: { minLockUp: POOL_MIN_LOCK_UP, maxLockUp: POOL_MAX_LOCK_UP } },
+  );
+  const projection = projectAccountAvailability(account, { available: [], pending: [] });
+
+  return {
+    system,
+    marketOrders: system.orderPool,
+    receipts: account.receipts,
+    readyWithdrawals: projection.readyWithdrawals,
+    notReadyWithdrawals: projection.pendingWithdrawals,
+    poolDeposits: system.poolDeposits,
+    cells: [...account.capacityCells, ...account.nativeUdtCells],
+    ckb: projection.ckbAvailable,
+    ickb: projection.ickbAvailable,
+    pendingCkb: projection.ckbPending,
+    depositCapacity: convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+  };
+}
+
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
   const summary = summarizeBotState(state);

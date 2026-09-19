@@ -3,7 +3,7 @@ import type { OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
 import { convert, ICKB_DEPOSIT_CAP } from "../udt.ts";
-import { compareBigInt, type ValueComponents } from "../utils/index.ts";
+import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import type { MaturityOrderInput, SystemState } from "./types.ts";
 
 /**

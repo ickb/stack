@@ -3,7 +3,7 @@ import {
   chainIdentities,
   type ChainIdentity,
   type SupportedChain,
-} from "../../../src/utils/index.ts";
+} from "../../../src/utils/chain.ts";
 
 /** Public chain preflight evidence returned after identity verification. */
 export interface ChainPreflightEvidence {

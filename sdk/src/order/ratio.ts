@@ -1,5 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
-import { CheckedUint64LE, compareBigInt, type ExchangeRatio } from "../utils/index.ts";
+import { CheckedUint64LE } from "../utils/codec.ts";
+import { compareBigInt, type ExchangeRatio } from "../utils/utils.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
 
