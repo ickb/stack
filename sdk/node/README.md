@@ -171,7 +171,7 @@ The unit sets `LimitCORE=0`, so crash diagnosis uses the journal rather than a c
 ## Notes
 
 - Distribute liquidity across multiple isolated bots to limit blast radius.
-- Fund the bot with about 2.2 deposits of capital plus plain CKB above the 1,000 CKB reserve; below that it still matches what it can but may idle with a full buffer waiting for a buyer.
+- Fund the bot with about 2.5 deposits of capital (250,000 iCKB worth) plus the 1,000 CKB reserve: 1.2 deposits ride in the inventory band, since the bot withdraws only above 120,000 iCKB, one deposit's worth of CKB refills the band, and the last half keeps serving sellers while a withdrawal waits for its claim date. Below that it still matches what it can but idles with a full band waiting for a buyer or a claim date.
 - Prefer an exclusive node that keeps CKB's default `[indexer_v2] index_tx_pool = false`: with pool indexing on, a timed-out send can be duplicated with disjoint inputs on a later turn. A public node, as in the example units, is acceptable when you accept that risk.
 - The bot relies on shared CCC packages for protocol-specific transaction content and owns final iCKB completion, fee completion, signing, sending, and commit waiting.
 

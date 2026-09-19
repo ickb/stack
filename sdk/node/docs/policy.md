@@ -26,7 +26,7 @@ iCKB thresholds are constants in units of the deposit cap `Q` (100,000 iCKB), co
 ## Prerequisites
 
 - Recommended: an exclusive node that keeps CKB's default `[indexer_v2] index_tx_pool = false`. With pool indexing on, a timed-out send can be duplicated with disjoint inputs on a later turn. A public node is acceptable when the operator accepts that risk (user decision 2026-09-12); the tracked example units use the public testnet node.
-- Recommended funding: about 2.2 deposits total plus some plain CKB above the reserve. Below it the bot still matches what it can but may idle with a full buffer waiting for a buyer. The number derives from the thresholds (1.2 deposits of iCKB before withdrawal, one deposit plus reserve to deposit) and must be recomputed if they change.
+- Recommended funding: about 2.5 deposits total plus the reserve. Below it the bot still matches what it can but may idle with a full band waiting for a buyer or a claim date. The number derives from the thresholds (1.2 deposits of iCKB before withdrawal, one deposit plus reserve to refill) plus the half deposit of CKB that keeps serving sellers while a withdrawal waits for its claim date, the steady state observed on testnet (decisions amendment 52(aj)); it must be recomputed if the thresholds change.
 
 ## Properties
 
