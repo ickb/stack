@@ -43,8 +43,9 @@ describe("Ratio", () => {
     const populated = Ratio.from({ ckbScale: 1n, udtScale: 2n });
     const invalid = Ratio.from({ ckbScale: 1n, udtScale: 0n });
 
-    expect(populated.isValid()).toBe(true);
-    expect(invalid.isValid()).toBe(false);
+    expect(() => {
+      populated.validate();
+    }).not.toThrow();
     expect(() => {
       invalid.validate();
     }).toThrow("Ratio invalid");

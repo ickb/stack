@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedUint128LE } from "../utils/index.ts";
-import { isValidEntity } from "./entity_validity.ts";
 import { Info, type InfoLike } from "./info.ts";
 import {
   MasterCodec,
@@ -52,8 +51,6 @@ export interface OrderData {
   hash(): ccc.Hex;
   /** Returns whether the master pointer is relative to the current output. */
   isMint(): boolean;
-  /** Returns whether the UDT value, master pointer, and info pass validation. */
-  isValid(): boolean;
   /** Serializes the order payload to bytes. */
   toBytes(): ccc.Bytes;
   /** Serializes the order payload to full-width hexadecimal. */
@@ -103,11 +100,6 @@ const OrderDataImplementation = class OrderData extends OrderBase {
     }
     masterValidate(this.master);
     this.info.validate();
-  }
-
-  /** Returns true when validation succeeds. */
-  public isValid(): boolean {
-    return isValidEntity(this);
   }
 
   /** Returns true when the master pointer is relative to the current output. */

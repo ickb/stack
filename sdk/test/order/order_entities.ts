@@ -90,9 +90,15 @@ describe("order entity validation", () => {
       info,
     });
 
-    expect(relative.isValid()).toBe(true);
-    expect(invalidRelative.isValid()).toBe(false);
-    expect(data.isValid()).toBe(true);
+    expect(() => {
+      relative.validate();
+    }).not.toThrow();
+    expect(() => {
+      invalidRelative.validate();
+    }).toThrow("Relative master invalid, non standard padding");
+    expect(() => {
+      data.validate();
+    }).not.toThrow();
     expect(data.isMint()).toBe(true);
     expect(
       data.getMaster(ccc.OutPoint.from({ txHash: byte32("44"), index: 1n })).index,
@@ -119,7 +125,9 @@ describe("order entity validation", () => {
     const udtToCkb = Ratio.from({ ckbScale: 3n, udtScale: 1n });
     const dual = Info.from({ ckbToUdt, udtToCkb, ckbMinMatchLog: 2 });
 
-    expect(dual.isValid()).toBe(true);
+    expect(() => {
+      dual.validate();
+    }).not.toThrow();
     expect(dual.isDualRatio()).toBe(true);
     expect(dual.getCkbMinMatch()).toBe(4n);
     expect(dual.ckbToUdt.compare(Ratio.from({ ckbScale: 4n, udtScale: 1n }))).toBe(-1);
@@ -166,7 +174,9 @@ describe("order entity wire bounds", () => {
       Ratio.empty(),
       Ratio.from({ ckbScale: maxUint64, udtScale: 1n }),
     ]) {
-      expect(ratio.isValid()).toBe(true);
+      expect(() => {
+        ratio.validate();
+      }).not.toThrow();
       expect(() => {
         ratio.toBytes();
       }).not.toThrow();
@@ -177,7 +187,9 @@ describe("order entity wire bounds", () => {
         udtToCkb: Ratio.empty(),
         ckbMinMatchLog,
       });
-      expect(info.isValid()).toBe(true);
+      expect(() => {
+        info.validate();
+      }).not.toThrow();
       expect(() => {
         info.toBytes();
       }).not.toThrow();
@@ -191,7 +203,6 @@ describe("order entity wire bounds", () => {
       [Ratio.from({ ckbScale: 1n, udtScale: -1n }), "udtScale"],
       [Ratio.from({ ckbScale: 1n, udtScale: maxUint64 + 1n }), "udtScale"],
     ] as const) {
-      expect(ratio.isValid()).toBe(false);
       expect(() => {
         ratio.validate();
       }).toThrow("Ratio scale exceeds Uint64");
@@ -199,9 +210,9 @@ describe("order entity wire bounds", () => {
         ratio.toBytes();
       }).toThrow(`struct.${field} - NumLike out of uint64 bounds`);
     }
-    expect(Info.create(true, { ckbScale: maxUint64 + 1n, udtScale: 1n }).isValid()).toBe(
-      false,
-    );
+    expect(() => {
+      Info.create(true, { ckbScale: maxUint64 + 1n, udtScale: 1n }).validate();
+    }).toThrow("Ratio scale exceeds Uint64");
   });
 
   it("enforces the semantic Info integer range", () => {
@@ -211,7 +222,6 @@ describe("order entity wire bounds", () => {
         udtToCkb: Ratio.empty(),
         ckbMinMatchLog,
       });
-      expect(info.isValid()).toBe(false);
       expect(() => {
         info.validate();
       }).toThrow("ckbMinMatchLog invalid");
@@ -234,7 +244,9 @@ describe("order data wire bounds", () => {
         master: { type: "relative", value: Relative.create(1n) },
         info,
       });
-      expect(data.isValid()).toBe(true);
+      expect(() => {
+        data.validate();
+      }).not.toThrow();
       expect(() => {
         data.toBytes();
       }).not.toThrow();
@@ -245,7 +257,6 @@ describe("order data wire bounds", () => {
         master: { type: "relative", value: Relative.create(1n) },
         info,
       });
-      expect(data.isValid()).toBe(false);
       expect(() => {
         data.validate();
       }).toThrow(
@@ -257,14 +268,15 @@ describe("order data wire bounds", () => {
     }
     for (const distance of [-(1n << 31n), (1n << 31n) - 1n]) {
       const relative = Relative.create(distance);
-      expect(relative.isValid()).toBe(true);
+      expect(() => {
+        relative.validate();
+      }).not.toThrow();
       expect(() => {
         relative.toBytes();
       }).not.toThrow();
     }
     for (const distance of [-(1n << 31n) - 1n, 1n << 31n]) {
       const relative = Relative.create(distance);
-      expect(relative.isValid()).toBe(false);
       expect(() => {
         relative.validate();
       }).toThrow("Relative master distance exceeds Int32");
@@ -475,7 +487,9 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(OrderGroup.tryFrom(master, origin, origin)?.isValid()).toBe(true);
+    expect(() => {
+      OrderGroup.tryFrom(master, origin, origin)?.validate();
+    }).not.toThrow();
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),

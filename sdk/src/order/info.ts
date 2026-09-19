@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedUint8, type ExchangeRatio } from "../utils/index.ts";
-import { isValidEntity } from "./entity_validity.ts";
 import { Ratio } from "./ratio.ts";
 
 /**
@@ -52,8 +51,6 @@ export interface Info {
   isDualRatio(): boolean;
   /** Returns whether the UDT-to-CKB ratio is populated. */
   isUdt2Ckb(): boolean;
-  /** Returns whether the ratios and minimum-match exponent pass validation. */
-  isValid(): boolean;
   /** Serializes the order info to bytes. */
   toBytes(): ccc.Bytes;
   /** Serializes the order info to full-width hexadecimal. */
@@ -141,11 +138,6 @@ const InfoImplementation = class Info extends InfoBase {
     ) {
       throw new Error("udtToCkb and ckbToUdt allow order value to be extracted");
     }
-  }
-
-  /** Returns true when validation succeeds. */
-  public isValid(): boolean {
-    return isValidEntity(this);
   }
 
   /** Returns the minimum CKB match amount. */

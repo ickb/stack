@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedInt32LE } from "../utils/index.ts";
-import { isValidEntity } from "./entity_validity.ts";
 
 const minInt32 = -(1n << 31n);
 const maxInt32 = (1n << 31n) - 1n;
@@ -36,8 +35,6 @@ export interface Relative {
   eq(other: RelativeLike): boolean;
   /** Returns the CKB hash of the serialized relative pointer. */
   hash(): ccc.Hex;
-  /** Returns whether padding is canonical and distance fits Int32. */
-  isValid(): boolean;
   /** Serializes the relative pointer to bytes. */
   toBytes(): ccc.Bytes;
   /** Serializes the relative pointer to full-width hexadecimal. */
@@ -92,11 +89,6 @@ const RelativeImplementation = class Relative extends RelativeBase {
     if (this.distance < minInt32 || this.distance > maxInt32) {
       throw new Error("Relative master distance exceeds Int32");
     }
-  }
-
-  /** Returns true when validation succeeds. */
-  public isValid(): boolean {
-    return isValidEntity(this);
   }
 };
 

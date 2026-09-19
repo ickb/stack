@@ -222,7 +222,7 @@ describe("dual orders", () => {
           pick,
         ) => {
           const info = Info.from({ ckbToUdt, udtToCkb, ckbMinMatchLog });
-          fc.pre(info.isValid());
+          fc.pre(isValid(info));
           const order = orderWith({ info, ckbUnoccupied, udtValue });
           const gains = [true, false].map((isCkb2Udt) => {
             const matcher = OrderMatcher.from(resolvedOrderGroup(order), isCkb2Udt, fee);
@@ -286,3 +286,13 @@ describe("minimum match pre-gate", () => {
     expect(adjudicate(order, matcher.match(3n))).toEqual(["ok"]);
   });
 });
+
+/** Whether the entity's own `validate` accepts it: the property's precondition. */
+function isValid(entity: { validate: () => void }): boolean {
+  try {
+    entity.validate();
+    return true;
+  } catch {
+    return false;
+  }
+}

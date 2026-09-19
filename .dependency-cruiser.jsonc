@@ -12,6 +12,7 @@
           "(^|/)(?:babel|webpack)\\.config\\.(?:js|cjs|mjs|ts|json)$",
           "^scripts/run-node-tests[.](?:mts|ts)$",
           "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
+          "^scripts/tooling/dead-members[.]ts$",
           "^scripts/tooling/eslint/plugins[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
           "^sdk/node/test/.+[.]ts$",

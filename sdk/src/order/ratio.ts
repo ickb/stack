@@ -1,6 +1,5 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { CheckedUint64LE, compareBigInt, type ExchangeRatio } from "../utils/index.ts";
-import { isValidEntity } from "./entity_validity.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
 
@@ -33,8 +32,6 @@ export interface Ratio extends ExchangeRatio {
   isEmpty(): boolean;
   /** Returns whether both scales are positive. */
   isPopulated(): boolean;
-  /** Returns whether both scales fit Uint64 and are both zero or both positive. */
-  isValid(): boolean;
   /** Serializes the ratio to bytes. */
   toBytes(): ccc.Bytes;
   /** Serializes the ratio to full-width hexadecimal. */
@@ -84,11 +81,6 @@ const RatioImplementation = class Ratio extends RatioBase {
     if (!this.isEmpty() && !this.isPopulated()) {
       throw new Error("Ratio invalid: not empty, not populated");
     }
-  }
-
-  /** Returns true when validation succeeds. */
-  public isValid(): boolean {
-    return isValidEntity(this);
   }
 
   /** Returns true for the sentinel empty ratio. */
