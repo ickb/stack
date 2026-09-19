@@ -1,23 +1,20 @@
-import type { ccc } from "@ckb-ccc/core";
-import type { StubClient } from "@ickb/testkit";
+import { ccc } from "@ckb-ccc/core";
+import type { StubClientHandlers } from "@ickb/testkit";
 
 export const ORDER_MATCHER_SUITE = "OrderMatcher";
 export const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
 export const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
 export const NO_CELLS: readonly ccc.Cell[] = [];
 
-type StubClientOptions = NonNullable<ConstructorParameters<typeof StubClient>[0]>;
-type FindCellsOnChainHandler = NonNullable<StubClientOptions["findCellsOnChain"]>;
-export type FindCellsOnChainQuery = Parameters<FindCellsOnChainHandler>[0];
-export type FindCellsOnChainOrder = Parameters<FindCellsOnChainHandler>[1];
-export type FindCellsOnChainLimit = Parameters<FindCellsOnChainHandler>[2];
-export type FindCellsOnChainReturn = ReturnType<FindCellsOnChainHandler>;
+type FindCellsHandler = NonNullable<StubClientHandlers["findCellsPagedNoCache"]>;
+export type FindCellsQuery = Parameters<FindCellsHandler>[0];
+export type FindCellsLimit = Parameters<FindCellsHandler>[2];
 export type GetTransactionHash = Parameters<ccc.Client["getTransaction"]>[0];
 export type GetTransactionReturn = ReturnType<ccc.Client["getTransaction"]>;
 
-export function mustPageSize(pageSize: FindCellsOnChainLimit): number {
+export function mustPageSize(pageSize: FindCellsLimit): number {
   if (pageSize === undefined) {
     throw new Error("Expected page size");
   }
-  return pageSize;
+  return Number(ccc.numFrom(pageSize));
 }

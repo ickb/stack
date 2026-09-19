@@ -21,10 +21,9 @@ import { IckbSdk } from "../../../../src/sdk.ts";
 
 import {
   byte32FromByte,
-  chainState,
   committedTransactionResponse,
-  FakeClient,
   headerLike,
+  pagedCells,
   script,
   StubClient,
 } from "@ickb/testkit";
@@ -214,7 +213,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
  * tests must exercise (decisions amendment 47(i)).
  */
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
-  const client = overrides.client ?? new FakeClient(chainState());
+  const client = overrides.client ?? new StubClient();
   const config = getConfig("testnet");
   const primaryLock = overrides.primaryLock ?? script("11");
 
@@ -321,14 +320,9 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   mint.outputsData.push("0x", order.outputData, master.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
-      await Promise.resolve();
-      if (query.scriptType === "lock") {
-        yield order;
-      } else {
-        yield master;
-      }
-    },
+    findCellsPagedNoCache: pagedCells((query) =>
+      query.scriptType === "lock" ? [order] : [master],
+    ),
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(mint);

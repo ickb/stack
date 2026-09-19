@@ -28,7 +28,7 @@ describe(L1_STATE_SUITE, () => {
     const client = new FeeRateStubClient({
       getTipHeader,
       getHeaderByNumber,
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await sdk.getL1AccountState(client, []);
@@ -48,7 +48,7 @@ describe(L1_STATE_SUITE, () => {
     const sdk = defaultL1Sdk();
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await sdk.getL1AccountState(client, []);

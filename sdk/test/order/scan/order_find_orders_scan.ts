@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, StubClient } from "@ickb/testkit";
+import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { OrderManager } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
@@ -9,10 +9,7 @@ import {
   NO_CELLS,
   ORDER_CELL_RESOLVE_SUITE,
   ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type FindCellsOnChainLimit,
-  type FindCellsOnChainOrder,
-  type FindCellsOnChainQuery,
-  type FindCellsOnChainReturn,
+  type FindCellsQuery,
   type GetTransactionHash,
   type GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
@@ -129,7 +126,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 });
 
 async function expectDefaultPageSizeScan(
-  scriptType: FindCellsOnChainQuery["scriptType"],
+  scriptType: FindCellsQuery["scriptType"],
 ): Promise<void> {
   const orderScript = ccc.Script.from({
     codeHash: byte32FromByte("11"),
@@ -144,17 +141,16 @@ async function expectDefaultPageSizeScan(
   const manager = new OrderManager(orderScript, [], udtScript);
   let requestedPageSize = 0;
   const client = new StubClient({
-    async *findCellsOnChain(
-      query: FindCellsOnChainQuery,
-      _order: FindCellsOnChainOrder,
-      pageSize: FindCellsOnChainLimit,
-    ): FindCellsOnChainReturn {
+    findCellsPagedNoCache: async (
+      query,
+      _order,
+      pageSize,
+    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
       await Promise.resolve();
-      if (query.scriptType !== scriptType) {
-        return;
+      if (query.scriptType === scriptType) {
+        requestedPageSize = mustPageSize(pageSize);
       }
-      requestedPageSize = mustPageSize(pageSize);
-      yield* NO_CELLS;
+      return { cells: [...NO_CELLS], lastCursor: "0" };
     },
   });
 
@@ -192,19 +188,22 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      async *findCellsOnChain(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-        await Promise.resolve();
-        if (query.scriptType === "lock") {
-          for (let index = 0; index < defaultCellPageSize; index += 1) {
-            yield index === 0 ? order.cell : dummyCell("38", orderScript, udtScript);
-          }
-          return;
-        }
-
-        for (let index = 0; index < defaultCellPageSize; index += 1) {
-          yield index === 0 ? liveMaster : dummyCell("39", ownerLock, orderScript);
-        }
-      },
+      // One full page each, then the empty page that ends the scan.
+      findCellsPagedNoCache: pagedCells((query) =>
+        query.scriptType === "lock"
+          ? [
+              order.cell,
+              ...Array.from({ length: defaultCellPageSize - 1 }, () =>
+                dummyCell("38", orderScript, udtScript),
+              ),
+            ]
+          : [
+              liveMaster,
+              ...Array.from({ length: defaultCellPageSize - 1 }, () =>
+                dummyCell("39", ownerLock, orderScript),
+              ),
+            ],
+      ),
       getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
         await Promise.resolve();
         return txHash === master.txHash ? transactionResponse(tx) : undefined;

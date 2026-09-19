@@ -1,9 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, committedTransactionResponse, StubClient } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  committedTransactionResponse,
+  pagedCells,
+  StubClient,
+} from "@ickb/testkit";
 import { OrderManager } from "../../../../src/order/order.ts";
 import type {
-  FindCellsOnChainQuery,
-  FindCellsOnChainReturn,
   GetTransactionHash,
   GetTransactionReturn,
 } from "../../fixtures/order_constants.ts";
@@ -68,14 +71,9 @@ export function originLookupClient({
 }): ccc.Client {
   return new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    async *findCellsOnChain(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-      await Promise.resolve();
-      if (query.scriptType === "lock") {
-        yield liveOrder;
-      } else {
-        yield liveMaster;
-      }
-    },
+    findCellsPagedNoCache: pagedCells((query) =>
+      query.scriptType === "lock" ? [liveOrder] : [liveMaster],
+    ),
     getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
       await Promise.resolve();
       return txHash === originMasterTxHash

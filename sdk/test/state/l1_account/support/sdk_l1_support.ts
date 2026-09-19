@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import { script, StubClient } from "@ickb/testkit";
+import { pagedCells, script, StubClient } from "@ickb/testkit";
 
 import { LogicManager } from "../../../../src/logic.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
@@ -33,15 +33,7 @@ export function tipHeaderHandler(
   };
 }
 
-export function emptyCellScan(): ReturnType<ccc.Client["findCellsOnChain"]> {
-  return none<ccc.Cell>();
-}
-
-export async function* none<T>(): AsyncGenerator<T> {
-  const values: T[] = [];
-  yield* values;
-  await Promise.resolve();
-}
+export const emptyCellScan = pagedCells([]);
 
 export function defaultL1Sdk(): IckbSdk {
   const dao = script("33");

@@ -40,7 +40,7 @@ describe(L1_STATE_SUITE, () => {
     const tip = headerLike(1n, { epoch: ccc.Epoch.from([181n, 0n, 1n]) });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {

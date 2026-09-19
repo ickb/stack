@@ -19,7 +19,7 @@ describe(L1_STATE_SUITE, () => {
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockResolvedValue([]);
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(baseTip),
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
     const minLockUp = ccc.Epoch.from([0n, 1n, 16n]);
     const maxLockUp = ccc.Epoch.from([0n, 4n, 16n]);

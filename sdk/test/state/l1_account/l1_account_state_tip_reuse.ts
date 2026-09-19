@@ -25,7 +25,7 @@ describe(L1_STATE_SUITE, () => {
       .mockResolvedValueOnce(secondTip);
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await defaultL1Sdk().getL1AccountState(client, [accountLock]);
@@ -50,7 +50,7 @@ describe(L1_STATE_SUITE, () => {
     const client = new FeeRateStubClient({
       getTipHeader,
       getHeaderByNumber,
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await defaultL1Sdk().getL1AccountState(client, [accountLock]);
@@ -71,7 +71,7 @@ describe(L1_STATE_SUITE, () => {
       .mockResolvedValueOnce(replacementTip);
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await defaultL1Sdk().getL1AccountState(client, [accountLock]);

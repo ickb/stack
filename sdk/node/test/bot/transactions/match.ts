@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { TESTNET_SCRIPTS } from "@ckb-ccc/core/advanced";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
 
-import { chainState, FakeClient } from "@ickb/testkit";
+import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../../src/constants.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
@@ -77,11 +76,9 @@ describe("buildTransaction matching", () => {
       ratio: { ckbScale: 2n, udtScale: 1n },
       ckbMinMatchLog: 44,
     });
-    const chain = chainState().cell(seller.order.cell).cell(seller.master.cell);
-    for (const known of Object.values(ccc.KnownScript)) {
-      chain.knownScript(known, TESTNET_SCRIPTS[known]);
-    }
-    const client = new FakeClient(chain);
+    // Completion spends the cells it is given and never scans; the testnet stub carries
+    // the known scripts the signer needs.
+    const client = new StubClient();
     const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
     const { script: primaryLock } = await signer.getRecommendedAddressObj();
     const plain = ccc.Cell.from({
@@ -89,7 +86,6 @@ describe("buildTransaction matching", () => {
       cellOutput: { capacity: CKB_RESERVE + ask, lock: primaryLock },
       outputData: "0x",
     });
-    chain.cell(plain);
     const runtime = botRuntime({
       client,
       primaryLock,

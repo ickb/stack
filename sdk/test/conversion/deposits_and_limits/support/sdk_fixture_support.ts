@@ -1,9 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
-  asyncPassthroughTransaction,
   FakeCkbSigner,
   headerLike,
-  passthroughTransaction,
   script,
   StubClient,
   transactionWithHeader,
@@ -86,7 +84,10 @@ function withCompletion(
   completion: "passthrough" | "real" = "passthrough",
 ): IckbSdk {
   if (completion === "passthrough") {
-    vi.spyOn(sdk, "completeTransaction").mockImplementation(asyncPassthroughTransaction);
+    vi.spyOn(sdk, "completeTransaction").mockImplementation(async (txLike) => {
+      await Promise.resolve();
+      return ccc.Transaction.from(txLike);
+    });
   }
   return sdk;
 }
@@ -185,7 +186,9 @@ export function fakeIckbUdt(
 }
 
 export function mockPassthroughMint(orderManager: OrderManager): void {
-  vi.spyOn(orderManager, "mint").mockImplementation(passthroughTransaction);
+  vi.spyOn(orderManager, "mint").mockImplementation((txLike) =>
+    ccc.Transaction.from(txLike),
+  );
 }
 
 export async function expectIckbToCkbDirectPlusOrder(options: {
@@ -224,13 +227,13 @@ export function mockWithdrawalWithRemainderOrder(
     .spyOn(fixture.ownedOwnerManager, "requestWithdrawal")
     .mockImplementation((txLike, deposits) => {
       expect(deposits).toEqual(expectedDeposits);
-      return passthroughTransaction(txLike);
+      return ccc.Transaction.from(txLike);
     });
   const mint = vi
     .spyOn(fixture.orderManager, "mint")
     .mockImplementation((txLike, _lock, _info, amounts) => {
       expect(amounts).toEqual(expectedAmounts);
-      return passthroughTransaction(txLike);
+      return ccc.Transaction.from(txLike);
     });
   return { mint, requestWithdrawal };
 }

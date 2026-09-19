@@ -1,11 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, StubClient } from "@ickb/testkit";
+import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Relative } from "../../../src/order/relative.ts";
 import {
   ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type FindCellsOnChainQuery,
-  type FindCellsOnChainReturn,
   type GetTransactionHash,
   type GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
@@ -70,16 +68,11 @@ function twoGroupScan({
   ]);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    async *findCellsOnChain(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-      await Promise.resolve();
-      if (query.scriptType === "lock") {
-        yield first.liveOrder;
-        yield second.liveOrder;
-      } else {
-        yield first.liveMaster;
-        yield second.liveMaster;
-      }
-    },
+    findCellsPagedNoCache: pagedCells((query) =>
+      query.scriptType === "lock"
+        ? [first.liveOrder, second.liveOrder]
+        : [first.liveMaster, second.liveMaster],
+    ),
     getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
       await Promise.resolve();
       const requested = ccc.hexFrom(txHash);

@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
+import {
+  committedTransactionResponse,
+  pagedCells,
+  script,
+  StubClient,
+} from "@ickb/testkit";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { OrderManager } from "../../../../src/order/order.ts";
@@ -160,10 +165,9 @@ export async function resolveOrderGroupFixture(
     originTransaction.outputsData.push(cell.outputData);
   }
   const client = new StubClient({
-    async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
-      yield query.scriptType === "lock" ? cells.orderCell : cells.masterCell;
-      await Promise.resolve();
-    },
+    findCellsPagedNoCache: pagedCells((query) =>
+      query.scriptType === "lock" ? [cells.orderCell] : [cells.masterCell],
+    ),
     getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return txHash === cells.masterCell.outPoint.txHash

@@ -5,10 +5,7 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte } from "./bytes.ts";
 
-export { byte32FromByte } from "./bytes.ts";
-export { ChainState, chainState } from "./chain_state.ts";
 export {
   AR_0,
   ckbMinMatchFromLog,
@@ -20,25 +17,38 @@ export {
   type OracleVerdict,
   type OrderState,
 } from "./contract_oracle.ts";
-export { FakeClient, FakeClientError, type FakeClientOverrides } from "./fake_client.ts";
 export { FakeCkbSigner } from "./fake_signer.ts";
 
-type ClientMethod<K extends keyof ccc.Client> = Extract<
+export type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
   (...args: never[]) => unknown
 >;
 
-interface StubClientHandlers {
+/** The client methods a test may script; every other call stays off the network. */
+export interface StubClientHandlers {
   addressPrefix?: string;
   cache?: ccc.Client["cache"];
-  findCellsOnChain?: ClientMethod<"findCellsOnChain">;
   findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
   getCell?: ClientMethod<"getCell">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
   getTransaction?: ClientMethod<"getTransaction">;
+  getTransactionNoCache?: ClientMethod<"getTransactionNoCache">;
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
+}
+
+/**
+ * Creates a 32-byte hex string by repeating one byte.
+ *
+ * @param hexByte - Exactly two hex characters.
+ */
+export function byte32FromByte(hexByte: string): `0x${string}` {
+  if (!/^[0-9a-f]{2}$/iu.test(hexByte)) {
+    throw new Error("Expected exactly one byte as two hex chars");
+  }
+
+  return `0x${hexByte.repeat(32)}`;
 }
 
 export interface TransactionWithHeader {
@@ -108,22 +118,21 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
 }
 
 export class StubClient extends ccc.ClientPublicTestnet {
-  private readonly handlers: StubClientHandlers;
+  private readonly prefix: string | undefined;
   private readonly rememberedHeaders: Map<bigint, ccc.ClientBlockHeader>;
-  private readonly findCellsOnChainHandler: ClientMethod<"findCellsOnChain">;
-  private readonly legacyCellScanHandler: ClientMethod<"findCellsOnChain"> | undefined;
-  private readonly getCellHandler: ClientMethod<"getCell">;
-  private readonly getHeaderByNumberHandler: ClientMethod<"getHeaderByNumber">;
-  private readonly getTransactionHandler: ClientMethod<"getTransaction">;
-  private readonly getTransactionWithHeaderHandler: ClientMethod<"getTransactionWithHeader">;
-  declare public findCellsPagedNoCache: ClientMethod<"findCellsPagedNoCache">;
-  declare public getTipHeader: ClientMethod<"getTipHeader">;
-  declare public sendTransactionDry: ClientMethod<"sendTransactionDry">;
+  private readonly headerByNumber: ClientMethod<"getHeaderByNumber"> | undefined;
 
   /**
-   * Creates a stub client using the supplied method overrides.
+   * Creates a stub client using the supplied method overrides. Each handler becomes the
+   * instance's own method, ahead of the class's, so an unscripted method still runs CCC's
+   * real code down to the offline transport.
    */
-  constructor(handlers: StubClientHandlers = {}) {
+  constructor({
+    addressPrefix,
+    cache,
+    getHeaderByNumber,
+    ...handlers
+  }: StubClientHandlers = {}) {
     // The SDK reads a transaction's header through two raw calls on a JSON-RPC client; the
     // stub answers them from its own handlers so a test stubs one method, not the wire.
     const raw: { client?: StubClient } = {};
@@ -138,75 +147,17 @@ export class StubClient extends ccc.ClientPublicTestnet {
     });
     raw.client = this;
     this.rememberedHeaders = rememberedHeaders;
-    const baseFindCellsPagedNoCache = this.findCellsPagedNoCache.bind(this);
-    this.handlers = handlers;
-    if (handlers.cache !== undefined) {
-      this.cache = handlers.cache;
+    this.prefix = addressPrefix;
+    this.headerByNumber = getHeaderByNumber;
+    if (cache !== undefined) {
+      this.cache = cache;
     }
-    this.findCellsOnChainHandler =
-      handlers.findCellsOnChain ?? super.findCellsOnChain.bind(this);
-    this.legacyCellScanHandler = handlers.findCellsOnChain;
-    const findCellsPagedNoCache =
-      handlers.findCellsPagedNoCache ??
-      (this.legacyCellScanHandler === undefined
-        ? baseFindCellsPagedNoCache
-        : this.findCellsPaged.bind(this));
-    this.findCellsPagedNoCache = async (
-      ...args
-    ): ReturnType<ClientMethod<"findCellsPagedNoCache">> =>
-      findCellsPagedNoCache(...args);
-    this.getCellHandler = handlers.getCell ?? super.getCell.bind(this);
-    this.getHeaderByNumberHandler =
-      handlers.getHeaderByNumber ?? super.getHeaderByNumber.bind(this);
-    this.getTransactionHandler =
-      handlers.getTransaction ?? super.getTransaction.bind(this);
-    this.getTransactionWithHeaderHandler =
-      handlers.getTransactionWithHeader ?? super.getTransactionWithHeader.bind(this);
-    if (handlers.getTipHeader !== undefined) {
-      this.getTipHeader = handlers.getTipHeader;
-    }
-    if (handlers.sendTransactionDry !== undefined) {
-      this.sendTransactionDry = handlers.sendTransactionDry;
-    }
+    Object.assign(this, handlers);
   }
 
   /** Address prefix override used by address formatting tests. */
   public override get addressPrefix(): string {
-    return this.handlers.addressPrefix ?? super.addressPrefix;
-  }
-
-  /** Delegates on-chain cell scans to the configured handler or the base client. */
-  public override findCellsOnChain(
-    ...args: Parameters<ClientMethod<"findCellsOnChain">>
-  ): ReturnType<ClientMethod<"findCellsOnChain">> {
-    return this.findCellsOnChainHandler(...args);
-  }
-
-  /** Delegates page scans or adapts a configured generator scan for existing fixtures. */
-  public override async findCellsPaged(
-    ...args: Parameters<ClientMethod<"findCellsPaged">>
-  ): ReturnType<ClientMethod<"findCellsPaged">> {
-    if (this.legacyCellScanHandler === undefined) {
-      // A test double must never fall through to the real network.
-      throw new Error("StubClient has no cell scan handler");
-    }
-
-    const [key, order, limit = 10, after] = args;
-    const pageSize = Number(ccc.numFrom(limit));
-    const offset = after === undefined ? 0 : Number(after.slice("stub:".length));
-    const allCells: ccc.Cell[] = [];
-    for await (const cell of this.legacyCellScanHandler(key, order, pageSize)) {
-      allCells.push(cell);
-    }
-    const cells = allCells.slice(offset, offset + pageSize);
-    return { cells, lastCursor: `stub:${String(offset + cells.length)}` };
-  }
-
-  /** Delegates single-cell lookup to the configured handler or the base client. */
-  public override async getCell(
-    ...args: Parameters<ClientMethod<"getCell">>
-  ): ReturnType<ClientMethod<"getCell">> {
-    return this.getCellHandler(...args);
+    return this.prefix ?? super.addressPrefix;
   }
 
   /**
@@ -219,23 +170,39 @@ export class StubClient extends ccc.ClientPublicTestnet {
   ): ReturnType<ClientMethod<"getHeaderByNumber">> {
     return (
       this.rememberedHeaders.get(ccc.numFrom(args[0])) ??
-      this.getHeaderByNumberHandler(...args)
+      (this.headerByNumber ?? super.getHeaderByNumber.bind(this))(...args)
     );
   }
+}
 
-  /** Delegates transaction lookup to the configured handler or the base client. */
-  public override async getTransaction(
-    ...args: Parameters<ClientMethod<"getTransaction">>
-  ): ReturnType<ClientMethod<"getTransaction">> {
-    return this.getTransactionHandler(...args);
-  }
+/**
+ * A page handler over a cell list, sliced the way the SDK's `findCells` reads it: the
+ * cursor is the count served so far and a short page ends the scan. A function picks the
+ * list per search key.
+ */
+export function pagedCells(
+  cells:
+    readonly ccc.Cell[] | ((key: ccc.ClientIndexerSearchKeyLike) => readonly ccc.Cell[]),
+): ClientMethod<"findCellsPagedNoCache"> {
+  return async (key, _order, limit, after) => {
+    await Promise.resolve();
+    const all = typeof cells === "function" ? cells(key) : cells;
+    const offset = after === undefined ? 0 : Number(after);
+    const page = all.slice(offset, offset + Number(ccc.numFrom(limit ?? 10)));
+    return { cells: [...page], lastCursor: String(offset + page.length) };
+  };
+}
 
-  /** Delegates transaction-with-header lookup to the configured handler or the base client. */
-  public override async getTransactionWithHeader(
-    ...args: Parameters<ClientMethod<"getTransactionWithHeader">>
-  ): ReturnType<ClientMethod<"getTransactionWithHeader">> {
-    return this.getTransactionWithHeaderHandler(...args);
-  }
+// @ts-expect-error TS2655: the abstract members are forwarded by the Proxy at runtime, as in the connector.
+class ComposedClient extends ccc.Proxy.Base(ccc.Client) {}
+
+/**
+ * The client the connector hands the interface: a composition proxy over the public
+ * client (`ClientWithFeeRate`), an instance of `ccc.Client` but not of `ccc.ClientJsonRpc`,
+ * so the SDK takes its typed read paths. Tests reach those paths through this.
+ */
+export function composedClient(inner: ccc.Client): ccc.Client {
+  return new ComposedClient(inner);
 }
 
 /**
@@ -282,23 +249,6 @@ export function capacityCell(
     cellOutput: { capacity, lock },
     outputData: "0x",
   });
-}
-
-/**
- * Async form of {@link passthroughTransaction} for client handler tests.
- */
-export async function asyncPassthroughTransaction(
-  txLike: ccc.TransactionLike,
-): Promise<ccc.Transaction> {
-  await Promise.resolve();
-  return passthroughTransaction(txLike);
-}
-
-/**
- * Normalizes a transaction-like value into a CCC transaction.
- */
-export function passthroughTransaction(txLike: ccc.TransactionLike): ccc.Transaction {
-  return ccc.Transaction.from(txLike);
 }
 
 /**

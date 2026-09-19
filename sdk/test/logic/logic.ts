@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
   headerLike,
+  pagedCells,
   script,
   StubClient,
   transactionWithHeader,
@@ -362,12 +363,10 @@ describe("LogicManager.findDeposits", () => {
     const wrongLock = depositCellOf("55", script("77"));
     const queries: ccc.ClientIndexerSearchKeyLike[] = [];
     const client = new StubClient({
-      async *findCellsOnChain(query): ReturnType<ccc.Client["findCellsOnChain"]> {
+      findCellsPagedNoCache: pagedCells((query) => {
         queries.push(query);
-        await Promise.resolve();
-        yield deposit;
-        yield wrongLock;
-      },
+        return [deposit, wrongLock];
+      }),
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {
@@ -404,11 +403,7 @@ describe("LogicManager.findDeposits", () => {
     const second = depositCellOf("44", logic, 1n);
     let transactionCalls = 0;
     const client = new StubClient({
-      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
-        await Promise.resolve();
-        yield first;
-        yield second;
-      },
+      findCellsPagedNoCache: pagedCells([first, second]),
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {

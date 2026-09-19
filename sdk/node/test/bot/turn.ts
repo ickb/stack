@@ -3,11 +3,10 @@ import { OrderManager } from "../../../src/order/order.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 
 import {
-  chainState,
-  FakeClient,
-  headerLike,
-  type ChainState,
-  type FakeClientOverrides,
+  committedTransactionResponse,
+  composedClient,
+  StubClient,
+  type StubClientHandlers,
 } from "@ickb/testkit";
 import { afterEach, expect, it, vi } from "vitest";
 import { BotEventEmitter } from "../../src/bot/events.ts";
@@ -115,13 +114,13 @@ it("ends the turn with the broadcast error when the send fails without a hash", 
 });
 
 it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
-  const chain = chainState();
+  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    chain,
+    responses,
     sendTransaction: async (txLike, recordTxHash) => {
       await Promise.resolve();
-      const txHash = commitTransaction(chain, txLike);
+      const txHash = commitTransaction(responses, txLike);
       recordTxHash?.(txHash);
       throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
     },
@@ -145,13 +144,13 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
-  const chain = chainState();
+  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    chain,
+    responses,
     sendTransaction: async (txLike) => {
       await Promise.resolve();
-      throw new TransactionBroadcastError(commitTransaction(chain, txLike), {
+      throw new TransactionBroadcastError(commitTransaction(responses, txLike), {
         cause: new TypeError(FETCH_FAILED),
       });
     },
@@ -176,14 +175,17 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
 
 it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
   vi.useFakeTimers();
-  const chain = chainState();
+  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    chain,
+    responses,
     sendTransaction: async (txLike) => {
       await Promise.resolve();
       const transaction = ccc.Transaction.from(txLike);
-      chain.tx({ transaction, status: "pending" });
+      responses.set(
+        transaction.hash(),
+        ccc.ClientTransactionResponse.from({ transaction, status: "pending" }),
+      );
       return transaction.hash();
     },
   });
@@ -211,15 +213,18 @@ it("ends the attempt after one confirmation window without resending or rebuildi
 });
 
 it("ends the turn with the SDK wait error when the node rejects the transaction", async () => {
-  const chain = chainState();
+  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const reason = "Resolve failed Dead(OutPoint(...))";
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    chain,
+    responses,
     sendTransaction: async (txLike) => {
       await Promise.resolve();
       const transaction = ccc.Transaction.from(txLike);
-      chain.tx({ transaction, status: "rejected", reason });
+      responses.set(
+        transaction.hash(),
+        ccc.ClientTransactionResponse.from({ transaction, status: "rejected", reason }),
+      );
       return transaction.hash();
     },
   });
@@ -273,8 +278,8 @@ it("propagates a build failure after the state event", async () => {
 function turnHarness(
   options: {
     account?: L1AccountState;
-    chain?: ChainState;
-    client?: FakeClientOverrides;
+    responses?: Map<ccc.Hex, ccc.ClientTransactionResponse>;
+    client?: StubClientHandlers;
     getL1AccountState?: Runtime["sdk"]["getL1AccountState"];
     sendTransaction?: Runtime["sendTransaction"];
   } = {},
@@ -284,19 +289,31 @@ function turnHarness(
   sendTransaction: ReturnType<typeof vi.fn<Runtime["sendTransaction"]>>;
   sentHash: () => ccc.Hex;
 } {
-  const chain = options.chain ?? chainState();
+  const responses =
+    options.responses ?? new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
-  // The default fake node accepts and commits whatever the bot sends.
+  // The default node accepts and commits whatever the bot sends; the confirmation wait
+  // then reads the recorded response through the typed path of a composed client.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
       (async (txLike): Promise<ccc.Hex> => {
         await Promise.resolve();
-        return commitTransaction(chain, txLike);
+        return commitTransaction(responses, txLike);
       }),
   );
   const runtime = botRuntime({
-    client: new FakeClient(chain, options.client),
+    client: composedClient(
+      new StubClient({
+        getTransactionNoCache: async (
+          txHash,
+        ): ReturnType<ccc.Client["getTransactionNoCache"]> => {
+          await Promise.resolve();
+          return responses.get(ccc.hexFrom(txHash));
+        },
+        ...options.client,
+      }),
+    ),
     sdk: {
       getL1AccountState:
         options.getL1AccountState ??
@@ -360,9 +377,15 @@ function fundedAccount(
   });
 }
 
-function commitTransaction(chain: ChainState, txLike: ccc.TransactionLike): ccc.Hex {
+function commitTransaction(
+  responses: Map<ccc.Hex, ccc.ClientTransactionResponse>,
+  txLike: ccc.TransactionLike,
+): ccc.Hex {
   const transaction = ccc.Transaction.from(txLike);
-  chain.committedTx(transaction, headerLike({ number: 1n }));
+  responses.set(
+    transaction.hash(),
+    committedTransactionResponse(transaction, { blockNumber: 1n }),
+  );
   return transaction.hash();
 }
 

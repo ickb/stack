@@ -50,7 +50,7 @@ describe(L1_STATE_SUITE, () => {
 
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(headerLike(1n)),
-      findCellsOnChain: emptyCellScan,
+      findCellsPagedNoCache: emptyCellScan,
     });
 
     const state = await sdk.getL1AccountState(client, [userLock]);
@@ -118,7 +118,7 @@ function l1StateWithMarketOrder({
 
   const client = new FeeRateStubClient({
     getTipHeader: tipHeaderHandler(headerLike(1n)),
-    findCellsOnChain: emptyCellScan,
+    findCellsPagedNoCache: emptyCellScan,
   });
 
   return { client, marketOrder, sdk, userLock };

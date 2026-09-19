@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { chainState, FakeClient, headerLike } from "@ickb/testkit";
+import { composedClient, headerLike, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { getTransactionHeader } from "../../src/utils/transaction_header.ts";
 
@@ -89,8 +89,17 @@ describe("getTransactionHeader", () => {
     }
   });
 
-  it("keeps the typed lookup on other clients", async () => {
-    const client = new FakeClient(chainState());
+  it("keeps the typed lookup on the connector's composed client", async () => {
+    const client = composedClient(
+      new StubClient({
+        getTransactionWithHeader: async (): ReturnType<
+          ccc.Client["getTransactionWithHeader"]
+        > => {
+          await Promise.resolve();
+          return undefined;
+        },
+      }),
+    );
 
     await expect(getTransactionHeader(client, TX_HASH)).resolves.toBeUndefined();
   });

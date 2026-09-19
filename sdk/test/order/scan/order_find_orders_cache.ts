@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, StubClient } from "@ickb/testkit";
+import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
 import { OrderData } from "../../../src/order/order_data.ts";
@@ -7,8 +7,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import {
   ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type FindCellsOnChainQuery,
-  type FindCellsOnChainReturn,
   type GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
 import {
@@ -142,14 +140,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     let fetched = false;
     const client = new StubClient({
       cache: new TransactionResponseCache(originMaster.txHash, cachedResponse),
-      async *findCellsOnChain(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-        await Promise.resolve();
-        if (query.scriptType === "lock") {
-          yield liveOrder.cell;
-        } else {
-          yield liveMaster;
-        }
-      },
+      findCellsPagedNoCache: pagedCells((query) =>
+        query.scriptType === "lock" ? [liveOrder.cell] : [liveMaster],
+      ),
       getTransaction: async (): GetTransactionReturn => {
         fetched = true;
         await Promise.resolve();
@@ -294,15 +287,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      async *findCellsOnChain(query: FindCellsOnChainQuery): FindCellsOnChainReturn {
-        await Promise.resolve();
-        if (query.scriptType === "lock") {
-          yield firstOrder.cell;
-          yield secondOrder.cell;
-        } else {
-          yield liveMaster;
-        }
-      },
+      findCellsPagedNoCache: pagedCells((query) =>
+        query.scriptType === "lock" ? [firstOrder.cell, secondOrder.cell] : [liveMaster],
+      ),
       getTransaction: async (): GetTransactionReturn => {
         await Promise.resolve();
         return transactionResponse(tx);

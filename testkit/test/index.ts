@@ -1,13 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
 import {
-  asyncPassthroughTransaction,
   byte32FromByte,
   capacityCell,
   committedTransactionResponse,
+  composedClient,
   headerLike,
   outPoint,
-  passthroughTransaction,
+  pagedCells,
   script,
   StubClient,
   transactionWithHeader,
@@ -40,20 +40,13 @@ describe("cell fixtures", () => {
 });
 
 describe("transaction fixtures", () => {
-  it("normalizes transactions and committed responses", () => {
-    const tx = passthroughTransaction({ outputs: [] });
+  it("creates committed responses", () => {
+    const tx = ccc.Transaction.from({ outputs: [] });
     const response = committedTransactionResponse(tx, { blockNumber: 7n });
 
-    expect(tx).toBeInstanceOf(ccc.Transaction);
     expect(response.transaction.hash()).toBe(tx.hash());
     expect(response.status).toBe("committed");
     expect(response.blockNumber).toBe(7n);
-  });
-
-  it("normalizes transactions asynchronously", async () => {
-    await expect(asyncPassthroughTransaction({ outputs: [] })).resolves.toBeInstanceOf(
-      ccc.Transaction,
-    );
   });
 
   it("creates transaction-with-header fixtures", () => {
@@ -111,10 +104,7 @@ describe("StubClient", () => {
     const withHeader = transactionWithHeader(headerLike({ number: 3n }));
     const header = headerLike({ number: 4n });
     const client = new StubClient({
-      async *findCellsOnChain(): ReturnType<ccc.Client["findCellsOnChain"]> {
-        await Promise.resolve();
-        yield cell;
-      },
+      findCellsPagedNoCache: pagedCells([cell]),
       getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
         await Promise.resolve();
         return transaction;
@@ -137,9 +127,10 @@ describe("StubClient", () => {
       scriptSearchMode: "exact",
     } as const;
 
-    await expect(collect(client.findCellsOnChain(searchKey, "asc", 1))).resolves.toEqual([
-      cell,
-    ]);
+    await expect(client.findCellsPagedNoCache(searchKey, "asc", 1)).resolves.toEqual({
+      cells: [cell],
+      lastCursor: "1",
+    });
     await expect(client.getTransaction(byte32FromByte("99"))).resolves.toBe(transaction);
     await expect(client.getTransactionWithHeader(byte32FromByte("99"))).resolves.toBe(
       withHeader,
@@ -147,14 +138,6 @@ describe("StubClient", () => {
     await expect(client.getHeaderByNumber(4n)).resolves.toBe(header);
   });
 });
-
-async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
-  const values: T[] = [];
-  for await (const value of source) {
-    values.push(value);
-  }
-  return values;
-}
 
 class TestCache extends ccc.ClientCache {
   public override async markUsableNoCache(): Promise<void> {
@@ -191,7 +174,46 @@ describe("StubClient network boundary", () => {
     } as const;
 
     await expect(client.findCellsPaged(searchKey, "asc", 1)).rejects.toThrow(
-      "StubClient has no cell scan handler",
+      "Offline test client received get_cells",
     );
+  });
+});
+
+describe("pagedCells", () => {
+  it("serves the list in pages, the cursor counting what was served", async () => {
+    const cells = ["11", "22", "33"].map((byte) => capacityCell(1n, script("44"), byte));
+    const page = pagedCells(cells);
+    const key = {
+      script: script("44"),
+      scriptType: "lock",
+      scriptSearchMode: "exact",
+    } as const;
+
+    await expect(page(key, "asc", 2)).resolves.toEqual({
+      cells: cells.slice(0, 2),
+      lastCursor: "2",
+    });
+    await expect(page(key, "asc", 2, "2")).resolves.toEqual({
+      cells: cells.slice(2),
+      lastCursor: "3",
+    });
+  });
+});
+
+describe("composedClient", () => {
+  it("is a client but not a JSON-RPC one, and forwards to the inner client", async () => {
+    const cell = capacityCell(1n, script("44"), "55");
+    const client = composedClient(
+      new StubClient({
+        getCell: async (): Promise<ccc.Cell | undefined> => {
+          await Promise.resolve();
+          return cell;
+        },
+      }),
+    );
+
+    expect(client).toBeInstanceOf(ccc.Client);
+    expect(client).not.toBeInstanceOf(ccc.ClientJsonRpc);
+    await expect(client.getCell(outPoint("66"))).resolves.toBe(cell);
   });
 });

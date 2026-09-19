@@ -33,7 +33,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
   it("rejects a negative fee rate returned by a custom client", async () => {
     const client = new FeeRateStubClient(
       {
-        findCellsOnChain: emptyCellScan,
+        findCellsPagedNoCache: emptyCellScan,
         getTipHeader: tipHeaderHandler(headerLike(3n)),
       },
       -1n,
