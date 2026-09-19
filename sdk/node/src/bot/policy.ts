@@ -3,7 +3,7 @@ import {
   ringSurplusDepositFilter,
   sortByMaturity,
 } from "../../../src/conversion/withdrawal_ring.ts";
-import type { IckbDepositCell } from "../../../src/core/index.ts";
+import type { IckbDepositCell } from "../../../src/logic.ts";
 
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import {

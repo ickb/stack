@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../../../src/core/index.ts";
+import type { IckbDepositCell } from "../../../src/logic.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
@@ -41,13 +41,13 @@ describe("readBotState pool snapshot", () => {
         withdrawalGroups: [],
       },
     });
-    const findDeposits = vi.fn(async function* (): AsyncGenerator<IckbDepositCell> {
+    const findDeposits = vi.fn(async (): Promise<IckbDepositCell[]> => {
       await Promise.resolve();
-      yield* NO_DEPOSITS;
+      return NO_DEPOSITS;
     });
     const runtime = botRuntime({
       sdk: { getL1AccountState },
-      managers: { logic: { findDeposits } },
+      managers: { ickbLogic: { findDeposits } },
     });
 
     const state = await readBotState(runtime);

@@ -1,11 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
-import {
-  DaoManager,
-  LogicManager,
-  OwnedOwnerManager,
-} from "../../../../src/core/index.ts";
+
+import { LogicManager } from "../../../../src/logic.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
+import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 
@@ -45,13 +43,6 @@ export async function* none<T>(): AsyncGenerator<T> {
   await Promise.resolve();
 }
 
-export async function* repeat<T>(count: number, value: T): AsyncGenerator<T> {
-  for (let index = 0; index < count; index += 1) {
-    yield value;
-  }
-  await Promise.resolve();
-}
-
 export function defaultL1Sdk(): IckbSdk {
   const dao = script("33");
   const logic = script("22");
@@ -60,8 +51,8 @@ export function defaultL1Sdk(): IckbSdk {
   const udt = script("66");
   return new IckbSdk({
     ickbUdt: fakeIckbUdt(udt),
-    ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
-    ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
+    ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
+    ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
     order: new OrderManager(order, [], udt),
   });
 }
@@ -76,9 +67,10 @@ export function l1SdkWithManagers(options: {
   const udt = options.udt ?? script("66");
   const ownedOwnerManager =
     options.ownedOwnerManager ??
-    new OwnedOwnerManager(script("44"), [], new DaoManager(dao, []));
+    new OwnedOwnerManager(script("44"), [], { script: dao, cellDeps: [] });
   const logicManager =
-    options.logicManager ?? new LogicManager(script("22"), [], new DaoManager(dao, []));
+    options.logicManager ??
+    new LogicManager(script("22"), [], { script: dao, cellDeps: [] });
   const orderManager = options.orderManager ?? new OrderManager(script("55"), [], udt);
   return new IckbSdk({
     ickbUdt: fakeIckbUdt(udt),

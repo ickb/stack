@@ -176,24 +176,6 @@ export async function asyncBinarySearch(
   return i;
 }
 
-/**
- * Converts an asynchronous iterable into an array.
- *
- * This function takes an `AsyncIterable<T>` as input and returns a promise that resolves
- * to an array containing all the elements yielded by the iterable.
- *
- * @typeParam T - The type of elements in the input iterable.
- * @param inputs - The asynchronous iterable to convert into an array.
- * @returns A promise that resolves to an array of elements.
- */
-export async function collect<T>(inputs: AsyncIterable<T>): Promise<T[]> {
-  const res = [];
-  for await (const i of inputs) {
-    res.push(i);
-  }
-  return res;
-}
-
 export function minBigInt(left: bigint, right: bigint): bigint {
   return left < right ? left : right;
 }

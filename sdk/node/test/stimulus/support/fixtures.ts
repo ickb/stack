@@ -7,12 +7,12 @@ import {
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
-import { ReceiptData } from "../../../../src/core/entities.ts";
-import type { ReceiptCell } from "../../../../src/core/index.ts";
+import type { ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import { encodeReceiptData } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/index.ts";
 import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
 
@@ -56,10 +56,10 @@ export function receipt(
     cellOutput: {
       capacity: ckbValue,
       lock: PRIMARY_LOCK,
-      type: getConfig("testnet").managers.logic.script,
+      type: getConfig("testnet").ickbLogic.script,
     },
     outputData: ccc.hexFrom(
-      ReceiptData.encode({ depositQuantity: 1, depositAmount: udtValue }),
+      encodeReceiptData({ depositQuantity: 1n, depositAmount: udtValue }),
     ),
   });
   return {
@@ -88,7 +88,7 @@ export function runtime({
   orders = [],
   originBlocks = new Map<ccc.Hex, bigint | undefined>(),
   sdk = {},
-  order = getConfig("testnet").managers.order,
+  order = getConfig("testnet").order,
 }: {
   system?: SystemState;
   account?: StimulusState["account"];
@@ -136,7 +136,7 @@ export async function order(
   ckbToUdt: ExchangeRatio = TWO_CKB_PER_UDT,
 ): Promise<OrderGroup> {
   const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
-  const manager = getConfig("testnet").managers.order;
+  const manager = getConfig("testnet").order;
   const { udtScript, script: orderLock } = manager;
   const ckbValue = isMatchable ? 100n * CKB : 0n;
   const master = new MasterCell(
@@ -199,11 +199,5 @@ export async function order(
 
 /** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
 function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  const { ickbUdt, ownedOwner, logic } = config.managers;
-  return new IckbSdk({
-    ickbUdt,
-    ownedOwner,
-    ickbLogic: logic,
-    order: config.managers.order,
-  });
+  return new IckbSdk(config);
 }

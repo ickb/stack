@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   expectIckbToCkbDirectPlusOrder,

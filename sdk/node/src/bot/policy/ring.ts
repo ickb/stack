@@ -3,7 +3,7 @@ import {
   ringSegmentIndex,
   ringSegments,
 } from "../../../../src/conversion/withdrawal_ring.ts";
-import type { IckbDepositCell } from "../../../../src/core/index.ts";
+import type { IckbDepositCell } from "../../../../src/logic.ts";
 
 /** Compact evidence of the pool ring the policy evaluated, as the journal carries it. */
 export interface RingSummary {

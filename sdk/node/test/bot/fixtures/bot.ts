@@ -1,12 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
-import { ickbDepositCellFrom, OwnerCell } from "../../../../src/core/cells.ts";
-import { OwnerData } from "../../../../src/core/entities.ts";
-import {
-  DaoManager,
-  type IckbDepositCell,
-  WithdrawalGroup,
-} from "../../../../src/core/index.ts";
+import { depositData } from "../../../../src/dao.ts";
+import type { IckbDepositCell } from "../../../../src/logic.ts";
 import {
   attestResolvedOrderGroup,
   MasterCell,
@@ -17,6 +12,11 @@ import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
+import {
+  encodeOwnerData,
+  OwnerCell,
+  WithdrawalGroup,
+} from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 
 import {
@@ -39,11 +39,10 @@ export interface BotRuntimeOptions {
   sdk?: Partial<Pick<IckbSdk, "getL1AccountState">>;
   primaryLock?: ccc.Script;
   managers?: {
-    dao?: Partial<Runtime["managers"]["dao"]>;
     ickbUdt?: Partial<Runtime["managers"]["ickbUdt"]>;
     order?: Partial<Runtime["managers"]["order"]>;
     ownedOwner?: Partial<Runtime["managers"]["ownedOwner"]>;
-    logic?: Partial<Runtime["managers"]["logic"]>;
+    ickbLogic?: Partial<Runtime["managers"]["ickbLogic"]>;
   };
 }
 
@@ -66,7 +65,8 @@ export function readyDeposit(
 ): IckbDepositCell {
   const minute = 60n * 1000n;
   const ringEpoch = maturityUnix % minute === 0n ? maturityUnix / minute : maturityUnix;
-  const { logic, dao } = getConfig("testnet").managers;
+  const { ickbLogic: logic } = getConfig("testnet");
+  const { dao } = logic;
   const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
@@ -75,22 +75,17 @@ export function readyDeposit(
       lock: logic.script,
       type: dao.script,
     },
-    outputData: DaoManager.depositData(),
+    outputData: depositData(),
   });
-  const deposit = ickbDepositCellFrom(
-    {
-      cell,
-      headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
-      interests: 0n,
-      maturity: new TestEpoch(ringEpoch, 0n, 1n, maturityUnix),
-      isReady: options.isReady ?? true,
-      isDeposit: true,
-      ckbValue: udtValue,
-      udtValue: 0n,
-    },
-    logic.script,
-  );
-  return Object.assign(deposit, { udtValue });
+  return {
+    cell,
+    headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
+    interests: 0n,
+    maturity: new TestEpoch(ringEpoch, 0n, 1n, maturityUnix),
+    isReady: options.isReady ?? true,
+    ckbValue: udtValue,
+    udtValue,
+  };
 }
 
 /** A partial that pays the matcher `ckbDelta` CKB and `udtDelta` iCKB out of a real order. */
@@ -123,7 +118,7 @@ export function marketOrder({
   ratio: { ckbScale: bigint; udtScale: bigint };
   ckbMinMatchLog?: number;
 }): OrderGroup {
-  const { script: orderLock, udtScript } = getConfig("testnet").managers.order;
+  const { script: orderLock, udtScript } = getConfig("testnet").order;
   // A mint order: its master sits one output later in the same transaction.
   const masterOutPoint = { txHash: hash(byte), index: 1n };
   const outputData = OrderData.from({
@@ -167,7 +162,8 @@ export function marketOrder({
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */
 export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup {
-  const { dao, ownedOwner } = getConfig("testnet").managers;
+  const { ownedOwner } = getConfig("testnet");
+  const { dao } = ownedOwner;
   // `distinct` numbers the request and its deposit header past what one byte can, so a
   // test can hold more withdrawals than the DAO script addresses in one transaction.
   const txHash =
@@ -196,9 +192,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
     interests: 0n,
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
     isReady: true,
-    isDeposit: false,
     ckbValue: cell.cellOutput.capacity,
-    udtValue: 0n,
   };
   const owner = new OwnerCell(
     ccc.Cell.from({
@@ -208,7 +202,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
         lock: script("11"),
         type: ownedOwner.script,
       },
-      outputData: OwnerData.encode({ ownedDistance: -1n }),
+      outputData: encodeOwnerData({ ownedDistance: -1n }),
     }),
   );
   return new WithdrawalGroup(owned, owner);
@@ -227,14 +221,10 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   return {
     client,
     managers: {
-      dao: Object.assign(config.managers.dao, overrides.managers?.dao),
-      ickbUdt: Object.assign(config.managers.ickbUdt, overrides.managers?.ickbUdt),
-      order: Object.assign(config.managers.order, overrides.managers?.order),
-      ownedOwner: Object.assign(
-        config.managers.ownedOwner,
-        overrides.managers?.ownedOwner,
-      ),
-      logic: Object.assign(config.managers.logic, overrides.managers?.logic),
+      ickbUdt: Object.assign(config.ickbUdt, overrides.managers?.ickbUdt),
+      order: Object.assign(config.order, overrides.managers?.order),
+      ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
+      ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
     },
     sdk: Object.assign(sdkOf(config), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
@@ -294,7 +284,7 @@ export function botState(overrides: Partial<BotState>): BotState {
  * resolver because the builders accept nothing else; its master sits one output later.
  */
 async function testOrderGroup(byte: string): Promise<OrderGroup> {
-  const manager = getConfig("testnet").managers.order;
+  const manager = getConfig("testnet").order;
   const { script: orderLock, udtScript } = manager;
   const outputData = OrderData.from({
     udtValue: ccc.fixedPointFrom(1000),
@@ -405,6 +395,5 @@ class TestEpoch extends ccc.Epoch {
 
 /** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
 function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  const { ickbUdt, ownedOwner, logic, order } = config.managers;
-  return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order });
+  return new IckbSdk(config);
 }

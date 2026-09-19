@@ -1,7 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { convert, type IckbDepositCell } from "../core/index.ts";
+import type { IckbDepositCell } from "../logic.ts";
 import type { Info } from "../order/info.ts";
 import type { Ratio } from "../order/ratio.ts";
+import { convert } from "../udt.ts";
 import { binarySearch, compareBigInt, type ValueComponents } from "../utils/index.ts";
 import type { CkbCumulative, MaturityOrderInput, SystemState } from "./types.ts";
 

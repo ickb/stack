@@ -16,8 +16,7 @@ describe("getConfig", () => {
   });
 
   it("builds the SDK from one coherent config object", async () => {
-    const config = getConfig("testnet");
-    const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
+    const { ickbUdt, ickbLogic, order, ownedOwner } = getConfig("testnet");
     const sdk = IckbSdk.fromChain("testnet");
     const tx = ccc.Transaction.default();
     const client = offlineTestnetClient();
@@ -28,8 +27,8 @@ describe("getConfig", () => {
     ]);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
-    expect(logic.daoManager).toBe(dao);
-    expect(ownedOwner.daoManager).toBe(dao);
+    expect(ickbLogic.dao.script.eq(ownedOwner.dao.script)).toBe(true);
+    expect(ickbUdt.daoScript.eq(ickbLogic.dao.script)).toBe(true);
     expect(order.udtScript.eq(ickbUdt.script)).toBe(true);
     const completed = await sdk.completeTransaction(tx, {
       signer,
@@ -45,8 +44,7 @@ describe("getConfig", () => {
 
 describe("getConfig defaults", () => {
   it("resolves mainnet defaults", () => {
-    const config = getConfig("mainnet");
-    const { dao, ickbUdt, logic, order, ownedOwner } = config.managers;
+    const { ickbUdt, ickbLogic, order, ownedOwner } = getConfig("mainnet");
     const logicScript =
       "0x350000001000000030000000310000002a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd30200000000";
     const udtScript =
@@ -54,7 +52,7 @@ describe("getConfig defaults", () => {
     const depGroup =
       "0x621a6f38de3b9f453016780edac3b26bfcbfa3e2ecb47c2da275471a5d3ed1650000000001";
 
-    expect(logic.script.toHex()).toBe(logicScript);
+    expect(ickbLogic.script.toHex()).toBe(logicScript);
     expect(ickbUdt.logicScript.toHex()).toBe(logicScript);
     expect(ownedOwner.script.toHex()).toBe(
       "0x35000000100000003000000031000000acc79e07d107831feef4c70c9e683dac5644d5993b9cb106dca6e74baa381bd00200000000",
@@ -70,7 +68,7 @@ describe("getConfig defaults", () => {
     expect(ickbUdt.logicCode.toHex()).toBe(
       "0xd7309191381f5a8a2904b8a79958a9be2752dbba6871fa193dab6aeb29dc8f4400000000",
     );
-    for (const manager of [dao, logic, ownedOwner, order]) {
+    for (const manager of [ickbLogic.dao, ickbLogic, ownedOwner, order]) {
       expect(manager.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
     }
   });

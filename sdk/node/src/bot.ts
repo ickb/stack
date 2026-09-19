@@ -26,7 +26,7 @@ try {
   clientOwner = createPublicClient(chain, rpcUrl);
   const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
-  const config = getConfig(chain);
+  const managers = getConfig(chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
@@ -49,16 +49,11 @@ try {
     observed: preflight.observed,
     matches: preflight.matches,
   });
-  const sdk = new IckbSdk({
-    ickbUdt: config.managers.ickbUdt,
-    ownedOwner: config.managers.ownedOwner,
-    ickbLogic: config.managers.logic,
-    order: config.managers.order,
-  });
+  const sdk = new IckbSdk(managers);
   const runtime: Runtime = {
     client,
     sdk,
-    managers: config.managers,
+    managers,
     primaryLock,
     accountLocks: await signerAccountLocks(signer, primaryLock),
     completeTransaction: async (tx, feeRate, cells) =>

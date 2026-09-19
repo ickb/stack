@@ -1,15 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { ReceiptData } from "../../../src/core/entities.ts";
-import { DaoManager, LogicManager, OwnedOwnerManager } from "../../../src/core/index.ts";
+import { LogicManager } from "../../../src/logic.ts";
+import { encodeReceiptData } from "../../../src/udt.ts";
+
 import { OrderManager } from "../../../src/order/order.ts";
+import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import {
-  ownedWithdrawalCell,
-  ownerMarkerCell,
-} from "../../core/owned_owner/support/owned_owner_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   FeeRateStubClient,
@@ -29,8 +27,8 @@ describe(L1_STATE_SUITE, () => {
     const udt = script("66");
     const sdk = new IckbSdk({
       ickbUdt: fakeIckbUdt(udt),
-      ownedOwner: new OwnedOwnerManager(ownedOwner, [], new DaoManager(dao, [])),
-      ickbLogic: new LogicManager(logic, [], new DaoManager(dao, [])),
+      ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
+      ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
       order: new OrderManager(script("55"), [], udt),
     });
     const plain = cell("81", accountLock, 3000n * CKB);
@@ -52,7 +50,7 @@ describe(L1_STATE_SUITE, () => {
       accountLock,
       100082n * CKB,
       logic,
-      ReceiptData.from({ depositQuantity: 1, depositAmount: 100000n * CKB }).toBytes(),
+      encodeReceiptData({ depositQuantity: 1n, depositAmount: 100000n * CKB }),
     );
     const owner = ownerMarkerCell("86", 1n, accountLock, ownedOwner);
     const owned = ownedWithdrawalCell({
@@ -163,5 +161,42 @@ function cell(
     outPoint: { txHash: hash(byte), index: 0n },
     cellOutput: { capacity, lock, type },
     outputData,
+  });
+}
+
+function ownerMarkerCell(
+  txHashByte: string,
+  index: bigint,
+  ownerLock: ccc.Script,
+  ownedOwnerScript: ccc.Script,
+): ccc.Cell {
+  return ccc.Cell.from({
+    outPoint: { txHash: hash(txHashByte), index },
+    cellOutput: { capacity: 61n, lock: ownerLock, type: ownedOwnerScript },
+    outputData: encodeOwnerData({ ownedDistance: -1n }),
+  });
+}
+
+function ownedWithdrawalCell({
+  txHashByte,
+  index,
+  ownedOwnerScript,
+  daoScript,
+  depositHeaderNumber,
+}: {
+  txHashByte: string;
+  index: bigint;
+  ownedOwnerScript: ccc.Script;
+  daoScript: ccc.Script;
+  depositHeaderNumber: bigint;
+}): ccc.Cell {
+  return ccc.Cell.from({
+    outPoint: { txHash: hash(txHashByte), index },
+    cellOutput: {
+      capacity: ccc.fixedPointFrom(100082),
+      lock: ownedOwnerScript,
+      type: daoScript,
+    },
+    outputData: ccc.mol.Uint64LE.encode(depositHeaderNumber),
   });
 }

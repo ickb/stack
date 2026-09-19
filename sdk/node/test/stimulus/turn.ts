@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../../../src/constants.ts";
 import { IckbError } from "../../../src/conversion/error.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
-import { ICKB_DEPOSIT_CAP } from "../../../src/core/index.ts";
 import { Info } from "../../../src/order/info.ts";
 import {
   signAndSendTransaction,
@@ -14,6 +13,7 @@ import {
   TransactionWaitError,
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { chainIdentities } from "../../../src/utils/index.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
@@ -126,7 +126,7 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    const orderManager = getConfig("testnet").managers.order;
+    const orderManager = getConfig("testnet").order;
     const mint = vi.spyOn(orderManager, "mint");
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
@@ -181,7 +181,7 @@ describe("runStimulusTurn", () => {
 
   it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
-    const orderManager = getConfig("testnet").managers.order;
+    const orderManager = getConfig("testnet").order;
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike, _lock, info, amounts) => {

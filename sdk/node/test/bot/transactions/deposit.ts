@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/error.ts";
-import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
@@ -30,7 +30,7 @@ describe("buildTransaction deposit", () => {
     const runtime = botRuntime({
       completeTransaction: completing(ccc.fixedPointFrom(2000)),
     });
-    const deposit = vi.spyOn(runtime.managers.logic, "deposit");
+    const deposit = vi.spyOn(runtime.managers.ickbLogic, "deposit");
 
     const result = await buildTransaction(
       runtime,
@@ -58,7 +58,7 @@ describe("buildTransaction deposit", () => {
     const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP, 0n);
     const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n, 0n);
     const whale = readyDeposit("73", 30n * ICKB_DEPOSIT_CAP, 60n * MINUTE);
-    const daoScript = botRuntime().managers.dao.script;
+    const daoScript = botRuntime().managers.ickbLogic.dao.script;
     const primaryLock = botRuntime().primaryLock;
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
       await Promise.resolve();

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { chainState, FakeClient, headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { getTransactionHeader } from "../../src/core/transaction_header.ts";
+import { getTransactionHeader } from "../../src/utils/transaction_header.ts";
 
 const TX_HASH: ccc.Hex = `0x${"ab".repeat(32)}`;
 

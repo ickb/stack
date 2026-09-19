@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { DaoHeaderIndexError, DaoOutputLimitError } from "../core/index.ts";
+import { DaoHeaderIndexError, DaoOutputLimitError } from "../dao.ts";
 import { IckbError } from "./error.ts";
 
 /**

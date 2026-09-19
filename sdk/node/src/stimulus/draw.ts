@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
-import { convert } from "../../../src/core/index.ts";
+import { convert } from "../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../src/utils/index.ts";
 
 export type Kind = "order" | "conversion";

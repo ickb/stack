@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
-import { DAO_HEADER_INDEX_LIMIT, type WithdrawalGroup } from "../core/index.ts";
+import { DAO_HEADER_INDEX_LIMIT } from "../dao.ts";
 import type { OrderGroup } from "../order/cells.ts";
+import type { WithdrawalGroup } from "../owned_owner.ts";
 import { maxBigInt } from "../utils/index.ts";
 import { maturity } from "./maturity.ts";
 import type {

@@ -60,14 +60,7 @@ export type {
   PoolDepositRangeOptions,
   SystemState,
 } from "./conversion/types.ts";
-export type {
-  IckbDepositCell,
-  OwnerCell,
-  ReceiptCell,
-  WithdrawalGroup,
-} from "./core/cells.ts";
-export type { DaoDepositCell, DaoWithdrawalRequestCell } from "./core/dao_cells.ts";
-export { ickbExchangeRatio } from "./core/udt.ts";
+export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
   OrderConversionRepresentabilityError,
@@ -79,6 +72,11 @@ export type { Master, MasterLike } from "./order/master.ts";
 export type { OrderData, OrderDataLike } from "./order/order_data.ts";
 export { Ratio } from "./order/ratio.ts";
 export type { Relative, RelativeLike } from "./order/relative.ts";
+export type {
+  DaoWithdrawalRequestCell,
+  OwnerCell,
+  WithdrawalGroup,
+} from "./owned_owner.ts";
 export { hasTransactionActivity } from "./sdk.ts";
 export { signerAccountLocks } from "./send/account_locks.ts";
 export {
@@ -87,5 +85,6 @@ export {
 } from "./send/sign_and_send_transaction.ts";
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
+export { ickbExchangeRatio } from "./udt.ts";
 export type { SupportedChain } from "./utils/chain.ts";
 export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";

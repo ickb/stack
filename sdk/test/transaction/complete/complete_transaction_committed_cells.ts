@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { DaoOutputLimitError } from "../../../src/core/index.ts";
+import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { TRANSACTION_SIZE_BUDGET } from "../../../src/sdk.ts";
 import {
   fundedSigner,
@@ -299,7 +299,7 @@ function registerFailureTests(): void {
     if (first === undefined) {
       throw new Error("Expected DAO output");
     }
-    first.type = logicManager.daoManager.script;
+    first.type = logicManager.dao.script;
 
     await expect(
       sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),

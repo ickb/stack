@@ -1,6 +1,6 @@
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { daoClaimEpoch } from "../../src/core/dao_cells.ts";
+import { daoClaimEpoch } from "../../src/dao.ts";
 
 type EpochTuple = [bigint, bigint, bigint];
 

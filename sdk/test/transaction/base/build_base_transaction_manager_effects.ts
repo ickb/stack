@@ -1,11 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OwnerData } from "../../../src/core/entities.ts";
-import type {
-  IckbDepositCell,
-  ReceiptCell,
-  WithdrawalGroup,
-} from "../../../src/core/index.ts";
+import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
+import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
 import {
   baseTransactionFixture,
   BUILD_BASE_TRANSACTION_SUITE,
@@ -63,7 +59,7 @@ function expectRealBaseTransactionEffects(
   expect(tx.outputs[1]?.type?.eq(options.ownedOwner)).toBe(true);
   expect(tx.outputsData).toEqual([
     ccc.hexFrom(ccc.mol.Uint64LE.encode(options.depositHeader.number)),
-    ccc.hexFrom(OwnerData.encode({ ownedDistance: -1n })),
+    ccc.hexFrom(encodeOwnerData({ ownedDistance: -1n })),
   ]);
   expect(tx.headerDeps).toEqual([
     options.depositHeader.hash,

@@ -1,11 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { IckbError } from "../../../../src/conversion/error.ts";
 import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
-import {
-  DAO_HEADER_INDEX_LIMIT,
-  ICKB_DEPOSIT_CAP,
-  type IckbDepositCell,
-} from "../../../../src/core/index.ts";
+import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
+import type { IckbDepositCell } from "../../../../src/logic.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
@@ -28,7 +26,7 @@ const MINUTE = 60n * 1000n;
 
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
-  const daoScript = botRuntime().managers.dao.script;
+  const daoScript = botRuntime().managers.ickbLogic.dao.script;
   return async (txLike): Promise<ccc.Transaction> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();

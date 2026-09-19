@@ -2,24 +2,20 @@ import { ccc } from "@ckb-ccc/core";
 import {
   asyncPassthroughTransaction,
   FakeCkbSigner,
+  headerLike,
   passthroughTransaction,
   script,
   StubClient,
   transactionWithHeader,
 } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
-import {
-  DaoManager,
-  ICKB_DEPOSIT_CAP,
-  IckbUdt,
-  LogicManager,
-  OwnedOwnerManager,
-  type IckbDepositCell,
-} from "../../../../src/core/index.ts";
+
+import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
+import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
-import { headerLike } from "../../../core/cells/support/cells_support.ts";
+import { ICKB_DEPOSIT_CAP, IckbUdt } from "../../../../src/udt.ts";
 import {
   baseClient,
   conversionContext,
@@ -55,7 +51,7 @@ export function baseTransactionFixture(
   const ownedOwner = script("44");
   const order = script("55");
   const udt = script("66");
-  const daoManager = new DaoManager(dao, options.daoDeps ?? []);
+  const daoManager = { script: dao, cellDeps: options.daoDeps ?? [] };
   const logicManager = new LogicManager(logic, options.logicDeps ?? [], daoManager);
   const ownedOwnerManager = new OwnedOwnerManager(
     ownedOwner,
@@ -116,16 +112,14 @@ export function testSdk(
   options: { completion?: "passthrough" | "real" } = {},
 ): SdkFixture {
   const lock = script("11");
-  const logicManager = new LogicManager(
-    script("22"),
-    [],
-    new DaoManager(script("33"), []),
-  );
-  const ownedOwnerManager = new OwnedOwnerManager(
-    script("44"),
-    [],
-    new DaoManager(script("33"), []),
-  );
+  const logicManager = new LogicManager(script("22"), [], {
+    script: script("33"),
+    cellDeps: [],
+  });
+  const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], {
+    script: script("33"),
+    cellDeps: [],
+  });
   const orderManager = new OrderManager(script("55"), [], script("66"));
   const ickbUdt = fakeIckbUdt();
   const sdk = new IckbSdk({
@@ -160,7 +154,13 @@ export function fundedSigner(
       ccc.Client["getTransactionWithHeader"]
     > => {
       await Promise.resolve();
-      return transactionWithHeader(ccc.ClientBlockHeader.from(headerLike(GENESIS_AR)));
+      return transactionWithHeader(
+        headerLike({
+          dao: { c: 0n, ar: GENESIS_AR, s: 0n, u: 0n },
+          epoch: [1n, 0n, 1n],
+          number: 1n,
+        }),
+      );
     },
   });
   return { client, signer: new FakeCkbSigner(client, [...locks]), cells: [...cells] };
@@ -179,9 +179,9 @@ export interface SdkFixture {
 export function fakeIckbUdt(
   udt = script("66"),
   logic = script("22"),
-  daoManager = new DaoManager(script("33"), []),
+  dao?: { script: ccc.Script },
 ): IckbUdt {
-  return new TestIckbUdt(udt, logic, daoManager);
+  return new TestIckbUdt(udt, logic, dao?.script ?? script("33"));
 }
 
 export function mockPassthroughMint(orderManager: OrderManager): void {
@@ -237,13 +237,13 @@ export function mockWithdrawalWithRemainderOrder(
 }
 
 class TestIckbUdt extends IckbUdt {
-  constructor(udt: ccc.Script, logic: ccc.Script, daoManager: DaoManager) {
+  constructor(udt: ccc.Script, logic: ccc.Script, daoScript: ccc.Script) {
     super({
       code: { txHash: hash("a1"), index: 0n },
       script: udt,
       logicCode: { txHash: hash("a2"), index: 0n },
       logicScript: logic,
-      daoManager,
+      daoScript,
     });
   }
 

@@ -1,12 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/types.ts";
-import type {
-  IckbDepositCell,
-  ReceiptCell,
-  WithdrawalGroup,
-} from "../../../../src/core/index.ts";
+import type { SdkManagers, SystemState } from "../../../../src/conversion/types.ts";
+import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
 import type { OrderGroup } from "../../../../src/order/cells.ts";
+import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../../src/sdk.ts";
 
 import type { DepositReason, RingSummary } from "../policy.ts";
@@ -20,7 +16,7 @@ export interface Runtime {
   sdk: IckbSdk;
 
   /** Lower-level managers from the selected deployment config. */
-  managers: ReturnType<typeof getConfig>["managers"];
+  managers: SdkManagers;
 
   /** Primary lock controlled by the signer. */
   primaryLock: ccc.Script;

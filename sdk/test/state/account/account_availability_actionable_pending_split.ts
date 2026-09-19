@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
-import { DAO_HEADER_INDEX_LIMIT } from "../../../src/core/index.ts";
+import { DAO_HEADER_INDEX_LIMIT } from "../../../src/dao.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,

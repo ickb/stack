@@ -351,7 +351,6 @@ export default defineConfig(
   },
   {
     files: [
-      "sdk/src/core/entities.ts",
       "sdk/src/order/info.ts",
       "sdk/src/order/order_data.ts",
       "sdk/src/order/ratio.ts",

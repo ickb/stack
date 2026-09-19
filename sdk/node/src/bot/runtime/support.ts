@@ -1,6 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import { convert } from "../../../../src/core/index.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
+import { convert } from "../../../../src/udt.ts";
 
 import { CKB_RESERVE } from "../../../../src/constants.ts";
 import { maxBigInt } from "../../../../src/utils/index.ts";

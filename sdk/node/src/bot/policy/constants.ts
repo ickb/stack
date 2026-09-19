@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { ICKB_DEPOSIT_CAP } from "../../../../src/core/index.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 export const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
 export const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);

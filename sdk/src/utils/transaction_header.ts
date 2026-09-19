@@ -20,6 +20,49 @@ export async function getTransactionHeader(
   return blockNumber === undefined ? undefined : client.getHeaderByNumber(blockNumber);
 }
 
+/**
+ * The committing headers of a batch of transactions, each hash read once. A batch is one
+ * coherent read: the cells came from one scan, so every header must exist.
+ */
+export async function transactionHeaders(
+  client: ccc.Client,
+  txHashes: Iterable<ccc.Hex>,
+): Promise<Map<ccc.Hex, ccc.ClientBlockHeader>> {
+  const distinct = [...new Set(txHashes)];
+  const headers = await Promise.all(
+    distinct.map(async (txHash) => getTransactionHeader(client, txHash)),
+  );
+  return new Map(
+    distinct.map((txHash, index) => {
+      const header = headers[index];
+      if (header === undefined) {
+        throw new Error(`Header not found for txHash ${txHash}`);
+      }
+      return [txHash, header];
+    }),
+  );
+}
+
+/** The headers of a batch of block numbers, each read once; every block must exist. */
+export async function headersByNumber(
+  client: ccc.Client,
+  blockNumbers: Iterable<ccc.Num>,
+): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
+  const distinct = [...new Set(blockNumbers)];
+  const headers = await Promise.all(
+    distinct.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
+  );
+  return new Map(
+    distinct.map((blockNumber, index) => {
+      const header = headers[index];
+      if (header === undefined) {
+        throw new Error(`Header not found for block number ${String(blockNumber)}`);
+      }
+      return [blockNumber, header];
+    }),
+  );
+}
+
 /** The block number of a committed status record; anything else is not committed. */
 function committedBlockNumber(response: unknown): ccc.Num | undefined {
   if (

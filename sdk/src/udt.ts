@@ -1,8 +1,12 @@
-import { ccc } from "@ckb-ccc/core";
-import { CheckedUint128LE, CheckedUint32LE, type ExchangeRatio } from "../utils/index.ts";
-import type { DaoManager } from "./dao.ts";
-import { ReceiptData } from "./entities.ts";
-import { getTransactionHeader } from "./transaction_header.ts";
+import { ccc, mol } from "@ckb-ccc/core";
+import { isDaoDeposit } from "./dao.ts";
+import {
+  CheckedUint128LE,
+  CheckedUint32LE,
+  CheckedUint64LE,
+  type ExchangeRatio,
+} from "./utils/index.ts";
+import { transactionHeaders } from "./utils/transaction_header.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
 const udtDataSize = 16;
@@ -10,6 +14,38 @@ const AR_0: ccc.Num = 10000000000000000n; // Base scale for CKB
 const depositUsedCapacity = ccc.fixedPointFrom(82); // 82n CKB
 const depositCapacityDelta = (depositUsedCapacity * AR_0) / ccc.fixedPointFrom(100000);
 const xudtOwnerMode = 0x80000000n;
+
+// A receipt's fixed prefix: 4 bytes of deposit quantity and 8 of deposit amount.
+export const receiptDataBytes = 12;
+
+/** The receipt payload for one or more identical iCKB deposits. */
+export interface ReceiptData {
+  /** Number of identical deposits represented by this receipt. */
+  depositQuantity: ccc.Num;
+  /** Free CKB capacity of each represented deposit before iCKB conversion. */
+  depositAmount: ccc.FixedPoint;
+}
+
+const ReceiptDataCodec = mol.struct({
+  depositQuantity: CheckedUint32LE,
+  depositAmount: CheckedUint64LE,
+});
+
+/** Encodes a receipt payload. */
+export function encodeReceiptData(data: ReceiptData): ccc.Bytes {
+  return ReceiptDataCodec.encode(data);
+}
+
+/**
+ * Decodes the fixed receipt-data prefix and ignores trailing cell payload bytes.
+ *
+ * @remarks The receipt data prefix is 12 bytes after the `0x` marker: 4 bytes for deposit
+ * quantity and 8 bytes for deposit amount. Later payload bytes belong to other protocol
+ * data and are intentionally tolerated here.
+ */
+export function decodeReceiptData(outputData: ccc.Hex): ReceiptData {
+  return ReceiptDataCodec.decode(outputData.slice(0, 2 + 2 * receiptDataBytes));
+}
 
 /**
  * Soft per-deposit iCKB value cap used before applying the excess discount.
@@ -34,8 +70,8 @@ export class IckbUdt {
   /** Logic script whose hash is embedded in this iCKB xUDT type script. */
   public readonly logicScript: ccc.Script;
 
-  /** DAO helper used to recognize iCKB DAO deposit inputs during completion. */
-  public readonly daoManager: DaoManager;
+  /** The Nervos DAO script, to recognize the first-phase deposits a transaction re-mints. */
+  public readonly daoScript: ccc.Script;
 
   /** Creates an instance of IckbUdt from its code and script references. */
   constructor({
@@ -43,19 +79,19 @@ export class IckbUdt {
     script,
     logicCode,
     logicScript,
-    daoManager,
+    daoScript,
   }: {
     code: ccc.OutPointLike;
     script: ccc.ScriptLike;
     logicCode: ccc.OutPointLike;
     logicScript: ccc.ScriptLike;
-    daoManager: DaoManager;
+    daoScript: ccc.ScriptLike;
   }) {
     this.script = ccc.Script.from(script);
     this.udtCode = ccc.OutPoint.from(code);
     this.logicCode = ccc.OutPoint.from(logicCode);
     this.logicScript = ccc.Script.from(logicScript);
-    this.daoManager = daoManager;
+    this.daoScript = ccc.Script.from(daoScript);
   }
 
   /**
@@ -119,12 +155,9 @@ export class IckbUdt {
   /**
    * iCKB carried by the transaction's inputs: xUDT balances plus receipt value,
    * minus the first-phase deposits it re-mints. Final withdrawal inputs carry none.
+   * The protocol cells are valued at their deposit headers, each read once.
    */
   public async inputBalance(tx: ccc.Transaction, client: ccc.Client): Promise<ccc.Num> {
-    const transactionCache = new Map<
-      ccc.Hex,
-      Promise<ccc.ClientBlockHeader | undefined>
-    >();
     const cells = await Promise.all(
       tx.inputs.map(async (input) => {
         try {
@@ -136,10 +169,61 @@ export class IckbUdt {
         }
       }),
     );
-    const contributions = await Promise.all(
-      cells.map(async (cell) => this.inputContribution(cell, client, transactionCache)),
+    const valued = cells.map((cell) => this.protocolValue(cell));
+    const headers = await transactionHeaders(
+      client,
+      valued.flatMap((value) => (value === undefined ? [] : [value.txHash])),
     );
-    return contributions.reduce((total, balance) => total + balance, ccc.Zero);
+    let balance = ccc.Zero;
+    for (const [index, cell] of cells.entries()) {
+      const value = valued[index];
+      if (this.isUdt(cell)) {
+        balance += decodeUdtBalance(cell.outputData);
+      } else if (value !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every protocol cell's hash was read above.
+        const header = headers.get(value.txHash)!;
+        balance += value.sign * ickbValue(value.amount, header) * value.quantity;
+      }
+    }
+    return balance;
+  }
+
+  /** What a protocol input (receipt or first-phase deposit) is worth once its header is known. */
+  private protocolValue(
+    cell: ccc.CellAny,
+  ):
+    | { txHash: ccc.Hex; amount: ccc.FixedPoint; quantity: bigint; sign: bigint }
+    | undefined {
+    if (this.isUdt(cell) || cell.outPoint === undefined) {
+      return undefined;
+    }
+    const { type, lock } = cell.cellOutput;
+    if (type !== undefined && this.logicScript.eq(type)) {
+      let receipt: ReturnType<typeof decodeReceiptData>;
+      try {
+        receipt = decodeReceiptData(cell.outputData);
+      } catch (error) {
+        throw new Error(
+          `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: ${cell.outputData}`,
+          { cause: error },
+        );
+      }
+      return {
+        txHash: cell.outPoint.txHash,
+        amount: receipt.depositAmount,
+        quantity: receipt.depositQuantity,
+        sign: 1n,
+      };
+    }
+    if (this.logicScript.eq(lock) && isDaoDeposit(cell, this.daoScript)) {
+      return {
+        txHash: cell.outPoint.txHash,
+        amount: cell.capacityFree,
+        quantity: 1n,
+        sign: -1n,
+      };
+    }
+    return undefined;
   }
 
   /** iCKB the transaction's outputs require. */
@@ -155,84 +239,6 @@ export class IckbUdt {
       return;
     }
     tx.addOutput({ lock, type: this.script }, CheckedUint128LE.encode(balance));
-  }
-
-  /** Values one input cell in iCKB. */
-  private async inputContribution(
-    cell: ccc.CellAny,
-    client: ccc.Client,
-    transactionCache: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>,
-  ): Promise<ccc.Num> {
-    if (this.isUdt(cell)) {
-      return decodeUdtBalance(cell.outputData);
-    }
-    if (cell.outPoint === undefined) {
-      return ccc.Zero;
-    }
-
-    const { type, lock } = cell.cellOutput;
-    let amount: ccc.FixedPoint;
-    let quantity = 1n;
-    let sign = 1n;
-    if (type !== undefined && this.logicScript.eq(type)) {
-      let receipt: ReturnType<typeof ReceiptData.decodePrefix>;
-      try {
-        receipt = ReceiptData.decodePrefix(cell.outputData);
-      } catch (error) {
-        throw new Error(
-          `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: ${cell.outputData}`,
-          { cause: error },
-        );
-      }
-      amount = receipt.depositAmount;
-      quantity = receipt.depositQuantity;
-    } else if (this.logicScript.eq(lock) && this.daoManager.isDeposit(cell)) {
-      amount = cell.capacityFree;
-      sign = -1n;
-    } else {
-      return ccc.Zero;
-    }
-
-    const header = await getCachedTransactionHeader(
-      client,
-      cell.outPoint,
-      transactionCache,
-    );
-    if (header === undefined) {
-      throw new Error(
-        `Header not found for txHash ${cell.outPoint.txHash} at ${cell.outPoint.toHex()}`,
-      );
-    }
-
-    return sign * ickbValue(amount, header) * quantity;
-  }
-}
-
-async function getCachedTransactionHeader(
-  client: ccc.Client,
-  outPoint: ccc.OutPoint,
-  transactionCache: Map<ccc.Hex, Promise<ccc.ClientBlockHeader | undefined>>,
-): Promise<ccc.ClientBlockHeader | undefined> {
-  const txHash = outPoint.txHash;
-  let promise = transactionCache.get(txHash);
-  if (promise === undefined) {
-    promise = loadTransactionHeader(client, outPoint);
-    transactionCache.set(txHash, promise);
-  }
-  return promise;
-}
-
-async function loadTransactionHeader(
-  client: ccc.Client,
-  outPoint: ccc.OutPoint,
-): Promise<ccc.ClientBlockHeader | undefined> {
-  try {
-    return await getTransactionHeader(client, outPoint.txHash);
-  } catch (error) {
-    throw new Error(
-      `Failed to load transaction header for txHash ${outPoint.txHash} at ${outPoint.toHex()}`,
-      { cause: error },
-    );
   }
 }
 

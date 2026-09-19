@@ -6,8 +6,8 @@ import {
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
   DaoOutputLimitError,
-  ICKB_DEPOSIT_CAP,
-} from "../../../src/core/index.ts";
+} from "../../../src/dao.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
   baseTip,
   conversionContext,

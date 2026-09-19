@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, script } from "@ickb/testkit";
-import { ickbDepositCellFrom } from "../../../src/core/cells.ts";
-import { DaoManager, type IckbDepositCell } from "../../../src/core/index.ts";
+import { depositData } from "../../../src/dao.ts";
+import type { IckbDepositCell } from "../../../src/logic.ts";
 
 export const TIP = headerLike();
 
@@ -38,23 +38,17 @@ function deposit(
   const cell = ccc.Cell.from({
     outPoint: { txHash: ccc.hashCkb(ccc.bytesFrom(key, "utf8")), index: 0n },
     cellOutput: { capacity: udtValue, lock: logic, type: script("33") },
-    outputData: DaoManager.depositData(),
+    outputData: depositData(),
   });
-  const result = ickbDepositCellFrom(
-    {
-      cell,
-      headers: [{ header: TIP, txHash: cell.outPoint.txHash }, { header: TIP }],
-      interests: 0n,
-      maturity,
-      isReady,
-      isDeposit: true,
-      ckbValue: udtValue,
-      udtValue: 0n,
-    },
-    logic,
-  );
-  Object.assign(result, { udtValue });
-  return result;
+  return {
+    cell,
+    headers: [{ header: TIP, txHash: cell.outPoint.txHash }, { header: TIP }],
+    interests: 0n,
+    maturity,
+    isReady,
+    ckbValue: udtValue,
+    udtValue,
+  };
 }
 
 function epochAtUnix(maturityUnix: bigint): ccc.Epoch {

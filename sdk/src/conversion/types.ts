@@ -1,16 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
-import type {
-  IckbDepositCell,
-  IckbUdt,
-  LogicManager,
-  OwnedOwnerManager,
-  ReceiptCell,
-  WithdrawalGroup,
-} from "../core/index.ts";
+import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import type { Info } from "../order/info.ts";
 import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
+import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
+import type { IckbUdt } from "../udt.ts";
 import type { ValueComponents } from "../utils/index.ts";
 
 /**

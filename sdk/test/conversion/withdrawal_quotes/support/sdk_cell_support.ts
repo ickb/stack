@@ -1,14 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
-import { ickbDepositCellFrom, OwnerCell } from "../../../../src/core/cells.ts";
-import type { DaoWithdrawalRequestCell } from "../../../../src/core/dao_cells.ts";
-import { OwnerData, ReceiptData } from "../../../../src/core/entities.ts";
+import { depositData } from "../../../../src/dao.ts";
+import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
 import {
-  DaoManager,
+  encodeOwnerData,
+  OwnerCell,
   WithdrawalGroup,
-  type IckbDepositCell,
-  type ReceiptCell,
-} from "../../../../src/core/index.ts";
+  type DaoWithdrawalRequestCell,
+} from "../../../../src/owned_owner.ts";
+import { encodeReceiptData } from "../../../../src/udt.ts";
 import { baseTip, hash } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function depositCell(
@@ -28,26 +28,20 @@ export function depositCell(
       lock: logic,
       type: dao,
     },
-    outputData: DaoManager.depositData(),
+    outputData: depositData(),
   });
-  const deposit = ickbDepositCellFrom(
-    {
-      cell,
-      headers: [
-        { header: depositHeader, txHash: cell.outPoint.txHash },
-        { header: tipHeader },
-      ],
-      interests: 0n,
-      maturity: ccc.Epoch.from([1n, 0n, 1n]),
-      isReady: options?.isReady ?? false,
-      isDeposit: true,
-      ckbValue: cell.cellOutput.capacity,
-      udtValue: 0n,
-    },
-    logic,
-  );
-  Object.assign(deposit, { udtValue: ccc.fixedPointFrom(100000) });
-  return deposit;
+  return {
+    cell,
+    headers: [
+      { header: depositHeader, txHash: cell.outPoint.txHash },
+      { header: tipHeader },
+    ],
+    interests: 0n,
+    maturity: ccc.Epoch.from([1n, 0n, 1n]),
+    isReady: options?.isReady ?? false,
+    ckbValue: cell.cellOutput.capacity,
+    udtValue: ccc.fixedPointFrom(100000),
+  };
 }
 
 export function projectionReadyDeposit(
@@ -62,26 +56,17 @@ export function projectionReadyDeposit(
       lock: script("22"),
       type: script("33"),
     },
-    outputData: DaoManager.depositData(),
+    outputData: depositData(),
   });
-  const deposit = ickbDepositCellFrom(
-    {
-      cell,
-      headers: [{ header: baseTip, txHash: cell.outPoint.txHash }, { header: baseTip }],
-      interests: 0n,
-      isReady: options.isReady ?? true,
-      isDeposit: true,
-      ckbValue: cell.cellOutput.capacity,
-      udtValue: 0n,
-      maturity: new TestEpoch(maturityUnix),
-    },
-    script("22"),
-  );
-  Object.assign(deposit, {
+  return {
+    cell,
+    headers: [{ header: baseTip, txHash: cell.outPoint.txHash }, { header: baseTip }],
+    interests: 0n,
+    isReady: options.isReady ?? true,
     ckbValue: options.ckbValue ?? udtValue,
     udtValue,
-  });
-  return deposit;
+    maturity: new TestEpoch(maturityUnix),
+  };
 }
 
 export function receiptValue(
@@ -147,8 +132,8 @@ export function receiptCell(
       lock,
       type: logic,
     },
-    outputData: ReceiptData.encode({
-      depositQuantity: 1,
+    outputData: encodeReceiptData({
+      depositQuantity: 1n,
       depositAmount: ccc.fixedPointFrom(100000),
     }),
   });
@@ -194,7 +179,7 @@ export function readyWithdrawalGroup(options: {
         lock: options.ownerLock,
         type: options.ownedOwner,
       },
-      outputData: OwnerData.encode({ ownedDistance: -1n }),
+      outputData: encodeOwnerData({ ownedDistance: -1n }),
     }),
   );
   return new WithdrawalGroup(
@@ -207,9 +192,7 @@ export function readyWithdrawalGroup(options: {
       interests: 0n,
       maturity: ccc.Epoch.from([1n, 0n, 1n]),
       isReady: true,
-      isDeposit: false,
       ckbValue: ownedCell.cellOutput.capacity,
-      udtValue: 0n,
     },
     owner,
   );
@@ -242,9 +225,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
       interests: 0n,
       maturity: new TestEpoch(options.maturityUnix ?? 0n),
       isReady: options.isReady,
-      isDeposit: false,
       ckbValue: options.ckbValue,
-      udtValue: options.udtValue ?? 0n,
     } satisfies DaoWithdrawalRequestCell;
     super(
       owned,
@@ -252,7 +233,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         ccc.Cell.from({
           outPoint: { txHash: hash(options.byte ?? "30"), index: 1n },
           cellOutput: { capacity: 0n, lock: script("11"), type: script("44") },
-          outputData: OwnerData.encode({ ownedDistance: -1n }),
+          outputData: encodeOwnerData({ ownedDistance: -1n }),
         }),
       ),
     );

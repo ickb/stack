@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_DEPOSIT_CAP, convert } from "../../../src/core/index.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
+import { ICKB_DEPOSIT_CAP, convert } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,

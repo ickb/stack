@@ -17,7 +17,6 @@ export {
   asyncBinarySearch,
   binarySearch,
   ceilDiv,
-  collect,
   compareBigInt,
   findCells,
   isPlainCapacityCell,

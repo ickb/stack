@@ -37,7 +37,7 @@ try {
       client,
       signer,
       sdk: IckbSdk.fromChain(chain),
-      order: getConfig(chain).managers.order,
+      order: getConfig(chain).order,
       primaryLock,
       accountLocks: await signerAccountLocks(signer, primaryLock),
     },

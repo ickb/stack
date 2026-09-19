@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
   binarySearch,
-  collect,
   compareBigInt,
   defaultCellPageSize,
   findCells,
@@ -65,20 +64,6 @@ describe("findCells", () => {
       }),
     ).resolves.toEqual([]);
     expect(noCache).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("async iterable collection", () => {
-  it("collects async iterable values", async () => {
-    await expect(
-      collect(
-        (async function* (): AsyncGenerator<string> {
-          yield "a";
-          await Promise.resolve();
-          yield "b";
-        })(),
-      ),
-    ).resolves.toEqual(["a", "b"]);
   });
 });
 

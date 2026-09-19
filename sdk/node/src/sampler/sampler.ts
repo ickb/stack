@@ -12,7 +12,7 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { convert, ickbExchangeRatio } from "../../../src/core/index.ts";
+import { convert, ickbExchangeRatio } from "../../../src/udt.ts";
 import { asyncBinarySearch } from "../../../src/utils/index.ts";
 
 /**

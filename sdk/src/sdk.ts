@@ -16,23 +16,17 @@ import type {
   ConversionTransactionOptions,
   ConversionTransactionResult,
   GetL1StateOptions,
-  PoolDepositRangeOptions,
   SdkManagers,
   SystemState,
 } from "./conversion/types.ts";
-import {
-  assertDaoOutputLimit,
-  ickbExchangeRatio,
-  type IckbDepositCell,
-  type IckbUdt,
-  type LogicManager,
-  type OwnedOwnerManager,
-} from "./core/index.ts";
+import { assertDaoOutputLimit, DEFAULT_LOCK_UP_WINDOW } from "./dao.ts";
+import type { IckbDepositCell, LogicManager } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
+import type { OwnedOwnerManager } from "./owned_owner.ts";
+import { ickbExchangeRatio, type IckbUdt } from "./udt.ts";
 import {
-  collect,
   compareBigInt,
   findCells,
   isPlainCapacityCell,
@@ -107,10 +101,7 @@ const IckbSdkImplementation = class IckbSdk {
 
   /** Creates the SDK for one chain's deployment. */
   public static fromChain(chain: SupportedChain): IckbSdk {
-    const {
-      managers: { ickbUdt, ownedOwner, logic, order },
-    } = getConfig(chain);
-    return new IckbSdk({ ickbUdt, ownedOwner, ickbLogic: logic, order });
+    return new IckbSdk(getConfig(chain));
   }
 
   // ---- State reads -------------------------------------------------------------------
@@ -133,8 +124,13 @@ const IckbSdkImplementation = class IckbSdk {
   }> {
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
+    // The lock-up window is settled once, here; every reader below takes it whole.
+    const window = {
+      minLockUp: options?.poolDeposits?.minLockUp ?? DEFAULT_LOCK_UP_WINDOW.minLockUp,
+      maxLockUp: options?.poolDeposits?.maxLockUp ?? DEFAULT_LOCK_UP_WINDOW.maxLockUp,
+    };
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
-      this.getPoolDeposits(client, tip, options?.poolDeposits),
+      this.ickbLogic.findDeposits(client, tip, window),
       this.order.findOrders(client),
       getFeeRate(client),
       Promise.all(
@@ -163,20 +159,6 @@ const IckbSdkImplementation = class IckbSdk {
         withdrawalGroups: accounts.flatMap((account) => account.withdrawalGroups),
       },
     };
-  }
-
-  private async getPoolDeposits(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-    range?: PoolDepositRangeOptions,
-  ): Promise<IckbDepositCell[]> {
-    return collect(
-      this.ickbLogic.findDeposits(client, {
-        tip,
-        ...(range?.minLockUp === undefined ? {} : { minLockUp: range.minLockUp }),
-        ...(range?.maxLockUp === undefined ? {} : { maxLockUp: range.maxLockUp }),
-      }),
-    );
   }
 
   /** Every Stack cell one lock owns, classified from a single exact-lock scan. */
@@ -454,7 +436,7 @@ const IckbSdkImplementation = class IckbSdk {
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the budget.
     const swept = sweep(tx, plainCells);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
-    assertDaoOutputLimit(tx, this.ickbLogic.daoManager.script);
+    assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
     return tx;
   }
 

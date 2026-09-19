@@ -1,14 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DaoManager, LogicManager, OwnedOwnerManager } from "../../../src/core/index.ts";
+
+import { LogicManager } from "../../../src/logic.ts";
+import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   emptyCellScan,
   FeeRateStubClient,
   l1SdkWithManagers,
-  repeat,
   tipHeaderHandler,
   transactionWithHeader,
 } from "../l1_account/support/sdk_l1_support.ts";
@@ -23,7 +24,7 @@ describe(L1_STATE_SUITE, () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
-    const daoManager = new DaoManager(dao, []);
+    const daoManager = { script: dao, cellDeps: [] };
     const logicManager = new LogicManager(logic, [], daoManager);
     const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], daoManager);
     const readyDeposit = depositCell("03", logic, dao, headerLike(0n), headerLike(0n), {
@@ -31,7 +32,7 @@ describe(L1_STATE_SUITE, () => {
     });
     const findDeposits = vi
       .spyOn(logicManager, "findDeposits")
-      .mockImplementation(() => repeat(1, readyDeposit));
+      .mockResolvedValue([readyDeposit]);
     const sdk = l1SdkWithManagers({
       ownedOwnerManager,
       logicManager,
@@ -50,7 +51,7 @@ describe(L1_STATE_SUITE, () => {
 
     const state = await sdk.getL1AccountState(client, []);
 
-    expect(findDeposits.mock.calls[0]?.[1]).toMatchObject({ tip });
+    expect(findDeposits.mock.calls[0]?.[1]).toBe(tip);
     expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(100082));
     expect(state.system.ckbMaturing).toEqual([]);
   });

@@ -3,10 +3,7 @@ import {
   completeFirstFundable,
   isFundabilityFailure,
 } from "../../../../src/conversion/fundable_walk.ts";
-import {
-  type IckbDepositCell,
-  receiptPhase2Capacity,
-} from "../../../../src/core/index.ts";
+import { type IckbDepositCell, receiptPhase2Capacity } from "../../../../src/logic.ts";
 
 import { matchTurn, seedOf, type TurnMatch } from "../match.ts";
 import { planRebalance, type RebalancePlan } from "../policy.ts";
@@ -186,7 +183,7 @@ function buildCore(
       : undefined,
   );
   if (core.kind === "deposit") {
-    tx = runtime.managers.logic.deposit(
+    tx = runtime.managers.ickbLogic.deposit(
       tx,
       1,
       state.depositCapacity,
