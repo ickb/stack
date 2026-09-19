@@ -1,11 +1,7 @@
 import type { QuoteState } from "../query/queries.ts";
 import { chartAmountText, graphAmountText } from "../shared/figures.ts";
 import { CKB, clampShannons, type RootConfig } from "../shared/utils.ts";
-import {
-  conversionWorthSamples,
-  type IckbWorthSample,
-  type IckbWorthSamples,
-} from "./rateChartData.ts";
+import { conversionWorthSamples, type IckbWorthSample } from "./rateChartData.ts";
 import { scaleX, scaleY } from "./rateChartScale.ts";
 import { valueGridMarks } from "./rateChartText.ts";
 
@@ -13,20 +9,15 @@ interface RateChartViewParams {
   readonly chain: RootConfig["chain"];
   readonly isCkb2Udt: boolean;
   readonly amount: bigint;
-  readonly quoteState?: Pick<QuoteState, "exchangeRatio" | "tipTimestamp">;
-  readonly now: Date;
+  readonly quoteState?: QuoteState;
 }
 
 export interface RateChartViewState {
   readonly sourceSymbol: "CKB" | "iCKB";
-  readonly targetSymbol: "CKB" | "iCKB";
-  readonly chartAmount: bigint;
   readonly amountText: string;
   readonly title: string;
   readonly caption: string;
   readonly description: string;
-  readonly samples: IckbWorthSamples;
-  readonly first: IckbWorthSample;
   readonly tip: IckbWorthSample;
   readonly minX: number;
   readonly maxX: number;
@@ -46,63 +37,35 @@ export function rateChartView({
   isCkb2Udt,
   amount,
   quoteState,
-  now,
 }: RateChartViewParams): RateChartViewState {
   const sourceSymbol = isCkb2Udt ? "CKB" : "iCKB";
   const targetSymbol = isCkb2Udt ? "iCKB" : "CKB";
   const chartAmount = amount >= CKB ? clampShannons(amount) : CKB;
   const amountText = chartAmountText(chartAmount);
-  const samples = conversionWorthSamples(chain, isCkb2Udt, quoteState, now);
+  const samples = conversionWorthSamples(chain, isCkb2Udt, quoteState);
   const xs = samples.map(({ date }) => date.getTime());
   const ys = samples.map(({ value }) => value);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const gridMarks = valueGridMarks(minY, maxY, targetSymbol, chartAmount);
   const first = samples[0];
   const tip = samples.reduce((_, sample) => sample);
-  const firstValueText = graphAmountText(chartAmount, first.value);
-  const tipValueText = graphAmountText(chartAmount, tip.value);
 
   return {
     sourceSymbol,
-    targetSymbol,
-    chartAmount,
     amountText,
     title: `${amountText} ${sourceSymbol} worth over time:`,
     caption: isCkb2Udt
       ? "iCKB earns NervosDAO compensation, so 1 CKB buys a little less iCKB every day."
       : "iCKB earns NervosDAO compensation, so 1 iCKB is worth a little more CKB every day.",
-    description: [
-      "Protocol-derived ",
-      chainLabel[chain],
-      " curve from ",
-      String(first.date.getUTCFullYear()),
-      " to ",
-      String(tip.date.getUTCFullYear()),
-      ", showing ",
-      amountText,
-      " ",
-      sourceSymbol,
-      " changing from ",
-      firstValueText,
-      " ",
-      targetSymbol,
-      " to ",
-      tipValueText,
-      " ",
-      targetSymbol,
-      ".",
-    ].join(""),
-    samples,
-    first,
+    description: `Protocol-derived ${chainLabel[chain]} curve from ${String(first.date.getUTCFullYear())} to ${String(tip.date.getUTCFullYear())}, showing ${amountText} ${sourceSymbol} changing from ${graphAmountText(chartAmount, first.value)} ${targetSymbol} to ${graphAmountText(chartAmount, tip.value)} ${targetSymbol}.`,
     tip,
     minX,
     maxX,
     minY,
     maxY,
-    gridMarks,
+    gridMarks: valueGridMarks(minY, maxY, targetSymbol, chartAmount),
     points: samples
       .map((sample) =>
         [

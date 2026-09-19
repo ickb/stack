@@ -7,28 +7,26 @@ import {
   type PendingTransactionState,
 } from "../action/pendingTransaction.ts";
 import { l1StateOptions, type L1StateType, type QuoteState } from "../query/queries.ts";
-import {
-  direction2Symbol,
-  errorMessageOf,
-  parseAmountInput,
-  symbol2Direction,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, parseAmountInput, type WalletConfig } from "../shared/utils.ts";
 import { WalletAppView } from "../view/WalletAppView.tsx";
 
 export default function App({
   walletConfig,
   walletName,
   openWallet,
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   quoteState,
 }: Readonly<{
   walletConfig: WalletConfig;
   walletName: string;
   openWallet: () => unknown;
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   quoteState?: QuoteState;
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
@@ -48,14 +46,11 @@ export default function App({
   const l1StateQuery = useQuery<L1StateType>({
     ...l1StateOptions(walletConfig, isFrozen),
   });
-  const symbol = rawText.startsWith("I") ? "I" : "C";
-  const isCkb2Udt = symbol2Direction(symbol);
-  const amountInput = parseAmountInput(rawText.slice(1));
+  const amountInput = parseAmountInput(text);
   const formReset = (): void => {
-    setRawText(direction2Symbol(isCkb2Udt));
+    setText("");
   };
   const l1State = l1StateQuery.data;
-  const formQuoteState = l1State?.system ?? quoteState;
   const refreshPreview = async (
     refreshedIsCkb2Udt: boolean,
     refreshedAmount: bigint,
@@ -81,7 +76,7 @@ export default function App({
 
     return {
       stateId: freshState.stateId,
-      tipTimestamp: freshState.tipTimestamp,
+      tipTimestamp: freshState.system.tip.timestamp,
       hasCollectable: freshState.hasCollectable,
       build: async () =>
         freshState.txBuilder(refreshedIsCkb2Udt, refreshedAmount, refreshedDestination),
@@ -94,12 +89,14 @@ export default function App({
         walletConfig,
         walletName,
         openWallet,
-        rawText,
-        setRawText,
-        quoteState,
-        formQuoteState,
-        isFrozen,
         isCkb2Udt,
+        setIsCkb2Udt,
+        text,
+        setText,
+        quoteState,
+        // The wallet's own sampled ratio quotes the form once the account state is in.
+        exchangeRatio: l1State?.system.exchangeRatio ?? quoteState?.exchangeRatio,
+        isFrozen,
         amount: amountInput.amount ?? 0n,
         l1State,
       }}

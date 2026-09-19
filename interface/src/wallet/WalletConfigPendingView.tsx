@@ -2,12 +2,7 @@ import type { JSX } from "react";
 import { ActionLayout } from "../action/ActionLayout.tsx";
 import RateChart from "../chart/rateChart.tsx";
 import type { QuoteState } from "../query/queries.ts";
-import {
-  errorMessageOf,
-  parseAmountInput,
-  symbol2Direction,
-  type RootConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, parseAmountInput, type RootConfig } from "../shared/utils.ts";
 import { PendingDashboard } from "../view/Dashboard.tsx";
 import Form from "../view/Form.tsx";
 import { WalletHeaderPortal } from "../view/WalletHeaderPortal.tsx";
@@ -17,8 +12,10 @@ export function WalletConfigPendingView({
   rootConfig,
   walletName,
   openWallet,
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   quoteState,
   error,
   retry,
@@ -26,14 +23,15 @@ export function WalletConfigPendingView({
   rootConfig: RootConfig;
   walletName: string;
   openWallet: () => unknown;
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   quoteState?: QuoteState;
   error?: unknown;
   retry?: () => void;
 }>): JSX.Element {
-  const isCkb2Udt = symbol2Direction(rawText.startsWith("I") ? "I" : "C");
-  const amount = parseAmountInput(rawText.slice(1)).amount ?? 0n;
+  const amount = parseAmountInput(text).amount ?? 0n;
   const hasError = error !== undefined;
 
   return (
@@ -44,13 +42,10 @@ export function WalletConfigPendingView({
       <WalletSections>
         <WalletSection>
           <Form
-            {...{
-              rawText,
-              setRawText,
-              quoteState,
-              isFrozen: false,
-              chain: rootConfig.chain,
-            }}
+            {...{ isCkb2Udt, setIsCkb2Udt, text, setText }}
+            exchangeRatio={quoteState?.exchangeRatio}
+            isFrozen={false}
+            chain={rootConfig.chain}
           />
         </WalletSection>
         <WalletSection>

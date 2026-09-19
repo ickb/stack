@@ -22,7 +22,9 @@ export function WalletGate(): JSX.Element {
   const { client, close, open, setClient, wallet, signerInfo } = useCcc();
   const signer = useSigner();
   const chain = chainFromClient(client);
-  const [rawText, setRawText] = useState("C");
+  const [isCkb2Udt, setIsCkb2Udt] = useState(true);
+  const [text, setText] = useState("");
+  const draft = { isCkb2Udt, setIsCkb2Udt, text, setText };
   const rootConfig = useMemo(
     () => (chain === undefined ? undefined : createRootConfig(chain, client)),
     [client, chain],
@@ -47,9 +49,7 @@ export function WalletGate(): JSX.Element {
   if (signer === undefined) {
     return (
       <>
-        <LandingPage
-          {...{ open, setClient, rootConfig, rawText, setRawText, quoteStateQuery }}
-        />
+        <LandingPage {...{ open, setClient, rootConfig, ...draft, quoteStateQuery }} />
         {chain === "testnet" ? <TestnetHint /> : null}
       </>
     );
@@ -66,7 +66,7 @@ export function WalletGate(): JSX.Element {
   const walletName = walletLabel(wallet?.name, signerInfo?.name);
   return (
     <WalletConfigGate
-      {...{ rootConfig, signer, walletName, rawText, setRawText }}
+      {...{ rootConfig, signer, walletName, ...draft }}
       openWallet={open}
       quoteState={quoteStateQuery.data}
     />

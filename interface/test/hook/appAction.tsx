@@ -1,4 +1,5 @@
 import { script } from "@ickb/testkit";
+import { skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import {
@@ -10,6 +11,7 @@ import {
 } from "./fixtures/data.ts";
 import {
   hookState,
+  queryFnOf,
   queryMock,
   resetHooks,
   transactMock,
@@ -56,13 +58,15 @@ function registerAppStateTests(): void {
       isFetching: false,
       refetch,
     };
-    const setRawText = vi.fn<(value: string) => void>();
+    const setText = vi.fn<(value: string) => void>();
     const element = App({
       walletConfig: walletConfig(),
       walletName: "JoyID",
       openWallet: vi.fn<() => void>(),
-      rawText: "I2",
-      setRawText,
+      isCkb2Udt: false,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "2",
+      setText,
       quoteState: quoteState(),
     });
     const props = elementProps<Parameters<typeof WalletAppView>[0]>(element);
@@ -75,11 +79,11 @@ function registerAppStateTests(): void {
 
     expect(props.isCkb2Udt).toBe(false);
     expect(props.amount).toBe(2n * CKB);
-    expect(props.formQuoteState).toBe(loadedState.system);
-    expect(setRawText).toHaveBeenCalledWith("I");
+    expect(props.exchangeRatio).toBe(loadedState.system.exchangeRatio);
+    expect(setText).toHaveBeenCalledWith("");
     expect(refreshedState).toMatchObject({
       stateId: loadedState.stateId,
-      tipTimestamp: loadedState.tipTimestamp,
+      tipTimestamp: loadedState.system.tip.timestamp,
       hasCollectable: loadedState.hasCollectable,
     });
     expect(loadedState.txBuilder).not.toHaveBeenCalled();
@@ -97,11 +101,13 @@ function registerAppStateTests(): void {
           walletConfig: walletConfig(),
           walletName: "JoyID",
           openWallet: vi.fn<() => void>(),
-          rawText: "C",
-          setRawText,
+          isCkb2Udt: true,
+          setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+          text: "",
+          setText,
         }),
-      ).isCkb2Udt,
-    ).toBe(true);
+      ).exchangeRatio,
+    ).toBeUndefined();
   });
 }
 
@@ -129,8 +135,10 @@ function registerAppRefreshTests(): void {
           walletConfig: walletConfig(),
           walletName: "JoyID",
           openWallet: vi.fn<() => void>(),
-          rawText: "C1",
-          setRawText: vi.fn<(value: string) => void>(),
+          isCkb2Udt: true,
+          setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+          text: "1",
+          setText: vi.fn<(value: string) => void>(),
         }),
       );
 
@@ -151,8 +159,10 @@ function registerAppRefreshTests(): void {
         walletConfig: walletConfig(),
         walletName: "JoyID",
         openWallet: vi.fn<() => void>(),
-        rawText: "C1",
-        setRawText: vi.fn<(value: string) => void>(),
+        isCkb2Udt: true,
+        setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+        text: "1",
+        setText: vi.fn<(value: string) => void>(),
       }),
     );
     await expect(
@@ -171,7 +181,8 @@ function registerActionPreviewTests(): void {
       stateError: null,
       retryState,
     });
-    await expect(txPreviewQueryOptions().queryFn()).resolves.toBe(txInfoPadding);
+    // Without wallet data the preview query is parked.
+    expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
 
     expect(elementProps<Parameters<typeof ActionLayout>[0]>(loading)).toMatchObject({
       disabled: true,
@@ -194,7 +205,7 @@ function registerActionPreviewTests(): void {
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     const ready = Action({ ...actionProps(), freeze, l1State: l1State() });
     const props = elementProps<Parameters<typeof ActionLayout>[0]>(ready);
-    await expect(txPreviewQueryOptions().queryFn()).resolves.toBe(txInfoPadding);
+    await expect(queryFnOf(txPreviewQueryOptions())()).resolves.toBe(txInfoPadding);
     props.onAction?.();
 
     expect(props.disabled).toBe(false);
@@ -315,8 +326,10 @@ function registerFreshFailureIdentityTests(): void {
         walletConfig: walletConfig(),
         walletName: "JoyID",
         openWallet: vi.fn<() => void>(),
-        rawText: "C1",
-        setRawText: vi.fn<(value: string) => void>(),
+        isCkb2Udt: true,
+        setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+        text: "1",
+        setText: vi.fn<(value: string) => void>(),
       }),
     );
     resetHooks();
@@ -513,10 +526,12 @@ function registerWalletViewTests(): void {
       walletConfig: walletConfig(),
       walletName: "JoyID",
       openWallet: vi.fn<() => void>(),
-      rawText: "C1",
-      setRawText: vi.fn<(value: string) => void>(),
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1",
+      setText: vi.fn<(value: string) => void>(),
       quoteState: quoteState(),
-      formQuoteState: quoteState(),
+      exchangeRatio: quoteState().exchangeRatio,
       isFrozen: false,
       destinationField: {
         text: "",
@@ -525,7 +540,6 @@ function registerWalletViewTests(): void {
         isForeign: false,
       },
       actionParams: actionProps(),
-      isCkb2Udt: true,
       amount: CKB,
     } satisfies Omit<Parameters<typeof WalletAppView>[0], "l1State">;
 
@@ -543,7 +557,7 @@ function registerWalletViewTests(): void {
       findElements(withoutBalances, (element) => element.type === Form),
     ).toHaveLength(1);
     expect(
-      elementProps<Parameters<typeof Form>[0]>(firstElement(formElements)).balances,
+      elementProps<Parameters<typeof Form>[0]>(firstElement(formElements)).projection,
     ).toMatchObject({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,

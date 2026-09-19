@@ -1,6 +1,5 @@
-import type { ccc } from "@ckb-ccc/ccc";
 import { hasTransactionActivity } from "@ickb/sdk";
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { L1StateType } from "../query/queries.ts";
 import {
@@ -12,23 +11,20 @@ import {
 } from "../shared/utils.ts";
 import { ActionLayout } from "./ActionLayout.tsx";
 import {
-  actionDisabled,
-  actionDone,
   actionLabel,
   actionMessage,
-  canPreviewTx,
-  currentTxInfo,
+  confirmPreviewMessage,
   isTxInfoValid,
   shownMaturityText,
-  transactionIntentMessage,
+  timeUntilMaturity,
   unavailableConversionMessage,
 } from "./actionStatus.ts";
-import { timeUntilMaturity } from "./actionTime.ts";
 import {
   retryConfirmation,
   transact,
   type RefreshedTransactionPreview,
   type RefreshedTransactionState,
+  type TransactionCallbacks,
 } from "./actionTransaction.ts";
 import type { Destination } from "./destination.ts";
 import type {
@@ -38,23 +34,7 @@ import type {
 
 const PREVIEW_SETTLE_MS = 300;
 
-export default function Action({
-  isCkb2Udt,
-  amount,
-  amountError,
-  destination,
-  destinationError,
-  refreshPreview,
-  freeze,
-  formReset,
-  walletConfig,
-  pendingTransaction,
-  pendingStore,
-  l1State,
-  isStateFetching,
-  stateError,
-  retryState,
-}: Readonly<{
+type ActionProps = Readonly<{
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   amountError: string;
@@ -74,12 +54,30 @@ export default function Action({
   isStateFetching: boolean;
   stateError: unknown;
   retryState: () => void;
-}>): JSX.Element {
+}>;
+
+export default function Action({
+  isCkb2Udt,
+  amount,
+  amountError,
+  destination,
+  destinationError,
+  refreshPreview,
+  freeze,
+  formReset,
+  walletConfig,
+  pendingTransaction,
+  pendingStore,
+  l1State,
+  isStateFetching,
+  stateError,
+  retryState,
+}: ActionProps): JSX.Element {
   const [message, setMessage] = useState("");
   // The last attempt's result, kept until the next attempt or an edit of the draft: React's
   // pattern for state that depends on a prop, so a stale "enter a larger amount" never
   // advises on a draft the user has already changed (decisions amendment 52(t)).
-  const draft = `${isCkb2Udt ? "C" : "I"}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
+  const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
   const [failure, setFailureFor] = useState({ draft, message: "" });
   if (failure.message !== "" && failure.draft !== draft) {
     setFailureFor({ draft, message: "" });
@@ -88,26 +86,19 @@ export default function Action({
     setFailureFor({ draft, message: text });
   };
   const [frozenPreview, setFrozenPreview] = useState<RefreshedTransactionPreview>();
-  const mountedRef = useRef(false);
-  const attemptRef = useRef<AbortController | null>(null);
+  const attempt = useAttempt(freeze);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  useEffect(() => {
-    mountedRef.current = true;
-    return (): void => {
-      mountedRef.current = false;
-      attemptRef.current?.abort();
-      attemptRef.current = null;
-      freeze(false);
-    };
-  }, [freeze]);
   const freezePreview = (preview: RefreshedTransactionPreview | undefined): void => {
-    updateFrozenPreview(preview, setFrozenPreview, freeze, setMessage);
+    setFrozenPreview(preview);
+    freeze(preview !== undefined);
+    setMessage(confirmPreviewMessage(preview));
   };
 
   const isFrozen = frozenPreview !== undefined;
   const isLocked = isPreparing || isFrozen;
-  const stateId = previewStateIdentity(frozenPreview, l1State);
+  // While a preview is frozen its own sampled state stands in for the live one.
+  const sampled = frozenPreview ?? l1State;
   const transactionHash =
     pendingTransaction?.status === "pending" ? pendingTransaction.txHash : undefined;
   const isSubmitting = pendingTransaction?.status === "submitting";
@@ -118,83 +109,59 @@ export default function Action({
       walletConfig.chain,
       walletConfig.address,
       "txInfo",
-      stateId,
+      sampled?.stateId ?? "missing",
       isCkb2Udt,
       amountIdentity(settledAmount, amountError),
       destinationIdentity(destination),
     ],
-    queryFn: async () => buildPreview(l1State, isCkb2Udt, settledAmount, destination),
-    enabled: canPreviewTx(isLocked, l1State, settledAmount, destination !== undefined),
+    queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount, destination) ?? skipToken,
+    enabled: !isLocked,
     retry: false,
   });
   if (l1State === undefined) {
     return missingStateActionLayout(stateError, isStateFetching, retryState);
   }
 
-  const txInfo = currentTxInfo(
-    isFrozen,
-    frozenTransactionInfo(frozenPreview),
-    txPreviewQuery.data,
-  );
+  const txInfo = frozenPreview?.txInfo ?? txPreviewQuery.data ?? txInfoPadding;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
-  const hasActivity = hasTransactionActivity(txInfo.tx);
-  const isValid = isTxInfoValid(txInfo, hasActivity);
+  const isValid = isTxInfoValid(txInfo, hasTransactionActivity(txInfo.tx));
   const maturity = timeUntilMaturity(
     txInfo.estimatedMaturity,
-    previewTip(frozenPreview, l1State),
+    frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
   );
-  const shownMaturity = shownMaturityText(txInfo, maturity);
-  const hasCollectable = previewHasCollectable(frozenPreview, l1State);
-  const actionText = transactionActionLabel(
-    transactionHash,
-    isConfirming,
-    amount,
-    hasCollectable,
-    destination?.moveTo !== undefined,
-  );
+  const { hasCollectable } = sampled ?? l1State;
+  const actionText =
+    transactionHash === undefined
+      ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
+      : confirmationLabel(isConfirming);
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
-  const messageText = actionMessage({
+  const messageText = actionMessage(txInfo, {
     amount,
     amountError,
-    conversionKind: txInfo.conversionKind,
-    conversionNotice: txInfo.conversionNotice,
     destinationError,
     failure: failure.message,
-    hasActivity,
     hasCollectable,
     hasDestination: destination !== undefined,
     isFrozen,
     isPreparing,
     isStateFetching,
     isTxPreviewFetching: txPreviewQuery.isFetching,
-    isValid,
     message,
-    moveTo: txInfo.moveTo,
-    txError: txInfo.error,
     unavailableMessage,
   });
-  const isActionDisabled = transactionActionDisabled({
-    hasAmount: amount !== undefined && destination !== undefined,
-    isConfirming,
-    isPreparing,
-    isSubmitting,
-    transactionHash,
-    isFetching,
-    isFrozen,
-    isValid,
-  });
-  const isActionDone = actionDone(isFetching, isPreparing || isConfirming);
-
-  const transactionCallbacks = {
-    freezePreview,
-    setMessage,
-    setFailure,
-    setIsPreparing,
-    setIsConfirming,
-    formReset,
-    walletConfig,
-    pendingStore,
-  };
+  // A pending hash is always actionable (retry or stop); a fresh request needs a valid,
+  // settled preview and no attempt under way.
+  const isActionDisabled =
+    transactionHash === undefined &&
+    (amount === undefined ||
+      destination === undefined ||
+      isPreparing ||
+      isSubmitting ||
+      isConfirming ||
+      isFetching ||
+      isFrozen ||
+      !isValid);
+  const isActionDone = !isFetching && !(isPreparing || isConfirming);
 
   return (
     <ActionLayout
@@ -202,110 +169,145 @@ export default function Action({
       disabled={isActionDisabled}
       isDone={isActionDone}
       onAction={() => {
-        if (!mountedRef.current) {
-          return;
-        }
-        const currentTransaction = pendingStore.current;
-        if (currentTransaction?.status === "submitting") {
-          return;
-        }
-        const cachedTransactionHash =
-          currentTransaction?.status === "pending"
-            ? currentTransaction.txHash
-            : undefined;
-        if (cachedTransactionHash !== undefined && isConfirming) {
-          attemptRef.current?.abort();
-          attemptRef.current = null;
-          setIsConfirming(false);
-          setMessage("Confirmation wait stopped.");
-          return;
-        }
-        const attempt = new AbortController();
-        let operation: Promise<void> | undefined;
-        if (cachedTransactionHash === undefined) {
-          if (amount !== undefined && destination !== undefined) {
-            attemptRef.current = attempt;
-            operation = transact({
-              ...transactionCallbacks,
-              lockIntent: () => {
-                freeze(true);
-              },
-              refreshPreview: async () => refreshPreview(isCkb2Udt, amount, destination),
-              signal: attempt.signal,
-              unavailableMessage,
-            });
-          }
-        } else {
-          attemptRef.current = attempt;
-          freeze(true);
-          operation = retryConfirmation({
-            ...transactionCallbacks,
-            signal: attempt.signal,
-            txHash: cachedTransactionHash,
-          });
-        }
-        if (operation !== undefined) {
-          const releaseAttempt = (): void => {
-            if (attemptRef.current === attempt) {
-              attemptRef.current = null;
-            }
-          };
-          void operation.then(releaseAttempt, releaseAttempt);
-        }
+        startAttempt({
+          attempt,
+          isConfirming,
+          isCkb2Udt,
+          amount,
+          destination,
+          refreshPreview,
+          freeze,
+          unavailableMessage,
+          callbacks: {
+            freezePreview,
+            setMessage,
+            setFailure,
+            setIsPreparing,
+            setIsConfirming,
+            formReset,
+            walletConfig,
+            pendingStore,
+          },
+        });
       }}
       message={messageText}
       // Maturity and fee describe a transaction; before a valid preview there is none.
       fee={isValid ? `${toText(txInfo.fee)} CKB` : "..."}
-      maturity={isValid ? shownMaturity : "..."}
+      maturity={isValid ? shownMaturityText(txInfo, maturity) : "..."}
     />
   );
 }
 
-function updateFrozenPreview(
-  preview: RefreshedTransactionPreview | undefined,
-  setFrozenPreview: (preview: RefreshedTransactionPreview | undefined) => void,
-  freeze: (value: boolean) => void,
-  setMessage: (message: string) => void,
-): void {
-  setFrozenPreview(preview);
-  freeze(preview !== undefined);
-  if (preview !== undefined) {
-    const intent = transactionIntentMessage(preview.txInfo, preview.hasCollectable);
-    setMessage(
-      intent === ""
-        ? "Confirm the transaction in your wallet."
-        : `${intent} Confirm the transaction in your wallet.`,
+/** The one attempt the section may own; unmounting aborts it and releases the form. */
+interface AttemptOwner {
+  readonly abort: () => void;
+  readonly run: (start: (signal: AbortSignal) => Promise<void>) => void;
+}
+
+function useAttempt(freeze: (value: boolean) => void): AttemptOwner {
+  const current = useRef<AbortController | null>(null);
+  const isMounted = useRef(false);
+  useEffect(() => {
+    isMounted.current = true;
+    return (): void => {
+      isMounted.current = false;
+      current.current?.abort();
+      current.current = null;
+      freeze(false);
+    };
+  }, [freeze]);
+  return {
+    abort: (): void => {
+      current.current?.abort();
+      current.current = null;
+    },
+    run: (start): void => {
+      if (!isMounted.current) {
+        return;
+      }
+      const controller = new AbortController();
+      current.current = controller;
+      const release = (): void => {
+        if (current.current === controller) {
+          current.current = null;
+        }
+      };
+      void start(controller.signal).then(release, release);
+    },
+  };
+}
+
+/**
+ * Starts the one attempt a click may own: a fresh request, a retry of the pending hash's
+ * confirmation, or, while a retry waits, a stop. A submission under way owns the click.
+ */
+function startAttempt({
+  attempt,
+  isConfirming,
+  isCkb2Udt,
+  amount,
+  destination,
+  refreshPreview,
+  freeze,
+  unavailableMessage,
+  callbacks,
+}: Readonly<{
+  attempt: AttemptOwner;
+  isConfirming: boolean;
+  isCkb2Udt: boolean;
+  amount: bigint | undefined;
+  destination: Destination | undefined;
+  refreshPreview: ActionProps["refreshPreview"];
+  freeze: (value: boolean) => void;
+  unavailableMessage: string;
+  callbacks: TransactionCallbacks;
+}>): void {
+  const current = callbacks.pendingStore.current;
+  if (current?.status === "submitting") {
+    return;
+  }
+  if (current?.status === "pending" && isConfirming) {
+    attempt.abort();
+    callbacks.setIsConfirming(false);
+    callbacks.setMessage("Confirmation wait stopped.");
+    return;
+  }
+  if (current !== undefined) {
+    attempt.run(async (signal): Promise<void> => {
+      freeze(true);
+      await retryConfirmation({ ...callbacks, signal, txHash: current.txHash });
+    });
+  } else if (amount !== undefined && destination !== undefined) {
+    attempt.run(async (signal): Promise<void> =>
+      transact({
+        ...callbacks,
+        lockIntent: () => {
+          freeze(true);
+        },
+        refreshPreview: async (): Promise<RefreshedTransactionState> =>
+          refreshPreview(isCkb2Udt, amount, destination),
+        signal,
+        unavailableMessage,
+      }),
     );
   }
 }
 
-function stateIdentity(l1State: L1StateType | undefined): string {
-  return l1State?.stateId ?? "missing";
-}
-
-function previewStateIdentity(
-  preview: RefreshedTransactionPreview | undefined,
+/** The preview builder for the settled draft; the query parks while any part is missing. */
+function previewBuilder(
   l1State: L1StateType | undefined,
-): string {
-  return preview?.stateId ?? stateIdentity(l1State);
+  isCkb2Udt: boolean,
+  amount: bigint | undefined,
+  destination: Destination | undefined,
+): (() => Promise<TxInfo>) | undefined {
+  if (l1State === undefined || amount === undefined || destination === undefined) {
+    return undefined;
+  }
+  return async () => l1State.txBuilder(isCkb2Udt, amount, destination);
 }
 
-function frozenTransactionInfo(preview: RefreshedTransactionPreview | undefined): TxInfo {
-  return preview?.txInfo ?? txInfoPadding;
-}
-
-function previewTip(
-  preview: RefreshedTransactionPreview | undefined,
-  l1State: L1StateType,
-): bigint {
-  return preview?.tipTimestamp ?? l1State.tipTimestamp;
-}
-
-function previewHasCollectable(
-  preview: RefreshedTransactionPreview | undefined,
-  l1State: L1StateType,
-): boolean {
-  return preview?.hasCollectable ?? l1State.hasCollectable;
+function confirmationLabel(isConfirming: boolean): string {
+  return isConfirming ? "stop waiting" : "retry confirmation";
 }
 
 /** The value as it was `delayMs` ago, unless it has kept changing since. */
@@ -328,58 +330,6 @@ function amountIdentity(amount: bigint | undefined, amountError: string): string
 
 function destinationIdentity(destination: Destination | undefined): string {
   return destination?.lock.hash() ?? "invalid";
-}
-
-async function buildPreview(
-  l1State: L1StateType | undefined,
-  isCkb2Udt: boolean,
-  amount: bigint | undefined,
-  destination: Destination | undefined,
-): Promise<TxInfo> {
-  return l1State !== undefined && amount !== undefined && destination !== undefined
-    ? l1State.txBuilder(isCkb2Udt, amount, destination)
-    : txInfoPadding;
-}
-
-function transactionActionLabel(
-  transactionHash: ccc.Hex | undefined,
-  isConfirming: boolean,
-  amount: bigint | undefined,
-  hasCollectable: boolean,
-  isMove: boolean,
-): string {
-  if (transactionHash === undefined) {
-    return actionLabel(amount, hasCollectable, isMove);
-  }
-  return isConfirming ? "stop waiting" : "retry confirmation";
-}
-
-function transactionActionDisabled({
-  hasAmount,
-  isConfirming,
-  isPreparing,
-  isSubmitting,
-  transactionHash,
-  isFetching,
-  isFrozen,
-  isValid,
-}: Readonly<{
-  hasAmount: boolean;
-  isConfirming: boolean;
-  isPreparing: boolean;
-  isSubmitting: boolean;
-  transactionHash: ccc.Hex | undefined;
-  isFetching: boolean;
-  isFrozen: boolean;
-  isValid: boolean;
-}>): boolean {
-  return transactionHash === undefined
-    ? !hasAmount ||
-        isPreparing ||
-        isSubmitting ||
-        isConfirming ||
-        actionDisabled(isFetching, isFrozen, isValid)
-    : false;
 }
 
 function missingStateActionLayout(

@@ -1,83 +1,84 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasSavedCccConnection,
   savedSelectedChain,
   saveSelectedChain,
 } from "../../src/wallet/cccConnection.ts";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("hasSavedCccConnection", () => {
   it("recognizes CCC wallet and signer persistence", () => {
-    expect(
-      hasSavedCccConnection(
-        storageOf({
-          walletName: "JoyID",
-          signerName: "CKB",
-        }),
-      ),
-    ).toBe(true);
+    stubStorage({
+      "ccc-connection-info": JSON.stringify({ walletName: "JoyID", signerName: "CKB" }),
+    });
+    expect(hasSavedCccConnection()).toBe(true);
   });
 
-  it("requires both wallet and signer names", () => {
-    expect(hasSavedCccConnection(storageOf({ walletName: "JoyID" }))).toBe(false);
-    expect(hasSavedCccConnection(storageOf({ signerName: "CKB" }))).toBe(false);
-    expect(hasSavedCccConnection(storageOf({ walletName: "", signerName: "CKB" }))).toBe(
-      false,
-    );
+  it.each([
+    { walletName: "JoyID" },
+    { signerName: "CKB" },
+    { walletName: "", signerName: "CKB" },
+    [],
+  ])("requires both wallet and signer names: %j", (saved) => {
+    stubStorage({ "ccc-connection-info": JSON.stringify(saved) });
+    expect(hasSavedCccConnection()).toBe(false);
   });
 
-  it("ignores invalid saved values", () => {
-    expect(hasSavedCccConnection(storageOf(undefined))).toBe(false);
-    expect(hasSavedCccConnection(storageOf([]))).toBe(false);
-    expect(hasSavedCccConnection({ getItem: () => "not-json" })).toBe(false);
+  it("ignores missing, empty, invalid, or unreadable saved values", () => {
+    stubStorage({});
+    expect(hasSavedCccConnection()).toBe(false);
+    stubStorage({ "ccc-connection-info": "" });
+    expect(hasSavedCccConnection()).toBe(false);
+    stubStorage({ "ccc-connection-info": "not-json" });
+    expect(hasSavedCccConnection()).toBe(false);
+    vi.unstubAllGlobals();
+    expect(hasSavedCccConnection()).toBe(false);
   });
 });
 
 describe("selected chain persistence", () => {
   it("reads saved mainnet or testnet selections", () => {
-    expect(savedSelectedChain(storageWithItem("mainnet"))).toBe("mainnet");
-    expect(savedSelectedChain(storageWithItem("testnet"))).toBe("testnet");
+    stubStorage({ "ickb-selected-chain": "mainnet" });
+    expect(savedSelectedChain()).toBe("mainnet");
+    stubStorage({ "ickb-selected-chain": "testnet" });
+    expect(savedSelectedChain()).toBe("testnet");
   });
 
-  it("falls back when storage is empty or invalid", () => {
-    expect(savedSelectedChain(storageWithItem(null))).toBeUndefined();
-    expect(savedSelectedChain(storageWithItem("devnet"))).toBeUndefined();
-    expect(
-      savedSelectedChain({
-        getItem: () => {
-          throw new Error("blocked");
-        },
-      }),
-    ).toBeUndefined();
+  it("falls back when storage is empty, invalid, or unreadable", () => {
+    stubStorage({});
+    expect(savedSelectedChain()).toBeUndefined();
+    stubStorage({ "ickb-selected-chain": "devnet" });
+    expect(savedSelectedChain()).toBeUndefined();
+    vi.unstubAllGlobals();
+    expect(savedSelectedChain()).toBeUndefined();
   });
 
   it("saves selected chains when storage is available", () => {
-    let saved = "";
-    saveSelectedChain("testnet", {
-      setItem: (_key, value) => {
-        saved = value;
-      },
-    });
+    const saved = stubStorage({});
+    saveSelectedChain("testnet");
 
-    expect(saved).toBe("testnet");
+    expect(saved.get("ickb-selected-chain")).toBe("testnet");
   });
 
   it("ignores save failures", () => {
+    vi.unstubAllGlobals();
     expect(() => {
-      saveSelectedChain("testnet", {
-        setItem: () => {
-          throw new Error("blocked");
-        },
-      });
+      saveSelectedChain("testnet");
     }).not.toThrow();
   });
 });
 
-function storageOf(value: unknown): Pick<Storage, "getItem"> {
-  return {
-    getItem: () => (value === undefined ? null : JSON.stringify(value)),
-  };
-}
-
-function storageWithItem(value: string | null): Pick<Storage, "getItem"> {
-  return { getItem: () => value };
+/** Vitest runs in Node, where `localStorage` is absent: a map stands in for the browser's. */
+function stubStorage(items: Record<string, string>): Map<string, string> {
+  const saved = new Map(Object.entries(items));
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      saved.set(key, value);
+    },
+  });
+  return saved;
 }

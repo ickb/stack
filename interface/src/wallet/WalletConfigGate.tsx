@@ -26,18 +26,23 @@ export default function WalletConfigGate({
   signer,
   walletName,
   openWallet,
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   quoteState,
 }: Readonly<{
   rootConfig: RootConfig;
   signer: ccc.Signer;
   walletName: string;
   openWallet: () => unknown;
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   quoteState?: QuoteState;
 }>): JSX.Element {
+  const draft = { isCkb2Udt, setIsCkb2Udt, text, setText };
   const [attempt, setAttempt] = useState(0);
   const [read, setRead] = useState<WalletConfigRead>();
   useEffect(() => {
@@ -72,14 +77,14 @@ export default function WalletConfigGate({
   ) {
     return (
       <WalletConfigPendingView
-        {...{ rootConfig, walletName, openWallet, rawText, setRawText, quoteState }}
+        {...{ rootConfig, walletName, openWallet, ...draft, quoteState }}
       />
     );
   }
   if ("error" in read) {
     return (
       <WalletConfigPendingView
-        {...{ rootConfig, walletName, openWallet, rawText, setRawText, quoteState }}
+        {...{ rootConfig, walletName, openWallet, ...draft, quoteState }}
         error={read.error}
         retry={() => {
           setAttempt((count) => count + 1);
@@ -89,7 +94,7 @@ export default function WalletConfigGate({
   }
   return (
     <App
-      {...{ walletName, openWallet, rawText, setRawText, quoteState }}
+      {...{ walletName, openWallet, ...draft, quoteState }}
       walletConfig={read.config}
     />
   );

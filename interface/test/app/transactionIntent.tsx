@@ -94,13 +94,13 @@ describe("transaction intent", () => {
     const root = createRoot(fakeContainer(testDocument) as unknown as Element);
 
     flushSync(() => {
-      root.render(appElement("C1"));
+      root.render(appElement("1"));
     });
     flushSync(() => {
-      root.render(appElement("C2"));
+      root.render(appElement("2"));
     });
     flushSync(() => {
-      root.render(appElement("C1e2"));
+      root.render(appElement("1e2"));
     });
 
     expect(mocks.amounts).toEqual([100_000_000n, 200_000_000n, undefined]);
@@ -110,14 +110,16 @@ describe("transaction intent", () => {
   });
 });
 
-function appElement(rawText: string): ReactElement {
+function appElement(text: string): ReactElement {
   return createElement(App, {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Query and view mocks make wallet internals irrelevant to this App prop transition.
     walletConfig: {} as WalletConfig,
     walletName: "Test wallet",
     openWallet: vi.fn(),
-    rawText,
-    setRawText: vi.fn<(value: string) => void>(),
+    isCkb2Udt: true,
+    setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+    text,
+    setText: vi.fn<(value: string) => void>(),
   });
 }
 

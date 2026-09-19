@@ -1,21 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  direction2Symbol,
   errorMessageOf,
   maxShannons,
   parseAmountInput,
-  symbol2Direction,
   toText,
 } from "../../src/shared/utils.ts";
 
 describe("amount utilities", () => {
-  it("maps display symbols", () => {
-    expect(symbol2Direction("I")).toBe(false);
-    expect(symbol2Direction("C")).toBe(true);
-    expect(direction2Symbol(true)).toBe("C");
-    expect(direction2Symbol(false)).toBe("I");
-  });
-
   it("trims fixed-point decimal text", () => {
     expect(toText(123450000n)).toBe("1.2345");
     expect(toText(100000000n)).toBe("1");
@@ -32,7 +23,7 @@ describe("amount utilities", () => {
     expect(parseAmountInput(text)).toEqual({ status: "valid", amount, error: "" });
   });
 
-  it.each(["-1", "1e2", "1..2", "1.234567899", "abc"])(
+  it.each(["-1", "1e2", "1..2", "1.234567899", "abc", "１", " 1", "1\n"])(
     "rejects invalid input %j without rewriting it",
     (text) => {
       expect(parseAmountInput(text)).toMatchObject({

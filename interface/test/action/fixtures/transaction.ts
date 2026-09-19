@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
+  type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
   IckbSdk,
@@ -9,10 +10,7 @@ import {
 import { byte32FromByte, headerLike, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
-import type {
-  buildTransactionPreview,
-  TransactionContext,
-} from "../../../src/action/transaction.ts";
+import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
 import type { WalletConfig } from "../../../src/shared/utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
@@ -95,7 +93,9 @@ export function txWithInput(txHashByte: string): ccc.Transaction {
   return tx;
 }
 
-export function context(overrides: Partial<TransactionContext> = {}): TransactionContext {
+export function context(
+  overrides: Partial<ConversionTransactionContext> = {},
+): ConversionTransactionContext {
   return {
     system: {
       feeRate: 1n,

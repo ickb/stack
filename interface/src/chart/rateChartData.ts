@@ -28,10 +28,9 @@ const chainGenesis: Record<RootConfig["chain"], number> = {
 export function conversionWorthSamples(
   chain: RootConfig["chain"],
   isCkb2Udt: boolean,
-  quoteState: Pick<QuoteState, "exchangeRatio" | "tipTimestamp"> | undefined,
-  now: Date,
+  quoteState: QuoteState | undefined,
 ): IckbWorthSamples {
-  const [first, second, ...rest] = ickbWorthSamples(chain, quoteState, now);
+  const [first, second, ...rest] = ickbWorthSamples(chain, quoteState);
   const convert = ({ date, value }: IckbWorthSample): IckbWorthSample => ({
     date,
     value: isCkb2Udt ? 1 / value : value,
@@ -46,12 +45,11 @@ export function conversionWorthSamples(
  */
 export function ickbWorthSamples(
   chain: RootConfig["chain"],
-  quoteState: Pick<QuoteState, "exchangeRatio" | "tipTimestamp"> | undefined,
-  now: Date,
+  quoteState: QuoteState | undefined,
 ): IckbWorthSamples {
   const genesis = chainGenesis[chain];
   const liveTip = liveTipSample(quoteState);
-  const end = Math.max(genesis, liveTip?.date.getTime() ?? now.getTime());
+  const end = Math.max(genesis, liveTip?.date.getTime() ?? Date.now());
   const sampleAt = (index: number): IckbWorthSample => {
     const date = new Date(genesis + ((end - genesis) * index) / (sampleCount - 1));
     return {
@@ -84,10 +82,8 @@ export function ickbWorthAt(date: Date, chain: RootConfig["chain"]): number {
   return accumulatedDaoRate(elapsedYears);
 }
 
-function liveTipSample(
-  quoteState: Pick<QuoteState, "exchangeRatio" | "tipTimestamp"> | undefined,
-): IckbWorthSample | undefined {
-  if (quoteState?.tipTimestamp === undefined) {
+function liveTipSample(quoteState: QuoteState | undefined): IckbWorthSample | undefined {
+  if (quoteState === undefined) {
     return undefined;
   }
 

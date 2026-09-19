@@ -1,91 +1,80 @@
+import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import { groupDigits } from "../shared/figures.ts";
-import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
-
-export interface FormBalances {
-  ckbNative: bigint;
-  ickbNative: bigint;
-  ckbAvailable: bigint;
-  ickbAvailable: bigint;
-  ckbBalance: bigint;
-  ickbBalance: bigint;
-}
+import { conversionQuote } from "../shared/quote.ts";
+import { twoDecimals, type AmountInput } from "../shared/utils.ts";
 
 export interface AssetDisplay {
   name: "CKB" | "iCKB";
-  available?: bigint;
-  locked?: bigint;
-  status?: string;
+  balance?: { available: bigint; locked: bigint; status: string };
   /** What the Max control sets: the SDK's own bound, native plus collectable. iCKB only. */
   max?: bigint;
 }
 
 export function formAssets(
-  balances: FormBalances | undefined,
+  projection: AccountAvailabilityProjection | undefined,
   isCkb2Udt: boolean,
 ): readonly [AssetDisplay, AssetDisplay] {
   const ckb: AssetDisplay =
-    balances === undefined
+    projection === undefined
       ? { name: "CKB" }
-      : assetDisplay(
-          "CKB",
-          balances.ckbNative,
-          balances.ckbAvailable,
-          balances.ckbBalance,
-        );
+      : {
+          name: "CKB",
+          balance: balanceDisplay(
+            projection.ckbNative,
+            projection.ckbAvailable,
+            projection.ckbBalance,
+          ),
+          // No CKB Max: a request at the CKB bound never funds (decisions amendment 52(z)).
+        };
   const ickb: AssetDisplay =
-    balances === undefined
+    projection === undefined
       ? { name: "iCKB" }
-      : assetDisplay(
-          "iCKB",
-          balances.ickbNative,
-          balances.ickbAvailable,
-          balances.ickbBalance,
-        );
+      : {
+          name: "iCKB",
+          balance: balanceDisplay(
+            projection.ickbNative,
+            projection.ickbAvailable,
+            projection.ickbBalance,
+          ),
+          max: projection.ickbAvailable,
+        };
   return isCkb2Udt ? [ckb, ickb] : [ickb, ckb];
 }
 
 export function amountQuoteText(
-  amount: bigint | undefined,
-  rawText: string,
-  quoteState: QuoteStateLike | undefined,
-  validationError = "",
+  isCkb2Udt: boolean,
+  { amount, error }: AmountInput,
+  exchangeRatio: Ratio | undefined,
 ): string {
   if (amount === undefined) {
-    return validationError === "" ? "..." : validationError;
+    return error === "" ? "..." : error;
   }
   if (amount === 0n) {
     return "0";
   }
 
-  if (quoteState === undefined) {
-    return "...";
-  }
-
-  return groupDigits(conversionQuote(rawText, quoteState).outputText);
-}
-
-function assetDisplay(
-  name: AssetDisplay["name"],
-  native: bigint,
-  bound: bigint,
-  balance: bigint,
-): AssetDisplay {
-  return {
-    name,
-    available: native,
-    locked: balance - native,
-    status: maturityStatus(balance, native, bound),
-    // No CKB Max: a request at the CKB bound never funds (decisions amendment 52(z)).
-    ...(name === "iCKB" ? { max: bound } : {}),
-  };
+  const quoted =
+    exchangeRatio === undefined
+      ? undefined
+      : conversionQuote(isCkb2Udt, amount, exchangeRatio);
+  // The quote is an estimate: two decimals on screen, the exact figure beside it.
+  return quoted === undefined ? "..." : groupDigits(twoDecimals(quoted));
 }
 
 /**
  * The word beside the non-native figure: "collectable" when every part of it returns with the
  * next transaction, else "converting", the middle of a two-step conversion (or nothing at all).
  */
-function maturityStatus(balance: bigint, native: bigint, bound: bigint): string {
-  return balance !== native && balance === bound ? "collectable" : "converting";
+function balanceDisplay(
+  native: bigint,
+  bound: bigint,
+  balance: bigint,
+): NonNullable<AssetDisplay["balance"]> {
+  return {
+    available: native,
+    locked: balance - native,
+    status: balance !== native && balance === bound ? "collectable" : "converting",
+  };
 }
 
 /** Where the caret lands in `shown` after `count` of its non-separator characters. */

@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/ccc";
 import { Ratio } from "@ickb/sdk";
 
 import { headerLike, StubClient } from "@ickb/testkit";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
@@ -10,6 +10,8 @@ import {
   l1StateOptions,
   quoteStateOptions,
 } from "../../src/query/queries.ts";
+import type { RootConfig } from "../../src/shared/utils.ts";
+import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
 import {
   cell,
   script,
@@ -92,15 +94,17 @@ function itRunsL1StateOptionsQuery(): void {
       false,
     );
 
-    await expect(options.queryFn()).resolves.toMatchObject({ tipTimestamp: 42n });
+    await expect(options.queryFn()).resolves.toMatchObject({
+      system: { tip: { timestamp: 42n } },
+    });
   });
 }
 
 function itLoadsQuoteStateFromTip(): void {
   it("loads quote state from the tip without scanning protocol or account state", async () => {
     let tipReads = 0;
-    const rootConfig = {
-      chain: "testnet",
+    const rootConfig: RootConfig = {
+      ...testRootConfig("testnet"),
       cccClient: new StubClient({
         getTipHeader: async (): Promise<ccc.ClientBlockHeader> => {
           await Promise.resolve();
@@ -111,9 +115,12 @@ function itLoadsQuoteStateFromTip(): void {
           });
         },
       }),
-    } satisfies Parameters<typeof quoteStateOptions>[0];
+    };
 
     const options = quoteStateOptions(rootConfig);
+    if (options.queryFn === skipToken) {
+      throw new Error("A configured chain has a quote query");
+    }
     const state = await options.queryFn();
 
     expect(state.exchangeRatio.ckbScale).toBe(10000000000000000n);
@@ -122,6 +129,10 @@ function itLoadsQuoteStateFromTip(): void {
     expect(options.queryKey.at(-1)).toBe("quoteState");
     expect(options.refetchInterval).toBe(60_000);
     expect(tipReads).toBe(1);
+    // An unsupported chain parks the query under a key that tolerates the missing config.
+    const parked = quoteStateOptions(undefined);
+    expect(parked.queryFn).toBe(skipToken);
+    expect(parked.queryKey).toEqual(["unsupported", "quoteState"]);
   });
 }
 
@@ -161,12 +172,14 @@ it("loads display balances from an SDK account snapshot", async () => {
 
   // The iCKB cell's capacity is the account's CKB too (decisions amendment 52(ah)).
   const liquidCapacity = nativeCapacity + nativeUdtCell.cellOutput.capacity;
-  expect(state.ckbNative).toBe(liquidCapacity);
-  expect(state.ickbNative).toBe(11n);
-  expect(state.ckbAvailable).toBe(liquidCapacity);
-  expect(state.ickbAvailable).toBe(11n);
-  expect(state.ckbBalance).toBe(liquidCapacity);
-  expect(state.ickbBalance).toBe(11n);
+  expect(state.projection).toMatchObject({
+    ckbNative: liquidCapacity,
+    ickbNative: 11n,
+    ckbAvailable: liquidCapacity,
+    ickbAvailable: 11n,
+    ckbBalance: liquidCapacity,
+    ickbBalance: 11n,
+  });
   expect(state.stateId).toMatch(/^\d+$/u);
   await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
     error: "No conversion request available for this amount",

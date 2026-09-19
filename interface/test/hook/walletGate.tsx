@@ -30,7 +30,8 @@ import {
 interface LandingPageTestContext {
   open: ReturnType<typeof vi.fn<() => void>>;
   setClient: ReturnType<typeof vi.fn<(client: unknown) => void>>;
-  setRawText: ReturnType<typeof vi.fn<(value: string) => void>>;
+  setIsCkb2Udt: ReturnType<typeof vi.fn<(value: boolean) => void>>;
+  setText: ReturnType<typeof vi.fn<(value: string) => void>>;
 }
 
 describe("hook-based wallet gate", () => {
@@ -119,7 +120,8 @@ function landingPageTestContext(): LandingPageTestContext {
   return {
     open: vi.fn<() => void>(),
     setClient: vi.fn<(client: unknown) => void>(),
-    setRawText: vi.fn<(value: string) => void>(),
+    setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+    setText: vi.fn<(value: string) => void>(),
   };
 }
 
@@ -176,8 +178,10 @@ function renderLandingPage(
       open: context.open,
       setClient: context.setClient,
       rootConfig: rootConfig(chain),
-      rawText: "C1",
-      setRawText: context.setRawText,
+      isCkb2Udt: true,
+      setIsCkb2Udt: context.setIsCkb2Udt,
+      text: "1",
+      setText: context.setText,
       quoteStateQuery: quoteStateQuery(liveQuote),
     }),
   );

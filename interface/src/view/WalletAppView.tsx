@@ -1,3 +1,4 @@
+import type { Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
 import Action from "../action/Action.tsx";
 import type { DestinationField } from "../action/destination.ts";
@@ -14,28 +15,30 @@ export function WalletAppView({
   walletConfig,
   walletName,
   openWallet,
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   quoteState,
-  formQuoteState,
+  exchangeRatio,
   isFrozen,
   destinationField,
   actionParams,
-  isCkb2Udt,
   amount,
   l1State,
 }: Readonly<{
   walletConfig: WalletConfig;
   walletName: string;
   openWallet: () => unknown;
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   quoteState?: QuoteState;
-  formQuoteState: Parameters<typeof Form>[0]["quoteState"];
+  exchangeRatio?: Ratio;
   isFrozen: boolean;
   destinationField: DestinationField;
   actionParams: ActionParams;
-  isCkb2Udt: boolean;
   amount: bigint;
   l1State: L1StateType | undefined;
 }>): JSX.Element {
@@ -51,25 +54,9 @@ export function WalletAppView({
       <WalletSections>
         <WalletSection>
           <Form
-            {...{
-              rawText,
-              setRawText,
-              quoteState: formQuoteState,
-              isFrozen,
-              chain: walletConfig.chain,
-              ...(l1State !== undefined
-                ? {
-                    balances: {
-                      ckbNative: l1State.ckbNative,
-                      ickbNative: l1State.ickbNative,
-                      ckbAvailable: l1State.ckbAvailable,
-                      ickbAvailable: l1State.ickbAvailable,
-                      ckbBalance: l1State.ckbBalance,
-                      ickbBalance: l1State.ickbBalance,
-                    },
-                  }
-                : {}),
-            }}
+            {...{ isCkb2Udt, setIsCkb2Udt, text, setText, exchangeRatio, isFrozen }}
+            projection={l1State?.projection}
+            chain={walletConfig.chain}
           />
         </WalletSection>
         {/* The button follows the form; the chart is context and comes last (52(ag)). */}

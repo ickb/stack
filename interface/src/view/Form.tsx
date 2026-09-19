@@ -1,11 +1,11 @@
+import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
-import { conversionQuote, type QuoteStateLike } from "../shared/quote.ts";
+import { conversionQuote } from "../shared/quote.ts";
 import {
-  direction2Symbol,
+  CKB,
   parseAmountInput,
   type RootConfig,
-  symbol2Direction,
   toText,
   twoDecimals,
 } from "../shared/utils.ts";
@@ -14,42 +14,34 @@ import {
   type AssetDisplay,
   caretAfter,
   formAssets,
-  type FormBalances,
 } from "./formState.ts";
 
 const amountErrorId = "conversion-amount-error";
 
 export default function Form({
-  rawText,
-  setRawText,
-  quoteState,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
+  exchangeRatio,
   isFrozen,
-  balances,
+  projection,
   chain,
 }: Readonly<{
-  rawText: string;
-  setRawText: (value: string) => void;
-  quoteState?: QuoteStateLike;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
+  exchangeRatio?: Ratio;
   isFrozen: boolean;
-  balances?: FormBalances;
+  projection?: AccountAvailabilityProjection;
   chain: RootConfig["chain"];
 }>): JSX.Element {
-  const symbol = rawText.startsWith("I") ? "I" : direction2Symbol(true);
-  const text = rawText.slice(1);
-  const isCkb2Udt = symbol2Direction(symbol);
   const amountInput = parseAmountInput(text);
   const hasAmountError = amountInput.status === "invalid";
-  const amountQuote = amountQuoteText(
-    amountInput.amount,
-    rawText,
-    quoteState,
-    amountInput.error,
-  );
-  const toggle = (): void => {
-    setRawText(direction2Symbol(!isCkb2Udt) + text);
-  };
+  const amountQuote = amountQuoteText(isCkb2Udt, amountInput, exchangeRatio);
 
-  const [a, b] = formAssets(balances, isCkb2Udt);
+  const [a, b] = formAssets(projection, isCkb2Udt);
   // While the amount box shows its "0" placeholder the quote row shows its own, at the same
   // tint, so the empty form reads as two placeholders rather than two stacked zeros.
   const isPlaceholder = text === "" && !hasAmountError;
@@ -57,22 +49,20 @@ export default function Form({
   // The rate for one unit sits beside the direction switch, where the conversion happens.
   // Both figures carry two decimals, so the two sides of the switch are the same length.
   const unitAmount =
-    quoteState === undefined
+    exchangeRatio === undefined
       ? undefined
-      : conversionQuote(`${symbol}1`, quoteState).convertedAmount;
+      : conversionQuote(isCkb2Udt, CKB, exchangeRatio);
   const unitRate =
     unitAmount === undefined ? "..." : `${twoDecimals(unitAmount)} ${b.name}`;
 
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
-      {nativeBalanceDisplay(a)}
+      {availableDisplay(a)}
       {/* The name stays centred in its column; its control, "max" under the source iCKB
           or "faucet" under CKB on testnet, sits just under it. */}
       <span className="relative text-2xl text-ickb-text normal-case">
         {a.name}
-        {a.name === "iCKB"
-          ? maxButton(a, symbol, setRawText, isFrozen)
-          : faucetLink(chain)}
+        {a.name === "iCKB" ? maxButton(a, setText, isFrozen) : faucetLink(chain)}
       </span>
       {lockedBalanceDisplay(a)}
       <input
@@ -90,7 +80,7 @@ export default function Form({
           const count = value
             .slice(0, selectionStart ?? value.length)
             .replaceAll(",", "").length;
-          setRawText(symbol + value.replaceAll(",", ""));
+          setText(value.replaceAll(",", ""));
           queueMicrotask(() => {
             const position = caretAfter(target.value, count);
             target.setSelectionRange(position, position);
@@ -113,7 +103,9 @@ export default function Form({
         // win over a smaller height, no side padding, and the asset names' case.
         className="col-span-3 grid h-11 w-[calc(100%-0.5rem)] cursor-pointer grid-cols-3 items-center justify-items-center rounded border border-ickb-border/70 text-sm leading-relaxed font-bold tracking-wider text-ickb-action normal-case transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action active:bg-ickb-action/15 disabled:cursor-default disabled:opacity-50"
         disabled={isFrozen}
-        onClick={toggle}
+        onClick={() => {
+          setIsCkb2Udt(!isCkb2Udt);
+        }}
         aria-label="Switch conversion direction"
         title="Switch conversion direction"
       >
@@ -135,7 +127,7 @@ export default function Form({
       >
         {quoteLine}
       </span>
-      {nativeBalanceDisplay(b)}
+      {availableDisplay(b)}
       <span className="relative text-2xl whitespace-nowrap text-ickb-text normal-case">
         {b.name}
         {b.name === "CKB" ? faucetLink(chain) : undefined}
@@ -145,17 +137,17 @@ export default function Form({
   );
 }
 
-function nativeBalanceDisplay(asset: AssetDisplay): JSX.Element {
-  if (!hasBalance(asset)) {
+function availableDisplay({ name, balance }: AssetDisplay): JSX.Element {
+  if (balance === undefined) {
     return <span aria-hidden="true" />;
   }
 
   return (
     <span
       className="whitespace-nowrap text-ickb-text"
-      aria-label={`${asset.name} in wallet: ${toText(asset.available)}`}
+      aria-label={`${name} in wallet: ${toText(balance.available)}`}
     >
-      {display(asset.available, "in wallet", false)}
+      {display(balance.available, "in wallet", false)}
     </span>
   );
 }
@@ -189,8 +181,7 @@ function faucetLink(chain: RootConfig["chain"]): JSX.Element | undefined {
  */
 function maxButton(
   asset: AssetDisplay,
-  symbol: string,
-  setRawText: (value: string) => void,
+  setText: (value: string) => void,
   isFrozen: boolean,
 ): JSX.Element | undefined {
   const max = asset.max;
@@ -203,7 +194,7 @@ function maxButton(
       className={`${underNameClass} disabled:cursor-default disabled:opacity-50`}
       disabled={isFrozen}
       onClick={() => {
-        setRawText(symbol + toText(max));
+        setText(toText(max));
       }}
       aria-label={`Use maximum ${asset.name}: ${toText(max)}`}
     >
@@ -212,29 +203,17 @@ function maxButton(
   );
 }
 
-function hasBalance(asset: AssetDisplay): asset is Required<AssetDisplay> {
-  return (
-    asset.available !== undefined &&
-    asset.locked !== undefined &&
-    asset.status !== undefined
-  );
-}
-
-function lockedBalanceDisplay(asset: AssetDisplay): JSX.Element {
-  if (
-    asset.available === undefined ||
-    asset.locked === undefined ||
-    asset.status === undefined
-  ) {
+function lockedBalanceDisplay({ balance }: AssetDisplay): JSX.Element {
+  if (balance === undefined) {
     return <span aria-hidden="true" />;
   }
 
   return (
     <span className="whitespace-nowrap text-ickb-muted">
       {display(
-        asset.locked,
-        asset.status,
-        asset.status === "converting" && asset.locked > 0n,
+        balance.locked,
+        balance.status,
+        balance.status === "converting" && balance.locked > 0n,
       )}
     </span>
   );

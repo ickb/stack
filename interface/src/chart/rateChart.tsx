@@ -15,8 +15,7 @@ interface RateChartProps {
   readonly chain: RootConfig["chain"];
   readonly isCkb2Udt: boolean;
   readonly amount: bigint;
-  readonly quoteState?: Pick<QuoteState, "exchangeRatio" | "tipTimestamp">;
-  readonly now?: Date;
+  readonly quoteState?: QuoteState;
 }
 
 export default function RateChart({
@@ -24,7 +23,6 @@ export default function RateChart({
   isCkb2Udt,
   amount,
   quoteState,
-  now = new Date(),
 }: RateChartProps): JSX.Element {
   const {
     sourceSymbol,
@@ -39,7 +37,7 @@ export default function RateChart({
     maxY,
     points,
     tip,
-  } = rateChartView({ chain, isCkb2Udt, amount, quoteState, now });
+  } = rateChartView({ chain, isCkb2Udt, amount, quoteState });
 
   return (
     <figure className="grid h-full grid-rows-[2rem_minmax(0,1fr)_4.5rem] sm:grid-rows-[2rem_minmax(0,1fr)_3.25rem]">

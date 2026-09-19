@@ -1,10 +1,5 @@
 import type { RootConfig } from "../shared/utils.ts";
 
-interface RootConfigQueryKeyInput {
-  chain: RootConfig["chain"];
-  cccClient: object;
-}
-
 let nextObjectKey = 1;
 const objectKeys = new WeakMap<object, number>();
 
@@ -14,7 +9,7 @@ const objectKeys = new WeakMap<object, number>();
  * @remarks The client segment is based on object identity, so recreating an equivalent client creates a distinct cache key.
  */
 export function rootConfigQueryKey(
-  rootConfig: RootConfigQueryKeyInput,
+  rootConfig: RootConfig,
 ): readonly [RootConfig["chain"], number, "rootConfig"] {
   return [
     rootConfig.chain,

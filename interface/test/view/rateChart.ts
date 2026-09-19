@@ -1,5 +1,5 @@
 import { Ratio } from "@ickb/sdk";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   conversionWorthSamples,
   ickbWorthAt,
@@ -13,9 +13,18 @@ const sampledMainnetTipDaoRate = 1.19704741;
 const liveTipDateIso = "2026-06-10T00:00:00.000Z";
 const oneIckbWorthTitle = "1 iCKB worth over time";
 
+// Without a live tip the curve ends at the clock, so the clock is pinned.
+beforeEach(() => {
+  vi.useFakeTimers({ now: sampledMainnetTipDate });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("ickbWorthSamples", () => {
   it("starts one to one at genesis", () => {
-    const samples = ickbWorthSamples("mainnet", undefined, sampledMainnetTipDate);
+    const samples = ickbWorthSamples("mainnet", undefined);
 
     expect(samples[0]).toEqual({
       date: new Date("2019-11-15T21:09:50.812Z"),
@@ -24,7 +33,7 @@ describe("ickbWorthSamples", () => {
   });
 
   it("uses the Testnet genesis timestamp", () => {
-    expect(ickbWorthSamples("testnet", undefined, sampledMainnetTipDate)[0].date).toEqual(
+    expect(ickbWorthSamples("testnet", undefined)[0].date).toEqual(
       new Date("2020-05-12T09:37:10Z"),
     );
   });
@@ -36,14 +45,11 @@ describe("ickbWorthSamples", () => {
   });
 
   it("uses the live tip as the endpoint when available", () => {
-    const samples = ickbWorthSamples(
-      "testnet",
-      {
-        exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
-        tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
-      },
-      new Date("2026-07-01T00:00:00.000Z"),
-    );
+    vi.setSystemTime(new Date("2026-07-01T00:00:00.000Z"));
+    const samples = ickbWorthSamples("testnet", {
+      exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
+      tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
+    });
     const tip = samples.at(-1);
 
     expect(tip?.date).toEqual(new Date(liveTipDateIso));
@@ -52,28 +58,19 @@ describe("ickbWorthSamples", () => {
   });
 
   it("ignores invalid live tip values", () => {
-    const samples = ickbWorthSamples(
-      "testnet",
-      {
-        exchangeRatio: Ratio.from({ ckbScale: 0n, udtScale: 1n }),
-        tipTimestamp: 1n,
-      },
-      sampledMainnetTipDate,
-    );
+    const samples = ickbWorthSamples("testnet", {
+      exchangeRatio: Ratio.from({ ckbScale: 0n, udtScale: 1n }),
+      tipTimestamp: 1n,
+    });
 
     expect(samples.at(-1)?.value).not.toBe(Infinity);
   });
 
   it("inverts the curve for CKB to iCKB direction", () => {
-    const samples = conversionWorthSamples(
-      "mainnet",
-      true,
-      {
-        exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
-        tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
-      },
-      sampledMainnetTipDate,
-    );
+    const samples = conversionWorthSamples("mainnet", true, {
+      exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
+      tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
+    });
     const tip = samples.reduce((_, sample) => sample);
 
     expect(samples[0].value).toBeCloseTo(1 / 1.00082);
@@ -127,8 +124,8 @@ describe("rateChartView", () => {
   it("builds stable chart geometry", () => {
     const state = view(100000000n, false);
 
-    expect(state.samples).toHaveLength(36);
     expect(state.points.split(" ")).toHaveLength(36);
+    expect(state.tip.date).toEqual(sampledMainnetTipDate);
     expect(state.maxX).toBeGreaterThan(state.minX);
     expect(state.maxY).toBeGreaterThan(state.minY);
   });
@@ -154,6 +151,5 @@ function view(amount: bigint, isCkb2Udt: boolean): ReturnType<typeof rateChartVi
     amount,
     chain: "mainnet",
     isCkb2Udt,
-    now: sampledMainnetTipDate,
   });
 }

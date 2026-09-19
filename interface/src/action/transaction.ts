@@ -35,15 +35,13 @@ const completionFailureMessages: Record<IckbErrorCode, string> = {
   insufficient_ickb: conversionFailureMessages["insufficient-ickb"],
 };
 
-export type TransactionContext = ConversionTransactionContext;
-
 /**
  * Builds a non-broadcast transaction preview for one conversion request.
  *
  * @returns A frozen TxInfo with an empty error on success, or a non-empty error when the SDK cannot produce a broadcastable transaction.
  */
 export async function buildTransactionPreview(
-  context: TransactionContext,
+  context: ConversionTransactionContext,
   isCkb2Udt: boolean,
   amount: bigint,
   destination: Destination,

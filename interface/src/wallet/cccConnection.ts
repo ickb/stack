@@ -3,23 +3,11 @@ import type { RootConfig } from "../shared/utils.ts";
 const cccConnectionInfoKey = "ccc-connection-info";
 const selectedChainKey = "ickb-selected-chain";
 
-function browserStorage(): Storage | undefined {
+/** Detects whether saved CCC connection metadata has wallet and signer names. */
+export function hasSavedCccConnection(): boolean {
   try {
-    return globalThis.localStorage;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Detects whether saved CCC connection metadata has wallet and signer names.
- */
-export function hasSavedCccConnection(
-  storage: Pick<Storage, "getItem"> | undefined = browserStorage(),
-): boolean {
-  try {
-    const value = storage?.getItem(cccConnectionInfoKey);
-    if (value === undefined || value === null || value === "") {
+    const value = globalThis.localStorage.getItem(cccConnectionInfoKey);
+    if (value === null || value === "") {
       return false;
     }
 
@@ -34,6 +22,7 @@ export function hasSavedCccConnection(
       connection.signerName.length > 0
     );
   } catch {
+    // Storage may be absent or denied; a malformed record reads as no saved connection.
     return false;
   }
 }
@@ -44,29 +33,20 @@ function isConnectionRecord(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Reads the persisted chain selector, ignoring malformed storage values.
- */
-export function savedSelectedChain(
-  storage: Pick<Storage, "getItem"> | undefined = browserStorage(),
-): RootConfig["chain"] | undefined {
+/** Reads the persisted chain selector, ignoring malformed storage values. */
+export function savedSelectedChain(): RootConfig["chain"] | undefined {
   try {
-    const value = storage?.getItem(selectedChainKey);
+    const value = globalThis.localStorage.getItem(selectedChainKey);
     return value === "mainnet" || value === "testnet" ? value : undefined;
   } catch {
     return undefined;
   }
 }
 
-/**
- * Persists the selected chain when browser storage is available.
- */
-export function saveSelectedChain(
-  chain: RootConfig["chain"],
-  storage: Pick<Storage, "setItem"> | undefined = browserStorage(),
-): void {
+/** Persists the selected chain when browser storage is available. */
+export function saveSelectedChain(chain: RootConfig["chain"]): void {
   try {
-    storage?.setItem(selectedChainKey, chain);
+    globalThis.localStorage.setItem(selectedChainKey, chain);
   } catch {
     // Ignore storage failures; network selection still works for this session.
   }

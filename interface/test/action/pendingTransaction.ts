@@ -17,16 +17,13 @@ function ignoreChange(): void {
 const walletRejected = "wallet rejected";
 
 describe("pending transaction store", () => {
-  it("mirrors every write to its owner and starts from the given record", async () => {
+  it("mirrors every write to its owner and starts empty", async () => {
     const observed: Array<PendingTransactionState | undefined> = [];
-    const store = createPendingTransactionStore(
-      (state) => {
-        observed.push(state);
-      },
-      { status: "pending", txHash },
-    );
+    const store = createPendingTransactionStore((state) => {
+      observed.push(state);
+    });
 
-    expect(store.current).toEqual({ status: "pending", txHash });
+    expect(store.current).toBeUndefined();
     clearPendingTransaction(store);
     await recordPending(store, txHash);
 

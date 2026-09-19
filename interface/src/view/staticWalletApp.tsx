@@ -9,8 +9,10 @@ import { WalletHeaderPortal } from "./WalletHeaderPortal.tsx";
 import { WalletSection, WalletSections } from "./WalletSections.tsx";
 
 export function WalletAppShell({
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   chain,
   selectChain,
   isRestoring,
@@ -18,8 +20,10 @@ export function WalletAppShell({
   liveStatus,
   quoteState,
 }: Readonly<{
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   chain: RootConfig["chain"];
   selectChain: (chain: RootConfig["chain"]) => void;
   isRestoring: boolean;
@@ -27,8 +31,7 @@ export function WalletAppShell({
   liveStatus: string;
   quoteState?: QuoteState;
 }>): JSX.Element {
-  const isCkb2Udt = !rawText.startsWith("I");
-  const amount = parseAmountInput(rawText.slice(1)).amount ?? 0n;
+  const amount = parseAmountInput(text).amount ?? 0n;
   const networkName = chain === "mainnet" ? "Mainnet" : "Testnet";
   const action = isRestoring ? `Restoring ${networkName} wallet` : "Connect wallet";
   const liveStatusPrefix = liveStatus !== "" ? `${liveStatus} ` : "";
@@ -42,13 +45,9 @@ export function WalletAppShell({
       <WalletSections>
         <WalletSection>
           <Form
-            {...{
-              rawText,
-              setRawText,
-              quoteState,
-              isFrozen: false,
-              chain,
-            }}
+            {...{ isCkb2Udt, setIsCkb2Udt, text, setText, chain }}
+            exchangeRatio={quoteState?.exchangeRatio}
+            isFrozen={false}
           />
         </WalletSection>
         <WalletSection>

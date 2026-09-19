@@ -14,14 +14,8 @@ export function activeTxInfo(): TxInfo {
 
 export function l1State(): L1StateType {
   const candidate: unknown = {
-    ckbNative: 0n,
-    ickbNative: 0n,
-    ckbBalance: 0n,
-    ickbBalance: 0n,
-    ckbAvailable: 0n,
-    ickbAvailable: 0n,
-    tipTimestamp: 0n,
-    system: {},
+    projection: {},
+    system: { tip: { timestamp: 0n } },
     stateId: "state",
     txBuilder: async () => {
       await Promise.resolve();

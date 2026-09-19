@@ -10,15 +10,19 @@ export function LandingPage({
   open,
   setClient,
   rootConfig,
-  rawText,
-  setRawText,
+  isCkb2Udt,
+  setIsCkb2Udt,
+  text,
+  setText,
   quoteStateQuery,
 }: Readonly<{
   open: () => unknown;
   setClient: (client: ccc.Owner<ccc.Client>) => unknown;
   rootConfig: RootConfig;
-  rawText: string;
-  setRawText: (value: string) => void;
+  isCkb2Udt: boolean;
+  setIsCkb2Udt: (value: boolean) => void;
+  text: string;
+  setText: (value: string) => void;
   quoteStateQuery: QuoteStateQuery;
 }>): JSX.Element {
   const pendingOpen = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(
@@ -67,7 +71,7 @@ export function LandingPage({
 
   return (
     <WalletAppShell
-      {...{ chain, rawText, setRawText, isRestoring, selectChain }}
+      {...{ chain, isCkb2Udt, setIsCkb2Udt, text, setText, isRestoring, selectChain }}
       liveStatus={
         quoteStateQuery.data !== undefined ? "" : liveQuoteStatus(quoteStateQuery)
       }

@@ -30,7 +30,7 @@ export interface RefreshedTransactionPreview extends RefreshedTransactionStateMe
   readonly txInfo: TxInfo;
 }
 
-interface TransactionCallbacks {
+export interface TransactionCallbacks {
   readonly freezePreview: (preview: RefreshedTransactionPreview | undefined) => void;
   readonly setMessage: (message: string) => void;
   readonly setFailure: (message: string) => void;

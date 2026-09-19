@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ConversionMetadata, IckbSdk } from "@ickb/sdk";
+import type { ConversionMetadata, ConversionNotice, IckbSdk } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
@@ -53,13 +53,7 @@ export type TxInfo = Readonly<{
   conversionKind?: ConversionMetadata["kind"];
   /** The shortened destination when the transaction moves everything to another lock. */
   moveTo?: string;
-  conversionNotice?: {
-    kind: "dust-ickb-to-ckb" | "maturity-unavailable";
-    inputIckb: bigint;
-    outputCkb: bigint;
-    incentiveCkb: bigint;
-    maturityEstimateUnavailable: boolean;
-  };
+  conversionNotice?: ConversionNotice;
 }>;
 
 export const txInfoPadding: TxInfo = Object.freeze({
@@ -71,14 +65,6 @@ export const txInfoPadding: TxInfo = Object.freeze({
 
 export const CKB = ccc.fixedPointFrom(1);
 export const maxShannons = (1n << 64n) - 1n;
-
-export function symbol2Direction(symbol: string): boolean {
-  return symbol !== "I";
-}
-
-export function direction2Symbol(isCkb2Udt: boolean): string {
-  return isCkb2Udt ? "C" : "I";
-}
 
 export type AmountInput =
   | Readonly<{ status: "valid"; amount: bigint; error: "" }>
@@ -93,8 +79,10 @@ export function parseAmountInput(text: string): AmountInput {
   if (text === ".") {
     return { status: "intermediate", amount: undefined, error: "" };
   }
-  const parts = fixedPointParts(text);
-  if (parts === undefined) {
+  // ASCII digits only: `\d` never matches other scripts' digits, with or without `u`.
+  // eslint-disable-next-line security/detect-unsafe-regex -- The optional group starts with a literal dot, so no input backtracks.
+  const parts = /^(\d*)(?:\.(\d{0,8}))?$/u.exec(text);
+  if (parts === null) {
     return {
       status: "invalid",
       amount: undefined,
@@ -102,9 +90,8 @@ export function parseAmountInput(text: string): AmountInput {
     };
   }
 
-  const [whole, fractionalPart] = parts;
-  const fraction = `${fractionalPart}00000000`.slice(0, 8);
-  const amount = BigInt(whole) * CKB + BigInt(fraction);
+  const [, whole = "", fraction = ""] = parts;
+  const amount = BigInt(`0${whole}`) * CKB + BigInt(fraction.padEnd(8, "0"));
   if (amount > maxShannons) {
     return {
       status: "invalid",
@@ -114,42 +101,6 @@ export function parseAmountInput(text: string): AmountInput {
   }
 
   return { status: "valid", amount, error: "" };
-}
-
-function fixedPointParts(text: string): readonly [string, string] | undefined {
-  const dotIndex = text.indexOf(".");
-  if (dotIndex === -1) {
-    return isAsciiDigits(text) ? [text, ""] : undefined;
-  }
-  if (dotIndex !== text.lastIndexOf(".")) {
-    return undefined;
-  }
-
-  const whole = text.slice(0, dotIndex);
-  const fraction = text.slice(dotIndex + 1);
-  return validFixedPointParts(whole, fraction)
-    ? [whole === "" ? "0" : whole, fraction]
-    : undefined;
-}
-
-function validFixedPointParts(whole: string, fraction: string): boolean {
-  if (fraction.length > 8) {
-    return false;
-  }
-  if (whole === "") {
-    return fraction !== "" && isAsciiDigits(fraction);
-  }
-  return isAsciiDigits(whole) && (fraction === "" || isAsciiDigits(fraction));
-}
-
-function isAsciiDigits(text: string): boolean {
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.codePointAt(index);
-    if (code === undefined || code < 48 || code > 57) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export function toText(amount: bigint): string {

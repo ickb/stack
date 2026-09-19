@@ -1,16 +1,12 @@
 import type { ccc } from "@ckb-ccc/ccc";
 
-interface PendingTransactionSubmission {
-  readonly result: Promise<ccc.Hex>;
-}
-
 /**
  * The one transaction the wallet session may have in flight: being submitted, or sent and
  * awaiting confirmation. Current-session only: a reload starts with nothing pending, and
  * the next action rebuilds from committed cells.
  */
 export type PendingTransactionState =
-  | Readonly<{ status: "submitting"; owner: PendingTransactionSubmission }>
+  | Readonly<{ status: "submitting"; result: Promise<ccc.Hex> }>
   | Readonly<{ status: "pending"; txHash: ccc.Hex }>;
 
 /**
@@ -25,9 +21,8 @@ export interface PendingTransactionStore {
 
 export function createPendingTransactionStore(
   onChange: (state: PendingTransactionState | undefined) => void,
-  initial?: PendingTransactionState,
 ): PendingTransactionStore {
-  return { current: initial, onChange };
+  return { current: undefined, onChange };
 }
 
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- Every non-owner must receive the exact shared submission promise.
@@ -40,49 +35,40 @@ export function submitPendingTransaction(
     return Promise.resolve(current.txHash);
   }
   if (current?.status === "submitting") {
-    return current.owner.result;
+    return current.result;
   }
   const completion = Promise.withResolvers<ccc.Hex>();
-  const owner: PendingTransactionSubmission = { result: completion.promise };
-  write(store, { status: "submitting", owner });
+  // The promise is the submission's identity: a write lands only while it still owns the record.
+  const result = completion.promise;
+  write(store, { status: "submitting", result });
+  const storeHash = (txHash: ccc.Hex): void => {
+    if (store.current?.status === "submitting" && store.current.result === result) {
+      write(store, { status: "pending", txHash });
+    }
+  };
 
   void Promise.resolve()
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Adopt synchronous throws without wrapping the submission result again.
-    .then(() =>
-      submit((txHash) => {
-        storeSubmissionHash(store, owner, txHash);
-      }),
-    )
+    .then(() => submit(storeHash))
     .then(
       (txHash) => {
-        storeSubmissionHash(store, owner, txHash);
+        storeHash(txHash);
         completion.resolve(txHash);
         return null;
       },
       (error: unknown) => {
-        if (store.current?.status === "submitting" && store.current.owner === owner) {
+        if (store.current?.status === "submitting" && store.current.result === result) {
           write(store, undefined);
         }
         completion.reject(error);
         return null;
       },
     );
-  return completion.promise;
+  return result;
 }
 
 export function clearPendingTransaction(store: PendingTransactionStore): void {
   write(store, undefined);
-}
-
-/** Publishes the hash only while this submission still owns the record. */
-function storeSubmissionHash(
-  store: PendingTransactionStore,
-  owner: PendingTransactionSubmission,
-  txHash: ccc.Hex,
-): void {
-  if (store.current?.status === "submitting" && store.current.owner === owner) {
-    write(store, { status: "pending", txHash });
-  }
 }
 
 function write(

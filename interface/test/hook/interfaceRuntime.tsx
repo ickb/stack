@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { offlineTestnetClient } from "@ickb/testkit";
+import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
@@ -79,17 +80,17 @@ describe("hook-based interface runtime", () => {
     expect(walletLabel(undefined, undefined)).toBe("Wallet");
   });
 
-  it("loads quote state only for supported root configs", async () => {
+  it("loads quote state only for supported root configs", () => {
     queryMock.result = { isError: true };
     expect(useQuoteState(undefined)).toBe(queryMock.result);
-    await expect(quoteStateOptions().queryFn()).rejects.toThrow("Unsupported network");
+    expect(quoteStateOptions().queryFn).toBe(skipToken);
     expect(liveQuoteStatus(quoteStateQuery(queryMock.result))).toBe(
       "Unable to load live exchange rate.",
     );
 
     queryMock.result = { isError: false };
     expect(useQuoteState(rootConfig("testnet"))).toBe(queryMock.result);
-    expect(quoteStateOptions().enabled).toBe(true);
+    expect(quoteStateOptions().queryFn).not.toBe(skipToken);
     expect(liveQuoteStatus(quoteStateQuery(queryMock.result))).toBe(
       "Loading live exchange rate...",
     );

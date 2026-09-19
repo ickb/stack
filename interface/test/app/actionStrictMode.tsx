@@ -264,9 +264,11 @@ function PendingHost({
   freeze: (value: boolean) => void;
 }>): ReactElement {
   const [pendingTransaction, setPendingTransaction] = useState(initialPending);
-  const [store] = useState(() =>
-    createPendingTransactionStore(setPendingTransaction, initialPending),
-  );
+  const [store] = useState(() => {
+    const created = createPendingTransactionStore(setPendingTransaction);
+    created.current = initialPending;
+    return created;
+  });
   return createElement(actionComponent, {
     pendingTransaction,
     pendingStore: store,

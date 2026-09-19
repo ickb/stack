@@ -3,30 +3,18 @@ import {
   isRefused,
   projectConversionTransactionContext,
   Ratio,
+  type AccountAvailabilityProjection,
   type SystemState,
 } from "@ickb/sdk";
+import { skipToken, type SkipToken } from "@tanstack/react-query";
 import type { Destination } from "../action/destination.ts";
-import {
-  buildTransactionPreview,
-  type TransactionContext,
-} from "../action/transaction.ts";
+import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 import { l1StateQueryKey } from "./l1StateQueryKey.ts";
 import { objectIdentityKey, rootConfigQueryKey } from "./rootConfigQueryKey.ts";
 
-interface QuoteStateConfig {
-  chain: RootConfig["chain"];
-  cccClient: RootConfig["cccClient"];
-}
-
 export interface L1StateType {
-  ckbNative: bigint;
-  ickbNative: bigint;
-  ckbBalance: bigint;
-  ickbBalance: bigint;
-  ckbAvailable: bigint;
-  ickbAvailable: bigint;
-  tipTimestamp: bigint;
+  projection: AccountAvailabilityProjection;
   system: SystemState;
   stateId: string;
   txBuilder: (
@@ -39,7 +27,7 @@ export interface L1StateType {
 
 export interface QuoteState {
   exchangeRatio: Ratio;
-  tipTimestamp?: bigint;
+  tipTimestamp: bigint;
 }
 
 /** Builds the L1 account query options for one wallet config. */
@@ -65,25 +53,38 @@ export function l1StateOptions(
 /**
  * Builds quote query options for chain-level exchange and DAO rate state.
  *
- * @remarks The query key is rooted in the root config key, including the client object identity used to read the tip header.
+ * @remarks The query key is rooted in the root config key, including the client object
+ * identity used to read the tip header. Without a config (an unsupported chain) the query
+ * is parked, its key tolerating the missing config.
  */
-export function quoteStateOptions(rootConfig: QuoteStateConfig): {
+export function quoteStateOptions(rootConfig: RootConfig | undefined): {
   retry: number;
   refetchInterval: number;
-  queryKey: readonly [RootConfig["chain"], number, "rootConfig", "quoteState"];
-  queryFn: () => Promise<QuoteState>;
+  queryKey: readonly [
+    ...(readonly [RootConfig["chain"], number, "rootConfig"] | readonly ["unsupported"]),
+    "quoteState",
+  ];
+  queryFn: (() => Promise<QuoteState>) | SkipToken;
 } {
   return {
     retry: 2,
     refetchInterval: 60_000,
-    queryKey: [...rootConfigQueryKey(rootConfig), "quoteState"] as const,
-    queryFn: async (): Promise<QuoteState> => {
-      const tipHeader = await rootConfig.cccClient.getTipHeader();
-      return {
-        exchangeRatio: Ratio.from(ickbExchangeRatio(tipHeader)),
-        tipTimestamp: tipHeader.timestamp,
-      };
-    },
+    queryKey: [
+      ...(rootConfig === undefined
+        ? (["unsupported"] as const)
+        : rootConfigQueryKey(rootConfig)),
+      "quoteState",
+    ],
+    queryFn:
+      rootConfig === undefined
+        ? skipToken
+        : async (): Promise<QuoteState> => {
+            const tipHeader = await rootConfig.cccClient.getTipHeader();
+            return {
+              exchangeRatio: Ratio.from(ickbExchangeRatio(tipHeader)),
+              tipTimestamp: tipHeader.timestamp,
+            };
+          },
   };
 }
 
@@ -105,34 +106,20 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
   // on the book (decisions amendment 52(z)).
   const collectable = (group: (typeof user.orders)[number]): boolean =>
     group.order.isFulfilled() || isRefused(group, system);
-  const { projection, context: conversionContext } = projectConversionTransactionContext(
-    system,
-    account,
-    {
-      available: user.orders.filter(collectable),
-      pending: user.orders.filter((group) => !collectable(group)),
-    },
-  );
-  const { ckbNative, ickbNative, ckbBalance, ickbBalance, ckbAvailable, ickbAvailable } =
-    projection;
-
-  const txContext: TransactionContext = conversionContext;
+  const { projection, context } = projectConversionTransactionContext(system, account, {
+    available: user.orders.filter(collectable),
+    pending: user.orders.filter((group) => !collectable(group)),
+  });
 
   return {
-    ckbNative,
-    ickbNative,
-    ckbBalance,
-    ickbBalance,
-    ckbAvailable,
-    ickbAvailable,
-    tipTimestamp: system.tip.timestamp,
+    projection,
     system,
     stateId: String(objectIdentityKey(sdkState)),
     txBuilder: async (isCkb2Udt, amount, destination) =>
-      buildTransactionPreview(txContext, isCkb2Udt, amount, destination, walletConfig),
+      buildTransactionPreview(context, isCkb2Udt, amount, destination, walletConfig),
     hasCollectable:
-      conversionContext.availableOrders.length > 0 ||
-      conversionContext.receipts.length > 0 ||
-      conversionContext.readyWithdrawals.length > 0,
+      context.availableOrders.length > 0 ||
+      context.receipts.length > 0 ||
+      context.readyWithdrawals.length > 0,
   };
 }

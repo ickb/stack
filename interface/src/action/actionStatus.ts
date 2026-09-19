@@ -1,59 +1,32 @@
-import type { L1StateType } from "../query/queries.ts";
-import { toText, txInfoPadding, type TxInfo } from "../shared/utils.ts";
+import { hasTransactionActivity } from "@ickb/sdk";
+import { toText, type TxInfo } from "../shared/utils.ts";
 import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 
-interface ActionMessageParams {
+/** What the action section knows beside the preview itself. */
+export interface ActionFlags {
   readonly amount: bigint | undefined;
   readonly amountError: string;
-  readonly conversionKind: TxInfo["conversionKind"];
-  readonly conversionNotice: TxInfo["conversionNotice"];
   readonly destinationError: string;
   readonly failure: string;
-  readonly hasDestination: boolean;
-  readonly hasActivity: boolean;
   readonly hasCollectable: boolean;
+  readonly hasDestination: boolean;
   readonly isFrozen: boolean;
   readonly isPreparing: boolean;
   readonly isStateFetching: boolean;
   readonly isTxPreviewFetching: boolean;
-  readonly isValid: boolean;
   readonly message: string;
-  readonly moveTo: TxInfo["moveTo"];
-  readonly txError: string;
   readonly unavailableMessage: string;
 }
 
 /** Resolves the status message shown beside the conversion action button. */
-export function actionMessage({
-  amount,
-  amountError,
-  conversionKind,
-  conversionNotice,
-  destinationError,
-  failure,
-  hasActivity,
-  hasCollectable,
-  hasDestination,
-  isFrozen,
-  isPreparing,
-  isStateFetching,
-  isTxPreviewFetching,
-  isValid,
-  message,
-  moveTo,
-  txError,
-  unavailableMessage,
-}: Readonly<ActionMessageParams>): string {
+export function actionMessage(txInfo: TxInfo, flags: ActionFlags): string {
+  const { amount, amountError, destinationError, failure, hasDestination } = flags;
   if (failure !== "") {
     return failureMessage(failure);
   }
 
-  if (isFrozen) {
-    return message;
-  }
-
-  if (isPreparing) {
-    return message;
+  if (flags.isFrozen || flags.isPreparing) {
+    return flags.message;
   }
 
   if (amount === undefined) {
@@ -68,66 +41,40 @@ export function actionMessage({
       : failureMessage(destinationError);
   }
 
-  const pendingMessage = actionPendingMessage(
-    amount,
-    isStateFetching,
-    isTxPreviewFetching,
-  );
-  if (pendingMessage !== "") {
-    return pendingMessage;
+  if (flags.isStateFetching) {
+    return "Refreshing wallet data...";
   }
 
-  return previewMessage({
-    conversionKind,
-    conversionNotice,
-    hasActivity,
-    hasCollectable,
-    isValid,
-    moveTo,
-    txError,
-    unavailableMessage,
-  });
+  if (flags.isTxPreviewFetching) {
+    return amount > 0n ? "Checking conversion request..." : "Checking converted funds...";
+  }
+
+  return previewMessage(txInfo, flags.hasCollectable, flags.unavailableMessage);
 }
 
-function previewMessage({
-  conversionKind,
-  conversionNotice,
-  hasActivity,
-  hasCollectable,
-  isValid,
-  moveTo,
-  txError,
-  unavailableMessage,
-}: Readonly<{
-  conversionKind: TxInfo["conversionKind"];
-  conversionNotice: TxInfo["conversionNotice"];
-  hasActivity: boolean;
-  hasCollectable: boolean;
-  isValid: boolean;
-  moveTo: TxInfo["moveTo"];
-  txError: string;
-  unavailableMessage: string;
-}>): string {
-  if (txError !== "") {
+function previewMessage(
+  txInfo: TxInfo,
+  hasCollectable: boolean,
+  unavailableMessage: string,
+): string {
+  if (txInfo.error !== "") {
     // The preview lags the typed amount by the settle delay, so an availability error is
     // worded for the amount on screen, not the one the preview was built for.
-    return isAvailabilityMessage(txError)
+    return isAvailabilityMessage(txInfo.error)
       ? `${unavailableMessage}.`
-      : failureMessage(txError);
+      : failureMessage(txInfo.error);
   }
 
+  const hasActivity = hasTransactionActivity(txInfo.tx);
   if (!hasActivity) {
     return `${unavailableMessage}.`;
   }
 
-  if (!isValid) {
+  if (!isTxInfoValid(txInfo, hasActivity)) {
     return "Transaction preview is not ready.";
   }
 
-  return transactionIntentMessage(
-    { conversionKind, conversionNotice, moveTo },
-    hasCollectable,
-  );
+  return transactionIntentMessage(txInfo, hasCollectable);
 }
 
 /**
@@ -156,28 +103,30 @@ export function transactionIntentMessage(
     .join(" ");
 }
 
+/**
+ * The frozen preview's message: what the signed transaction does, then the ask. Releasing
+ * the preview clears it; both callers have already cleared the message by then.
+ */
+export function confirmPreviewMessage(
+  preview: { txInfo: TxInfo; hasCollectable: boolean } | undefined,
+): string {
+  if (preview === undefined) {
+    return "";
+  }
+  return [
+    transactionIntentMessage(preview.txInfo, preview.hasCollectable),
+    "Confirm the transaction in your wallet.",
+  ]
+    .filter((text) => text !== "")
+    .join(" ");
+}
+
 function failureMessage(failure: string): string {
   return `⚠️ ${failure}`;
 }
 
 function isAvailabilityMessage(message: string): boolean {
   return message === noCollectionMessage || message === noRequestMessage;
-}
-
-function actionPendingMessage(
-  amount: bigint,
-  isStateFetching: boolean,
-  isTxPreviewFetching: boolean,
-): string {
-  if (isStateFetching) {
-    return "Refreshing wallet data...";
-  }
-
-  if (isTxPreviewFetching) {
-    return checkingMessage(amount);
-  }
-
-  return "";
 }
 
 function conversionNoticeText(notice: NonNullable<TxInfo["conversionNotice"]>): string {
@@ -212,35 +161,6 @@ export function conversionIntentText(
   };
 
   return intent[kind];
-}
-
-function checkingMessage(amount: bigint): string {
-  if (amount > 0n) {
-    return "Checking conversion request...";
-  }
-
-  return "Checking converted funds...";
-}
-
-export function canPreviewTx(
-  isFrozen: boolean,
-  l1State: L1StateType | undefined,
-  amount: bigint | undefined,
-  hasDestination: boolean,
-): boolean {
-  return !isFrozen && l1State !== undefined && amount !== undefined && hasDestination;
-}
-
-export function currentTxInfo(
-  isFrozen: boolean,
-  frozenTxInfo: TxInfo,
-  previewTxInfo: TxInfo | undefined,
-): TxInfo {
-  if (isFrozen) {
-    return frozenTxInfo;
-  }
-
-  return previewTxInfo ?? txInfoPadding;
 }
 
 /** Returns true only for a broadcastable preview with real transaction activity. */
@@ -279,14 +199,28 @@ export function unavailableConversionMessage(amount: bigint): string {
   return noCollectionMessage;
 }
 
-export function actionDisabled(
-  isFetching: boolean,
-  isFrozen: boolean,
-  isValid: boolean,
-): boolean {
-  return isFetching || isFrozen || !isValid;
-}
+/** Completes the "Ready:" label: "now" or "in 3 days". */
+export function timeUntilMaturity(
+  estimatedMaturity: bigint,
+  tipTimestamp: bigint,
+): string {
+  const remaining = estimatedMaturity - tipTimestamp;
+  if (remaining <= 0n) {
+    return "now";
+  }
 
-export function actionDone(isFetching: boolean, isConfirming: boolean): boolean {
-  return !isFetching && !isConfirming;
+  const minute = 60_000n;
+
+  if (remaining <= 90n * minute) {
+    return `in ${String(Number((remaining + minute - 1n) / minute))} minutes`;
+  }
+
+  const hour = 60n * minute;
+  const day = 24n * hour;
+
+  if (remaining <= day) {
+    return `in ${String(Number((remaining + hour - 1n) / hour))} hours`;
+  }
+
+  return `in ${String(Number((remaining + day - 1n) / day))} days`;
 }

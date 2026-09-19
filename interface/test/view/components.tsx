@@ -31,6 +31,7 @@ import {
   WalletSection,
   WalletSections,
 } from "./fixtures/modules.ts";
+import { projection } from "./fixtures/projection.ts";
 
 vi.mock(import("react-dom"), () => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Component tests replace portals with inline children for static rendering.
@@ -150,22 +151,24 @@ describe("view components", () => {
   });
 
   it("renders form edits, direction changes, and balance selectors", () => {
-    const setRawText = vi.fn<(value: string) => void>();
-    const balances = {
+    const setIsCkb2Udt = vi.fn<(value: boolean) => void>();
+    const setText = vi.fn<(value: string) => void>();
+    const draft = {
+      isCkb2Udt: true,
+      setIsCkb2Udt,
+      text: "1.5",
+      setText,
+      isFrozen: false,
+    };
+    const balances = projection({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
       ckbAvailable: 4n * CKB,
       ickbAvailable: 2n * CKB,
       ckbBalance: 5n * CKB,
       ickbBalance: 3n * CKB,
-    };
-    const element = Form({
-      rawText: "C1.5",
-      setRawText,
-      isFrozen: false,
-      balances,
-      chain: "testnet",
     });
+    const element = Form({ ...draft, projection: balances, chain: "testnet" });
     const input = findElement(element, (node) => node.type === "input");
     const buttons = findElements(element, (node) => node.type === "button");
 
@@ -180,23 +183,18 @@ describe("view components", () => {
       elementProps<{ onClick?: () => void }>(button).onClick?.();
     }
 
-    // Commas in the box never reach the raw text.
+    // Commas in the box never reach the text.
     elementProps<{ onChange: Change }>(input).onChange(typed("1,234,5", 7));
-    expect(setRawText.mock.calls).toEqual([["C.25abc"], ["I1.5"], ["C12345"]]);
+    expect(setText.mock.calls).toEqual([[".25abc"], ["12345"]]);
+    expect(setIsCkb2Udt.mock.calls).toEqual([[false]]);
     expect(
       renderToStaticMarkup(
-        Form({
-          rawText: "C1234567.5",
-          setRawText,
-          isFrozen: false,
-          balances,
-          chain: "testnet",
-        }),
+        Form({ ...draft, text: "1234567.5", projection: balances, chain: "testnet" }),
       ),
     ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
     const invalidMarkup = renderToStaticMarkup(
-      <Form rawText="C1e2" setRawText={setRawText} isFrozen={false} chain="testnet" />,
+      <Form {...draft} text="1e2" chain="testnet" />,
     );
     expect(invalidMarkup).toContain("Enter a decimal amount with up to 8 decimal places");
     expect(invalidMarkup).toContain('aria-invalid="true"');
@@ -214,26 +212,17 @@ describe("view components", () => {
     // Max exists only while converting from iCKB: no CKB Max (52(z)), none on the target.
     expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
     const fromIckb = Form({
-      rawText: "I1.5",
-      setRawText,
-      isFrozen: false,
+      ...draft,
+      isCkb2Udt: false,
+      projection: balances,
       chain: "testnet",
-      balances,
     });
     expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
     // The faucet sits under "CKB" on testnet, wherever CKB is, and nowhere on mainnet.
     expect(renderToStaticMarkup(element)).toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(fromIckb)).toContain("faucet.nervos.org");
     expect(
-      renderToStaticMarkup(
-        Form({
-          rawText: "C1.5",
-          setRawText,
-          isFrozen: false,
-          balances,
-          chain: "mainnet",
-        }),
-      ),
+      renderToStaticMarkup(Form({ ...draft, projection: balances, chain: "mainnet" })),
     ).not.toContain("faucet");
     elementProps<{ onClick?: () => void }>(
       findElement(
@@ -245,22 +234,21 @@ describe("view components", () => {
           ) === true,
       ),
     ).onClick?.();
-    expect(setRawText.mock.lastCall).toEqual(["I2"]);
+    expect(setText.mock.lastCall).toEqual(["2"]);
     expect(
       renderToStaticMarkup(
         <Form
+          {...draft}
+          text="1"
           chain="testnet"
-          rawText="C1"
-          setRawText={setRawText}
-          isFrozen={false}
-          balances={{
+          projection={projection({
             ckbNative: 1n,
             ickbNative: 0n,
             ckbAvailable: 1n,
             ickbAvailable: 0n,
             ckbBalance: 1n,
             ickbBalance: 0n,
-          }}
+          })}
         />,
       ),
     ).toContain("0+");
@@ -270,29 +258,23 @@ describe("view components", () => {
     expect(
       renderToStaticMarkup(
         <Form
+          {...draft}
+          text="1"
           chain="testnet"
-          rawText="C1"
-          setRawText={setRawText}
-          isFrozen={false}
-          quoteState={{ exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }) }}
+          exchangeRatio={Ratio.from({ ckbScale: 1n, udtScale: 1n })}
         />,
       ),
     ).toContain("1.00 iCKB");
     expect(
       renderToStaticMarkup(
-        <Form chain="testnet" rawText="I" setRawText={setRawText} isFrozen={true} />,
+        <Form {...draft} isCkb2Udt={false} text="" chain="testnet" isFrozen={true} />,
       ),
     ).toContain('disabled=""');
   });
 
   it("renders chart layout elements", () => {
     const chart = renderToStaticMarkup(
-      <RateChart
-        chain="mainnet"
-        isCkb2Udt={true}
-        amount={CKB}
-        now={new Date("2026-06-07T18:43:08.091Z")}
-      />,
+      <RateChart chain="mainnet" isCkb2Udt={true} amount={CKB} />,
     );
 
     expect(chart).toContain("1 CKB worth over time");
@@ -310,7 +292,12 @@ describe("view components", () => {
 
   it("renders wallet section shells and pending wallet config states", () => {
     const openWallet = vi.fn<() => void>();
-    const setRawText = vi.fn<(value: string) => void>();
+    const draft = {
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1",
+      setText: vi.fn<(value: string) => void>(),
+    };
     const selectChain = vi.fn<Parameters<typeof WalletAppShell>[0]["selectChain"]>();
     vi.stubGlobal("document", { getElementById: () => ({}) });
 
@@ -329,8 +316,7 @@ describe("view components", () => {
     ).toContain("Body");
     const restoredShell = (
       <WalletAppShell
-        rawText="C1"
-        setRawText={setRawText}
+        {...draft}
         chain="mainnet"
         selectChain={selectChain}
         isRestoring={true}
@@ -342,8 +328,7 @@ describe("view components", () => {
     expect(
       renderToStaticMarkup(
         <WalletAppShell
-          rawText="C1"
-          setRawText={setRawText}
+          {...draft}
           chain="testnet"
           selectChain={selectChain}
           isRestoring={false}
@@ -356,8 +341,9 @@ describe("view components", () => {
       rootConfig: pendingRootConfig("testnet"),
       walletName: "JoyID",
       openWallet,
-      rawText: "I2",
-      setRawText,
+      ...draft,
+      isCkb2Udt: false,
+      text: "2",
       error: new Error("denied"),
       retry: vi.fn<() => void>(),
     });
@@ -374,8 +360,8 @@ describe("view components", () => {
       rootConfig: pendingRootConfig("mainnet"),
       walletName: "JoyID",
       openWallet,
-      rawText: "C2",
-      setRawText,
+      ...draft,
+      text: "2",
     });
     expect(
       elementProps<Parameters<typeof ActionLayout>[0]>(
@@ -392,9 +378,15 @@ describe("view components", () => {
 
   it("keeps invalid disconnected and pending amounts out of chart calculations", () => {
     vi.stubGlobal("document", { getElementById: () => ({}) });
+    const draft = {
+      isCkb2Udt: false,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: ".",
+      setText: vi.fn<(value: string) => void>(),
+    };
     const invalidShell = WalletAppShell({
-      rawText: "C.",
-      setRawText: vi.fn<(value: string) => void>(),
+      ...draft,
+      isCkb2Udt: true,
       chain: "mainnet",
       selectChain: vi.fn<(chain: "mainnet" | "testnet") => void>(),
       isRestoring: false,
@@ -408,8 +400,7 @@ describe("view components", () => {
       rootConfig: pendingRootConfig("testnet"),
       walletName: "JoyID",
       openWallet: vi.fn<() => void>(),
-      rawText: "I.",
-      setRawText: vi.fn<(value: string) => void>(),
+      ...draft,
       error: new Error("denied"),
     });
     const pendingChart = findElement(pending, (element) => element.type === RateChart);

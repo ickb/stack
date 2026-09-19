@@ -66,13 +66,20 @@ export function activeTxInfo(): TxInfo {
 
 export function l1State(): L1StateType {
   return {
-    ckbNative: 3n * CKB,
-    ickbNative: 2n * CKB,
-    ckbBalance: 4n * CKB,
-    ickbBalance: 3n * CKB,
-    ckbAvailable: 3n * CKB,
-    ickbAvailable: 2n * CKB,
-    tipTimestamp: 0n,
+    projection: {
+      ckbNative: 3n * CKB,
+      ickbNative: 2n * CKB,
+      ckbBalance: 4n * CKB,
+      ickbBalance: 3n * CKB,
+      ckbAvailable: 3n * CKB,
+      ickbAvailable: 2n * CKB,
+      ckbPending: CKB,
+      ickbPending: CKB,
+      readyWithdrawals: [],
+      pendingWithdrawals: [],
+      availableOrders: [],
+      pendingOrders: [],
+    },
     system: quoteSystemState(),
     stateId: "state-id",
     txBuilder: vi.fn(async () => {
@@ -118,8 +125,10 @@ export function walletConfigGateProps(
     signer,
     walletName: "JoyID",
     openWallet: vi.fn<() => void>(),
-    rawText: "C1",
-    setRawText: vi.fn<(value: string) => void>(),
+    isCkb2Udt: true,
+    setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+    text: "1",
+    setText: vi.fn<(value: string) => void>(),
   };
 }
 
@@ -181,7 +190,10 @@ export function signerInfo(type: ccc.SignerType, addressPrefix: string): ccc.Sig
 
 function quoteSystemState(): L1StateType["system"] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Test quote state matches the system subset used by App.
-  return quoteState() as L1StateType["system"];
+  return {
+    exchangeRatio: quoteState().exchangeRatio,
+    tip: { timestamp: 0n },
+  } as L1StateType["system"];
 }
 
 function rootSdk(): RootConfig["sdk"] {

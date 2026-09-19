@@ -1,6 +1,7 @@
 import type * as ConnectorModule from "@ckb-ccc/connector-react";
 import { StubClient } from "@ickb/testkit";
 import type * as ReactQueryModule from "@tanstack/react-query";
+import { skipToken, type SkipToken } from "@tanstack/react-query";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 import type {
@@ -213,24 +214,37 @@ export function resetHooks(): void {
 }
 
 export function quoteStateOptions(): {
-  enabled: boolean;
-  queryFn: () => Promise<QuoteState>;
+  queryKey: readonly unknown[];
+  queryFn: (() => Promise<QuoteState>) | SkipToken;
 } {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Query mock options are captured from the production hook call.
-  return queryMock.options as { enabled: boolean; queryFn: () => Promise<QuoteState> };
+  return queryMock.options as {
+    queryKey: readonly unknown[];
+    queryFn: (() => Promise<QuoteState>) | SkipToken;
+  };
 }
 
 export function txPreviewQueryOptions(): {
   enabled: boolean;
   queryKey: readonly unknown[];
-  queryFn: () => Promise<TxInfo>;
+  queryFn: (() => Promise<TxInfo>) | SkipToken;
 } {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Query mock options are captured from the production hook call.
   return queryMock.options as {
     enabled: boolean;
     queryKey: readonly unknown[];
-    queryFn: () => Promise<TxInfo>;
+    queryFn: (() => Promise<TxInfo>) | SkipToken;
   };
+}
+
+/** The captured query function, which the test expects not to be parked. */
+export function queryFnOf<T>(options: {
+  queryFn: (() => Promise<T>) | SkipToken;
+}): () => Promise<T> {
+  if (options.queryFn === skipToken) {
+    throw new Error("The query is parked");
+  }
+  return options.queryFn;
 }
 
 function storage(): Pick<Storage, "getItem" | "setItem"> {

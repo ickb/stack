@@ -10,7 +10,8 @@ export function WalletGate(): JSX.Element {
     createRootConfig("testnet", testnetClient),
   );
   const [signer, setSigner] = useState<ccc.Signer>();
-  const [rawText, setRawText] = useState("C");
+  const [isCkb2Udt, setIsCkb2Udt] = useState(true);
+  const [text, setText] = useState("");
   const quoteState = useQuoteState(rootConfig).data;
 
   if (signer === undefined) {
@@ -19,7 +20,7 @@ export function WalletGate(): JSX.Element {
 
   return (
     <WalletConfigGate
-      {...{ rootConfig, signer, rawText, setRawText, quoteState }}
+      {...{ rootConfig, signer, isCkb2Udt, setIsCkb2Udt, text, setText, quoteState }}
       walletName="Private Key Test Wallet"
       openWallet={() => {
         setSigner(undefined);
