@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP, convert } from "../../../src/core/index.ts";
-import { Ratio } from "../../../src/order/index.ts";
+import { Info, Ratio } from "../../../src/order/index.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
@@ -34,7 +34,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const mint = vi
       .spyOn(orderManager, "mint")
       .mockImplementation((txLike, _lock, info, amounts) => {
-        expect(info.ckbMinMatchLog).toBe(33);
+        expect(info.ckbMinMatchLog).toBe(Info.ckbMinMatchLogDefault());
         expect(amounts).toEqual({ ckbValue: 0n, udtValue: 100000n });
         return ccc.Transaction.from(txLike);
       });

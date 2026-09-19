@@ -119,6 +119,26 @@ describe("matchTurn", () => {
     expect(turn(orders, { ckb: CKB, udt: 100n * CKB }).partials).toHaveLength(1);
   });
 
+  it("leaves at least the order's own minimum match when the balances fall short", () => {
+    // A buyer paying 2 CKB per iCKB: its minimum match of 2^36 shannons is 2^35 iCKB.
+    const minimum = 1n << 35n;
+    const orders = [buyer("20", 2000n * CKB, 1000n * CKB, 36)];
+
+    const short = turn(orders, { ckb: CKB, udt: 1000n * CKB - 1n });
+    expect(short.udtDelta).toBe(-(1000n * CKB - minimum));
+
+    const whole = turn(orders, { ckb: CKB, udt: 1000n * CKB });
+    expect(whole.udtDelta).toBe(-1000n * CKB);
+  });
+
+  it("takes an order under twice its minimum match whole or not at all", () => {
+    const udt = (1n << 36n) - 1n;
+    const orders = [buyer("21", 2n * udt, udt, 36)];
+
+    expect(turn(orders, { ckb: CKB, udt: udt - 1n }).partials).toEqual([]);
+    expect(turn(orders, { ckb: CKB, udt }).udtDelta).toBe(-udt);
+  });
+
   it("prefers the larger of two fills at one price", () => {
     const orders = [
       buyer("08", 200n * CKB, 100n * CKB),

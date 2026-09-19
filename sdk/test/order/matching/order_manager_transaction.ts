@@ -55,7 +55,7 @@ function registerOrderMatcherMinimumTests(): void {
     if (matcher === undefined) {
       throw new Error(EXPECTED_MATCHER_ERROR);
     }
-    expect(matcher.bMaxMatch).toBeLessThan(1n << 33n);
+    expect(matcher.bMaxMatch).toBeLessThan(order.data.info.getCkbMinMatch());
     expect(matcher.bMinMatch).toBe(matcher.bMaxMatch);
 
     const match = matcher.match(matcher.bMaxMatch);

@@ -66,6 +66,13 @@ export interface Info {
   validate(): void;
 }
 
+// 2^36 shannons, about 687 CKB: a fresh remainder of that size clears the bot's ten-fee
+// floor 22 times over even at a 100,000 fee rate, so a partial fill never strands a scrap.
+// Orders under twice that (about 1,375 CKB, about 1,150 iCKB) are taken whole or left;
+// that band must stay under the bot's refill line (`ICKB_REFILL_BELOW`, 2,000 iCKB) so a
+// buyer the bot cannot complete always fires the refill deposit: 37 would break it.
+const CKB_MIN_MATCH_LOG_DEFAULT = 36;
+
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const InfoImplementation = class Info extends InfoBase {
   static {
@@ -181,7 +188,7 @@ const InfoImplementation = class Info extends InfoBase {
 
   /** Returns the default minimum CKB match exponent for newly created orders. */
   public static ckbMinMatchLogDefault(): number {
-    return 33;
+    return CKB_MIN_MATCH_LOG_DEFAULT;
   }
 };
 

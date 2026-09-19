@@ -98,10 +98,17 @@ function bestFill(
   let best: { index: number; fill: Match; net: bigint; paid: bigint } | undefined;
   for (const [index, matcher] of matchers.entries()) {
     const allowance = matcher.isCkb2Udt ? balances.udt : balances.ckb;
-    if (allowance < matcher.bMinMatch) {
+    // A completion is any size, but a partial leaves at least the order's own minimum
+    // match, so the scrap a short balance would leave stays fillable by a later turn
+    // instead of sitting on the book forever (decision 52(aj)(2)).
+    const payment =
+      allowance >= matcher.bMaxMatch
+        ? matcher.bMaxMatch
+        : minBigInt(allowance, matcher.bMaxMatch - matcher.bMinMatch);
+    if (payment < matcher.bMinMatch) {
       continue;
     }
-    const fill = matcher.match(minBigInt(allowance, matcher.bMaxMatch));
+    const fill = matcher.match(payment);
     const net = netOf(fill, cost, { ckbScale, udtScale });
     const paid = matcher.isCkb2Udt
       ? -fill.udtDelta * udtScale
