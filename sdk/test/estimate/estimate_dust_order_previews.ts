@@ -9,6 +9,7 @@ import { OrderManager } from "../../src/order/order.ts";
 import { OrderData } from "../../src/order/order_data.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
+import { projectionReadyDeposit } from "../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import {
   hash,
   headerLike,
@@ -68,7 +69,8 @@ describe(ESTIMATE_SUITE, () => {
   it("does not advertise one-sat iCKB-to-CKB dust orders below the fee threshold", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({ ckbAvailable: 1n, tip: headerLike(0n, { timestamp: 1234n }) }),
+      system({ tip: headerLike(0n, { timestamp: 1234n }) }),
+      [],
     );
 
     expect(result).toBeUndefined();
@@ -82,9 +84,9 @@ describe(ESTIMATE_SUITE, () => {
           ckbScale: (1n << 64n) - 1n,
           udtScale: (1n << 64n) - 2n,
         }),
-        ckbAvailable: 1n,
         tip: headerLike(0n, { timestamp: 1234n }),
       }),
+      [],
     );
 
     expect(result).toBeUndefined();
@@ -111,18 +113,15 @@ describe(ESTIMATE_SUITE, () => {
           ckbScale: (1n << 64n) - 1n,
           udtScale: 1n,
         }),
-        ckbAvailable: 1n,
       }),
+      [],
     );
 
     expect(result).toBeUndefined();
   });
 
   it("returns no iCKB-to-CKB estimate when both default and dust estimates are missing", () => {
-    const result = estimateIckbToCkbOrder(
-      { ckbValue: 0n, udtValue: 0n },
-      system({ ckbAvailable: 0n }),
-    );
+    const result = estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 0n }, system(), []);
 
     expect(result).toBeUndefined();
   });
@@ -134,9 +133,11 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
-        ckbAvailable: 1n << 80n,
         feeRate: 0n,
+        // At this ratio the bot's deposit is worth no CKB: one pool deposit supplies the one.
+        poolDeposits: [projectionReadyDeposit(1n, 0n, { ckbValue: 1n })],
       }),
+      [],
     );
 
     expect(result).toMatchObject({
@@ -148,7 +149,8 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("keeps a base estimate without fee search when fee thresholds are disabled", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({ ckbAvailable: 1n, feeRate: 0n }),
+      system({ feeRate: 0n }),
+      [],
     );
 
     expect(result).toMatchObject({
@@ -162,8 +164,8 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
       { ckbValue: 0n, udtValue: 1n },
       system({
         exchangeRatio: Ratio.from({ ckbScale: 2n, udtScale: 1n }),
-        ckbAvailable: 1n,
       }),
+      [],
     );
 
     expect(result).toBeUndefined();
@@ -173,11 +175,11 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 100000n },
       system({
-        ckbAvailable: 100000n,
         // The default fee pays 10 here; a threshold of 20 sends the estimate to the dust search.
         feeRate: 2n,
         tip: headerLike(0n, { timestamp: 1234n }),
       }),
+      [],
     );
 
     expect(result).toMatchObject({
@@ -190,9 +192,9 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 2n },
       system({
-        ckbAvailable: 2n,
         feeRate: 1n,
       }),
+      [],
     );
 
     expect(result).toBeUndefined();
@@ -240,10 +242,10 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       { ckbValue: 0n, udtValue: 1000000n },
       system({
         exchangeRatio,
-        ckbAvailable: ccc.fixedPointFrom("3102.81677146"),
         feeRate: 33222n,
         tip: headerLike(0n, { timestamp: 1234n }),
       }),
+      [],
     );
 
     if (result === undefined) {

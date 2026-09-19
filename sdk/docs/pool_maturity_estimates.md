@@ -1,51 +1,47 @@
 # Pool Maturity Estimates
 
-This note describes the current stack-owned contract for estimating iCKB-to-CKB conversion timing in UI consumers.
+How the SDK dates an order-based conversion for the interface's "Ready:" line. This is an off-chain stack mechanism, not protocol law: the bot (`sdk/node`) fills orders, and the estimate is a model of it (decisions amendment 52(ai)(15)).
 
-## Scope
+## Inputs
 
-This is an off-chain stack mechanism, not protocol law.
+`getL1AccountState` samples one tip and reads:
 
-- `sdk/node` (the bot) fills orders and produces withdrawal requests; the estimate does not model it.
-- `@ickb/sdk` owns the summary that interface consumers read as `system.ckbAvailable` and `system.ckbMaturing`.
-- `interface` renders that summary into conversion-time estimates.
+- `system.orderPool`: every order past par on the book, the wallet's own included; the bot fills by price, not by owner.
+- `system.poolDeposits`: every iCKB pool deposit with its real claim date (the next DAO claim epoch, rolled a cycle when too close to request now). No readiness collapse: a deposit counts on its date, three days out or thirty.
+- Each order group's `blockNumber`, the block that committed its origin, read from the same transaction response the scan already fetches. An uncommitted origin has none.
 
-## Current Runtime Path
+The bot's own working capital is not read: a published library should not name one operator's wallet, and the model below stands in for it.
 
-The current SDK estimate path does **not** use a bot-written pool snapshot.
+## The one duration
 
-This direct-scan path assumes the deposit pool is still small enough that interface-side maturity estimates can afford a live scan when needed.
+`BOT_TURN_MS` is ten minutes: the bot's one-minute cadence plus its confirmation wait, with room for slow reads. It is the one duration the bot can be held to, so every estimate is built from it. The lock-up window's ten-minute lower bound and the sitting-seller threshold below are the same length for their own reasons and change independently.
 
-Instead, `getL1AccountState` builds the estimate from direct scans of pool deposits via `LogicManager.findDeposits(...)`.
+An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores does not queue ahead of anyone and does not supply anyone.
 
-Ready deposits, those whose claim epoch lies within the readiness window (three days by default), are counted as immediately available CKB.
-Not-ready deposits remain in the future maturity buckets.
+## A seller (iCKB to CKB)
 
-The bot's own working capital is not counted: the SDK used to carry one hardcoded bot lock per network for this, but that capital only matters when no pool deposit matures inside the window, and a published library should not name one operator's wallet (decisions amendment 52(ai)).
+The seller waits for CKB. Supply, in time order:
 
-The result is eventually consistent rather than snapshot-atomic: the targeted indexer scans can observe different indexer progress while sharing one sampled tip. The SDK does not reread them to manufacture snapshot semantics.
+1. Now: one deposit's worth of CKB (the cap at the DAO ratio), the bot's working capital, unless a fillable seller has already sat on the book for more than a turn (its origin is more than a twenty-fourth of an epoch of blocks below the tip). Then the bot evidently has none to give, and this term is zero.
+2. Each pool deposit at its real claim date, earliest first, less the deposits the same plan withdraws directly (they cannot fill its order leg too).
 
-## Why Direct Scans Are Used
+Demand is the CKB this order pays out, plus the CKB of every fillable seller priced better than it (asking fewer CKB per iCKB, strictly; ties are not possible since the DAO ratio moves every block), valued at the DAO ratio.
 
-The older snapshot idea tried to summarize the full deposit pool without scanning every deposit.
+The estimate is the first date whose cumulative supply covers the demand, plus one turn. No such date reads "waiting for CKB liquidity" (`maturity` returns `undefined`).
 
-That design was removed from the live runtime because the old format had no explicit discriminator. In practice, arbitrary aligned bot-owned no-type data could be mistaken for a snapshot. For UI estimation, approximation is acceptable, but misidentifying unrelated bytes as an estimate source is not.
+## A buyer (CKB to iCKB)
 
-So the current stack chooses the smaller honest contract:
+The buyer waits for the bot to mint. Once its iCKB inventory is spent the bot mints one cap-sized deposit per turn, and the inventory is unknown here, so the wait is one turn plus one per cap of net CKB demand ahead: fillable buyers paying more per iCKB than this one, less the iCKB the fillable sellers bring in, at the DAO ratio. One cap per worst-case turn is about 630,000 CKB an hour, five to ten times slower than a normal day, deliberately.
 
-- direct deposit scans are slower at large pool sizes
-- but the data source is unambiguous
+## The date on screen
 
-## What A Future Snapshot Implementation Would Need
+`ConversionTransactionContext.estimatedMaturity` is the latest date at which everything the wallet has converting, plus this request, is collectable: pending withdrawals at their claim dates, pending orders at their estimates, and the request's own direct deposits and order leg. An amount of zero is the collection itself. Users track their conversions on the interface, so the one date is the feature.
 
-If deposit-pool growth makes direct scans too expensive for UI use, a snapshot design can still make sense. But it must be a real stack-owned format, not just a byte-length heuristic.
+Plans are ordered direct first (the most deposits withdrawn directly), and the completion walk takes the first it can fund; the estimate never ranks plans (decisions amendment 52(ak)).
 
-A future revival should define:
+## Accepted limits
 
-1. an explicit format identity, such as a versioned prefix or a dedicated cell shape
-2. a clear writer, likely the bot
-3. a clear reader, `@ickb/sdk`
-4. freshness and fallback rules
-5. exact behavior when the snapshot is missing, stale, malformed, or partial
-
-Until then, direct deposit scanning remains the active runtime contract.
+- The bot filling early is a pleasant surprise; the reverse was a broken promise. In a thin pool with a sitting seller the line reads the next claim date or "waiting for CKB liquidity" where the bot might fill within a turn.
+- A buyer-side distress signal (a fillable buyer sitting for over a turn) is not modelled; add it only when a journal shows buyers sitting.
+- In-flight withdrawal requests are not read as a dated supply grade; the simpler policy was preferred.
+- The pool is read by direct scans, whose cost grows with the pool. A bot-written snapshot would need an explicit format identity, a writer, a reader, freshness and fallback rules; none exists yet.

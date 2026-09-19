@@ -30,8 +30,6 @@ describe("readBotState pool snapshot", () => {
         orderPool: [],
         feeRate: 1n,
         poolDeposits: [ready, tooEarly, nearReady, future],
-        ckbAvailable: 0n,
-        ckbMaturing: [],
       },
       user: { orders: [] },
       account: {
@@ -84,8 +82,6 @@ describe("readBotState", () => {
         orderPool: [marketOrder],
         feeRate: 1n,
         poolDeposits: [],
-        ckbAvailable: 0n,
-        ckbMaturing: [],
       },
       user: { orders: [ownOrder] },
       account: {

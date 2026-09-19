@@ -72,7 +72,6 @@ function conversion(
     signer: fundedSigner(cells, [lock]).signer,
     context: conversionContext({
       system: {
-        ckbAvailable: ccc.fixedPointFrom(1_000_000),
         poolDeposits: readyPool(fixture),
       },
       cells,
@@ -146,7 +145,6 @@ describe("buildConversionTransaction fundable walk", () => {
         lock,
         signer: fundedSigner(cells, [lock]).signer,
         context: conversionContext({
-          system: { ckbAvailable: ccc.fixedPointFrom(1_000_000) },
           cells,
           ckbAvailable: DEPOSIT,
         }),

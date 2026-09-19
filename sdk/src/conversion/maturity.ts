@@ -1,26 +1,42 @@
-import { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
+import type { OrderGroup } from "../order/cells.ts";
+import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
-import type { Ratio } from "../order/ratio.ts";
-import { convert } from "../udt.ts";
-import { binarySearch, compareBigInt, type ValueComponents } from "../utils/index.ts";
-import type { CkbCumulative, MaturityOrderInput, SystemState } from "./types.ts";
+import { convert, ICKB_DEPOSIT_CAP } from "../udt.ts";
+import { compareBigInt, type ValueComponents } from "../utils/index.ts";
+import type { MaturityOrderInput, SystemState } from "./types.ts";
 
-export function maturity(o: MaturityOrderInput, system: SystemState): bigint | undefined {
+/**
+ * The bot's worst-case turn: its one-minute cadence plus the confirmation wait, with room
+ * for slow reads. It is the one duration the bot can be held to, so every order estimate
+ * is built from it (decisions amendment 52(ai)(15)).
+ */
+export const BOT_TURN_MS = 10n * 60n * 1000n;
+
+/**
+ * The estimated fill time of an order on the book or about to be placed: `undefined` when
+ * nothing dated covers it, zero when it is already fulfilled. `takenDeposits` are the pool
+ * deposits the same plan withdraws directly, which cannot fill its order leg too.
+ */
+export function maturity(
+  o: MaturityOrderInput,
+  system: SystemState,
+  takenDeposits: readonly IckbDepositCell[] = [],
+): bigint | undefined {
   const { info, amounts } = maturityOrderParts(o);
   if (info.isDualRatio()) {
     return undefined;
   }
 
   const isCkb2Udt = info.isCkb2Udt();
-  const amount = orderSideAmount(isCkb2Udt, amounts);
+  const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
   if (amount === 0n) {
     return 0n;
   }
 
   return isCkb2Udt
     ? ckbToIckbOrderMaturity(info, amount, system)
-    : ickbToCkbOrderMaturity(info, amounts, amount, system);
+    : ickbToCkbOrderMaturity(info, amounts, amount, system, takenDeposits);
 }
 
 function maturityOrderParts(o: MaturityOrderInput): {
@@ -37,111 +53,89 @@ function maturityOrderParts(o: MaturityOrderInput): {
   };
 }
 
-function orderSideAmount(isCkb2Udt: boolean, amounts: ValueComponents): bigint {
-  return isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
-}
-
+/**
+ * A buyer waits for the bot to mint: the bot mints one cap-sized deposit per turn once its
+ * iCKB inventory is spent, and the inventory is unknown here, so the wait is one turn plus
+ * one per cap of net CKB demand ahead (buyers priced better than this one, less the iCKB
+ * the sellers on the book bring in). One cap per worst-case turn is about 630,000 CKB an
+ * hour, five to ten times slower than a normal day, deliberately: the turn is the one
+ * duration the bot can be held to.
+ */
 function ckbToIckbOrderMaturity(info: Info, amount: bigint, system: SystemState): bigint {
-  const pressure = orderPoolPressure(true, info.ckbToUdt, system);
-  const ckb = amount + pressure.ckb - convert(false, pressure.udt, system.exchangeRatio);
-  const baseMaturity = 10n * 60n * 1000n;
-  const maturityValue =
-    ckb > 0n ? baseMaturity * (1n + ckb / ccc.fixedPointFrom("200000")) : baseMaturity;
-  return maturityValue + system.tip.timestamp;
+  const buyersAhead = fillableOrders(system, true)
+    .filter((group) => group.order.data.info.ckbToUdt.compare(info.ckbToUdt) < 0)
+    .reduce((ckb, group) => ckb + group.order.ckbUnoccupied, 0n);
+  const sellers = fillableOrders(system, false).reduce(
+    (udt, group) => udt + group.udtValue,
+    0n,
+  );
+  const demand = amount + buyersAhead - convert(false, sellers, system.exchangeRatio);
+  const capCkb = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+  const turns = demand > 0n ? 1n + demand / capCkb : 1n;
+  return system.tip.timestamp + BOT_TURN_MS * turns;
 }
 
+/**
+ * A seller waits for CKB: the bot's own working capital, one deposit's worth, unless a
+ * fillable seller has already sat on the book for over a turn (then the bot has none to
+ * give), plus each pool deposit at its real claim date, in claim order. The first date
+ * whose supply covers this order and every seller priced better than it, plus one turn.
+ */
 function ickbToCkbOrderMaturity(
   info: Info,
   amounts: ValueComponents,
   amount: bigint,
   system: SystemState,
+  takenDeposits: readonly IckbDepositCell[],
 ): bigint | undefined {
-  const ratio = info.udtToCkb;
-  const pressure = orderPoolPressure(false, ratio, system);
-  const orderCkb = amounts.ckbValue - ratio.convert(false, amount, true);
-  const ckb =
-    orderCkb +
-    pressure.ckb -
-    convert(false, pressure.udt, system.exchangeRatio) +
-    system.ckbAvailable;
-  const baseMaturity = 10n * 60n * 1000n;
-  if (ckb >= 0n) {
-    return baseMaturity + system.tip.timestamp;
-  }
-
-  return firstCkbMaturityAtOrAbove(system.ckbMaturing, -ckb);
-}
-
-function orderPoolPressure(
-  isCkb2Udt: boolean,
-  reference: Ratio,
-  system: SystemState,
-): { ckb: bigint; udt: bigint } {
-  let ckb = 0n;
-  let udt = 0n;
-  for (const { order } of system.orderPool) {
-    const info = order.data.info;
-    if (shouldCountCkbOrder(isCkb2Udt, info, reference)) {
-      ckb += order.ckbUnoccupied;
+  const sellers = fillableOrders(system, false);
+  const sellersAhead = sellers
+    .filter((group) => info.udtToCkb.compare(group.order.data.info.udtToCkb) < 0)
+    .reduce((udt, group) => udt + group.udtValue, 0n);
+  const needed =
+    info.udtToCkb.convert(false, amount, true) -
+    amounts.ckbValue +
+    convert(false, sellersAhead, system.exchangeRatio);
+  const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
+  const steps = [
+    {
+      ckbValue: sellers.some((group) => sits(group, system))
+        ? 0n
+        : convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+      at: system.tip.timestamp,
+    },
+    ...system.poolDeposits
+      .filter((deposit) => !taken.has(deposit.cell.outPoint.toHex()))
+      .map((deposit) => ({
+        ckbValue: deposit.ckbValue,
+        at: deposit.maturity.toUnix(system.tip),
+      }))
+      .toSorted((left, right) => compareBigInt(left.at, right.at)),
+  ];
+  let supply = 0n;
+  for (const step of steps) {
+    supply += step.ckbValue;
+    if (supply >= needed) {
+      return step.at + BOT_TURN_MS;
     }
-    if (shouldCountUdtOrder(isCkb2Udt, info, reference)) {
-      udt += order.udtValue;
-    }
   }
-  return { ckb, udt };
+  return undefined;
 }
 
-function shouldCountCkbOrder(isCkb2Udt: boolean, info: Info, reference: Ratio): boolean {
-  return info.isCkb2Udt() && (!isCkb2Udt || info.ckbToUdt.compare(reference) < 0);
-}
-
-function shouldCountUdtOrder(isCkb2Udt: boolean, info: Info, reference: Ratio): boolean {
-  return !info.isCkb2Udt() && (isCkb2Udt || reference.compare(info.udtToCkb) < 0);
-}
-
-function firstCkbMaturityAtOrAbove(
-  ckbMaturing: readonly CkbCumulative[],
-  ckbNeeded: bigint,
-): bigint | undefined {
-  const index = binarySearch(ckbMaturing.length, (n) => {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- binarySearch probes 0 <= n < ckbMaturing.length.
-    return ckbMaturing[n]!.ckbCumulative >= ckbNeeded;
-  });
-  if (index >= ckbMaturing.length) {
-    return undefined;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- index is checked against ckbMaturing.length above.
-  return ckbMaturing[index]!.maturity;
+/** The book orders the bot would take whole in the given direction. */
+function fillableOrders(system: SystemState, isCkb2Udt: boolean): OrderGroup[] {
+  return system.orderPool.filter((group) =>
+    fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
+  );
 }
 
 /**
- * The CKB the pool can fill orders with: ready deposits now, the rest as cumulative
- * buckets at their claim dates, earliest first.
+ * Whether the order has been on the book for more than a turn, a twenty-fourth of an
+ * epoch in blocks: the bot has seen it and left it. An uncommitted origin is fresh.
  */
-export function poolCkb(
-  poolDeposits: readonly IckbDepositCell[],
-  tip: ccc.ClientBlockHeader,
-): { ready: bigint; maturing: CkbCumulative[] } {
-  let ready = 0n;
-  const maturing = poolDeposits
-    .filter((deposit) => !deposit.isReady)
-    .map((deposit) => ({
-      ckbValue: deposit.ckbValue,
-      maturity: deposit.maturity.toUnix(tip),
-    }))
-    .toSorted((left, right) => compareBigInt(left.maturity, right.maturity));
-  for (const deposit of poolDeposits) {
-    if (deposit.isReady) {
-      ready += deposit.ckbValue;
-    }
-  }
-  let cumulative = 0n;
-  return {
-    ready,
-    maturing: maturing.map(({ ckbValue, maturity: at }) => {
-      cumulative += ckbValue;
-      return { ckbCumulative: cumulative, maturity: at };
-    }),
-  };
+function sits(group: OrderGroup, { tip }: SystemState): boolean {
+  return (
+    group.blockNumber !== undefined &&
+    tip.number - group.blockNumber > tip.epoch.denominator / 24n
+  );
 }

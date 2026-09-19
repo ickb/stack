@@ -3,7 +3,6 @@ import { offlineTestnetClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
-  binarySearch,
   compareBigInt,
   defaultCellPageSize,
   findCells,
@@ -87,14 +86,6 @@ describe("isPlainCapacityCell", () => {
 });
 
 describe("binary search helpers", () => {
-  it("finds the first matching index", () => {
-    expect(binarySearch(8, (index) => index >= 5)).toBe(5);
-  });
-
-  it("returns the range end when no index matches", () => {
-    expect(binarySearch(4, () => false)).toBe(4);
-  });
-
   it("finds the first matching index asynchronously", async () => {
     await expect(
       asyncBinarySearch(8, async (index) => {

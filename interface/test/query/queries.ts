@@ -50,8 +50,6 @@ function itPollsLiveStateUnlessFrozen(): void {
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
           orderPool: [],
           poolDeposits: [],
-          ckbAvailable: 0n,
-          ckbMaturing: [],
         },
         user: { orders: [] },
         account: {
@@ -80,8 +78,6 @@ function itRunsL1StateOptionsQuery(): void {
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
           orderPool: [],
           poolDeposits: [],
-          ckbAvailable: 0n,
-          ckbMaturing: [],
         },
         user: { orders: [] },
         account: {
@@ -156,8 +152,6 @@ it("loads display balances from an SDK account snapshot", async () => {
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
-      ckbAvailable: 0n,
-      ckbMaturing: [],
     },
     user: { orders: [] },
     account: {
@@ -196,8 +190,6 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
-      ckbAvailable: 0n,
-      ckbMaturing: [],
     },
     user: { orders: [] },
     account: {

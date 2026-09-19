@@ -19,7 +19,7 @@ describe(ESTIMATE_SUITE, () => {
       false,
       { ckbValue: 0n, udtValue: 100000n },
       // The default fee pays 10 here; a threshold of 20 keeps the maturity out.
-      system({ ckbAvailable: 100000n, feeRate: 2n }),
+      system({ feeRate: 2n }),
     );
 
     expect(result.convertedAmount).toBe(99990n);
@@ -32,7 +32,6 @@ describe(ESTIMATE_SUITE, () => {
       false,
       { ckbValue: 0n, udtValue: 1000000n },
       system({
-        ckbAvailable: 1000000n,
         tip: headerLike(0n, { timestamp: 1234n }),
       }),
     );
@@ -48,7 +47,6 @@ describe(ESTIMATE_SUITE, () => {
       { ckbValue: 0n, udtValue: 100n },
       system({
         exchangeRatio: Ratio.from({ ckbScale: 2n, udtScale: 1n }),
-        ckbAvailable: 100n,
       }),
       { fee: 1n, feeBase: 10n },
     );
@@ -69,7 +67,6 @@ describe(ESTIMATE_SUITE, () => {
       { ckbValue: 0n, udtValue: ccc.fixedPointFrom("100000.001") },
       system({
         exchangeRatio,
-        ckbAvailable: ccc.fixedPointFrom(100082),
       }),
     );
 

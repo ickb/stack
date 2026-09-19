@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe(L1_STATE_SUITE, () => {
-  it("treats ready deposits as available CKB instead of future maturity", async () => {
+  it("carries the pool deposits, judged against the tip, as the CKB supply", async () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
@@ -52,7 +52,6 @@ describe(L1_STATE_SUITE, () => {
     const state = await sdk.getL1AccountState(client, []);
 
     expect(findDeposits.mock.calls[0]?.[1]).toBe(tip);
-    expect(state.system.ckbAvailable).toBe(ccc.fixedPointFrom(100082));
-    expect(state.system.ckbMaturing).toEqual([]);
+    expect(state.system.poolDeposits).toEqual([readyDeposit]);
   });
 });

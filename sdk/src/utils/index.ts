@@ -15,7 +15,6 @@ export {
 } from "./codec.ts";
 export {
   asyncBinarySearch,
-  binarySearch,
   ceilDiv,
   compareBigInt,
   findCells,

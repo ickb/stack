@@ -3,8 +3,8 @@ import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
 import { quoteConversion } from "../../src/order/conversion.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
 import { Ratio } from "../../src/order/ratio.ts";
-import { system } from "../transaction/base/support/sdk_core_support.ts";
-import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
+import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
+import { ESTIMATE_SUITE, estimate, sittingSeller } from "./support/estimate_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -31,7 +31,6 @@ describe(ESTIMATE_SUITE, () => {
       amounts,
       system({
         exchangeRatio,
-        ckbAvailable: 1000000n,
       }),
     );
 
@@ -42,9 +41,11 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("builds normal iCKB-to-CKB orders when maturity is unavailable", () => {
+    // A fillable seller left on the book for over a turn: the bot has no CKB to give.
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
-      system({ ckbAvailable: 0n }),
+      system({ orderPool: [sittingSeller(0n)], tip: headerLike(1n) }),
+      [],
     );
 
     if (result === undefined) {

@@ -205,23 +205,24 @@ export class OrderManager implements ScriptDeps {
     master: MasterCell,
     orders: OrderCell[],
   ): Promise<OrderGroup | undefined> {
-    const origin = await this.findOrigin(client, master.cell.outPoint);
-    const order = origin?.resolve(orders);
-    if (origin === undefined || order === undefined) {
+    const found = await this.findOrigin(client, master.cell.outPoint);
+    const order = found?.origin.resolve(orders);
+    if (found === undefined || order === undefined) {
       return undefined;
     }
-    const group = OrderGroup.tryFrom(master, order, origin);
+    const group = OrderGroup.tryFrom(master, order, found.origin, found.blockNumber);
     return group === undefined ? undefined : attestResolvedOrderGroup(group);
   }
 
   /**
    * The mint order created beside the master, read from the master's transaction: the
-   * client cache first, then the node, recording the response for the next read.
+   * client cache first, then the node, recording the response for the next read. The
+   * response's block number dates the order; an uncommitted origin has none.
    */
   private async findOrigin(
     client: ccc.Client,
     master: ccc.OutPoint,
-  ): Promise<OrderCell | undefined> {
+  ): Promise<{ origin: OrderCell; blockNumber: ccc.Num | undefined } | undefined> {
     const { txHash, index: masterIndex } = master;
     const response = await cachedTransactionResponse(client, txHash);
     if (response === undefined) {
@@ -254,7 +255,9 @@ export class OrderManager implements ScriptDeps {
       }
       origin = order;
     }
-    return origin;
+    return origin === undefined
+      ? undefined
+      : { origin, blockNumber: response.blockNumber };
   }
 
   private validatedPartial({

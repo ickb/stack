@@ -15,6 +15,7 @@ interface ProjectionOrderOptions {
   udtValue: bigint;
   isDualRatio: boolean;
   isMatchable: boolean;
+  blockNumber?: bigint;
 }
 
 class ProjectionOrderCell extends OrderCell {
@@ -67,6 +68,7 @@ class ProjectionOrderGroup extends OrderGroup {
       ),
       order,
       order,
+      projection.blockNumber,
     );
     this.projection = projection;
   }

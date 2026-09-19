@@ -35,7 +35,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       lock,
       signer: stubSigner,
       context: conversionContext({
-        system: { ckbAvailable: ICKB_DEPOSIT_CAP },
         ckbAvailable: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
         ickbAvailable: 0n,
       }),

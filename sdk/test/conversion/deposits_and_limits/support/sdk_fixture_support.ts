@@ -203,7 +203,6 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
       context: conversionContext({
         system: {
           exchangeRatio: options.exchangeRatio,
-          ckbAvailable: 10n,
           poolDeposits: options.deposits,
         },
         ckbAvailable: 0n,

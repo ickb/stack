@@ -47,7 +47,6 @@ export { projectConversionTransactionContext } from "./conversion/projection.ts"
 export type {
   AccountAvailabilityProjection,
   AccountState,
-  CkbCumulative,
   ConversionDirection,
   ConversionMetadata,
   ConversionNotice,

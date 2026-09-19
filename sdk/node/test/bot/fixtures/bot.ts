@@ -271,8 +271,6 @@ export function botState(overrides: Partial<BotState>): BotState {
       tip: headerLike(),
       orderPool: [],
       poolDeposits: [],
-      ckbAvailable: 0n,
-      ckbMaturing: [],
     },
     ...overrides,
   };
@@ -356,8 +354,6 @@ export function l1AccountState(
       orderPool: [],
       feeRate: 1n,
       poolDeposits: [],
-      ckbAvailable: 0n,
-      ckbMaturing: [],
     },
     user: { orders: [] },
     account: {

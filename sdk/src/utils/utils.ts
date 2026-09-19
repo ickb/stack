@@ -105,42 +105,6 @@ export function isPlainCapacityCell(cell: ccc.Cell): boolean {
 }
 
 /**
- * Performs a binary search to find the smallest index `i` in the range [0, n)
- * such that the function `f(i)` returns true. It is assumed that for the range
- * [0, n), if `f(i)` is true, then `f(i+1)` is also true. This means that there
- * is a prefix of the input range where `f` is false, followed by a suffix where
- * `f` is true. If no such index exists, the function returns `n`.
- *
- * The function `f` is only called for indices in the range [0, n).
- *
- * @param n - The non-negative integer upper bound of the search range (exclusive).
- * @param f - A function that takes an index `i` and returns a boolean value.
- * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
- *
- * @remarks Adapted from Go's standard library search implementation:
- * {@link https://go.dev/src/sort/search.go}
- *
- * @example
- * `binarySearch(10, (i) => i > 5)` returns `6`.
- */
-export function binarySearch(n: number, f: (i: number) => boolean): number {
-  // Define f(-1) == false and f(n) == true.
-  // Invariant: f(i-1) == false, f(j) == true.
-  let [i, j] = [0, n];
-  while (i < j) {
-    const h = Math.trunc((i + j) / 2);
-    // i ≤ h < j
-    if (!f(h)) {
-      i = h + 1; // preserves f(i-1) == false
-    } else {
-      j = h; // preserves f(j) == true
-    }
-  }
-  // i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
-  return i;
-}
-
-/**
  * Performs asynchronously a binary search to find the smallest index `i` in the range [0, n)
  * such that the function `f(i)` returns true. It is assumed that for the range
  * [0, n), if `f(i)` is true, then `f(i+1)` is also true. This means that there

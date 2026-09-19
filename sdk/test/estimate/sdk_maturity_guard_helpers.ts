@@ -21,8 +21,6 @@ describe("sdk maturity and withdrawal guard helpers", () => {
           isMatchable: true,
         }),
       ],
-      ckbAvailable: 0n,
-      ckbMaturing: [{ ckbCumulative: 100n, maturity: 500n }],
       poolDeposits: [],
     };
 
@@ -43,7 +41,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
         },
         highFeeSystem,
       ),
-    ).toBe(500n);
+    ).toBe(600100n);
     expect(
       maturity(
         {

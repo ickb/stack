@@ -24,7 +24,8 @@ describe("IckbSdk.estimate dust fee search", () => {
     expect(
       estimateIckbToCkbOrder(
         { ckbValue: 0n, udtValue: 10n },
-        system({ ckbAvailable: 10n, feeRate: 0n }),
+        system({ feeRate: 0n }),
+        [],
       ),
     ).toMatchObject({
       maturity: 600000n,
@@ -38,7 +39,11 @@ describe("IckbSdk.estimate dust fee search", () => {
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
-      estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, system({ feeRate: 1n })),
+      estimateIckbToCkbOrder(
+        { ckbValue: 0n, udtValue: 10n },
+        system({ feeRate: 1n }),
+        [],
+      ),
     ).toBeUndefined();
   });
 });

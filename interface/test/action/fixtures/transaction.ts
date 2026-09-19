@@ -103,8 +103,6 @@ export function context(
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
-      ckbAvailable: 0n,
-      ckbMaturing: [],
     },
     cells: [],
     receipts: [],

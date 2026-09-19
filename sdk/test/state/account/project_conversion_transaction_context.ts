@@ -34,8 +34,6 @@ function system(overrides: Partial<SystemState> = {}): SystemState {
     tip: baseTip,
     exchangeRatio: ratio,
     orderPool: [],
-    ckbAvailable: 0n,
-    ckbMaturing: [],
     poolDeposits: [],
     ...overrides,
   };

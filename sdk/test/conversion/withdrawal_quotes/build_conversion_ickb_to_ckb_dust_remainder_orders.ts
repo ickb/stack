@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { ICKB_DEPOSIT_CAP, convert } from "../../../src/udt.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
@@ -55,7 +55,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           exchangeRatio,
           // The default fee pays 10 on this remainder; a threshold of 20 makes it a dust order.
           feeRate: 2n,
-          ckbAvailable: convert(false, ICKB_DEPOSIT_CAP, exchangeRatio),
           poolDeposits: [directDeposit, ringAnchor],
         },
         ckbAvailable: 0n,

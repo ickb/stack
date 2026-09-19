@@ -132,7 +132,8 @@ function ickbToCkbConversionPlan(
   let order: ConversionOrder | undefined;
   if (remainder > 0n) {
     const amounts = { ckbValue: 0n, udtValue: remainder };
-    const estimate = estimateIckbToCkbOrder(amounts, context.system);
+    // The deposits this plan withdraws directly cannot fill its order leg too.
+    const estimate = estimateIckbToCkbOrder(amounts, context.system, selectedDeposits);
     if (estimate === undefined) {
       return undefined;
     }

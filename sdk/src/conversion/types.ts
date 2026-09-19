@@ -264,22 +264,8 @@ export interface SystemState {
   exchangeRatio: Ratio;
   /** Every order past par on the book, the wallet's own included: what the bot can fill. */
   orderPool: OrderGroup[];
-  /** The total available CKB (as FixedPoint). */
-  ckbAvailable: ccc.FixedPoint;
-  /** Array of CKB maturing entries with cumulative amounts and maturity timestamps. */
-  ckbMaturing: CkbCumulative[];
-  /** Every iCKB pool deposit, its readiness evaluated against this tip. */
+  /** Every iCKB pool deposit, its readiness evaluated against this tip: the CKB supply. */
   poolDeposits: IckbDepositCell[];
-}
-
-/**
- * Cumulative CKB maturity bucket used for maturity estimation.
- */
-export interface CkbCumulative {
-  /** The cumulative CKB value (as FixedPoint) up to this maturity. */
-  ckbCumulative: ccc.FixedPoint;
-  /** The maturity timestamp (as ccc.Num). */
-  maturity: ccc.Num;
 }
 
 /** Manager set that builds one iCKB SDK instance. */

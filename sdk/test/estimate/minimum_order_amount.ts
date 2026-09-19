@@ -40,11 +40,12 @@ describe(`${ESTIMATE_SUITE} minimum order amount`, () => {
         const accepted = estimateIckbToCkbOrder(
           { ckbValue: 0n, udtValue: minimum },
           state,
+          [],
         );
         expect(accepted?.ckbFee).toBeGreaterThanOrEqual(0n);
         // Exact: one unit less and the dust search finds no fee that reaches the threshold.
         expect(
-          estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: minimum - 1n }, state),
+          estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: minimum - 1n }, state, []),
         ).toBeUndefined();
       }
     }

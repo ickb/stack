@@ -381,17 +381,26 @@ export class OrderGroup implements ValueComponents {
   public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
   public readonly origin: OrderCell;
+  /** The block that committed the origin, when known: how long the order has been on the book. */
+  public readonly blockNumber: ccc.Num | undefined;
 
   /**
    * Creates an instance of OrderGroup.
    * @param master - The master cell associated with the order group.
    * @param order - The order within the group.
    * @param origin - The original order associated with the group.
+   * @param blockNumber - The block that committed the origin, if committed.
    */
-  constructor(master: MasterCell, order: OrderCell, origin: OrderCell) {
+  constructor(
+    master: MasterCell,
+    order: OrderCell,
+    origin: OrderCell,
+    blockNumber?: ccc.Num,
+  ) {
     this.master = master;
     this.order = order;
     this.origin = origin;
+    this.blockNumber = blockNumber;
   }
 
   /**
@@ -423,8 +432,9 @@ export class OrderGroup implements ValueComponents {
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
+    blockNumber?: ccc.Num,
   ): OrderGroup | undefined {
-    const og = new OrderGroup(master, order, origin);
+    const og = new OrderGroup(master, order, origin, blockNumber);
     if (og.isValid()) {
       return og;
     }

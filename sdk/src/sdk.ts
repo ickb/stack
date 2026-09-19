@@ -3,7 +3,6 @@ import { getConfig } from "./constants.ts";
 import { IckbError } from "./conversion/error.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import { completeFirstFundable } from "./conversion/fundable_walk.ts";
-import { poolCkb } from "./conversion/maturity.ts";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
@@ -137,8 +136,6 @@ const IckbSdkImplementation = class IckbSdk {
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),
     ]);
-    // The CKB that can fill orders is the public pool: ready deposits now, the rest at maturity.
-    const { ready, maturing } = poolCkb(poolDeposits, tip);
     return {
       system: {
         feeRate,
@@ -147,8 +144,6 @@ const IckbSdkImplementation = class IckbSdk {
         // One book, two filters (decisions amendment 52(ak)): the market side is every order
         // past par, the wallet's own included, since the bot fills by price, not by owner.
         orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),
-        ckbAvailable: ready,
-        ckbMaturing: maturing,
         poolDeposits,
       },
       user: { orders: orders.filter((group) => group.isOwner(...locks)) },

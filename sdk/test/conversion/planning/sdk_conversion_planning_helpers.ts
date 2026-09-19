@@ -22,9 +22,7 @@ describe("sdk conversion planning helpers", () => {
       context: conversionContext({
         system: {
           exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
-          ckbAvailable: 1n,
         },
-        ckbAvailable: 1n,
       }),
     });
     const anchorDeposit = projectionReadyDeposit(3n, 0n, { ckbValue: 3n, id: "50" });
@@ -71,7 +69,6 @@ describe("sdk conversion planning helpers", () => {
         lock,
         signer: stubSigner,
         context: conversionContext({
-          system: { ckbAvailable: ccc.fixedPointFrom(1_000_000) },
           ickbAvailable: 4n * unit,
         }),
       },

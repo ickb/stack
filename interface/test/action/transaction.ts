@@ -40,7 +40,6 @@ describe("buildTransactionPreview", () => {
     );
     vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(42n);
     const txContext = context({
-      ckbAvailable: 7n,
       system: { ...context().system, feeRate: 9n },
     });
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });

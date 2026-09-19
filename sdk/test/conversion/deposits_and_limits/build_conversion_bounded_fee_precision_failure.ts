@@ -32,7 +32,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
               ckbScale: (1n << 64n) - 1n,
               udtScale: 1n,
             }),
-            ckbAvailable: 1n,
             poolDeposits: [],
           },
           ckbAvailable: 0n,

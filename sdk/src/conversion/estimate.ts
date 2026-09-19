@@ -1,3 +1,4 @@
+import type { IckbDepositCell } from "../logic.ts";
 import {
   OrderConversionRepresentabilityError,
   quoteConversion,
@@ -22,6 +23,7 @@ export function estimateConversionOrder(
   amounts: ValueComponents,
   system: SystemState,
   { fee, feeBase }: { fee: bigint; feeBase: bigint },
+  takenDeposits: readonly IckbDepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
   let quote: ReturnType<typeof quoteConversion>;
   try {
@@ -34,7 +36,7 @@ export function estimateConversionOrder(
   }
   const estimatedMaturity =
     quote.ckbFee >= estimateMaturityFeeThreshold(system)
-      ? maturity({ info: quote.info, amounts }, system)
+      ? maturity({ info: quote.info, amounts }, system, takenDeposits)
       : undefined;
   return { ...quote, maturity: estimatedMaturity };
 }
@@ -72,11 +74,15 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 export function estimateIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
+  takenDeposits: readonly IckbDepositCell[],
 ): ConversionOrderEstimate | undefined {
-  const base = estimateConversionOrder(false, amounts, system, {
-    fee: DEFAULT_ORDER_FEE,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-  });
+  const base = estimateConversionOrder(
+    false,
+    amounts,
+    system,
+    { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
+    takenDeposits,
+  );
   if (base?.maturity !== undefined) {
     return base;
   }
@@ -97,7 +103,7 @@ export function estimateIckbToCkbOrder(
   if (dust === undefined) {
     return undefined;
   }
-  const estimatedMaturity = maturity({ info: dust.info, amounts }, system);
+  const estimatedMaturity = maturity({ info: dust.info, amounts }, system, takenDeposits);
   return {
     ...dust,
     maturity: estimatedMaturity,

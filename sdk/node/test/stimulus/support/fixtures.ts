@@ -25,8 +25,6 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     tip: headerLike({ number: 1_000_000n }),
     exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
     orderPool: [],
-    ckbAvailable: 0n,
-    ckbMaturing: [],
     poolDeposits: [],
     ...overrides,
   };

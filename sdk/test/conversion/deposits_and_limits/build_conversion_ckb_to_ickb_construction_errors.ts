@@ -28,7 +28,6 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         lock,
         signer: stubSigner,
         context: conversionContext({
-          system: { ckbAvailable: ICKB_DEPOSIT_CAP * 2n },
           ckbAvailable: ICKB_DEPOSIT_CAP * 2n,
           ickbAvailable: 0n,
         }),

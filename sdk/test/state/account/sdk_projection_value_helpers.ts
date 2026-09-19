@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { poolCkb } from "../../../src/conversion/maturity.ts";
 import {
   projectAccountAvailability,
   sumUdt,
@@ -10,30 +9,12 @@ import {
   plainCapacityCell,
   projectionReadyDeposit,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
 
 describe("sdk projection value helpers", () => {
-  it("splits the pool into ready CKB and cumulative maturing buckets", () => {
-    const readyDeposit = projectionReadyDeposit(5n, 40n, { ckbValue: 50n, id: "43" });
-    const later = projectionReadyDeposit(7n, 60n, {
-      ckbValue: 70n,
-      id: "44",
-      isReady: false,
-    });
-    const earlier = projectionReadyDeposit(2n, 50n, {
-      ckbValue: 20n,
-      id: "45",
-      isReady: false,
-    });
-
-    expect(poolCkb([readyDeposit, later, earlier], baseTip)).toEqual({
-      ready: 50n,
-      maturing: [
-        { ckbCumulative: 20n, maturity: 50n },
-        { ckbCumulative: 90n, maturity: 60n },
-      ],
-    });
-    expect(sumUdt([readyDeposit, later])).toBe(12n);
+  it("sums the iCKB of deposits", () => {
+    expect(
+      sumUdt([projectionReadyDeposit(5n, 40n), projectionReadyDeposit(7n, 60n)]),
+    ).toBe(12n);
   });
 });
 

@@ -145,8 +145,7 @@ describe(L1_STATE_SUITE, () => {
     const [withdrawal, pending] = account.withdrawalGroups;
     expect(withdrawal?.owned.isReady).toBe(true);
     expect(pending?.owned.isReady).toBe(false);
-    expect(system.ckbAvailable).toBe(0n);
-    expect(system.ckbMaturing).toEqual([]);
+    expect(system.poolDeposits).toEqual([]);
   });
 });
 
