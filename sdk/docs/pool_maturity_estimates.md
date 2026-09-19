@@ -6,7 +6,7 @@ How the SDK dates an order-based conversion for the interface's "Ready:" line. T
 
 `getL1AccountState` samples one tip and reads:
 
-- `system.orderPool`: every order past par on the book, the wallet's own included; the bot fills by price, not by owner.
+- `system.orderPool`: every order past par on the book, the wallet's own included; the bot fills by price, not by owner. A dual-ratio order (both directions priced) is dropped at the scan: nothing in the stack places one, so it is neither matched, estimated, shown nor melted here.
 - `system.poolDeposits`: every iCKB pool deposit with its real claim date (the next DAO claim epoch, rolled a cycle when too close to request now). No readiness collapse: a deposit counts on its date, three days out or thirty.
 - Each order group's `blockNumber`, the block that committed its origin, read from the same transaction response the scan already fetches. An uncommitted origin has none.
 
@@ -25,9 +25,9 @@ The seller waits for CKB. Supply, in time order:
 1. Now: one deposit's worth of CKB (the cap at the DAO ratio), the bot's working capital, unless a fillable seller has already sat on the book for more than a turn (its origin is more than a twenty-fourth of an epoch of blocks below the tip). Then the bot evidently has none to give, and this term is zero.
 2. Each pool deposit at its real claim date, earliest first, less the deposits the same plan withdraws directly (they cannot fill its order leg too).
 
-Demand is the CKB this order pays out, plus the CKB of every fillable seller priced better than it (asking fewer CKB per iCKB, strictly; ties are not possible since the DAO ratio moves every block), valued at the DAO ratio.
+Demand is the CKB this order pays out, plus the CKB of every fillable seller priced at or better than it (asking at most its CKB per iCKB; a tie is filled in an order of the bot's choosing, so it counts as ahead), valued at the DAO ratio. When the order is already on the book it is left out of its own queue.
 
-The estimate is the first date whose cumulative supply covers the demand, plus one turn. No such date reads "waiting for CKB liquidity" (`maturity` returns `undefined`).
+The estimate is the first date whose cumulative supply covers the demand, plus one turn. Every iCKB is backed by a pool deposit that matures within one DAO cycle, so the pool always covers an order at par. An order asking above par may outrun the pool's CKB at today's ratio; it waits for the DAO ratio to reach its ask, later than any claim date, and reads the pool's last claim date plus one turn, an understatement accepted as the nearest date the model knows.
 
 ## A buyer (CKB to iCKB)
 
@@ -41,7 +41,7 @@ Plans are ordered direct first (the most deposits withdrawn directly), and the c
 
 ## Accepted limits
 
-- The bot filling early is a pleasant surprise; the reverse was a broken promise. In a thin pool with a sitting seller the line reads the next claim date or "waiting for CKB liquidity" where the bot might fill within a turn.
+- The bot filling early is a pleasant surprise; the reverse was a broken promise. In a thin pool with a sitting seller the line reads the next claim date where the bot might fill within a turn.
 - A buyer-side distress signal (a fillable buyer sitting for over a turn) is not modelled; add it only when a journal shows buyers sitting.
 - In-flight withdrawal requests are not read as a dated supply grade; the simpler policy was preferred.
 - The pool is read by direct scans, whose cost grows with the pool. A bot-written snapshot would need an explicit format identity, a writer, a reader, freshness and fallback rules; none exists yet.

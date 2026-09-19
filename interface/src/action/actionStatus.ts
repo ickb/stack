@@ -130,12 +130,7 @@ function isAvailabilityMessage(message: string): boolean {
 }
 
 function conversionNoticeText(notice: NonNullable<TxInfo["conversionNotice"]>): string {
-  const inputIckb = toText(notice.inputIckb);
-  const outputCkb = toText(notice.outputCkb);
-  const incentiveCkb = toText(notice.incentiveCkb);
-  return notice.kind === "maturity-unavailable"
-    ? `This request converts ${inputIckb} iCKB to about ${outputCkb} CKB. Timing is not available yet.`
-    : `This small request converts ${inputIckb} iCKB to about ${outputCkb} CKB and pays ${incentiveCkb} CKB for the variable time.`;
+  return `This small request converts ${toText(notice.inputIckb)} iCKB to about ${toText(notice.outputCkb)} CKB and pays ${toText(notice.incentiveCkb)} CKB for the variable time.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {
@@ -166,14 +161,6 @@ export function conversionIntentText(
 /** Returns true only for a broadcastable preview with real transaction activity. */
 export function isTxInfoValid(txInfo: TxInfo, hasActivity: boolean): boolean {
   return hasActivity && txInfo.fee > 0n && txInfo.error === "";
-}
-
-export function shownMaturityText(txInfo: TxInfo, maturity: string): string {
-  if (txInfo.conversionNotice?.maturityEstimateUnavailable === true) {
-    return "waiting for CKB liquidity";
-  }
-
-  return maturity;
 }
 
 export function actionLabel(

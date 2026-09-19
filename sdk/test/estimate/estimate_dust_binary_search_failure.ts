@@ -8,8 +8,6 @@ import { Info } from "../../src/order/info.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 
 const CONVERSION_MODULE = "../../src/order/conversion.ts";
-const DUST_NOTICE = "dust-ickb-to-ckb";
-
 afterEach(() => {
   vi.doUnmock(CONVERSION_MODULE);
   vi.resetModules();
@@ -29,7 +27,7 @@ describe("IckbSdk.estimate dust fee search", () => {
       ),
     ).toMatchObject({
       maturity: 600000n,
-      notice: { kind: DUST_NOTICE, incentiveCkb: 0n },
+      notice: { incentiveCkb: 0n },
     });
   });
 

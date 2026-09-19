@@ -85,12 +85,10 @@ export type ConversionTransactionFailureReason =
   | "nothing-to-do";
 
 /**
- * Non-fatal conversion notice for callers to surface in UI or logs.
+ * A dust iCKB-to-CKB order: too small for the default fee to clear the estimate threshold,
+ * so it pays the smallest fee that does. For callers to surface in UI or logs.
  */
 export interface ConversionNotice {
-  /** Notice category. */
-  kind: "dust-ickb-to-ckb" | "maturity-unavailable";
-
   /** iCKB input amount that triggered the notice. */
   inputIckb: bigint;
 
@@ -99,9 +97,6 @@ export interface ConversionNotice {
 
   /** CKB incentive associated with the noticed path. */
   incentiveCkb: bigint;
-
-  /** True when maturity could not be estimated from available state. */
-  maturityEstimateUnavailable: boolean;
 }
 
 /**

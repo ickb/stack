@@ -211,7 +211,12 @@ export class OrderManager implements ScriptDeps {
       return undefined;
     }
     const group = OrderGroup.tryFrom(master, order, found.origin, found.blockNumber);
-    return group === undefined ? undefined : attestResolvedOrderGroup(group);
+    // A dual-ratio order, valid on chain but placed by nothing in the stack, is left to
+    // whoever placed it: neither matched, estimated, shown nor melted here (52(al)).
+    if (group === undefined || group.order.data.info.isDualRatio()) {
+      return undefined;
+    }
+    return attestResolvedOrderGroup(group);
   }
 
   /**

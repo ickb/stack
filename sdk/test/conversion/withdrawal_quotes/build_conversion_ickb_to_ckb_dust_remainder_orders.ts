@@ -19,8 +19,6 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-const DUST_ICKB_TO_CKB = "dust-ickb-to-ckb";
-
 describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
   it("builds iCKB-to-CKB direct withdrawals plus dust remainder orders", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
@@ -65,13 +63,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     expect(result).toMatchObject({
       ok: true,
       conversion: { kind: DIRECT_PLUS_ORDER },
-      conversionNotice: {
-        kind: DUST_ICKB_TO_CKB,
-        inputIckb: 100000n,
-        outputCkb: 100062n,
-        incentiveCkb: 20n,
-        maturityEstimateUnavailable: false,
-      },
+      conversionNotice: { inputIckb: 100000n, outputCkb: 100062n, incentiveCkb: 20n },
     });
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
     expect(mint).toHaveBeenCalledTimes(1);

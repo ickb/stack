@@ -24,13 +24,7 @@ afterEach(() => {
 describe("buildTransactionPreview", () => {
   it("delegates planning and completion to the SDK and reports the completed fee", async () => {
     const tx = txWithInput("99");
-    const notice = {
-      kind: "dust-ickb-to-ckb" as const,
-      inputIckb: 1n,
-      outputCkb: 1n,
-      incentiveCkb: 0n,
-      maturityEstimateUnavailable: false,
-    };
+    const notice = { inputIckb: 1n, outputCkb: 1n, incentiveCkb: 0n };
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({
         tx,

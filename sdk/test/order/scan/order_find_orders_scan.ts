@@ -16,6 +16,7 @@ import {
 import {
   absoluteOrderCell,
   directionalInfo,
+  dualInfo,
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
@@ -213,5 +214,43 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const groups = await manager.findOrders(client);
 
     expect(groups).toHaveLength(1);
+  });
+
+  it("drops a dual-ratio order at the scan", async () => {
+    // Valid on chain, placed by nothing in the stack: left to whoever placed it.
+    const { manager, orderScript, ownerLock } = findOrdersFixture();
+    const master = ccc.OutPoint.from({ txHash: byte32FromByte("36"), index: 1n });
+    const order = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: ccc.fixedPointFrom(100),
+      info: dualInfo(),
+      master: { type: "absolute", value: master },
+      lock: orderScript,
+      outPoint: { txHash: byte32FromByte("37"), index: 0n },
+    });
+    const liveMaster = masterCell(master, orderScript, ownerLock);
+    const tx = transactionWithOutputs([
+      makeOrderCell({
+        ckbUnoccupied: ccc.fixedPointFrom(100),
+        udtValue: ccc.fixedPointFrom(100),
+        info: dualInfo(),
+        master: { type: "relative", value: Relative.create(1n) },
+        lock: orderScript,
+        outPoint: { txHash: master.txHash, index: 0n },
+      }).cell,
+      liveMaster,
+    ]);
+    const client = new StubClient({
+      cache: new ccc.ClientCacheMemory(),
+      findCellsPagedNoCache: pagedCells((query) =>
+        query.scriptType === "lock" ? [order.cell] : [liveMaster],
+      ),
+      getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
+        await Promise.resolve();
+        return txHash === master.txHash ? transactionResponse(tx) : undefined;
+      },
+    });
+
+    await expect(manager.findOrders(client)).resolves.toEqual([]);
   });
 });

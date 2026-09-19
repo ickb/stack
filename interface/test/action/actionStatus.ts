@@ -4,7 +4,6 @@ import {
   actionMessage,
   conversionIntentText,
   isTxInfoValid,
-  shownMaturityText,
   timeUntilMaturity,
   unavailableConversionMessage,
   type ActionFlags,
@@ -56,26 +55,9 @@ describe("action status", () => {
         {
           ...txInfo,
           conversionNotice: {
-            kind: "maturity-unavailable",
-            inputIckb: 2n * 100000000n,
-            outputCkb: 3n * 100000000n,
-            incentiveCkb: 0n,
-            maturityEstimateUnavailable: true,
-          },
-        },
-        flags(),
-      ),
-    ).toBe("This request converts 2 iCKB to about 3 CKB. Timing is not available yet.");
-    expect(
-      actionMessage(
-        {
-          ...txInfo,
-          conversionNotice: {
-            kind: "dust-ickb-to-ckb",
             inputIckb: 1n * 100000000n,
             outputCkb: 2n * 100000000n,
             incentiveCkb: 25_000_000n,
-            maturityEstimateUnavailable: false,
           },
         },
         flags(),
@@ -131,29 +113,13 @@ describe("action status", () => {
     expect(conversionIntentText(kind)).toBe(expected);
   });
 
-  it("derives validity and the maturity text from the preview", () => {
+  it("derives validity from the preview", () => {
     const txInfo = activeTxInfo();
 
     expect(isTxInfoValid(txInfo, true)).toBe(true);
     expect(isTxInfoValid({ ...txInfo, fee: 0n }, true)).toBe(false);
     expect(isTxInfoValid({ ...txInfo, error: "bad" }, true)).toBe(false);
     expect(isTxInfoValid(txInfo, false)).toBe(false);
-    expect(shownMaturityText(txInfo, "Ready")).toBe("Ready");
-    expect(
-      shownMaturityText(
-        {
-          ...txInfo,
-          conversionNotice: {
-            kind: "maturity-unavailable",
-            inputIckb: 1n,
-            outputCkb: 1n,
-            incentiveCkb: 0n,
-            maturityEstimateUnavailable: true,
-          },
-        },
-        "Ready",
-      ),
-    ).toBe("waiting for CKB liquidity");
   });
 
   it("waits for the destination and names an invalid one", () => {

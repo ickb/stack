@@ -136,9 +136,7 @@ function ickbToCkbConversionPlan(
     if (estimate === undefined) {
       return undefined;
     }
-    if (estimate.maturity !== undefined) {
-      estimatedMaturity = maxBigInt(estimatedMaturity, estimate.maturity);
-    }
+    estimatedMaturity = maxBigInt(estimatedMaturity, estimate.maturity);
     order = { amounts, estimate };
   }
 

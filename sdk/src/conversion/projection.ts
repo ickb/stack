@@ -26,9 +26,7 @@ export function projectConversionTransactionContext(
     ...projection.pendingWithdrawals.map((group) =>
       group.owned.maturity.toUnix(system.tip),
     ),
-    ...projection.pendingOrders
-      .map((group) => maturity(group.order, system))
-      .filter((estimate): estimate is bigint => estimate !== undefined),
+    ...projection.pendingOrders.map((group) => maturity(group.order, system)),
   ].reduce(maxBigInt, system.tip.timestamp);
 
   return {

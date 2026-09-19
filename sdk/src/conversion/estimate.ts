@@ -68,14 +68,14 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 
 /**
  * The order leg of an iCKB-to-CKB conversion: at the default fee when that fee clears the
- * maturity threshold, else the smallest fee that does (a dust order, noticed), else the
- * default-fee quote with a maturity-unavailable notice.
+ * maturity threshold, else the smallest fee that does (a dust order, noticed). Either way
+ * it is dated: a sell order at par is always covered by the pool (see `maturity`).
  */
 export function estimateIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
   takenDeposits: readonly IckbDepositCell[],
-): ConversionOrderEstimate | undefined {
+): (ConversionOrderEstimate & { maturity: bigint }) | undefined {
   const base = estimateConversionOrder(
     false,
     amounts,
@@ -84,35 +84,20 @@ export function estimateIckbToCkbOrder(
     takenDeposits,
   );
   if (base?.maturity !== undefined) {
-    return base;
-  }
-  if (base !== undefined && base.ckbFee >= estimateMaturityFeeThreshold(system)) {
-    return {
-      ...base,
-      notice: {
-        kind: "maturity-unavailable",
-        inputIckb: amounts.udtValue,
-        outputCkb: base.convertedAmount,
-        incentiveCkb: positiveFee(base.ckbFee),
-        maturityEstimateUnavailable: true,
-      },
-    };
+    return { ...base, maturity: base.maturity };
   }
 
   const dust = estimateDustIckbToCkbOrder(amounts, system);
   if (dust === undefined) {
     return undefined;
   }
-  const estimatedMaturity = maturity({ info: dust.info, amounts }, system, takenDeposits);
   return {
     ...dust,
-    maturity: estimatedMaturity,
+    maturity: maturity({ info: dust.info, amounts }, system, takenDeposits),
     notice: {
-      kind: "dust-ickb-to-ckb",
       inputIckb: amounts.udtValue,
       outputCkb: dust.convertedAmount,
       incentiveCkb: positiveFee(dust.ckbFee),
-      maturityEstimateUnavailable: estimatedMaturity === undefined,
     },
   };
 }

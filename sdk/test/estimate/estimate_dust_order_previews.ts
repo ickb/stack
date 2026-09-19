@@ -63,8 +63,6 @@ async function orderFromEstimate(
   });
 }
 
-const DUST_ICKB_TO_CKB = "dust-ickb-to-ckb";
-
 describe(ESTIMATE_SUITE, () => {
   it("does not advertise one-sat iCKB-to-CKB dust orders below the fee threshold", () => {
     const result = estimateIckbToCkbOrder(
@@ -142,7 +140,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
     expect(result).toMatchObject({
       maturity: 600000n,
-      notice: { kind: DUST_ICKB_TO_CKB, incentiveCkb: 0n },
+      notice: { incentiveCkb: 0n },
     });
   });
 
@@ -184,7 +182,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
     expect(result).toMatchObject({
       maturity: 601234n,
-      notice: { kind: DUST_ICKB_TO_CKB, maturityEstimateUnavailable: false },
+      notice: { inputIckb: 100000n },
     });
   });
 
@@ -252,11 +250,7 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       throw new Error("Expected dust iCKB-to-CKB order estimate");
     }
     expect(result.maturity).toBe(601234n);
-    expect(result.notice).toMatchObject({
-      kind: DUST_ICKB_TO_CKB,
-      inputIckb: 1000000n,
-      maturityEstimateUnavailable: false,
-    });
+    expect(result.notice).toMatchObject({ inputIckb: 1000000n });
     expect(result.ckbFee).toBeGreaterThanOrEqual(332220n);
     expect(result.convertedAmount).toBeGreaterThan(0n);
     expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual(maxUint64);

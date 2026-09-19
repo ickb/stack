@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
+import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { quoteConversion } from "../../src/order/conversion.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
 import { Ratio } from "../../src/order/ratio.ts";
@@ -40,25 +41,19 @@ describe(ESTIMATE_SUITE, () => {
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
   });
 
-  it("builds normal iCKB-to-CKB orders when maturity is unavailable", () => {
-    // A fillable seller left on the book for over a turn: the bot has no CKB to give.
+  it("dates a sell order even with a sitting seller and no pool", () => {
+    // A fillable seller left on the book for over a turn: the bot has no CKB to give now,
+    // so the order reads the pool's last claim date, here the tip (timestamp zero), plus a turn.
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
       system({ orderPool: [sittingSeller(0n)], tip: headerLike(1n) }),
       [],
     );
 
-    if (result === undefined) {
-      throw new Error("Expected iCKB-to-CKB order estimate");
-    }
-    expect(result.maturity).toBeUndefined();
-    expect(result.notice).toEqual({
-      kind: "maturity-unavailable",
-      inputIckb: 1000000n,
-      outputCkb: 999900n,
-      incentiveCkb: 100n,
-      maturityEstimateUnavailable: true,
+    expect(result).toMatchObject({
+      maturity: BOT_TURN_MS,
+      info: { ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT },
     });
-    expect(result.info.ckbMinMatchLog).toBe(CKB_MIN_MATCH_LOG_DEFAULT);
+    expect(result?.notice).toBeUndefined();
   });
 });

@@ -15,7 +15,6 @@ import {
   actionMessage,
   confirmPreviewMessage,
   isTxInfoValid,
-  shownMaturityText,
   timeUntilMaturity,
   unavailableConversionMessage,
 } from "./actionStatus.ts";
@@ -193,7 +192,7 @@ export default function Action({
       message={messageText}
       // Maturity and fee describe a transaction; before a valid preview there is none.
       fee={isValid ? `${toText(txInfo.fee)} CKB` : "..."}
-      maturity={isValid ? shownMaturityText(txInfo, maturity) : "..."}
+      maturity={isValid ? maturity : "..."}
     />
   );
 }
