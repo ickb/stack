@@ -13,7 +13,7 @@ ExecStart=/home/user/.local/share/fnm/node-versions/v24.18.0/installation/bin/no
 Environment=BOT_CHAIN=testnet
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
-# A turn is a slow read plus at most the ten-minute wait window; a process still alive at
+# A turn is a slow read plus at most the two-minute wait window; a process still alive at
 # thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
 RuntimeMaxSec=30min
 # Every exit starts the next turn after a minute; a turn never holds.

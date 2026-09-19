@@ -14,7 +14,7 @@ describe("bot events", () => {
         txHash: `0x${"44".repeat(32)}`,
         status: "committed",
         elapsedMs: 12,
-        timeoutMs: 600_000,
+        timeoutMs: 120_000,
         intervalMs: 10_000,
       });
     } finally {

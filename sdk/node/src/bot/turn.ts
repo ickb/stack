@@ -18,7 +18,11 @@ export interface BotTurnContext {
   runtime: Runtime;
 }
 
-export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 600_000;
+// The wait only lets this turn journal its own commit: the next turn rebuilds from committed
+// state. A withdrawal request is built inside a fifteen-minute lock-up window, so a ten-minute
+// wait on a stuck one left five minutes to rebuild it before the deposit locked for another
+// thirty days. Two minutes covers every commit journalled so far (77 s at most, 54 s at p90).
+export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /** Runs one bot turn: read state, decide, and at most one broadcast with its confirmation wait. */
