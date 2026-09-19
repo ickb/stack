@@ -85,27 +85,16 @@ export function runtime({
   system = systemState(),
   account = accountState(),
   orders = [],
-  originBlocks = new Map<ccc.Hex, bigint | undefined>(),
   sdk = {},
   order = getConfig("testnet").order,
 }: {
   system?: SystemState;
   account?: StimulusState["account"];
   orders?: OrderGroup[];
-  originBlocks?: Map<ccc.Hex, bigint | undefined>;
   sdk?: Partial<Runtime["sdk"]>;
   order?: Runtime["order"];
 } = {}): Runtime {
-  const client = new StubClient({
-    getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
-      await Promise.resolve();
-      const blockNumber = originBlocks.get(ccc.hexFrom(txHash));
-      return committedTransactionResponse(
-        ccc.Transaction.default(),
-        blockNumber === undefined ? {} : { blockNumber },
-      );
-    },
-  });
+  const client = new StubClient();
   const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
   return {
     client,
@@ -129,10 +118,12 @@ const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };
  * A resolver-produced order group under the testnet order scripts, so the real SDK melts
  * it; matchable orders carry 100 CKB and, by default, a buy price well above par.
  */
+/** An order group as the scan resolves it; `blockNumber` dates its origin, none is uncommitted. */
 export async function order(
   txHashByte: string,
   isMatchable: boolean,
   ckbToUdt: ExchangeRatio = TWO_CKB_PER_UDT,
+  blockNumber?: bigint,
 ): Promise<OrderGroup> {
   const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
   const manager = getConfig("testnet").order;
@@ -180,7 +171,10 @@ export async function order(
     ),
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
-      return committedTransactionResponse(transaction);
+      return committedTransactionResponse(
+        transaction,
+        blockNumber === undefined ? {} : { blockNumber },
+      );
     },
   });
   const groups = await manager.findOrders(client);

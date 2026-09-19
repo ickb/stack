@@ -107,17 +107,6 @@ export function selectReadyWithdrawalDeposits(
   return deposits;
 }
 
-/** The pool's ready deposits, earliest maturity first. */
-export function readyPoolDeposits(
-  poolDeposits: readonly IckbDepositCell[],
-  tip: ccc.ClientBlockHeader,
-): IckbDepositCell[] {
-  return sortByMaturity(
-    poolDeposits.filter((deposit) => deposit.isReady),
-    tip,
-  );
-}
-
 /** Earliest maturity first: the deposit that turns into CKB soonest. */
 export function sortByMaturity(
   deposits: readonly IckbDepositCell[],

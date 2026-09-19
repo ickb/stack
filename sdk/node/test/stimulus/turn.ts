@@ -124,7 +124,7 @@ async function turn(target: Runtime, override: Override = {}): Promise<StimulusL
 
 describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
-    const fresh = await order("a2", true);
+    const fresh = await order("a2", true, undefined, 1_000_000n);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
     const orderManager = getConfig("testnet").order;
     const mint = vi.spyOn(orderManager, "mint");
@@ -147,7 +147,6 @@ describe("runStimulusTurn", () => {
           receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
         }),
         orders: live,
-        originBlocks: new Map([[fresh.origin.cell.outPoint.txHash, 1_000_000n]]),
         sdk: { buildConversionTransaction },
         order: orderManager,
       }),
@@ -237,7 +236,7 @@ describe("runStimulusTurn", () => {
   });
 
   it("falls back to collecting when the drawn action is refused", async () => {
-    const stale = await order("a3", true);
+    const stale = await order("a3", true, undefined, 1n);
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
     >(async (_txLike, options) => {
@@ -260,7 +259,6 @@ describe("runStimulusTurn", () => {
       runtime({
         account: fundedAccount,
         orders: [stale],
-        originBlocks: new Map([[stale.origin.cell.outPoint.txHash, 1n]]),
         sdk: { ...completing(500n * CKB), buildConversionTransaction },
       }),
       { ...orderDraw, amount: 0n },

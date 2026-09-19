@@ -6,13 +6,11 @@ The Stack rewrite is in progress. The [rewrite overview](docs/stack-rewrite/READ
 
 ## Transaction Completion Boundary
 
-`IckbSdk.buildConversionTransaction(...)` returns a completed transaction: the SDK completes each candidate plan against the signer's committed cells and returns the first fundable one, so a caller only signs and sends. The lower-level builders (`buildBaseTransaction`, `request`, `collect`, and the package managers) still return partial transactions; a caller composing them calls `sdk.completeTransaction(...)` before sending.
+`IckbSdk.buildConversionTransaction(...)` returns a completed transaction: the SDK completes each candidate plan against the signer's committed cells and returns the first fundable one, so a caller only signs and sends (`signAndSendTransaction`) and waits (`waitTransaction`). The managers behind it are internal to the package.
 
-Withdrawal requests built from public pool ready deposits may include `requiredLiveDeposits`. `@ickb/sdk` adds those cells as live `cell_dep` checks so a transaction fails if a protected pool anchor disappears before inclusion.
+## Cell Scans
 
-## Scan Page Size Boundary
-
-Stack cell scans that feed account state, pool state, order books, or maturity estimates use a per-request page size. SDK state APIs expose it as `cellPageSize`; lower-level scan wrappers expose it as `pageSize` and pass it to CCC as `limit`.
+Every Stack cell scan, for account state, the pool, the order book, or the maturity estimate, is one uncached paging loop at a fixed page of 400 cells that stops on the first short page; there is no page-size knob (decisions amendment 52(c)).
 
 ## User Lock Assumption
 
@@ -29,7 +27,7 @@ Apps are private workspace runtimes and run from source under Node 22.19+ or Vit
 
 Packages:
 
-- `sdk`: the one published package. `src/core` holds the iCKB protocol primitives, cells, transaction builders, the Nervos DAO cells and builders, and the ring and withdrawal selection; `src/order` the UDT limit-order entities, matching, minting, and melting; `src/conversion` the state read, projection, estimates, conversion plans, and the completion walk; `src/send` signing, sending, and confirmation; and `src/utils` the one uncached cell paging loop and shared helpers.
+- `sdk`: the one published package. One file per on-chain script at the top of `src` (`udt.ts` the iCKB token, `logic.ts` deposits and receipts, `owned_owner.ts` withdrawal requests and withdrawals, `dao.ts` the shared Nervos DAO rules); `src/order` the UDT limit-order entities, matching, minting, and melting; `src/conversion` the state read, projection, estimates, conversion plans, the withdrawal ring, and the completion walk; `src/send` signing, sending, and confirmation; and `src/utils` the one uncached cell paging loop and shared helpers.
 - `testkit`: Private test helpers and fixtures for workspace tests.
 
 ## Dependencies

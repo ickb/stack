@@ -1,6 +1,6 @@
 # Bot Policy
 
-The behaviour of `sdk/node/src/bot/` as settled in decisions amendment 52: `policy.ts` decides, `runtime/transaction.ts` builds, `turn.ts` sends once and waits.
+The behaviour of `sdk/node/src/bot/` as settled in decisions amendment 52: `policy.ts` decides, `transaction.ts` builds, `turn.ts` sends once and waits.
 
 ## The policy
 

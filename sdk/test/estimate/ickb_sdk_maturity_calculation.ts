@@ -13,9 +13,9 @@ import { fillableBuyer, sittingSeller } from "./support/estimate_support.ts";
 
 const CAP = ICKB_DEPOSIT_CAP;
 const tip = headerLike(1n, { timestamp: 100n });
-const seller = (udtValue: bigint, ckbValue = 0n): Parameters<typeof maturity>[0] => ({
+const seller = (udtValue: bigint): Parameters<typeof maturity>[0] => ({
   info: Info.create(false, ratio),
-  amounts: { ckbValue, udtValue },
+  amounts: { ckbValue: 0n, udtValue },
 });
 const buyer = (ckbValue: bigint): Parameters<typeof maturity>[0] => ({
   info: Info.create(true, ratio),
@@ -65,8 +65,12 @@ describe("maturity of a seller", () => {
     expect(maturity(seller(CAP + 1n), state, [taken])).toBe(5000n + BOT_TURN_MS);
   });
 
-  it("counts the CKB already in the order against what it needs", () => {
-    expect(maturity(seller(CAP + 1n, 1n), system({ tip }))).toBe(100n + BOT_TURN_MS);
+  it("owes the remaining iCKB at its price whatever CKB earlier fills already paid in", () => {
+    const halfFilled: Parameters<typeof maturity>[0] = {
+      info: Info.create(false, ratio),
+      amounts: { ckbValue: CAP, udtValue: CAP + 1n },
+    };
+    expect(maturity(halfFilled, system({ tip }))).toBeUndefined();
   });
 
   it("gives the bot no CKB while a fillable seller has sat on the book for over a turn", () => {

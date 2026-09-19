@@ -6,6 +6,7 @@ import {
   depositData,
   depositMaturity,
   isDaoDeposit,
+  pushHeaderDep,
   type LockUpWindow,
 } from "./dao.ts";
 import {
@@ -174,10 +175,7 @@ export class LogicManager implements ScriptDeps {
     }
     tx.addCellDeps(this.cellDeps);
     for (const receipt of receipts) {
-      const hash = receipt.header.header.hash;
-      if (!tx.headerDeps.includes(hash)) {
-        tx.headerDeps.push(hash);
-      }
+      pushHeaderDep(tx, receipt.header.header.hash);
       tx.addInput(receipt.cell);
     }
     return tx;

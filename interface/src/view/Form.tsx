@@ -8,11 +8,11 @@ import {
   toText,
   twoDecimals,
 } from "../shared/utils.ts";
-import { conversionQuote } from "../view/formState.ts";
 import {
   amountQuoteText,
   type AssetDisplay,
   caretAfter,
+  conversionQuote,
   formAssets,
 } from "./formState.ts";
 

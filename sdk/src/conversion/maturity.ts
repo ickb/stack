@@ -36,7 +36,7 @@ export function maturity(
 
   return isCkb2Udt
     ? ckbToIckbOrderMaturity(info, amount, system)
-    : ickbToCkbOrderMaturity(info, amounts, amount, system, takenDeposits);
+    : ickbToCkbOrderMaturity(info, amount, system, takenDeposits);
 }
 
 function maturityOrderParts(o: MaturityOrderInput): {
@@ -83,7 +83,6 @@ function ckbToIckbOrderMaturity(info: Info, amount: bigint, system: SystemState)
  */
 function ickbToCkbOrderMaturity(
   info: Info,
-  amounts: ValueComponents,
   amount: bigint,
   system: SystemState,
   takenDeposits: readonly IckbDepositCell[],
@@ -92,9 +91,10 @@ function ickbToCkbOrderMaturity(
   const sellersAhead = sellers
     .filter((group) => info.udtToCkb.compare(group.order.data.info.udtToCkb) < 0)
     .reduce((udt, group) => udt + group.udtValue, 0n);
+  // The CKB an order has already received belongs to its earlier fills; what it still
+  // needs is the remaining iCKB at its price.
   const needed =
-    info.udtToCkb.convert(false, amount, true) -
-    amounts.ckbValue +
+    info.udtToCkb.convert(false, amount, true) +
     convert(false, sellersAhead, system.exchangeRatio);
   const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
   const steps = [

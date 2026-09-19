@@ -118,10 +118,15 @@ function parseRpcUrl({ name, value }: EnvValue): PublicRpcEndpointIdentity {
   }
   const { protocol } = url;
   if (
-    protocol !== "http:" &&
-    protocol !== "https:" &&
-    protocol !== "ws:" &&
-    protocol !== "wss:"
+    (protocol !== "http:" &&
+      protocol !== "https:" &&
+      protocol !== "ws:" &&
+      protocol !== "wss:") ||
+    // Userinfo would travel in every request and in the transport's error text; the
+    // URL parser strips control characters silently, so they are refused here too.
+    url.username !== "" ||
+    url.password !== "" ||
+    /[\s\p{Cc}]/u.test(value)
   ) {
     throw invalidEnvError(name);
   }

@@ -16,7 +16,6 @@ import type {
   IckbToCkbConversionPlan,
 } from "./types.ts";
 import {
-  readyPoolDeposits,
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
 } from "./withdrawal_ring.ts";
@@ -70,7 +69,7 @@ export function ickbToCkbConversionPlans(
   const { amount, context } = options;
   const isSurplus = ringSurplusDepositFilter(poolDeposits);
   const deposits = selectReadyWithdrawalDeposits(
-    readyPoolDeposits(poolDeposits, context.system.tip).filter(isSurplus),
+    poolDeposits.filter((deposit) => deposit.isReady && isSurplus(deposit)),
     amount,
     context.system.tip,
   );

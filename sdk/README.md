@@ -4,7 +4,7 @@ iCKB SDK built on top of CCC
 
 ## Layout
 
-One package, five internal directories by protocol domain: `src/core` (iCKB and Nervos DAO cells, transaction builders, ring and withdrawal selection), `src/order` (UDT limit orders and matching), `src/conversion` (state read, projection, estimates, plans, completion), `src/send` (sign, send, wait), and `src/utils` (the one uncached cell paging loop and shared helpers). The only runtime dependency is `@ckb-ccc/core`, and nothing here imports Node built-ins, so the package runs in the browser.
+One package, one file per on-chain script at the top of `src` (`udt.ts` the iCKB token, `logic.ts` deposits and receipts, `owned_owner.ts` withdrawal requests and withdrawals, `dao.ts` the shared Nervos DAO rules) and four directories by concern: `src/order` (UDT limit orders and matching), `src/conversion` (state read, projection, estimates, plans, the withdrawal ring, completion), `src/send` (sign, send, wait), and `src/utils` (the one uncached cell paging loop and shared helpers). The only barrel is `src/index.ts`. The only runtime dependency is `@ckb-ccc/core`, and nothing here imports Node built-ins, so the package runs in the browser.
 
 ## Send Confirmation
 

@@ -37,16 +37,16 @@ describe("runtime config env", () => {
         pathname: "/",
       },
     });
-    // The URL string reaches only the client; its identity carries no query, no credentials.
+    // The URL string reaches only the client; its identity carries no query.
     await expect(
       readConfig({
         BOT_CHAIN: "mainnet",
-        BOT_RPC_URL: "https://user:password@rpc.example:8443/path?token=abc#private",
+        BOT_RPC_URL: "https://rpc.example:8443/path?token=abc#private",
       }),
     ).resolves.toEqual({
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: "https://user:password@rpc.example:8443/path?token=abc#private",
+      rpcUrl: "https://rpc.example:8443/path?token=abc#private",
       rpcEndpoint: {
         mode: "exclusive",
         protocol: "https:",
@@ -134,9 +134,17 @@ describe("runtime config private key file", () => {
 });
 
 describe("runtime config RPC URL", () => {
-  it("rejects malformed and non-HTTP URLs without exposing them", async () => {
+  it("rejects malformed, non-HTTP, credentialed and whitespace URLs without exposing them", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
-    for (const rpcUrl of ["file:///tmp/socket", "https://[bad", "not a url"]) {
+    for (const rpcUrl of [
+      "file:///tmp/socket",
+      "https://[bad",
+      "not a url",
+      "https://user:password@rpc.example/",
+      "https://user@rpc.example/",
+      "https://rpc.example/\t",
+      " https://rpc.example/",
+    ]) {
       let error: unknown;
       try {
         await readConfig({ BOT_RPC_URL: rpcUrl });

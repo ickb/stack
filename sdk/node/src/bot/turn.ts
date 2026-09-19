@@ -28,10 +28,6 @@ export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /**
- * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
- * wait. Any failure propagates to the entry point, which journals it and exits 1.
- */
-/**
  * Reads bot-owned account state and public market state for one planning attempt.
  *
  * @remarks The bot places no orders, so nothing here counts or collects any; the market
@@ -60,6 +56,10 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
   };
 }
 
+/**
+ * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
+ * wait. Any failure propagates to the entry point, which journals it and exits 1.
+ */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
   const summary = summarizeBotState(state);

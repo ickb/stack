@@ -50,7 +50,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   );
   const fulfilled = user.orders.filter((group) => group.order.isFulfilled());
   const live = user.orders.filter((group) => group.order.isMatchable());
-  const { refused, stale } = await abandonedOrders(runtime.client, live, system);
+  const { refused, stale } = abandonedOrders(live, system);
   const collectable = [...fulfilled, ...refused, ...stale];
   const { context, projection } = projectConversionTransactionContext(system, account, {
     available: collectable,
@@ -82,24 +82,17 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
  * `refused` is an order the market will never fill (the SDK's rule); `stale` is any order
  * older than {@link STALE_ORDER_BLOCKS}, which a running bot should never let happen.
  */
-async function abandonedOrders(
-  client: ccc.Client,
+function abandonedOrders(
   live: OrderGroup[],
   { exchangeRatio, feeRate, tip }: SystemState,
-): Promise<{ refused: OrderGroup[]; stale: OrderGroup[] }> {
+): { refused: OrderGroup[]; stale: OrderGroup[] } {
   const refused = live.filter((group) => isRefused(group, { exchangeRatio, feeRate }));
-  // One origin read per live order, all at once: in turn they cost the turn seconds.
-  const ages = await Promise.all(
-    live
-      .filter((group) => !refused.includes(group))
-      .map(async (group) => {
-        const origin = await client.getTransaction(group.origin.cell.outPoint.txHash);
-        // An origin without a block is not yet committed, so it is as fresh as an order gets.
-        return { group, mintedAt: origin?.blockNumber ?? tip.number };
-      }),
+  // The scan dates each group by its origin's block; an uncommitted origin is as fresh as
+  // an order gets.
+  const stale = live.filter(
+    (group) =>
+      !refused.includes(group) &&
+      (group.blockNumber ?? tip.number) + STALE_ORDER_BLOCKS <= tip.number,
   );
-  const stale = ages
-    .filter(({ mintedAt }) => mintedAt + STALE_ORDER_BLOCKS <= tip.number)
-    .map(({ group }) => group);
   return { refused, stale };
 }

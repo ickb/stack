@@ -1,4 +1,3 @@
-import type { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import { readStimulusState, STALE_ORDER_BLOCKS } from "../../src/stimulus/state.ts";
@@ -14,24 +13,19 @@ import {
 describe("readStimulusState", () => {
   it("collects fulfilled and stale orders and keeps fresh ones live", async () => {
     const system = systemState();
-    const fulfilled = await order("a1", false);
-    const fresh = await order("a2", true);
-    const stale = await order("a3", true);
+    const tipNumber = system.tip.number;
+    const fulfilled = await order("a1", false, undefined, tipNumber);
+    const fresh = await order("a2", true, undefined, tipNumber - STALE_ORDER_BLOCKS + 1n);
+    const stale = await order("a3", true, undefined, tipNumber - STALE_ORDER_BLOCKS);
     const uncommitted = await order("a4", true);
     // A buy at par: the bot's matcher gains nothing on it and the ratio only grows past it.
-    const refused = await order("a5", true, system.exchangeRatio);
-    const tipNumber = system.tip.number;
+    const refused = await order("a5", true, system.exchangeRatio, tipNumber);
 
     const state = await readStimulusState(
       runtime({
         system,
         account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
         orders: [fulfilled, fresh, stale, uncommitted, refused],
-        originBlocks: new Map<ccc.Hex, bigint | undefined>([
-          [fresh.origin.cell.outPoint.txHash, tipNumber - STALE_ORDER_BLOCKS + 1n],
-          [stale.origin.cell.outPoint.txHash, tipNumber - STALE_ORDER_BLOCKS],
-          [uncommitted.origin.cell.outPoint.txHash, undefined],
-        ]),
       }),
     );
 
