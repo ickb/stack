@@ -8,6 +8,6 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["test/{action,app,hook,query,shared,view,wallet}/*.{ts,tsx}"],
+    include: ["test/{action,app,chart,hook,shared,view,wallet}/*.{ts,tsx}"],
   },
 });

@@ -20,7 +20,6 @@ import {
   liveQuoteStatus,
   mainnetClient,
   queryClient,
-  signerClientChain,
   testnetClient,
   useQuoteState,
   walletLabel,
@@ -75,7 +74,6 @@ describe("hook-based interface runtime", () => {
     expect(connectorStyle["--background"]).toBe("oklch(21% 0.006 286)");
     await expect(ckbSignerOnly(signerFilterInfo(ckbSigner))).resolves.toBe(true);
     await expect(ckbSignerOnly(signerFilterInfo(btcSigner))).resolves.toBe(false);
-    expect(signerClientChain(ckbSigner)).toBe("testnet");
     expect(walletLabel("JoyID", "CKB")).toBe("JoyID CKB");
     expect(walletLabel(undefined, undefined)).toBe("Wallet");
   });

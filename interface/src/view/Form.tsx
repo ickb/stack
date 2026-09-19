@@ -1,7 +1,6 @@
 import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
-import { conversionQuote } from "../shared/quote.ts";
 import {
   CKB,
   parseAmountInput,
@@ -9,6 +8,7 @@ import {
   toText,
   twoDecimals,
 } from "../shared/utils.ts";
+import { conversionQuote } from "../view/formState.ts";
 import {
   amountQuoteText,
   type AssetDisplay,
@@ -99,7 +99,7 @@ export default function Form({
           and the row is outlined in the section-divider line, a full-width target on a phone,
           inset 4px a side so the section's clipping edge never crops the outline or the focus ring. */}
       <button
-        // The main button's look (buttonStyles.ts) written out, since its own utilities would
+        // The main button's look (ActionLayout's buttonClass) written out, since its own utilities would
         // win over a smaller height, no side padding, and the asset names' case.
         className="col-span-3 grid h-11 w-[calc(100%-0.5rem)] cursor-pointer grid-cols-3 items-center justify-items-center rounded border border-ickb-border/70 text-sm leading-relaxed font-bold tracking-wider text-ickb-action normal-case transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action active:bg-ickb-action/15 disabled:cursor-default disabled:opacity-50"
         disabled={isFrozen}

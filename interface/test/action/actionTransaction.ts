@@ -19,7 +19,7 @@ import {
   submitPendingTransaction,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
-import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
+import { l1StateQueryKey } from "../../src/app/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";

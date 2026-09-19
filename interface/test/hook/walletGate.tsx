@@ -14,6 +14,7 @@ import {
 } from "./fixtures/data.ts";
 import { connectorMock, hookState, resetHooks } from "./fixtures/environment.ts";
 import {
+  chainFromClient,
   CkbSignerRequired,
   LandingPage,
   mainnetClient,
@@ -210,3 +211,14 @@ function lendsClient(context: LandingPageTestContext, client: unknown): boolean 
 function landingShellProps(element: ReactElement): Parameters<typeof WalletAppShell>[0] {
   return elementProps<Parameters<typeof WalletAppShell>[0]>(element);
 }
+
+describe("chainFromClient", () => {
+  it("maps supported CCC client prefixes to stack chains", () => {
+    expect(chainFromClient(new StubClient({ addressPrefix: "ckb" }))).toBe("mainnet");
+    expect(chainFromClient(new StubClient({ addressPrefix: "ckt" }))).toBe("testnet");
+  });
+
+  it("rejects unsupported prefixes so client and signer chains must agree", () => {
+    expect(chainFromClient(new StubClient({ addressPrefix: "ckb-dev" }))).toBeUndefined();
+  });
+});

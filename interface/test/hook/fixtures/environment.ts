@@ -8,7 +8,7 @@ import type {
   retryConfirmation as retryConfirmationType,
   transact as transactType,
 } from "../../../src/action/actionTransaction.ts";
-import type { QuoteState } from "../../../src/query/queries.ts";
+import type { QuoteState } from "../../../src/app/queries.ts";
 import type { TxInfo } from "../../../src/shared/utils.ts";
 
 interface HookState {

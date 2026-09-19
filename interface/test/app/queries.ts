@@ -4,12 +4,13 @@ import { Ratio } from "@ickb/sdk";
 import { headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { l1StateQueryKey } from "../../src/query/l1StateQueryKey.ts";
 import {
   getL1State,
   l1StateOptions,
+  l1StateQueryKey,
   quoteStateOptions,
-} from "../../src/query/queries.ts";
+  rootConfigQueryKey,
+} from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
 import {
@@ -204,4 +205,19 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
   const second = await getL1State(walletConfigForState(lock, sampledState()));
 
   expect(first.stateId).not.toBe(second.stateId);
+});
+
+describe("rootConfigQueryKey", () => {
+  it("keys root-scoped client reads by chain and client identity", () => {
+    const config = testRootConfig("testnet");
+    const key = rootConfigQueryKey(config);
+
+    expect(key[0]).toBe("testnet");
+    expect(key.at(-1)).toBe("rootConfig");
+    expect(rootConfigQueryKey({ ...config })).toEqual(key);
+    expect(rootConfigQueryKey({ ...config, chain: "mainnet" })).not.toEqual(key);
+    expect(
+      rootConfigQueryKey({ ...config, cccClient: testRootConfig("mainnet").cccClient }),
+    ).not.toEqual(key);
+  });
 });

@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { lendClient, savedConnectionRestoreMs } from "../app/interfaceConfig.ts";
-import { liveQuoteStatus, type QuoteStateQuery } from "../query/quoteState.ts";
+import { liveQuoteStatus, type QuoteStateQuery } from "../app/queries.ts";
 import type { RootConfig } from "../shared/utils.ts";
-import { WalletAppShell } from "../view/staticWalletApp.tsx";
+import { WalletAppShell } from "../view/WalletAppShell.tsx";
 import { hasSavedCccConnection } from "./cccConnection.ts";
 
 export function LandingPage({

@@ -1,7 +1,7 @@
 import { hasTransactionActivity } from "@ickb/sdk";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
-import type { L1StateType } from "../query/queries.ts";
+import type { L1StateType } from "../app/queries.ts";
 import {
   errorMessageOf,
   toText,

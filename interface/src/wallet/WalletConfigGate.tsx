@@ -3,7 +3,7 @@ import { signerAccountLocks } from "@ickb/sdk";
 
 import { useEffect, useState, type JSX } from "react";
 import App from "../app/App.tsx";
-import type { QuoteState } from "../query/queries.ts";
+import type { QuoteState } from "../app/queries.ts";
 import type { RootConfig, WalletConfig } from "../shared/utils.ts";
 import { WalletConfigPendingView } from "./WalletConfigPendingView.tsx";
 

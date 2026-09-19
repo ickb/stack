@@ -18,18 +18,13 @@ import {
   Dashboard,
   DisconnectedDashboard,
   Form,
-  gridLine,
   PendingDashboard,
   RateChart,
   SwitchingWalletNetwork,
-  unscaledTimeLabels,
-  unscaledValueLabel,
   UnsupportedNetwork,
   WalletAppShell,
   WalletConfigPendingView,
-  WalletHeaderPortal,
-  WalletSection,
-  WalletSections,
+  WalletPage,
 } from "./fixtures/modules.ts";
 import { projection } from "./fixtures/projection.ts";
 
@@ -279,15 +274,10 @@ describe("view components", () => {
 
     expect(chart).toContain("1 CKB worth over time");
     expect(chart).toContain("polyline");
-    expect(
-      renderToStaticMarkup(<>{unscaledTimeLabels(0, Date.UTC(2030, 0, 1))}</>),
-    ).toContain("2030");
-    expect(renderToStaticMarkup(gridLine(1, 0, 2))).toContain("line");
-    expect(
-      renderToStaticMarkup(
-        unscaledValueLabel({ value: 1, minY: 0, maxY: 2, label: "1 CKB", index: 0 }),
-      ),
-    ).toContain("1 CKB");
+    // The unscaled labels: the years along the time axis and the value ticks with their unit.
+    expect(chart).toContain("2019");
+    expect(chart).toContain("<line");
+    expect(chart).toContain(" iCKB");
   });
 
   it("renders wallet section shells and pending wallet config states", () => {
@@ -301,19 +291,14 @@ describe("view components", () => {
     const selectChain = vi.fn<Parameters<typeof WalletAppShell>[0]["selectChain"]>();
     vi.stubGlobal("document", { getElementById: () => ({}) });
 
-    expect(
-      renderToStaticMarkup(<WalletHeaderPortal>Header</WalletHeaderPortal>),
-    ).toContain("Header");
+    const page = <WalletPage header="Header" form="Form" action="Act" chart="Chart" />;
+    expect(renderToStaticMarkup(page)).toContain("Header");
+    expect(renderToStaticMarkup(page)).toContain("Form");
+    // Without the header mount the page renders its sections alone.
     vi.stubGlobal("document", { getElementById: () => null });
-    expect(WalletHeaderPortal({ children: "Header" })).toBeNull();
+    expect(renderToStaticMarkup(page)).not.toContain("Header");
+    expect(renderToStaticMarkup(page)).toContain("Chart");
     vi.stubGlobal("document", { getElementById: () => ({}) });
-    expect(
-      renderToStaticMarkup(
-        <WalletSections>
-          <WalletSection>Body</WalletSection>
-        </WalletSections>,
-      ),
-    ).toContain("Body");
     const restoredShell = (
       <WalletAppShell
         {...draft}

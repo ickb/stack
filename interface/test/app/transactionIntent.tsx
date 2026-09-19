@@ -1,7 +1,7 @@
 import type * as ReactQueryModule from "@tanstack/react-query";
 import { createElement, Fragment, type ReactElement } from "react";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import type * as QueryModule from "../../src/query/queries.ts";
+import type * as QueryModule from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import type { WalletAppView } from "../../src/view/WalletAppView.tsx";
 
@@ -58,7 +58,7 @@ vi.mock(import("@tanstack/react-query"), () => {
   return { useQuery };
 });
 
-vi.mock(import("../../src/query/queries.ts"), () => {
+vi.mock(import("../../src/app/queries.ts"), () => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- The mocked query hook ignores options, so App only needs a spreadable value.
   const l1StateOptions = (() => ({})) as unknown as typeof QueryModule.l1StateOptions;
   return { l1StateOptions };

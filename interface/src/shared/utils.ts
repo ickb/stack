@@ -63,6 +63,36 @@ export const txInfoPadding: TxInfo = Object.freeze({
   estimatedMaturity: 0n,
 });
 
+/** The main button's look, shared by every button that reads as an action. */
+export const buttonClass =
+  "flex min-h-12 w-full cursor-pointer items-center justify-center rounded border-2 border-ickb-action px-4 text-center leading-relaxed font-bold tracking-wider text-ickb-action uppercase transition-colors duration-150 hover:bg-ickb-action/10 active:bg-ickb-action/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50";
+
+/**
+ * Maps CCC address prefixes to the interface chain name.
+ */
+export function chainFromClient(client: ccc.Client): RootConfig["chain"] | undefined {
+  switch (client.addressPrefix) {
+    case "ckb":
+      return "mainnet";
+    case "ckt":
+      return "testnet";
+    default:
+      return undefined;
+  }
+}
+
+export function walletLabel(
+  walletName: string | undefined,
+  signerName: string | undefined,
+): string {
+  const name = [walletName, signerName].filter(Boolean).join(" ");
+  if (name !== "") {
+    return name;
+  }
+
+  return "Wallet";
+}
+
 export const CKB = ccc.fixedPointFrom(1);
 export const maxShannons = (1n << 64n) - 1n;
 

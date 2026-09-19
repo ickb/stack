@@ -1,12 +1,11 @@
 import type { JSX } from "react";
 import { ActionLayout } from "../action/ActionLayout.tsx";
-import RateChart from "../chart/rateChart.tsx";
-import type { QuoteState } from "../query/queries.ts";
+import type { QuoteState } from "../app/queries.ts";
+import RateChart from "../chart/RateChart.tsx";
 import { parseAmountInput, type RootConfig } from "../shared/utils.ts";
 import { DisconnectedDashboard } from "./Dashboard.tsx";
 import Form from "./Form.tsx";
-import { WalletHeaderPortal } from "./WalletHeaderPortal.tsx";
-import { WalletSection, WalletSections } from "./WalletSections.tsx";
+import { WalletPage } from "./WalletPage.tsx";
 
 export function WalletAppShell({
   isCkb2Udt,
@@ -38,33 +37,27 @@ export function WalletAppShell({
   const message = `${liveStatusPrefix}This is an estimate. Wallet balance, fee, and exact availability are checked after you connect.`;
 
   return (
-    <>
-      <WalletHeaderPortal>
-        <DisconnectedDashboard {...{ chain, selectChain }} />
-      </WalletHeaderPortal>
-      <WalletSections>
-        <WalletSection>
-          <Form
-            {...{ isCkb2Udt, setIsCkb2Udt, text, setText, chain }}
-            exchangeRatio={quoteState?.exchangeRatio}
-            isFrozen={false}
-          />
-        </WalletSection>
-        <WalletSection>
-          <ActionLayout
-            action={action}
-            disabled={isRestoring}
-            isDone={!isRestoring}
-            onAction={open}
-            message={message}
-            fee="..."
-            maturity="..."
-          />
-        </WalletSection>
-        <WalletSection>
-          <RateChart {...{ chain, isCkb2Udt, amount, quoteState }} />
-        </WalletSection>
-      </WalletSections>
-    </>
+    <WalletPage
+      header={<DisconnectedDashboard {...{ chain, selectChain }} />}
+      form={
+        <Form
+          {...{ isCkb2Udt, setIsCkb2Udt, text, setText, chain }}
+          exchangeRatio={quoteState?.exchangeRatio}
+          isFrozen={false}
+        />
+      }
+      action={
+        <ActionLayout
+          action={action}
+          disabled={isRestoring}
+          isDone={!isRestoring}
+          onAction={open}
+          message={message}
+          fee="..."
+          maturity="..."
+        />
+      }
+      chart={<RateChart {...{ chain, isCkb2Udt, amount, quoteState }} />}
+    />
   );
 }

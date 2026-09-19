@@ -1,17 +1,11 @@
 import { useCcc, useSigner } from "@ckb-ccc/connector-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { createRootConfig, isCkbSigner } from "../app/interfaceConfig.ts";
-import { useQuoteState } from "../query/quoteState.ts";
+import { useQuoteState } from "../app/queries.ts";
+import { buttonClass, chainFromClient, walletLabel } from "../shared/utils.ts";
 import { saveSelectedChain } from "./cccConnection.ts";
-import { chainFromClient } from "./chain.ts";
-import { LandingPage, TestnetHint } from "./interfaceLanding.tsx";
+import { LandingPage, TestnetHint } from "./LandingPage.tsx";
 import WalletConfigGate from "./WalletConfigGate.tsx";
-import { signerClientChain, walletLabel } from "./walletGateState.ts";
-import {
-  CkbSignerRequired,
-  SwitchingWalletNetwork,
-  UnsupportedNetwork,
-} from "./walletGateSupport.tsx";
 
 /**
  * The connector's client is the one source of the chain: the landing tabs and the wallet
@@ -59,7 +53,7 @@ export function WalletGate(): JSX.Element {
     return <CkbSignerRequired open={open} />;
   }
 
-  if (signerClientChain(signer) !== chain) {
+  if (chainFromClient(signer.client) !== chain) {
     return <SwitchingWalletNetwork open={open} />;
   }
 
@@ -70,5 +64,63 @@ export function WalletGate(): JSX.Element {
       openWallet={open}
       quoteState={quoteStateQuery.data}
     />
+  );
+}
+
+export function CkbSignerRequired({
+  open,
+}: Readonly<{ open: () => unknown }>): JSX.Element {
+  return (
+    <div className="flex flex-col space-y-4">
+      <p>iCKB requires a CKB signer.</p>
+      <button
+        className={buttonClass}
+        onClick={() => {
+          open();
+        }}
+      >
+        Choose CKB signer
+      </button>
+    </div>
+  );
+}
+
+export function UnsupportedNetwork({
+  addressPrefix,
+  open,
+}: Readonly<{
+  addressPrefix: string;
+  open: () => unknown;
+}>): JSX.Element {
+  return (
+    <div className="flex flex-col space-y-4">
+      <p className="break-words">Unsupported CKB address prefix: {addressPrefix}</p>
+      <button
+        className={buttonClass}
+        onClick={() => {
+          open();
+        }}
+      >
+        Switch network
+      </button>
+    </div>
+  );
+}
+
+export function SwitchingWalletNetwork({
+  open,
+}: Readonly<{ open: () => unknown }>): JSX.Element {
+  return (
+    <div className="flex flex-col space-y-4">
+      <p>Switching wallet network...</p>
+      <button
+        className={buttonClass}
+        onClick={() => {
+          open();
+        }}
+      >
+        Open wallet connector
+      </button>
+    </div>
   );
 }

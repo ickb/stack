@@ -2,7 +2,12 @@ import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
 import { figureText, groupDigits, phoneFigureText } from "../../src/shared/figures.ts";
 import { CKB, parseAmountInput } from "../../src/shared/utils.ts";
-import { amountQuoteText, caretAfter, formAssets } from "../../src/view/formState.ts";
+import {
+  amountQuoteText,
+  caretAfter,
+  conversionQuote,
+  formAssets,
+} from "../../src/view/formState.ts";
 import { projection } from "./fixtures/projection.ts";
 
 const unit = Ratio.from({ ckbScale: 1n, udtScale: 1n });
@@ -152,5 +157,24 @@ describe("balance figures", () => {
     // The chart caption compacts a digit earlier.
     expect(phoneFigureText(999999n * CKB + 1n, 1_000_000n)).toBe("999,999+");
     expect(phoneFigureText(1234567n * CKB, 1_000_000n)).toBe("1.23M");
+  });
+});
+
+describe("conversionQuote", () => {
+  it("quotes both directions net of the default order fee", () => {
+    expect(conversionQuote(true, 200000000n, unit)).toBe(199980000n);
+    expect(conversionQuote(false, 200000000n, unit)).toBe(199980000n);
+  });
+
+  it("returns undefined instead of throwing when a quote cannot be represented", () => {
+    expect(
+      conversionQuote(true, 1n, Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n })),
+    ).toBeUndefined();
+  });
+
+  it("rethrows unexpected quote failures", () => {
+    expect(() => {
+      conversionQuote(true, 100000000n, Ratio.from({ ckbScale: 0n, udtScale: 1n }));
+    }).toThrow("Invalid ExchangeRatio");
   });
 });

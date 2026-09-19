@@ -6,9 +6,9 @@ import {
   createPendingTransactionStore,
   type PendingTransactionState,
 } from "../action/pendingTransaction.ts";
-import { l1StateOptions, type L1StateType, type QuoteState } from "../query/queries.ts";
 import { errorMessageOf, parseAmountInput, type WalletConfig } from "../shared/utils.ts";
 import { WalletAppView } from "../view/WalletAppView.tsx";
+import { l1StateOptions, type L1StateType, type QuoteState } from "./queries.ts";
 
 export default function App({
   walletConfig,

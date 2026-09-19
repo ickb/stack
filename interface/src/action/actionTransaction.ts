@@ -6,7 +6,7 @@ import {
   signAndSendTransaction,
   waitTransaction,
 } from "@ickb/sdk";
-import { l1StateQueryKey } from "../query/l1StateQueryKey.ts";
+import { l1StateQueryKey } from "../app/queries.ts";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import {
   clearPendingTransaction,

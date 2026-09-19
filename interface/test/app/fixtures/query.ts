@@ -3,7 +3,7 @@ import { IckbSdk } from "@ickb/sdk";
 import { byte32FromByte, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
-import type { getL1State } from "../../../src/query/queries.ts";
+import type { getL1State } from "../../../src/app/queries.ts";
 import type { WalletConfig } from "../../../src/shared/utils.ts";
 
 export function walletConfigForState(

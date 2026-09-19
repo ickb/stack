@@ -1,5 +1,5 @@
 import { useId, type JSX } from "react";
-import { buttonClass } from "../shared/buttonStyles.ts";
+import { buttonClass } from "../shared/utils.ts";
 
 export function ActionLayout({
   action,

@@ -6,12 +6,15 @@ import {
   type AccountAvailabilityProjection,
   type SystemState,
 } from "@ickb/sdk";
-import { skipToken, type SkipToken } from "@tanstack/react-query";
+import {
+  skipToken,
+  useQuery,
+  type SkipToken,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import type { Destination } from "../action/destination.ts";
 import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
-import { l1StateQueryKey } from "./l1StateQueryKey.ts";
-import { objectIdentityKey, rootConfigQueryKey } from "./rootConfigQueryKey.ts";
 
 export interface L1StateType {
   projection: AccountAvailabilityProjection;
@@ -122,4 +125,71 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
       context.receipts.length > 0 ||
       context.readyWithdrawals.length > 0,
   };
+}
+
+let nextObjectKey = 1;
+const objectKeys = new WeakMap<object, number>();
+
+/**
+ * Builds the chain-level query key for root configuration reads.
+ *
+ * @remarks The client segment is based on object identity, so recreating an equivalent client creates a distinct cache key.
+ */
+export function rootConfigQueryKey(
+  rootConfig: RootConfig,
+): readonly [RootConfig["chain"], number, "rootConfig"] {
+  return [
+    rootConfig.chain,
+    objectIdentityKey(rootConfig.cccClient),
+    "rootConfig",
+  ] as const;
+}
+
+/**
+ * Assigns a stable process-local cache key to one object instance.
+ *
+ * @remarks Keys are identity-based and WeakMap-backed; structurally equal objects never share a key unless they are the same object.
+ */
+export function objectIdentityKey(value: object): number {
+  const existing = objectKeys.get(value);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const key = nextObjectKey;
+  nextObjectKey += 1;
+  objectKeys.set(value, key);
+  return key;
+}
+
+/**
+ * Builds the L1 account query key for one wallet config object.
+ *
+ * @remarks The wallet config is rebuilt whenever its signer, locks, or client change, so its
+ * object identity is the cache boundary; a refetched config starts a cold L1 query
+ * (decisions amendment 46(h)).
+ */
+export function l1StateQueryKey(
+  walletConfig: Pick<WalletConfig, "chain" | "address"> & object,
+): readonly [WalletConfig["chain"], string, number, "l1State"] {
+  return [
+    walletConfig.chain,
+    walletConfig.address,
+    objectIdentityKey(walletConfig),
+    "l1State",
+  ] as const;
+}
+
+export type QuoteStateQuery = UseQueryResult<QuoteState>;
+
+export function useQuoteState(rootConfig: RootConfig | undefined): QuoteStateQuery {
+  return useQuery(quoteStateOptions(rootConfig));
+}
+
+export function liveQuoteStatus(quoteStateQuery: QuoteStateQuery): string {
+  if (quoteStateQuery.isError) {
+    return "Unable to load live exchange rate.";
+  }
+
+  return "Loading live exchange rate...";
 }

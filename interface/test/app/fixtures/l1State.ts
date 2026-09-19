@@ -1,4 +1,4 @@
-import type { L1StateType } from "../../../src/query/queries.ts";
+import type { L1StateType } from "../../../src/app/queries.ts";
 import type { TxInfo } from "../../../src/shared/utils.ts";
 import { txWithInput } from "../../action/fixtures/transaction.ts";
 

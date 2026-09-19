@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { useRef, useState, type JSX, type SyntheticEvent } from "react";
 import { createRootConfig, testnetClient } from "../../src/app/interfaceConfig.ts";
-import { useQuoteState } from "../../src/query/quoteState.ts";
+import { useQuoteState } from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
 import WalletConfigGate from "../../src/wallet/WalletConfigGate.tsx";
 

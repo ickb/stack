@@ -4,8 +4,8 @@ import {
   conversionWorthSamples,
   ickbWorthAt,
   ickbWorthSamples,
-} from "../../src/chart/rateChartData.ts";
-import { rateChartView } from "../../src/chart/rateChartView.ts";
+  rateChartView,
+} from "../../src/chart/model.ts";
 import { graphAmountText } from "../../src/shared/figures.ts";
 
 const sampledMainnetTipDate = new Date("2026-06-07T18:43:08.091Z");

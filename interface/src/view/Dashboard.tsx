@@ -1,7 +1,6 @@
 import { useState, type JSX } from "react";
 import { shortAddress, type DestinationField } from "../action/destination.ts";
-import { buttonClass } from "../shared/buttonStyles.ts";
-import type { RootConfig, WalletConfig } from "../shared/utils.ts";
+import { buttonClass, type RootConfig, type WalletConfig } from "../shared/utils.ts";
 
 export function Dashboard({
   walletConfig,

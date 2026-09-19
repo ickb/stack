@@ -6,13 +6,16 @@ export function elementProps<T>(element: ReactElement): T {
   return element.props as T;
 }
 
+/** Every node an element carries in its props: `children` and the slots a page names. */
 export function childNodes(element: ReactElement): ReactNode[] {
-  const { children } = elementProps<{ children?: ReactNode }>(element);
-  if (children === undefined || children === null) {
-    return [];
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- React children arrays come from ReactElement props.
-  return Array.isArray(children) ? children : [children];
+  const props = elementProps<Record<string, unknown>>(element);
+  return Object.values(props).flatMap((value): ReactNode[] => {
+    if (Array.isArray(value)) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- React children arrays come from ReactElement props.
+      return value;
+    }
+    return isValidElement(value) || typeof value === "string" ? [value] : [];
+  });
 }
 
 export function isReactElement(value: ReactNode): value is ReactElement {
