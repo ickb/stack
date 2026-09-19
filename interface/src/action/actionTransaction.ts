@@ -88,22 +88,32 @@ export async function transact({
     assertCurrent(signal);
     callbacks.setIsPreparing(false);
     callbacks.setIsConfirming(true);
-    const sentHash = await abortable(
-      sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
-      signal,
-    );
+    let lostResponse = false;
+    try {
+      txHash = await abortable(
+        sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
+        signal,
+      );
+    } catch (error) {
+      // A lost answer does not undo a send: the node may hold the transaction, so the
+      // same window watches its hash (end-game consultation 2026-09-19). A resend could
+      // not tell what became of the first copy; only the status read can.
+      if (!(error instanceof TransactionBroadcastError)) {
+        throw error;
+      }
+      txHash = error.txHash;
+      lostResponse = true;
+    }
     assertCurrent(signal);
-    txHash = sentHash;
     callbacks.setMessage(
-      `Transaction ${sentHash} sent. Waiting for network confirmation...`,
+      lostResponse
+        ? `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`
+        : `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
-    await waitForConfirmation(callbacks.walletConfig.signer.client, sentHash, signal);
+    await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
     assertCurrent(signal);
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
-    if (error instanceof TransactionBroadcastError) {
-      txHash = error.txHash;
-    }
     if (signal.aborted || error instanceof AttemptAbortedError) {
       return;
     }
@@ -261,9 +271,6 @@ function isWaitWindowTimeout(error: unknown): boolean {
 }
 
 function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
-  if (error instanceof TransactionBroadcastError) {
-    return error.message;
-  }
   if (error instanceof TransactionWaitError) {
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;

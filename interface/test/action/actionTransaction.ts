@@ -213,24 +213,84 @@ describe("transact post-broadcast outcomes", () => {
 });
 
 describe("transact broadcast identity and rejection", () => {
-  it("stores signed identity before an ambiguous send and does not release it", async () => {
-    signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-      await Promise.resolve();
-      recordTxHash?.(txHash);
-      throw new TransactionBroadcastError(txHash, {
-        cause: new TypeError(rpcUnavailable),
-      });
-    });
+  it("watches the hash of an ambiguous send and completes when it commits", async () => {
+    ambiguousSend();
+    waitTransaction.mockResolvedValueOnce(committedResponse());
     const calls = transactionCalls();
 
     await transact(calls);
 
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction ${txHash} broadcast outcome is unresolved`,
+    expect(waitTransaction).toHaveBeenCalledTimes(1);
+    expect(waitTransaction).toHaveBeenCalledWith(calls.walletConfig.cccClient, txHash, {
+      timeout: confirmationWindowMs,
+      signal: calls.signal,
+    });
+    expect(calls.setMessage).toHaveBeenCalledWith(
+      `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`,
     );
-    expect(waitTransaction).not.toHaveBeenCalled();
+    expect(calls.setFailure).not.toHaveBeenCalledWith(
+      expect.stringContaining("unresolved"),
+    );
+    expect(calls.formReset).toHaveBeenCalledTimes(1);
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+  });
+
+  it("keeps the hash of an ambiguous send pending when the window closes", async () => {
+    ambiguousSend();
+    waitTransaction.mockRejectedValueOnce(
+      new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
+    );
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.setFailure).toHaveBeenCalledWith(
+      `Transaction ${txHash} is still unconfirmed after 60s. It may still confirm; check again.`,
+    );
+    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
+  });
+
+  it("releases an ambiguous send the node then rejects", async () => {
+    ambiguousSend();
+    waitTransaction.mockRejectedValueOnce(
+      new TransactionWaitError(txHash, { status: "rejected", reason: "dead input" }),
+    );
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.setFailure).toHaveBeenCalledWith(
+      `Transaction rejected: dead input. Hash: ${txHash}`,
+    );
+    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+  });
+
+  it("keeps the hash of an ambiguous send when the attempt is aborted mid-wait", async () => {
+    ambiguousSend();
+    const controller = new AbortController();
+    waitTransaction.mockImplementationOnce(async (...args) => {
+      const { signal } = waitCallOptions(args);
+      return new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          reject(new Error("confirmation stopped"));
+        });
+      });
+    });
+    const calls = transactionCalls(refreshedPreview(), undefined, controller);
+    const attempt = transact(calls);
+    await vi.waitFor(() => {
+      expect(waitTransaction).toHaveBeenCalledTimes(1);
+    });
+    const callbackCounts = attemptCallbackCounts(calls);
+
+    controller.abort();
+    await attempt;
+
+    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
+    expect(calls.setFailure).toHaveBeenLastCalledWith("");
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
   });
 
   it("releases a rejected send without resetting the form", async () => {
@@ -479,6 +539,17 @@ describe("attempt ownership after broadcast", () => {
     expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
   });
 });
+
+/** The next send records the hash, then loses the node's answer. */
+function ambiguousSend(): void {
+  signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
+    await Promise.resolve();
+    recordTxHash?.(txHash);
+    throw new TransactionBroadcastError(txHash, {
+      cause: new TypeError(rpcUnavailable),
+    });
+  });
+}
 
 /** Establishes pending state exactly as a completed submission does. */
 async function recordPending(store: PendingTransactionStore): Promise<void> {

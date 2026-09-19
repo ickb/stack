@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { composedClient, headerLike, StubClient } from "@ickb/testkit";
+import { composedClient, headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { getTransactionHeader } from "../../src/utils/transaction_header.ts";
 
@@ -89,17 +89,30 @@ describe("getTransactionHeader", () => {
     }
   });
 
-  it("keeps the typed lookup on the connector's composed client", async () => {
-    const client = composedClient(
-      new StubClient({
-        getTransactionWithHeader: async (): ReturnType<
-          ccc.Client["getTransactionWithHeader"]
-        > => {
-          await Promise.resolve();
-          return undefined;
-        },
-      }),
+  it("reads the status only through the connector's composed client", async () => {
+    const header = ccc.ClientBlockHeader.from(headerLike({ number: 7n }));
+    const { client, methods } = jsonRpcClient(
+      { transaction: null, tx_status: { status: "committed", block_number: "0x7" } },
+      header,
     );
+
+    await expect(
+      getTransactionHeader(composedClient(client), TX_HASH),
+    ).resolves.toMatchObject({ number: 7n, hash: header.hash });
+    expect(methods).toEqual(["get_transaction", "get_header_by_number"]);
+  });
+
+  it("keeps the typed lookup on a client without a JSON-RPC requestor", async () => {
+    const typedOnly = {
+      getTransactionWithHeader: async (): ReturnType<
+        ccc.Client["getTransactionWithHeader"]
+      > => {
+        await Promise.resolve();
+        return undefined;
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the typed lookup is exercised.
+    const client = typedOnly as unknown as ccc.Client;
 
     await expect(getTransactionHeader(client, TX_HASH)).resolves.toBeUndefined();
   });

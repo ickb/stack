@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { composedClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   TransactionWaitError,
@@ -165,6 +166,18 @@ describe("waitTransaction terminal rejection", () => {
     );
 
     expect(noCache).not.toHaveBeenCalled();
+  });
+
+  it("sees a status-only rejection through the connector's composed client", async () => {
+    // The connector's client is a composition proxy, not a ClientJsonRpc; a rejected
+    // transaction has a null body, which the typed read turns into "not yet committed".
+    const { client } = jsonRpcClient({ status: "rejected", reason: "dead input" });
+
+    await expect(waitTransaction(composedClient(client), TX_HASH)).rejects.toMatchObject({
+      name: "TransactionWaitError",
+      status: "rejected",
+      reason: "dead input",
+    });
   });
 
   it("preserves a status-only rejection without a reason", async () => {

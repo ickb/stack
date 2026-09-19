@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { jsonRpcRequestor } from "../utils/utils.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -44,9 +45,9 @@ export interface WaitTransactionOptions {
  *
  * @remarks Every Stack caller waits at depth zero for one window and then rebuilds
  * from committed state (decisions amendment 45); depth would be an additive option.
- * JSON-RPC clients poll `get_transaction` verbosity 1 directly so a status-only
- * rejection is not hidden by CCC's transaction cache, and every transaction body
- * read bypasses that cache. Timeout and abort also apply while awaiting client
+ * Clients with a JSON-RPC requestor, the connector's composed client included, poll
+ * `get_transaction` verbosity 1 directly so a status-only rejection is not hidden by
+ * CCC's transaction cache, and every transaction body read bypasses that cache. Timeout and abort also apply while awaiting client
  * operations, but CCC transports cannot be cancelled and may finish after this
  * function rejects. Nothing here mutates the client cache: later attempts rebuild
  * from exact committed reads.
@@ -221,12 +222,13 @@ async function readCommittedTransaction(
 
 async function readTransactionStatus(poll: WaitPoll): Promise<TransactionStatus> {
   const { client, txHash, budget } = poll;
-  if (client instanceof ccc.ClientJsonRpc) {
-    // Raw verbosity-1 polling keeps a status-only rejection that CCC's cached
-    // transaction response discards.
+  const requestor = jsonRpcRequestor(client);
+  if (requestor !== undefined) {
+    // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed
+    // transaction response discards (its body is null, so CCC returns nothing).
     return rawTransactionStatus(
       await within(
-        async () => client.requestor.request("get_transaction", [txHash, "0x1"]),
+        async () => requestor.request("get_transaction", [txHash, "0x1"]),
         budget,
       ),
     );

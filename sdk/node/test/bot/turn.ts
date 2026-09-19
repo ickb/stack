@@ -4,7 +4,6 @@ import { TransactionBroadcastError } from "../../../src/send/sign_and_send_trans
 
 import {
   committedTransactionResponse,
-  composedClient,
   headerLike,
   script,
   StubClient,
@@ -313,18 +312,18 @@ function turnHarness(
         return commitTransaction(responses, txLike);
       }),
   );
+  // The bot's client is a JSON-RPC one: the stub answers the raw status poll from the
+  // scripted body, as the node would.
   const runtime = botRuntime({
-    client: composedClient(
-      new StubClient({
-        getTransactionNoCache: async (
-          txHash,
-        ): ReturnType<ccc.Client["getTransactionNoCache"]> => {
-          await Promise.resolve();
-          return responses.get(ccc.hexFrom(txHash));
-        },
-        ...options.client,
-      }),
-    ),
+    client: new StubClient({
+      getTransactionNoCache: async (
+        txHash,
+      ): ReturnType<ccc.Client["getTransactionNoCache"]> => {
+        await Promise.resolve();
+        return responses.get(ccc.hexFrom(txHash));
+      },
+      ...options.client,
+    }),
     sdk: {
       getL1AccountState:
         options.getL1AccountState ??

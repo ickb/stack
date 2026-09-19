@@ -140,6 +140,19 @@ export async function asyncBinarySearch(
   return i;
 }
 
+/**
+ * The client's JSON-RPC requestor, when it has one. The connector hands the interface a
+ * composition proxy over the public client (`ClientWithFeeRate`, a `ccc.Client` but not a
+ * `ccc.ClientJsonRpc`), so `instanceof` misses it; the proxy forwards the property.
+ */
+export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc | undefined {
+  if (!("requestor" in client)) {
+    return undefined;
+  }
+  const { requestor } = client;
+  return requestor instanceof ccc.RequestorJsonRpc ? requestor : undefined;
+}
+
 export function minBigInt(left: bigint, right: bigint): bigint {
   return left < right ? left : right;
 }

@@ -75,12 +75,14 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 }
 
 /**
- * Answers the SDK's status-only `get_transaction` from the stub's `getTransactionWithHeader`
- * handler and remembers the header for the follow-up lookup by number, so a test stubs one
- * typed method, not the wire; everything else is offline.
+ * Answers the SDK's status-only `get_transaction` from the stub's scripted typed reads, so
+ * a test stubs one typed method, not the wire: `getTransactionWithHeader` when scripted
+ * (the header is remembered for the follow-up lookup by number), else
+ * `getTransactionNoCache` (the body's status, with its block number or reason).
+ * Everything else is offline.
  */
 function stubTransport(
-  raw: { client?: StubClient },
+  raw: { client?: StubClient; scripted?: StubClientHandlers },
   headers: Map<bigint, ccc.ClientBlockHeader>,
 ): ccc.JsonRpcTransport {
   return {
@@ -93,23 +95,51 @@ function stubTransport(
       ) {
         return offlineTransport().request(payload);
       }
-      const header = (await raw.client.getTransactionWithHeader(txHash))?.header;
-      if (header !== undefined) {
-        headers.set(header.number, header);
-      }
+      const status = await rawStatus(raw, headers, txHash);
       return {
         id: payload.id,
         jsonrpc: "2.0",
-        result: {
-          transaction: null,
-          tx_status:
-            header === undefined
-              ? { status: "unknown" }
-              : { status: "committed", block_number: ccc.numToHex(header.number) },
-        },
+        result: { transaction: null, tx_status: status },
       };
     },
   };
+}
+
+async function rawStatus(
+  raw: { client?: StubClient; scripted?: StubClientHandlers },
+  headers: Map<bigint, ccc.ClientBlockHeader>,
+  txHash: string,
+): Promise<object> {
+  if (raw.client === undefined) {
+    return { status: "unknown" };
+  }
+  if (raw.scripted?.getTransactionWithHeader !== undefined) {
+    const header = (await raw.client.getTransactionWithHeader(txHash))?.header;
+    if (header === undefined) {
+      return { status: "unknown" };
+    }
+    headers.set(header.number, header);
+    return { status: "committed", block_number: ccc.numToHex(header.number) };
+  }
+  if (raw.scripted?.getTransactionNoCache !== undefined) {
+    const response = await raw.client.getTransactionNoCache(txHash);
+    if (response === undefined) {
+      return { status: "unknown" };
+    }
+    return {
+      status: response.status,
+      ...(response.blockNumber === undefined
+        ? {}
+        : { block_number: ccc.numToHex(response.blockNumber) }),
+      ...(response.reason === undefined ? {} : { reason: response.reason }),
+    };
+  }
+  return offlineTransport().request({
+    id: 0,
+    jsonrpc: "2.0",
+    method: "get_transaction",
+    params: [txHash],
+  });
 }
 
 /** A testnet client on the offline transport. */
@@ -135,7 +165,7 @@ export class StubClient extends ccc.ClientPublicTestnet {
   }: StubClientHandlers = {}) {
     // The SDK reads a transaction's header through two raw calls on a JSON-RPC client; the
     // stub answers them from its own handlers so a test stubs one method, not the wire.
-    const raw: { client?: StubClient } = {};
+    const raw: { client?: StubClient; scripted?: StubClientHandlers } = {};
     const rememberedHeaders = new Map<bigint, ccc.ClientBlockHeader>();
     // A subclass has no factory, so the deprecated constructor is the only super call; the
     // offline transport keeps every unstubbed method off the network.
@@ -146,6 +176,7 @@ export class StubClient extends ccc.ClientPublicTestnet {
       }),
     });
     raw.client = this;
+    raw.scripted = handlers;
     this.rememberedHeaders = rememberedHeaders;
     this.prefix = addressPrefix;
     this.headerByNumber = getHeaderByNumber;

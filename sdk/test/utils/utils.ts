@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { offlineTestnetClient } from "@ickb/testkit";
+import { composedClient, offlineTestnetClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   asyncBinarySearch,
@@ -7,8 +7,25 @@ import {
   defaultCellPageSize,
   findCells,
   isPlainCapacityCell,
+  jsonRpcRequestor,
   unique,
 } from "../../src/utils/utils.ts";
+
+describe("jsonRpcRequestor", () => {
+  it("finds the requestor on a JSON-RPC client and through the connector's proxy", () => {
+    const client = offlineTestnetClient();
+
+    expect(jsonRpcRequestor(client)).toBe(client.requestor);
+    expect(jsonRpcRequestor(composedClient(client))).toBe(client.requestor);
+  });
+
+  it("finds none on a client without one, or with another kind of requestor", () => {
+    for (const shape of [{}, { requestor: {} }]) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the requestor field is inspected.
+      expect(jsonRpcRequestor(shape as unknown as ccc.Client)).toBeUndefined();
+    }
+  });
+});
 
 describe("compareBigInt", () => {
   it("orders bigint values", () => {
