@@ -1,9 +1,20 @@
 import path from "node:path";
 import process from "node:process";
-import type { SupportedChain } from "./chain.ts";
+import type { SupportedChain } from "../../../src/utils/index.ts";
 
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+
+/** Credential-free identity of the RPC endpoint: one configured node, or CCC's public pool. */
+export type PublicRpcEndpointIdentity =
+  | {
+      mode: "exclusive";
+      protocol: "http:" | "https:" | "ws:" | "wss:";
+      hostname: string;
+      port: string;
+      pathname: string;
+    }
+  | { mode: "default" };
 
 /** Runtime configuration read from one prefix of environment variables. */
 export interface RuntimeConfig {
@@ -15,6 +26,9 @@ export interface RuntimeConfig {
 
   /** RPC URL of one node, the only endpoint when set; absent means CCC's public pool. */
   rpcUrl?: string;
+
+  /** What the journal may say about the endpoint: never the URL, which may carry a token. */
+  rpcEndpoint: PublicRpcEndpointIdentity;
 }
 
 /**
@@ -35,11 +49,10 @@ export async function readRuntimeConfigEnv(
   const rpcUrl = optionalEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
   const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
-  return {
-    chain,
-    privateKey,
-    ...(rpcUrl === undefined ? {} : { rpcUrl: parseRpcUrl(rpcUrl) }),
-  };
+  if (rpcUrl === undefined) {
+    return { chain, privateKey, rpcEndpoint: { mode: "default" } };
+  }
+  return { chain, privateKey, rpcUrl: rpcUrl.value, rpcEndpoint: parseRpcUrl(rpcUrl) };
 }
 
 interface EnvValue {
@@ -95,31 +108,30 @@ function parsePrivateKey({ name, value }: EnvValue): `0x${string}` {
   throw invalidEnvError(name);
 }
 
-function parseRpcUrl({ name, value }: EnvValue): string {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.codePointAt(index);
-    if (
-      code === undefined ||
-      /\s/u.test(value[index] ?? "") ||
-      code < 0x20 ||
-      code === 0x7f
-    ) {
-      throw invalidEnvError(name);
-    }
-  }
+/** The URL string reaches only the client; the journal gets these fields, never the URL. */
+function parseRpcUrl({ name, value }: EnvValue): PublicRpcEndpointIdentity {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw invalidEnvError(name);
   }
-  if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol)) {
+  const { protocol } = url;
+  if (
+    protocol !== "http:" &&
+    protocol !== "https:" &&
+    protocol !== "ws:" &&
+    protocol !== "wss:"
+  ) {
     throw invalidEnvError(name);
   }
-  if (url.username !== "" || url.password !== "") {
-    throw invalidEnvError(name);
-  }
-  return value;
+  return {
+    mode: "exclusive",
+    protocol,
+    hostname: url.hostname,
+    port: url.port,
+    pathname: url.pathname,
+  };
 }
 
 function isPrivateKeyHex(value: string): value is `0x${string}` {

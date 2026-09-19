@@ -2,17 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import {
   completeFirstFundable,
   isFundabilityFailure,
-} from "../../../../src/conversion/fundable_walk.ts";
-import { type IckbDepositCell, receiptPhase2Capacity } from "../../../../src/logic.ts";
+} from "../../../src/conversion/fundable_walk.ts";
+import { type IckbDepositCell, receiptPhase2Capacity } from "../../../src/logic.ts";
 
-import { matchTurn, seedOf, type TurnMatch } from "../match.ts";
-import { planRebalance, type RebalancePlan } from "../policy.ts";
-import {
-  matchableCkb,
-  matchedOrderOutPoints,
-  summarizeBotState,
-  transactionShape,
-} from "./support.ts";
+import { transactionShape } from "../shared/format.ts";
+import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
+import { planRebalance, type RebalancePlan } from "./policy.ts";
+import { matchableCkb, matchedOrderOutPoints, summarizeBotState } from "./support.ts";
 import type {
   BotActions,
   BotDecision,
@@ -29,15 +25,6 @@ interface MatchOutcome {
   tx: ccc.Transaction;
 }
 
-/**
- * One turn's transaction: the best match, then one rebalance core the completion walk can
- * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits are sized to keep the reserve; completion's fee, the
- * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
- * amount, withdrawal owner markers by chain length (chains are sized in iCKB), and nothing
- * checks the completed transaction against it, since such a check rejected every fill
- * sized to the reserve (decisions amendment 52(i)).
- */
 function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
@@ -48,6 +35,15 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
 }
 
+/**
+ * One turn's transaction: the best match, then one rebalance core the completion walk can
+ * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
+ * riding along. Matches and deposits are sized to keep the reserve; completion's fee, the
+ * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
+ * amount, withdrawal owner markers by chain length (chains are sized in iCKB), and nothing
+ * checks the completed transaction against it, since such a check rejected every fill
+ * sized to the reserve (decisions amendment 52(i)).
+ */
 export async function buildTransaction(
   runtime: Runtime,
   state: BotState,
@@ -88,8 +84,7 @@ export async function buildTransaction(
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx } = completion;
-  const built = decision(core, attempts, tx);
-  return { kind: "built", tx, actions: built.actions, decision: built };
+  return { kind: "built", tx, decision: decision(core, attempts, tx) };
 }
 
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
@@ -106,8 +101,8 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
 
 /**
  * The cores to try in order: deposit first, then every withdrawal chain (the greedy fit from
- * the oldest candidate, longest prefix first, then the same rebuilt without the oldest), then
- * `none`, a candidate only when a match or a collection rides on it.
+ * the oldest candidate, longest prefix first), then `none`, a candidate only when a match or
+ * a collection rides on it.
  */
 function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
   const cores: Core[] = [];
@@ -257,10 +252,5 @@ function skipped(
   reason: BuildTransactionSkipReason,
   decision: BotDecision,
 ): BuildTransactionResult {
-  return {
-    kind: "skipped",
-    reason,
-    actions: decision.actions,
-    decision: { ...decision, skip: { reason } },
-  };
+  return { kind: "skipped", reason, decision: { ...decision, skip: { reason } } };
 }

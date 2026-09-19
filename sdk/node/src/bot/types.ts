@@ -1,11 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { SdkManagers, SystemState } from "../../../../src/conversion/types.ts";
-import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
-import type { OrderGroup } from "../../../../src/order/cells.ts";
-import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
-import type { IckbSdk } from "../../../../src/sdk.ts";
+import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts";
+import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
+import type { OrderGroup } from "../../../src/order/cells.ts";
+import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
+import type { IckbSdk } from "../../../src/sdk.ts";
 
-import type { DepositReason, RingSummary } from "../policy.ts";
+import type { DepositReason, RingSummary } from "./policy.ts";
 
 /** Runtime dependencies used by each bot loop iteration. */
 export interface Runtime {
@@ -100,13 +100,8 @@ export type Core =
 
 /** Bot transaction-build outcome with the decision evidence used for logs and events. */
 export type BuildTransactionResult =
-  | { kind: "built"; tx: ccc.Transaction; actions: BotActions; decision: BotDecision }
-  | {
-      kind: "skipped";
-      reason: BuildTransactionSkipReason;
-      actions: BotActions;
-      decision: BotDecision;
-    };
+  | { kind: "built"; tx: ccc.Transaction; decision: BotDecision }
+  | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 
 /** Structured evidence for one bot planning attempt. */
 export interface BotDecision {

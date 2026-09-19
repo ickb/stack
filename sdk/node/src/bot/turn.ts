@@ -1,12 +1,12 @@
 import type { ccc } from "@ckb-ccc/core";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { transactionShape } from "../shared/format.ts";
 import type { BotEventEmitter } from "./events.ts";
-import { handleTurnFailure } from "./failure.ts";
-import { summarizeBotState, transactionShape } from "./runtime/support.ts";
-import { buildTransaction } from "./runtime/transaction.ts";
-import type { BotState, BuildTransactionResult, Runtime } from "./runtime/types.ts";
 import { readBotState } from "./state.ts";
+import { summarizeBotState } from "./support.ts";
+import { buildTransaction } from "./transaction.ts";
+import type { BotState, BuildTransactionResult, Runtime } from "./types.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 
@@ -25,16 +25,11 @@ export interface BotTurnContext {
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
-/** Runs one bot turn: read state, decide, and at most one broadcast with its confirmation wait. */
+/**
+ * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
+ * wait. Any failure propagates to the entry point, which journals it and exits 1.
+ */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
-  try {
-    await executeBotWork(context);
-  } catch (error) {
-    handleTurnFailure(context.events, error);
-  }
-}
-
-async function executeBotWork(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
   const summary = summarizeBotState(state);
   context.events.emit({ type: "bot.state.read", ...summary });
@@ -44,18 +39,11 @@ async function executeBotWork(context: BotTurnContext): Promise<void> {
     context.events.emit({
       type: "bot.decision.skipped",
       reason: result.reason,
-      actions: result.actions,
       decision: result.decision,
     });
     return;
   }
-  context.events.emit({
-    type: "bot.transaction.built",
-    actions: result.actions,
-    fee: result.decision.fee,
-    transactionShape: result.decision.transactionShape,
-    decision: result.decision,
-  });
+  context.events.emit({ type: "bot.transaction.built", decision: result.decision });
   await sendBuiltTransaction({ context, state, result });
 }
 

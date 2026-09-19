@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
-import { readRuntimeConfigEnv, type RuntimeConfig } from "../shared/index.ts";
+import { readRuntimeConfigEnv, type RuntimeConfig } from "../shared/runtime_config.ts";
 import type { Kind, Override } from "./draw.ts";
 
 /**

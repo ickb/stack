@@ -5,50 +5,6 @@ import {
   type SupportedChain,
 } from "../../../src/utils/index.ts";
 
-export type { SupportedChain } from "../../../src/utils/chain.ts";
-
-/** Credential-free identity of the RPC endpoint: one configured node, or CCC's public pool. */
-export type PublicRpcEndpointIdentity =
-  | {
-      mode: "exclusive";
-      protocol: "http:" | "https:" | "ws:" | "wss:";
-      hostname: string;
-      port: string;
-      pathname: string;
-    }
-  | { mode: "default" };
-
-/** Reduces a configured RPC URL to the public fields needed for runtime identity. */
-export function publicRpcEndpointIdentity(
-  rpcUrl: string | undefined,
-): PublicRpcEndpointIdentity {
-  if (rpcUrl === undefined) {
-    return { mode: "default" };
-  }
-  let url: URL;
-  try {
-    url = new URL(rpcUrl);
-  } catch {
-    throw invalidRpcEndpointIdentity();
-  }
-  if (!isRpcProtocol(url.protocol) || url.username !== "" || url.password !== "") {
-    throw invalidRpcEndpointIdentity();
-  }
-  return {
-    mode: "exclusive",
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port,
-    pathname: url.pathname,
-  };
-}
-
-function isRpcProtocol(
-  protocol: string,
-): protocol is "http:" | "https:" | "ws:" | "wss:" {
-  return ["http:", "https:", "ws:", "wss:"].includes(protocol);
-}
-
 /** Public chain preflight evidence returned after identity verification. */
 export interface ChainPreflightEvidence {
   /** Chain requested by the runtime config. */
@@ -99,7 +55,6 @@ export function createPublicClient(
   chain: SupportedChain,
   rpcUrl?: string,
 ): ccc.Owner<ccc.Client> {
-  publicRpcEndpointIdentity(rpcUrl);
   const config = rpcUrl === undefined ? {} : { urls: [rpcUrl] as const };
   return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open(
     config,
@@ -158,8 +113,4 @@ function assertChainPreflight(evidence: ChainPreflightEvidence): ChainPreflightE
   }
 
   return evidence;
-}
-
-function invalidRpcEndpointIdentity(): TypeError {
-  return new TypeError("Invalid RPC endpoint identity input");
 }

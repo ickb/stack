@@ -3,22 +3,17 @@ import { getConfig } from "../../src/constants.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signerAccountLocks } from "../../src/send/account_locks.ts";
 import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
-import {
-  BotEventEmitter,
-  createRunId,
-  handleTurnFailure,
-  readBotRuntimeConfig,
-  runBotTurn,
-  type Runtime,
-} from "./bot/index.ts";
-import {
-  createPublicClient,
-  publicRpcEndpointIdentity,
-  verifyChainPreflight,
-} from "./shared/index.ts";
+import { BotEventEmitter, createRunId } from "./bot/events.ts";
+import { runBotTurn } from "./bot/turn.ts";
+import type { Runtime } from "./bot/types.ts";
+import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
+import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 
 // One process is one bot turn: read config, connect, act at most once, exit.
-const { chain, privateKey, rpcUrl } = await readBotRuntimeConfig(process.env);
+const { chain, privateKey, rpcUrl, rpcEndpoint } = await readRuntimeConfigEnv(
+  process.env,
+  "BOT",
+);
 const events = new BotEventEmitter({ chain, runId: createRunId() });
 events.emit({ type: "bot.turn.started" });
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
@@ -43,7 +38,7 @@ try {
         hashType: primaryLock.hashType,
         args: primaryLock.args,
       },
-      rpcEndpoint: publicRpcEndpointIdentity(rpcUrl),
+      rpcEndpoint,
     },
     expected: preflight.expected,
     observed: preflight.observed,
@@ -63,7 +58,10 @@ try {
   };
   await runBotTurn({ events, runtime });
 } catch (error) {
-  handleTurnFailure(events, error);
+  // Every failure is safe to follow with a fresh turn: it rebuilds from committed state, and
+  // a transaction still pending from this turn conflicts with the rebuilt one at the node.
+  events.emit({ type: "bot.turn.failed", error });
+  process.exitCode = 1;
 } finally {
   // Closes the sockets the client opened, so nothing keeps the finished turn alive.
   await clientOwner?.dispose();

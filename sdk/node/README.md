@@ -68,8 +68,8 @@ Bot-only log queries over a saved bot stdout NDJSON stream, or over `journalctl 
 EVENT_FILE=log/bot/events.ndjson
 jq -r '.type' "$EVENT_FILE" | sort | uniq -c
 jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, expected, observed, matches}' "$EVENT_FILE"
-jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions, skip: .decision.skip}' "$EVENT_FILE"
-jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions: .decision.actions, skip: .decision.skip}' "$EVENT_FILE"
+jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions: .decision.actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, status, elapsedMs}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
 ```

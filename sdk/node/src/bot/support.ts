@@ -1,10 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { Match } from "../../../../src/order/matcher.ts";
-import { convert } from "../../../../src/udt.ts";
-
-import { CKB_RESERVE } from "../../../../src/constants.ts";
-import { maxBigInt } from "../../../../src/utils/index.ts";
-import type { BotDecision, BotState, BotStateSummary } from "./types.ts";
+import { CKB_RESERVE } from "../../../src/constants.ts";
+import type { Match } from "../../../src/order/matcher.ts";
+import { convert } from "../../../src/udt.ts";
+import { maxBigInt } from "../../../src/utils/index.ts";
+import type { BotState, BotStateSummary } from "./types.ts";
 
 /**
  * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
@@ -46,16 +45,6 @@ export function summarizeBotState(state: BotState): BotStateSummary {
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,
     fee: { feeRate },
-  };
-}
-
-export function transactionShape(tx: ccc.Transaction): BotDecision["transactionShape"] {
-  return {
-    inputs: tx.inputs.length,
-    outputs: tx.outputs.length,
-    cellDeps: tx.cellDeps.length,
-    headerDeps: tx.headerDeps.length,
-    witnesses: tx.witnesses.length,
   };
 }
 

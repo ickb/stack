@@ -28,7 +28,7 @@ import {
   script,
   StubClient,
 } from "@ickb/testkit";
-import type { BotState, Runtime } from "../../../src/bot/runtime/types.ts";
+import type { BotState, Runtime } from "../../../src/bot/types.ts";
 
 type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0];
 

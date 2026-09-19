@@ -15,12 +15,10 @@ import {
   TransactionWaitError,
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
-import {
-  type ChainPreflightEvidence,
-  formatCkb,
-  logExecution,
-  type PublicRpcEndpointIdentity,
-} from "../shared/index.ts";
+import type { ChainPreflightEvidence } from "../shared/chain.ts";
+import { formatCkb, transactionShape } from "../shared/format.ts";
+import { logExecution } from "../shared/logging.ts";
+import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
 import { type Draw, drawTurn, type Override } from "./draw.ts";
 import {
   MAX_LIVE_ORDERS,
@@ -69,20 +67,13 @@ export interface StimulusLog {
   outcome?: Outcome;
   skip?: Skip;
   action?: Action;
-  transactionShape?: {
-    inputs: number;
-    outputs: number;
-    cellDeps: number;
-    witnesses: number;
-  };
+  transactionShape?: ReturnType<typeof transactionShape>;
   txFee?: { fee: string; feeRate: ccc.Num };
   txHash?: ccc.Hex;
   error?: unknown;
 }
 
 type Built = { tx: ccc.Transaction; action: Action } | { skip: Skip };
-/** Appends fields to the turn's log line. */
-type Record = (fields: Partial<StimulusLog>) => void;
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -101,9 +92,7 @@ export async function runStimulusTurn({
   const startTime = new Date();
   const log: StimulusLog = { identity };
   try {
-    await stimulate(runtime, override, random, (fields) => {
-      Object.assign(log, fields);
-    });
+    await stimulate(runtime, override, random, log);
   } catch (error) {
     log.outcome ??= "failed";
     log.error = error;
@@ -116,12 +105,12 @@ async function stimulate(
   runtime: Runtime,
   override: Override,
   random: () => number,
-  record: Record,
+  log: StimulusLog,
 ): Promise<void> {
   const state = await readStimulusState(runtime);
-  record({ balance: balanceLog(state), orders: state.orders });
+  Object.assign(log, { balance: balanceLog(state), orders: state.orders });
   const draw = drawTurn(state.budgets, override, random);
-  record({ draw });
+  Object.assign(log, { draw });
   let built: Built;
   if (draw === undefined) {
     built = { skip: { reason: "nothing-to-spend" } };
@@ -133,14 +122,14 @@ async function stimulate(
   // Whatever stopped the drawn action, collecting what the account has keeps it liquid;
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built && hasCollectible(state)) {
-    record({ skip: built.skip, draw: { kind: "collect-only" } });
+    Object.assign(log, { skip: built.skip, draw: { kind: "collect-only" } });
     built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
   }
   if ("skip" in built) {
-    record({ outcome: "skipped", skip: built.skip });
+    Object.assign(log, { outcome: "skipped", skip: built.skip });
     return;
   }
-  await send(runtime, state, built, record);
+  await send(runtime, state, built, log);
 }
 
 async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promise<Built> {
@@ -224,16 +213,11 @@ async function send(
   runtime: Runtime,
   state: StimulusState,
   { tx, action }: Extract<Built, { tx: ccc.Transaction }>,
-  record: Record,
+  log: StimulusLog,
 ): Promise<void> {
-  record({
+  Object.assign(log, {
     action,
-    transactionShape: {
-      inputs: tx.inputs.length,
-      outputs: tx.outputs.length,
-      cellDeps: tx.cellDeps.length,
-      witnesses: tx.witnesses.length,
-    },
+    transactionShape: transactionShape(tx),
     txFee: {
       fee: formatCkb(tx.estimateFee(state.system.feeRate)),
       feeRate: state.system.feeRate,
@@ -242,7 +226,7 @@ async function send(
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(runtime.signer, tx, (hash) => {
-      record({ txHash: hash });
+      Object.assign(log, { txHash: hash });
     });
   } catch (error) {
     if (!(error instanceof TransactionBroadcastError)) {
@@ -254,12 +238,12 @@ async function send(
   try {
     await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });
   } catch (error) {
-    record({
+    Object.assign(log, {
       outcome: error instanceof TransactionWaitError ? "rejected" : "unresolved",
     });
     throw error;
   }
-  record({ outcome: "committed" });
+  Object.assign(log, { outcome: "committed" });
 }
 
 function hasCollectible({ context }: StimulusState): boolean {

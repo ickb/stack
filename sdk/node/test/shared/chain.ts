@@ -2,11 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  createPublicClient,
-  publicRpcEndpointIdentity,
-  verifyChainPreflight,
-} from "../../src/shared/index.ts";
+import { createPublicClient, verifyChainPreflight } from "../../src/shared/chain.ts";
 import {
   byte32FromByte,
   MAINNET_GENESIS_HASH,
@@ -16,34 +12,11 @@ import {
 
 const MISSING_TESTNET_GENESIS_HEADER = "Missing testnet genesis header";
 const MAINNET_RPC_URL = "https://mainnet.example";
-const INVALID_RPC_ENDPOINT_IDENTITY = "Invalid RPC endpoint identity input";
 const HTTP_CLIENT_PROCESS = fileURLToPath(
   new URL("fixtures/httpPublicClientProcess.ts", import.meta.url),
 );
 
 describe("public clients and preflight identity", () => {
-  it("reduces RPC configuration to credential-free endpoint identity", () => {
-    expect(
-      publicRpcEndpointIdentity("https://rpc.example:8443/ckb?token=secret#private"),
-    ).toEqual({
-      mode: "exclusive",
-      protocol: "https:",
-      hostname: "rpc.example",
-      port: "8443",
-      pathname: "/ckb",
-    });
-    expect(publicRpcEndpointIdentity("wss://rpc.example/ws")).toMatchObject({
-      mode: "exclusive",
-      protocol: "wss:",
-    });
-    expect(publicRpcEndpointIdentity(undefined)).toEqual({ mode: "default" });
-    for (const value of ["", "invalid", "https://user@rpc.example/"]) {
-      expect(() => publicRpcEndpointIdentity(value)).toThrow(
-        INVALID_RPC_ENDPOINT_IDENTITY,
-      );
-    }
-  });
-
   it("opens network-specific public clients owned by the caller", async () => {
     const testnetUrl = "http://127.0.0.1:8114/";
     const mainnet = createPublicClient("mainnet", MAINNET_RPC_URL);
@@ -67,12 +40,6 @@ describe("public clients and preflight identity", () => {
     expect(testnet.value).toBeInstanceOf(ccc.ClientPublicTestnet);
     expect(endpointPoolUrls(testnet.value).length).toBeGreaterThan(1);
     await testnet.dispose();
-  });
-
-  it("rejects an empty RPC URL", () => {
-    expect(() => createPublicClient("testnet", "")).toThrow(
-      INVALID_RPC_ENDPOINT_IDENTITY,
-    );
   });
 });
 describe("finite public clients", () => {

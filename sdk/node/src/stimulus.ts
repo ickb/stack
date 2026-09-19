@@ -2,22 +2,15 @@ import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signerAccountLocks } from "../../src/send/account_locks.ts";
-import {
-  createPublicClient,
-  logExecution,
-  publicRpcEndpointIdentity,
-  verifyChainPreflight,
-} from "./shared/index.ts";
-import {
-  readStimulusConfig,
-  readStimulusOverride,
-  runStimulusTurn,
-} from "./stimulus/index.ts";
+import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
+import { logExecution } from "./shared/logging.ts";
+import { readStimulusConfig, readStimulusOverride } from "./stimulus/config.ts";
+import { runStimulusTurn } from "./stimulus/turn.ts";
 // One process is one stimulus turn: read config, connect, send at most one transaction, exit.
 if (process.argv.length > 2) {
   throw new Error(`Unknown argument: ${String(process.argv[2])}`);
 }
-const { chain, privateKey, rpcUrl } = await readStimulusConfig(process.env);
+const { chain, privateKey, rpcUrl, rpcEndpoint } = await readStimulusConfig(process.env);
 const override = readStimulusOverride(process.env);
 const startTime = new Date();
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
@@ -49,7 +42,7 @@ try {
         hashType: primaryLock.hashType,
         args: primaryLock.args,
       },
-      rpcEndpoint: publicRpcEndpointIdentity(rpcUrl),
+      rpcEndpoint,
       preflight: {
         expected: preflight.expected,
         observed: preflight.observed,

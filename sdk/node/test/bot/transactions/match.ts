@@ -6,7 +6,7 @@ import { OrderManager } from "../../../../src/order/order.ts";
 import { chainState, FakeClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CKB_RESERVE } from "../../../../src/constants.ts";
-import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
+import { buildTransaction } from "../../../src/bot/transaction.ts";
 import {
   BAND_ICKB_BALANCE,
   botRuntime,
@@ -223,8 +223,8 @@ describe("buildTransaction matching", () => {
 
     expect(result).toMatchObject({
       kind: "built",
-      actions: { matchedOrders: 1, deposits: 0, withdrawalRequests: 0 },
       decision: {
+        actions: { matchedOrders: 1, deposits: 0, withdrawalRequests: 0 },
         match: {
           reason: "matched",
           partialCount: 1,
@@ -257,8 +257,10 @@ describe("buildTransaction matching", () => {
     expect(withdraw).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       kind: "built",
-      actions: { matchedOrders: 0, withdrawals: 1 },
-      decision: { core: { kind: "none" } },
+      decision: {
+        actions: { matchedOrders: 0, withdrawals: 1 },
+        core: { kind: "none" },
+      },
     });
   });
 });

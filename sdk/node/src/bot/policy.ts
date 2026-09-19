@@ -1,21 +1,37 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
+import { CKB_RESERVE } from "../../../src/constants.ts";
 import {
+  ringSegmentIndex,
+  ringSegments,
   ringSurplusDepositFilter,
   sortByMaturity,
 } from "../../../src/conversion/withdrawal_ring.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 
-import { CKB_RESERVE } from "../../../src/constants.ts";
-import {
-  ICKB_REFILL_BELOW,
-  ICKB_RETAIN,
-  ICKB_WITHDRAW_ABOVE,
-  STRESS_DIVISOR,
-} from "./policy/constants.ts";
-import { ringCoverage, type RingSummary } from "./policy/ring.ts";
+/** The pool deposits the bot may request now: claim between fifteen minutes and an hour out. */
+export const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
+export const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 
-export { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy/constants.ts";
-export type { RingSummary } from "./policy/ring.ts";
+// The inventory band the pre-rewrite bot ran for a year: refill under 2,000 iCKB,
+// withdraw above 120,000 keeping 20,000, so a refill lands far below the withdrawal
+// line and a withdrawal keeps ten times the refill line (decisions amendment 52).
+// The refill line must stay above the whole-only band of `CKB_MIN_MATCH_LOG_DEFAULT`
+// (about 1,150 iCKB at 36), so a buyer the bot cannot complete always fires a refill.
+export const ICKB_REFILL_BELOW = ICKB_DEPOSIT_CAP / 50n;
+export const ICKB_RETAIN = ICKB_DEPOSIT_CAP / 5n;
+export const ICKB_WITHDRAW_ABOVE = ICKB_DEPOSIT_CAP + ICKB_RETAIN;
+/** Anchors may be withdrawn only when spendable CKB is below this fraction of a deposit. */
+export const STRESS_DIVISOR = 5n;
+
+/** Compact evidence of the pool ring the policy evaluated, as the journal carries it. */
+export interface RingSummary {
+  poolDepositCount: number;
+  segmentCount: number;
+  targetSegmentIndex: number;
+  targetUdtValue: bigint;
+  totalPoolUdt: bigint;
+}
 
 /** Post-match balances and the pool the rebalance decision reads. */
 export interface RebalanceInput {
@@ -87,4 +103,31 @@ function depositReasonFor(ickb: bigint, needsSeed: boolean): DepositReason | und
     return "low_ickb";
   }
   return needsSeed ? "ring_coverage" : undefined;
+}
+
+/**
+ * Whether the ring segment containing the tip lacks coverage: under half its equal share
+ * of the pool's iCKB. The full public pool shapes the ring, not only ready deposits.
+ */
+export function ringCoverage(
+  poolDeposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+): { needsSeed: boolean; summary: RingSummary } {
+  const segments = ringSegments(poolDeposits);
+  const targetSegmentIndex = ringSegmentIndex(tip.epoch, segments.length);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringSegmentIndex returns 0 <= index < segmentCount, and ringSegments always returns at least one segment.
+  const target = segments[targetSegmentIndex]!;
+  const totalPoolUdt = segments.reduce((sum, segment) => sum + segment.udtValue, 0n);
+  return {
+    needsSeed:
+      poolDeposits.length === 0 ||
+      2n * target.udtValue * BigInt(segments.length) < totalPoolUdt,
+    summary: {
+      poolDepositCount: poolDeposits.length,
+      segmentCount: segments.length,
+      targetSegmentIndex,
+      targetUdtValue: target.udtValue,
+      totalPoolUdt,
+    },
+  };
 }

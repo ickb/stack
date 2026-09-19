@@ -1,18 +1,13 @@
 import type { ccc } from "@ckb-ccc/core";
-import {
-  toJsonLogRecord,
-  writeJsonLine,
-  type ChainPreflightEvidence,
-  type JsonLogRecord,
-  type PublicRpcEndpointIdentity,
-  type SupportedChain,
-} from "../shared/index.ts";
+import type { SupportedChain } from "../../../src/utils/index.ts";
+import type { ChainPreflightEvidence } from "../shared/chain.ts";
+import { writeJsonLine } from "../shared/logging.ts";
+import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
 import type {
-  BotActions,
   BotDecision,
   BotStateSummary,
   BuildTransactionSkipReason,
-} from "./runtime/types.ts";
+} from "./types.ts";
 
 /** Public identity of one bot process, emitted once with the chain preflight evidence. */
 export interface BotIdentity {
@@ -37,16 +32,9 @@ export type BotEvent =
   | {
       type: "bot.decision.skipped";
       reason: BuildTransactionSkipReason;
-      actions: BotActions;
       decision: BotDecision;
     }
-  | {
-      type: "bot.transaction.built";
-      actions: BotActions;
-      fee: BotDecision["fee"];
-      transactionShape: BotDecision["transactionShape"];
-      decision: BotDecision;
-    }
+  | { type: "bot.transaction.built"; decision: BotDecision }
   | {
       type: "bot.transaction.sent";
       txHash: ccc.Hex;
@@ -72,31 +60,21 @@ export type BotEvent =
       error: unknown;
     };
 
-/** Emits bot events as JSON lines on stdout, or to `write` in tests. */
+/** Emits bot events as JSON lines on stdout. */
 export class BotEventEmitter {
-  private readonly context: {
-    chain: SupportedChain;
-    runId: string;
-    write?: (event: JsonLogRecord) => void;
-  };
+  private readonly context: { chain: SupportedChain; runId: string };
 
-  constructor(context: {
-    chain: SupportedChain;
-    runId: string;
-    write?: (event: JsonLogRecord) => void;
-  }) {
+  constructor(context: { chain: SupportedChain; runId: string }) {
     this.context = context;
   }
 
   public emit(event: BotEvent): void {
-    (this.context.write ?? writeJsonLine)(
-      toJsonLogRecord({
-        ...event,
-        chain: this.context.chain,
-        runId: this.context.runId,
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    writeJsonLine({
+      ...event,
+      chain: this.context.chain,
+      runId: this.context.runId,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 

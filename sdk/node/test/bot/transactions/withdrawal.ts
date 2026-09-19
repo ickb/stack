@@ -6,9 +6,9 @@ import type { IckbDepositCell } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
-import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
-import type { Runtime } from "../../../src/bot/runtime/types.ts";
+import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
+import { buildTransaction } from "../../../src/bot/transaction.ts";
+import type { Runtime } from "../../../src/bot/types.ts";
 import {
   botRuntime,
   botState,
@@ -67,8 +67,8 @@ describe("buildTransaction withdrawal", () => {
     expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([first, second]);
     expect(result).toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 2 },
       decision: {
+        actions: { withdrawalRequests: 2 },
         rebalance: { withdrawal: { candidateCount: 3, stress: false } },
         core: { kind: "withdraw", withdrawalRequests: 2, attempts: 2 },
       },
@@ -121,8 +121,10 @@ describe("buildTransaction withdrawal", () => {
       ),
     ).resolves.toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 0, withdrawals: 1 },
-      decision: { core: { kind: "none", attempts: 2 } },
+      decision: {
+        actions: { withdrawalRequests: 0, withdrawals: 1 },
+        core: { kind: "none", attempts: 2 },
+      },
     });
     await expect(buildTransaction(runtime, botState(state))).resolves.toMatchObject({
       kind: "skipped",
@@ -154,8 +156,10 @@ describe("buildTransaction withdrawal", () => {
       ),
     ).resolves.toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
-      decision: { transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 1 } },
+      decision: {
+        actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
+        transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 1 },
+      },
     });
     // A withdrawal request's deposit header takes the first slot, so the last withdrawal's
     // header lands on the limit: the withdraw core is unfundable and `none` carries the batch.
@@ -171,8 +175,10 @@ describe("buildTransaction withdrawal", () => {
       ),
     ).resolves.toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
-      decision: { core: { kind: "none", attempts: 2 } },
+      decision: {
+        actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
+        core: { kind: "none", attempts: 2 },
+      },
     });
     // One fewer ready withdrawal leaves the request its slot: the header overflow was the
     // only reason the withdraw core failed.
@@ -189,8 +195,10 @@ describe("buildTransaction withdrawal", () => {
       ),
     ).resolves.toMatchObject({
       kind: "built",
-      actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT - 1 },
-      decision: { core: { kind: "withdraw", attempts: 1 } },
+      decision: {
+        actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT - 1 },
+        core: { kind: "withdraw", attempts: 1 },
+      },
     });
   });
 });

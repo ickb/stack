@@ -1,6 +1,10 @@
 import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logExecution, toJsonLogRecord, writeJsonLine } from "../../src/shared/index.ts";
+import {
+  logExecution,
+  toJsonLogRecord,
+  writeJsonLine,
+} from "../../src/shared/logging.ts";
 import { byte32FromByte } from "./support/node_utils_support.ts";
 
 afterEach(() => {

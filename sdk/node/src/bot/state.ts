@@ -1,7 +1,7 @@
 import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
 import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy.ts";
-import type { BotState, Runtime } from "./runtime/types.ts";
+import type { BotState, Runtime } from "./types.ts";
 
 /**
  * Reads bot-owned account state and public market state for one planning attempt.

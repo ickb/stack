@@ -11,14 +11,13 @@ import {
 } from "@ickb/testkit";
 import { afterEach, expect, it, vi } from "vitest";
 import { BotEventEmitter } from "../../src/bot/events.ts";
-import type { Runtime } from "../../src/bot/runtime/types.ts";
 import {
   BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
   runBotTurn,
   type BotTurnContext,
 } from "../../src/bot/turn.ts";
-import type { JsonLogRecord } from "../../src/shared/index.ts";
+import type { Runtime } from "../../src/bot/types.ts";
 import {
   BAND_ICKB_BALANCE,
   botRuntime,
@@ -30,7 +29,6 @@ import {
 
 const BOT_STATE_READ = "bot.state.read";
 const BOT_TRANSACTION_BUILT = "bot.transaction.built";
-const BOT_TURN_FAILED = "bot.turn.failed";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
 const FETCH_FAILED = "fetch failed";
@@ -109,17 +107,11 @@ it("ends the turn with the broadcast error when the send fails without a hash", 
     },
   });
 
-  await runBotTurn(harness.context);
-
-  expect(process.exitCode).toBe(1);
-  expect(eventTypes(harness.events)).toEqual([
-    BOT_STATE_READ,
-    BOT_TRANSACTION_BUILT,
-    BOT_TURN_FAILED,
-  ]);
-  expect(harness.events.at(-1)).toMatchObject({
-    error: { name: "Error", message: "transaction broadcast failed" },
+  await expect(runBotTurn(harness.context)).rejects.toMatchObject({
+    name: "Error",
+    message: "transaction broadcast failed",
   });
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
 });
 
 it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
@@ -196,22 +188,25 @@ it("ends the attempt after one confirmation window without resending or rebuildi
     },
   });
 
-  const turn = runBotTurn(harness.context);
+  const turn = (async (): Promise<unknown> => {
+    try {
+      await runBotTurn(harness.context);
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  })();
   await vi.advanceTimersByTimeAsync(BOT_TRANSACTION_WAIT_TIMEOUT_MS);
-  await turn;
+  const failure = await turn;
 
-  expect(process.exitCode).toBe(1);
   expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
     BOT_TRANSACTION_BUILT,
     BOT_TRANSACTION_SENT,
-    BOT_TURN_FAILED,
   ]);
-  expect(harness.events.at(-1)).toMatchObject({
-    error: {
-      message: `Client request error Wait transaction timeout ${String(BOT_TRANSACTION_WAIT_TIMEOUT_MS)}ms`,
-    },
+  expect(failure).toMatchObject({
+    message: `Client request error Wait transaction timeout ${String(BOT_TRANSACTION_WAIT_TIMEOUT_MS)}ms`,
   });
 });
 
@@ -229,21 +224,25 @@ it("ends the turn with the SDK wait error when the node rejects the transaction"
     },
   });
 
-  await runBotTurn(harness.context);
+  const failure = await (async (): Promise<unknown> => {
+    try {
+      await runBotTurn(harness.context);
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  })();
 
-  expect(process.exitCode).toBe(1);
-  expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_TURN_FAILED,
-    error: {
-      name: "TransactionWaitError",
-      txHash: harness.sentHash(),
-      status: "rejected",
-      reason,
-    },
+  expect(failure).toMatchObject({
+    name: "TransactionWaitError",
+    txHash: harness.sentHash(),
+    status: "rejected",
+    reason,
   });
+  expect(eventTypes(harness.events).at(-1)).toBe(BOT_TRANSACTION_SENT);
 });
 
-it("exits 1 with the error, its stack, and no private material when the read fails", async () => {
+it("propagates the read failure with nothing sent", async () => {
   const harness = turnHarness({
     getL1AccountState: async () => {
       await Promise.resolve();
@@ -251,32 +250,24 @@ it("exits 1 with the error, its stack, and no private material when the read fai
     },
   });
 
-  await runBotTurn(harness.context);
-
-  expect(process.exitCode).toBe(1);
-  expect(harness.sendTransaction).not.toHaveBeenCalled();
-  expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_TURN_FAILED,
-    error: { name: "TypeError", message: FETCH_FAILED },
+  await expect(runBotTurn(harness.context)).rejects.toMatchObject({
+    name: "TypeError",
+    message: FETCH_FAILED,
   });
-  expect(JSON.stringify(harness.events.at(-1))).toContain(
-    '"stack":"TypeError: fetch failed',
-  );
+  expect(harness.sendTransaction).not.toHaveBeenCalled();
+  expect(harness.events).toEqual([]);
 });
 
-it("exits 1 with structured event evidence for a build failure", async () => {
+it("propagates a build failure after the state event", async () => {
   vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
     throw new Error("deterministic build failure");
   });
   const harness = turnHarness();
 
-  await runBotTurn(harness.context);
-
-  expect(process.exitCode).toBe(1);
-  expect(harness.events.at(-1)).toMatchObject({
-    type: BOT_TURN_FAILED,
-    error: { message: "deterministic build failure" },
-  });
+  await expect(runBotTurn(harness.context)).rejects.toThrow(
+    "deterministic build failure",
+  );
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ]);
 });
 
 function turnHarness(
@@ -289,13 +280,13 @@ function turnHarness(
   } = {},
 ): {
   context: BotTurnContext;
-  events: JsonLogRecord[];
+  events: object[];
   sendTransaction: ReturnType<typeof vi.fn<Runtime["sendTransaction"]>>;
   sentHash: () => ccc.Hex;
 } {
   const chain = options.chain ?? chainState();
   const account = options.account ?? fundedAccount();
-  const events: JsonLogRecord[] = [];
+  const events: object[] = [];
   // The default fake node accepts and commits whatever the bot sends.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
@@ -316,15 +307,18 @@ function turnHarness(
     },
     sendTransaction,
   });
+  // The emitter writes JSON lines to stdout; the harness parses them back.
+  vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    const parsed: unknown = JSON.parse(String(chunk));
+    if (typeof parsed !== "object" || parsed === null) {
+      throw new TypeError("Expected a JSON object line");
+    }
+    events.push(parsed);
+    return true;
+  });
   return {
     context: {
-      events: new BotEventEmitter({
-        chain: "testnet",
-        runId: "run-1",
-        write: (event): void => {
-          events.push(event);
-        },
-      }),
+      events: new BotEventEmitter({ chain: "testnet", runId: "run-1" }),
       runtime,
     },
     events,
@@ -376,6 +370,6 @@ function hashScript(byte: string): ccc.Script {
   return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
 }
 
-function eventTypes(events: JsonLogRecord[]): unknown[] {
-  return events.map((event) => event["type"]);
+function eventTypes(events: object[]): string[] {
+  return events.map((event) => ("type" in event ? String(event.type) : ""));
 }

@@ -1,7 +1,10 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readRuntimeConfigEnv, type RuntimeConfig } from "../../src/shared/index.ts";
+import {
+  readRuntimeConfigEnv,
+  type RuntimeConfig,
+} from "../../src/shared/runtime_config.ts";
 
 const VALID_PRIVATE_KEY = `0x${"11".repeat(32)}`;
 const SECP256K1_ORDER =
@@ -26,16 +29,31 @@ describe("runtime config env", () => {
       chain: "testnet",
       privateKey: VALID_PRIVATE_KEY,
       rpcUrl: RPC_URL,
+      rpcEndpoint: {
+        mode: "exclusive",
+        protocol: "https:",
+        hostname: "testnet.example",
+        port: "",
+        pathname: "/",
+      },
     });
+    // The URL string reaches only the client; its identity carries no query, no credentials.
     await expect(
       readConfig({
         BOT_CHAIN: "mainnet",
-        BOT_RPC_URL: "https://rpc.example/path?token=abc",
+        BOT_RPC_URL: "https://user:password@rpc.example:8443/path?token=abc#private",
       }),
     ).resolves.toEqual({
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: "https://rpc.example/path?token=abc",
+      rpcUrl: "https://user:password@rpc.example:8443/path?token=abc#private",
+      rpcEndpoint: {
+        mode: "exclusive",
+        protocol: "https:",
+        hostname: "rpc.example",
+        port: "8443",
+        pathname: "/path",
+      },
     });
   });
 
@@ -59,6 +77,7 @@ describe("runtime config env", () => {
     await expect(readConfig({ BOT_RPC_URL: "" })).resolves.toEqual({
       chain: "testnet",
       privateKey: VALID_PRIVATE_KEY,
+      rpcEndpoint: { mode: "default" },
     });
     await expect(readConfig({ BOT_PRIVATE_KEY_FILE: undefined })).rejects.toThrow(
       "Empty env BOT_PRIVATE_KEY_FILE",
@@ -115,18 +134,9 @@ describe("runtime config private key file", () => {
 });
 
 describe("runtime config RPC URL", () => {
-  it("rejects malformed, non-HTTP, and credential-bearing URLs without exposing them", async () => {
+  it("rejects malformed and non-HTTP URLs without exposing them", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
-    for (const rpcUrl of [
-      "file:///tmp/socket",
-      "https://[bad",
-      "https://rpc.example/ bad",
-      "https://rpc.example/",
-      "https://user@rpc.example/",
-      "https://:password@rpc.example/",
-      "https://user:password@rpc.example/",
-      "https://%75ser:%70assword@rpc.example/",
-    ]) {
+    for (const rpcUrl of ["file:///tmp/socket", "https://[bad", "not a url"]) {
       let error: unknown;
       try {
         await readConfig({ BOT_RPC_URL: rpcUrl });

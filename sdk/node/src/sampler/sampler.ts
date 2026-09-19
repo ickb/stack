@@ -17,16 +17,13 @@ import { asyncBinarySearch } from "../../../src/utils/index.ts";
 
 /**
  * Yields the CSV header, the genesis row, one approximate row per sample date
- * (`samplesPerYear` evenly spaced positions per covered UTC year plus the iCKB
- * launch when in range), and the exact tip row.
+ * (four evenly spaced positions per covered UTC year plus the iCKB launch when in
+ * range), and the exact tip row.
  *
  * @remarks The tip is read once and bounds every search. A missing probed header
  * moves the search left; a missing genesis or selected header throws.
  */
-export async function* sampleRows(
-  client: ccc.Client,
-  samplesPerYear?: number,
-): AsyncGenerator<string> {
+export async function* sampleRows(client: ccc.Client): AsyncGenerator<string> {
   const headers = new Map<number, ccc.ClientBlockHeader | undefined>();
   const getHeader = async (
     blockNumber: number,
@@ -52,7 +49,7 @@ export async function* sampleRows(
   }
   const n = Number(searchBound);
 
-  const dates = sampleTargets(genesis.timestamp, tip.timestamp, samplesPerYear);
+  const dates = sampleTargets(genesis.timestamp, tip.timestamp);
 
   yield ["BlockNumber", "Date", "CkbPerIckb", "Note"].join(", ");
   yield row(genesis, "Genesis");
@@ -88,8 +85,9 @@ export async function* sampleRows(
   yield row(tip, "Tip");
 }
 
-function sampleTargets(startMs: bigint, endMs: bigint, n = 4): Array<[Date, string]> {
-  const dates = samples(startMs, endMs, n).map((date): [Date, string] => [
+/** Four evenly spaced dates a year, plus the iCKB launch when the range covers it. */
+function sampleTargets(startMs: bigint, endMs: bigint): Array<[Date, string]> {
+  const dates = samples(startMs, endMs, 4).map((date): [Date, string] => [
     date,
     "Approximate timestamp sample",
   ]);

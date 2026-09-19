@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { createPublicClient } from "../../../src/shared/index.ts";
+import { createPublicClient } from "../../../src/shared/chain.ts";
 
 const server = createServer((request, response) => {
   request.resume();

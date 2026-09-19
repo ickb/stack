@@ -5,7 +5,7 @@ import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
 import { minBigInt, type ExchangeRatio } from "../../../src/utils/index.ts";
 
 import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
-import { MAX_MATCH_PARTIALS } from "./runtime/support.ts";
+import { MAX_MATCH_PARTIALS } from "./support.ts";
 
 /** One turn's match and how it was chosen. */
 export interface TurnMatch extends Match {
@@ -38,7 +38,6 @@ export function matchTurn({
   exchangeRatio,
   feeRate,
   seed,
-  maxPartials = MAX_MATCH_PARTIALS,
 }: {
   orders: OrderGroup[];
   ckb: bigint;
@@ -46,7 +45,6 @@ export function matchTurn({
   exchangeRatio: ExchangeRatio;
   feeRate: ccc.Num;
   seed: number;
-  maxPartials?: number;
 }): TurnMatch {
   const fee = partialOrderFee(orders, feeRate);
   const cost = fillCost(fee, exchangeRatio);
@@ -73,7 +71,7 @@ export function matchTurn({
     seed,
   };
   const balances = { ckb, udt };
-  while (match.partials.length < maxPartials) {
+  while (match.partials.length < MAX_MATCH_PARTIALS) {
     const best = bestFill(matchers, balances, cost, exchangeRatio);
     if (best === undefined) {
       break;

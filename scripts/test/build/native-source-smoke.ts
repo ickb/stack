@@ -66,7 +66,7 @@ void test("native source imports do not load deprecated builtin punycode", async
     await importFromRoot("sdk/src/index.ts");
     requireFromCore("@ckb-ccc/core");
     requireFromCccCore("@joyid/ckb");
-    await importFromRoot("sdk/node/src/bot/index.ts");
+    await importFromRoot("sdk/node/src/bot/turn.ts");
     await importFromRoot("sdk/node/src/sampler/sampler.ts");
   } finally {
     Reflect.set(Module, "_load", originalLoad);

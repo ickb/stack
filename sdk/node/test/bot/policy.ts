@@ -10,12 +10,13 @@ import {
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { CKB_RESERVE } from "../../../src/constants.ts";
-import { planRebalance, type RebalanceInput } from "../../src/bot/policy.ts";
 import {
   ICKB_REFILL_BELOW,
   ICKB_RETAIN,
   ICKB_WITHDRAW_ABOVE,
-} from "../../src/bot/policy/constants.ts";
+  planRebalance,
+  type RebalanceInput,
+} from "../../src/bot/policy.ts";
 import { readyDeposit } from "./fixtures/bot.ts";
 
 const TIP = headerLike({ epoch: [0n, 0n, 1n], timestamp: 0n });

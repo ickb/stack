@@ -37,7 +37,7 @@ function ratioOf(ckb: bigint, udt: bigint): { ckbScale: bigint; udtScale: bigint
 function turn(
   orders: Array<ReturnType<typeof marketOrder>>,
   balances: { ckb: bigint; udt: bigint },
-  options: { seed?: number; maxPartials?: number; exchangeRatio?: typeof UNIT } = {},
+  options: { seed?: number; exchangeRatio?: typeof UNIT } = {},
 ): TurnMatch {
   return matchTurn({
     orders,
@@ -45,7 +45,6 @@ function turn(
     exchangeRatio: options.exchangeRatio ?? UNIT,
     feeRate: FEE_RATE,
     seed: options.seed ?? 1,
-    ...(options.maxPartials === undefined ? {} : { maxPartials: options.maxPartials }),
   });
 }
 
@@ -145,9 +144,9 @@ describe("matchTurn", () => {
       buyer("09", 400n * CKB, 200n * CKB),
     ];
 
-    const match = turn(orders, { ckb: CKB, udt: 1000n * CKB }, { maxPartials: 1 });
+    const match = turn(orders, { ckb: CKB, udt: 1000n * CKB });
 
-    expect(outPoints(match)).toEqual([hash("09")]);
+    expect(outPoints(match)[0]).toBe(hash("09"));
   });
 
   it("breaks ties by the seed, the same way for the same seed", () => {
@@ -157,14 +156,10 @@ describe("matchTurn", () => {
     ];
     const picks = new Set<string>();
     for (let seed = 0; seed < 16; seed += 1) {
-      const first = turn(
-        orders,
-        { ckb: CKB, udt: 1000n * CKB },
-        { seed, maxPartials: 1 },
+      const first = turn(orders, { ckb: CKB, udt: 1000n * CKB }, { seed });
+      expect(outPoints(turn(orders, { ckb: CKB, udt: 1000n * CKB }, { seed }))).toEqual(
+        outPoints(first),
       );
-      expect(
-        outPoints(turn(orders, { ckb: CKB, udt: 1000n * CKB }, { seed, maxPartials: 1 })),
-      ).toEqual(outPoints(first));
       picks.add(outPoints(first)[0] ?? "");
     }
 

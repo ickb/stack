@@ -3,9 +3,9 @@ import { IckbError } from "../../../../src/conversion/error.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy/constants.ts";
-import { buildTransaction } from "../../../src/bot/runtime/transaction.ts";
-import type { Runtime } from "../../../src/bot/runtime/types.ts";
+import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
+import { buildTransaction } from "../../../src/bot/transaction.ts";
+import type { Runtime } from "../../../src/bot/types.ts";
 import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
 
 afterEach(() => {
@@ -45,8 +45,8 @@ describe("buildTransaction deposit", () => {
     );
     expect(result).toMatchObject({
       kind: "built",
-      actions: { deposits: 1 },
       decision: {
+        actions: { deposits: 1 },
         rebalance: { deposit: "low_ickb", ring: { poolDepositCount: 0 } },
         core: { kind: "deposit", attempts: 1 },
       },
@@ -86,8 +86,8 @@ describe("buildTransaction deposit", () => {
     expect(completeTransaction).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
       kind: "built",
-      actions: { deposits: 0, withdrawalRequests: 1 },
       decision: {
+        actions: { deposits: 0, withdrawalRequests: 1 },
         rebalance: { deposit: "ring_coverage", withdrawal: { candidateCount: 1 } },
         core: { kind: "withdraw", withdrawalRequests: 1, attempts: 2 },
       },

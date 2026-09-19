@@ -36,7 +36,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
 describe(SAMPLER_MODULE_SUITE, () => {
   it("throws when the genesis header is missing", async () => {
     await expect(
-      rows(sampleClient(new Map(), sampleHeader(1n, SAMPLE_TIP_ISO)), 1),
+      rows(sampleClient(new Map(), sampleHeader(1n, SAMPLE_TIP_ISO))),
     ).rejects.toThrow("Genesis block not found");
   });
 
@@ -54,7 +54,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
         ]),
         tip,
       ),
-      1,
     );
 
     expect(lines.map((line) => line.split(", ").slice(0, 2))).toEqual([
@@ -68,7 +67,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
     expect(lines[1]?.split(", ", 4)[2]).toBe("1.00082");
   });
 
-  it("keeps one target when default sample count is omitted", async () => {
+  it("samples four dates a year, one inside a two-month range", async () => {
     const genesisIso = "2024-01-01T00:00:00.000Z";
     const tipIso = "2024-03-01T00:00:00.000Z";
     const genesis = sampleHeader(0n, genesisIso);
@@ -120,7 +119,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
           return tip;
         },
       }),
-      1,
     );
 
     expect(Object.fromEntries(reads)).toEqual({ 0: 1, 1: 1, 2: 1 });
@@ -146,7 +144,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
         ]),
         tip,
       ),
-      1,
     );
 
     expect(lines.join("\n")).not.toContain("iCKB Launch");
@@ -173,7 +170,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
 
     const lines = await rows(
       sampleClient(headers, tip ?? sampleHeader(5n, SAMPLE_TIP_ISO)),
-      4,
     );
 
     expect(lines.slice(1).map((line) => line.split(", ", 4)[3])).toEqual([
@@ -202,7 +198,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
         ]),
         tip,
       ),
-      1,
     );
 
     expect(lines.at(-1)?.startsWith(`2, ${SAMPLE_TIP_ISO}`)).toBe(true);
@@ -228,7 +223,6 @@ describe(SAMPLER_MODULE_SUITE, () => {
           return tip;
         },
       }),
-      1,
     );
 
     const positiveRequest = requests.find((blockNumber) => blockNumber > 0n);
@@ -241,7 +235,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
     const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
     const tip = sampleHeader(2n ** 52n, SAMPLE_TIP_ISO);
 
-    await expect(rows(sampleClient(new Map([[0, genesis]]), tip), 1)).rejects.toThrow(
+    await expect(rows(sampleClient(new Map([[0, genesis]]), tip))).rejects.toThrow(
       "Tip block number exceeds sampler search range",
     );
   });
@@ -259,15 +253,14 @@ describe(SAMPLER_MODULE_SUITE, () => {
           ]),
           tip,
         ),
-        1,
       ),
     ).rejects.toThrow("Header not found");
   });
 });
 
-async function rows(client: ccc.Client, samplesPerYear?: number): Promise<string[]> {
+async function rows(client: ccc.Client): Promise<string[]> {
   const lines: string[] = [];
-  for await (const line of sampleRows(client, samplesPerYear)) {
+  for await (const line of sampleRows(client)) {
     lines.push(line);
   }
   return lines;
