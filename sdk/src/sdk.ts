@@ -230,11 +230,13 @@ const IckbSdkImplementation = class IckbSdk {
     ) {
       return conversionFailure("nothing-to-do", context.estimatedMaturity);
     }
+    const completed = await this.completeConversion(tx, options);
     return {
       ok: true,
-      tx: await this.completeConversion(tx, options),
+      tx: completed,
       estimatedMaturity: context.estimatedMaturity,
       conversion: { kind: "collect-only" },
+      isSweepComplete: sweepsAll(completed, context.cells),
     };
   }
 
@@ -283,6 +285,7 @@ const IckbSdkImplementation = class IckbSdk {
       conversion: {
         kind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
       },
+      isSweepComplete: sweepsAll(tx, context.cells),
     };
   }
 
@@ -327,6 +330,7 @@ const IckbSdkImplementation = class IckbSdk {
         kind: conversionKind(plan.selectedDeposits.length > 0, plan.order !== undefined),
       },
       ...(notice === undefined ? {} : { conversionNotice: notice }),
+      isSweepComplete: sweepsAll(tx, context.cells),
     };
   }
 
@@ -499,6 +503,12 @@ function conversionKind(
     return "direct-plus-order";
   }
   return hasDirect ? "direct" : "order";
+}
+
+/** Whether every liquid cell became an input; false when the size budget cut the sweep. */
+function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
+  const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
+  return cells.every((cell) => spent.has(cell.outPoint.toHex()));
 }
 
 async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {

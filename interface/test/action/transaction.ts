@@ -212,7 +212,23 @@ describe("buildTransactionPreview destination", () => {
     );
 
     expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({ lock });
-    expect(txInfo.moveTo).toBe("ckt1qzda…abcdef");
+    expect(txInfo.move).toEqual({ to: "ckt1qzda…abcdef", isComplete: true });
+  });
+
+  it("refuses a move with an amount before reaching the SDK", async () => {
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+
+    const txInfo = await buildTransactionPreview(
+      context(),
+      true,
+      1n,
+      { lock: config.primaryLock, moveTo: "ckt1qzda…abcdef" },
+      config,
+    );
+
+    expect(txInfo.error).toBe("A move to another address takes no amount");
+    expect(buildConversionTransaction).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,11 @@
 import { useState, type JSX } from "react";
 import { shortAddress, type DestinationField } from "../action/destination.ts";
-import { buttonClass, type RootConfig, type WalletConfig } from "../shared/utils.ts";
+import {
+  buttonClass,
+  reasonLabelClass,
+  type RootConfig,
+  type WalletConfig,
+} from "../shared/utils.ts";
 
 export function Dashboard({
   walletConfig,
@@ -41,7 +46,8 @@ export function Dashboard({
  * The wallet's address, doubling as the destination of the next transaction: the own
  * address as the placeholder of the empty field, a pasted one shortened at rest and in
  * full while editing, marked with an arrow once it points elsewhere (decisions amendment
- * 52(af)). The link opens the shown address in the explorer.
+ * 52(af)). While a transaction is under way the field reads as plain text with the reason
+ * under it (52(al)). The link opens the shown address in the explorer.
  */
 function AddressField({
   destination,
@@ -68,34 +74,39 @@ function AddressField({
       {/* "to" and the underline say this is the destination and that it is editable; the
           tooltip alone never shows on a phone. */}
       <span className="text-ickb-muted">to</span>
-      <input
-        value={shown}
-        placeholder={shortAddress(ownAddress)}
-        disabled={disabled}
-        onFocus={() => {
-          setIsEditing(true);
-        }}
-        onBlur={() => {
-          setIsEditing(false);
-        }}
-        onChange={(event) => {
-          setText(event.target.value);
-        }}
-        // A paste is the whole edit: leaving the field shows the address shortened at once.
-        onPaste={(event) => {
-          const element = event.currentTarget;
-          setTimeout(() => {
-            element.blur();
-          }, 0);
-        }}
-        autoComplete="off"
-        spellCheck={false}
-        type="text"
-        aria-invalid={!isValid}
-        aria-label="Destination address"
-        title="Every cell the next transaction creates for you belongs to this address"
-        className="field-sizing-content max-w-full min-w-0 overflow-hidden rounded-none border-0 border-b border-ickb-border/70 bg-transparent text-center text-ellipsis whitespace-nowrap text-ickb-action outline-none placeholder:text-ickb-action/70 hover:border-ickb-action/60 focus:border-ickb-action focus-visible:outline-none disabled:cursor-default"
-      />
+      <span className="relative max-w-full min-w-0">
+        <input
+          value={shown}
+          placeholder={shortAddress(ownAddress)}
+          disabled={disabled}
+          onFocus={() => {
+            setIsEditing(true);
+          }}
+          onBlur={() => {
+            setIsEditing(false);
+          }}
+          onChange={(event) => {
+            setText(event.target.value);
+          }}
+          // A paste is the whole edit: leaving the field shows the address shortened at once.
+          onPaste={(event) => {
+            const element = event.currentTarget;
+            setTimeout(() => {
+              element.blur();
+            }, 0);
+          }}
+          autoComplete="off"
+          spellCheck={false}
+          type="text"
+          aria-invalid={!isValid}
+          aria-label="Destination address"
+          title="Every cell the next transaction creates for you belongs to this address"
+          className={`field-sizing-content max-w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent text-center text-ellipsis whitespace-nowrap outline-none focus-visible:outline-none ${disabled ? "cursor-default text-ickb-text placeholder:text-ickb-text" : "border-b border-ickb-border/70 text-ickb-action placeholder:text-ickb-action/70 hover:border-ickb-action/60 focus:border-ickb-action"}`}
+        />
+        {disabled ? (
+          <span className={reasonLabelClass}>cannot change during the transaction</span>
+        ) : undefined}
+      </span>
       <a
         href={href}
         target="_blank"

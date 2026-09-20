@@ -51,8 +51,11 @@ export type TxInfo = Readonly<{
   fee: bigint;
   estimatedMaturity: bigint;
   conversionKind?: ConversionMetadata["kind"];
-  /** The shortened destination when the transaction moves everything to another lock. */
-  moveTo?: string;
+  /**
+   * Set when the transaction moves the liquid funds to another lock: the shortened
+   * destination, and whether the sweep took every liquid cell or another move is needed.
+   */
+  move?: { to: string; isComplete: boolean };
   conversionNotice?: ConversionNotice;
 }>;
 
@@ -62,6 +65,10 @@ export const txInfoPadding: TxInfo = Object.freeze({
   fee: 0n,
   estimatedMaturity: 0n,
 });
+
+/** The small line under a value the user cannot edit, saying why, centred beneath it. */
+export const reasonLabelClass =
+  "absolute top-full left-1/2 -translate-x-1/2 -translate-y-1.5 text-xs leading-none font-medium tracking-normal whitespace-nowrap text-ickb-muted normal-case";
 
 /** The main button's look, shared by every button that reads as an action. */
 export const buttonClass =

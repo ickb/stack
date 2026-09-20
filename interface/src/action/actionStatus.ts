@@ -78,26 +78,33 @@ function previewMessage(
 }
 
 /**
- * A move to another address replaces the collect-only intent, since the sweep is the
- * transaction, and follows any conversion, since the conversion's outputs move too.
+ * Another address as the destination means leaving this wallet: the sweep is the
+ * transaction, always at amount zero, so it replaces the collect-only intent; converting
+ * positions stay, and a sweep the size budget cut short asks for another run (52(al)).
  */
 export function transactionIntentMessage(
-  txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "moveTo">,
+  txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "move">,
   hasCollectable: boolean,
 ): string {
-  const isMove = txInfo.moveTo !== undefined;
+  const { move } = txInfo;
+  if (move !== undefined) {
+    return [
+      `Sends all CKB and iCKB in this wallet to ${move.to}, without converting.`,
+      collectableNotice(hasCollectable),
+      "Funds still converting stay here: collect them from this wallet later.",
+      move.isComplete ? "" : "Run it again until everything has been sent.",
+    ]
+      .filter((text) => text !== "")
+      .join(" ");
+  }
   return [
-    txInfo.conversionKind === undefined ||
-    (isMove && txInfo.conversionKind === "collect-only")
+    txInfo.conversionKind === undefined
       ? ""
       : conversionIntentText(txInfo.conversionKind),
     txInfo.conversionNotice === undefined
       ? ""
       : conversionNoticeText(txInfo.conversionNotice),
-    txInfo.conversionKind === "collect-only" && !isMove
-      ? ""
-      : collectableNotice(hasCollectable),
-    isMove ? `Moves everything to ${txInfo.moveTo}.` : "",
+    txInfo.conversionKind === "collect-only" ? "" : collectableNotice(hasCollectable),
   ]
     .filter((text) => text !== "")
     .join(" ");
@@ -169,7 +176,7 @@ export function actionLabel(
   isMove: boolean,
 ): string {
   if (isMove) {
-    return "move everything";
+    return "send all CKB and iCKB";
   }
   if (amount === 0n && hasCollectable) {
     return "collect converted funds";

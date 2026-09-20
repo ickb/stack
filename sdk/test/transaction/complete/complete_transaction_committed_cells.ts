@@ -7,7 +7,11 @@ import {
   fundedSigner,
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import { hash, transactionWithOutputs } from "../base/support/sdk_core_support.ts";
+import {
+  conversionContext,
+  hash,
+  transactionWithOutputs,
+} from "../base/support/sdk_core_support.ts";
 import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";
 
 describe(COMPLETE_TRANSACTION_SUITE, () => {
@@ -179,6 +183,47 @@ function registerSweepTests(): void {
 
     // Nothing fit under the budget, so both cells came from the fee loop one at a time.
     expect(completed.inputs).toHaveLength(2);
+  });
+
+  it("moves iCKB cells first, plain cells last, and reports a sweep the budget cut short", async () => {
+    // A move is amount zero to another lock, so the sweep is the transaction. The budget
+    // may cut it, so the iCKB cells go first and the plain cells left behind can still fund
+    // the next move's fee (decisions amendment 52(al)).
+    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
+    const { signer } = fundedSigner([], [lock]);
+    const tx = fullBudgetTransaction(lock, 400);
+    const ickb = ["a1", "a2", "a3"].map((byte) =>
+      udtCell(byte, lock, ickbUdt.script, 10n),
+    );
+    const dust = Array.from({ length: 40 }, (_, index) =>
+      plainCell(index.toString(16).padStart(2, "0"), lock, ccc.fixedPointFrom(62)),
+    );
+    const funding = plainCell(
+      "ff",
+      lock,
+      ccc.fixedPointFrom(61 * tx.outputs.length + 100),
+    );
+
+    const result = await sdk.buildConversionTransaction(tx, {
+      direction: "ckb-to-ickb",
+      amount: 0n,
+      lock: script("77"),
+      signer,
+      context: conversionContext({
+        system: { feeRate: 1_000n },
+        cells: [...dust, funding, ...ickb],
+      }),
+    });
+
+    if (!result.ok) {
+      throw new Error("Expected a completed move");
+    }
+    const inputs = result.tx.inputs.map((input) => input.previousOutput.toHex());
+    expect(inputs.slice(0, 4)).toEqual(
+      [...ickb, funding].map((cell) => cell.outPoint.toHex()),
+    );
+    expect(inputs.length).toBeLessThan(ickb.length + dust.length + 1);
+    expect(result.isSweepComplete).toBe(false);
   });
 
   it("stops the iCKB sweep at the budget once the outputs are covered", async () => {

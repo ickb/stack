@@ -135,20 +135,19 @@ describe("action status", () => {
     ).toBe("⚠️ Enter a valid Testnet address");
   });
 
-  it("says a move replaces the collection and follows a conversion", () => {
-    const moveTo = "ckt1qzda…abcdef";
-    const txInfo = activeTxInfo();
-    expect(
-      actionMessage({ ...txInfo, conversionKind: "collect-only", moveTo }, flags()),
-    ).toBe("Moves everything to ckt1qzda…abcdef.");
+  it("says a send to another address replaces the collection and may need another run", () => {
+    const move = { to: "ckt1qzda…abcdef", isComplete: true };
+    const txInfo = { ...activeTxInfo(), conversionKind: "collect-only" as const };
+    expect(actionMessage({ ...txInfo, move }, flags())).toBe(
+      "Sends all CKB and iCKB in this wallet to ckt1qzda…abcdef, without converting. Funds still converting stay here: collect them from this wallet later.",
+    );
     expect(
       actionMessage(
-        { ...txInfo, conversionKind: "collect-only", moveTo },
+        { ...txInfo, move: { ...move, isComplete: false } },
         { ...flags(), hasCollectable: true },
       ),
-    ).toBe("Also collects converted funds. Moves everything to ckt1qzda…abcdef.");
-    expect(actionMessage({ ...txInfo, conversionKind: "order", moveTo }, flags())).toBe(
-      "Converts at a variable time, estimated below. Moves everything to ckt1qzda…abcdef.",
+    ).toBe(
+      "Sends all CKB and iCKB in this wallet to ckt1qzda…abcdef, without converting. Also collects converted funds. Funds still converting stay here: collect them from this wallet later. Run it again until everything has been sent.",
     );
   });
 
@@ -156,8 +155,7 @@ describe("action status", () => {
     expect(actionLabel(0n, true, false)).toBe("collect converted funds");
     expect(actionLabel(0n, false, false)).toBe("request conversion");
     expect(actionLabel(1n, true, false)).toBe(requestConversion);
-    expect(actionLabel(1n, true, true)).toBe("move everything");
-    expect(actionLabel(0n, false, true)).toBe("move everything");
+    expect(actionLabel(0n, false, true)).toBe("send all CKB and iCKB");
     expect(unavailableConversionMessage(1n)).toBe(noRequestMessage);
     expect(unavailableConversionMessage(0n)).toBe(noCollectionMessage);
   });

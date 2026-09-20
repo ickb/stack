@@ -52,6 +52,7 @@ export function WalletAppView({
       form={
         <Form
           {...{ isCkb2Udt, setIsCkb2Udt, text, setText, exchangeRatio, isFrozen }}
+          isMove={destinationField.isForeign}
           projection={l1State?.projection}
           chain={walletConfig.chain}
         />

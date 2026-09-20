@@ -121,6 +121,11 @@ export type ConversionTransactionResult =
       conversion: ConversionMetadata;
       /** Optional notice about the selected path. */
       conversionNotice?: ConversionNotice;
+      /**
+       * True when every liquid cell of the context is an input. False when the size budget
+       * left some behind: a move to another lock then needs another transaction.
+       */
+      isSweepComplete: boolean;
     }
   | {
       ok: false;

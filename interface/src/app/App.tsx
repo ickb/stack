@@ -46,7 +46,11 @@ export default function App({
   const l1StateQuery = useQuery<L1StateType>({
     ...l1StateOptions(walletConfig, isFrozen),
   });
-  const amountInput = parseAmountInput(text);
+  // A move carries only native CKB and iCKB and converts nothing, so its amount is zero;
+  // the typed text stays, and clearing the address brings it back (amendment 52(al)).
+  const isMove = destination?.moveTo !== undefined;
+  const draft = isMove ? "0" : text;
+  const amountInput = parseAmountInput(draft);
   const formReset = (): void => {
     setText("");
   };
@@ -91,7 +95,7 @@ export default function App({
         openWallet,
         isCkb2Udt,
         setIsCkb2Udt,
-        text,
+        text: draft,
         setText,
         quoteState,
         // The wallet's own sampled ratio quotes the form once the account state is in.
@@ -104,7 +108,7 @@ export default function App({
         text: destinationText,
         setText: setDestinationText,
         isValid: destination !== undefined,
-        isForeign: destination?.moveTo !== undefined,
+        isForeign: isMove,
       }}
       actionParams={{
         isCkb2Udt,

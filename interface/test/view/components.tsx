@@ -112,7 +112,7 @@ describe("view components", () => {
           disabled={true}
         />,
       ),
-    ).toContain('disabled=""');
+    ).toContain("cannot change during the transaction");
 
     const pending = PendingDashboard({
       chain: "mainnet",
@@ -265,6 +265,19 @@ describe("view components", () => {
         <Form {...draft} isCkb2Udt={false} text="" chain="testnet" isFrozen={true} />,
       ),
     ).toContain('disabled=""');
+    // Another address: the amount, max and direction cannot change, and the zero says why.
+    const move = renderToStaticMarkup(
+      <Form
+        {...draft}
+        isCkb2Udt={false}
+        text="0"
+        chain="testnet"
+        projection={balances}
+        isMove={true}
+      />,
+    );
+    expect(move).toContain("all CKB and iCKB go to the address above");
+    expect(move.match(/disabled=""/gu)).toHaveLength(3);
   });
 
   it("renders chart layout elements", () => {

@@ -138,6 +138,7 @@ describe("runStimulusTurn", () => {
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
         conversion: { kind: "collect-only" },
+        isSweepComplete: true,
       };
     });
     const log = await turn(
@@ -253,6 +254,7 @@ describe("runStimulusTurn", () => {
         tx,
         estimatedMaturity: 0n,
         conversion: { kind: "collect-only" },
+        isSweepComplete: true,
       };
     });
     const log = await turn(

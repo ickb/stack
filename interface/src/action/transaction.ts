@@ -47,6 +47,14 @@ export async function buildTransactionPreview(
   destination: Destination,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
+  // A move carries only native CKB and iCKB, never a converting position, so it takes no
+  // amount; the form fixes it at zero and this boundary refuses anything else (52(al)).
+  if (destination.moveTo !== undefined && amount !== 0n) {
+    return txInfoWithError(
+      "A move to another address takes no amount",
+      context.estimatedMaturity,
+    );
+  }
   try {
     const result = await walletConfig.sdk.buildConversionTransaction(
       ccc.Transaction.default(),
@@ -72,7 +80,9 @@ export async function buildTransactionPreview(
       fee: await result.tx.getFee(walletConfig.signer.client),
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversion.kind,
-      ...(destination.moveTo === undefined ? {} : { moveTo: destination.moveTo }),
+      ...(destination.moveTo === undefined
+        ? {}
+        : { move: { to: destination.moveTo, isComplete: result.isSweepComplete } }),
       ...(result.conversionNotice === undefined
         ? {}
         : { conversionNotice: result.conversionNotice }),

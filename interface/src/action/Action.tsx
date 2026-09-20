@@ -124,10 +124,14 @@ export default function Action({
   const txInfo = frozenPreview?.txInfo ?? txPreviewQuery.data ?? txInfoPadding;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
   const isValid = isTxInfoValid(txInfo, hasTransactionActivity(txInfo.tx));
-  const maturity = timeUntilMaturity(
-    txInfo.estimatedMaturity,
-    frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
-  );
+  // A move leaves the converting positions here, so their dates do not apply to it.
+  const maturity =
+    txInfo.move === undefined
+      ? timeUntilMaturity(
+          txInfo.estimatedMaturity,
+          frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
+        )
+      : "now";
   const { hasCollectable } = sampled ?? l1State;
   const actionText =
     transactionHash === undefined
