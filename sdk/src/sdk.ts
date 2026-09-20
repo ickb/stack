@@ -63,9 +63,11 @@ export interface IckbSdk {
 /**
  * Prepared-size budget one own transaction may grow to while sweeping liquid cells.
  *
- * @remarks Measured as CCC charges fees, `toBytes().length + 4`. About a tenth of a
- * block; it admits roughly 1,400 inputs, so it outpaces one cellbase cell per block
- * from a miner paying the bot and is never reached after the first sweep.
+ * @remarks Measured as CCC charges fees, `toBytes().length + 4`, and checked before
+ * each input, so the last one may overshoot it: "about 64 KiB" (decisions amendment
+ * 52(al)). About a tenth of a block; it admits roughly 1,400 inputs, so it outpaces one
+ * cellbase cell per block from a miner paying the bot and is never reached after the
+ * first sweep.
  */
 export const TRANSACTION_SIZE_BUDGET = 64 * 1024;
 
