@@ -7,7 +7,7 @@ import {
   depositMaturity,
   isDaoDeposit,
   pushHeaderDep,
-  type LockUpWindow,
+  type LockUpPolicy,
 } from "./dao.ts";
 import {
   decodeReceiptData,
@@ -41,10 +41,11 @@ export interface IckbDepositCell extends ValueComponents {
   headers: [TransactionHeader, TransactionHeader];
   /** The DAO interest accrued between the two headers. */
   interests: ccc.Num;
-  /** The DAO claim epoch, rolled to the next cycle when the current one is too close. */
-  maturity: ccc.Epoch;
-  /** Whether a withdrawal request made now claims within the lock-up window. */
-  isReady: boolean;
+  /**
+   * The DAO claim epoch as sampled at the tip, not rolled: each reader judges it against
+   * its own {@link LockUpPolicy} with `depositMaturity`.
+   */
+  claimEpoch: ccc.Epoch;
 }
 
 /**
@@ -201,13 +202,12 @@ export class LogicManager implements ScriptDeps {
   }
 
   /**
-   * Every live iCKB deposit, valued at its deposit header and judged for readiness against
-   * the tip and the lock-up window; each deposit transaction's header is read once.
+   * Every live iCKB deposit, valued at its deposit header, with its claim epoch at the tip;
+   * each deposit transaction's header is read once.
    */
   public async findDeposits(
     client: ccc.Client,
     tip: ccc.ClientBlockHeader,
-    window: LockUpWindow,
   ): Promise<IckbDepositCell[]> {
     const cells = (
       await findCells(client, {
@@ -229,33 +229,37 @@ export class LogicManager implements ScriptDeps {
     return cells.map((cell) => {
       const { txHash } = cell.outPoint;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's hash was read above.
-      return ickbDepositCell(cell, { header: headers.get(txHash)!, txHash }, tip, window);
+      return ickbDepositCell(cell, { header: headers.get(txHash)!, txHash }, tip);
     });
   }
 }
 
-/** Values a DAO deposit cell at its deposit header and judges its readiness at the tip. */
+/** Values a DAO deposit cell at its deposit header and samples its claim epoch at the tip. */
 export function ickbDepositCell(
   cell: ccc.Cell,
   depositHeader: TransactionHeader,
   tip: ccc.ClientBlockHeader,
-  window: LockUpWindow,
 ): IckbDepositCell {
   const interests = ccc.calcDaoProfit(cell.capacityFree, depositHeader.header, tip);
-  const { maturity, isReady } = depositMaturity(
-    daoClaimEpoch(depositHeader.header, tip),
-    tip,
-    window,
-  );
   return {
     cell,
     headers: [depositHeader, { header: tip }],
     interests,
-    maturity,
-    isReady,
+    claimEpoch: daoClaimEpoch(depositHeader.header, tip),
     ckbValue: cell.cellOutput.capacity + interests,
     udtValue: ickbValue(cell.capacityFree, depositHeader.header),
   };
+}
+
+/** The deposits a withdrawal request made now may claim at their sampled dates under the policy. */
+export function readyDeposits(
+  deposits: readonly IckbDepositCell[],
+  tip: ccc.ClientBlockHeader,
+  policy: LockUpPolicy,
+): IckbDepositCell[] {
+  return deposits.filter(
+    (deposit) => depositMaturity(deposit.claimEpoch, tip, policy).isReady,
+  );
 }
 
 /** Decodes a receipt cell and values it at its deposit header. */

@@ -10,9 +10,9 @@ import type {
   AccountState,
   ConversionTransactionOptions,
   ConversionTransactionResult,
-  GetL1StateOptions,
   SystemState,
 } from "./conversion/types.ts";
+import type { LockUpPolicy } from "./dao.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
 import type { SupportedChain } from "./utils/chain.ts";
@@ -24,11 +24,11 @@ export interface IckbSdk {
     txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,
   ) => Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state against one sampled tip. */
+  /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
   getL1AccountState: (
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1StateOptions,
+    lockUp: LockUpPolicy,
   ) => Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
@@ -55,10 +55,10 @@ export type {
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
-  GetL1StateOptions,
-  PoolDepositRangeOptions,
   SystemState,
 } from "./conversion/types.ts";
+export { WALLET_LOCK_UP } from "./dao.ts";
+export type { LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
@@ -81,6 +81,7 @@ export { signerAccountLocks } from "./send/account_locks.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,
+  TransactionExpiredError,
 } from "./send/sign_and_send_transaction.ts";
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";

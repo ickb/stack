@@ -5,6 +5,7 @@ import {
   type ConversionTransactionResult,
   IckbSdk,
   Ratio,
+  WALLET_LOCK_UP,
 } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient } from "@ickb/testkit";
@@ -105,6 +106,7 @@ export function context(
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
+      lockUp: WALLET_LOCK_UP,
     },
     cells: [],
     receipts: [],

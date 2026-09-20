@@ -37,11 +37,15 @@ export function depositCell(
       { header: tipHeader },
     ],
     interests: 0n,
-    maturity: ccc.Epoch.from([1n, 0n, 1n]),
-    isReady: options?.isReady ?? false,
+    claimEpoch: claimEpochAt(tipHeader, options?.isReady ?? false),
     ckbValue: cell.cellOutput.capacity,
     udtValue: ccc.fixedPointFrom(100000),
   };
+}
+
+/** A claim inside the wallet's selection window past the tip, or far beyond it. */
+function claimEpochAt(tip: ccc.ClientBlockHeader, isReady: boolean): ccc.Epoch {
+  return tip.epoch.add(isReady ? [1n, 0n, 1n] : [100n, 0n, 1n]);
 }
 
 export function projectionReadyDeposit(
@@ -62,10 +66,12 @@ export function projectionReadyDeposit(
     cell,
     headers: [{ header: baseTip, txHash: cell.outPoint.txHash }, { header: baseTip }],
     interests: 0n,
-    isReady: options.isReady ?? true,
+    claimEpoch: new TestEpoch(
+      claimEpochAt(baseTip, options.isReady ?? true),
+      maturityUnix,
+    ),
     ckbValue: options.ckbValue ?? udtValue,
     udtValue,
-    maturity: new TestEpoch(maturityUnix),
   };
 }
 
@@ -223,7 +229,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         { header: baseTip, txHash: hash(options.byte ?? "30") },
       ],
       interests: 0n,
-      maturity: new TestEpoch(options.maturityUnix ?? 0n),
+      maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,
       ckbValue: options.ckbValue,
     } satisfies DaoWithdrawalRequestCell;
@@ -252,11 +258,12 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
   }
 }
 
+/** An epoch whose date is dictated by the test, not by the tip. */
 class TestEpoch extends ccc.Epoch {
   private readonly unix: bigint;
 
-  constructor(unix: bigint) {
-    super(1n, 0n, 1n);
+  constructor(epoch: ccc.Epoch, unix: bigint) {
+    super(epoch.integer, epoch.numerator, epoch.denominator);
     this.unix = unix;
   }
 

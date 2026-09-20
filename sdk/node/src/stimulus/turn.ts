@@ -73,7 +73,8 @@ export interface StimulusLog {
   error?: unknown;
 }
 
-type Built = { tx: ccc.Transaction; action: Action } | { skip: Skip };
+type Built =
+  { tx: ccc.Transaction; action: Action; broadcastBefore?: ccc.Epoch } | { skip: Skip };
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -192,7 +193,13 @@ async function buildConversion(
       },
     );
     return result.ok
-      ? { tx: result.tx, action: { conversion: result.conversion } }
+      ? {
+          tx: result.tx,
+          action: { conversion: result.conversion },
+          ...(result.broadcastBefore === undefined
+            ? {}
+            : { broadcastBefore: result.broadcastBefore }),
+        }
       : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
   } catch (error) {
     return unfundableOrThrow(error);
@@ -212,7 +219,7 @@ function unfundableOrThrow(error: unknown): Built {
 async function send(
   runtime: Runtime,
   state: StimulusState,
-  { tx, action }: Extract<Built, { tx: ccc.Transaction }>,
+  { tx, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
   Object.assign(log, {
@@ -225,9 +232,14 @@ async function send(
   });
   let txHash: ccc.Hex;
   try {
-    txHash = await signAndSendTransaction(runtime.signer, tx, (hash) => {
-      Object.assign(log, { txHash: hash });
-    });
+    txHash = await signAndSendTransaction(
+      runtime.signer,
+      tx,
+      (hash) => {
+        Object.assign(log, { txHash: hash });
+      },
+      broadcastBefore,
+    );
   } catch (error) {
     if (!(error instanceof TransactionBroadcastError)) {
       throw error;

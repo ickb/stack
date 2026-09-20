@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
@@ -53,7 +54,7 @@ describe(L1_STATE_SUITE, () => {
       findCellsPagedNoCache: emptyCellScan,
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.user.orders).toEqual([ownerOrder.group]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
@@ -67,7 +68,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
       txHashByte: "b1",
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.user.orders).toEqual([]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
@@ -79,7 +80,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
       txHashByte: "c1",
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock]);
+    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.user.orders).toEqual([]);
     expect(state.system.orderPool).toEqual([]);

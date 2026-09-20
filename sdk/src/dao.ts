@@ -118,33 +118,66 @@ export function daoClaimEpoch(
 }
 
 /**
- * The window a deposit's claim epoch must fall in, past the tip, for a withdrawal request
- * made now to be claimable at that epoch: a claim at or before `tip + minLockUp` is too
- * close (the request would commit after it and lock for another cycle), so the deposit is
- * judged on its next cycle; a claim at or past `tip + maxLockUp` is too far.
+ * A caller's timing rules for withdrawal requests, in epochs (the chain's clock, so no
+ * wall-clock drift). Selection: a deposit may be requested when its claim epoch is past
+ * `tip + minLockUp` (closer, the request would commit after the claim and lock for another
+ * cycle, so the deposit is judged on its next cycle) and before `tip + maxLockUp`.
+ * Broadcast: the signed request is sent only while the tip is before the earliest selected
+ * claim less `broadcastReserve`, else it is refused and rebuilt (decisions amendment 52(al)).
  */
-export interface LockUpWindow {
+export interface LockUpPolicy {
   minLockUp: ccc.Epoch;
   maxLockUp: ccc.Epoch;
+  broadcastReserve: ccc.Epoch;
 }
 
-/** Ten minutes and three days on the nominal four-hour epoch. */
-export const DEFAULT_LOCK_UP_WINDOW: LockUpWindow = {
-  minLockUp: ccc.Epoch.from([0n, 1n, 24n]),
+/**
+ * The bot's rules on the nominal four-hour epoch: claims twenty minutes to an hour out,
+ * sent while fifteen minutes remain. The bot signs at once, so a short window suffices, and
+ * the estimate models the pool's supply on it (`sdk/docs/pool_maturity_estimates.md`).
+ */
+export const BOT_LOCK_UP: LockUpPolicy = {
+  minLockUp: ccc.Epoch.from([0n, 1n, 12n]),
+  maxLockUp: ccc.Epoch.from([0n, 4n, 16n]),
+  broadcastReserve: ccc.Epoch.from([0n, 1n, 16n]),
+};
+
+/**
+ * A wallet's rules: claims two hours to three days out, sent while ninety minutes remain. A
+ * user signs by hand, so the request may sit in a wallet popup for a while (user, 2026-09-20).
+ */
+export const WALLET_LOCK_UP: LockUpPolicy = {
+  minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
   maxLockUp: ccc.Epoch.from([18n, 0n, 1n]),
+  broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 
 /** A deposit's maturity, rolled a cycle when its claim is too close, and whether it is ready. */
 export function depositMaturity(
   claim: ccc.Epoch,
   tip: ccc.ClientBlockHeader,
-  { minLockUp, maxLockUp }: LockUpWindow,
+  { minLockUp, maxLockUp }: LockUpPolicy,
 ): { maturity: ccc.Epoch; isReady: boolean } {
   const maturity =
     claim.compare(minLockUp.add(tip.epoch)) <= 0
       ? claim.add([DAO_CYCLE_EPOCHS, 0n, 1n])
       : claim;
   return { maturity, isReady: maxLockUp.add(tip.epoch).compare(maturity) > 0 };
+}
+
+/**
+ * The epoch a transaction requesting these deposits must be broadcast before: the earliest
+ * claim less the reserve; undefined when it requests none.
+ */
+export function broadcastDeadline(
+  claims: readonly ccc.Epoch[],
+  { broadcastReserve }: LockUpPolicy,
+): ccc.Epoch | undefined {
+  const earliest = claims.reduce<ccc.Epoch | undefined>(
+    (best, claim) => (best === undefined || claim.compare(best) < 0 ? claim : best),
+    undefined,
+  );
+  return earliest?.sub(broadcastReserve);
 }
 
 /** Adds the header dep once. */

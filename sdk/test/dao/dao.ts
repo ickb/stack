@@ -3,13 +3,14 @@ import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   assertDaoOutputLimit,
+  broadcastDeadline,
   DAO_OUTPUT_LIMIT,
   DaoOutputLimitError,
-  DEFAULT_LOCK_UP_WINDOW,
   depositData,
   depositMaturity,
   isDaoDeposit,
   isDaoWithdrawalRequest,
+  WALLET_LOCK_UP,
 } from "../../src/dao.ts";
 
 function transactionWithPlainOutputs(count: number): ccc.Transaction {
@@ -120,7 +121,7 @@ describe("depositMaturity", () => {
     const tip = headerLike({ epoch: [180n, 23n, 24n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
 
-    const { maturity, isReady } = depositMaturity(claim, tip, DEFAULT_LOCK_UP_WINDOW);
+    const { maturity, isReady } = depositMaturity(claim, tip, WALLET_LOCK_UP);
 
     expect(isReady).toBe(false);
     expect(maturity.eq(claim.add([180n, 0n, 1n]))).toBe(true);
@@ -131,7 +132,7 @@ describe("depositMaturity", () => {
     const tip = headerLike({ epoch: [163n, 0n, 1n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
 
-    const { maturity, isReady } = depositMaturity(claim, tip, DEFAULT_LOCK_UP_WINDOW);
+    const { maturity, isReady } = depositMaturity(claim, tip, WALLET_LOCK_UP);
 
     expect(maturity.eq(claim)).toBe(true);
     expect(isReady).toBe(false);
@@ -142,6 +143,20 @@ describe("depositMaturity", () => {
     const tip = headerLike({ epoch: [170n, 0n, 1n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
 
-    expect(depositMaturity(claim, tip, DEFAULT_LOCK_UP_WINDOW).isReady).toBe(true);
+    expect(depositMaturity(claim, tip, WALLET_LOCK_UP).isReady).toBe(true);
+  });
+});
+
+describe("broadcastDeadline", () => {
+  it("is the earliest claim less the reserve, and nothing without claims", () => {
+    const early = ccc.Epoch.from([181n, 0n, 1n]);
+    const late = ccc.Epoch.from([190n, 0n, 1n]);
+
+    expect(
+      broadcastDeadline([late, early], WALLET_LOCK_UP)?.eq(
+        early.sub(WALLET_LOCK_UP.broadcastReserve),
+      ),
+    ).toBe(true);
+    expect(broadcastDeadline([], WALLET_LOCK_UP)).toBeUndefined();
   });
 });

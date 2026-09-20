@@ -5,7 +5,7 @@ import {
   ringSurplusDepositFilter,
   selectReadyWithdrawalDeposits,
 } from "../../src/conversion/withdrawal_ring.ts";
-import { ringDeposit, TIP } from "./support/withdrawal_selection_support.ts";
+import { ringDeposit } from "./support/withdrawal_selection_support.ts";
 
 describe("selectReadyWithdrawalDeposits ring segments", () => {
   it("keeps adaptive segments above the integer ring length", () => {
@@ -19,21 +19,30 @@ describe("selectReadyWithdrawalDeposits ring segments", () => {
     const surplus = ringDeposit(4n, 1n);
     const anchor = ringDeposit(6n, 1n);
     const otherAnchor = ringDeposit(6n, 100n);
+    // A segment's anchor is its largest deposit not ready, else its largest: with the
+    // small one not ready it anchors its segment and the larger one is surplus.
+    expect(
+      [surplus, anchor, otherAnchor].filter(
+        ringSurplusDepositFilter([surplus, anchor, otherAnchor], [anchor, otherAnchor]),
+      ),
+    ).toEqual([anchor]);
 
     expect(
       selectReadyWithdrawalDeposits(
         [surplus, anchor, otherAnchor].filter(
-          ringSurplusDepositFilter([surplus, anchor, otherAnchor]),
+          ringSurplusDepositFilter(
+            [surplus, anchor, otherAnchor],
+            [surplus, anchor, otherAnchor],
+          ),
         ),
         4n,
-        TIP,
       ),
     ).toEqual([surplus]);
   });
 
   it("rejects malformed epoch denominators", () => {
     const deposit = ringDeposit(1n, 1n);
-    Object.assign(deposit, { maturity: ccc.Epoch.from([1n, 0n, 0n]) });
+    Object.assign(deposit, { claimEpoch: ccc.Epoch.from([1n, 0n, 0n]) });
 
     expect(() => ringSegments([deposit])).toThrow("Epoch denominator must be positive");
   });
@@ -45,9 +54,8 @@ describe("selectReadyWithdrawalDeposits ring exclusions", () => {
 
     expect(
       selectReadyWithdrawalDeposits(
-        [anchor].filter(ringSurplusDepositFilter([anchor])),
+        [anchor].filter(ringSurplusDepositFilter([anchor], [anchor])),
         4n,
-        TIP,
       ),
     ).toEqual([]);
   });
@@ -58,9 +66,8 @@ describe("selectReadyWithdrawalDeposits ring exclusions", () => {
 
     expect(
       selectReadyWithdrawalDeposits(
-        [readyAnchor].filter(ringSurplusDepositFilter([poolAnchor])),
+        [readyAnchor].filter(ringSurplusDepositFilter([poolAnchor], [poolAnchor])),
         4n,
-        TIP,
       ),
     ).toEqual([]);
   });

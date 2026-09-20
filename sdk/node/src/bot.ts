@@ -53,8 +53,8 @@ try {
     accountLocks: await signerAccountLocks(signer, primaryLock),
     completeTransaction: async (tx, feeRate, cells) =>
       sdk.completeTransaction(tx, { signer, feeRate, cells }),
-    sendTransaction: async (tx, recordTxHash) =>
-      signAndSendTransaction(signer, tx, recordTxHash),
+    sendTransaction: async (tx, recordTxHash, broadcastBefore) =>
+      signAndSendTransaction(signer, tx, recordTxHash, broadcastBefore),
   };
   await runBotTurn({ events, runtime });
 } catch (error) {

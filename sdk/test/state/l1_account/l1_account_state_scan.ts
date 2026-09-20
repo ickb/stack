@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { LogicManager } from "../../../src/logic.ts";
 import { encodeReceiptData } from "../../../src/udt.ts";
 
@@ -117,10 +118,11 @@ describe(L1_STATE_SUITE, () => {
       },
     });
 
-    const { system, account } = await sdk.getL1AccountState(client, [
-      accountLock,
-      accountLock,
-    ]);
+    const { system, account } = await sdk.getL1AccountState(
+      client,
+      [accountLock, accountLock],
+      WALLET_LOCK_UP,
+    );
 
     // One scan per distinct lock, exact and unfiltered; the other three are public.
     const lockScans = scans.filter((key) => key.script.eq(accountLock));

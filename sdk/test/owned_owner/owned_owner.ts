@@ -49,8 +49,7 @@ function depositOf(
     cell,
     headers: [{ header, txHash: cell.outPoint.txHash }, { header }],
     interests: 0n,
-    maturity: ccc.Epoch.from([1n, 0n, 1n]),
-    isReady: true,
+    claimEpoch: ccc.Epoch.from([1n, 0n, 1n]),
     ckbValue: cell.cellOutput.capacity,
     udtValue: 0n,
   };

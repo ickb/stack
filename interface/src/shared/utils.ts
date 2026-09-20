@@ -57,6 +57,8 @@ export type TxInfo = Readonly<{
    */
   move?: { to: string; isComplete: boolean };
   conversionNotice?: ConversionNotice;
+  /** The epoch the transaction must be sent before, when it requests withdrawals. */
+  broadcastBefore?: ccc.Epoch;
 }>;
 
 export const txInfoPadding: TxInfo = Object.freeze({

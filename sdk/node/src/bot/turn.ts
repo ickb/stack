@@ -1,11 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
 import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
+import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { transactionShape } from "../shared/format.ts";
 import type { BotEventEmitter } from "./events.ts";
-import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "./policy.ts";
 import { summarizeBotState } from "./support.ts";
 import { buildTransaction } from "./transaction.ts";
 import type { BotState, BuildTransactionResult, Runtime } from "./types.ts";
@@ -21,9 +21,10 @@ export interface BotTurnContext {
 }
 
 // The wait only lets this turn journal its own commit: the next turn rebuilds from committed
-// state. A withdrawal request is built inside a fifteen-minute lock-up window, so a ten-minute
-// wait on a stuck one left five minutes to rebuild it before the deposit locked for another
-// thirty days. Two minutes covers every commit journalled so far (77 s at most, 54 s at p90).
+// state. A withdrawal request selects claims at least twenty minutes out and is sent while
+// fifteen remain (`BOT_LOCK_UP`), so a long wait on a stuck one would eat the time to rebuild
+// it before the deposit locked for another cycle. Two minutes covers every commit journalled
+// so far (77 s at most, 54 s at p90).
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
 export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
@@ -37,7 +38,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
   const { system, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
-    { poolDeposits: { minLockUp: POOL_MIN_LOCK_UP, maxLockUp: POOL_MAX_LOCK_UP } },
+    BOT_LOCK_UP,
   );
   const projection = projectAccountAvailability(account, { available: [], pending: [] });
 
@@ -96,9 +97,13 @@ async function sendBuiltTransaction({
   let recordedHash: ccc.Hex | undefined;
   let txHash: ccc.Hex;
   try {
-    txHash = await context.runtime.sendTransaction(result.tx, (hash) => {
-      recordedHash = hash;
-    });
+    txHash = await context.runtime.sendTransaction(
+      result.tx,
+      (hash) => {
+        recordedHash = hash;
+      },
+      result.broadcastBefore,
+    );
     context.events.emit({
       type: "bot.transaction.sent",
       txHash,

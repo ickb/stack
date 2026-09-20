@@ -35,6 +35,7 @@ export interface Runtime {
   sendTransaction: (
     tx: ccc.TransactionLike,
     recordTxHash?: (txHash: ccc.Hex) => void,
+    broadcastBefore?: ccc.Epoch,
   ) => Promise<ccc.Hex>;
 }
 
@@ -100,7 +101,13 @@ export type Core =
 
 /** Bot transaction-build outcome with the decision evidence used for logs and events. */
 export type BuildTransactionResult =
-  | { kind: "built"; tx: ccc.Transaction; decision: BotDecision }
+  | {
+      kind: "built";
+      tx: ccc.Transaction;
+      decision: BotDecision;
+      /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
+      broadcastBefore?: ccc.Epoch;
+    }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 
 /** Structured evidence for one bot planning attempt. */

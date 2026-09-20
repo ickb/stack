@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   TransactionBroadcastError,
+  TransactionExpiredError,
   TransactionWaitError,
   type signAndSendTransaction as sdkSignAndSendTransaction,
   type waitTransaction as sdkWaitTransaction,
@@ -311,6 +312,24 @@ describe("transact broadcast identity and rejection", () => {
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
     expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the preview when the broadcast deadline passed while signing", async () => {
+    const epoch = ccc.Epoch.from([1n, 0n, 1n]);
+    signAndSendTransaction.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      throw new TransactionExpiredError({ broadcastBefore: epoch, tip: epoch });
+    });
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.setFailure).toHaveBeenCalledWith(
+      "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",
+    );
+    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(waitTransaction).not.toHaveBeenCalled();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
   it("keeps the client after a committed transaction", async () => {

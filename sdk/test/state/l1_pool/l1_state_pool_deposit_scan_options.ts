@@ -1,5 +1,5 @@
-import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -14,19 +14,17 @@ afterEach(() => {
 });
 
 describe(L1_STATE_SUITE, () => {
-  it("passes custom pool deposit scan options through L1 state loading", async () => {
+  it("scans the pool at the tip and carries the caller's timing policy on the state", async () => {
     const { sdk, logicManager } = testSdk();
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockResolvedValue([]);
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(baseTip),
       findCellsPagedNoCache: emptyCellScan,
     });
-    const minLockUp = ccc.Epoch.from([0n, 1n, 16n]);
-    const maxLockUp = ccc.Epoch.from([0n, 4n, 16n]);
 
-    await sdk.getL1AccountState(client, [], { poolDeposits: { minLockUp, maxLockUp } });
+    const { system } = await sdk.getL1AccountState(client, [], BOT_LOCK_UP);
 
-    expect(findDeposits.mock.calls[0]?.[1]).toBe(baseTip);
-    expect(findDeposits.mock.calls[0]?.[2]).toEqual({ minLockUp, maxLockUp });
+    expect(findDeposits).toHaveBeenCalledWith(client, baseTip);
+    expect(system.lockUp).toBe(BOT_LOCK_UP);
   });
 });

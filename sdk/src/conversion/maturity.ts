@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
 import type { OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
@@ -115,11 +116,15 @@ function ickbToCkbOrderMaturity(
         : convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
       at: system.tip.timestamp,
     },
+    // A claim the bot can no longer request in time rolls a cycle: the bot's rule, not the
+    // caller's, since the bot is the one making the requests.
     ...system.poolDeposits
       .filter((deposit) => !taken.has(deposit.cell.outPoint.toHex()))
       .map((deposit) => ({
         ckbValue: deposit.ckbValue,
-        at: deposit.maturity.toUnix(system.tip),
+        at: depositMaturity(deposit.claimEpoch, system.tip, BOT_LOCK_UP).maturity.toUnix(
+          system.tip,
+        ),
       }))
       .toSorted((left, right) => compareBigInt(left.at, right.at)),
   ];

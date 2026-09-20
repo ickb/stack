@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/sdk";
+import { Ratio, WALLET_LOCK_UP } from "@ickb/sdk";
 
 import { headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
@@ -51,6 +51,7 @@ function itPollsLiveStateUnlessFrozen(): void {
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
           orderPool: [],
           poolDeposits: [],
+          lockUp: WALLET_LOCK_UP,
         },
         user: { orders: [] },
         account: {
@@ -79,6 +80,7 @@ function itRunsL1StateOptionsQuery(): void {
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
           orderPool: [],
           poolDeposits: [],
+          lockUp: WALLET_LOCK_UP,
         },
         user: { orders: [] },
         account: {
@@ -153,6 +155,7 @@ it("loads display balances from an SDK account snapshot", async () => {
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
+      lockUp: WALLET_LOCK_UP,
     },
     user: { orders: [] },
     account: {
@@ -191,6 +194,7 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       poolDeposits: [],
+      lockUp: WALLET_LOCK_UP,
     },
     user: { orders: [] },
     account: {

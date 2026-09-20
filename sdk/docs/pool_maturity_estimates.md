@@ -7,7 +7,7 @@ How the SDK dates an order-based conversion for the interface's "Ready:" line. T
 `getL1AccountState` samples one tip and reads:
 
 - `system.orderPool`: every order past par on the book, the wallet's own included; the bot fills by price, not by owner. A dual-ratio order (both directions priced) is dropped at the scan: nothing in the stack places one, so it is neither matched, estimated, shown nor melted here.
-- `system.poolDeposits`: every iCKB pool deposit with its real claim date (the next DAO claim epoch, rolled a cycle when too close to request now). No readiness collapse: a deposit counts on its date, three days out or thirty.
+- `system.poolDeposits`: every iCKB pool deposit with its sampled claim epoch, read here as its real claim date: rolled a cycle when the bot can no longer request it in time (under the bot's twenty-minute floor, `BOT_LOCK_UP`; the bot makes the requests, so its rule dates the supply whatever the caller's own policy). No readiness collapse: a deposit counts on its date, three days out or thirty.
 - Each order group's `blockNumber`, the block that committed its origin, read from the same transaction response the scan already fetches. An uncommitted origin has none.
 
 The bot's own working capital is not read: a published library should not name one operator's wallet, and the model below stands in for it.

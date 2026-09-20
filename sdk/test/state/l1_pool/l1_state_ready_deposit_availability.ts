@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 
 import { LogicManager } from "../../../src/logic.ts";
 import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
@@ -49,7 +50,7 @@ describe(L1_STATE_SUITE, () => {
       },
     });
 
-    const state = await sdk.getL1AccountState(client, []);
+    const state = await sdk.getL1AccountState(client, [], WALLET_LOCK_UP);
 
     expect(findDeposits.mock.calls[0]?.[1]).toBe(tip);
     expect(state.system.poolDeposits).toEqual([readyDeposit]);

@@ -47,6 +47,7 @@ vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) 
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
 const TX_HASH = byte32FromByte("46");
+const DEADLINE = ccc.Epoch.from([5n, 0n, 1n]);
 const identity: StimulusIdentity = {
   chain: "testnet",
   address: "ckt1stimulus",
@@ -139,6 +140,7 @@ describe("runStimulusTurn", () => {
         estimatedMaturity: 0n,
         conversion: { kind: "collect-only" },
         isSweepComplete: true,
+        broadcastBefore: DEADLINE,
       };
     });
     const log = await turn(
@@ -155,6 +157,8 @@ describe("runStimulusTurn", () => {
     );
 
     expect(mint).not.toHaveBeenCalled();
+    // The SDK's broadcast deadline reaches the sender.
+    expect(sendMock.mock.calls[0]?.[3]).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },

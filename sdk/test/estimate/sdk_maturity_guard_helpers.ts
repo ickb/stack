@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { estimateConversionOrder } from "../../src/conversion/estimate.ts";
 import { maturity } from "../../src/conversion/maturity.ts";
 import { ringSegmentIndex } from "../../src/conversion/withdrawal_ring.ts";
+import { WALLET_LOCK_UP } from "../../src/dao.ts";
 import { Info } from "../../src/order/info.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import { headerLike, ratio } from "../transaction/base/support/sdk_core_support.ts";
@@ -22,6 +23,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
         }),
       ],
       poolDeposits: [],
+      lockUp: WALLET_LOCK_UP,
     };
 
     expect(

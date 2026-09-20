@@ -1,11 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { script } from "@ickb/testkit";
+import { headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
+import {
+  signAndSendTransaction,
+  TransactionExpiredError,
+} from "../../src/send/sign_and_send_transaction.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("81");
+const TIP_EPOCH = ccc.Epoch.from([10n, 0n, 1n]);
 const INPUT_OUT_POINT = { txHash: hash("91"), index: 0n };
 const ALTERED_BODY_ERROR =
   "Signer altered the transaction inputs, outputs or outputs data";
@@ -204,6 +208,38 @@ describe("signAndSendTransaction broadcast outcomes", () => {
   });
 });
 
+describe("signAndSendTransaction broadcast deadline", () => {
+  it("refuses the send once the tip has reached the deadline, before recording", async () => {
+    const { signer, send, getTipHeader } = signerFixture(bodyTransaction());
+    const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
+
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), recordTxHash, TIP_EPOCH),
+    ).rejects.toBeInstanceOf(TransactionExpiredError);
+
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
+    expect(recordTxHash).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("sends while the tip is before the deadline, and reads no tip without one", async () => {
+    const { signer, getTipHeader } = signerFixture(bodyTransaction());
+
+    await expect(
+      signAndSendTransaction(
+        signer,
+        bodyTransaction(),
+        undefined,
+        TIP_EPOCH.add([0n, 1n, 2n]),
+      ),
+    ).resolves.toBe(TX_HASH);
+    await expect(signAndSendTransaction(signer, bodyTransaction())).resolves.toBe(
+      TX_HASH,
+    );
+    expect(getTipHeader).toHaveBeenCalledTimes(1);
+  });
+});
+
 function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransaction {
   return new ccc.ErrorClientDuplicatedTransaction(
     { code: -1107, data: `Duplicated(Byte32(${txHash}))` },
@@ -220,6 +256,7 @@ function signerFixture(signed = ccc.Transaction.default()): {
   send: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<ccc.Hex>>>;
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
   signTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
+  getTipHeader: ReturnType<typeof vi.fn<() => Promise<ccc.ClientBlockHeader>>>;
 } {
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
   const getCell = vi.fn(async (outPoint: ccc.OutPointLike) => {
@@ -233,8 +270,13 @@ function signerFixture(signed = ccc.Transaction.default()): {
   const mark = vi.fn(async () => {
     await Promise.resolve();
   });
+  const getTipHeader = vi.fn(async () => {
+    await Promise.resolve();
+    return headerLike({ epoch: TIP_EPOCH });
+  });
   const client = {
     getCell,
+    getTipHeader,
     // CCC resolves the Nervos DAO script while checking inputs for withdrawal profit.
     getKnownScript: vi.fn(async () => {
       await Promise.resolve();
@@ -256,6 +298,7 @@ function signerFixture(signed = ccc.Transaction.default()): {
     send,
     mark,
     signTransaction,
+    getTipHeader,
   };
 }
 

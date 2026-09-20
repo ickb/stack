@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
+import { readyDeposits } from "../../../src/logic.ts";
 import type { Match } from "../../../src/order/matcher.ts";
 import { convert } from "../../../src/udt.ts";
 import { maxBigInt } from "../../../src/utils/utils.ts";
@@ -40,7 +41,8 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       readyWithdrawals: state.readyWithdrawals.length,
       pendingWithdrawals: state.notReadyWithdrawals.length,
       poolDeposits: state.poolDeposits.length,
-      readyPoolDeposits: state.poolDeposits.filter((deposit) => deposit.isReady).length,
+      readyPoolDeposits: readyDeposits(state.poolDeposits, tip, state.system.lockUp)
+        .length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,

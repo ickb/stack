@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   defaultL1Sdk,
@@ -26,7 +27,7 @@ describe(L1_STATE_SUITE, () => {
       findCellsPagedNoCache: emptyCellScan,
     });
 
-    const state = await sdk.getL1AccountState(client, []);
+    const state = await sdk.getL1AccountState(client, [], WALLET_LOCK_UP);
 
     expect(state.system.tip).toBe(firstTip);
     expect(getTipHeader).toHaveBeenCalledTimes(1);

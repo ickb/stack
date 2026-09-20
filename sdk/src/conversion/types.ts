@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { LockUpPolicy } from "../dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import type { Info } from "../order/info.ts";
@@ -12,17 +13,6 @@ import type { ValueComponents } from "../utils/utils.ts";
  * Direction requested by a conversion transaction.
  */
 export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
-
-/**
- * Optional DAO readiness window for pool deposit scans.
- */
-export interface PoolDepositRangeOptions {
-  /** Optional lower bound for deposit renewal readiness. */
-  minLockUp?: ccc.Epoch;
-
-  /** Optional upper bound for deposit renewal readiness. */
-  maxLockUp?: ccc.Epoch;
-}
 
 /**
  * Snapshot used to plan one wallet conversion transaction.
@@ -126,6 +116,11 @@ export type ConversionTransactionResult =
        * left some behind: a move to another lock then needs another transaction.
        */
       isSweepComplete: boolean;
+      /**
+       * The epoch the transaction must be broadcast before for its withdrawal requests to
+       * claim at their sampled dates (`system.lockUp`); absent when it requests none.
+       */
+      broadcastBefore?: ccc.Epoch;
     }
   | {
       ok: false;
@@ -155,14 +150,6 @@ export interface CompleteIckbTransactionOptions {
 
   /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
   cells: ccc.Cell[];
-}
-
-/**
- * Options for scanning L1 state.
- */
-export interface GetL1StateOptions {
-  /** Optional readiness window for public pool deposit scans. */
-  poolDeposits?: PoolDepositRangeOptions;
 }
 
 /**
@@ -264,8 +251,10 @@ export interface SystemState {
   exchangeRatio: Ratio;
   /** Every order past par on the book, the wallet's own included: what the bot can fill. */
   orderPool: OrderGroup[];
-  /** Every iCKB pool deposit, its readiness evaluated against this tip: the CKB supply. */
+  /** Every iCKB pool deposit with its claim epoch at this tip: the CKB supply. */
   poolDeposits: IckbDepositCell[];
+  /** The caller's withdrawal timing rules, which every builder and the sender follow. */
+  lockUp: LockUpPolicy;
 }
 
 /** Manager set that builds one iCKB SDK instance. */

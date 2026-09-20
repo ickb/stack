@@ -4,6 +4,7 @@ import type {
   ConversionTransactionContext,
   SystemState,
 } from "../../../../src/conversion/types.ts";
+import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 
 export const hash = byte32FromByte;
@@ -64,6 +65,7 @@ export function system(overrides: Partial<SystemState> = {}): SystemState {
     exchangeRatio: ratio,
     orderPool: [],
     poolDeposits: [],
+    lockUp: WALLET_LOCK_UP,
     ...overrides,
   };
 }

@@ -1,5 +1,5 @@
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
-import type { IckbDepositCell } from "../logic.ts";
+import { readyDeposits, type IckbDepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP, convert } from "../udt.ts";
 import { maxBigInt } from "../utils/utils.ts";
 import {
@@ -67,12 +67,10 @@ export function ickbToCkbConversionPlans(
   poolDeposits: readonly IckbDepositCell[],
 ): IckbToCkbConversionPlan[] {
   const { amount, context } = options;
-  const isSurplus = ringSurplusDepositFilter(poolDeposits);
-  const deposits = selectReadyWithdrawalDeposits(
-    poolDeposits.filter((deposit) => deposit.isReady && isSurplus(deposit)),
-    amount,
-    context.system.tip,
-  );
+  const { tip, lockUp } = context.system;
+  const ready = readyDeposits(poolDeposits, tip, lockUp);
+  const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
+  const deposits = selectReadyWithdrawalDeposits(ready.filter(isSurplus), amount);
   const plans: IckbToCkbConversionPlan[] = [];
   const longest = Math.min(deposits.length, MAX_PLANNED_WITHDRAWAL_REQUESTS);
   for (let count = longest; count >= 0; count -= 1) {
@@ -121,10 +119,11 @@ function ickbToCkbConversionPlan(
 ): IckbToCkbConversionPlan | undefined {
   const { amount, context } = options;
   let estimatedMaturity = context.estimatedMaturity;
+  // Selected deposits are ready, so their sampled claim is their date.
   for (const deposit of selectedDeposits) {
     estimatedMaturity = maxBigInt(
       estimatedMaturity,
-      deposit.maturity.toUnix(context.system.tip),
+      deposit.claimEpoch.toUnix(context.system.tip),
     );
   }
   const remainder = amount - sumUdt(selectedDeposits);

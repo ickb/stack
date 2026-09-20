@@ -1,17 +1,14 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import {
   ringSegmentIndex,
   ringSegments,
   ringSurplusDepositFilter,
-  sortByMaturity,
+  sortByClaim,
 } from "../../../src/conversion/withdrawal_ring.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
+import type { LockUpPolicy } from "../../../src/dao.ts";
+import { readyDeposits, type IckbDepositCell } from "../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-
-/** The pool deposits the bot may request now: claim between fifteen minutes and an hour out. */
-export const POOL_MIN_LOCK_UP = ccc.Epoch.from([0n, 1n, 16n]);
-export const POOL_MAX_LOCK_UP = ccc.Epoch.from([0n, 4n, 16n]);
 
 // The inventory band the pre-rewrite bot ran for a year: refill under 2,000 iCKB,
 // withdraw above 120,000 keeping 20,000, so a refill lands far below the withdrawal
@@ -36,6 +33,8 @@ export interface RingSummary {
 /** Post-match balances and the pool the rebalance decision reads. */
 export interface RebalanceInput {
   tip: ccc.ClientBlockHeader;
+  /** The bot's withdrawal timing rules, `BOT_LOCK_UP`, as the state read carried them. */
+  lockUp: LockUpPolicy;
   /** iCKB the bot holds after the match. */
   ickb: bigint;
   /** CKB available to the bot after the match. */
@@ -71,7 +70,7 @@ export interface RebalancePlan {
  * stress (decisions amendment 52).
  */
 export function planRebalance(input: RebalanceInput): RebalancePlan {
-  const { tip, ickb, ckb, depositCost, poolDeposits } = input;
+  const { tip, lockUp, ickb, ckb, depositCost, poolDeposits } = input;
   const ring = ringCoverage(poolDeposits, tip);
   const plan: RebalancePlan = { ring: ring.summary };
 
@@ -81,12 +80,9 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
   }
 
   if (ickb > ICKB_WITHDRAW_ABOVE) {
-    const isSurplus = ringSurplusDepositFilter(poolDeposits);
+    const ready = sortByClaim(readyDeposits(poolDeposits, tip, lockUp));
+    const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
     const stress = ckb - CKB_RESERVE < depositCost / STRESS_DIVISOR;
-    const ready = sortByMaturity(
-      poolDeposits.filter((deposit) => deposit.isReady),
-      tip,
-    );
     const candidates = [
       ...ready.filter(isSurplus),
       ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),

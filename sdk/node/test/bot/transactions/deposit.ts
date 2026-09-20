@@ -12,7 +12,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const MINUTE = 60n * 1000n;
 const RICH_CKB = ccc.fixedPointFrom(500_000);
 
 /** Completion that leaves `change` plain CKB with the bot. */
@@ -55,9 +54,10 @@ describe("buildTransaction deposit", () => {
 
   it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
     // An under-covered tip window with one ready surplus deposit, and excess iCKB.
-    const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP, 0n);
-    const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n, 0n);
-    const whale = readyDeposit("73", 30n * ICKB_DEPOSIT_CAP, 60n * MINUTE);
+    const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP);
+    const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n);
+    // Sixty epochs out: another ring segment.
+    const whale = readyDeposit("73", 30n * ICKB_DEPOSIT_CAP, 60n * 240n);
     const daoScript = botRuntime().managers.ickbLogic.dao.script;
     const primaryLock = botRuntime().primaryLock;
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {

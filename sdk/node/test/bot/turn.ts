@@ -10,12 +10,12 @@ import {
   type StubClientHandlers,
 } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
-import { POOL_MAX_LOCK_UP, POOL_MIN_LOCK_UP } from "../../src/bot/policy.ts";
 import {
   BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
@@ -408,17 +408,9 @@ function eventTypes(events: object[]): string[] {
 }
 
 describe("readBotState pool snapshot", () => {
-  it("uses the required SDK pool snapshot without storing a readiness copy", async () => {
+  it("reads the state under the bot's timing policy and keeps the pool as given", async () => {
     const tip = headerLike({ number: 10n, epoch: [0n, 0n, 1n], timestamp: "0x0" });
-    const readyWindowEnd = POOL_MAX_LOCK_UP.add(tip.epoch).toUnix(tip);
-    const ready = readyDeposit("33", 1n, 1n, { isReady: true });
-    const tooEarly = readyDeposit("34", 2n, readyWindowEnd - 1n, { isReady: false });
-    const nearReady = readyDeposit("35", 3n, readyWindowEnd + 1n, {
-      isReady: false,
-    });
-    const future = readyDeposit("36", 4n, readyWindowEnd + 60n * 60n * 1000n, {
-      isReady: false,
-    });
+    const pool = [readyDeposit("33", 1n), readyDeposit("34", 2n, 15n)];
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
       system: {
@@ -426,7 +418,8 @@ describe("readBotState pool snapshot", () => {
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         orderPool: [],
         feeRate: 1n,
-        poolDeposits: [ready, tooEarly, nearReady, future],
+        poolDeposits: pool,
+        lockUp: BOT_LOCK_UP,
       },
       user: { orders: [] },
       account: {
@@ -448,11 +441,9 @@ describe("readBotState pool snapshot", () => {
     const state = await readBotState(runtime);
 
     expect(getL1AccountState).toHaveBeenCalledTimes(1);
-    expect(getL1AccountState.mock.calls[0]?.[2]).toMatchObject({
-      poolDeposits: { minLockUp: POOL_MIN_LOCK_UP, maxLockUp: POOL_MAX_LOCK_UP },
-    });
+    expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
     expect(findDeposits).not.toHaveBeenCalled();
-    expect(state.poolDeposits).toEqual([ready, tooEarly, nearReady, future]);
+    expect(state.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });
 });
@@ -478,6 +469,7 @@ describe("readBotState", () => {
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         orderPool: [marketOrder],
         feeRate: 1n,
+        lockUp: BOT_LOCK_UP,
         poolDeposits: [],
       },
       user: { orders: [ownOrder] },

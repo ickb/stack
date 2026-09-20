@@ -3,6 +3,7 @@ import {
   isRefused,
   projectConversionTransactionContext,
   Ratio,
+  WALLET_LOCK_UP,
   type AccountAvailabilityProjection,
   type SystemState,
 } from "@ickb/sdk";
@@ -102,6 +103,7 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
   const sdkState = await walletConfig.sdk.getL1AccountState(
     walletConfig.cccClient,
     walletConfig.accountLocks,
+    WALLET_LOCK_UP,
   );
   const { system, user, account } = sdkState;
   // Fulfilled orders and orders the market will never fill are collected on the next

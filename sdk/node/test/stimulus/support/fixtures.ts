@@ -8,6 +8,7 @@ import {
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
+import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import type { ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -27,6 +28,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
     orderPool: [],
     poolDeposits: [],
+    lockUp: WALLET_LOCK_UP,
     ...overrides,
   };
 }

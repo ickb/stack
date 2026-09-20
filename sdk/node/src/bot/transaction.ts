@@ -3,6 +3,7 @@ import {
   completeFirstFundable,
   isFundabilityFailure,
 } from "../../../src/conversion/fundable_walk.ts";
+import { broadcastDeadline } from "../../../src/dao.ts";
 import { type IckbDepositCell, receiptPhase2Capacity } from "../../../src/logic.ts";
 
 import { transactionShape } from "../shared/format.ts";
@@ -52,6 +53,7 @@ export async function buildTransaction(
   const { match } = matched;
   const plan = planRebalance({
     tip: state.system.tip,
+    lockUp: state.system.lockUp,
     ickb: state.ickb + match.udtDelta,
     ckb: state.ckb + match.ckbDelta,
     depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
@@ -84,7 +86,19 @@ export async function buildTransaction(
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx } = completion;
-  return { kind: "built", tx, decision: decision(core, attempts, tx) };
+  const broadcastBefore =
+    core.kind === "withdraw"
+      ? broadcastDeadline(
+          core.deposits.map((deposit) => deposit.claimEpoch),
+          state.system.lockUp,
+        )
+      : undefined;
+  return {
+    kind: "built",
+    tx,
+    decision: decision(core, attempts, tx),
+    ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
+  };
 }
 
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {

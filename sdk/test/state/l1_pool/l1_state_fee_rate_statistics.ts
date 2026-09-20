@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   defaultL1Sdk,
@@ -13,7 +14,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     const feeRateStatistics = vi.fn(() => null);
     const client = clientWithFeeRateStatistics(feeRateStatistics);
 
-    const state = await defaultL1Sdk().getL1AccountState(client, []);
+    const state = await defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP);
 
     expect(feeRateStatistics).toHaveBeenCalledTimes(1);
     expect(state.system.feeRate).toBe(1000n);
@@ -27,7 +28,9 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
       throw feeRateError;
     });
 
-    await expect(defaultL1Sdk().getL1AccountState(client, [])).rejects.toBe(feeRateError);
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+    ).rejects.toBe(feeRateError);
   });
 
   it("rejects a negative fee rate returned by a custom client", async () => {
@@ -39,9 +42,9 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
       -1n,
     );
 
-    await expect(defaultL1Sdk().getL1AccountState(client, [])).rejects.toThrow(
-      "Client fee rate must be non-negative",
-    );
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+    ).rejects.toThrow("Client fee rate must be non-negative");
   });
 });
 

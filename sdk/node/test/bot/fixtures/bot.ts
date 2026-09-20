@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
-import { depositData } from "../../../../src/dao.ts";
+import { BOT_LOCK_UP, depositData } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
 import {
   attestResolvedOrderGroup,
@@ -52,18 +52,20 @@ export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
 export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
 export const NO_DEPOSITS: IckbDepositCell[] = [];
 
+/** The bot tests' tip: epoch zero, so a deposit's claim is `minutesOut` on the nominal epoch. */
+export const BOT_TIP = headerLike({ epoch: [0n, 0n, 1n] });
+
 /**
- * A ready pool deposit shaped for the real DAO and owned-owner builders, with the iCKB value
- * and maturity the policy tests dictate rather than the ones the cell would imply.
+ * A pool deposit shaped for the real DAO and owned-owner builders, with the iCKB value and
+ * claim the tests dictate rather than the ones the cell would imply: `minutesOut` past
+ * `BOT_TIP` on the nominal four-hour epoch, ready under `BOT_LOCK_UP` between twenty and
+ * sixty; a whole number of epochs out places it in another ring segment.
  */
 export function readyDeposit(
   byte: string,
   udtValue: bigint,
-  maturityUnix: bigint,
-  options: { isReady?: boolean } = {},
+  minutesOut = 30n,
 ): IckbDepositCell {
-  const minute = 60n * 1000n;
-  const ringEpoch = maturityUnix % minute === 0n ? maturityUnix / minute : maturityUnix;
   const { ickbLogic: logic } = getConfig("testnet");
   const { dao } = logic;
   const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
@@ -80,8 +82,7 @@ export function readyDeposit(
     cell,
     headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
     interests: 0n,
-    maturity: new TestEpoch(ringEpoch, 0n, 1n, maturityUnix),
-    isReady: options.isReady ?? true,
+    claimEpoch: ccc.Epoch.from([minutesOut / 240n, minutesOut % 240n, 240n]),
     ckbValue: udtValue,
     udtValue,
   };
@@ -267,9 +268,10 @@ export function botState(overrides: Partial<BotState>): BotState {
     system: {
       feeRate: 1n,
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      tip: headerLike(),
+      tip: BOT_TIP,
       orderPool: [],
       poolDeposits: [],
+      lockUp: BOT_LOCK_UP,
     },
     ...overrides,
   };
@@ -343,11 +345,12 @@ export function l1AccountState(
 ): L1AccountState {
   return {
     system: {
-      tip: headerLike(),
+      tip: BOT_TIP,
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       orderPool: [],
       feeRate: 1n,
       poolDeposits: [],
+      lockUp: BOT_LOCK_UP,
     },
     user: { orders: [] },
     account: {

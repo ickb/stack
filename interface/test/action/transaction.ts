@@ -215,6 +215,25 @@ describe("buildTransactionPreview destination", () => {
     expect(txInfo.move).toEqual({ to: "ckt1qzda…abcdef", isComplete: true });
   });
 
+  it("carries the SDK's broadcast deadline into the preview", async () => {
+    const broadcastBefore = ccc.Epoch.from([7n, 0n, 1n]);
+    const buildConversionTransaction = buildConversionTransactionMock(
+      successfulPlan({ broadcastBefore }),
+    );
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
+
+    const txInfo = await buildTransactionPreview(
+      context(),
+      false,
+      1n,
+      own(config),
+      config,
+    );
+
+    expect(txInfo.broadcastBefore).toBe(broadcastBefore);
+  });
+
   it("refuses a move with an amount before reaching the SDK", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });

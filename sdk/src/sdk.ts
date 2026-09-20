@@ -14,11 +14,10 @@ import type {
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
-  GetL1StateOptions,
   SdkManagers,
   SystemState,
 } from "./conversion/types.ts";
-import { assertDaoOutputLimit, DEFAULT_LOCK_UP_WINDOW } from "./dao.ts";
+import { assertDaoOutputLimit, broadcastDeadline, type LockUpPolicy } from "./dao.ts";
 import type { IckbDepositCell, LogicManager } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
@@ -38,11 +37,11 @@ export interface IckbSdk {
     txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state against one sampled tip. */
+  /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
   getL1AccountState(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1StateOptions,
+    lockUp: LockUpPolicy,
   ): Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
@@ -101,7 +100,8 @@ const IckbSdkImplementation = class IckbSdk {
   // ---- State reads -------------------------------------------------------------------
 
   /**
-   * Reads system, user-order, and account state against one sampled tip.
+   * Reads system, user-order, and account state against one sampled tip, under the
+   * caller's withdrawal timing rules (`BOT_LOCK_UP` or `WALLET_LOCK_UP`).
    *
    * @remarks Every read is complete and uncapped: a large book or pool costs a slower
    * read, never a partial or failed one. Each account lock is enumerated by one uncached
@@ -110,7 +110,7 @@ const IckbSdkImplementation = class IckbSdk {
   public async getL1AccountState(
     client: ccc.Client,
     locks: ccc.Script[],
-    options?: GetL1StateOptions,
+    lockUp: LockUpPolicy,
   ): Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
@@ -118,13 +118,8 @@ const IckbSdkImplementation = class IckbSdk {
   }> {
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
-    // The lock-up window is settled once, here; every reader below takes it whole.
-    const window = {
-      minLockUp: options?.poolDeposits?.minLockUp ?? DEFAULT_LOCK_UP_WINDOW.minLockUp,
-      maxLockUp: options?.poolDeposits?.maxLockUp ?? DEFAULT_LOCK_UP_WINDOW.maxLockUp,
-    };
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
-      this.ickbLogic.findDeposits(client, tip, window),
+      this.ickbLogic.findDeposits(client, tip),
       this.order.findOrders(client),
       getFeeRate(client),
       Promise.all(
@@ -140,6 +135,7 @@ const IckbSdkImplementation = class IckbSdk {
         // past par, the wallet's own included, since the bot fills by price, not by owner.
         orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),
         poolDeposits,
+        lockUp,
       },
       user: { orders: orders.filter((group) => group.isOwner(...locks)) },
       account: {
@@ -322,6 +318,10 @@ const IckbSdkImplementation = class IckbSdk {
       async (partial) => this.completeConversion(partial, options),
     );
     const notice = plan.order?.estimate.notice;
+    const broadcastBefore = broadcastDeadline(
+      plan.selectedDeposits.map((deposit) => deposit.claimEpoch),
+      context.system.lockUp,
+    );
     return {
       ok: true,
       tx,
@@ -331,6 +331,7 @@ const IckbSdkImplementation = class IckbSdk {
       },
       ...(notice === undefined ? {} : { conversionNotice: notice }),
       isSweepComplete: sweepsAll(tx, context.cells),
+      ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
     };
   }
 
@@ -363,13 +364,6 @@ const IckbSdkImplementation = class IckbSdk {
   ): ccc.Transaction {
     let tx = ccc.Transaction.from(txLike);
     if (withdrawalRequest !== undefined && withdrawalRequest.deposits.length > 0) {
-      for (const deposit of withdrawalRequest.deposits) {
-        if (!deposit.isReady) {
-          throw new Error(
-            `Withdrawal deposit ${deposit.cell.outPoint.toHex()} is not ready`,
-          );
-        }
-      }
       tx = this.ownedOwner.requestWithdrawal(
         tx,
         withdrawalRequest.deposits,

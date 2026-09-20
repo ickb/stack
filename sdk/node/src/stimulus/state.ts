@@ -6,6 +6,7 @@ import type {
   ConversionTransactionContext,
   SystemState,
 } from "../../../src/conversion/types.ts";
+import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
 import { isRefused } from "../../../src/order/fill.ts";
 import type { OrderManager } from "../../../src/order/order.ts";
@@ -47,6 +48,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   const { system, user, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
+    WALLET_LOCK_UP,
   );
   const fulfilled = user.orders.filter((group) => group.order.isFulfilled());
   const live = user.orders.filter((group) => group.order.isMatchable());

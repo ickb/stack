@@ -22,8 +22,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const MINUTE = 60n * 1000n;
-
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
   const daoScript = botRuntime().managers.ickbLogic.dao.script;
@@ -43,14 +41,14 @@ function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
 
 /** Surplus deposits in one covered ring: an anchor per window plus these extras. */
 function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
-  return [readyDeposit("a0", ICKB_DEPOSIT_CAP + 1n, 0n), ...extras];
+  return [readyDeposit("a0", ICKB_DEPOSIT_CAP + 1n), ...extras];
 }
 
 describe("buildTransaction withdrawal", () => {
   it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
-    const first = readyDeposit("81", 4n, 0n);
-    const second = readyDeposit("82", 6n, 5n * MINUTE);
-    const third = readyDeposit("83", 5n, 10n * MINUTE);
+    const first = readyDeposit("81", 4n, 30n);
+    const second = readyDeposit("82", 6n, 35n);
+    const third = readyDeposit("83", 5n, 40n);
     const completeTransaction = completingUpTo(2);
     const runtime = botRuntime({ completeTransaction });
     const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
@@ -73,12 +71,17 @@ describe("buildTransaction withdrawal", () => {
         core: { kind: "withdraw", withdrawalRequests: 2, attempts: 2 },
       },
     });
+    // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
+    expect(
+      result.kind === "built" &&
+        result.broadcastBefore?.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
+    ).toBe(true);
   });
 
   it("starts the chain past a surplus deposit larger than the budget", async () => {
     // The pool anchor stays the largest; the oversize surplus alone repeats the next chain.
-    const oversize = readyDeposit("85", ICKB_DEPOSIT_CAP + 200n, 0n);
-    const fitting = readyDeposit("86", 4n, 5n * MINUTE);
+    const oversize = readyDeposit("85", ICKB_DEPOSIT_CAP + 200n, 30n);
+    const fitting = readyDeposit("86", 4n, 35n);
     const completeTransaction = vi.fn(completingUpTo(1));
     const runtime = botRuntime({ completeTransaction });
 
@@ -87,11 +90,7 @@ describe("buildTransaction withdrawal", () => {
       botState({
         ckb: ccc.fixedPointFrom(500_000),
         ickb: ICKB_WITHDRAW_ABOVE + 100n,
-        poolDeposits: [
-          readyDeposit("a0", ICKB_DEPOSIT_CAP + 300n, 0n),
-          oversize,
-          fitting,
-        ],
+        poolDeposits: [readyDeposit("a0", ICKB_DEPOSIT_CAP + 300n), oversize, fitting],
       }),
     );
 
@@ -106,7 +105,7 @@ describe("buildTransaction withdrawal", () => {
   });
 
   it("collects alone when no withdrawal prefix can complete, and skips when there is nothing", async () => {
-    const only = readyDeposit("87", 4n, 0n);
+    const only = readyDeposit("87", 4n);
     const runtime = botRuntime({ completeTransaction: completingUpTo(0) });
     const state = {
       ckb: ccc.fixedPointFrom(500_000),
@@ -169,7 +168,7 @@ describe("buildTransaction withdrawal", () => {
         botState({
           ckb: ccc.fixedPointFrom(500_000),
           ickb: ICKB_WITHDRAW_ABOVE + 100n,
-          poolDeposits: pool([readyDeposit("81", 4n, 0n)]),
+          poolDeposits: pool([readyDeposit("81", 4n)]),
           ...collections,
         }),
       ),
@@ -188,7 +187,7 @@ describe("buildTransaction withdrawal", () => {
         botState({
           ckb: ccc.fixedPointFrom(500_000),
           ickb: ICKB_WITHDRAW_ABOVE + 100n,
-          poolDeposits: pool([readyDeposit("81", 4n, 0n)]),
+          poolDeposits: pool([readyDeposit("81", 4n)]),
           readyWithdrawals: readyWithdrawals.slice(1),
           notReadyWithdrawals: pendingWithdrawals,
         }),

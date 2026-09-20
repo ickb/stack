@@ -1,6 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
-import { compareBigInt } from "../utils/utils.ts";
 
 const RING_EPOCHS = 180n;
 
@@ -29,9 +28,10 @@ export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegm
     udtValue: 0n,
   }));
 
+  // The ring is one DAO cycle round, so a claim rolled a cycle lands in the same segment.
   for (const deposit of poolDeposits) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- ringSegmentIndex returns 0 <= index < segmentCount.
-    const segment = segments[ringSegmentIndex(deposit.maturity, segmentCount)]!;
+    const segment = segments[ringSegmentIndex(deposit.claimEpoch, segmentCount)]!;
     segment.deposits.push(deposit);
     segment.udtValue += deposit.udtValue;
   }
@@ -39,7 +39,7 @@ export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegm
   return segments;
 }
 
-/** The segment index an epoch falls in, for a deposit's maturity or the tip. */
+/** The segment index an epoch falls in, for a deposit's claim or the tip. */
 export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number {
   const { denominator } = epoch;
   if (denominator <= 0n) {
@@ -53,16 +53,20 @@ export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number
 
 /**
  * Returns a filter that excludes the ring anchor deposits from surplus selection: each
- * segment keeps its anchor, the largest not-ready deposit, else the largest one.
+ * segment keeps its anchor, the largest deposit not in `ready`, else the largest one.
  */
 export function ringSurplusDepositFilter(
   poolDeposits: readonly IckbDepositCell[],
+  ready: readonly IckbDepositCell[],
 ): (deposit: IckbDepositCell) => boolean {
+  const isReady = new Set(ready.map((deposit) => deposit.cell.outPoint.toHex()));
   const anchors = new Set(
     ringSegments(poolDeposits).flatMap((segment) => {
       const anchor = segment.deposits.reduce<IckbDepositCell | undefined>(
         (best, deposit) =>
-          best === undefined || isBetterRingAnchor(deposit, best) ? deposit : best,
+          best === undefined || isBetterRingAnchor(deposit, best, isReady)
+            ? deposit
+            : best,
         undefined,
       );
       return anchor === undefined ? [] : [anchor.cell.outPoint.toHex()];
@@ -74,30 +78,31 @@ export function ringSurplusDepositFilter(
 function isBetterRingAnchor(
   candidate: IckbDepositCell,
   current: IckbDepositCell,
+  isReady: ReadonlySet<string>,
 ): boolean {
-  if (candidate.isReady !== current.isReady) {
-    return !candidate.isReady;
+  const candidateReady = isReady.has(candidate.cell.outPoint.toHex());
+  if (candidateReady !== isReady.has(current.cell.outPoint.toHex())) {
+    return !candidateReady;
   }
   return candidate.udtValue > current.udtValue;
 }
 
 /**
- * Selects ready deposits for withdrawal requests greedily by maturity.
+ * Selects ready deposits for withdrawal requests greedily by claim.
  *
  * @remarks
  * The deposit closest to its cycle boundary turns into CKB soonest, which is the wait the
- * user feels, so candidates are walked from the earliest maturity and each one that still
+ * user feels, so candidates are walked from the earliest claim and each one that still
  * fits under `maxAmount` is taken (decisions amendment 40). How many of the selected
  * deposits one transaction can carry is decided later by completion, not here.
  */
 export function selectReadyWithdrawalDeposits(
   readyDeposits: readonly IckbDepositCell[],
   maxAmount: bigint,
-  tip: ccc.ClientBlockHeader,
 ): IckbDepositCell[] {
   const deposits: IckbDepositCell[] = [];
   let total = 0n;
-  for (const deposit of sortByMaturity(readyDeposits, tip)) {
+  for (const deposit of sortByClaim(readyDeposits)) {
     if (total + deposit.udtValue > maxAmount) {
       continue;
     }
@@ -107,14 +112,9 @@ export function selectReadyWithdrawalDeposits(
   return deposits;
 }
 
-/** Earliest maturity first: the deposit that turns into CKB soonest. */
-export function sortByMaturity(
-  deposits: readonly IckbDepositCell[],
-  tip: ccc.ClientBlockHeader,
-): IckbDepositCell[] {
-  return deposits.toSorted((left, right) =>
-    compareBigInt(left.maturity.toUnix(tip), right.maturity.toUnix(tip)),
-  );
+/** Earliest claim first: the deposit that turns into CKB soonest. */
+export function sortByClaim(deposits: readonly IckbDepositCell[]): IckbDepositCell[] {
+  return deposits.toSorted((left, right) => left.claimEpoch.compare(right.claimEpoch));
 }
 
 function nextPowerOfTwo(value: number): number {

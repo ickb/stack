@@ -14,6 +14,22 @@ export class TransactionBroadcastError extends Error {
   }
 }
 
+/** Error from a send refused because the chain reached the transaction's broadcast deadline. */
+export class TransactionExpiredError extends Error {
+  /** The deadline and the tip epoch that reached it. */
+  public readonly epochs: { broadcastBefore: ccc.Epoch; tip: ccc.Epoch };
+
+  /** Creates the error for a deadline the tip has reached; nothing was sent. */
+  constructor(
+    epochs: { broadcastBefore: ccc.Epoch; tip: ccc.Epoch },
+    options?: ErrorOptions,
+  ) {
+    super("Transaction expired: the chain reached its broadcast deadline", options);
+    this.name = "TransactionExpiredError";
+    this.epochs = epochs;
+  }
+}
+
 /**
  * Signs locally, records chain identity before RPC, then broadcasts without
  * CCC's cache wrapper.
@@ -23,16 +39,21 @@ export class TransactionBroadcastError extends Error {
  * before signing, so in-place mutation cannot evade the check. Witnesses and
  * cell/header dependency preparation stay signer-owned. The fee ceiling values
  * inputs from the pre-sign transaction rather than connector-supplied metadata,
- * while measuring the signed bytes. `recordTxHash` is called after the signed
- * fee-rate guard and before the send RPC starts. A node that already holds this
- * exact transaction is an acceptance; any other send failure remains ambiguous
- * and throws `TransactionBroadcastError`. The client cache is never marked:
- * later attempts rebuild from exact committed reads.
+ * while measuring the signed bytes. When `broadcastBefore` is given, one fresh tip
+ * is read after the signature and the fee check, and the send is refused with
+ * `TransactionExpiredError` once the tip's epoch has reached it: a withdrawal
+ * request that commits after its claim locks the deposit for another cycle, and a
+ * wallet may hold the signature for a while (decisions amendment 52(al)).
+ * `recordTxHash` is called after these checks and before the send RPC starts. A
+ * node that already holds this exact transaction is an acceptance; any other send
+ * failure remains ambiguous and throws `TransactionBroadcastError`. The client
+ * cache is never marked: later attempts rebuild from exact committed reads.
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,
   tx: ccc.TransactionLike,
   recordTxHash?: (txHash: ccc.Hex) => void,
+  broadcastBefore?: ccc.Epoch,
 ): Promise<ccc.Hex> {
   // Transaction.from reuses Transaction instances, which a signer may mutate in place.
   const requested = ccc.Transaction.from(tx).clone();
@@ -48,6 +69,12 @@ export async function signAndSendTransaction(
   const feeRate = await feeTransaction.getFeeRate(signer.client);
   if (feeRate > cccA.DEFAULT_MAX_FEE_RATE) {
     throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
+  }
+  if (broadcastBefore !== undefined) {
+    const { epoch } = await signer.client.getTipHeader();
+    if (broadcastBefore.compare(epoch) <= 0) {
+      throw new TransactionExpiredError({ broadcastBefore, tip: epoch });
+    }
   }
   recordTxHash?.(txHash);
 

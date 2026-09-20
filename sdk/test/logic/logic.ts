@@ -353,10 +353,6 @@ describe("LogicManager.findDeposits", () => {
     number: 1n,
     dao: { c: 0n, ar: 10000000000000000n, s: 0n, u: 0n },
   });
-  const window = {
-    minLockUp: ccc.Epoch.from([0n, 1n, 24n]),
-    maxLockUp: ccc.Epoch.from([18n, 0n, 1n]),
-  };
 
   it("scans the logic lock for DAO deposits and values them at their deposit header", async () => {
     const deposit = depositCellOf("44");
@@ -375,7 +371,7 @@ describe("LogicManager.findDeposits", () => {
       },
     });
 
-    const deposits = await manager().findDeposits(client, tip, window);
+    const deposits = await manager().findDeposits(client, tip);
 
     expect(queries).toHaveLength(1);
     expect(ccc.Script.from(queries[0]?.script ?? logic).eq(logic)).toBe(true);
@@ -387,13 +383,12 @@ describe("LogicManager.findDeposits", () => {
         { header: tip },
       ],
       interests: ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
-      isReady: true,
       udtValue: ickbValue(deposit.capacityFree, depositHeader),
     });
     expect(deposits[0]?.ckbValue).toBe(
       deposit.cellOutput.capacity + (deposits[0]?.interests ?? 0n),
     );
-    expect(deposits[0]?.maturity.eq(ccc.calcDaoClaimEpoch(depositHeader, tip))).toBe(
+    expect(deposits[0]?.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, tip))).toBe(
       true,
     );
   });
@@ -413,7 +408,7 @@ describe("LogicManager.findDeposits", () => {
       },
     });
 
-    const deposits = await manager().findDeposits(client, tip, window);
+    const deposits = await manager().findDeposits(client, tip);
 
     expect(transactionCalls).toBe(1);
     expect(deposits.map((deposit) => deposit.cell.outPoint.index)).toEqual([0n, 1n]);

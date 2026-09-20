@@ -79,25 +79,6 @@ describe(BUILD_BASE_TRANSACTION_SUITE, () => {
 
     expectRealBaseTransactionEffects(tx, effects);
   });
-
-  it("rejects non-ready withdrawal request deposits before calling core", () => {
-    const { botLock, dao, logic, ownedOwnerManager, sdk } = baseTransactionFixture();
-    const requestedDeposit = depositCell("74", logic, dao, baseTip, baseTip, {
-      isReady: false,
-    });
-    const requestWithdrawal = vi.spyOn(ownedOwnerManager, "requestWithdrawal");
-
-    expect(() =>
-      sdk.buildBaseTransaction(
-        ccc.Transaction.default(),
-        { availableOrders: [], receipts: [], readyWithdrawals: [] },
-        { deposits: [requestedDeposit], lock: botLock },
-      ),
-    ).toThrow(
-      `Withdrawal deposit ${requestedDeposit.cell.outPoint.toHex()} is not ready`,
-    );
-    expect(requestWithdrawal).not.toHaveBeenCalled();
-  });
 });
 
 async function buildRealBaseTransactionCase(): Promise<

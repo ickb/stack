@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   TransactionBroadcastError,
+  TransactionExpiredError,
   TransactionWaitError,
   hasTransactionActivity,
   signAndSendTransaction,
@@ -145,7 +146,12 @@ function sendAndStoreTransaction(
     pendingStore,
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
     (recordTxHash) =>
-      signAndSendTransaction(walletConfig.signer, txInfo.tx, recordTxHash),
+      signAndSendTransaction(
+        walletConfig.signer,
+        txInfo.tx,
+        recordTxHash,
+        txInfo.broadcastBefore,
+      ),
   );
 }
 
@@ -271,6 +277,10 @@ function isWaitWindowTimeout(error: unknown): boolean {
 }
 
 function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
+  // Nothing was sent: the preview is released below and rebuilds from a fresh state read.
+  if (error instanceof TransactionExpiredError) {
+    return "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
+  }
   if (error instanceof TransactionWaitError) {
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;

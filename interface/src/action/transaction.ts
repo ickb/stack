@@ -86,6 +86,9 @@ export async function buildTransactionPreview(
       ...(result.conversionNotice === undefined
         ? {}
         : { conversionNotice: result.conversionNotice }),
+      ...(result.broadcastBefore === undefined
+        ? {}
+        : { broadcastBefore: result.broadcastBefore }),
     });
   } catch (error) {
     return txInfoWithError(
