@@ -24,12 +24,12 @@ Each bot process runs one turn and exits, so continuous matching is a loop aroun
 
 ## Run
 
-From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.19+. Local key files under `config/` are ignored by git:
+From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.19+. The key file lives outside the checkout, in a private directory:
 
 ```bash
 pnpm install
-mkdir -p config && (umask 077 && $EDITOR config/testnet.key)
-export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=config/testnet.key
+install -d -m 700 ~/.config/ickb-bot && (umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
+export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
 pnpm --filter ./sdk/node bot
 ```
 
@@ -62,10 +62,10 @@ One process is one turn: `pnpm --filter ./sdk/node bot` exits with code `0` afte
 
 Structured events contain the evidence needed to understand bot behavior. The bot must not print its configured private key to events, errors, stdout, or stderr. Private keys are for signing only: logger, event, error, and test-hook APIs must not receive private keys, signers, secret contexts, masking callbacks, redaction parameters, or guard inputs. Tests use a configured canary private key from outside the production path and verify produced output cannot reveal it. Secrets, credentialed RPC URLs, tokens, passwords, API keys, and secret-bearing config/env dumps must not be logged or passed to logging, redaction, masking, or guard helpers.
 
-Bot-only log queries over a saved bot stdout NDJSON stream, or over `journalctl --user -u ickb-bot-<network>.service -o cat` piped through the same filters:
+Bot-only log queries over the unit's journal saved as one JSON line per event (a saved stdout stream works the same):
 
 ```bash
-EVENT_FILE=log/bot/events.ndjson
+EVENT_FILE=$(mktemp) && journalctl --user -u ickb-bot-testnet.service -o cat | grep '^{' > "$EVENT_FILE"
 jq -r '.type' "$EVENT_FILE" | sort | uniq -c
 jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, expected, observed, matches}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions: .decision.actions, skip: .decision.skip}' "$EVENT_FILE"
@@ -90,7 +90,7 @@ Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|convers
 Each turn writes one JSON line with the bot's envelope, `type` `stimulus.turn` and `timestamp` first, then `identity` (chain, recommended address, primary lock, credential-free RPC endpoint, and the chain preflight evidence), `balance`, `orders` (live, fulfilled, refused, and stale counts; a stale count above zero means the bot left an order for thirty days and deserves a look), `draw`, and `outcome`: `committed`, `unresolved` (sent, but the wait window closed), `rejected` (the node refused it), `skipped` with its `skip` reason, or `failed` with `error`. A sent transaction carries `action` (the order and master output indices of a mint, or the SDK's conversion kind), `transactionShape`, `txFee`, and `txHash`; only `committed` proves the stimulus reached the chain. The order outpoints the bot logs in `decision.match.matchedOrderOutPoints` are `txHash` plus the logged output index, so the two journals join.
 
 ```bash
-export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
+export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=~/.config/ickb-bot/stimulus-testnet.key
 pnpm --filter ./sdk/node stimulus
 ```
 
@@ -108,7 +108,8 @@ journalctl -f --user -u ickb-bot-testnet.service -o cat | jq -R -c 'fromjson? | 
 The bot's reasons are lossy (any nonempty match is `matched`, whatever was rejected on the way) and some branches need pool or maturity state no order can create, so a missing reason means its precondition never occurred, not that the generator failed. Tally both journals, then read the table:
 
 ```bash
-BOT=log/bot/events.ndjson; STIMULUS=log/stimulus/events.ndjson
+BOT=$(mktemp) && journalctl --user -u ickb-bot-testnet.service -o cat | grep '^{' > "$BOT"
+STIMULUS=$(mktemp) && journalctl --user -u ickb-stimulus-testnet.service -o cat | grep '^{' > "$STIMULUS"
 jq -r 'select(.decision) | .decision.match.reason' "$BOT" | sort | uniq -c
 jq -r 'select(.decision) | "\(.decision.core.kind) \(.decision.rebalance.deposit // "-") \(.decision.rebalance.withdrawal.stress // "-")"' "$BOT" | sort | uniq -c
 jq -r 'select(.type == "bot.decision.skipped") | .reason' "$BOT" | sort | uniq -c
@@ -174,7 +175,3 @@ The unit sets `LimitCORE=0`, so crash diagnosis uses the journal rather than a c
 - Fund the bot with about 2.5 deposits of capital (250,000 iCKB worth) plus the 1,000 CKB reserve: 1.2 deposits ride in the inventory band, since the bot withdraws only above 120,000 iCKB, one deposit's worth of CKB refills the band, and the last half keeps serving sellers while a withdrawal waits for its claim date. Below that it still matches what it can but idles with a full band waiting for a buyer or a claim date.
 - Prefer an exclusive node that keeps CKB's default `[indexer_v2] index_tx_pool = false`: with pool indexing on, a timed-out send can be duplicated with disjoint inputs on a later turn. A public node, as in the example units, is acceptable when you accept that risk.
 - The bot relies on shared CCC packages for protocol-specific transaction content and owns final iCKB completion, fee completion, signing, sending, and commit waiting.
-
-## Licensing
-
-Released under the [MIT License](https://github.com/ickb/stack/blob/master/LICENSE).

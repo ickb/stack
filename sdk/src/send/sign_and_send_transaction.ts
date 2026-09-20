@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import { unique } from "../utils/utils.ts";
 
 /** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
 export class TransactionBroadcastError extends Error {
@@ -101,4 +102,19 @@ export async function signAndSendTransaction(
 function economicBody(tx: ccc.TransactionLike): ccc.Hex {
   const { inputs, outputs, outputsData } = ccc.Transaction.from(tx);
   return ccc.Transaction.from({ inputs, outputs, outputsData }).hash();
+}
+
+/**
+ * Returns the primary lock plus all signer address locks, deduplicated by script hash.
+ */
+export async function signerAccountLocks(
+  signer: ccc.Signer,
+  primaryLock: ccc.Script,
+): Promise<ccc.Script[]> {
+  return [
+    ...unique([
+      primaryLock,
+      ...(await signer.getAddressObjs()).map(({ script }) => script),
+    ]),
+  ];
 }

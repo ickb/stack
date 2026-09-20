@@ -2,7 +2,7 @@
 
 iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps built on top of [CCC](https://github.com/ckb-devrel/ccc).
 
-The Stack rewrite is in progress. The [rewrite overview](docs/stack-rewrite/README.md) explains the target architecture, completed foundations, remaining phases, and open design findings. The rest of this README describes the current repository.
+Every design decision behind this tree, with its rejected alternatives, is in the [decision record](docs/stack-rewrite/decisions.md). The rest of this README describes the repository.
 
 ## Transaction Completion Boundary
 
@@ -42,15 +42,16 @@ A release is a merge to the default branch that changes a package's `version` fi
 
 Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the JSON on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
 
-The bot reads `BOT_CHAIN`, the optional `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the stimulus generator reads the same under `STIMULUS_` and refuses any chain but testnet. Key files under the ignored `config/` directory hold one lowercase `0x` key each. Without an RPC URL the actors use CCC's public endpoints for the chain, WebSocket first with HTTPS fallbacks; a configured URL is the only endpoint. Private keys are for signing only and never reach events, errors, or logs.
+The bot reads `BOT_CHAIN`, the optional `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the stimulus generator reads the same under `STIMULUS_` and refuses any chain but testnet. A key file holds one lowercase `0x` key; keep it outside the checkout, in `~/.config/ickb-bot/` as the units do. Without an RPC URL the actors use CCC's public endpoints for the chain, WebSocket first with HTTPS fallbacks; a configured URL is the only endpoint. Private keys are for signing only and never reach events, errors, or logs.
 
 ```bash
-export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=config/bot-testnet.key
-export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=config/stimulus-testnet.key
-mkdir -p log/bot
-node sdk/node/src/bot.ts >> log/bot/events.ndjson
+export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
+export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=~/.config/ickb-bot/stimulus-testnet.key
+node sdk/node/src/bot.ts
 node sdk/node/src/stimulus.ts
 ```
+
+Each actor prints its JSON lines to stdout; redirect them wherever you keep journals.
 
 Each turn identifies itself first: the bot's `bot.chain.preflight` event and the generator's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn skips: the bot with `bot.decision.skipped` reason `no_actions`, the generator with outcome `skipped` and reason `nothing-to-spend`, both with exit code `0`, turn after turn until funded; the turn's balances are in `bot.state.read` and the generator's `balance`.
 

@@ -3,8 +3,6 @@
   "type": "module",
   "scripts": {
     "build": "pnpm --filter @ickb/sdk build && node scripts/tooling/build/rewrite-dts-imports.ts --check sdk/dist",
-    "node:install": "CI=true pnpm --filter @ickb/node... install --frozen-lockfile",
-    "node:check": "pnpm --filter @ickb/node exec tsgo --noEmit -p tsconfig.json",
     "check": "CI=true pnpm audit && CI=true pnpm lint && CI=true pnpm --filter ./interface build",
     "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./interface lint:typecheck",
@@ -18,9 +16,7 @@
     "lint:eslint:files": "eslint \"scripts/**/*.ts\" \"eslint.config.mts\" \"prettier.config.mts\" \"vitest.config.mts\" \"{sdk,sdk/node,testkit,interface}/vitest.config.mts\" \"interface/vite.config.ts\" \"{sdk,sdk/node,testkit,interface}/{src,test}/**/*.{ts,tsx}\"",
     "lint:eslint": "pnpm lint:eslint:files --max-warnings=0",
     "format": "pnpm lint:eslint:files --fix && prettier --write .",
-    "test": "vitest",
-    "test:ci": "vitest run && node scripts/run-node-tests.ts",
-    "clean": "rm -fr dist sdk/dist interface/dist */*.tsbuildinfo sdk/node/*.tsbuildinfo"
+    "test": "vitest"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IckbError, type IckbErrorCode } from "../../src/conversion/error.ts";
+import { IckbError, type IckbErrorCode } from "../../src/sdk.ts";
 
 describe("IckbError", () => {
   it.each<IckbErrorCode>(["insufficient_capacity"])(

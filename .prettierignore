@@ -1,13 +1,6 @@
 **/node_modules/
 **/dist/
-**/etc/*.api.md
 **/*.tsbuildinfo
 coverage/
 .git/
-.scratch/
-/config/
-/log/
-sdk/node/log_*.json
-sdk/node/rate.csv
 pnpm-lock.yaml
-eslint-suppressions.json

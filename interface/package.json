@@ -29,10 +29,7 @@
     "build": "tsgo && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:ci": "vitest run",
-    "lint:typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p tsconfig.node.json",
-    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 interface/src interface/test",
-    "clean": "rm -fr dist"
+    "lint:typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p tsconfig.node.json"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",

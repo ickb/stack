@@ -1,8 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "./constants.ts";
-import { IckbError } from "./conversion/error.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
-import { completeFirstFundable } from "./conversion/fundable_walk.ts";
 import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
@@ -17,7 +15,13 @@ import type {
   SdkManagers,
   SystemState,
 } from "./conversion/types.ts";
-import { assertDaoOutputLimit, broadcastDeadline, type LockUpPolicy } from "./dao.ts";
+import {
+  assertDaoOutputLimit,
+  broadcastDeadline,
+  DaoHeaderIndexError,
+  DaoOutputLimitError,
+  type LockUpPolicy,
+} from "./dao.ts";
 import type { IckbDepositCell, LogicManager } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
@@ -570,4 +574,62 @@ async function completeFee(
       tx.addInput(cell);
     }
   }
+}
+
+/** Stable machine-readable failures owned by the Phase-2 SDK. */
+export type IckbErrorCode = "insufficient_capacity" | "insufficient_ickb";
+
+/** Typed SDK failure with a stable machine-readable code. */
+export class IckbError extends Error {
+  /** Stable failure code for callers and observability. */
+  public readonly code: IckbErrorCode;
+
+  /** Creates a typed SDK failure while preserving its cause. */
+  constructor(message: string, options: ErrorOptions & { code: IckbErrorCode }) {
+    super(message, options);
+    this.name = "IckbError";
+    this.code = options.code;
+  }
+}
+
+/**
+ * Completes the first candidate that the real completer can fund.
+ *
+ * @remarks
+ * Only completion knows what a transaction costs once markers, remainder orders, change, and
+ * fee are in, so no count is computed up front: each candidate is built and completed in turn
+ * (decisions amendment 41). Capacity, DAO output-limit and DAO header-index failures advance
+ * the walk; transport, scan, signer, and malformed-transaction errors propagate. Exhausting
+ * the candidates throws the last advancing failure.
+ */
+export async function completeFirstFundable<T>(
+  candidates: Iterable<T>,
+  build: (candidate: T) => ccc.Transaction,
+  complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
+): Promise<{ candidate: T; tx: ccc.Transaction }> {
+  let error: Error | undefined;
+  for (const candidate of candidates) {
+    try {
+      return { candidate, tx: await complete(build(candidate)) };
+    } catch (failure) {
+      if (!isFundabilityFailure(failure)) {
+        throw failure;
+      }
+      error = failure;
+    }
+  }
+  throw error ?? new Error("No candidate could be completed");
+}
+
+/**
+ * A failure the walk advances past: the candidate costs more than the account funds, or
+ * needs more DAO outputs or deposit-header slots than one transaction has.
+ */
+export function isFundabilityFailure(error: unknown): error is Error {
+  return (
+    error instanceof IckbError ||
+    error instanceof ccc.ErrorTransactionInsufficientCapacity ||
+    error instanceof DaoOutputLimitError ||
+    error instanceof DaoHeaderIndexError
+  );
 }

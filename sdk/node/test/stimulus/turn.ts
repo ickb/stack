@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../../../src/constants.ts";
-import { IckbError } from "../../../src/conversion/error.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import { Info } from "../../../src/order/info.ts";
+import { IckbError } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,

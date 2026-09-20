@@ -1,4 +1,4 @@
-# protocol_vectors.json — provenance and schema
+# Fixtures: protocol_vectors.json, provenance and schema
 
 Golden vectors computed by the iCKB contracts' own Rust logic, for cross-checking
 TypeScript reimplementations. Do not edit the JSON by hand; regenerate it.

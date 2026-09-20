@@ -4,15 +4,7 @@
 # Artifacts
 **/coverage/
 **/dist/
-**/temp/*.api.md
 **/*.tsbuildinfo
-/log/
-sdk/node/log_*.json
-sdk/node/rate.csv
-
-# Local runtime config files
-/config/
 
 # Local scratch files
-.scratch/
 /private/

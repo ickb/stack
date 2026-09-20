@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
 import { IckbSdk } from "../../src/sdk.ts";
-import { signerAccountLocks } from "../../src/send/account_locks.ts";
+import { signerAccountLocks } from "../../src/send/sign_and_send_transaction.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { logExecution } from "./shared/logging.ts";
 import { readStimulusConfig, readStimulusOverride } from "./stimulus/config.ts";

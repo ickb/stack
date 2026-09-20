@@ -38,7 +38,7 @@ The app owns one client per chain on CCC's public endpoints, WebSocket first wit
 pnpm --filter ./interface build
 ```
 
-Like `dev`, the build uses workspace package source directly and does not require Stack package `dist` output.
+Like `dev`, the build uses workspace package source directly and does not require Stack package `dist` output. `public/` holds the two files Vite copies to the site root as they are: `favicon.png`, and `CNAME`, which binds the GitHub Pages deployment to `ickb.org`; a README there would be published too, so this sentence stands in for one.
 
 A release of the interface is a merge to the default branch that changes the `version` field of `interface/package.json`: the check workflow then uploads the `interface/dist` it just built and a deploy job publishes it to GitHub Pages at ickb.org, once the gate passed on the same commit, so a failed run leaves the previous deployment live. Other merges leave the site untouched. The `CNAME` in `public/` binds the domain; the repository's Pages source is GitHub Actions.
 
@@ -51,7 +51,3 @@ Form quotes come from `conversionQuote` in `src/view/formState.ts`, a midpoint o
 ## Small iCKB Balances
 
 For iCKB-to-CKB requests below the normal order preview threshold, the interface can build a discounted dust order when the SDK finds terms the bot will still take. The status line shows the tiny iCKB input, the approximate CKB output, and what the request pays for the variable time, before the normal wallet signature. If no actionable dust terms exist, the SDK reports the request as too small instead of creating an unmatchable order. This path is useful when the user mainly wants to recover CKB capacity locked in an iCKB xUDT cell; the user accepts or rejects the exact terms by signing or cancelling the transaction.
-
-## Licensing
-
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack) and it is released under the [MIT License](../LICENSE).

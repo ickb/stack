@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { completeFirstFundable } from "../../../src/conversion/fundable_walk.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
   DaoOutputLimitError,
 } from "../../../src/dao.ts";
+import { completeFirstFundable } from "../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
   baseTip,

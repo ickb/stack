@@ -1,6 +1,7 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   readRuntimeConfigEnv,
   type RuntimeConfig,
@@ -11,11 +12,14 @@ const SECP256K1_ORDER =
   "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 const RPC_URL = "https://testnet.example/";
 const KEY_FILE_NAME = "testnet.key";
-const KEY_DIR = path.join(
-  import.meta.dirname,
-  "../../../.scratch/node-utils-runtime-config",
-);
-const KEY_FILE_PATH = path.join(KEY_DIR, KEY_FILE_NAME);
+// A private temporary directory per test, outside the checkout.
+let KEY_DIR = "";
+let KEY_FILE_PATH = "";
+
+beforeEach(async () => {
+  KEY_DIR = await mkdtemp(path.join(tmpdir(), "ickb-runtime-config-"));
+  KEY_FILE_PATH = path.join(KEY_DIR, KEY_FILE_NAME);
+});
 
 afterEach(async () => {
   await rm(KEY_DIR, { recursive: true, force: true });
@@ -175,6 +179,5 @@ async function readConfig(overrides: NodeJS.ProcessEnv): Promise<RuntimeConfig> 
 }
 
 async function writeKeyFile(text: string): Promise<void> {
-  await mkdir(KEY_DIR, { recursive: true, mode: 0o700 });
   await writeFile(KEY_FILE_PATH, text, { mode: 0o600 });
 }

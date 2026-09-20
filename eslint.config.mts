@@ -334,22 +334,6 @@ export default defineConfig(
     },
   },
   {
-    files: ["sdk/src/order/io/**/*.ts"],
-    rules: {
-      "@typescript-eslint/no-restricted-types": [
-        "error",
-        {
-          types: {
-            "ccc.TransactionLike":
-              "Normalize at the public OrderManager boundary and pass ccc.Transaction to internal transaction helpers.",
-            InfoLike:
-              "Normalize at the public OrderManager boundary and pass Info to internal order IO helpers.",
-          },
-        },
-      ],
-    },
-  },
-  {
     files: [
       "sdk/src/order/info.ts",
       "sdk/src/order/order_data.ts",

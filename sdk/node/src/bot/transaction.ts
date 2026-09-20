@@ -1,11 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  completeFirstFundable,
-  isFundabilityFailure,
-} from "../../../src/conversion/fundable_walk.ts";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { receiptPhase2Capacity } from "../../../src/logic.ts";
+import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";

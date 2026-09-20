@@ -10,10 +10,8 @@
   "scripts": {
     "bot": "node src/bot.ts",
     "stimulus": "node src/stimulus.ts",
-    "sampler": "node src/sampler.ts | tee rate.csv",
-    "test": "vitest",
-    "test:ci": "vitest run",
-    "lint": "pnpm --workspace-root exec eslint --max-warnings=0 sdk/node/src sdk/node/test"
+    "sampler": "node src/sampler.ts",
+    "test": "vitest"
   },
   "dependencies": {
     "@ckb-ccc/core": "catalog:"
