@@ -58,7 +58,8 @@ export function fillsWhole(
  * Whether the market will never fill this order: a CKB-to-iCKB order the bot's own matcher
  * would not fill whole today, which the DAO ratio's growth only pushes further from
  * filling. An iCKB-to-CKB order is never refused, since the same growth only raises what
- * the bot earns on it (decisions amendment 52(q)).
+ * the bot earns on it (decisions amendment 52(q)); one too small for that to ever cover
+ * the fill's cost is collected by age instead ({@link isStale}).
  */
 export function isRefused(
   group: OrderGroup,
@@ -67,4 +68,17 @@ export function isRefused(
   return (
     group.order.data.info.isCkb2Udt() && !fillsWhole(group, true, exchangeRatio, feeRate)
   );
+}
+
+/** Thirty days of eight-second blocks. */
+export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
+
+/**
+ * Whether the order has sat on the book for thirty days: whatever the reason (dust under
+ * the fill's cost, a remainder another matcher left, an ask above the market), it is
+ * collected and its funds returned. Age from the origin's block, so an uncommitted origin
+ * is as fresh as an order gets (decisions amendment 52(am)).
+ */
+export function isStale(group: OrderGroup, tip: ccc.ClientBlockHeader): boolean {
+  return (group.blockNumber ?? tip.number) + STALE_ORDER_BLOCKS <= tip.number;
 }

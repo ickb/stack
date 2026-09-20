@@ -8,7 +8,7 @@ import type {
 } from "../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
-import { isRefused } from "../../../src/order/fill.ts";
+import { isRefused, isStale } from "../../../src/order/fill.ts";
 import type { OrderManager } from "../../../src/order/order.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import type { Budgets } from "./draw.ts";
@@ -39,8 +39,6 @@ export interface StimulusState {
   liquidCkb: bigint;
 }
 
-/** Thirty days of eight-second blocks: an order the bot left that long is cancelled. */
-export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
 /** Testnet hygiene, not safety: with this many own orders live, the turn stops minting. */
 export const MAX_LIVE_ORDERS = 500;
 
@@ -81,20 +79,14 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
 
 /**
  * Live orders the bot will not take, counted apart because they mean different things:
- * `refused` is an order the market will never fill (the SDK's rule); `stale` is any order
- * older than {@link STALE_ORDER_BLOCKS}, which a running bot should never let happen.
+ * `refused` is an order the market will never fill and `stale` one thirty days old (both
+ * the SDK's rules); a running bot should never let a fillable order go stale.
  */
 function abandonedOrders(
   live: OrderGroup[],
   { exchangeRatio, feeRate, tip }: SystemState,
 ): { refused: OrderGroup[]; stale: OrderGroup[] } {
   const refused = live.filter((group) => isRefused(group, { exchangeRatio, feeRate }));
-  // The scan dates each group by its origin's block; an uncommitted origin is as fresh as
-  // an order gets.
-  const stale = live.filter(
-    (group) =>
-      !refused.includes(group) &&
-      (group.blockNumber ?? tip.number) + STALE_ORDER_BLOCKS <= tip.number,
-  );
+  const stale = live.filter((group) => !refused.includes(group) && isStale(group, tip));
   return { refused, stale };
 }

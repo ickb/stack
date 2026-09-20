@@ -1,6 +1,7 @@
 import {
   ickbExchangeRatio,
   isRefused,
+  isStale,
   projectConversionTransactionContext,
   Ratio,
   WALLET_LOCK_UP,
@@ -106,11 +107,11 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     WALLET_LOCK_UP,
   );
   const { system, user, account } = sdkState;
-  // Fulfilled orders and orders the market will never fill are collected on the next
-  // transaction, which melts the latter and returns their funds; live fillable orders stay
-  // on the book (decisions amendment 52(z)).
+  // Fulfilled orders, orders the market will never fill and orders thirty days old are
+  // collected on the next transaction, which melts the latter two and returns their funds;
+  // other live orders stay on the book (decisions amendments 52(z), 52(am)).
   const collectable = (group: (typeof user.orders)[number]): boolean =>
-    group.order.isFulfilled() || isRefused(group, system);
+    group.order.isFulfilled() || isRefused(group, system) || isStale(group, system.tip);
   const { projection, context } = projectConversionTransactionContext(system, account, {
     available: user.orders.filter(collectable),
     pending: user.orders.filter((group) => !collectable(group)),
