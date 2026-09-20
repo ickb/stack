@@ -100,23 +100,6 @@ export function isDaoWithdrawalRequest(
   );
 }
 
-/** Matches deployed dao.c at ckb-system-scripts\@f25c5ae: equal fractions do not roll twice. */
-export function daoClaimEpoch(
-  depositHeader: ccc.ClientBlockHeaderLike,
-  withdrawHeader: ccc.ClientBlockHeaderLike,
-): ccc.Epoch {
-  const deposit = ccc.ClientBlockHeader.from(depositHeader).epoch.normalizeBase();
-  const withdraw = ccc.ClientBlockHeader.from(withdrawHeader).epoch.normalizeBase();
-  const partialCycle = (withdraw.integer - deposit.integer) % DAO_CYCLE_EPOCHS;
-  const depositFractionPrecedesWithdraw =
-    deposit.numerator * withdraw.denominator < withdraw.numerator * deposit.denominator;
-  const withdrawInteger =
-    partialCycle !== 0n || depositFractionPrecedesWithdraw
-      ? withdraw.integer - partialCycle + DAO_CYCLE_EPOCHS
-      : withdraw.integer;
-  return ccc.Epoch.from([withdrawInteger, deposit.numerator, deposit.denominator]);
-}
-
 /**
  * A caller's timing rules for withdrawal requests, in epochs (the chain's clock, so no
  * wall-clock drift). Selection: a deposit may be requested when its claim epoch is past

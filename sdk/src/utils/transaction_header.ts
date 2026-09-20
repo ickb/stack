@@ -1,5 +1,5 @@
-import { ccc } from "@ckb-ccc/core";
-import { jsonRpcRequestor } from "./utils.ts";
+import type { ccc } from "@ckb-ccc/core";
+import { jsonRpcRequestor, rawTransactionStatus } from "./utils.ts";
 
 /**
  * The header of the block that committed `txHash`, without the transaction body, which no
@@ -16,7 +16,7 @@ export async function getTransactionHeader(
   if (requestor === undefined) {
     return (await client.getTransactionWithHeader(txHash))?.header;
   }
-  const blockNumber = committedBlockNumber(
+  const { blockNumber } = rawTransactionStatus(
     await requestor.request("get_transaction", [txHash, "0x1"]),
   );
   return blockNumber === undefined ? undefined : client.getHeaderByNumber(blockNumber);
@@ -63,20 +63,4 @@ export async function headersByNumber(
       return [blockNumber, header];
     }),
   );
-}
-
-/** The block number of a committed status record; anything else is not committed. */
-function committedBlockNumber(response: unknown): ccc.Num | undefined {
-  if (
-    typeof response !== "object" ||
-    response === null ||
-    !("tx_status" in response) ||
-    typeof response.tx_status !== "object" ||
-    response.tx_status === null ||
-    !("block_number" in response.tx_status) ||
-    typeof response.tx_status.block_number !== "string"
-  ) {
-    return undefined;
-  }
-  return ccc.numFrom(response.tx_status.block_number);
 }

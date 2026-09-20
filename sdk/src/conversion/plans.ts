@@ -16,8 +16,9 @@ import type {
   IckbToCkbConversionPlan,
 } from "./types.ts";
 import {
+  fitWithdrawalDeposits,
   ringSurplusDepositFilter,
-  selectReadyWithdrawalDeposits,
+  sortByClaim,
 } from "./withdrawal_ring.ts";
 
 // The DAO script accepts 64 outputs per transaction. Planners start at the most the
@@ -70,7 +71,7 @@ export function ickbToCkbConversionPlans(
   const { tip, lockUp } = context.system;
   const ready = readyDeposits(poolDeposits, tip, lockUp);
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
-  const deposits = selectReadyWithdrawalDeposits(ready.filter(isSurplus), amount);
+  const deposits = fitWithdrawalDeposits(sortByClaim(ready.filter(isSurplus)), amount);
   const plans: IckbToCkbConversionPlan[] = [];
   const longest = Math.min(deposits.length, MAX_PLANNED_WITHDRAWAL_REQUESTS);
   for (let count = longest; count >= 0; count -= 1) {

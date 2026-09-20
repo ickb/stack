@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
+import { DAO_CYCLE_EPOCHS } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
-
-const RING_EPOCHS = 180n;
 
 /**
  * Ring segment of pool deposits grouped by maturity around the DAO cycle.
@@ -46,7 +45,7 @@ export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number
     throw new Error("Epoch denominator must be positive");
   }
   const scaled = epoch.integer * denominator + epoch.numerator;
-  const ring = RING_EPOCHS * denominator;
+  const ring = DAO_CYCLE_EPOCHS * denominator;
   const wrapped = ((scaled % ring) + ring) % ring;
   return Number((wrapped * BigInt(segmentCount)) / ring);
 }
@@ -88,21 +87,18 @@ function isBetterRingAnchor(
 }
 
 /**
- * Selects ready deposits for withdrawal requests greedily by claim.
- *
- * @remarks
- * The deposit closest to its cycle boundary turns into CKB soonest, which is the wait the
- * user feels, so candidates are walked from the earliest claim and each one that still
- * fits under `maxAmount` is taken (decisions amendment 40). How many of the selected
- * deposits one transaction can carry is decided later by completion, not here.
+ * Walks the candidates in the given order and takes each one that still fits under
+ * `maxAmount` (decisions amendment 40); the caller chooses the order, earliest claim first
+ * for a user (the wait they feel), surplus before anchors for the bot. How many of the
+ * selected deposits one transaction can carry is decided later by completion, not here.
  */
-export function selectReadyWithdrawalDeposits(
-  readyDeposits: readonly IckbDepositCell[],
+export function fitWithdrawalDeposits(
+  candidates: readonly IckbDepositCell[],
   maxAmount: bigint,
 ): IckbDepositCell[] {
   const deposits: IckbDepositCell[] = [];
   let total = 0n;
-  for (const deposit of sortByClaim(readyDeposits)) {
+  for (const deposit of candidates) {
     if (total + deposit.udtValue > maxAmount) {
       continue;
     }

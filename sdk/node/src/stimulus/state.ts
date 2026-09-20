@@ -31,7 +31,7 @@ export interface StimulusState {
   account: AccountState;
   /** Conversion context over the collectable orders only; live orders stay on the book. */
   context: ConversionTransactionContext;
-  /** Fulfilled orders plus the live ones the bot will not take (see {@link abandonedOrders}): melted this turn. */
+  /** Fulfilled orders plus the live ones the bot will not take or left thirty days: melted this turn. */
   collectable: OrderGroup[];
   /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
   orders: { live: number; fulfilled: number; refused: number; stale: number };

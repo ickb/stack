@@ -206,10 +206,6 @@ class TransactionResponseCache extends ccc.ClientCacheMemory {
     await Promise.resolve();
     return ccc.hexFrom(txHash) === this.txHash ? this.response.clone() : undefined;
   }
-
-  public override async recordTransactionResponses(): Promise<void> {
-    await Promise.resolve();
-  }
 }
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {

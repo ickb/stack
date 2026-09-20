@@ -1,13 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import {
+  fitWithdrawalDeposits,
   ringSegments,
   ringSurplusDepositFilter,
-  selectReadyWithdrawalDeposits,
 } from "../../src/conversion/withdrawal_ring.ts";
 import { ringDeposit } from "./support/withdrawal_selection_support.ts";
 
-describe("selectReadyWithdrawalDeposits ring segments", () => {
+describe("fitWithdrawalDeposits ring segments", () => {
   it("keeps adaptive segments above the integer ring length", () => {
     const deposits = Array.from({ length: 181 }, () => ringDeposit(1n, 20n));
     const segments = ringSegments(deposits);
@@ -28,7 +28,7 @@ describe("selectReadyWithdrawalDeposits ring segments", () => {
     ).toEqual([anchor]);
 
     expect(
-      selectReadyWithdrawalDeposits(
+      fitWithdrawalDeposits(
         [surplus, anchor, otherAnchor].filter(
           ringSurplusDepositFilter(
             [surplus, anchor, otherAnchor],
@@ -48,12 +48,12 @@ describe("selectReadyWithdrawalDeposits ring segments", () => {
   });
 });
 
-describe("selectReadyWithdrawalDeposits ring exclusions", () => {
+describe("fitWithdrawalDeposits ring exclusions", () => {
   it("does not select the only representative of a ring bucket", () => {
     const anchor = ringDeposit(4n, 1n);
 
     expect(
-      selectReadyWithdrawalDeposits(
+      fitWithdrawalDeposits(
         [anchor].filter(ringSurplusDepositFilter([anchor], [anchor])),
         4n,
       ),
@@ -65,7 +65,7 @@ describe("selectReadyWithdrawalDeposits ring exclusions", () => {
     const readyAnchor = ringDeposit(4n, 1n, { key: "anchor" });
 
     expect(
-      selectReadyWithdrawalDeposits(
+      fitWithdrawalDeposits(
         [readyAnchor].filter(ringSurplusDepositFilter([poolAnchor], [poolAnchor])),
         4n,
       ),

@@ -75,6 +75,7 @@ function write(
   store: PendingTransactionStore,
   next: PendingTransactionState | undefined,
 ): void {
+  // The alias satisfies eslint's no-param-reassign on the parameter's property.
   const holder = store;
   holder.current = next;
   store.onChange(next);

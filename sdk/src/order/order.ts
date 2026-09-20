@@ -297,9 +297,6 @@ async function cachedTransactionResponse(
     return cached;
   }
 
-  const response = await client.getTransaction(txHash);
-  if (response !== undefined) {
-    await client.cache.recordTransactionResponses(response);
-  }
-  return response;
+  // CCC's read records a found response in the cache itself.
+  return client.getTransaction(txHash);
 }

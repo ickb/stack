@@ -12,8 +12,10 @@ export const defaultCellPageSize = 400;
  * Reads every committed cell matching the key, page by page, without touching
  * CCC's cell cache. The scan ends on the first short page.
  *
- * @remarks The operator's node is trusted: CKB's indexers advance the cursor on
- * every non-empty page, so no progress guard exists here (decisions amendment 52).
+ * @remarks A non-empty page always moves the indexer's cursor (it is the last cell's
+ * own key), so a cursor that comes back unchanged after a full page can only be a broken
+ * or lying node: the read fails with a named error instead of looping for ever, which
+ * matters to the app on a public node pool (decisions amendment 52(an)).
  */
 export async function findCells(
   client: ccc.Client,
@@ -32,6 +34,9 @@ export async function findCells(
     cells.push(...page.cells);
     if (page.cells.length < defaultCellPageSize) {
       return cells;
+    }
+    if (page.lastCursor === after) {
+      throw new Error("Cell scan cursor did not advance");
     }
     after = page.lastCursor;
   }
@@ -151,6 +156,32 @@ export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc | und
   }
   const { requestor } = client;
   return requestor instanceof ccc.RequestorJsonRpc ? requestor : undefined;
+}
+
+/** A node's raw `get_transaction` status record (verbosity 1), the fields the stack reads. */
+export function rawTransactionStatus(response: unknown): {
+  status: string | undefined;
+  reason: string | undefined;
+  blockNumber: ccc.Num | undefined;
+} {
+  const record =
+    typeof response === "object" &&
+    response !== null &&
+    "tx_status" in response &&
+    typeof response.tx_status === "object" &&
+    response.tx_status !== null
+      ? response.tx_status
+      : {};
+  return {
+    status:
+      "status" in record && typeof record.status === "string" ? record.status : undefined,
+    reason:
+      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
+    blockNumber:
+      "block_number" in record && typeof record.block_number === "string"
+        ? ccc.numFrom(record.block_number)
+        : undefined,
+  };
 }
 
 export function minBigInt(left: bigint, right: bigint): bigint {

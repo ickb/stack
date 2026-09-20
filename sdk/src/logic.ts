@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   assertDaoOutputLimit,
-  daoClaimEpoch,
   DaoOutputLimitError,
   depositData,
   depositMaturity,
@@ -245,7 +244,7 @@ export function ickbDepositCell(
     cell,
     headers: [depositHeader, { header: tip }],
     interests,
-    claimEpoch: daoClaimEpoch(depositHeader.header, tip),
+    claimEpoch: ccc.calcDaoClaimEpoch(depositHeader.header, tip),
     ckbValue: cell.cellOutput.capacity + interests,
     udtValue: ickbValue(cell.capacityFree, depositHeader.header),
   };

@@ -2,7 +2,6 @@ import { ccc, mol } from "@ckb-ccc/core";
 import {
   assertDaoOutputLimit,
   DAO_HEADER_INDEX_LIMIT,
-  daoClaimEpoch,
   DaoHeaderIndexError,
   isDaoWithdrawalRequest,
   pushHeaderDep,
@@ -237,9 +236,9 @@ export class OwnedOwnerManager implements ScriptDeps {
    * Spends the owned withdrawal requests and their owner markers, with the DAO header deps,
    * since, and witness each request needs.
    *
-   * @remarks Header deps are pushed in two passes, every distinct deposit header first and
-   * the withdrawal headers after, so deposit-header indices stay as low as the collection
-   * allows. Caller must ensure UDT cellDeps are added to the transaction.
+   * @remarks The distinct deposit headers are moved to the front of the header deps and
+   * the withdrawal headers appended, so a deposit header's index is its rank among the
+   * collected withdrawals. Caller must ensure UDT cellDeps are added to the transaction.
    */
   public withdraw(
     txLike: ccc.TransactionLike,
@@ -292,7 +291,7 @@ export class OwnedOwnerManager implements ScriptDeps {
           outPoint: owned.cell.outPoint,
           cellOutput: owned.cell.cellOutput,
           outputData: owned.cell.outputData,
-          since: { relative: "absolute", metric: "epoch", value: owned.maturity.toHex() },
+          since: { relative: "absolute", metric: "epoch", value: owned.maturity.toNum() },
         }) - 1;
       const witness = tx.getWitnessArgs(inputIndex) ?? ccc.WitnessArgs.from({});
       if ((witness.inputType ?? "") !== "") {
@@ -371,7 +370,7 @@ export function withdrawalRequestCell(
     depositHeader,
     requestHeader.header,
   );
-  const maturity = daoClaimEpoch(depositHeader, requestHeader.header);
+  const maturity = ccc.calcDaoClaimEpoch(depositHeader, requestHeader.header);
   return {
     cell,
     headers: [{ header: depositHeader }, requestHeader],

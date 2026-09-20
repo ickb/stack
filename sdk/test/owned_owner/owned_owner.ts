@@ -10,7 +10,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
-  daoClaimEpoch,
   DaoHeaderIndexError,
   DaoOutputLimitError,
   depositData,
@@ -308,6 +307,7 @@ describe("OwnedOwnerManager.withdraw", () => {
     if (since === undefined) {
       throw new Error("Expected withdrawal input since");
     }
+    expect(ccc.Since.from(since).relative).toBe("absolute");
     expect(ccc.Since.from(since).metric).toBe("epoch");
     expect(ccc.Since.from(since).value).toBe(owned.maturity.toNum());
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
@@ -509,7 +509,6 @@ describe("withdrawalRequestCell", () => {
       tip,
     );
 
-    expect(daoClaimEpoch(depositHeader, requestHeader).eq([181n, 1n, 2n])).toBe(true);
     expect(cell.maturity.eq([181n, 1n, 2n])).toBe(true);
     expect(cell.isReady).toBe(true);
   });

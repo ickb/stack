@@ -66,6 +66,29 @@ describe("findCells", () => {
     expect(recording).not.toHaveBeenCalled();
   });
 
+  it("fails when a full page brings the cursor back unchanged", async () => {
+    // A non-empty page always moves the indexer's cursor; a node that repeats it would
+    // otherwise be read for ever (decisions amendment 52(an)).
+    const client = offlineTestnetClient();
+    const cell = testCell({ type: undefined, outputData: "0x" });
+    const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
+    const noCache = vi
+      .spyOn(client, "findCellsPagedNoCache")
+      .mockImplementation(async (_key, _order, _limit, after) => {
+        await Promise.resolve();
+        return { cells: fullPage, lastCursor: after ?? "stuck" };
+      });
+
+    await expect(
+      findCells(client, {
+        script: cell.cellOutput.lock,
+        scriptType: "lock",
+        scriptSearchMode: "exact",
+      }),
+    ).rejects.toThrow("Cell scan cursor did not advance");
+    expect(noCache).toHaveBeenCalledTimes(2);
+  });
+
   it("completes after an empty first page", async () => {
     const client = offlineTestnetClient();
     const noCache = vi

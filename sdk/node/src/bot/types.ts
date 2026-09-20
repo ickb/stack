@@ -44,7 +44,7 @@ export interface BotState {
   /** Sampled public L1 state. */
   system: SystemState;
 
-  /** Public market orders eligible for matching; own orders are not part of it. */
+  /** Every order past par on the book, the bot's own included, had it any (52(ak)(2)). */
   marketOrders: OrderGroup[];
 
   /** User receipt cells ready for deposit completion. */

@@ -3,8 +3,9 @@ import {
   completeFirstFundable,
   isFundabilityFailure,
 } from "../../../src/conversion/fundable_walk.ts";
+import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
-import { type IckbDepositCell, receiptPhase2Capacity } from "../../../src/logic.ts";
+import { receiptPhase2Capacity } from "../../../src/logic.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
@@ -144,7 +145,7 @@ function withdrawalCores({
   budget,
   stress,
 }: NonNullable<RebalancePlan["withdrawal"]>): Core[] {
-  const chain = greedyFit(candidates, budget);
+  const chain = fitWithdrawalDeposits(candidates, budget);
   return chain.map((_, index) => ({
     kind: "withdraw",
     deposits: chain.slice(0, chain.length - index),
@@ -152,27 +153,11 @@ function withdrawalCores({
   }));
 }
 
-function greedyFit(
-  candidates: readonly IckbDepositCell[],
-  budget: bigint,
-): IckbDepositCell[] {
-  const chain: IckbDepositCell[] = [];
-  let total = 0n;
-  for (const deposit of candidates) {
-    if (total + deposit.udtValue > budget) {
-      continue;
-    }
-    total += deposit.udtValue;
-    chain.push(deposit);
-  }
-  return chain;
-}
-
 /**
  * The match and every collection ride on each core; the builders mutate their input. The
- * projection already sized the ready batch to the deposit-header slots left after the
- * receipts; a withdrawal request that would push a header past the limit fails the core as
- * unfundable, so the walk falls back to a shorter chain or to `none`.
+ * projection already sized the ready batch to what the DAO script's deposit-header index
+ * addresses, and the withdrawals' deposit headers go first, so a request never displaces
+ * a collected withdrawal.
  */
 function buildCore(
   runtime: Runtime,

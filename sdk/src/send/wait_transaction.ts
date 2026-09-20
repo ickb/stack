@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { jsonRpcRequestor } from "../utils/utils.ts";
+import { jsonRpcRequestor, rawTransactionStatus } from "../utils/utils.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -266,24 +266,4 @@ function assertNotRejected(txHash: ccc.Hex, status: TransactionStatus): void {
       reason: status.reason,
     });
   }
-}
-
-function rawTransactionStatus(response: unknown): TransactionStatus {
-  if (
-    typeof response !== "object" ||
-    response === null ||
-    !("tx_status" in response) ||
-    typeof response.tx_status !== "object" ||
-    response.tx_status === null
-  ) {
-    return { status: undefined, reason: undefined };
-  }
-
-  const { tx_status: statusRecord } = response;
-  const status = "status" in statusRecord ? statusRecord.status : undefined;
-  const reason = "reason" in statusRecord ? statusRecord.reason : undefined;
-  return {
-    status: typeof status === "string" ? status : undefined,
-    reason: typeof reason === "string" ? reason : undefined,
-  };
 }

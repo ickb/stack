@@ -1,13 +1,15 @@
+import { ccc } from "@ckb-ccc/core";
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { daoClaimEpoch } from "../../src/dao.ts";
 
 type EpochTuple = [bigint, bigint, bigint];
 
 // Reference model transcribed from deployed dao.c (ckb-system-scripts f25c5ae,
 // calculate_dao_input_capacity): held epochs use the strict withdraw_fraction >
-// deposit_fraction comparison (CCC adds a cycle on equality, ckb-ccc issue 514), lock
-// epochs round up to whole 180-epoch cycles, and the claim epoch keeps the deposit's fraction.
+// deposit_fraction comparison, lock epochs round up to whole 180-epoch cycles, and the
+// claim epoch keeps the deposit's fraction. The stack uses CCC's `calcDaoClaimEpoch` (the
+// equality roll of ckb-ccc issue 514 is fixed in the pinned release); this suite pins the
+// installed CCC against the deployed script on every run (decisions amendment 52(an)).
 function daocMinimalSince(
   [dn, di, dl]: EpochTuple,
   [wn, wi, wl]: EpochTuple,
@@ -58,15 +60,17 @@ function* offsetCases(
   }
 }
 
-// Adopted from the fable5 audit: the claim epoch is what the deployed script computes,
-// not what CCC computes.
-describe("daoClaimEpoch versus the deployed dao.c model", () => {
+// Adopted from the fable5 audit: the claim epoch is what the deployed script computes.
+describe("calcDaoClaimEpoch versus the deployed dao.c model", () => {
   it("matches dao.c minimal since over epoch-length, offset, and fraction combinations", () => {
     let checked = 0;
     for (const [dep, wit] of depositWithdrawCases()) {
       checked += 1;
       const expected = daocMinimalSince(dep, wit);
-      const got = daoClaimEpoch(headerLike({ epoch: dep }), headerLike({ epoch: wit }));
+      const got = ccc.calcDaoClaimEpoch(
+        headerLike({ epoch: dep }),
+        headerLike({ epoch: wit }),
+      );
       const gotScaled = got.integer * got.denominator + got.numerator;
       const expectedScaled = expected[0] * expected[2] + expected[1];
       expect(gotScaled * expected[2]).toBe(expectedScaled * got.denominator);

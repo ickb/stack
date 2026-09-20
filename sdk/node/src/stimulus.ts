@@ -25,12 +25,13 @@ try {
   const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
   const address = await signer.getRecommendedAddressObj();
   const primaryLock = address.script;
+  const managers = getConfig(chain);
   await runStimulusTurn({
     runtime: {
       client,
       signer,
-      sdk: IckbSdk.fromChain(chain),
-      order: getConfig(chain).order,
+      sdk: new IckbSdk(managers),
+      order: managers.order,
       primaryLock,
       accountLocks: await signerAccountLocks(signer, primaryLock),
     },
