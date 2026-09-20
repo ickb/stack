@@ -39,7 +39,7 @@ catalog:
 
 # Three days while the stack is unpublished and follows CCC closely; restore 10080
 # (seven days) before the fork (user decision 2026-09-14).
-minimumReleaseAge: 4320
+minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 
 patchedDependencies:
