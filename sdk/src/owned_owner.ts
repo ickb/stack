@@ -266,9 +266,17 @@ export class OwnedOwnerManager implements ScriptDeps {
     }
     tx.addCellDeps(this.cellDeps);
     tx.addCellDeps(this.dao.cellDeps);
-    for (const { owned } of withdrawalGroups) {
-      pushHeaderDep(tx, owned.headers[0].header.hash);
-    }
+    // Only this step names a header by index, and the deployed script reads that index as
+    // one byte, so the deposit headers go first, ahead of whatever the requests and receipts
+    // pushed: the limit then counts these alone. Safe because nothing else in the stack reads
+    // a header by position and every built transaction passes here once (52(an)).
+    const depositHashes = [
+      ...new Set(withdrawalGroups.map(({ owned }) => owned.headers[0].header.hash)),
+    ];
+    tx.headerDeps = [
+      ...depositHashes,
+      ...tx.headerDeps.filter((hash) => !depositHashes.includes(hash)),
+    ];
     for (const { owned } of withdrawalGroups) {
       pushHeaderDep(tx, owned.headers[1].header.hash);
     }

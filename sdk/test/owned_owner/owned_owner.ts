@@ -346,16 +346,43 @@ describe("OwnedOwnerManager.withdraw", () => {
     expect(updated.headerDeps).toEqual([depositHeader.hash, requestHeader.hash]);
   });
 
-  it("rejects a deposit header the deployed script cannot address", () => {
+  it("moves the deposit headers ahead of every header already present", () => {
+    // Only phase 2 names a header by index, so the others may shift (52(an)).
     const owned = requestOf(depositHeader, requestHeader);
     const tx = ccc.Transaction.default();
     for (let index = 0; index < DAO_HEADER_INDEX_LIMIT; index += 1) {
       tx.headerDeps.push(ccc.hexFrom(ccc.numToBytes(index + 1, 32)));
     }
+    tx.headerDeps.push(depositHeader.hash);
 
+    const updated = manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
+
+    expect(updated.headerDeps[0]).toBe(depositHeader.hash);
+    expect(updated.headerDeps).toHaveLength(DAO_HEADER_INDEX_LIMIT + 2);
+    expect(updated.getWitnessArgs(0)?.inputType).toBe(
+      ccc.hexFrom(ccc.numLeToBytes(0n, 8)),
+    );
+  });
+
+  it("rejects the deposit header the deployed script cannot address", () => {
+    const groups = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, (_, index) => {
+      const owned = requestOf(
+        headerLike({
+          number: BigInt(index) + 10n,
+          hash: ccc.hexFrom(ccc.numToBytes(index + 1, 32)),
+        }),
+        requestHeader,
+        "55",
+      );
+      return new WithdrawalGroup(owned, ownerOf(owned));
+    });
+
+    expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
+      DaoHeaderIndexError,
+    );
     expect(() =>
-      manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]),
-    ).toThrow(DaoHeaderIndexError);
+      manager().withdraw(ccc.Transaction.default(), groups.slice(1)),
+    ).not.toThrow();
   });
 
   it("preserves an existing non-input witness by shifting it after the new input", () => {

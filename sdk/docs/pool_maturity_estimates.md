@@ -14,7 +14,7 @@ The bot's own working capital is not read: a published library should not name o
 
 ## The one duration
 
-`BOT_TURN_MS` is ten minutes: the bot's one-minute cadence plus its confirmation wait, with room for slow reads. It is the one duration the bot can be held to, so every estimate is built from it. The lock-up window's ten-minute lower bound and the sitting-seller threshold below are the same length for their own reasons and change independently.
+`BOT_TURN_MS` is ten minutes: the bot's one-minute cadence plus its confirmation wait, with room for slow reads. It is the one duration the bot can be held to, so every estimate is built from it. The sitting-seller threshold below is its own knob, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
 
 An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores does not queue ahead of anyone and does not supply anyone.
 

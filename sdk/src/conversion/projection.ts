@@ -56,7 +56,6 @@ export function projectAccountAvailability(
 ): AccountAvailabilityProjection {
   const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
     account.withdrawalGroups,
-    DAO_HEADER_INDEX_LIMIT - account.receipts.length,
   );
   // An iCKB cell's capacity is the owner's CKB too: completion spends it like a plain cell.
   const ckbNative = sumValues(
@@ -93,20 +92,17 @@ export function projectAccountAvailability(
 
 /**
  * `ready` is the batch one transaction can complete: the deployed DAO script addresses a
- * withdrawal's deposit header only below `DAO_HEADER_INDEX_LIMIT`, and the receipts' deposit
- * headers take slots first, so matured withdrawals past the remaining slots wait a turn.
+ * withdrawal's deposit header only below `DAO_HEADER_INDEX_LIMIT`, and the builder puts
+ * those headers first, so matured withdrawals past that count wait a turn.
  */
-function splitWithdrawals(
-  withdrawalGroups: readonly WithdrawalGroup[],
-  headerSlots: number,
-): {
+function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
   readyWithdrawals: WithdrawalGroup[];
   pendingWithdrawals: WithdrawalGroup[];
 } {
   const readyWithdrawals: WithdrawalGroup[] = [];
   const pendingWithdrawals: WithdrawalGroup[] = [];
   for (const group of withdrawalGroups) {
-    if (group.owned.isReady && readyWithdrawals.length < headerSlots) {
+    if (group.owned.isReady && readyWithdrawals.length < DAO_HEADER_INDEX_LIMIT) {
       readyWithdrawals.push(group);
     } else {
       pendingWithdrawals.push(group);

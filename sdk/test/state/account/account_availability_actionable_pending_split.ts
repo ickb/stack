@@ -71,7 +71,7 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
     );
   });
 
-  it("keeps ready the matured withdrawals that fit the header slots left after the receipts", () => {
+  it("keeps ready as many matured withdrawals as the deployed script addresses, receipts aside", () => {
     const matured = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, () =>
       withdrawalValue({ ckbValue: 11n, udtValue: 13n, isReady: true, byte: "32" }),
     );
@@ -87,11 +87,12 @@ describe(ACCOUNT_AVAILABILITY_SUITE, () => {
       { available: [], pending: [] },
     );
 
-    // The receipt's deposit header takes one slot; the last two withdrawals wait a turn.
-    expect(projection.readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT - 1);
-    expect(projection.pendingWithdrawals).toHaveLength(2);
-    expect(projection.ckbAvailable).toBe(41n + 11n * BigInt(DAO_HEADER_INDEX_LIMIT - 1));
-    expect(projection.ckbPending).toBe(22n);
+    // The withdrawals' deposit headers go first, so the receipt costs no slot; the last
+    // withdrawal waits a turn.
+    expect(projection.readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT);
+    expect(projection.pendingWithdrawals).toHaveLength(1);
+    expect(projection.ckbAvailable).toBe(41n + 11n * BigInt(DAO_HEADER_INDEX_LIMIT));
+    expect(projection.ckbPending).toBe(11n);
     expect(projection.ckbBalance).toBe(41n + 11n * BigInt(matured.length));
   });
 

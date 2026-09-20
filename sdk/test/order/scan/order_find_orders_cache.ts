@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  committedTransactionResponse,
+  pagedCells,
+  StubClient,
+} from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
 import { OrderData } from "../../../src/order/order_data.ts";
@@ -134,8 +139,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       liveOrderByte: "70",
     });
     const liveMaster = masterCell(originMaster, orderScript, ownerLock);
-    const cachedResponse = transactionResponse(
+    const cachedResponse = committedTransactionResponse(
       transactionWithOutputs([origin.cell, liveMaster]),
+      { blockNumber: 5n },
     );
     let fetched = false;
     const client = new StubClient({
@@ -154,6 +160,33 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(groups).toHaveLength(1);
     expect(fetched).toBe(false);
+  });
+
+  it("re-reads an origin the cache holds without a block", async () => {
+    const { manager, orderScript, ownerLock } = findOrdersFixture();
+    const originMaster = { txHash: byte32FromByte("69"), index: 1n };
+    const { origin, liveOrder } = linkedOriginAndOrder({
+      originMaster,
+      orderScript,
+      liveOrderByte: "70",
+    });
+    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const tx = transactionWithOutputs([origin.cell, liveMaster]);
+    const client = new StubClient({
+      cache: new TransactionResponseCache(
+        originMaster.txHash,
+        ccc.ClientTransactionResponse.from({ transaction: tx, status: "pending" }),
+      ),
+      findCellsPagedNoCache: pagedCells((query) =>
+        query.scriptType === "lock" ? [liveOrder.cell] : [liveMaster],
+      ),
+      getTransaction: async (): GetTransactionReturn => {
+        await Promise.resolve();
+        return committedTransactionResponse(tx, { blockNumber: 77n });
+      },
+    });
+
+    expect((await manager.findOrders(client))[0]?.blockNumber).toBe(77n);
   });
 });
 
@@ -176,7 +209,6 @@ class TransactionResponseCache extends ccc.ClientCacheMemory {
 
   public override async recordTransactionResponses(): Promise<void> {
     await Promise.resolve();
-    throw new Error("Should not record cached response");
   }
 }
 

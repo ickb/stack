@@ -357,7 +357,8 @@ const IckbSdkImplementation = class IckbSdk {
    *
    * @remarks
    * The result is still partial. Callers should use `completeTransaction` before
-   * signing and sending.
+   * signing and sending. The withdrawals move their deposit headers to the front of
+   * `headerDeps`, so the given transaction must not reference a header by position.
    */
   public buildBaseTransaction(
     txLike: ccc.TransactionLike,

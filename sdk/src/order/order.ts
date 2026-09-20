@@ -289,8 +289,11 @@ async function cachedTransactionResponse(
   client: ccc.Client,
   txHash: ccc.Hex,
 ): Promise<TransactionResponse | undefined> {
+  // As CCC's own readers do, trust the cache only once the transaction is in a block: the
+  // cache also holds what CCC records at broadcast and what a lagging node answered, and a
+  // long-lived client would otherwise keep that answer for good (52(al) Grok review).
   const cached = await client.cache.getTransactionResponse(txHash);
-  if (cached !== undefined) {
+  if (cached?.blockNumber !== undefined) {
     return cached;
   }
 

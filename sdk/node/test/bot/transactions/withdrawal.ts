@@ -131,7 +131,7 @@ describe("buildTransaction withdrawal", () => {
     });
   });
 
-  it("collects the projection's ready batch; a request that would push a deposit header past the limit is shed", async () => {
+  it("collects the projection's ready batch; a request in the same transaction costs it no slot", async () => {
     // One more matured withdrawal than the DAO script addresses; the projection keeps the
     // last one pending for the next turn (no receipts, so every slot is a withdrawal's).
     const withdrawalGroups = Array.from(
@@ -160,8 +160,8 @@ describe("buildTransaction withdrawal", () => {
         transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 1 },
       },
     });
-    // A withdrawal request's deposit header takes the first slot, so the last withdrawal's
-    // header lands on the limit: the withdraw core is unfundable and `none` carries the batch.
+    // The withdrawals' deposit headers go first, so the request's own deposit header never
+    // pushes one past the limit: the full batch and the request ride together (52(an)).
     await expect(
       buildTransaction(
         runtime,
@@ -175,12 +175,11 @@ describe("buildTransaction withdrawal", () => {
     ).resolves.toMatchObject({
       kind: "built",
       decision: {
-        actions: { withdrawalRequests: 0, withdrawals: DAO_HEADER_INDEX_LIMIT },
-        core: { kind: "none", attempts: 2 },
+        actions: { withdrawalRequests: 1, withdrawals: DAO_HEADER_INDEX_LIMIT },
+        core: { kind: "withdraw", attempts: 1 },
+        transactionShape: { headerDeps: DAO_HEADER_INDEX_LIMIT + 2 },
       },
     });
-    // One fewer ready withdrawal leaves the request its slot: the header overflow was the
-    // only reason the withdraw core failed.
     await expect(
       buildTransaction(
         runtime,
