@@ -1,0 +1,237 @@
+import { ccc } from "@ckb-ccc/core";
+
+/**
+ * The default page size used when querying cells from the chain.
+ *
+ * This page size is aligned with Nervos CKB's pull request #4576
+ * (https://github.com/nervosnetwork/ckb/pull/4576) to avoid excessive paging.
+ */
+export const defaultCellPageSize = 400;
+
+/**
+ * Reads every committed cell matching the key, page by page, without touching
+ * CCC's cell cache. The scan ends on the first short page.
+ *
+ * @remarks A non-empty page always moves the indexer's cursor (it is the last cell's
+ * own key), so a cursor that comes back unchanged after a full page can only be a broken
+ * or lying node: the read fails with a named error instead of looping for ever, which
+ * matters to the app on a public node pool (decisions amendment 52(an)).
+ */
+export async function findCells(
+  client: ccc.Client,
+  keyLike: ccc.ClientIndexerSearchKeyLike,
+): Promise<ccc.Cell[]> {
+  const key = ccc.ClientIndexerSearchKey.from(keyLike);
+  const cells: ccc.Cell[] = [];
+  let after: string | undefined;
+  for (;;) {
+    const page = await client.findCellsPagedNoCache(
+      key,
+      "asc",
+      defaultCellPageSize,
+      after,
+    );
+    cells.push(...page.cells);
+    if (page.cells.length < defaultCellPageSize) {
+      return cells;
+    }
+    if (page.lastCursor === after) {
+      throw new Error("Cell scan cursor did not advance");
+    }
+    after = page.lastCursor;
+  }
+}
+
+/**
+ * Local transaction inclusion metadata.
+ */
+export interface TransactionHeader {
+  /**
+   * The block header used for inclusion-dependent calculations.
+   */
+  header: ccc.ClientBlockHeader;
+
+  /**
+   * The transaction hash when the caller has resolved it for the header.
+   */
+  txHash?: ccc.Hex;
+}
+
+/**
+ * CKB and UDT amounts carried by a cell, order, or planned value.
+ */
+export interface ValueComponents {
+  /** CKB-side amount as a `ccc.FixedPoint`. */
+  ckbValue: ccc.FixedPoint;
+
+  /** UDT-side amount as a `ccc.FixedPoint`. */
+  udtValue: ccc.FixedPoint;
+}
+
+/**
+ * Integer scale pair for comparing or converting CKB-side and UDT-side values.
+ *
+ * @remarks
+ * CKB-to-UDT conversions multiply by `ckbScale` and divide by `udtScale`.
+ * UDT-to-CKB conversions swap the scales. Callers choose the rounding policy.
+ */
+export interface ExchangeRatio {
+  /** Numerator scale for CKB-side values. */
+  ckbScale: ccc.Num;
+
+  /** Numerator scale for UDT-side values. */
+  udtScale: ccc.Num;
+}
+
+/**
+ * Script plus cell dependencies needed to build transactions that use it.
+ */
+export interface ScriptDeps {
+  /**
+   * The lock or type script.
+   */
+  script: ccc.Script;
+
+  /**
+   * Cell dependencies required to resolve the script code.
+   */
+  cellDeps: ccc.CellDep[];
+}
+
+/**
+ * True when a cell has no type script and no data payload.
+ *
+ * @remarks
+ * This is a structural filter for plain capacity cells. Spendability still
+ * depends on the lock script, live cell state, and transaction context.
+ */
+export function isPlainCapacityCell(cell: ccc.Cell): boolean {
+  return cell.cellOutput.type === undefined && cell.outputData === "0x";
+}
+
+/**
+ * Performs asynchronously a binary search to find the smallest index `i` in the range [0, n)
+ * such that the function `f(i)` returns true. It is assumed that for the range
+ * [0, n), if `f(i)` is true, then `f(i+1)` is also true. This means that there
+ * is a prefix of the input range where `f` is false, followed by a suffix where
+ * `f` is true. If no such index exists, the function returns `n`.
+ *
+ * The function `f` is only called for indices in the range [0, n).
+ *
+ * @param n - The non-negative integer upper bound of the search range (exclusive).
+ * @param f - An async function that takes an index `i` and returns a boolean value.
+ * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
+ *
+ * @remarks Adapted from Go's standard library search implementation:
+ * {@link https://go.dev/src/sort/search.go}
+ */
+export async function asyncBinarySearch(
+  n: number,
+  f: (i: number) => Promise<boolean>,
+): Promise<number> {
+  // Define f(-1) == false and f(n) == true.
+  // Invariant: f(i-1) == false, f(j) == true.
+  let [i, j] = [0, n];
+  while (i < j) {
+    const h = Math.trunc((i + j) / 2);
+    // i ≤ h < j
+    if (!(await f(h))) {
+      i = h + 1; // preserves f(i-1) == false
+    } else {
+      j = h; // preserves f(j) == true
+    }
+  }
+  // i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
+  return i;
+}
+
+/**
+ * The client's JSON-RPC requestor, when it has one. The connector hands the interface a
+ * composition proxy over the public client (`ClientWithFeeRate`, a `ccc.Client` but not a
+ * `ccc.ClientJsonRpc`), so `instanceof` misses it; the proxy forwards the property.
+ */
+export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc | undefined {
+  if (!("requestor" in client)) {
+    return undefined;
+  }
+  const { requestor } = client;
+  return requestor instanceof ccc.RequestorJsonRpc ? requestor : undefined;
+}
+
+/** A node's raw `get_transaction` status record (verbosity 1), the fields the stack reads. */
+export function rawTransactionStatus(response: unknown): {
+  status: string | undefined;
+  reason: string | undefined;
+  blockNumber: ccc.Num | undefined;
+} {
+  const record =
+    typeof response === "object" &&
+    response !== null &&
+    "tx_status" in response &&
+    typeof response.tx_status === "object" &&
+    response.tx_status !== null
+      ? response.tx_status
+      : {};
+  return {
+    status:
+      "status" in record && typeof record.status === "string" ? record.status : undefined,
+    reason:
+      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
+    blockNumber:
+      "block_number" in record && typeof record.block_number === "string"
+        ? ccc.numFrom(record.block_number)
+        : undefined,
+  };
+}
+
+export function minBigInt(left: bigint, right: bigint): bigint {
+  return left < right ? left : right;
+}
+
+export function maxBigInt(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
+}
+
+/** `numerator / denominator` rounded up; the denominator is positive. */
+export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+/**
+ * Compares two bigint values using sort-compatible ordering.
+ *
+ * @returns `-1` when `left` is smaller, `1` when `left` is larger, and `0` when equal.
+ */
+export function compareBigInt(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
+}
+
+/**
+ * Yields unique items from the given iterable based on their hex representation.
+ *
+ * The function uses a Set to track the hex-string keys of items that have already been yielded.
+ * Only the first occurrence of each unique key is yielded.
+ *
+ * @typeParam T - A type that extends ccc.Entity.
+ * @param items - An iterable collection of items of type T.
+ * @returns A generator that yields items from the iterable, ensuring that each item's
+ *          hex representation (via toHex()) is unique.
+ */
+export function* unique<T extends ccc.Entity>(items: Iterable<T>): Generator<T> {
+  const set = new Set<string>();
+  for (const i of items) {
+    const key = i.toHex();
+    if (!set.has(key)) {
+      set.add(key);
+      yield i;
+    }
+  }
+}

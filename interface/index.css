@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ickb-bg: oklch(17.5% 0.008 286);
+  --color-ickb-surface: oklch(21% 0.006 286);
+  --color-ickb-border: oklch(37.9% 0.025 69);
+  --color-ickb-text: oklch(95.8% 0.011 137);
+  --color-ickb-muted: oklch(81.3% 0.025 139);
+  --color-ickb-action: oklch(78.3% 0.168 66);
+  --color-ickb-action-soft: oklch(49.5% 0.103 64);
+  --color-ickb-panel: oklch(15.5% 0.007 286);
+}
+
+/* The interface ships a single dark theme; render native controls and scrollbars to match. */
+html {
+  color-scheme: dark;
+}
+
+/* Scale up hit targets on high resolution mobile devices. */
+@media (min-resolution: 200dpi) {
+  html {
+    font-size: 18px;
+  }
+
+  .text-sm {
+    /* ensure minimum font size of 16px */
+    font-size: 0.9rem;
+  }
+}
+
+*::selection {
+  @apply bg-ickb-action text-ickb-bg;
+}
+
+.ickb-page-shell {
+  background:
+    radial-gradient(
+      ellipse at top,
+      color-mix(
+        in oklch,
+        var(--color-ickb-surface) 84%,
+        var(--color-ickb-action-soft) 8%
+      ),
+      var(--color-ickb-bg) 58%
+    ),
+    var(--color-ickb-bg);
+}
+
+.ickb-wallet-card {
+  position: relative;
+  --ickb-wallet-row: 16.25rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--color-ickb-surface) 80%, var(--color-ickb-text) 4%) 0%,
+    color-mix(in oklch, var(--color-ickb-surface) 70%, var(--color-ickb-action-soft) 8%)
+      48%,
+    color-mix(in oklch, var(--color-ickb-panel) 92%, var(--color-ickb-bg)) 100%
+  );
+  box-shadow:
+    0 28px 70px color-mix(in oklch, black 45%, transparent),
+    inset 0 1px 0 color-mix(in oklch, var(--color-ickb-text) 8%, transparent),
+    inset 0 -1px 0 color-mix(in oklch, var(--color-ickb-bg) 76%, transparent);
+}
+
+.ickb-copy-section {
+  border-color: color-mix(in oklch, var(--color-ickb-border) 74%, transparent);
+}
+
+.ickb-copy-section h2 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.ickb-copy-section p {
+  text-wrap: pretty;
+}
+
+.ickb-copy-section a {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in oklch, var(--color-ickb-action) 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  transition:
+    color 150ms ease-out,
+    text-decoration-color 150ms ease-out;
+}
+
+.ickb-copy-section a:hover {
+  text-decoration-color: currentColor;
+}
+
+.ickb-wallet-section {
+  box-sizing: border-box;
+  display: flex;
+  height: var(--ickb-wallet-row);
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: 0.75rem;
+}
+
+.ickb-wallet-title-section {
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.ickb-wallet-header-mount {
+  /* Reserves the wide header's one row before it mounts; a taller mount pushed the title up. */
+  min-height: 1.75rem;
+}
+
+.ickb-app-mount {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  height: calc(var(--ickb-wallet-row) * 3);
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  border-top: 1px solid var(--color-ickb-border);
+}
+
+.ickb-app-content {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}

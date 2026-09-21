@@ -1,0 +1,55 @@
+{
+  "name": "@ickb/interface",
+  "version": "9000.0.0",
+  "description": "iCKB interface built on top of CCC",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
+  "author": "phroi",
+  "license": "MIT",
+  "homepage": "https://ickb.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ickb/stack"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:testnet-wallet": "vite --mode testnet-wallet --host 127.0.0.1",
+    "build": "tsgo && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint:typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p tsconfig.node.json"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxc-transform-react": "^0.147.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "@ckb-ccc/ccc": "catalog:",
+    "@ckb-ccc/connector-react": "catalog:",
+    "@ickb/sdk": "workspace:*",
+    "@tanstack/react-query": "^5.101.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

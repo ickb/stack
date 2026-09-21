@@ -1,0 +1,139 @@
+import type { ccc } from "@ckb-ccc/core";
+import type { OrderGroup } from "../../../src/order/cells.ts";
+import { partialOrderFee } from "../../../src/order/fee.ts";
+import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
+import { minBigInt, type ExchangeRatio } from "../../../src/utils/utils.ts";
+
+import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
+import { MAX_MATCH_PARTIALS } from "./support.ts";
+
+/** One turn's match and how it was chosen. */
+export interface TurnMatch extends Match {
+  /** Matchable order directions on the book, each probed at every step. */
+  candidates: number;
+  /** Directions whose fill returns its cost at full size, whether or not the balances pay it. */
+  gains: number;
+  /** The mining fee of one fill; a fill is taken only above ten of them. */
+  fee: bigint;
+  /** The shuffle seed, so the choice among equal fills can be replayed. */
+  seed: number;
+}
+
+/**
+ * The turn's match, one fill at a time: from the balances, take the fill that returns
+ * most per unit of value paid, then again from the balances it leaves, until nothing
+ * returns or the partial cap is reached. A fill is sized to the largest payment the
+ * balances cover, and returns its exchange value net of ten fees, the buffer for the
+ * rebalancing it commits the bot to, so dust never ranks above zero. Nothing is taken
+ * that the balances cannot pay: buyers and sellers fund each other only across steps,
+ * whole orders beyond the balances wait for a later turn, and losing orders are never
+ * bridges. The mining fee is paid by the reserve the balances exclude, so a bot with no
+ * CKB to spare still serves buyers. Orders are shuffled once by the seed so equal fills
+ * fall in no fixed order (decisions amendment 52).
+ */
+export function matchTurn({
+  orders,
+  ckb,
+  udt,
+  exchangeRatio,
+  feeRate,
+  seed,
+}: {
+  orders: OrderGroup[];
+  ckb: bigint;
+  udt: bigint;
+  exchangeRatio: ExchangeRatio;
+  feeRate: ccc.Num;
+  seed: number;
+}): TurnMatch {
+  const fee = partialOrderFee(orders, feeRate);
+  const cost = fillCost(fee, exchangeRatio);
+  const pool = [
+    ...new Map(
+      orders.map((group) => [group.order.cell.outPoint.toHex(), group]),
+    ).values(),
+  ];
+  const matchers = shuffled(
+    pool.flatMap((group) =>
+      [true, false].flatMap(
+        (isCkb2Udt) => OrderMatcher.from(group, isCkb2Udt, fee) ?? [],
+      ),
+    ),
+    seed,
+  );
+  const match: TurnMatch = {
+    ckbDelta: 0n,
+    udtDelta: 0n,
+    partials: [],
+    candidates: matchers.length,
+    gains: matchers.filter((matcher) => returnsCost(matcher, cost, exchangeRatio)).length,
+    fee,
+    seed,
+  };
+  const balances = { ckb, udt };
+  while (match.partials.length < MAX_MATCH_PARTIALS) {
+    const best = bestFill(matchers, balances, cost, exchangeRatio);
+    if (best === undefined) {
+      break;
+    }
+    matchers.splice(best.index, 1);
+    balances.ckb += best.fill.ckbDelta;
+    balances.udt += best.fill.udtDelta;
+    match.ckbDelta += best.fill.ckbDelta;
+    match.udtDelta += best.fill.udtDelta;
+    match.partials.push(...best.fill.partials);
+  }
+  return match;
+}
+
+/** The fill that returns most per unit of value paid from the balances, if one returns its cost. */
+function bestFill(
+  matchers: OrderMatcher[],
+  balances: { ckb: bigint; udt: bigint },
+  cost: bigint,
+  { ckbScale, udtScale }: ExchangeRatio,
+): { index: number; fill: Match } | undefined {
+  let best: { index: number; fill: Match; net: bigint; paid: bigint } | undefined;
+  for (const [index, matcher] of matchers.entries()) {
+    const allowance = matcher.isCkb2Udt ? balances.udt : balances.ckb;
+    // A completion is any size, but a partial leaves at least the order's own minimum
+    // match, so the scrap a short balance would leave stays fillable by a later turn
+    // instead of sitting on the book forever (decision 52(aj)(2)).
+    const payment =
+      allowance >= matcher.bMaxMatch
+        ? matcher.bMaxMatch
+        : minBigInt(allowance, matcher.bMaxMatch - matcher.bMinMatch);
+    if (payment < matcher.bMinMatch) {
+      continue;
+    }
+    const fill = matcher.match(payment);
+    const net = netOf(fill, cost, { ckbScale, udtScale });
+    const paid = matcher.isCkb2Udt
+      ? -fill.udtDelta * udtScale
+      : -fill.ckbDelta * ckbScale;
+    if (net > 0n && (best === undefined || net * best.paid > best.net * paid)) {
+      best = { index, fill, net, paid };
+    }
+  }
+  return best;
+}
+
+/** The low bits of the tip hash: a seed that changes every block and is logged with the turn. */
+export function seedOf(tipHash: ccc.Hex): number {
+  return Number(BigInt(tipHash) & 0xff_ff_ff_ffn);
+}
+
+/** A uniform shuffle from a 32-bit seed (mulberry32), so a turn is replayable. */
+function shuffled<T>(items: T[], seed: number): T[] {
+  let state = seed >>> 0;
+  const next = (): number => {
+    state = (state + 0x6d_2b_79_f5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), state | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+  return items
+    .map((item) => ({ item, key: next() }))
+    .toSorted((left, right) => left.key - right.key)
+    .map(({ item }) => item);
+}

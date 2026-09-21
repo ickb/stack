@@ -1,0 +1,131 @@
+{
+  "extends": "dependency-cruiser/configs/recommended-strict",
+  "forbidden": [
+    {
+      "name": "no-orphans",
+      "from": {
+        "orphan": true,
+        "pathNot": [
+          "(^|/)\\.[^/]+\\.(js|cjs|mjs|ts|json)$",
+          "\\.d\\.(c|m)?ts$",
+          "(^|/)tsconfig\\.json$",
+          "(^|/)(?:babel|webpack)\\.config\\.(?:js|cjs|mjs|ts|json)$",
+          "^scripts/run-node-tests[.](?:mts|ts)$",
+          "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
+          "^scripts/tooling/dead-members[.]ts$",
+          "^scripts/tooling/eslint/plugins[.]ts$",
+          "^scripts/test/.+[.](?:mts|ts)$",
+          "^sdk/node/test/.+[.]ts$",
+          "^(?:sdk|sdk/node|testkit|interface)/vitest[.]config[.]mts$",
+          "^interface/vite[.]config[.]ts$",
+          "^interface/eslint[.]config[.]mts$",
+        ],
+      },
+    },
+    {
+      "name": "not-prod-to-test-source",
+      "comment": "Production source must not import test-only files. Keep test fixtures behind test/ boundaries.",
+      "severity": "error",
+      "from": {
+        "path": "^(?:(?:sdk|sdk/node|testkit|interface)/src/|scripts/)",
+        "pathNot": [
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+      "to": {
+        "path": [
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+    },
+    {
+      "name": "not-prod-to-testkit",
+      "comment": "Production source must not import @ickb/testkit. Keep test harness dependencies under test/.",
+      "severity": "error",
+      "from": {
+        "path": "^(?:sdk|sdk/node|testkit|interface)/src/",
+        "pathNot": [
+          "^testkit/src/",
+          "(?:^|/)test/",
+          "[.]test[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
+          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
+        ],
+      },
+      "to": {
+        "path": "^testkit/src/",
+      },
+    },
+    {
+      "name": "oracle-independent",
+      "comment": "The contract oracle imports nothing from the implementation it judges (amendment 44).",
+      "severity": "error",
+      "from": { "path": "^testkit/src/contract_oracle[.]ts$" },
+      "to": {},
+    },
+    {
+      "name": "node-actors-apart",
+      "comment": "The bot, the sampler, and the stimulus generator share only src/shared; they never import each other.",
+      "severity": "error",
+      "from": { "path": "^sdk/node/src/(bot|sampler|stimulus)/" },
+      "to": {
+        "path": "^sdk/node/src/(?:bot|sampler|stimulus)/",
+        "pathNot": "^sdk/node/src/$1/",
+      },
+    },
+    {
+      "name": "node-shared-neutral",
+      "comment": "src/shared serves every actor and depends on none of them.",
+      "severity": "error",
+      "from": { "path": "^sdk/node/src/shared/" },
+      "to": { "path": "^sdk/node/src/(?:bot|sampler|stimulus)" },
+    },
+    {
+      "name": "sdk-browser-safe",
+      "comment": "The SDK runs in the browser: no Node built-ins (decisions §1).",
+      "severity": "error",
+      "from": { "path": "^sdk/src/" },
+      "to": { "dependencyTypes": ["core"] },
+    },
+    {
+      "name": "sdk-not-node",
+      "comment": "The published SDK never imports the Node actors that live beside it (amendment 52).",
+      "severity": "error",
+      "from": { "path": "^sdk/src/" },
+      "to": { "path": "^sdk/node/" },
+    },
+    {
+      "name": "no-library-to-actor",
+      "comment": "The SDK and the test kit must not depend on the actors.",
+      "severity": "error",
+      "from": { "path": "^(?:sdk/src|testkit)/" },
+      "to": { "path": "^(?:interface|sdk/node)/" },
+    },
+    {
+      "name": "no-actor-to-actor",
+      "comment": "The interface and the Node actors must not depend on each other.",
+      "severity": "error",
+      "from": { "path": "^(interface|sdk/node)/" },
+      "to": { "path": "^(?:interface|sdk/node)/", "pathNot": "^$1/" },
+    },
+  ],
+  "options": {
+    "exclude": {
+      "path": "(?:^|/)(?:coverage|dist)/",
+    },
+    "includeOnly": "^(sdk|testkit|interface|scripts)/",
+    "tsConfig": {
+      "fileName": "tsconfig.json",
+    },
+    "tsPreCompilationDeps": "specify",
+  },
+}
