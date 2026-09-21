@@ -37,8 +37,10 @@ catalog:
   "@ckb-ccc/core": ^1.20.0
   "@types/node": ~22.20.1
 
-# Three days while the stack is unpublished and follows CCC closely; restore 10080
-# (seven days) before the fork (user decision 2026-09-14).
+# Seven days. A freshly published patch cannot be installed until it matures, so a
+# compromised release has time to be caught (user decision 2026-09-14; the three-day
+# window that applied while the stack was unpublished was restored to this before the
+# rewrite merged).
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 
