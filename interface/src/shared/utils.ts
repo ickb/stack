@@ -12,9 +12,8 @@ export interface RootConfig {
 
   /**
    * Gives the client a new, empty cache after any transaction error. CCC's cache clear keeps
-   * block headers, and a deep reorg is possible on CKB, where one pool holds a majority of
-   * the hash power; the client keeps its identity, so nothing remounts and the pending
-   * hash, the failure message and the frozen preview survive (decisions amendment 52(k)).
+   * block headers, which may be stale after a deep reorg. Keeping the client identity avoids
+   * remounting the wallet session, preserving its pending hash, failure and frozen preview.
    */
   resetClient: () => void;
 

@@ -1,6 +1,6 @@
 /**
  * Public SDK for one iCKB conversion workflow: read the sampled state, quote, build and
- * complete a conversion, sign, send, and wait (decisions amendment 52).
+ * complete a conversion, sign, send, and wait.
  *
  * @packageDocumentation
  */

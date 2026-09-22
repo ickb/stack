@@ -78,7 +78,7 @@ describe("formAssets", () => {
       false,
     );
 
-    // Max sets the SDK's bound, collectable orders included; CKB has no Max (52(z)).
+    // Max sets the SDK's bound, collectable orders included; CKB has no Max.
     expect(source).toMatchObject({
       name: "iCKB",
       balance: { available: 0n, locked: 350n * CKB },

@@ -75,7 +75,7 @@ export default function Action({
   const [message, setMessage] = useState("");
   // The last attempt's result, kept until the next attempt or an edit of the draft: React's
   // pattern for state that depends on a prop, so a stale "enter a larger amount" never
-  // advises on a draft the user has already changed (decisions amendment 52(t)).
+  // advises on a draft the user has already changed.
   const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
   const [failure, setFailureFor] = useState({ draft, message: "" });
   if (failure.message !== "" && failure.draft !== draft) {

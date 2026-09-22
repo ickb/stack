@@ -31,14 +31,14 @@ export default function App({
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
   // The destination of the next transaction, the wallet's own address while empty; it
-  // lives with this App, so a reload or a wallet switch resets it (amendment 52(af)).
+  // lives with this App, so a reload or a wallet switch resets it.
   const [destinationText, setDestinationText] = useState("");
   const { destination, error: destinationError } = useDestination(
     destinationText,
     walletConfig,
   );
   // The pending transaction lives with the wallet session: it survives the action
-  // remounting on a preview change and ends with this App (decisions amendment 46(i)).
+  // remounting on a preview change and ends with this App.
   const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
   const [pendingStore] = useState(() =>
     createPendingTransactionStore(setPendingTransaction),
@@ -47,7 +47,7 @@ export default function App({
     ...l1StateOptions(walletConfig, isFrozen),
   });
   // A move carries only native CKB and iCKB and converts nothing, so its amount is zero;
-  // the typed text stays, and clearing the address brings it back (amendment 52(al)).
+  // the typed text stays, and clearing the address brings it back.
   const isMove = destination?.moveTo !== undefined;
   const draft = isMove ? "0" : text;
   const amountInput = parseAmountInput(draft);

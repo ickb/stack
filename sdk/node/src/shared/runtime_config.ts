@@ -5,7 +5,7 @@ import type { SupportedChain } from "../../../src/utils/chain.ts";
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
-/** Credential-free identity of the RPC endpoint: one configured node, or CCC's public pool. */
+/** Journaled endpoint identity; configured paths must contain no credential (sdk/node/README.md). */
 export type PublicRpcEndpointIdentity =
   | {
       mode: "exclusive";

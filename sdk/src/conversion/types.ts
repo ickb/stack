@@ -34,7 +34,7 @@ export interface ConversionTransactionContext {
   ickbAvailable: bigint;
   /**
    * The latest date at which everything the wallet has converting, plus this request, is
-   * collectable; an amount of zero is the collection itself (decisions amendment 52(ai)).
+   * collectable; an amount of zero is the collection itself.
    */
   estimatedMaturity: bigint;
 }
@@ -52,8 +52,7 @@ export interface ConversionTransactionOptions {
   /**
    * Lock that owns every cell the transaction creates for the user, the conversion outputs
    * and the change; the signer's recommended lock by default. Completion sweeps the liquid
-   * cells along, so a lock that is not the signer's own moves everything liquid to it
-   * (decisions amendment 52(af)).
+   * cells along within its size budget, so a foreign lock redirects those funds too.
    */
   lock?: ccc.Script;
 
@@ -199,7 +198,7 @@ export interface AccountAvailabilityProjection {
   /**
    * CKB in the account's liquid cells, plain and iCKB alike: what the wallet shows and what
    * the next transaction spends, before the change cells, an order's master cell and the
-   * fee it must fund on top (decisions amendment 52(ah)).
+   * fee it must fund on top.
    */
   ckbNative: bigint;
   /** iCKB in the account's native iCKB cells. */
@@ -218,7 +217,7 @@ export interface AccountAvailabilityProjection {
   ickbBalance: bigint;
   /**
    * Matured withdrawal groups one transaction can complete: at most the deposit-header slots
-   * the DAO script addresses (`DAO_HEADER_INDEX_LIMIT`) left after the receipts' headers.
+   * the DAO script addresses (`DAO_HEADER_INDEX_LIMIT`), which the deposit headers hold alone.
    */
   readyWithdrawals: WithdrawalGroup[];
   /** Withdrawal groups still waiting for DAO maturity or for a header slot in a later turn. */

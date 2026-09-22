@@ -12,10 +12,10 @@ export const defaultCellPageSize = 400;
  * Reads every committed cell matching the key, page by page, without touching
  * CCC's cell cache. The scan ends on the first short page.
  *
- * @remarks A non-empty page always moves the indexer's cursor (it is the last cell's
- * own key), so a cursor that comes back unchanged after a full page can only be a broken
- * or lying node: the read fails with a named error instead of looping for ever, which
- * matters to the app on a public node pool (decisions amendment 52(an)).
+ * @remarks A full page must advance the cursor; otherwise the read throws so a faulty
+ * endpoint in the app's public node pool cannot keep the scan looping forever.
+ * The cursor continues ordering, not a coherent snapshot. There is no aggregate budget:
+ * a large book costs a slower read rather than a partial result.
  */
 export async function findCells(
   client: ccc.Client,

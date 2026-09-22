@@ -3,14 +3,15 @@
 // NOTHING (no @ickb/*, no CCC) so it cannot inherit a defect from the
 // implementation it judges; lint guards the direct dependency forms.
 //
-// Sources of truth (contracts checkout, commit-pinned by the review docs):
-// - contracts/scripts/contracts/limit_order/src/entry.rs
+// Source revision: https://github.com/ickb/contracts/tree/ae8a11fa560c157116e3f75acc316682d9cca061
+// Paths below are relative to that repository:
+// - scripts/contracts/limit_order/src/entry.rs
 //   - validate(): lines 86-133
 //   - ckb_min_match decoding: lines 221-224
-// - contracts/scripts/contracts/ickb_logic/src/entry.rs
+// - scripts/contracts/ickb_logic/src/entry.rs
 //   - deposit_to_ickb(): lines 71-84
-// - contracts/scripts/contracts/ickb_logic/src/constants.rs:7 (ICKB_SOFT_CAP_PER_DEPOSIT)
-// - contracts/scripts/contracts/utils/src/constants.rs:20 (GENESIS_ACCUMULATED_RATE)
+// - scripts/contracts/ickb_logic/src/constants.rs:7 (ICKB_SOFT_CAP_PER_DEPOSIT)
+// - scripts/contracts/utils/src/constants.rs:20 (GENESIS_ACCUMULATED_RATE)
 //
 // The Rust uses C256 checked arithmetic (utils/src/c256.rs); TypeScript bigints are
 // unbounded, so the checked-overflow abort cannot fire here. All on-chain operands

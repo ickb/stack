@@ -88,7 +88,7 @@ function isBetterRingAnchor(
 
 /**
  * Walks the candidates in the given order and takes each one that still fits under
- * `maxAmount` (decisions amendment 40); the caller chooses the order, earliest claim first
+ * `maxAmount`; the caller chooses the order, earliest claim first
  * for a user (the wait they feel), surplus before anchors for the bot. How many of the
  * selected deposits one transaction can carry is decided later by completion, not here.
  */

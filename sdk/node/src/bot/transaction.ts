@@ -41,7 +41,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
  * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
  * amount, withdrawal owner markers by chain length (chains are sized in iCKB), and nothing
  * checks the completed transaction against it, since such a check rejected every fill
- * sized to the reserve (decisions amendment 52(i)).
+ * sized to the reserve.
  */
 export async function buildTransaction(
   runtime: Runtime,
@@ -134,7 +134,7 @@ function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
  * Every prefix of the greedy chain, longest first, so completion can fall back to a shorter
  * one. One chain only: a shorter prefix needs fewer markers and less iCKB, and a chain
  * from a later start would only fund where this one's prefixes did not when the sweep
- * cannot reach iCKB the projection counted (decisions amendment 52(y)); trying every start
+ * cannot reach iCKB the projection counted; trying every start
  * made the walk quadratic in ready deposits.
  */
 function withdrawalCores({

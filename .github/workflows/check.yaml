@@ -33,7 +33,7 @@ jobs:
         run: pnpm check
 
       # A release is a push to the default branch whose commit changes a package's version
-      # field (decisions amendment 52(ad)). Every such push is one squash commit, so the
+      # field. Every such push is one squash commit, so the
       # previous commit is the comparison; a path absent there counts as changed.
       - id: releases
         if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -50,8 +50,7 @@ jobs:
         with:
           path: interface/dist
 
-  # The interface bundle the gate just built goes live at ickb.org (decisions amendment
-  # 52(ab)); a failed run leaves the previous deployment live.
+  # Deploy the bundle the gate just built; a failed run leaves the previous site live.
   deploy:
     needs: build
     if: needs.build.outputs.interface == 'true'
@@ -68,7 +67,7 @@ jobs:
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
 
   # npm trusted publishing: the id token stands in for a registry token, and npm records
-  # the provenance of this run with the package (decisions amendment 52(ad)).
+  # the provenance of this run with the package.
   publish:
     needs: build
     if: needs.build.outputs.sdk == 'true'

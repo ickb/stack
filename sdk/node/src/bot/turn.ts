@@ -32,7 +32,7 @@ export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * Reads bot-owned account state and public market state for one planning attempt.
  *
  * @remarks The bot places no orders, so nothing here counts or collects any; the market
- * side of the state is every order past par (decisions amendment 52(ak)).
+ * side of the state is every order past par.
  */
 export async function readBotState(runtime: Runtime): Promise<BotState> {
   const { system, account } = await runtime.sdk.getL1AccountState(

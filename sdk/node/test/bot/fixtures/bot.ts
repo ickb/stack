@@ -211,7 +211,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
 /**
  * The real testnet SDK and managers behind a stubbed L1 read, completion, and send: the
  * builders mutate transactions in place and assert their inputs, which is what the bot
- * tests must exercise (decisions amendment 47(i)).
+ * tests must exercise.
  */
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   const client = overrides.client ?? new StubClient();

@@ -48,7 +48,7 @@ export async function buildTransactionPreview(
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
   // A move carries only native CKB and iCKB, never a converting position, so it takes no
-  // amount; the form fixes it at zero and this boundary refuses anything else (52(al)).
+  // amount; the form fixes it at zero and this boundary refuses anything else.
   if (destination.moveTo !== undefined && amount !== 0n) {
     return txInfoWithError(
       "A move to another address takes no amount",

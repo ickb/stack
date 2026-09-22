@@ -30,7 +30,7 @@ export function formAssets(
             projection.ckbAvailable,
             projection.ckbBalance,
           ),
-          // No CKB Max: a request at the CKB bound never funds (decisions amendment 52(z)).
+          // No CKB Max: change and fees still need capacity beyond the requested amount.
         };
   const ickb: AssetDisplay =
     projection === undefined

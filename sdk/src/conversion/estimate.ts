@@ -8,9 +8,9 @@ import { maturity } from "./maturity.ts";
 import type { ConversionOrderEstimate, SystemState } from "./types.ts";
 
 /**
- * Default order-fee numerator used by Stack conversion quotes and plans: 0.01%, about two
- * days of DAO yield, which is how long a CKB-to-iCKB order stays fillable as the DAO ratio
- * grows past it (decisions amendment 52(z)).
+ * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
+ * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
+ * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
  */
 export const DEFAULT_ORDER_FEE = 10n;
 
@@ -43,6 +43,8 @@ export function estimateConversionOrder(
 
 /**
  * Returns the CKB fee threshold above which order maturity is worth estimating.
+ * This conservative proxy stays separate from partialOrderFee: the quote has no built
+ * order whose serialized size could supply that fee yet.
  */
 export function estimateMaturityFeeThreshold(
   system: Pick<SystemState, "feeRate">,

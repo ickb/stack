@@ -29,7 +29,7 @@ export interface TurnMatch extends Match {
  * whole orders beyond the balances wait for a later turn, and losing orders are never
  * bridges. The mining fee is paid by the reserve the balances exclude, so a bot with no
  * CKB to spare still serves buyers. Orders are shuffled once by the seed so equal fills
- * fall in no fixed order (decisions amendment 52).
+ * fall in no fixed order.
  */
 export function matchTurn({
   orders,
@@ -98,7 +98,7 @@ function bestFill(
     const allowance = matcher.isCkb2Udt ? balances.udt : balances.ckb;
     // A completion is any size, but a partial leaves at least the order's own minimum
     // match, so the scrap a short balance would leave stays fillable by a later turn
-    // instead of sitting on the book forever (decision 52(aj)(2)).
+    // instead of sitting on the book forever.
     const payment =
       allowance >= matcher.bMaxMatch
         ? matcher.bMaxMatch

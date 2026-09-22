@@ -2,7 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import { CheckedUint64LE } from "./utils/codec.ts";
 
 /**
- * Maximum output count accepted by the Nervos DAO validator path.
+ * Maximum outputs accepted by deployed dao.c, not a general CKB consensus cap.
+ * A node upgrade cannot lift a limit in that deployed script.
  */
 export const DAO_OUTPUT_LIMIT = 64;
 
@@ -18,7 +19,7 @@ export const DAO_HEADER_INDEX_LIMIT = 256;
 export const DAO_CYCLE_EPOCHS = 180n;
 
 /**
- * Error thrown when a DAO transaction exceeds the protocol output limit.
+ * Error thrown when a transaction exceeds the deployed DAO script's output limit.
  */
 export class DaoOutputLimitError extends Error {
   /**
@@ -106,7 +107,7 @@ export function isDaoWithdrawalRequest(
  * `tip + minLockUp` (closer, the request would commit after the claim and lock for another
  * cycle, so the deposit is judged on its next cycle) and before `tip + maxLockUp`.
  * Broadcast: the signed request is sent only while the tip is before the earliest selected
- * claim less `broadcastReserve`, else it is refused and rebuilt (decisions amendment 52(al)).
+ * claim less `broadcastReserve`, else it is refused before broadcast.
  */
 export interface LockUpPolicy {
   minLockUp: ccc.Epoch;
@@ -126,8 +127,8 @@ export const BOT_LOCK_UP: LockUpPolicy = {
 };
 
 /**
- * A wallet's rules: claims two hours to three days out, sent while ninety minutes remain. A
- * user signs by hand, so the request may sit in a wallet popup for a while (user, 2026-09-20).
+ * A wallet's rules on the nominal four-hour epoch: claims two hours to three days out,
+ * sent while ninety minutes remain. A user may leave the request in a wallet popup.
  */
 export const WALLET_LOCK_UP: LockUpPolicy = {
   minLockUp: ccc.Epoch.from([0n, 1n, 2n]),

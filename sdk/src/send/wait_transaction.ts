@@ -35,7 +35,7 @@ export interface WaitTransactionOptions {
   timeout?: number;
   /** Delay in milliseconds between polls. Defaults to 2000. */
   interval?: number;
-  /** Cancels polling and any in-flight client operation. */
+  /** Stops waiting, including on in-flight operations; their transports may still finish. */
   signal?: AbortSignal;
 }
 
@@ -43,11 +43,13 @@ export interface WaitTransactionOptions {
  * Observes one already-broadcast transaction for a single bounded window and returns
  * it once the node reports it committed.
  *
- * @remarks Every Stack caller waits at depth zero for one window and then rebuilds
- * from committed state (decisions amendment 45); depth would be an additive option.
+ * @remarks Stack waits at depth zero. Actors rebuild next turn; the app can reopen a
+ * window on the same hash without signing again. Callers needing deeper confirmation
+ * must observe it separately.
  * Clients with a JSON-RPC requestor, the connector's composed client included, poll
- * `get_transaction` verbosity 1 directly so a status-only rejection is not hidden by
- * CCC's transaction cache, and every transaction body read bypasses that cache. Timeout and abort also apply while awaiting client
+ * `get_transaction` verbosity 1 directly because CCC's typed response discards a null
+ * transaction body, including its rejection status. Body reads separately bypass the cache.
+ * Timeout and abort also apply while awaiting client
  * operations, but CCC transports cannot be cancelled and may finish after this
  * function rejects. Nothing here mutates the client cache: later attempts rebuild
  * from exact committed reads.

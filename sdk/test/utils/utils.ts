@@ -68,7 +68,7 @@ describe("findCells", () => {
 
   it("fails when a full page brings the cursor back unchanged", async () => {
     // A non-empty page always moves the indexer's cursor; a node that repeats it would
-    // otherwise be read for ever (decisions amendment 52(an)).
+    // otherwise be read for ever.
     const client = offlineTestnetClient();
     const cell = testCell({ type: undefined, outputData: "0x" });
     const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);

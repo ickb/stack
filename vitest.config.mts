@@ -1,8 +1,7 @@
 import { defineConfig } from "vitest/config";
 
-// Every branch on the money path runs under a test: the SDK and the Node actors carry the
-// four 100% thresholds; the test kit and the interface fail visibly, in a test or on screen,
-// when they matter (decisions amendment 39(b)).
+// Require branch coverage on the transaction and actor paths, without making changes to
+// test doubles and presentation glue carry the same percentage obligation.
 const fullCoverage = { lines: 100, functions: 100, branches: 100, statements: 100 };
 
 export default defineConfig({

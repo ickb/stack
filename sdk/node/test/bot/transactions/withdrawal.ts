@@ -161,7 +161,7 @@ describe("buildTransaction withdrawal", () => {
       },
     });
     // The withdrawals' deposit headers go first, so the request's own deposit header never
-    // pushes one past the limit: the full batch and the request ride together (52(an)).
+    // pushes one past the limit: the full batch and the request ride together.
     await expect(
       buildTransaction(
         runtime,

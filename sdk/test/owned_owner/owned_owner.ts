@@ -347,7 +347,7 @@ describe("OwnedOwnerManager.withdraw", () => {
   });
 
   it("moves the deposit headers ahead of every header already present", () => {
-    // Only phase 2 names a header by index, so the others may shift (52(an)).
+    // Only phase 2 names a header by index, so the others may shift.
     const owned = requestOf(depositHeader, requestHeader);
     const tx = ccc.Transaction.default();
     for (let index = 0; index < DAO_HEADER_INDEX_LIMIT; index += 1) {

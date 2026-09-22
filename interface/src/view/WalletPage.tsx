@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 /**
  * The wallet page: the header in the title block's mount, then three equal sections. The
- * button follows the form; the chart is context and comes last (decisions amendment 52(ag)).
+ * button follows the form; the chart is context and comes last.
  */
 export function WalletPage({
   header,

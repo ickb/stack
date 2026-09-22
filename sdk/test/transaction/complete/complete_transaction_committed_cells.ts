@@ -188,7 +188,7 @@ function registerSweepTests(): void {
   it("moves iCKB cells first, plain cells last, and reports a sweep the budget cut short", async () => {
     // A move is amount zero to another lock, so the sweep is the transaction. The budget
     // may cut it, so the iCKB cells go first and the plain cells left behind can still fund
-    // the next move's fee (decisions amendment 52(al)).
+    // the next move's fee.
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
     const { signer } = fundedSigner([], [lock]);
     const tx = fullBudgetTransaction(lock, 400);

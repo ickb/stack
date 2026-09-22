@@ -9,9 +9,8 @@ import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import type { MaturityOrderInput, SystemState } from "./types.ts";
 
 /**
- * The bot's worst-case turn: its one-minute cadence plus the confirmation wait, with room
- * for slow reads. It is the one duration the bot can be held to, so every order estimate
- * is built from it (decisions amendment 52(ai)(15)).
+ * Assumed turn duration, allowing for restart delay, confirmation and slow reads.
+ * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
  */
 export const BOT_TURN_MS = 10n * 60n * 1000n;
 
@@ -19,7 +18,7 @@ export const BOT_TURN_MS = 10n * 60n * 1000n;
  * The estimated fill time of an order on the book or about to be placed, zero when it is
  * already fulfilled. `takenDeposits` are the pool deposits the same plan withdraws
  * directly, which cannot fill its order leg too. Dual-ratio orders never reach here: the
- * scan drops them (decisions amendment 52(al)).
+ * scan drops them.
  */
 export function maturity(
   o: MaturityOrderInput,
@@ -58,10 +57,8 @@ function maturityOrderParts(o: MaturityOrderInput): {
 /**
  * A buyer waits for the bot to mint: the bot mints one cap-sized deposit per turn once its
  * iCKB inventory is spent, and the inventory is unknown here, so the wait is one turn plus
- * one per cap of net CKB demand ahead (buyers priced better than this one, less the iCKB
- * the sellers on the book bring in). One cap per worst-case turn is about 630,000 CKB an
- * hour, five to ten times slower than a normal day, deliberately: the turn is the one
- * duration the bot can be held to.
+ * one per whole cap of positive net CKB demand (this request and buyers priced at least
+ * as well, less the iCKB sellers bring in). The model does not measure the bot's funds.
  */
 function ckbToIckbOrderMaturity(
   info: Info,
@@ -84,13 +81,10 @@ function ckbToIckbOrderMaturity(
 }
 
 /**
- * A seller waits for CKB: the bot's own working capital, one deposit's worth, unless a
- * fillable seller has already sat on the book for over a turn (then the bot has none to
- * give), plus each pool deposit at its real claim date, in claim order. The first date
- * whose supply covers this order and every seller priced at or better than it, plus one
- * turn. Every iCKB is backed by a pool deposit that matures within a cycle, so the pool
- * always covers an order at par; an order asking above par waits for the DAO ratio to
- * reach its ask, later than any claim date, and reads the pool's last claim date.
+ * A seller waits for CKB: one deposit's worth of assumed working capital, zeroed when
+ * another fillable seller has sat beyond the threshold, plus dated pool supply. Return
+ * the first date covering demand, plus a turn. Insufficient supply falls back to the last
+ * date; this can understate an above-par ask's wait for further DAO growth.
  */
 function ickbToCkbOrderMaturity(
   info: Info,

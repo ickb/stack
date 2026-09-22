@@ -60,11 +60,10 @@ export interface Info {
   validate(): void;
 }
 
-// 2^36 shannons, about 687 CKB: a fresh remainder of that size clears the bot's ten-fee
-// floor 22 times over even at a 100,000 fee rate, so a partial fill never strands a scrap.
-// Orders under twice that (about 1,375 CKB, about 1,150 iCKB) are taken whole or left;
-// that band must stay under the bot's refill line (`ICKB_REFILL_BELOW`, 2,000 iCKB) so a
-// buyer the bot cannot complete always fires the refill deposit: 37 would break it.
+// 2^36 shannons, about 687 CKB, leaves fresh remainders headroom above the fill-cost floor.
+// Orders below twice that minimum are whole-only. Converted to iCKB, this band must stay
+// below `ICKB_REFILL_BELOW` so a buyer too small to split triggers a refill when inventory
+// cannot fill it whole. Fee changes and an aging buy can still make a remainder unprofitable.
 export const CKB_MIN_MATCH_LOG_DEFAULT = 36;
 
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.

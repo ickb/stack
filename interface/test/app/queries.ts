@@ -168,7 +168,7 @@ it("loads display balances from an SDK account snapshot", async () => {
 
   const state = await getL1State(walletConfig);
 
-  // The iCKB cell's capacity is the account's CKB too (decisions amendment 52(ah)).
+  // The iCKB cell's capacity is the account's CKB too.
   const liquidCapacity = nativeCapacity + nativeUdtCell.cellOutput.capacity;
   expect(state.projection).toMatchObject({
     ckbNative: liquidCapacity,

@@ -6,8 +6,7 @@ import { errorMessageOf, type WalletConfig } from "../shared/utils.ts";
  * The lock that owns every cell the next transaction creates for the user.
  *
  * @remarks `moveTo` names the destination when it is not one of the wallet's own locks:
- * completion then sweeps everything liquid to it, so the transaction is also a move
- * (decisions amendment 52(af)).
+ * completion sweeps liquid cells to it within the size budget, making this a wallet move.
  */
 export interface Destination {
   readonly lock: ccc.Script;

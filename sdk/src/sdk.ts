@@ -68,10 +68,11 @@ export interface IckbSdk {
  * Prepared-size budget one own transaction may grow to while sweeping liquid cells.
  *
  * @remarks Measured as CCC charges fees, `toBytes().length + 4`, and checked before
- * each input, so the last one may overshoot it: "about 64 KiB" (decisions amendment
- * 52(al)). About a tenth of a block; it admits roughly 1,400 inputs, so it outpaces one
- * cellbase cell per block from a miner paying the bot and is never reached after the
- * first sweep.
+ * each input, so the last one may overshoot it: "about 64 KiB". Compaction is deliberate,
+ * but the sweep must leave room for fee completion; this is not a hard transaction limit.
+ * The sizing target is roughly 1,400 same-lock inputs: enough to compact one miner payout
+ * per block between normal bot turns while leaving most block space free. A large backlog
+ * can still take several transactions.
  */
 export const TRANSACTION_SIZE_BUDGET = 64 * 1024;
 
@@ -111,7 +112,7 @@ const IckbSdkImplementation = class IckbSdk {
    *
    * @remarks Every read is complete and uncapped: a large book or pool costs a slower
    * read, never a partial or failed one. Each account lock is enumerated by one uncached
-   * unfiltered exact-lock scan and classified client-side (decisions amendment 52).
+   * unfiltered exact-lock scan and classified client-side.
    */
   public async getL1AccountState(
     client: ccc.Client,
@@ -137,7 +138,7 @@ const IckbSdkImplementation = class IckbSdk {
         feeRate,
         tip,
         exchangeRatio,
-        // One book, two filters (decisions amendment 52(ak)): the market side is every order
+        // One book, two filters: the market side is every order
         // past par, the wallet's own included, since the bot fills by price, not by owner.
         orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),
         poolDeposits,
@@ -187,7 +188,7 @@ const IckbSdkImplementation = class IckbSdk {
    * candidate plans (deposit counts, or prefixes of the greedy withdrawal selection with
    * their rebuilt remainder order) are completed most direct first and the first fundable one
    * wins, so a wallet short of CKB degrades to fewer direct actions plus a larger standing
-   * order rather than failing (decisions amendments 41, 52(ak)). Failure results are
+   * order rather than failing. Failure results are
    * expected planning outcomes; when no plan can be funded the last completion error throws.
    */
   public async buildConversionTransaction(
@@ -395,8 +396,8 @@ const IckbSdkImplementation = class IckbSdk {
    * @remarks Completion never scans. `cells` are the signer's known liquid cells, plain
    * CKB and iCKB, from the account state already read: the largest ones fund what the
    * outputs need, the rest ride along as a sweep while the prepared transaction stays
-   * under {@link TRANSACTION_SIZE_BUDGET}, so every own transaction compacts the account
-   * (decisions amendment 52). Ordinary change is always a plain cell; existing outputs
+   * under {@link TRANSACTION_SIZE_BUDGET}, so every own transaction compacts the account.
+   * Ordinary change is always a plain cell; existing outputs
    * are never reinterpreted or resized as fee change. This does not sign or send.
    */
   public async completeTransaction(
@@ -408,7 +409,7 @@ const IckbSdkImplementation = class IckbSdk {
     const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
     // Inputs come from one state read, each cell once, and each action spends its own
     // cell kind, so a repeated out point is a builder bug: this is the one place that
-    // names it, the node would refuse the transaction anyway (decisions amendment 52(y)).
+    // names it, the node would refuse the transaction anyway.
     const spent = new Set<string>();
     for (const { previousOutput } of tx.inputs) {
       const key = previousOutput.toHex();
@@ -597,8 +598,8 @@ export class IckbError extends Error {
  *
  * @remarks
  * Only completion knows what a transaction costs once markers, remainder orders, change, and
- * fee are in, so no count is computed up front: each candidate is built and completed in turn
- * (decisions amendment 41). Capacity, DAO output-limit and DAO header-index failures advance
+ * fee are in, so no count is computed up front: each candidate is built and completed in turn.
+ * Capacity, DAO output-limit and DAO header-index failures advance
  * the walk; transport, scan, signer, and malformed-transaction errors propagate. Exhausting
  * the candidates throws the last advancing failure.
  */

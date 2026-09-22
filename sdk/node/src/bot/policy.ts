@@ -12,9 +12,9 @@ import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 
 // The inventory band the pre-rewrite bot ran for a year: refill under 2,000 iCKB,
 // withdraw above 120,000 keeping 20,000, so a refill lands far below the withdrawal
-// line and a withdrawal keeps ten times the refill line (decisions amendment 52).
-// The refill line must stay above the whole-only band of `CKB_MIN_MATCH_LOG_DEFAULT`
-// (about 1,150 iCKB at 36), so a buyer the bot cannot complete always fires a refill.
+// line and a withdrawal keeps ten times the refill line.
+// The refill line must exceed twice `CKB_MIN_MATCH_LOG_DEFAULT`'s minimum, converted to
+// iCKB, so a buyer that is too small to split cannot wait above the refill threshold.
 export const ICKB_REFILL_BELOW = ICKB_DEPOSIT_CAP / 50n;
 export const ICKB_RETAIN = ICKB_DEPOSIT_CAP / 5n;
 export const ICKB_WITHDRAW_ABOVE = ICKB_DEPOSIT_CAP + ICKB_RETAIN;
@@ -67,7 +67,7 @@ export interface RebalancePlan {
  * Deposit one cap-sized deposit when the ring's current window lacks coverage or the
  * bot holds under 2,000 iCKB, if 1,000 CKB remains after it. Withdraw ready surplus
  * deposits while the bot holds over 120,000 iCKB, keeping 20,000; anchors only under
- * stress (decisions amendment 52).
+ * stress.
  */
 export function planRebalance(input: RebalanceInput): RebalancePlan {
   const { tip, lockUp, ickb, ckb, depositCost, poolDeposits } = input;

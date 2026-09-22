@@ -268,7 +268,7 @@ export class OwnedOwnerManager implements ScriptDeps {
     // Only this step names a header by index, and the deployed script reads that index as
     // one byte, so the deposit headers go first, ahead of whatever the requests and receipts
     // pushed: the limit then counts these alone. Safe because nothing else in the stack reads
-    // a header by position and every built transaction passes here once (52(an)).
+    // a header by position and every built transaction passes here once.
     const depositHashes = [
       ...new Set(withdrawalGroups.map(({ owned }) => owned.headers[0].header.hash)),
     ];

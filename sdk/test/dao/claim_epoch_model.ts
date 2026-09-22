@@ -9,7 +9,7 @@ type EpochTuple = [bigint, bigint, bigint];
 // deposit_fraction comparison, lock epochs round up to whole 180-epoch cycles, and the
 // claim epoch keeps the deposit's fraction. The stack uses CCC's `calcDaoClaimEpoch` (the
 // equality roll of ckb-ccc issue 514 is fixed in the pinned release); this suite pins the
-// installed CCC against the deployed script on every run (decisions amendment 52(an)).
+// installed CCC against the deployed script on every run.
 function daocMinimalSince(
   [dn, di, dl]: EpochTuple,
   [wn, wi, wl]: EpochTuple,

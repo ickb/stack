@@ -66,7 +66,7 @@ describe("buildTransaction matching", () => {
 
   it("funds a fill sized to the whole matchable CKB through the real completer", async () => {
     // The completed transaction's fee and the bot's new iCKB cell come out of the reserve;
-    // testnet's fee rate, so the fee is far above one partial's (N20, amendment 52(i)).
+    // testnet's fee rate, so the fee is far above one partial's.
     const feeRate = 33_222n;
     const ask = ccc.fixedPointFrom(4000);
     const seller = marketOrder({

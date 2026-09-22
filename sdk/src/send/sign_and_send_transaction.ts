@@ -44,7 +44,7 @@ export class TransactionExpiredError extends Error {
  * is read after the signature and the fee check, and the send is refused with
  * `TransactionExpiredError` once the tip's epoch has reached it: a withdrawal
  * request that commits after its claim locks the deposit for another cycle, and a
- * wallet may hold the signature for a while (decisions amendment 52(al)).
+ * wallet may hold the signature for a while.
  * `recordTxHash` is called after these checks and before the send RPC starts. A
  * node that already holds this exact transaction is an acceptance; any other send
  * failure remains ambiguous and throws `TransactionBroadcastError`. The client

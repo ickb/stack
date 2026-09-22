@@ -78,9 +78,9 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
 }
 
 /**
- * Live orders the bot will not take, counted apart because they mean different things:
- * `refused` is an order the market will never fill and `stale` one thirty days old (both
- * the SDK's rules); a running bot should never let a fillable order go stale.
+ * Separate the SDK's refused-buy classification from its nominal thirty-day age cutoff.
+ * A stale order warrants inspection, but can reflect inventory or price priority rather
+ * than a stopped bot; neither classification depends on this turn's available balances.
  */
 function abandonedOrders(
   live: OrderGroup[],

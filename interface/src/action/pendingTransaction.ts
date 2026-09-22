@@ -10,8 +10,8 @@ export type PendingTransactionState =
   | Readonly<{ status: "pending"; txHash: ccc.Hex }>;
 
 /**
- * Holder of the pending record, owned by the component that owns the wallet session
- * (decisions amendment 46(i)): the async transaction flow reads and writes `current`
+ * Holder of the pending record, owned by the component that owns the wallet session.
+ * The async transaction flow reads and writes `current`
  * synchronously, and every write is mirrored into that component's state through `onChange`.
  */
 export interface PendingTransactionStore {

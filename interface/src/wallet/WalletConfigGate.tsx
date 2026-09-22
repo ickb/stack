@@ -19,7 +19,7 @@ type WalletConfigRead = Readonly<
  *
  * @remarks The connector hands out a new signer when the wallet switches account, and
  * nothing else changes the address, so the signer is the only freshness boundary; a
- * background refetch would only remount the app under the user (decisions amendment 52).
+ * background refetch would only remount the app under the user.
  */
 export default function WalletConfigGate({
   rootConfig,

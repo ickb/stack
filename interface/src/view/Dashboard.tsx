@@ -45,9 +45,9 @@ export function Dashboard({
 /**
  * The wallet's address, doubling as the destination of the next transaction: the own
  * address as the placeholder of the empty field, a pasted one shortened at rest and in
- * full while editing, marked with an arrow once it points elsewhere (decisions amendment
- * 52(af)). While a transaction is under way the field reads as plain text with the reason
- * under it (52(al)). The link opens the shown address in the explorer.
+ * full while editing, marked with an arrow once it points elsewhere. While a transaction
+ * is under way the field reads as plain text with the reason under it. The link opens the
+ * shown address in the explorer.
  */
 function AddressField({
   destination,

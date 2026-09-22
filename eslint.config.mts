@@ -73,8 +73,7 @@ const guardedVitestRuleErrors = {
   "vitest/warn-todo": "error",
 } as const;
 
-// CKB invariants (decisions amendment 36): each selector encodes a fund-safety or
-// chain-correctness rule, not a style proxy.
+// Compare complete script identities and require reasons for type assertions.
 const restrictedSyntax = [
   {
     selector:
@@ -115,7 +114,7 @@ const productionRestrictedSyntax = [
     message:
       "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
   },
-  // Cell reads go through the SDK's one uncached paging loop (decisions amendment 52):
+  // Cell reads go through the SDK's one uncached paging loop:
   // CCC's cached iterators are never used for financial state.
   {
     selector:
@@ -136,7 +135,7 @@ const productionRestrictedSyntax = [
 ];
 
 // rollup deletes a `/* @__PURE__ */` call inside a class static block while keeping the
-// class, which silently breaks entities at runtime (decisions amendment 12). Comments are
+// class, which silently breaks entities at runtime. Comments are
 // not AST nodes, so a selector cannot express this; the rule reads the block's comments.
 const noPureInStaticBlock: Rule.RuleModule = {
   meta: {
@@ -349,7 +348,7 @@ export default defineConfig(
     files: ["scripts/**/*.ts", "sdk/node/**/*.ts"],
     rules: {
       // The actors beside the SDK drive its full class by relative import; the package
-      // barrel stays the one public entry (decisions amendment 52).
+      // barrel stays the one public entry.
       "no-restricted-imports": "off",
       "@typescript-eslint/unbound-method": "off",
     },
@@ -415,7 +414,7 @@ export default defineConfig(
     },
   },
   {
-    // The oracle's independence from the SDK is a dependency-cruiser rule (amendment 44).
+    // The oracle's independence from the SDK is a dependency-cruiser rule.
     files: ["testkit/src/contract_oracle.ts"],
     linterOptions: { noInlineConfig: true },
     rules: {

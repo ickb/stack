@@ -85,7 +85,7 @@ export const CKB_RESERVE = ccc.fixedPointFrom(1000);
  * completion path as `sdk.completeTransaction(...)`, which callers invoke before send.
  */
 export function getConfig(chain: SupportedChain): SdkManagers {
-  // The runtime check stands for callers outside TypeScript (decisions amendment 30).
+  // The runtime check stands for callers outside TypeScript.
   if (!Object.hasOwn(DEPLOYMENTS, chain)) {
     throw new TypeError("unsupported iCKB network");
   }

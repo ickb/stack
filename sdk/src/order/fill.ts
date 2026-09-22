@@ -7,8 +7,8 @@ import { type Match, OrderMatcher } from "./matcher.ts";
 /**
  * What a fill must return before the bot takes it, in mining fees of its own: the buffer
  * for the deposits and withdrawals that rebalance the inventory it moves (user decision
- * 2026-09-10, tuned on testnet). One rule for the bot, the generator's melts, and the
- * interface's collection of orders the market will never fill (decisions amendment 52(z)).
+ * 2026-09-10, tuned on testnet). One rule for the bot's fills and the refused-buy
+ * classification used by the generator and interface.
  */
 const FILL_COST_FEES = 10n;
 
@@ -37,8 +37,8 @@ export function returnsCost(
 
 /**
  * Whether the bot would take the whole order in the given direction. Judged on the order
- * alone, since the balances change every turn but the price does not, so a generator can
- * tell an order the bot will never take from one it cannot yet afford.
+ * alone, independently of the bot's current inventory. Price and the sampled fee rate
+ * decide profitability; balances decide whether a particular turn can afford it.
  */
 export function fillsWhole(
   group: OrderGroup,
@@ -55,11 +55,10 @@ export function fillsWhole(
 }
 
 /**
- * Whether the market will never fill this order: a CKB-to-iCKB order the bot's own matcher
- * would not fill whole today, which the DAO ratio's growth only pushes further from
- * filling. An iCKB-to-CKB order is never refused, since the same growth only raises what
- * the bot earns on it (decisions amendment 52(q)); one too small for that to ever cover
- * the fill's cost is collected by age instead ({@link isStale}).
+ * Whether a buy fails today's whole-fill profitability rule and should be collected.
+ * DAO growth makes it less attractive, though a lower fee rate could change this result.
+ * Sells are not refused: growth can make them profitable later, so unfilled sells return
+ * only through the age cutoff ({@link isStale}).
  */
 export function isRefused(
   group: OrderGroup,
@@ -77,7 +76,7 @@ export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
  * Whether the order has sat on the book for thirty days: whatever the reason (dust under
  * the fill's cost, a remainder another matcher left, an ask above the market), it is
  * collected and its funds returned. Age from the origin's block, so an uncommitted origin
- * is as fresh as an order gets (decisions amendment 52(am)).
+ * is as fresh as an order gets. The block count assumes eight-second blocks, not wall time.
  */
 export function isStale(group: OrderGroup, tip: ccc.ClientBlockHeader): boolean {
   return (group.blockNumber ?? tip.number) + STALE_ORDER_BLOCKS <= tip.number;

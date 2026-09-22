@@ -17,7 +17,7 @@ export interface BotIdentity {
 }
 
 /**
- * The seven bot events, each complete on its own. A turn emits `bot.turn.started`,
+ * The eight bot events, each complete on its own; one turn emits at most six. A turn emits `bot.turn.started`,
  * `bot.chain.preflight`, `bot.state.read`, then either `bot.decision.skipped` or
  * `bot.transaction.built`, `bot.transaction.sent`, and `bot.transaction.committed`;
  * any failure ends the turn with `bot.turn.failed` instead.

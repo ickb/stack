@@ -21,10 +21,9 @@ import {
   sortByClaim,
 } from "./withdrawal_ring.ts";
 
-// The DAO script accepts 64 outputs per transaction. Planners start at the most the
-// consensus limit can hold (one change output beside the deposits; a request and its
-// owner marker per withdrawal) and the completion walk steps down from there when
-// change and fees need more room (decisions amendment 52, finding N7).
+// Planners start at the most `DAO_OUTPUT_LIMIT` can hold (one change output beside the
+// deposits; a request and its owner marker per withdrawal) and the completion walk steps down from there when
+// change and fees need more room.
 const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
 const MAX_PLANNED_WITHDRAWAL_REQUESTS = DAO_OUTPUT_LIMIT / 2;
 
@@ -59,9 +58,9 @@ export function ckbToIckbConversionPlans(
 /**
  * Plans every prefix of the greedy ready-deposit selection, longest first, the remainder as
  * an order: direct withdrawals are free and their claim date certain, an order pays a fee
- * and waits for the bot, so the completion walk takes the most direct plan it can fund
- * (decisions amendment 52(ak)). The prefix shape keeps ring classification frozen: a prefix
- * of surplus deposits stays surplus with the same anchors pinned (amendments 40, 41).
+ * and waits for the bot, so the completion walk takes the most direct plan it can fund.
+ * The prefix shape keeps ring classification frozen: a prefix of surplus deposits stays
+ * surplus with the same anchors pinned.
  */
 export function ickbToCkbConversionPlans(
   options: ConversionTransactionOptions,

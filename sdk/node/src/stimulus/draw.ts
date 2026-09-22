@@ -33,7 +33,7 @@ const CKB = ccc.fixedPointFrom(1);
 const ORDER_WEIGHT = 3;
 // Zero pays nothing, the SDK default is what a user's order pays, ten times it is
 // generous; no fixed set lands on both sides of the bot's fee check for every transaction
-// size, so `STIMULUS_FEE` is the lever when a reason never shows (decisions amendment 48).
+// size, so `STIMULUS_FEE` is the lever when a reason never shows.
 // A buy at zero fee is never taken, since the DAO ratio only grows past it, so buys draw
 // from the positive fees.
 const POSITIVE_FEE_CHOICES: Choices<bigint> = [

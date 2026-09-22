@@ -120,7 +120,7 @@ export class OrderManager implements ScriptDeps {
    * Adds order groups and their master cells as melt inputs.
    *
    * @remarks Melts exactly the groups it is given: callers pass fulfilled groups
-   * to collect and a live group to cancel it (decisions amendment 52, N17).
+   * to collect and a live group to cancel it.
    */
   public melt(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
@@ -189,7 +189,7 @@ export class OrderManager implements ScriptDeps {
   }
 
   private async findAllMasters(client: ccc.Client): Promise<MasterCell[]> {
-    // An exact type search returns master cells only; the node is trusted (amendment 52).
+    // An exact type search returns master cells only, so nothing re-filters here.
     const cells = await findCells(client, {
       script: this.script,
       scriptType: "type",
@@ -212,7 +212,7 @@ export class OrderManager implements ScriptDeps {
     }
     const group = OrderGroup.tryFrom(master, order, found.origin, found.blockNumber);
     // A dual-ratio order, valid on chain but placed by nothing in the stack, is left to
-    // whoever placed it: neither matched, estimated, shown nor melted here (52(al)).
+    // whoever placed it: neither matched, estimated, shown nor melted here.
     if (group === undefined || group.order.data.info.isDualRatio()) {
       return undefined;
     }
@@ -291,7 +291,7 @@ async function cachedTransactionResponse(
 ): Promise<TransactionResponse | undefined> {
   // As CCC's own readers do, trust the cache only once the transaction is in a block: the
   // cache also holds what CCC records at broadcast and what a lagging node answered, and a
-  // long-lived client would otherwise keep that answer for good (52(al) Grok review).
+  // long-lived client would otherwise keep that answer for good.
   const cached = await client.cache.getTransactionResponse(txHash);
   if (cached?.blockNumber !== undefined) {
     return cached;

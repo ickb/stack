@@ -44,7 +44,7 @@ export interface BotState {
   /** Sampled public L1 state. */
   system: SystemState;
 
-  /** Every order past par on the book, the bot's own included, had it any (52(ak)(2)). */
+  /** Every order past par on the book, including any owned by the bot. */
   marketOrders: OrderGroup[];
 
   /** User receipt cells ready for deposit completion. */

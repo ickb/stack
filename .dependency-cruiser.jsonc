@@ -67,7 +67,7 @@
     },
     {
       "name": "oracle-independent",
-      "comment": "The contract oracle imports nothing from the implementation it judges (amendment 44).",
+      "comment": "The contract oracle imports nothing from the implementation it judges.",
       "severity": "error",
       "from": { "path": "^testkit/src/contract_oracle[.]ts$" },
       "to": {},
@@ -91,14 +91,14 @@
     },
     {
       "name": "sdk-browser-safe",
-      "comment": "The SDK runs in the browser: no Node built-ins (decisions §1).",
+      "comment": "The SDK runs in the browser: no Node built-ins.",
       "severity": "error",
       "from": { "path": "^sdk/src/" },
       "to": { "dependencyTypes": ["core"] },
     },
     {
       "name": "sdk-not-node",
-      "comment": "The published SDK never imports the Node actors that live beside it (amendment 52).",
+      "comment": "The published SDK never imports the Node actors that live beside it.",
       "severity": "error",
       "from": { "path": "^sdk/src/" },
       "to": { "path": "^sdk/node/" },

@@ -97,7 +97,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
  * Loads L1 account state and prepares the transaction-preview context for the current wallet.
  *
  * @remarks The stateId is the identity of this fetch's sampled state, so every fetch
- * gets a new preview (decisions amendment 38). The builder closes over the current
+ * gets a new preview. The builder closes over the current
  * wallet config, SDK, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
@@ -107,9 +107,8 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     WALLET_LOCK_UP,
   );
   const { system, user, account } = sdkState;
-  // Fulfilled orders, orders the market will never fill and orders thirty days old are
-  // collected on the next transaction, which melts the latter two and returns their funds;
-  // other live orders stay on the book (decisions amendments 52(z), 52(am)).
+  // Collect fulfilled orders, buys refused by today's matcher and orders past the age
+  // cutoff. Other live orders stay: DAO growth can make a waiting sell profitable later.
   const collectable = (group: (typeof user.orders)[number]): boolean =>
     group.order.isFulfilled() || isRefused(group, system) || isStale(group, system.tip);
   const { projection, context } = projectConversionTransactionContext(system, account, {
@@ -169,8 +168,7 @@ export function objectIdentityKey(value: object): number {
  * Builds the L1 account query key for one wallet config object.
  *
  * @remarks The wallet config is rebuilt whenever its signer, locks, or client change, so its
- * object identity is the cache boundary; a refetched config starts a cold L1 query
- * (decisions amendment 46(h)).
+ * object identity is the cache boundary; a refetched config starts a cold L1 query.
  */
 export function l1StateQueryKey(
   walletConfig: Pick<WalletConfig, "chain" | "address"> & object,

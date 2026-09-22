@@ -111,7 +111,7 @@ export class LogicManager implements ScriptDeps {
       throw new TypeError("iCKB deposit quantity must be a safe integer");
     }
     if (depositQuantity > maxDepositQuantity) {
-      // The completion walk steps a plan down on this error (decisions amendment 52, N7).
+      // The completion walk steps a plan down on this error.
       throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
     }
 

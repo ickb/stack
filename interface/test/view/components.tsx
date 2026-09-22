@@ -204,7 +204,7 @@ describe("view components", () => {
     expect(invalidMarkup).not.toContain("text-ellipsis whitespace-nowrap text-base");
     expect(renderToStaticMarkup(element)).toContain("CKB in wallet: 3");
     expect(renderToStaticMarkup(element)).toContain("motion-reduce:animate-none");
-    // Max exists only while converting from iCKB: no CKB Max (52(z)), none on the target.
+    // Max exists only while converting from iCKB: no CKB Max, none on the target.
     expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
     const fromIckb = Form({
       ...draft,

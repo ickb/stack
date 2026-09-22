@@ -201,7 +201,7 @@ function* pseudoRandom(seed: bigint): Generator<bigint, never, void> {
   }
 }
 
-// The self-recovery invariant (decisions amendment 52, finding N16): an account funded to
+// The self-recovery invariant: an account funded to
 // the recommended 2.2 deposits never sits below the refill line with nothing to do; either
 // the deposit is affordable or pending withdrawals are on their way back.
 describe("self-recovery property", () => {

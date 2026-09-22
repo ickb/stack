@@ -57,7 +57,7 @@ export function quoteConversion(
   }
 
   // Every order this SDK creates carries the default minimum match, the one the bot's
-  // remainder rule is sized to (decision 52(aj)(2)).
+  // remainder rule is sized to.
   const info = Info.create(
     isCkb2Udt,
     quotePreservingRatio(amount, convertedAmount, isCkb2Udt),

@@ -1,62 +1,74 @@
 # iCKB Stack
 
-iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps built on top of [CCC](https://github.com/ckb-devrel/ccc).
+iCKB Stack is the TypeScript SDK, liquidity bot and browser interface for iCKB, built on [CCC](https://github.com/ckb-devrel/ccc).
 
-Every design decision behind this tree, with its rejected alternatives, is in the [decision record](docs/stack-rewrite/decisions.md). The rest of this README describes the repository.
+## Where to start
 
-## Transaction Completion Boundary
+- [SDK](sdk/README.md): read account state, build a funded conversion, sign, send and wait.
+- [Node actors](sdk/node/README.md): run the bot, testnet stimulus generator or rate sampler.
+- [Bot policy](sdk/node/docs/policy.md): matching, rebalancing, funding and their tradeoffs.
+- [Interface](interface/README.md): run the app and understand its wallet and conversion model.
+- [Maturity estimates](sdk/docs/pool_maturity_estimates.md): how the interface estimates when funds return.
+- [Test kit](testkit/README.md) and [scripts](scripts/README.md): test helpers and repository tooling.
+- [Working agreement](AGENTS.md): how to change and validate this tree.
 
-`IckbSdk.buildConversionTransaction(...)` returns a completed transaction: the SDK completes each candidate plan against the signer's committed cells and returns the first fundable one, so a caller only signs and sends (`signAndSendTransaction`) and waits (`waitTransaction`). The managers behind it are internal to the package.
+Design rationale lives with the feature it explains: a reason comment for a branch or constant, or a section in its owning documentation for a choice spanning several functions. Follow the links above for both behavior and the reasons behind it.
 
-## Cell Scans
+## Workspace boundaries
 
-Every Stack cell scan, for account state, the pool, the order book, or the maturity estimate, is one uncached paging loop at a fixed page of 400 cells that stops on the first short page; there is no page-size knob (decisions amendment 52(c)).
+`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and depends at runtime only on `@ckb-ccc/core`. It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
 
-## User Lock Assumption
+`sdk/node/`, `interface/` and `testkit/` are private workspaces. The three Node entrypoints share preflight, configuration and logging under `sdk/node/src/shared/`; they never import each other. Development, tests and bot deployments run from TypeScript source. The SDK's build emits `dist/` for publishing, not for local workspace execution.
 
-Current stack flows assume user-owned cells are protected by locks whose signatures bind the whole transaction, such as standard `sighash` wallet flows. Passing a raw `ccc.Script` is only safe when that lock gives the same output and recipient binding. Delegated-signature or OTX-style locks are integration-specific and must account for the weak-lock boundary documented in the iCKB whitepaper and contracts audit.
+The former library boundaries separated concepts rather than independent consumer contracts. One package removes the cost of maintaining several entry points and releases; its internal layering is a convention rather than a second dependency graph. There are no `advanced` or `internal` public entry points. The [SDK layout](sdk/README.md#layout) follows the on-chain scripts and the conversion workflow.
 
-## Workspace Map
+### User locks
 
-Apps:
+Stack assumes user-owned cells have [locks whose signatures bind the whole transaction](https://github.com/ickb/contracts/blob/ae8a11fa560c157116e3f75acc316682d9cca061/20260501-ICKB-Audit-Report.md#authorization-boundary), as standard sighash wallet flows do. An output lock does not execute when the output is created, so it cannot itself protect the recipient of that newly created output. Passing a raw `ccc.Script` is safe only when its lock provides the same input, output and recipient binding. Delegated-signature and OTX-style integrations must establish that separately.
 
-- `sdk/node`: the bot, the testnet stimulus generator, and the mainnet rate sampler, three entrypoints in one Node workspace sharing chain preflight, config, and logging.
-- `interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
+## Dependencies and checks
 
-Apps are private workspace runtimes and run from source under Node 22.19+ or Vite. The supported reusable API surface lives in the packages below. Stack package `build` scripts emit `dist/` for publishing reusable packages only; local development, tests, live supervisor runs, and bot deployments use TypeScript source directly.
-
-Packages:
-
-- `sdk`: the one published package. One file per on-chain script at the top of `src` (`udt.ts` the iCKB token, `logic.ts` deposits and receipts, `owned_owner.ts` withdrawal requests and withdrawals, `dao.ts` the shared Nervos DAO rules); `src/order` the UDT limit-order entities, matching, minting, and melting; `src/conversion` the state read, projection, estimates, conversion plans, the withdrawal ring, and the completion walk; `src/send` signing, sending, and confirmation; and `src/utils` the one uncached cell paging loop and shared helpers.
-- `testkit`: Private test helpers and fixtures for workspace tests.
-
-## Dependencies
-
-CCC packages are normal package dependencies resolved through `pnpm-workspace.yaml` catalog entries and `pnpm-lock.yaml`. From a plain checkout, run `pnpm install`; no local CCC fork, build step, or workspace alias is required.
-
-A release is a merge to the default branch that changes a package's `version` field: `sdk` then publishes to npm through trusted publishing with provenance, and `interface` deploys to GitHub Pages; both from the check workflow, after the gate passed on that commit. Other merges release nothing.
-
-`pnpm check` is the validation gate: the audit, the full `pnpm lint` (typecheck, format, duplication, knip, architecture, forgotten exports, publish check, coverage, ESLint, Node script tests), and the interface build, all with `CI=true`. It runs against the installed dependencies; CI installs them from the pinned lockfile in a fresh checkout first.
-
-## Live Testnet Validation
-
-Validation is operator-driven. Each actor runs one turn as a process and exits with its outcome; the operator, a person or a model, reads the JSON on stdout and decides the next action. There is no launcher, supervisor, summary, or automated cadence.
-
-The bot reads `BOT_CHAIN`, the optional `BOT_RPC_URL`, and the key file named by `BOT_PRIVATE_KEY_FILE`; the stimulus generator reads the same under `STIMULUS_` and refuses any chain but testnet. A key file holds one lowercase `0x` key; keep it outside the checkout, in `~/.config/ickb-bot/` as the units do. Without an RPC URL the actors use CCC's public endpoints for the chain, WebSocket first with HTTPS fallbacks; a configured URL is the only endpoint. Private keys are for signing only and never reach events, errors, or logs.
+Use Node 22.19 or later and the pinned pnpm 12.4.2. From a plain checkout:
 
 ```bash
-export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
-export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=~/.config/ickb-bot/stimulus-testnet.key
-node sdk/node/src/bot.ts
-node sdk/node/src/stimulus.ts
+pnpm install --frozen-lockfile
+CI=true pnpm check
 ```
 
-Each actor prints its JSON lines to stdout; redirect them wherever you keep journals.
+CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
 
-Each turn identifies itself first: the bot's `bot.chain.preflight` event and the generator's `identity` field carry the recommended address, the primary lock, the credential-free RPC endpoint, and the chain preflight evidence. Fund that address. An unfunded turn skips: the bot with `bot.decision.skipped` reason `no_actions`, the generator with outcome `skipped` and reason `nothing-to-spend`, both with exit code `0`, turn after turn until funded; the turn's balances are in `bot.state.read` and the generator's `balance`.
+The lockfile retains the tested CCC 1.20.0 set. The later UDT input-selection fix did not affect Stack's own sampled-cell completion path, so taking unrelated connector changes after wallet testing was not justified. A relevant upstream fix can be evaluated as its own change. The release notes used for that decision are [pinned here](https://github.com/ckb-devrel/ccc/tree/3e9087267bd8c8768c3ce8e0e47a11140b446bcb).
 
-To exercise the bot, run the generator once, then run a bot turn and look for the correlated `bot.transaction.committed` followed by a `bot.decision.skipped` with no market orders. Under systemd each actor's stream is its unit's journal; see `sdk/node/README.md`.
+pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
+
+`pnpm check` runs the audit, full lint suite and interface build against installed dependencies. CI first installs from the pinned lockfile, then runs the same gate on the declared Node floor. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
+
+## Releases
+
+A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
+
+- A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
+- A change to `interface/package.json` deploys the bundle that the check job built to GitHub Pages at `ickb.org`.
+
+Both jobs require the gate to pass. Other merges release nothing. This assumes each reviewed change lands as a squash commit, so comparing with the previous commit covers it. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
+
+The rewrite's versioned packages start at `9000.0.0`, above the old `@ickb/sdk` line at `1000.0.82`. The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
+
+### First release setup
+
+The maintainer must configure the external services before the release merge:
+
+1. Register the npm trusted publisher for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `check.yaml`, no environment. Configure the package to require two-factor authentication and disallow tokens.
+2. Enable GitHub Pages with GitHub Actions as its source. Move the `ickb.org` domain from `ickb/legacy-lumos-interface` to this repository, then archive the old repository after the new site is live.
+
+Whether to deprecate the old `1000.x` SDK line and its companion packages remains optional. The [workflow](.github/workflows/check.yaml) owns the release mechanics; the [interface README](interface/README.md#deployment) owns the site setup.
+
+## Live testnet validation
+
+Each actor runs one turn and prints JSON to stdout. The operator reads the outcome and decides the next action; systemd supplies continuous cadence when wanted. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
+
+To exercise matching, run a stimulus turn, then a bot turn. Correlate the generator's committed order outpoints with the bot's matched orders and committed transaction; a generator draw can also be skipped or produce an order the bot cannot profitably fill. The [journal guide](sdk/node/README.md#what-the-journals-should-show) names the preconditions for each observable case.
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/) and released under the [MIT License](LICENSE).
