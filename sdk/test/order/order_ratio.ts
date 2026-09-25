@@ -64,10 +64,19 @@ describe("Ratio", () => {
     );
   });
 
-  it("covers zero conversion", () => {
+  it("compares ratios whose scales both differ", () => {
     const ratio = Ratio.from({ ckbScale: 2n, udtScale: 3n });
 
-    expect(ratio.convert(true, 0n, true)).toBe(0n);
     expect(Ratio.from({ ckbScale: 3n, udtScale: 2n }).compare(ratio)).toBe(1);
+  });
+
+  it("converts zero to zero in both directions and rounding modes", () => {
+    const ratio = Ratio.from({ ckbScale: 2n, udtScale: 3n });
+
+    for (const isCkb2Udt of [true, false]) {
+      for (const mustCeil of [true, false]) {
+        expect(ratio.convert(isCkb2Udt, 0n, mustCeil)).toBe(0n);
+      }
+    }
   });
 });

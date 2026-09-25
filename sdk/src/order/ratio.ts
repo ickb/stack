@@ -122,10 +122,6 @@ const RatioImplementation = class Ratio extends RatioBase {
       throw new Error("Invalid midpoint ExchangeRatio");
     }
 
-    if (amount === 0n) {
-      return 0n;
-    }
-
     let { ckbScale: aScale, udtScale: bScale } = this;
     if (!isCkb2Udt) {
       [aScale, bScale] = [bScale, aScale];
