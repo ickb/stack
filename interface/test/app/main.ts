@@ -6,6 +6,14 @@ import { element, renderedElement } from "./fixtures/mount.ts";
 
 const walletAppId = "wallet-app";
 
+// Hoisted so the mocked module and the assertion share one component identity.
+const MockInterface = vi.hoisted(
+  () =>
+    function Interface(): ReactElement {
+      return createElement("div");
+    },
+);
+
 const createRoot = vi.hoisted(() =>
   vi.fn<typeof reactCreateRoot>(() => ({
     render: vi.fn<(children: ReactNode) => void>(),
@@ -15,14 +23,10 @@ const createRoot = vi.hoisted(() =>
 
 vi.mock(import("react-dom/client"), () => ({ createRoot }));
 // The wallet connector needs a DOM; the entrypoint test only checks what is mounted where.
-vi.mock(import("../../src/app/Interface.tsx"), () => ({
-  default: function Interface(): ReactElement {
-    return createElement("div");
-  },
-}));
+vi.mock(import("../../src/app/Interface.tsx"), () => ({ default: MockInterface }));
 
 describe("main entrypoint", () => {
-  it("uses explicit app-owned HTTPS RPC endpoints", () => {
+  it("opens the mainnet and testnet clients on their own chains", () => {
     expect(mainnetClient.addressPrefix).toBe("ckb");
     expect(testnetClient.addressPrefix).toBe("ckt");
   });
@@ -39,7 +43,7 @@ describe("main entrypoint", () => {
     const rendered = renderedElement(createRoot);
 
     expect(createRoot).toHaveBeenCalledWith(walletApp);
-    expect(rendered.props.children.type).toHaveProperty("name", "Interface");
+    expect(rendered.props.children.type).toBe(MockInterface);
   });
 
   it("fails fast when the wallet app mount is missing", async () => {

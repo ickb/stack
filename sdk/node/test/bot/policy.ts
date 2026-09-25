@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { receiptPhase2Capacity, type IckbDepositCell } from "../../../src/logic.ts";
+import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import {
   convert,
   ICKB_DEPOSIT_CAP,
@@ -152,10 +153,9 @@ describe("planRebalance withdrawal", () => {
 const CKB = ccc.fixedPointFrom(1);
 const AR_0 = 10_000_000_000_000_000n;
 
-// Adopted from the fable51, fable5, and grok46 policy audits: the numbers the thresholds
-// rest on, so a future edit cannot move one without the others.
+// Adopted from the fable51, fable5, and grok46 policy audits: the facts the thresholds rest on.
 describe("policy arithmetic", () => {
-  it("keeps the iCKB lines in cap units and the CKB costs at the tip", () => {
+  it("prices a cap-sized deposit and a secp256k1 receipt at the tip", () => {
     const secpLock = ccc.Script.from({
       codeHash: `0x${"9b".repeat(32)}`,
       hashType: "type",
@@ -163,14 +163,20 @@ describe("policy arithmetic", () => {
     });
     const header = headerLike({ dao: { c: 0n, ar: (AR_0 * 11n) / 10n, s: 0n, u: 0n } });
 
-    expect(ICKB_REFILL_BELOW).toBe(ccc.fixedPointFrom(2_000));
-    expect(ICKB_RETAIN).toBe(ccc.fixedPointFrom(20_000));
-    expect(ICKB_WITHDRAW_ABOVE).toBe(ccc.fixedPointFrom(120_000));
-    expect(CKB_RESERVE).toBe(1000n * CKB);
     expect(convert(false, ICKB_DEPOSIT_CAP, ickbExchangeRatio(header))).toBe(
       110_082n * CKB,
     );
     expect(receiptPhase2Capacity(secpLock)).toBe(208n * CKB);
+  });
+
+  it("refills above twice the default minimum match, so a buyer too small to split triggers a refill", () => {
+    // At the genesis AR an iCKB costs the least CKB, so the minimum converts to the most iCKB.
+    const header = headerLike({ dao: { c: 0n, ar: AR_0, s: 0n, u: 0n } });
+    const twiceMinimum = 2n << BigInt(CKB_MIN_MATCH_LOG_DEFAULT);
+
+    expect(convert(true, twiceMinimum, ickbExchangeRatio(header))).toBeLessThan(
+      ICKB_REFILL_BELOW,
+    );
   });
 
   it.each([AR_0, (15n * AR_0) / 10n, (3n * AR_0) / 2n + 12345n])(

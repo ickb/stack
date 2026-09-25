@@ -14,7 +14,6 @@ import { queryMock, quoteStateOptions } from "./fixtures/environment.ts";
 import {
   appName,
   ckbSignerOnly,
-  connectorStyle,
   createRootConfig,
   Interface,
   liveQuoteStatus,
@@ -71,7 +70,6 @@ describe("hook-based interface runtime", () => {
     expect(root.cccClient).toBe(client);
     expect(client.cache).toBeInstanceOf(ccc.ClientCacheMemory);
     expect(client.cache).not.toBe(cache);
-    expect(connectorStyle["--background"]).toBe("oklch(21% 0.006 286)");
     await expect(ckbSignerOnly(signerFilterInfo(ckbSigner))).resolves.toBe(true);
     await expect(ckbSignerOnly(signerFilterInfo(btcSigner))).resolves.toBe(false);
     expect(walletLabel("JoyID", "CKB")).toBe("JoyID CKB");

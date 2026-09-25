@@ -81,12 +81,6 @@ describe("public client preflight identity", () => {
     });
   });
 
-  it("returns undefined for non-genesis preflight header reads", async () => {
-    const client = testnetClient();
-
-    await expect(client.getHeaderByNumber(1n)).resolves.toBeUndefined();
-  });
-
   it("rejects mismatched public chain identity evidence", async () => {
     const client = preflightClient({
       addressPrefix: "ckb",

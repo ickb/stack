@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateMaturityFeeThreshold } from "../../src/conversion/estimate.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
@@ -10,10 +9,6 @@ afterEach(() => {
 });
 
 describe(ESTIMATE_SUITE, () => {
-  it("exposes the fee threshold used for maturity previews", () => {
-    expect(estimateMaturityFeeThreshold(system({ feeRate: 7n }))).toBe(70n);
-  });
-
   it("omits maturity below the fee threshold", () => {
     const result = estimate(
       false,

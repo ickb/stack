@@ -39,7 +39,6 @@ export const WalletConfigPendingView =
 export const WalletGate = walletGateModule.WalletGate;
 export const appName = interfaceConfigModule.appName;
 export const ckbSignerOnly = interfaceConfigModule.ckbSignerOnly;
-export const connectorStyle = interfaceConfigModule.connectorStyle;
 export const createRootConfig = interfaceConfigModule.createRootConfig;
 export const mainnetClient = interfaceConfigModule.mainnetClient;
 export const queryClient = interfaceConfigModule.queryClient;
