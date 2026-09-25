@@ -178,7 +178,7 @@ The intended mainnet boundary is a separate production VM with no agent running 
 The tracked examples `sdk/node/ickb-bot-testnet.service` and `sdk/node/ickb-stimulus-testnet.service` are the whole configuration for one network each. Copy one under a name per network, edit every path and the RPC URL, and keep the rest:
 
 ```bash
-pnpm node:install
+pnpm install --frozen-lockfile
 install -d -m 700 ~/.config/ickb-bot ~/.config/systemd/user
 (umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
 cp sdk/node/ickb-bot-testnet.service ~/.config/systemd/user/
@@ -200,7 +200,7 @@ systemctl --user --failed
 systemctl --user restart ickb-bot-testnet.service
 ```
 
-To update, stop every unit that shares the checkout, move the checkout to the reviewed revision, run `pnpm node:install`, then start them again; a turn must never observe a half-updated tree. Editing a unit needs `systemd-analyze --user verify`, `systemctl --user daemon-reload`, and a restart of that unit, because a reload alone keeps the running process.
+To update, stop every unit that shares the checkout, move the checkout to the reviewed revision, run `pnpm install --frozen-lockfile`, then start them again; a turn must never observe a half-updated tree. Editing a unit needs `systemd-analyze --user verify`, `systemctl --user daemon-reload`, and a restart of that unit, because a reload alone keeps the running process.
 
 A turn never holds: every exit starts the next turn after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
 
