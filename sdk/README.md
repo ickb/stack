@@ -35,9 +35,9 @@ Direct-first deliberately favors a known claim date and avoiding an order fee ov
 
 ### Funding and compaction
 
-Inputs needed by the outputs go in first, largest first. The completer then sweeps remaining liquid cells while about 64 KiB of prepared size allows; the budget is checked before each input, so the last may overshoot. Funding the outputs can exceed that budget outright, and fee completion can use cells left after the sweep. An integrator should expect a transaction to spend more of the account than the requested amount alone requires: compaction is deliberate.
+Inputs needed by the outputs go in first, largest first. The completer then sweeps remaining liquid cells until the transaction has 1,000 inputs, about 50 KB. That is a compaction target, not a size bound: funding the outputs can exceed it outright, and fee completion can use cells left after the sweep. An integrator should expect a transaction to spend more of the account than the requested amount alone requires: compaction is deliberate.
 
-The sweep budget does not bound the whole transaction. Receipts and collectable orders are added in full, while required funding can exceed that budget. Large collection backlogs can therefore produce an oversized transaction; rebuilding from the same state may repeat the failure. Whole-transaction sizing remains an open design issue.
+The sweep limit does not bound the whole transaction. Receipts and collectable orders are added in full, while required funding can exceed that limit. Large collection backlogs can therefore produce an oversized transaction; rebuilding from the same state may repeat the failure. Whole-transaction sizing remains an open design issue.
 
 Plain-cell discovery does not filter mining rewards by cellbase maturity. If the scan returns an immature reward, completion can include it and the node rejects the transaction; rebuilding can select it again until it matures. This limitation is accepted: current use cases do not justify reward-specific discovery checks and their complexity.
 

@@ -52,7 +52,7 @@ export interface ConversionTransactionOptions {
   /**
    * Lock that owns every cell the transaction creates for the user, the conversion outputs
    * and the change; the signer's recommended lock by default. Completion sweeps the liquid
-   * cells along within its size budget, so a foreign lock redirects those funds too.
+   * cells along within its input limit, so a foreign lock redirects those funds too.
    */
   lock?: ccc.Script;
 
@@ -111,7 +111,7 @@ export type ConversionTransactionResult =
       /** Optional notice about the selected path. */
       conversionNotice?: ConversionNotice;
       /**
-       * True when every liquid cell of the context is an input. False when the size budget
+       * True when every liquid cell of the context is an input. False when the input limit
        * left some behind: a move to another lock then needs another transaction.
        */
       isSweepComplete: boolean;

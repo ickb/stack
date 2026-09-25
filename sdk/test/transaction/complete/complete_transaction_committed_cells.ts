@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
-import { TRANSACTION_SIZE_BUDGET } from "../../../src/sdk.ts";
+import { SWEEP_INPUT_LIMIT } from "../../../src/sdk.ts";
 import {
   fundedSigner,
   testSdk,
@@ -116,7 +116,7 @@ function registerFundingTests(): void {
 }
 
 function registerSweepTests(): void {
-  it("sweeps every given cell largest first while the size budget allows", async () => {
+  it("sweeps every given cell largest first while the input limit allows", async () => {
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
     const small = plainCell("90", lock, ccc.fixedPointFrom(70));
     const large = plainCell("91", lock, ccc.fixedPointFrom(300));
@@ -141,39 +141,13 @@ function registerSweepTests(): void {
     expect(ickbUdt.outputBalance(completed)).toBe(5n);
   });
 
-  it("stops sweeping at the size budget and still funds the fee beyond it", async () => {
+  it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
     const { signer } = fundedSigner([], [lock]);
-    // Leave room for a handful of sweep inputs under the budget.
-    const tx = fullBudgetTransaction(lock, 400);
-    const dust = Array.from({ length: 40 }, (_, index) =>
-      plainCell(index.toString(16).padStart(2, "0"), lock, ccc.fixedPointFrom(62)),
-    );
-    const funding = plainCell(
-      "ff",
-      lock,
-      ccc.fixedPointFrom(61 * tx.outputs.length + 100),
-    );
-
-    const completed = await sdk.completeTransaction(tx, {
-      signer,
-      feeRate: 1_000n,
-      cells: [...dust, funding],
-    });
-
-    // The largest cell is swept first, a little dust follows, the rest stays for later.
-    expect(completed.inputs[0]?.previousOutput.eq(funding.outPoint)).toBe(true);
-    expect(completed.inputs.length).toBeGreaterThan(1);
-    expect(completed.inputs.length).toBeLessThan(dust.length + 1);
-  });
-
-  it("funds the fee from the reserve when the budget is already full", async () => {
-    const { sdk, lock } = testSdk({ completion: "real" });
-    const { signer } = fundedSigner([], [lock]);
-    const tx = fullBudgetTransaction(lock);
-    const half =
-      ccc.fixedPointFrom(61 * tx.outputs.length) / 2n + ccc.fixedPointFrom(100);
-    const cells = [plainCell("e1", lock, half), plainCell("e2", lock, half)];
+    const cells = plainCells(SWEEP_INPUT_LIMIT + 2, lock, ccc.fixedPointFrom(100));
+    // The swept cells fall just short of the output, so the fee loop adds one more.
+    const tx = ccc.Transaction.default();
+    tx.addOutput({ capacity: ccc.fixedPointFrom(100 * SWEEP_INPUT_LIMIT), lock }, "0x");
 
     const completed = await sdk.completeTransaction(tx, {
       signer,
@@ -181,30 +155,22 @@ function registerSweepTests(): void {
       cells,
     });
 
-    // Nothing fit under the budget, so both cells came from the fee loop one at a time.
-    expect(completed.inputs).toHaveLength(2);
+    expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
   });
 
-  it("moves iCKB cells first, plain cells last, and reports a sweep the budget cut short", async () => {
-    // A move is amount zero to another lock, so the sweep is the transaction. The budget
+  it("moves iCKB cells first, plain cells last, and reports a sweep the limit cut short", async () => {
+    // A move is amount zero to another lock, so the sweep is the transaction. The limit
     // may cut it, so the iCKB cells go first and the plain cells left behind can still fund
     // the next move's fee.
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
     const { signer } = fundedSigner([], [lock]);
-    const tx = fullBudgetTransaction(lock, 400);
     const ickb = ["a1", "a2", "a3"].map((byte) =>
       udtCell(byte, lock, ickbUdt.script, 10n),
     );
-    const dust = Array.from({ length: 40 }, (_, index) =>
-      plainCell(index.toString(16).padStart(2, "0"), lock, ccc.fixedPointFrom(62)),
-    );
-    const funding = plainCell(
-      "ff",
-      lock,
-      ccc.fixedPointFrom(61 * tx.outputs.length + 100),
-    );
+    const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
+    const funding = plainCell("ff", lock, ccc.fixedPointFrom(1000));
 
-    const result = await sdk.buildConversionTransaction(tx, {
+    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
       direction: "ckb-to-ickb",
       amount: 0n,
       lock: script("77"),
@@ -222,23 +188,22 @@ function registerSweepTests(): void {
     expect(inputs.slice(0, 4)).toEqual(
       [...ickb, funding].map((cell) => cell.outPoint.toHex()),
     );
-    expect(inputs.length).toBeLessThan(ickb.length + dust.length + 1);
+    expect(inputs).toHaveLength(SWEEP_INPUT_LIMIT);
     expect(result.isSweepComplete).toBe(false);
   });
 
-  it("stops the iCKB sweep at the budget once the outputs are covered", async () => {
+  it("funds iCKB past the limit, then stops the sweep", async () => {
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
     const type = ickbUdt.script;
     const { signer } = fundedSigner([], [lock]);
-    const tx = fullBudgetTransaction(lock);
+    const tx = ccc.Transaction.default();
     tx.addOutput(
       { capacity: ccc.fixedPointFrom(150), lock, type },
-      ccc.numLeToBytes(10n, 16),
+      ccc.numLeToBytes(BigInt(SWEEP_INPUT_LIMIT + 1), 16),
     );
     const cells = [
-      udtCell("e3", lock, type, 30n),
-      udtCell("e4", lock, type, 20n),
-      plainCell("e5", lock, ccc.fixedPointFrom(61 * tx.outputs.length + 400)),
+      ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
+      plainCell("e5", lock, ccc.fixedPointFrom(1000)),
     ];
 
     const completed = await sdk.completeTransaction(tx, {
@@ -247,8 +212,9 @@ function registerSweepTests(): void {
       cells,
     });
 
-    expect(ickbUdt.outputBalance(completed)).toBe(30n);
-    expect(completed.inputs).toHaveLength(2);
+    // Required funding passes the limit; neither sweep adds a cell beyond it.
+    expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
+    expect(ickbUdt.outputBalance(completed)).toBe(BigInt(SWEEP_INPUT_LIMIT + 1));
   });
 }
 
@@ -367,17 +333,24 @@ function registerFailureTests(): void {
   });
 }
 
-/** A transaction whose plain outputs fill the size budget up to `room` bytes. */
-function fullBudgetTransaction(lock: ccc.Script, room = 0): ccc.Transaction {
-  const tx = ccc.Transaction.default();
-  const empty = tx.toBytes().length;
-  tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
-  const perOutput = tx.toBytes().length - empty;
-  const outputCount = Math.ceil((TRANSACTION_SIZE_BUDGET - room - empty) / perOutput);
-  for (let index = 1; index < outputCount; index += 1) {
-    tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
-  }
-  return tx;
+/** `count` cells sharing one transaction hash, since `hash` spans only 256 values. */
+function manyCells(
+  count: number,
+  byte: string,
+  cell: (index: number) => ccc.Cell,
+): ccc.Cell[] {
+  return Array.from({ length: count }, (_, index) => {
+    const { cellOutput, outputData } = cell(index);
+    return ccc.Cell.from({
+      outPoint: { txHash: hash(byte), index: BigInt(index) },
+      cellOutput,
+      outputData,
+    });
+  });
+}
+
+function plainCells(count: number, lock: ccc.Script, capacity: ccc.Num): ccc.Cell[] {
+  return manyCells(count, "d0", () => plainCell("d0", lock, capacity));
 }
 
 function plainCell(byte: string, lock: ccc.Script, capacity: ccc.Num): ccc.Cell {

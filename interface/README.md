@@ -46,7 +46,7 @@ The address field defaults to the connected wallet and stays in React state only
 
 For a foreign destination, the amount becomes zero and the direction switch and Max are disabled. The transaction sends native CKB and iCKB, including funds collected in that transaction; it leaves still-converting positions with the source wallet because the destination wallet may not understand them. Clearing the destination restores the typed amount. The address is fixed while a transaction is prepared, signed or awaited.
 
-Completion deliberately sweeps liquid cells. A large account can exceed its size budget, so the status asks the user to run the send again until everything has been sent. iCKB cells are swept before plain CKB, with plain cells available for fee completion. The [SDK funding rules](../sdk/README.md#funding-and-compaction) own that order and its limits.
+Completion deliberately sweeps liquid cells. A large account can exceed its input limit, so the status asks the user to run the send again until everything has been sent. iCKB cells are swept before plain CKB, with plain cells available for fee completion. The [SDK funding rules](../sdk/README.md#funding-and-compaction) own that order and its limits.
 
 ### Balances and small amounts
 

@@ -65,16 +65,16 @@ export interface IckbSdk {
 }
 
 /**
- * Prepared-size budget one own transaction may grow to while sweeping liquid cells.
+ * Input count up to which one own transaction sweeps liquid cells.
  *
- * @remarks Measured as CCC charges fees, `toBytes().length + 4`, and checked before
- * each input, so the last one may overshoot it: "about 64 KiB". Compaction is deliberate,
- * but the sweep must leave room for fee completion; this is not a hard transaction limit.
- * The sizing target is roughly 1,400 same-lock inputs: enough to compact one miner payout
- * per block between normal bot turns while leaving most block space free. A large backlog
- * can still take several transactions.
+ * @remarks A compaction target, not a validity bound: required funding and the fee may go
+ * past it. Counted rather than measured in bytes because a same-lock input costs a fixed
+ * 44 bytes (52 with an extra witness slot), so 1,000 inputs stay near 50 KB, far under the
+ * node's 512,000-byte limit, and near the one measured point (1,000 inputs: 44 KB, about
+ * 180 ms of local completion). A miner paying the bot adds about forty cellbase cells per
+ * turn, which this outpaces; a larger backlog takes several transactions.
  */
-export const TRANSACTION_SIZE_BUDGET = 64 * 1024;
+export const SWEEP_INPUT_LIMIT = 1000;
 
 /** The options with the lock resolved to the signer's recommended one when absent. */
 type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
@@ -395,8 +395,8 @@ const IckbSdkImplementation = class IckbSdk {
    *
    * @remarks Completion never scans. `cells` are the signer's known liquid cells, plain
    * CKB and iCKB, from the account state already read: the largest ones fund what the
-   * outputs need, the rest ride along as a sweep while the prepared transaction stays
-   * under {@link TRANSACTION_SIZE_BUDGET}, so every own transaction compacts the account.
+   * outputs need, the rest ride along as a sweep while the transaction has fewer than
+   * {@link SWEEP_INPUT_LIMIT} inputs, so every own transaction compacts the account.
    * Ordinary change is always a plain cell; existing outputs
    * are never reinterpreted or resized as fee change. This does not sign or send.
    */
@@ -429,14 +429,14 @@ const IckbSdkImplementation = class IckbSdk {
       );
 
     await this.completeIckb(tx, signer.client, changeLock, ickbCells);
-    // Plain CKB: the sweep first, then whatever the fee still needs beyond the budget.
+    // Plain CKB: the sweep first, then whatever the fee still needs beyond the limit.
     const swept = sweep(tx, plainCells);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
     return tx;
   }
 
-  /** iCKB: what the outputs need first, then the sweep while the budget allows, then change. */
+  /** iCKB: what the outputs need first, then the sweep while the limit allows, then change. */
   private async completeIckb(
     tx: ccc.Transaction,
     client: ccc.Client,
@@ -446,7 +446,7 @@ const IckbSdkImplementation = class IckbSdk {
     const required = this.ickbUdt.outputBalance(tx);
     let balance = await this.ickbUdt.inputBalance(tx, client);
     for (const cell of ickbCells) {
-      if (balance >= required && !withinSizeBudget(tx)) {
+      if (balance >= required && tx.inputs.length >= SWEEP_INPUT_LIMIT) {
         break;
       }
       tx.addInput(cell);
@@ -507,7 +507,7 @@ function conversionKind(
   return hasDirect ? "direct" : "order";
 }
 
-/** Whether every liquid cell became an input; false when the size budget cut the sweep. */
+/** Whether every liquid cell became an input; false when the input limit cut the sweep. */
 function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
   const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
   return cells.every((cell) => spent.has(cell.outPoint.toHex()));
@@ -525,23 +525,15 @@ async function getFeeRate(client: ccc.Client): Promise<ccc.Num> {
   return feeRate;
 }
 
-function withinSizeBudget(tx: ccc.Transaction): boolean {
-  return tx.toBytes().length + 4 <= TRANSACTION_SIZE_BUDGET;
-}
-
 function udtBalance(cell: ccc.Cell): ccc.Num {
   return ccc.udtBalanceFrom(cell.outputData);
 }
 
-/** Adds cells while the prepared size stays under budget; returns how many were added. */
+/** Adds cells while the input count stays under the limit; returns how many were added. */
 function sweep(tx: ccc.Transaction, cells: readonly ccc.Cell[]): number {
-  let added = 0;
-  for (const cell of cells) {
-    if (!withinSizeBudget(tx)) {
-      break;
-    }
+  const added = Math.min(cells.length, Math.max(0, SWEEP_INPUT_LIMIT - tx.inputs.length));
+  for (const cell of cells.slice(0, added)) {
     tx.addInput(cell);
-    added += 1;
   }
   return added;
 }

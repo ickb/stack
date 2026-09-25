@@ -80,7 +80,7 @@ function previewMessage(
 /**
  * Another address as the destination means leaving this wallet: the sweep is the
  * transaction, always at amount zero, so it replaces the collect-only intent; converting
- * positions stay, and a sweep the size budget cut short asks for another run.
+ * positions stay, and a sweep the input limit cut short asks for another run.
  */
 export function transactionIntentMessage(
   txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "move">,
