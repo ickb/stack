@@ -201,24 +201,22 @@ function* pseudoRandom(seed: bigint): Generator<bigint, never, void> {
   }
 }
 
-// The self-recovery invariant: an account funded to
-// the recommended 2.2 deposits never sits below the refill line with nothing to do; either
-// the deposit is affordable or pending withdrawals are on their way back.
+// The self-recovery invariant: an account funded to the recommended 2.2 deposits never sits
+// below the refill line with nothing to do. Pending withdrawals only add CKB on their way
+// back, and the planner never sees them, so the property is checked with nothing pending.
 describe("self-recovery property", () => {
-  it("below the refill line, a funded account can deposit unless CKB is pending", () => {
+  it("below the refill line, a funded account with nothing pending can deposit", () => {
     const random = pseudoRandom(20_260_908n);
     const funding = (22n * DEPOSIT_COST) / 10n;
     let checked = 0;
     for (let round = 0; round < 2000; round += 1) {
       const ickb = random.next().value % ICKB_REFILL_BELOW;
-      const pendingCkb = random.next().value % (3n * DEPOSIT_COST);
       const ckb = random.next().value % (4n * DEPOSIT_COST);
-      if (ckb + ickb + pendingCkb < funding) {
+      if (ckb + ickb < funding) {
         continue;
       }
       checked += 1;
-      const plan = planRebalance(input({ ickb, ckb }));
-      expect(plan.deposit !== undefined || pendingCkb > 0n).toBe(true);
+      expect(planRebalance(input({ ickb, ckb })).deposit).toEqual({ reason: "low_ickb" });
     }
     expect(checked).toBeGreaterThan(500);
   });
