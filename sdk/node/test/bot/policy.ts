@@ -64,19 +64,28 @@ describe("planRebalance deposit", () => {
     expect(planRebalance(input({ poolDeposits: [] })).deposit).toEqual({
       reason: "ring_coverage",
     });
-    // One deposit at the tip window and four elsewhere: the target holds under half its share.
+    // Half a cap at the tip window and four whales elsewhere: 36.5 caps make 32 segments,
+    // so the target holds under half its share of about 1.14 caps.
     const whales = ["b1", "b2", "b3", "b4"].map((byte) =>
       readyDeposit(byte, 9n * ICKB_DEPOSIT_CAP, 60n * EPOCH_MINUTES),
     );
     const plan = planRebalance(
-      input({ poolDeposits: [readyDeposit("b0", ICKB_DEPOSIT_CAP), ...whales] }),
+      input({ poolDeposits: [readyDeposit("b0", ICKB_DEPOSIT_CAP / 2n), ...whales] }),
     );
 
     expect(plan.deposit).toEqual({ reason: "ring_coverage" });
     expect(plan.ring).toMatchObject({
       poolDepositCount: 5,
-      targetUdtValue: ICKB_DEPOSIT_CAP,
+      segmentCount: 32,
+      targetUdtValue: ICKB_DEPOSIT_CAP / 2n,
     });
+  });
+
+  it("seeds a pool that holds only zero-value deposits", () => {
+    const plan = planRebalance(input({ poolDeposits: [readyDeposit("f0", 0n)] }));
+
+    expect(plan.deposit).toEqual({ reason: "ring_coverage" });
+    expect(plan.ring).toMatchObject({ poolDepositCount: 1, segmentCount: 1 });
   });
 
   it("does nothing inside the band with a covered ring", () => {
@@ -130,10 +139,11 @@ describe("planRebalance withdrawal", () => {
     const both = planRebalance(
       input({
         ickb: ICKB_WITHDRAW_ABOVE + 1n,
+        // 31.5 caps make 16 segments; the two quarter-caps at the tip hold under half its share.
         poolDeposits: [
-          readyDeposit("e1", ICKB_DEPOSIT_CAP),
-          readyDeposit("e2", ICKB_DEPOSIT_CAP),
-          readyDeposit("e3", 30n * ICKB_DEPOSIT_CAP, 60n * EPOCH_MINUTES),
+          readyDeposit("e1", ICKB_DEPOSIT_CAP / 4n),
+          readyDeposit("e2", ICKB_DEPOSIT_CAP / 4n),
+          readyDeposit("e3", 31n * ICKB_DEPOSIT_CAP, 60n * EPOCH_MINUTES),
         ],
       }),
     );

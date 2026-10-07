@@ -1,6 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
 import { DAO_CYCLE_EPOCHS } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
+import { ICKB_DEPOSIT_CAP } from "../udt.ts";
 
 /**
  * Ring segment of pool deposits grouped by maturity around the DAO cycle.
@@ -17,10 +18,14 @@ export interface RingSegment {
 }
 
 /**
- * Splits pool deposits into power-of-two maturity ring segments.
+ * Splits pool deposits into power-of-two maturity ring segments, one segment per two
+ * deposit caps of pool iCKB.
  */
 export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegment[] {
-  const segmentCount = nextPowerOfTwo(poolDeposits.length);
+  // Value, not count: zero-value deposits, made without iCKB Logic running, must not add segments.
+  // Two caps per segment, not one: the room the bot's own fills need, see node/docs/policy.md.
+  const totalUdt = poolDeposits.reduce((sum, deposit) => sum + deposit.udtValue, 0n);
+  const segmentCount = nextPowerOfTwo(ceilDiv(totalUdt, 2n * ICKB_DEPOSIT_CAP));
   const segments = Array.from({ length: segmentCount }, (_, index): RingSegment => ({
     index,
     deposits: [],
@@ -113,9 +118,13 @@ export function sortByClaim(deposits: readonly IckbDepositCell[]): IckbDepositCe
   return deposits.toSorted((left, right) => left.claimEpoch.compare(right.claimEpoch));
 }
 
-function nextPowerOfTwo(value: number): number {
+function ceilDiv(dividend: bigint, divisor: bigint): bigint {
+  return (dividend + divisor - 1n) / divisor;
+}
+
+function nextPowerOfTwo(value: bigint): number {
   let power = 1;
-  while (power < value) {
+  while (BigInt(power) < value) {
     power *= 2;
   }
   return power;

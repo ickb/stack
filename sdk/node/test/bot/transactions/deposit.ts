@@ -53,11 +53,12 @@ describe("buildTransaction deposit", () => {
   });
 
   it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
-    // An under-covered tip window with one ready surplus deposit, and excess iCKB.
-    const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP);
-    const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP + 1n);
+    // An under-covered tip window with one ready surplus deposit, and excess iCKB:
+    // 31.5 caps make 16 segments, and the half cap at the tip holds under half its share.
+    const surplus = readyDeposit("71", ICKB_DEPOSIT_CAP / 4n);
+    const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP / 4n + 1n);
     // Sixty epochs out: another ring segment.
-    const whale = readyDeposit("73", 30n * ICKB_DEPOSIT_CAP, 60n * 240n);
+    const whale = readyDeposit("73", 31n * ICKB_DEPOSIT_CAP, 60n * 240n);
     const daoScript = botRuntime().managers.ickbLogic.dao.script;
     const primaryLock = botRuntime().primaryLock;
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {

@@ -115,8 +115,10 @@ export function ringCoverage(
   const target = segments[targetSegmentIndex]!;
   const totalPoolUdt = segments.reduce((sum, segment) => sum + segment.udtValue, 0n);
   return {
+    // Pool value, not deposit count: a pool holding only zero-value deposits still needs
+    // seeding, and the inequality below is false when every term is zero.
     needsSeed:
-      poolDeposits.length === 0 ||
+      totalPoolUdt === 0n ||
       2n * target.udtValue * BigInt(segments.length) < totalPoolUdt,
     summary: {
       poolDepositCount: poolDeposits.length,
