@@ -21,11 +21,9 @@ import {
   sortByClaim,
 } from "./withdrawal_ring.ts";
 
-// Planners start at the most `DAO_OUTPUT_LIMIT` can hold (one change output beside the
-// deposits; a request and its owner marker per withdrawal) and the completion walk steps down from there when
-// change and fees need more room.
+// The planner starts at the most `DAO_OUTPUT_LIMIT` can hold, one change output beside the
+// deposits, and the completion walk steps down from there when change and fees need more room.
 const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
-const MAX_PLANNED_WITHDRAWAL_REQUESTS = DAO_OUTPUT_LIMIT / 2;
 
 /**
  * Plans every deposit count from the most the amount covers down to zero, skipping
@@ -72,8 +70,7 @@ export function ickbToCkbConversionPlans(
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
   const deposits = fitWithdrawalDeposits(sortByClaim(ready.filter(isSurplus)), amount);
   const plans: IckbToCkbConversionPlan[] = [];
-  const longest = Math.min(deposits.length, MAX_PLANNED_WITHDRAWAL_REQUESTS);
-  for (let count = longest; count >= 0; count -= 1) {
+  for (let count = deposits.length; count >= 0; count -= 1) {
     const plan = ickbToCkbConversionPlan(options, deposits.slice(0, count));
     if (plan !== undefined) {
       plans.push(plan);

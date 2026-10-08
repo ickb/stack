@@ -3,6 +3,7 @@ import {
   fitWithdrawalDeposits,
   sortByClaim,
 } from "../../src/conversion/withdrawal_ring.ts";
+import { DAO_OUTPUT_LIMIT } from "../../src/dao.ts";
 import { readyDeposit } from "./support/withdrawal_selection_support.ts";
 
 const MINUTE_MS = 60n * 1000n;
@@ -20,14 +21,18 @@ describe("fitWithdrawalDeposits greedy walk", () => {
     expect(fitWithdrawalDeposits(deposits, 10n)).toEqual([deposits[0], deposits[3]]);
   });
 
-  it("takes every fitting deposit with no count cap of its own", () => {
-    const deposits = Array.from({ length: 40 }, (_, index) =>
-      readyDeposit(1n, BigInt(index) * MINUTE_MS, `d-${String(index)}`),
+  it("stops at the requests one transaction can carry, even for zero-value deposits", () => {
+    // A deposit made without iCKB Logic running carries no iCKB, so it always fits the
+    // amount; a flood of them must not make the chain, and every prefix built from it, grow.
+    const oversized = readyDeposit(1n, 0n, "oversized");
+    const empties = Array.from({ length: 40 }, (_, index) =>
+      readyDeposit(0n, BigInt(index + 1) * MINUTE_MS, `d-${String(index)}`),
     );
 
-    const selected = fitWithdrawalDeposits(deposits, 40n);
-
-    expect(selected).toHaveLength(40);
+    // The cap counts selected deposits, not candidates walked: the skipped one takes no slot.
+    const selected = fitWithdrawalDeposits([oversized, ...empties], 0n);
+    expect(selected).toHaveLength(DAO_OUTPUT_LIMIT / 2);
+    expect(selected).not.toContain(oversized);
   });
 
   it("takes the candidates in the given order", () => {

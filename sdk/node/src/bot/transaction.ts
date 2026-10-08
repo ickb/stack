@@ -39,7 +39,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
  * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
  * riding along. Matches and deposits are sized to keep the reserve; completion's fee, the
  * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
- * amount, withdrawal owner markers by chain length (chains are sized in iCKB), and nothing
+ * amount, withdrawal owner markers by chain length (at most DAO_OUTPUT_LIMIT / 2), and nothing
  * checks the completed transaction against it, since such a check rejected every fill
  * sized to the reserve.
  */
