@@ -50,22 +50,18 @@ async function declarationFiles(filePath: string): Promise<string[]> {
 }
 
 async function readDirectory(filePath: string): Promise<Dirent[]> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- CLI roots are explicit user-selected build output paths.
   return readdir(filePath, { encoding: "utf8", withFileTypes: true });
 }
 
 async function readText(filePath: string): Promise<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- CLI roots are explicit user-selected build output paths.
   return readFile(filePath, "utf8");
 }
 
 async function statPath(filePath: string): Promise<Stats> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- CLI roots are explicit user-selected build output paths.
   return stat(filePath);
 }
 
 async function writeText(filePath: string, data: string): Promise<void> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- CLI roots are explicit user-selected build output paths.
   await writeFile(filePath, data);
 }
 

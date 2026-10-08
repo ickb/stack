@@ -1,0 +1,42 @@
+import { ccc, mol } from "@ckb-ccc/core";
+import { Relative, type RelativeLike } from "./relative.ts";
+
+// Both variants are 36 bytes, and OrderData is a struct, so the union must be fixed-size:
+// CCC 1.23+ sizes a plain union dynamically and rejects it as a struct field.
+const MasterCodec = mol.fixedUnion({
+  relative: Relative,
+  absolute: ccc.OutPoint,
+});
+
+/**
+ * Master pointer before normalization.
+ */
+export type MasterLike =
+  | { type: "relative"; value: RelativeLike }
+  | { type: "absolute"; value: ccc.OutPointLike };
+
+/**
+ * Master pointer stored in order data.
+ */
+export type Master =
+  { type: "relative"; value: Relative } | { type: "absolute"; value: ccc.OutPoint };
+
+/** Normalizes a master pointer into entity values. */
+export function masterFrom(master: MasterLike): Master {
+  if (master.type === "relative") {
+    return { type: "relative", value: Relative.from(master.value) };
+  }
+  return { type: "absolute", value: ccc.OutPoint.from(master.value) };
+}
+
+/** Validates a normalized master pointer. */
+export function masterValidate(master: Master): void {
+  const { type, value } = master;
+  if (type === "relative") {
+    value.validate();
+  } else if (!/^0x[0-9a-f]{64}$/i.test(value.txHash) || value.index < 0) {
+    throw new Error("OutPoint invalid");
+  }
+}
+
+export { MasterCodec };

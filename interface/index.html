@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>iCKB DApp</title>
+    <link rel="icon" href="favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta property="og:title" content="iCKB DApp" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:description"
+      content="Swap between CKB and iCKB, a liquid token backed by NervosDAO deposits."
+    />
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body class="ickb-page-shell min-h-screen cursor-default text-ickb-text antialiased">
+    <main
+      class="mx-auto flex w-full max-w-5xl flex-col gap-14 px-4 py-6 sm:py-8 lg:gap-16 lg:py-10"
+    >
+      <section
+        class="ickb-wallet-card mx-auto w-full max-w-3xl overflow-hidden rounded-3xl border border-ickb-border bg-ickb-surface/55 px-5 shadow-2xl shadow-black/25"
+        aria-labelledby="wallet-title"
+      >
+        <div class="ickb-wallet-section ickb-wallet-title-section text-center">
+          <h1
+            id="wallet-title"
+            class="text-4xl font-semibold tracking-tight text-balance sm:text-5xl"
+          >
+            iCKB DApp
+          </h1>
+          <div id="wallet-header" class="ickb-wallet-header-mount"></div>
+        </div>
+        <div id="wallet-app" class="ickb-app-mount min-h-0"></div>
+      </section>
+
+      <section
+        class="ickb-copy-section grid gap-5 border-t border-ickb-border pt-8 text-ickb-muted lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8"
+        aria-labelledby="intro-title"
+      >
+        <h2 id="intro-title" class="text-2xl font-medium text-ickb-text/85 sm:text-3xl">
+          How iCKB works
+        </h2>
+        <div class="max-w-3xl space-y-4">
+          <p class="text-lg leading-relaxed">
+            Put CKB into NervosDAO and get iCKB back. iCKB keeps the DAO position easy to
+            move, so you do not have to manage deposit cycles by hand.
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="ickb-copy-section grid gap-5 border-t border-ickb-border pt-8 text-ickb-muted lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8"
+        aria-labelledby="why-title"
+      >
+        <h2 id="why-title" class="text-2xl font-medium text-ickb-text/85 sm:text-3xl">
+          Why iCKB exists
+        </h2>
+        <div class="max-w-3xl space-y-4 leading-relaxed">
+          <p>
+            NervosDAO lets CKB holders lock CKB and receive
+            <a
+              href="https://www.nervos.org/knowledge-base/understanding_nervos_ckb_issuance_model"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >DAO compensation</a
+            >. A direct DAO deposit normally waits through about 30 days before it can
+            exit. iCKB aims to
+            <a
+              href="https://www.youtube.com/watch?v=CcFFuenup38&t=781s"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >make that DAO position easier to move</a
+            >.
+          </p>
+          <p>
+            When you swap CKB to iCKB, the protocol puts deposits into a
+            <a
+              href="https://github.com/ickb/whitepaper#enter-ickb"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >shared pool</a
+            >. When you swap back, it can use CKB that is ready in the pool, or other
+            liquidity when it exists.
+          </p>
+          <p>
+            The pool is many DAO deposits moving through the cycle together. You do not
+            have to wait for your own deposit if a ready pool deposit is available.
+          </p>
+          <p>
+            iCKB is a CKB token, so compatible wallets and apps can move it like other
+            xUDT assets.
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="ickb-copy-section grid gap-5 border-t border-ickb-border pt-8 text-ickb-muted lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8"
+        aria-labelledby="audit-title"
+      >
+        <h2 id="audit-title" class="text-2xl font-medium text-ickb-text/85 sm:text-3xl">
+          Audit status
+        </h2>
+        <div class="max-w-3xl space-y-4 leading-relaxed">
+          <p>
+            The
+            <a
+              href="https://github.com/ickb/contracts/tree/master/scripts"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >iCKB L1 scripts</a
+            >
+            are the on-chain rules for deposits, minting, and withdrawals. People with
+            deep Nervos L1 experience reviewed them, a
+            <a
+              href="https://scalebit.xyz/reports/20240911-ICKB-Final-Audit-Report.pdf"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >Scalebit audit</a
+            >
+            checked them, and a later
+            <a
+              href="https://github.com/ickb/contracts/blob/master/20260501-ICKB-Audit-Report.md"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >security review</a
+            >
+            checked the release binaries.
+          </p>
+          <p>
+            The contract repo also has the tests used in that review. That does not remove
+            risk, but it makes the core rules public and testable.
+          </p>
+          <p>
+            This web app is separate from the contracts. Review its
+            <a
+              href="https://github.com/ickb/stack/tree/master/apps/interface"
+              class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+              >web app source code</a
+            >
+            if you want, and only sign transactions you understand.
+          </p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

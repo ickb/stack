@@ -1,93 +1,76 @@
 # iCKB Stack
 
-iCKB Stack is the monorepo for the current TypeScript iCKB libraries and apps built on top of [CCC](https://github.com/ckb-devrel/ccc).
+iCKB Stack is the TypeScript SDK, liquidity bot and browser interface for iCKB, built on [CCC](https://github.com/ckb-devrel/ccc).
 
-## Transaction Completion Boundary
+## Where to start
 
-`@ickb/sdk` builders still return partial `ccc.Transaction` values. Callers explicitly choose when to finalize, and the shared completion path now also lives in `@ickb/sdk`.
+- [SDK](sdk/README.md): read account state, build a funded conversion, sign, send and wait.
+- [Node actors](sdk/node/README.md): run the bot, testnet stimulus generator or rate sampler.
+- [Bot policy](sdk/node/docs/policy.md): matching, rebalancing, funding and their tradeoffs.
+- [Interface](interface/README.md): run the app and understand its wallet and conversion model.
+- [Maturity estimates](sdk/docs/pool_maturity_estimates.md): how the interface estimates when funds return.
+- [Test kit](testkit/README.md) and [scripts](scripts/README.md): test helpers and repository tooling.
+- [Working agreement](AGENTS.md): how to change and validate this tree.
 
-Callers own the final completion pipeline:
+Design rationale lives with the feature it explains: a reason comment for a branch or constant, or a section in its owning documentation for a choice spanning several functions. Follow the links above for both behavior and the reasons behind it.
 
-1. Build the partial transaction through `IckbSdk` and the package managers.
-2. Before send, call `sdk.completeTransaction(...)` or `completeIckbTransaction(...)` from `@ickb/sdk`.
-3. Only then send the transaction.
+## Workspace boundaries
 
-Withdrawal requests built from public pool ready deposits may include `requiredLiveDeposits`. `@ickb/sdk` adds those cells as live `cell_dep` checks so a transaction fails if a protected pool anchor disappears before inclusion.
+`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and depends at runtime only on `@ckb-ccc/core`. It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
 
-## Scan Page Size Boundary
+`sdk/node/`, `interface/` and `testkit/` are private workspaces. The three Node entrypoints share preflight, configuration and logging under `sdk/node/src/shared/`; they never import each other. Development, tests and bot deployments run from TypeScript source. The SDK's build emits `dist/` for publishing, not for local workspace execution.
 
-Stack cell scans that feed account state, pool state, order books, or maturity estimates use a per-request page size. SDK state APIs expose it as `cellPageSize`; lower-level scan wrappers expose it as `pageSize` and pass it to CCC as `limit`.
+The former library boundaries separated concepts rather than independent consumer contracts. One package removes the cost of maintaining several entry points and releases; its internal layering is a convention rather than a second dependency graph. There are no `advanced` or `internal` public entry points. The [SDK layout](sdk/README.md#layout) follows the on-chain scripts and the conversion workflow.
 
-## User Lock Assumption
+### User locks
 
-Current stack flows assume user-owned cells are protected by locks whose signatures bind the whole transaction, such as standard `sighash` wallet flows. Passing a raw `ccc.Script` is only safe when that lock gives the same output and recipient binding. Delegated-signature or OTX-style locks are integration-specific and must account for the weak-lock boundary documented in the iCKB whitepaper and contracts audit.
+Stack assumes user-owned cells have [locks whose signatures bind the whole transaction](https://github.com/ickb/contracts/blob/master/ICKB-Audit-Report.md#authorization-boundary), as standard sighash wallet flows do. An output lock does not execute when the output is created, so it cannot itself protect the recipient of that newly created output. Passing a raw `ccc.Script` is safe only when its lock provides the same input, output and recipient binding. Delegated-signature and OTX-style integrations must establish that separately.
 
-## Workspace Map
+## Dependencies and checks
 
-Apps:
-
-- `apps/bot`: Node order-fulfillment and rebalance bot for matching profitable orders, collecting owned orders, completing receipts and withdrawals, and rebalancing pool exposure.
-- `apps/interface`: Browser interface for CCC wallet connection, conversion previews, transaction completion, signing, sending, and confirmation.
-- `apps/sampler`: Mainnet sampling utility that writes historical iCKB exchange-rate CSV output.
-- `apps/supervisor`: Deterministic live testnet supervisor for bounded bot/tester stress cycles, ignored artifacts, and incident bundles.
-- `apps/tester`: Node simulator that creates random conversion orders to exercise the order and conversion flows.
-
-The Node app packages (`@ickb/bot`, `@ickb/sampler`, and `@ickb/tester`) publish their built entrypoints for distribution, but the supported reusable API surface lives in the packages below. `@ickb/interface` is a deployable browser app package and does not expose a library entrypoint.
-
-Packages:
-
-- `packages/core`: iCKB protocol primitives, cells, UDT conversion helpers, and low-level transaction builders.
-- `packages/dao`: Nervos DAO cell classification, readiness, deposit, request, and withdrawal helpers.
-- `packages/node-utils`: Private Node app utilities for env parsing, RPC client setup, signer locks, sleeps, and JSON logs.
-- `packages/order`: UDT limit-order entities, grouping, matching, minting, melting, and deployed-script confusion mitigation.
-- `packages/sdk`: Stack-level SDK that composes core, DAO, and order packages into account state, conversion planning, completion, sending, and confirmation helpers.
-- `packages/testkit`: Private test helpers and fixtures for workspace tests.
-- `packages/utils`: Shared low-level utilities such as complete-scan enforcement, binary search, collection helpers, and bounded subset selection.
-
-## Dependencies
-
-CCC packages are normal package dependencies resolved through `pnpm-workspace.yaml` catalog entries and `pnpm-lock.yaml`. From a plain checkout, run `pnpm install`; no local CCC fork, build step, or workspace alias is required.
-
-`pnpm check` is the validation gate. It always runs with `CI=true`.
-
-## Live Testnet Supervisor
-
-Provide ignored bounded configs, then run the supervisor from the repo root:
+Use Node 22.19 or later and the pinned pnpm 12.4.2. From a plain checkout:
 
 ```bash
-pnpm live:supervisor
+pnpm install --frozen-lockfile
+CI=true pnpm check
 ```
 
-By default the supervisor uses ignored `config/bot-testnet.json` and `config/tester-testnet.json`, writes standalone artifacts under ignored `logs/live-supervisor/<run-id>/` paths, and runs deterministic bounded bot/tester commands only.
+CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
 
-Rebuild disposable live configs from `ICKB_TESTNET_BOT_PRIVATE_KEY` and `ICKB_TESTNET_TESTER_PRIVATE_KEY` with `pnpm live:config-from-env -- --force` when they are missing or stale; `ICKB_TESTNET_RPC_URL` is optional. The supervisor does not patch, verify, rebuild, relaunch, or invoke an LLM; external loops and operators consume `summary.json` between runs.
+The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
 
-`pnpm live:preflight -- --config config/bot-testnet.json --role bot` prints public balance evidence for funding checks. Use `key.recommendedAddress` as the funding address, then rerun preflight and check `balances.CKB.available`, `balances.CKB.reserve`, `balances.CKB.spendable`, `balances.CKB.projectedAvailable`, `balances.CKB.total`, and `capital.minimumCkbCapital`; `available` and `spendable` are actual plain-cell values, while `projectedAvailable` and `total` are projected accounting values. For machine-readable JSON without package-manager output, run `node scripts/ickb-live-preflight.mjs --config config/bot-testnet.json --role bot` directly.
+TypeScript stays on 6. The 7.x package ships the native compiler only, without the JavaScript compiler API that typescript-eslint and `scripts/tooling/dead-members.ts` use, and typescript-eslint declares `typescript <6.1.0`. Type checking already runs on the native preview.
 
-For repeated bounded invocations, keep loop-owned options before `--` and supervisor options after it. The loop owns child run directories through `--out-root`, so do not pass supervisor `--out-dir` after `--`:
+pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
 
-```bash
-pnpm live:supervisor:loop --max-runs 1 -- --scenario standard-cycle --max-cycles 1
-```
+`pnpm check` runs the audit, full lint suite and interface build against installed dependencies. CI first installs from the pinned lockfile, then runs the same gate on the declared Node floor. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
 
-By default the loop prebuilds bot, tester, and supervisor runtime before the first run. Use loop-owned `--skip-build` only when another wrapper has already built those artifacts. Use loop-owned `--child-timeout-seconds` to bound the outer supervisor child process when running long watches; keep it long enough for the whole supervisor invocation, including actor preflights and actor commands, so the supervisor remains alive to enforce its own `--command-timeout-seconds` process-group cleanup.
+## Releases
 
-For continuous live matching, use the dynamic external loop. It reads only tester preflight balance summaries, chooses `all-ckb-limit-order` when `CKB.available >= 3001`, otherwise chooses `ickb-to-ckb-limit-order` with `--tester-fee 1 --tester-fee-base 1000` when `CKB.available >= 2100` and `ICKB.available >= 100`, otherwise leaves the tester scenario as `auto`, then runs bounded `scripts/ickb-supervisor-loop.mjs` chunks:
+A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
 
-```bash
-pnpm live:supervisor:dynamic-loop
-```
+- A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
+- A change to `interface/package.json` deploys the bundle that the check job built to GitHub Pages at `ickb.org`.
 
-Dynamic validation sessions default to ignored `log/validation/dynamic-<time>-<pid>/` under the checkout. Override the root with `--log-root <path>` or pin a single session with `--session-root <path>`; the session root must be exactly `<log-root>/validation/<session>`, stay under the resolved log root, avoid symlinked parents, and be new for each run. Loop-owned options stay before `--`, while supervisor options stay after it. The dynamic loop derives `--chunk-timeout-seconds` from its delegated supervisor-loop child timeout, chunk run count, and chunk backoff so the outer chunk timeout does not preempt supervisor-owned child cleanup:
+Both jobs require the gate to pass. Other merges release nothing. This assumes each reviewed change lands as a squash commit, so comparing with the previous commit covers it. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
 
-```bash
-pnpm live:supervisor:dynamic-loop --log-root log --max-chunks 2 -- --target-outcome bot_match_committed
-```
+The rewrite's versioned packages start at `9000.0.0`, above the old `@ickb/sdk` line at `1000.0.82`. The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
 
-Session layout is source-separated: `operator/events.ndjson`, `operator/launch.json`, optional `operator/stderr.log`, and `chunks/chunk-0001/run-0001/summary.json` plus the supervisor-owned preflight, bot, tester, and supervisor artifacts. Production bot-only logs remain separate under the configured production log root, for example `<log-root>/bot/testnet/bot.events.ndjson`.
+### First release setup
 
-Explicit repeatable `--target-outcome` requests become bounded coverage contracts: if `--max-cycles` ends before they are observed, the supervisor writes a logical incident for external review. The supervisor treats public testnet iCKB deposits, receipts, and orders as observable stress surface, but only bot/tester-owned state from the supplied configs is treated as spend authority.
+The maintainer must configure the external services before the release merge:
+
+1. Register the npm trusted publisher for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `check.yaml`, no environment. Configure the package to require two-factor authentication and disallow tokens.
+2. Enable GitHub Pages with GitHub Actions as its source. Move the `ickb.org` domain from `ickb/legacy-lumos-interface` to this repository, then archive the old repository after the new site is live.
+
+Whether to deprecate the old `1000.x` SDK line and its companion packages remains optional. The [workflow](.github/workflows/check.yaml) owns the release mechanics; the [interface README](interface/README.md#deployment) owns the site setup.
+
+## Live testnet validation
+
+Each actor runs one turn and prints JSON to stdout. The operator reads the outcome and decides the next action; systemd supplies continuous cadence when wanted. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
+
+To exercise matching, run a stimulus turn, then a bot turn. Correlate the generator's committed order outpoints with the bot's matched orders and committed transaction; a generator draw can also be skipped or produce an order the bot cannot profitably fill. The [journal guide](sdk/node/README.md#what-the-journals-should-show) names the preconditions for each observable case.
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/) and released under the [MIT License](LICENSE).
