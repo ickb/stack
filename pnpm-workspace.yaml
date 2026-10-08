@@ -31,7 +31,6 @@ overrides:
   shell-quote@>=1.8.4 <1.11.0: 1.11.0
   smol-toml@<1.9.0: 1.9.0
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
-  vitest@<4.1.0: 4.1.8
   ws@>=8.0.0 <8.21.1: 8.21.1
   # eslint-plugin-react-hooks imports this subpath, but pnpm can otherwise pick
   # 3.5.4 from its union range, which does not export `zod-validation-error/v4`.
