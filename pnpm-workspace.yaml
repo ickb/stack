@@ -14,14 +14,23 @@ audit:
     # never runs in the browser bundle.
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq
+    # No patched version exists. braces sits under the same React Native chain.
+    - GHSA-vfj7-8cjw-p6xm
+    # No patched version exists. sprintf-js sits under @microsoft/api-extractor's argparse,
+    # a build-time tool that only parses its own command line.
+    - GHSA-hp3w-g68c-fv3c
 
 overrides:
   # Security pins for vulnerable transitive ranges not yet lifted by upstreams.
-  brace-expansion@>=5.0.0 <5.0.9: 5.0.9
+  axios@>=1.0.0 <1.20.0: 1.20.0
+  brace-expansion@>=5.0.0 <5.0.12: 5.0.12
   esbuild@>=0.27.3 <0.28.1: 0.28.1
-  fast-uri@>=3.0.0 <3.1.6: 3.1.6
+  fast-uri@>=3.0.0 <3.1.8: 3.1.8
   form-data@>=4.0.0 <4.0.6: 4.0.6
   nanoid@<3.3.18: 3.3.18
+  shell-quote@>=1.8.4 <1.11.0: 1.11.0
+  smol-toml@<1.9.0: 1.9.0
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
   vitest@<4.1.0: 4.1.8
   ws@>=8.0.0 <8.21.1: 8.21.1
   # eslint-plugin-react-hooks imports this subpath, but pnpm can otherwise pick
