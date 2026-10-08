@@ -25,7 +25,10 @@ export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegm
   // Value, not count: zero-value deposits, made without iCKB Logic running, must not add segments.
   // Two caps per segment, not one: the room the bot's own fills need, see node/docs/policy.md.
   const totalUdt = poolDeposits.reduce((sum, deposit) => sum + deposit.udtValue, 0n);
-  const segmentCount = nextPowerOfTwo(ceilDiv(totalUdt, 2n * ICKB_DEPOSIT_CAP));
+  let segmentCount = 1;
+  while (BigInt(segmentCount) * 2n * ICKB_DEPOSIT_CAP < totalUdt) {
+    segmentCount *= 2;
+  }
   const segments = Array.from({ length: segmentCount }, (_, index): RingSegment => ({
     index,
     deposits: [],
@@ -116,16 +119,4 @@ export function fitWithdrawalDeposits(
 /** Earliest claim first: the deposit that turns into CKB soonest. */
 export function sortByClaim(deposits: readonly IckbDepositCell[]): IckbDepositCell[] {
   return deposits.toSorted((left, right) => left.claimEpoch.compare(right.claimEpoch));
-}
-
-function ceilDiv(dividend: bigint, divisor: bigint): bigint {
-  return (dividend + divisor - 1n) / divisor;
-}
-
-function nextPowerOfTwo(value: bigint): number {
-  let power = 1;
-  while (BigInt(power) < value) {
-    power *= 2;
-  }
-  return power;
 }
