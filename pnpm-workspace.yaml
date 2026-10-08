@@ -44,7 +44,7 @@ catalog:
   "@ckb-ccc/ccc": ^1.3.1
   "@ckb-ccc/connector-react": ^2.0.0
   "@ckb-ccc/core": ^1.20.0
-  "@types/node": ~22.20.1
+  "@types/node": ~22.20.4
 
 # Seven days. A freshly published patch cannot be installed until it matures, so a
 # compromised release has time to be caught (user decision 2026-09-14; the three-day
