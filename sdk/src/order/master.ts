@@ -1,7 +1,9 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { Relative, type RelativeLike } from "./relative.ts";
 
-const MasterCodec = mol.union({
+// Both variants are 36 bytes, and OrderData is a struct, so the union must be fixed-size:
+// CCC 1.21+ sizes a plain union dynamically and rejects it as a struct field.
+const MasterCodec = mol.fixedUnion({
   relative: Relative,
   absolute: ccc.OutPoint,
 });

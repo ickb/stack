@@ -26,12 +26,11 @@ describe("waitTransaction committed reads", () => {
 
     await expect(waitTransaction(client, TX_HASH)).resolves.toBe(response);
 
-    expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "get_transaction",
-        params: [TX_HASH, "0x1"],
-      }),
-    );
+    // CCC 1.23 passes optional request options as a second argument; only the payload matters.
+    expect(request.mock.calls[0]?.[0]).toMatchObject({
+      method: "get_transaction",
+      params: [TX_HASH, "0x1"],
+    });
     expect(noCache).toHaveBeenCalledWith(TX_HASH);
     expect(cached).not.toHaveBeenCalled();
   });

@@ -37,7 +37,7 @@ CI=true pnpm check
 
 CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
 
-The lockfile retains the tested CCC 1.20.0 set. The later UDT input-selection fix did not affect Stack's own sampled-cell completion path, so taking unrelated connector changes after wallet testing was not justified. A relevant upstream fix can be evaluated as its own change. The release notes used for that decision are [pinned here](https://github.com/ckb-devrel/ccc/tree/3e9087267bd8c8768c3ce8e0e47a11140b446bcb).
+The lockfile holds the CCC 1.23.0 set. CCC 1.21 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
 
 pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
 
