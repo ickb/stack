@@ -241,8 +241,9 @@ export default defineConfig(
       "unicorn/no-unreadable-array-destructuring": "off",
       "unicorn/number-literal-case": "off",
       "unicorn/numeric-separators-style": "off",
-      // Ternary shape is a readability call made per site, not a rule; unicorn 76 added
-      // these to the preset and flagged 37 if/else returns and ternary placements.
+      // Ternary shape is a readability call made per site, not a rule. Unicorn 76 added
+      // prefer-simplified-conditions to the preset and broadened the other three; together
+      // they flagged 37 if/else returns and ternary placements.
       "unicorn/prefer-ternary": "off",
       "unicorn/prefer-minimal-ternary": "off",
       "unicorn/prefer-simplified-conditions": "off",

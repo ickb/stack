@@ -37,9 +37,9 @@ CI=true pnpm check
 
 CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
 
-The lockfile holds the CCC 1.23.0 set. CCC 1.21 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
+The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
 
-TypeScript stays on 6. The 7.x package ships the native compiler only, without the JavaScript compiler API that typescript-eslint, api-extractor and `scripts/tooling/dead-members.ts` use, and both tools declare `typescript <6.1.0`. Type checking already runs on the native preview.
+TypeScript stays on 6. The 7.x package ships the native compiler only, without the JavaScript compiler API that typescript-eslint and `scripts/tooling/dead-members.ts` use, and typescript-eslint declares `typescript <6.1.0`. Type checking already runs on the native preview.
 
 pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
 

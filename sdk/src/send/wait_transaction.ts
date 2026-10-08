@@ -50,8 +50,8 @@ export interface WaitTransactionOptions {
  * `get_transaction` verbosity 1 directly because CCC's typed response discards a null
  * transaction body, including its rejection status. Body reads separately bypass the cache.
  * Timeout and abort also apply while awaiting client
- * operations, but CCC transports cannot be cancelled and may finish after this
- * function rejects. Nothing here mutates the client cache: later attempts rebuild
+ * operations, but the in-flight client operation receives no abort signal and may
+ * finish after this function rejects. Nothing here mutates the client cache: later attempts rebuild
  * from exact committed reads.
  */
 export async function waitTransaction(
@@ -171,8 +171,8 @@ async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promi
     throw budget.timeoutError;
   }
   const running = operation();
-  // CCC transports cannot be cancelled, so a settlement arriving after the
-  // window closed must stay handled rather than surface as an unhandled one.
+  // The operation is not cancelled, so a settlement arriving after the window
+  // closed must stay handled rather than surface as an unhandled one.
   void running.catch(ignoreSettlement);
   const result = await Promise.race([running, budget.stopped]);
   // An operation that settles in the same turn as an abort can win the race, so
