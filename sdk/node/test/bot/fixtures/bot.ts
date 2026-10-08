@@ -322,9 +322,9 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   mint.outputsData.push("0x", order.outputData, master.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) =>
-      query.scriptType === "lock" ? [order] : [master],
-    ),
+    findCellsPagedNoCache: pagedCells((query) => [
+      query.scriptType === "lock" ? order : master,
+    ]),
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(mint);

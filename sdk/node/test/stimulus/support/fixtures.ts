@@ -168,9 +168,9 @@ export async function order(
   transaction.outputsData.push(orderCell.cell.outputData, master.cell.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) =>
-      query.scriptType === "lock" ? [orderCell.cell] : [master.cell],
-    ),
+    findCellsPagedNoCache: pagedCells((query) => [
+      query.scriptType === "lock" ? orderCell.cell : master.cell,
+    ]),
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(

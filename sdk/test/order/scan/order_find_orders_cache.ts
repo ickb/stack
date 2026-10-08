@@ -146,9 +146,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     let fetched = false;
     const client = new StubClient({
       cache: new TransactionResponseCache(originMaster.txHash, cachedResponse),
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [liveOrder.cell] : [liveMaster],
-      ),
+      findCellsPagedNoCache: pagedCells((query) => [
+        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
+      ]),
       getTransaction: async (): GetTransactionReturn => {
         fetched = true;
         await Promise.resolve();
@@ -177,9 +177,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         originMaster.txHash,
         ccc.ClientTransactionResponse.from({ transaction: tx, status: "pending" }),
       ),
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [liveOrder.cell] : [liveMaster],
-      ),
+      findCellsPagedNoCache: pagedCells((query) => [
+        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
+      ]),
       getTransaction: async (): GetTransactionReturn => {
         await Promise.resolve();
         return committedTransactionResponse(tx, { blockNumber: 77n });

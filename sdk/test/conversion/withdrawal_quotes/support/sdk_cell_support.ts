@@ -45,7 +45,7 @@ export function depositCell(
 
 /** A claim inside the wallet's selection window past the tip, or far beyond it. */
 function claimEpochAt(tip: ccc.ClientBlockHeader, isReady: boolean): ccc.Epoch {
-  return tip.epoch.add(isReady ? [1n, 0n, 1n] : [100n, 0n, 1n]);
+  return tip.epoch.add([isReady ? 1n : 100n, 0n, 1n]);
 }
 
 export function projectionReadyDeposit(

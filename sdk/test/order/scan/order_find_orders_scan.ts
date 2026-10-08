@@ -242,9 +242,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     ]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [order.cell] : [liveMaster],
-      ),
+      findCellsPagedNoCache: pagedCells((query) => [
+        query.scriptType === "lock" ? order.cell : liveMaster,
+      ]),
       getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
         await Promise.resolve();
         return txHash === master.txHash ? transactionResponse(tx) : undefined;

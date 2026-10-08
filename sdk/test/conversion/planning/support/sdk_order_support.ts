@@ -165,9 +165,9 @@ export async function resolveOrderGroupFixture(
     originTransaction.outputsData.push(cell.outputData);
   }
   const client = new StubClient({
-    findCellsPagedNoCache: pagedCells((query) =>
-      query.scriptType === "lock" ? [cells.orderCell] : [cells.masterCell],
-    ),
+    findCellsPagedNoCache: pagedCells((query) => [
+      query.scriptType === "lock" ? cells.orderCell : cells.masterCell,
+    ]),
     getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return txHash === cells.masterCell.outPoint.txHash

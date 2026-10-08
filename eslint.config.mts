@@ -241,13 +241,9 @@ export default defineConfig(
       "unicorn/no-unreadable-array-destructuring": "off",
       "unicorn/number-literal-case": "off",
       "unicorn/numeric-separators-style": "off",
-      // Ternary shape is a readability call made per site, not a rule. Unicorn 76 added
-      // prefer-simplified-conditions to the preset and broadened the other three; together
-      // they flagged 37 if/else returns and ternary placements.
+      // Unicorn 76 broadened this rule to a guard clause before the final return, which
+      // would turn a chain of guard clauses into an if followed by a ternary.
       "unicorn/prefer-ternary": "off",
-      "unicorn/prefer-minimal-ternary": "off",
-      "unicorn/prefer-simplified-conditions": "off",
-      "unicorn/prefer-logical-operator-over-ternary": "off",
       "@typescript-eslint/consistent-type-imports": [
         "error",
         {

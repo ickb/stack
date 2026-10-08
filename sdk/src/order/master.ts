@@ -23,10 +23,10 @@ export type Master =
 
 /** Normalizes a master pointer into entity values. */
 export function masterFrom(master: MasterLike): Master {
-  const { type, value } = master;
-  return type === "relative"
-    ? { type, value: Relative.from(value) }
-    : { type, value: ccc.OutPoint.from(value) };
+  if (master.type === "relative") {
+    return { type: "relative", value: Relative.from(master.value) };
+  }
+  return { type: "absolute", value: ccc.OutPoint.from(master.value) };
 }
 
 /** Validates a normalized master pointer. */

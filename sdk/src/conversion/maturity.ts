@@ -142,7 +142,7 @@ function fillableOrders(
 ): OrderGroup[] {
   return system.orderPool.filter(
     (group) =>
-      !(self !== undefined && group.order.cell.outPoint.eq(self)) &&
+      (self === undefined || !group.order.cell.outPoint.eq(self)) &&
       fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
   );
 }

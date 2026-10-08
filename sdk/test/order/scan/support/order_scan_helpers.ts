@@ -71,9 +71,9 @@ export function originLookupClient({
 }): ccc.Client {
   return new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) =>
-      query.scriptType === "lock" ? [liveOrder] : [liveMaster],
-    ),
+    findCellsPagedNoCache: pagedCells((query) => [
+      query.scriptType === "lock" ? liveOrder : liveMaster,
+    ]),
     getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
       await Promise.resolve();
       return txHash === originMasterTxHash

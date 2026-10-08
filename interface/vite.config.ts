@@ -20,6 +20,11 @@ const testnetWalletGate = fileURLToPath(
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const isTestnetWallet = command === "serve" && mode === testnetWalletMode;
+  // The live wallet harness binds to loopback only; every other serve listens on all interfaces.
+  let host: string | true = true;
+  if (isTestnetWallet) {
+    host = "127.0.0.1";
+  }
   return {
     resolve: {
       alias: [
@@ -29,9 +34,7 @@ export default defineConfig(({ command, mode }) => {
           : []),
       ],
     },
-    server: {
-      host: isTestnetWallet ? "127.0.0.1" : true,
-    },
+    server: { host },
     // The React Compiler runs natively in the plugin over the app's JSX and TSX modules.
     plugins: [
       tailwindcss(),
