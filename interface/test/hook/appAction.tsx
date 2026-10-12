@@ -413,8 +413,8 @@ function registerActionConfirmationTests(): void {
       }),
     );
 
-    expect(waiting.action).toBe("stop waiting");
-    expect(waiting.disabled).toBe(false);
+    expect(waiting.action).toBe("confirming...");
+    expect(waiting.disabled).toBe(true);
     expect(waiting.fee).toBe("0.00000009 CKB");
     expect(waiting.maturity).toBe("in 3 minutes");
     expect(waiting.message).toContain(

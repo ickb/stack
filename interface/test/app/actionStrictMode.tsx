@@ -91,18 +91,18 @@ afterAll(async () => {
 });
 
 describe("Action StrictMode ownership", () => {
-  it("uses the fresh controller generation for a send click", () => {
+  it("runs a send click under the surviving mount's controller", () => {
     const freeze = vi.fn<(value: boolean) => void>();
     const fixture = walletFixture();
     const { controllers, root } = strictAction(fixture.config, freeze);
 
-    const controllerCount = controllers.length;
     const onAction = currentLayout().onAction;
     onAction?.();
 
+    // StrictMode mounts twice; the attempt runs under the surviving mount's controller.
     expect(mocks.transact).toHaveBeenCalledTimes(1);
-    expect(controllers).toHaveLength(controllerCount + 1);
     expect(mocks.transact.mock.calls[0]?.[0].signal).toBe(controllers.at(-1)?.signal);
+    expect(controllers.at(-1)?.signal.aborted).toBe(false);
     flushSync(() => {
       root.unmount();
     });
@@ -112,7 +112,7 @@ describe("Action StrictMode ownership", () => {
     expect(freeze).toHaveBeenCalledWith(false);
   });
 
-  it("uses the fresh controller generation for recovered confirmation retry", () => {
+  it("runs a recovered confirmation retry under the surviving mount's controller", () => {
     const fixture = walletFixture();
     const { controllers, root } = strictAction(
       fixture.config,
@@ -121,41 +121,34 @@ describe("Action StrictMode ownership", () => {
     );
 
     expect(currentLayout().action).toBe("retry confirmation");
-    const controllerCount = controllers.length;
     currentLayout().onAction?.();
 
     expect(mocks.retryConfirmation).toHaveBeenCalledTimes(1);
-    expect(controllers).toHaveLength(controllerCount + 1);
     expect(mocks.retryConfirmation.mock.calls[0]?.[0].signal).toBe(
       controllers.at(-1)?.signal,
     );
+    expect(controllers.at(-1)?.signal.aborted).toBe(false);
     expect(fixture.sendTransaction).not.toHaveBeenCalled();
     flushSync(() => {
       root.unmount();
     });
   });
 
-  it("stops an active wait and retries it with a fresh controller", stopAndRetry);
+  it("holds the action through an active wait, then offers the retry", waitThenRetry);
 });
 
-async function stopAndRetry(): Promise<void> {
+async function waitThenRetry(): Promise<void> {
   const fixture = walletFixture();
   const { root } = strictAction(fixture.config, vi.fn<(value: boolean) => void>());
   let submitted: Promise<unknown> | undefined;
+  const windowClosed = Promise.withResolvers<undefined>();
   mocks.transact.mockImplementationOnce(async (params) => {
     params.lockIntent();
     params.setIsConfirming(true);
     submitted = recordPending(params.pendingStore);
     await submitted;
-    await new Promise<void>((resolve) => {
-      params.signal.addEventListener(
-        "abort",
-        () => {
-          resolve();
-        },
-        { once: true },
-      );
-    });
+    await windowClosed.promise;
+    params.setIsConfirming(false);
   });
 
   flushSync(() => {
@@ -163,19 +156,20 @@ async function stopAndRetry(): Promise<void> {
   });
   const firstSignal = mocks.transact.mock.calls[0]?.[0].signal;
   // The shared submission publishes the hash asynchronously, so the layout only
-  // shows the recovered wait once the render it schedules is flushed.
+  // shows the watch once the render it schedules is flushed.
   await submitted;
   await vi.waitFor(() => {
     flushSync(flushScheduledRender);
-    expect(currentLayout().action).toBe("stop waiting");
+    expect(currentLayout().action).toBe("confirming...");
   });
-  expect(currentLayout().disabled).toBe(false);
+  expect(currentLayout().disabled).toBe(true);
 
-  flushSync(() => {
-    currentLayout().onAction?.();
+  windowClosed.resolve(undefined);
+  await vi.waitFor(() => {
+    flushSync(flushScheduledRender);
+    expect(currentLayout().action).toBe("retry confirmation");
   });
-  expect(firstSignal?.aborted).toBe(true);
-  expect(currentLayout().action).toBe("retry confirmation");
+  expect(firstSignal?.aborted).toBe(false);
   expect(currentLayout().disabled).toBe(false);
 
   flushSync(() => {
@@ -185,7 +179,6 @@ async function stopAndRetry(): Promise<void> {
   if (retrySignal === undefined) {
     throw new Error("Retry confirmation was not started");
   }
-  expect(retrySignal).not.toBe(firstSignal);
   expect(retrySignal.aborted).toBe(false);
   expect(mocks.transact).toHaveBeenCalledTimes(1);
   expect(mocks.retryConfirmation).toHaveBeenCalledTimes(1);

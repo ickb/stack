@@ -85,7 +85,7 @@ export default function Action({
     setFailureFor({ draft, message: text });
   };
   const [frozenPreview, setFrozenPreview] = useState<RefreshedTransactionPreview>();
-  const attempt = useAttempt(freeze);
+  const runAttempt = useAttempt(freeze);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const freezePreview = (preview: RefreshedTransactionPreview | undefined): void => {
@@ -152,18 +152,18 @@ export default function Action({
     message,
     unavailableMessage,
   });
-  // A pending hash is always actionable (retry or stop); a fresh request needs a valid,
-  // settled preview and no attempt under way.
+  // A pending hash is actionable once its watch closes (retry); a fresh request needs a
+  // valid, settled preview and no attempt under way.
   const isActionDisabled =
-    transactionHash === undefined &&
-    (amount === undefined ||
-      destination === undefined ||
-      isPreparing ||
-      isSubmitting ||
-      isConfirming ||
-      isFetching ||
-      isFrozen ||
-      !isValid);
+    isConfirming ||
+    (transactionHash === undefined &&
+      (amount === undefined ||
+        destination === undefined ||
+        isPreparing ||
+        isSubmitting ||
+        isFetching ||
+        isFrozen ||
+        !isValid));
   const isActionDone = !isFetching && !(isPreparing || isConfirming);
 
   return (
@@ -173,8 +173,7 @@ export default function Action({
       isDone={isActionDone}
       onAction={() => {
         startAttempt({
-          attempt,
-          isConfirming,
+          runAttempt,
           isCkb2Udt,
           amount,
           destination,
@@ -201,52 +200,34 @@ export default function Action({
   );
 }
 
-/** The one attempt the section may own; unmounting aborts it and releases the form. */
-interface AttemptOwner {
-  readonly abort: () => void;
-  readonly run: (start: (signal: AbortSignal) => Promise<void>) => void;
-}
+type RunAttempt = (start: (signal: AbortSignal) => Promise<void>) => void;
 
-function useAttempt(freeze: (value: boolean) => void): AttemptOwner {
-  const current = useRef<AbortController | null>(null);
-  const isMounted = useRef(false);
+/** Runs attempts under the mount's one controller; unmounting aborts and releases the form. */
+function useAttempt(freeze: (value: boolean) => void): RunAttempt {
+  const controller = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
-    isMounted.current = true;
+    const mounted = new AbortController();
+    controller.current = mounted;
     return (): void => {
-      isMounted.current = false;
-      current.current?.abort();
-      current.current = null;
+      mounted.abort();
       freeze(false);
     };
   }, [freeze]);
-  return {
-    abort: (): void => {
-      current.current?.abort();
-      current.current = null;
-    },
-    run: (start): void => {
-      if (!isMounted.current) {
-        return;
-      }
-      const controller = new AbortController();
-      current.current = controller;
-      const release = (): void => {
-        if (current.current === controller) {
-          current.current = null;
-        }
-      };
-      void start(controller.signal).then(release, release);
-    },
+  return (start): void => {
+    const signal = controller.current?.signal;
+    if (signal === undefined || signal.aborted) {
+      return;
+    }
+    void start(signal);
   };
 }
 
 /**
- * Starts the one attempt a click may own: a fresh request, a retry of the pending hash's
- * confirmation, or, while a retry waits, a stop. A submission under way owns the click.
+ * Starts the one attempt a click may own: a fresh request or a retry of the pending hash's
+ * confirmation. A submission under way owns the click.
  */
 function startAttempt({
-  attempt,
-  isConfirming,
+  runAttempt,
   isCkb2Udt,
   amount,
   destination,
@@ -255,8 +236,7 @@ function startAttempt({
   unavailableMessage,
   callbacks,
 }: Readonly<{
-  attempt: AttemptOwner;
-  isConfirming: boolean;
+  runAttempt: RunAttempt;
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   destination: Destination | undefined;
@@ -269,19 +249,13 @@ function startAttempt({
   if (current?.status === "submitting") {
     return;
   }
-  if (current?.status === "pending" && isConfirming) {
-    attempt.abort();
-    callbacks.setIsConfirming(false);
-    callbacks.setMessage("Confirmation wait stopped.");
-    return;
-  }
   if (current !== undefined) {
-    attempt.run(async (signal): Promise<void> => {
+    runAttempt(async (signal): Promise<void> => {
       freeze(true);
       await retryConfirmation({ ...callbacks, signal, txHash: current.txHash });
     });
   } else if (amount !== undefined && destination !== undefined) {
-    attempt.run(async (signal): Promise<void> =>
+    runAttempt(async (signal): Promise<void> =>
       transact({
         ...callbacks,
         lockIntent: () => {
@@ -310,7 +284,7 @@ function previewBuilder(
 }
 
 function confirmationLabel(isConfirming: boolean): string {
-  return isConfirming ? "stop waiting" : "retry confirmation";
+  return isConfirming ? "confirming..." : "retry confirmation";
 }
 
 /** The value as it was `delayMs` ago, unless it has kept changing since. */
