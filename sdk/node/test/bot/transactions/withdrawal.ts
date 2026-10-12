@@ -45,6 +45,26 @@ function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
 }
 
 describe("buildTransaction withdrawal", () => {
+  it("counts CKB in flight against stress", async () => {
+    const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
+    const drained = {
+      ckb: ccc.fixedPointFrom(1000),
+      ickb: ICKB_WITHDRAW_ABOVE + 1n,
+      poolDeposits: pool([]),
+    };
+
+    const stressed = await buildTransaction(runtime, botState(drained));
+    const covered = await buildTransaction(
+      runtime,
+      botState({ ...drained, pendingCkb: ccc.fixedPointFrom(200_000) }),
+    );
+
+    expect(stressed.decision.rebalance).toMatchObject({
+      withdrawal: { candidateCount: 1, stress: true },
+    });
+    expect(covered.decision.rebalance.withdrawal).toBeUndefined();
+  });
+
   it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
     const first = readyDeposit("81", 4n, 30n);
     const second = readyDeposit("82", 6n, 35n);

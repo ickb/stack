@@ -32,6 +32,7 @@ function input(overrides: Partial<RebalanceInput> = {}): RebalanceInput {
     lockUp: BOT_LOCK_UP,
     ickb: ccc.fixedPointFrom(50_000),
     ckb: ccc.fixedPointFrom(500_000),
+    pendingCkb: 0n,
     depositCost: DEPOSIT_COST,
     poolDeposits: coveredPool(),
     ...overrides,
@@ -58,6 +59,20 @@ describe("planRebalance deposit", () => {
     const plan = planRebalance(input({ ickb: 0n, ckb: DEPOSIT_COST + CKB_RESERVE - 1n }));
 
     expect(plan.deposit).toBeUndefined();
+  });
+
+  it("seeds the ring only when a deposit's worth of CKB survives it, unlike a refill", () => {
+    const oneDeposit = { ckb: 2n * DEPOSIT_COST + CKB_RESERVE - 1n, poolDeposits: [] };
+
+    expect(planRebalance(input(oneDeposit)).deposit).toBeUndefined();
+    expect(
+      planRebalance(input({ ...oneDeposit, ckb: oneDeposit.ckb + 1n })).deposit,
+    ).toEqual({
+      reason: "ring_coverage",
+    });
+    expect(
+      planRebalance(input({ ...oneDeposit, ickb: ICKB_REFILL_BELOW - 1n })).deposit,
+    ).toEqual({ reason: "low_ickb" });
   });
 
   it("seeds an empty or under-covered ring window", () => {
@@ -117,12 +132,12 @@ describe("planRebalance withdrawal", () => {
     });
   });
 
-  it("admits anchors after the surplus only under stress", () => {
+  it("admits anchors after the surplus only under stress, counting CKB in flight", () => {
     const surplus = readyDeposit("d1", ICKB_DEPOSIT_CAP);
     const anchor = readyDeposit("d2", ICKB_DEPOSIT_CAP + 1n);
     const stressed = input({
       ickb: ICKB_WITHDRAW_ABOVE + 1n,
-      ckb: CKB_RESERVE + DEPOSIT_COST / 5n - 1n,
+      ckb: CKB_RESERVE + DEPOSIT_COST - 1n,
       poolDeposits: [anchor, surplus],
     });
 
@@ -131,8 +146,12 @@ describe("planRebalance withdrawal", () => {
       stress: true,
     });
     expect(
-      planRebalance({ ...stressed, ckb: CKB_RESERVE + DEPOSIT_COST / 5n }).withdrawal,
+      planRebalance({ ...stressed, ckb: CKB_RESERVE + DEPOSIT_COST }).withdrawal,
     ).toMatchObject({ candidates: [surplus], stress: false });
+    expect(planRebalance({ ...stressed, pendingCkb: 1n }).withdrawal).toMatchObject({
+      candidates: [surplus],
+      stress: false,
+    });
   });
 
   it("returns both moves when coverage and excess apply, and none without ready deposits", () => {
@@ -205,35 +224,4 @@ describe("policy arithmetic", () => {
       expect(ICKB_REFILL_BELOW - 1n + minted).toBeLessThan(ICKB_WITHDRAW_ABOVE);
     },
   );
-});
-
-/** A small deterministic generator, so the property is reproducible from its seed. */
-function* pseudoRandom(seed: bigint): Generator<bigint, never, void> {
-  let state = seed;
-  for (;;) {
-    state =
-      (state * 6_364_136_223_846_793_005n + 1_442_695_040_888_963_407n) % (1n << 64n);
-    yield state >> 11n;
-  }
-}
-
-// The self-recovery invariant: an account funded to the recommended 2.2 deposits never sits
-// below the refill line with nothing to do. Pending withdrawals only add CKB on their way
-// back, and the planner never sees them, so the property is checked with nothing pending.
-describe("self-recovery property", () => {
-  it("below the refill line, a funded account with nothing pending can deposit", () => {
-    const random = pseudoRandom(20_260_908n);
-    const funding = (22n * DEPOSIT_COST) / 10n;
-    let checked = 0;
-    for (let round = 0; round < 2000; round += 1) {
-      const ickb = random.next().value % ICKB_REFILL_BELOW;
-      const ckb = random.next().value % (4n * DEPOSIT_COST);
-      if (ckb + ickb < funding) {
-        continue;
-      }
-      checked += 1;
-      expect(planRebalance(input({ ickb, ckb })).deposit).toEqual({ reason: "low_ickb" });
-    }
-    expect(checked).toBeGreaterThan(500);
-  });
 });

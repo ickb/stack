@@ -37,7 +37,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
 /**
  * One turn's transaction: the best match, then one rebalance core the completion walk can
  * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits are sized to keep the reserve; completion's fee, the
+ * riding along. Matches and deposits are sized to keep at least the reserve; completion's fee, the
  * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
  * amount, withdrawal owner markers by chain length (at most DAO_OUTPUT_LIMIT / 2), and nothing
  * checks the completed transaction against it, since such a check rejected every fill
@@ -54,6 +54,7 @@ export async function buildTransaction(
     lockUp: state.system.lockUp,
     ickb: state.ickb + match.udtDelta,
     ckb: state.ckb + match.ckbDelta,
+    pendingCkb: state.pendingCkb,
     depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
     poolDeposits: state.poolDeposits,
   });
