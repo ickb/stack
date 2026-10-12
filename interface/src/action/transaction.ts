@@ -29,9 +29,10 @@ const conversionFailureMessages: Record<
 
 // Completion fails past the SDK's pre-check when the change cells, an order's master cell or
 // the fee do not fit: the amount was within the balance, so the message names what ran out.
+// It never says to lower the amount: at the displayed minimum there is nothing to lower, an
+// iCKB-to-CKB order's cells cost the same at any amount, and a move has no amount.
 const completionFailureMessages: Record<IckbErrorCode, string> = {
-  insufficient_capacity:
-    "Lower the amount a little: the change cells and the fee need CKB too",
+  insufficient_capacity: "Not enough spare CKB for the cells and the fee",
   insufficient_ickb: conversionFailureMessages["insufficient-ickb"],
 };
 

@@ -293,10 +293,7 @@ describe("buildTransactionPreview thrown failures", () => {
 
   it("names what ran out when completion fails past the planner's checks", async () => {
     for (const [code, message] of [
-      [
-        "insufficient_capacity",
-        "Lower the amount a little: the change cells and the fee need CKB too",
-      ],
+      ["insufficient_capacity", "Not enough spare CKB for the cells and the fee"],
       ["insufficient_ickb", "More iCKB than you have"],
     ] as const) {
       const config = walletConfigWith({
