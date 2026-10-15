@@ -28,6 +28,8 @@ export interface L1StateType {
     destination: Destination,
   ) => Promise<TxInfo>;
   hasCollectable: boolean;
+  /** A withdrawal or order stays after the next collection: the intent line says so. */
+  hasConverting: boolean;
 }
 
 export interface QuoteState {
@@ -126,6 +128,8 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
       context.availableOrders.length > 0 ||
       context.receipts.length > 0 ||
       context.readyWithdrawals.length > 0,
+    // Every pending position holds capacity, so the CKB row's own pending sum decides.
+    hasConverting: projection.ckbPending > 0n,
   };
 }
 

@@ -33,7 +33,7 @@ The interface describes conversions by when funds return: direct actions have a 
 
 Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [default order fee](../sdk/src/conversion/estimate.ts). The completed preview shows the actual plan: a direct conversion, a standing order, or both. Its rounded output can differ from the form quote. The SDK chooses the [first fundable direct-first plan](../sdk/README.md#transaction-completion), not the plan with the earliest estimated completion.
 
-Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. Live orders join that collection when:
+Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. The intent line of a collection says whether a withdrawal or order stays converting after it: the button reads the same either way, and the balance row's "converting" word alone went unnoticed when a receipt was collected while its sibling order was still open. Live orders join that collection when:
 
 - a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`);
 - either direction reaches the block-age cutoff, nominally thirty days (`isStale`).

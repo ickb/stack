@@ -9,6 +9,7 @@ export interface ActionFlags {
   readonly destinationError: string;
   readonly failure: string;
   readonly hasCollectable: boolean;
+  readonly hasConverting: boolean;
   readonly hasDestination: boolean;
   readonly isFrozen: boolean;
   readonly isPreparing: boolean;
@@ -49,12 +50,15 @@ export function actionMessage(txInfo: TxInfo, flags: ActionFlags): string {
     return amount > 0n ? "Checking conversion request..." : "Checking converted funds...";
   }
 
-  return previewMessage(txInfo, flags.hasCollectable, flags.unavailableMessage);
+  return previewMessage(txInfo, flags, flags.unavailableMessage);
 }
 
 function previewMessage(
   txInfo: TxInfo,
-  hasCollectable: boolean,
+  {
+    hasCollectable,
+    hasConverting,
+  }: Pick<ActionFlags, "hasCollectable" | "hasConverting">,
   unavailableMessage: string,
 ): string {
   if (txInfo.error !== "") {
@@ -74,7 +78,7 @@ function previewMessage(
     return "Transaction preview is not ready.";
   }
 
-  return transactionIntentMessage(txInfo, hasCollectable);
+  return transactionIntentMessage(txInfo, hasCollectable, hasConverting);
 }
 
 /**
@@ -85,6 +89,7 @@ function previewMessage(
 export function transactionIntentMessage(
   txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "move">,
   hasCollectable: boolean,
+  hasConverting: boolean,
 ): string {
   const { move } = txInfo;
   if (move !== undefined) {
@@ -97,6 +102,13 @@ export function transactionIntentMessage(
       .filter((text) => text !== "")
       .join(" ");
   }
+  // The button reads the same whether a position stays or not, and the balance row alone was
+  // missed, so the collect-only line names which case this is.
+  if (txInfo.conversionKind === "collect-only") {
+    return hasConverting
+      ? "Collects what is ready, the rest keeps converting."
+      : "Collects everything that was converting.";
+  }
   return [
     txInfo.conversionKind === undefined
       ? ""
@@ -104,7 +116,7 @@ export function transactionIntentMessage(
     txInfo.conversionNotice === undefined
       ? ""
       : conversionNoticeText(txInfo.conversionNotice),
-    txInfo.conversionKind === "collect-only" ? "" : collectableNotice(hasCollectable),
+    collectableNotice(hasCollectable),
   ]
     .filter((text) => text !== "")
     .join(" ");
@@ -115,13 +127,18 @@ export function transactionIntentMessage(
  * the preview clears it; both callers have already cleared the message by then.
  */
 export function confirmPreviewMessage(
-  preview: { txInfo: TxInfo; hasCollectable: boolean } | undefined,
+  preview:
+    { txInfo: TxInfo; hasCollectable: boolean; hasConverting: boolean } | undefined,
 ): string {
   if (preview === undefined) {
     return "";
   }
   return [
-    transactionIntentMessage(preview.txInfo, preview.hasCollectable),
+    transactionIntentMessage(
+      preview.txInfo,
+      preview.hasCollectable,
+      preview.hasConverting,
+    ),
     "Confirm the transaction in your wallet.",
   ]
     .filter((text) => text !== "")
@@ -149,13 +166,15 @@ function collectableNotice(hasCollectable: boolean): string {
 }
 
 export function conversionIntentText(
-  kind: NonNullable<TxInfo["conversionKind"]>,
+  kind: Exclude<NonNullable<TxInfo["conversionKind"]>, "collect-only">,
 ): string {
   // What the signed transaction does, in the user's terms. "Below" is the "Ready:" line,
   // the SDK's latest-of-everything estimate, pending positions included, so the mixed case
   // points at it for both parts and no sentence calls it one part's date.
-  const intent: Record<NonNullable<TxInfo["conversionKind"]>, string> = {
-    "collect-only": "Collects your converted funds.",
+  const intent: Record<
+    Exclude<NonNullable<TxInfo["conversionKind"]>, "collect-only">,
+    string
+  > = {
     direct: "Converts at a fixed time, shown below.",
     order: "Converts at a variable time, estimated below.",
     "direct-plus-order":

@@ -376,6 +376,7 @@ function registerActionConfirmationTests(): void {
           stateId: "fresh-state",
           tipTimestamp: 0n,
           hasCollectable: false,
+          hasConverting: false,
           build: async (): Promise<ReturnType<typeof activeTxInfo>> => {
             await Promise.resolve();
             return {

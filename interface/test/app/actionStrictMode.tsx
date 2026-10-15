@@ -276,6 +276,7 @@ function PendingHost({
         stateId: "state",
         tipTimestamp: 0n,
         hasCollectable: false,
+        hasConverting: false,
         build: async (): Promise<TxInfo> => {
           await Promise.resolve();
           return activeTxInfo();

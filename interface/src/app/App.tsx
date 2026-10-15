@@ -82,6 +82,7 @@ export default function App({
       stateId: freshState.stateId,
       tipTimestamp: freshState.system.tip.timestamp,
       hasCollectable: freshState.hasCollectable,
+      hasConverting: freshState.hasConverting,
       build: async () =>
         freshState.txBuilder(refreshedIsCkb2Udt, refreshedAmount, refreshedDestination),
     };

@@ -69,12 +69,19 @@ describe("action status", () => {
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
       "Also collects converted funds.",
     );
+    const collectOnly = { ...txInfo, conversionKind: "collect-only" as const };
     expect(
-      actionMessage(
-        { ...txInfo, conversionKind: "collect-only" },
-        { ...flags(), amount: 0n, hasCollectable: true },
-      ),
-    ).toBe("Collects your converted funds.");
+      actionMessage(collectOnly, { ...flags(), amount: 0n, hasCollectable: true }),
+    ).toBe("Collects everything that was converting.");
+    // The button reads the same either way, so the line names what stays.
+    expect(
+      actionMessage(collectOnly, {
+        ...flags(),
+        amount: 0n,
+        hasCollectable: true,
+        hasConverting: true,
+      }),
+    ).toBe("Collects what is ready, the rest keeps converting.");
     expect(
       actionMessage(
         { ...txInfo, conversionKind: "direct-plus-order" },
@@ -102,7 +109,6 @@ describe("action status", () => {
   });
 
   it.each([
-    ["collect-only", "Collects your converted funds."],
     ["direct", "Converts at a fixed time, shown below."],
     ["order", "Converts at a variable time, estimated below."],
     [
@@ -182,6 +188,7 @@ function flags(): ActionFlags {
     destinationError: "",
     failure: "",
     hasCollectable: false,
+    hasConverting: false,
     hasDestination: true,
     isFrozen: false,
     isPreparing: false,

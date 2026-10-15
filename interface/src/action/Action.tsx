@@ -132,7 +132,7 @@ export default function Action({
           frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
         )
       : "now";
-  const { hasCollectable } = sampled ?? l1State;
+  const { hasCollectable, hasConverting } = sampled ?? l1State;
   const actionText =
     transactionHash === undefined
       ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
@@ -144,6 +144,7 @@ export default function Action({
     destinationError,
     failure: failure.message,
     hasCollectable,
+    hasConverting,
     hasDestination: destination !== undefined,
     isFrozen,
     isPreparing,

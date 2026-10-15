@@ -22,6 +22,7 @@ export function l1State(): L1StateType {
       return activeTxInfo();
     },
     hasCollectable: false,
+    hasConverting: false,
   };
   if (!isL1State(candidate)) {
     throw new Error("L1 state fixture is invalid");

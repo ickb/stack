@@ -36,6 +36,7 @@ export function actionProps(): Parameters<typeof Action>[0] {
         stateId: "state-id",
         tipTimestamp: 0n,
         hasCollectable: false,
+        hasConverting: false,
         build: async (): Promise<TxInfo> => {
           await Promise.resolve();
           return activeTxInfo();
@@ -87,6 +88,7 @@ export function l1State(): L1StateType {
       return txInfoPadding;
     }),
     hasCollectable: false,
+    hasConverting: false,
   };
 }
 

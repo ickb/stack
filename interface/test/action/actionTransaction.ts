@@ -648,6 +648,7 @@ function transactionCalls(
     stateId: preview.stateId,
     tipTimestamp: preview.tipTimestamp,
     hasCollectable: preview.hasCollectable,
+    hasConverting: preview.hasConverting,
   };
   return {
     lockIntent: vi.fn<() => void>(),
@@ -676,6 +677,7 @@ function refreshedPreview(
     stateId: freshStateId,
     tipTimestamp: 10n,
     hasCollectable: true,
+    hasConverting: false,
     ...overrides,
   };
 }
@@ -685,6 +687,7 @@ function refreshedState(preview: RefreshedTransactionPreview): RefreshedTransact
     stateId: preview.stateId,
     tipTimestamp: preview.tipTimestamp,
     hasCollectable: preview.hasCollectable,
+    hasConverting: preview.hasConverting,
     build: async (): Promise<TxInfo> => {
       await Promise.resolve();
       return preview.txInfo;

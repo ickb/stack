@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio, WALLET_LOCK_UP } from "@ickb/sdk";
+import { Ratio, WALLET_LOCK_UP, type WithdrawalGroup } from "@ickb/sdk";
 
 import { headerLike, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
@@ -179,10 +179,61 @@ it("loads display balances from an SDK account snapshot", async () => {
     ickbBalance: 11n,
   });
   expect(state.stateId).toMatch(/^\d+$/u);
+  expect(state).toMatchObject({ hasCollectable: false, hasConverting: false });
   await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
     error: "No conversion request available for this amount",
     estimatedMaturity: 10n,
   });
+});
+
+it("flags a withdrawal that stays after the next collection", async () => {
+  // A request before its claim epoch is pending: the collect-only intent says the rest keeps
+  // converting, while nothing is collectable yet.
+  const lock = script("11");
+  const tip = headerLike({ timestamp: 10n });
+  const request = cell(ccc.fixedPointFrom(100_082), script("44"));
+  const owner = cell(ccc.fixedPointFrom(61), lock);
+  // The SDK exports the group as a type; the projection reads only these members.
+  const pendingWithdrawal: WithdrawalGroup = {
+    owned: {
+      cell: request,
+      headers: [{ header: tip }, { header: tip, txHash: request.outPoint.txHash }],
+      interests: 0n,
+      maturity: ccc.Epoch.from([182n, 0n, 1n]),
+      isReady: false,
+      ckbValue: request.cellOutput.capacity,
+    },
+    owner: {
+      cell: owner,
+      udtValue: 0n,
+      ckbValue: owner.cellOutput.capacity,
+      getOwned: () => request.outPoint,
+    },
+    ckbValue: request.cellOutput.capacity + owner.cellOutput.capacity,
+    udtValue: 0n,
+  };
+  const walletConfig = walletConfigForState(lock, {
+    system: {
+      feeRate: 1n,
+      tip,
+      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+      orderPool: [],
+      poolDeposits: [],
+      lockUp: WALLET_LOCK_UP,
+    },
+    user: { orders: [] },
+    account: {
+      capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
+      nativeUdtCells: [],
+      receipts: [],
+      withdrawalGroups: [pendingWithdrawal],
+    },
+  });
+
+  const state = await getL1State(walletConfig);
+
+  expect(state).toMatchObject({ hasCollectable: false, hasConverting: true });
+  expect(state.projection.pendingWithdrawals).toEqual([pendingWithdrawal]);
 });
 
 it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {

@@ -21,6 +21,7 @@ interface RefreshedTransactionStateMetadata {
   readonly stateId: string;
   readonly tipTimestamp: bigint;
   readonly hasCollectable: boolean;
+  readonly hasConverting: boolean;
 }
 
 export interface RefreshedTransactionState extends RefreshedTransactionStateMetadata {
