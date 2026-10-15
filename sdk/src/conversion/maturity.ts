@@ -1,0 +1,159 @@
+import type { ccc } from "@ckb-ccc/core";
+import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
+import type { IckbDepositCell } from "../logic.ts";
+import type { OrderGroup } from "../order/cells.ts";
+import { fillsWhole } from "../order/fill.ts";
+import type { Info } from "../order/info.ts";
+import { convert, ICKB_DEPOSIT_CAP } from "../udt.ts";
+import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
+import type { MaturityOrderInput, SystemState } from "./types.ts";
+
+/**
+ * Assumed turn duration, allowing for restart delay, confirmation and slow reads.
+ * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
+ */
+export const BOT_TURN_MS = 10n * 60n * 1000n;
+
+/**
+ * The estimated fill time of an order on the book or about to be placed, zero when it is
+ * already fulfilled. `takenDeposits` are the pool deposits the same plan withdraws
+ * directly, which cannot fill its order leg too. Dual-ratio orders never reach here: the
+ * scan drops them.
+ */
+export function maturity(
+  o: MaturityOrderInput,
+  system: SystemState,
+  takenDeposits: readonly IckbDepositCell[] = [],
+): bigint {
+  const { info, amounts, self } = maturityOrderParts(o);
+  const isCkb2Udt = info.isCkb2Udt();
+  const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
+  if (amount === 0n) {
+    return 0n;
+  }
+
+  return isCkb2Udt
+    ? ckbToIckbOrderMaturity(info, amount, system, self)
+    : ickbToCkbOrderMaturity(info, amount, system, takenDeposits, self);
+}
+
+/** The order's terms, and its own out point when it is already on the book. */
+function maturityOrderParts(o: MaturityOrderInput): {
+  info: Info;
+  amounts: ValueComponents;
+  self: ccc.OutPoint | undefined;
+} {
+  if ("info" in o) {
+    return { ...o, self: undefined };
+  }
+
+  return {
+    info: o.data.info,
+    amounts: { ckbValue: o.ckbUnoccupied, udtValue: o.udtValue },
+    self: o.cell.outPoint,
+  };
+}
+
+/**
+ * A buyer waits for the bot to mint: the bot mints one cap-sized deposit per turn once its
+ * iCKB inventory is spent, and the inventory is unknown here, so the wait is one turn plus
+ * one per whole cap of positive net CKB demand (this request and buyers priced at least
+ * as well, less the iCKB sellers bring in). The model does not measure the bot's funds.
+ */
+function ckbToIckbOrderMaturity(
+  info: Info,
+  amount: bigint,
+  system: SystemState,
+  self: ccc.OutPoint | undefined,
+): bigint {
+  // An equal price counts as ahead: the bot fills ties in an order of its own choosing.
+  const buyersAhead = fillableOrders(system, true, self)
+    .filter((group) => group.order.data.info.ckbToUdt.compare(info.ckbToUdt) <= 0)
+    .reduce((ckb, group) => ckb + group.order.ckbUnoccupied, 0n);
+  const sellers = fillableOrders(system, false, self).reduce(
+    (udt, group) => udt + group.udtValue,
+    0n,
+  );
+  const demand = amount + buyersAhead - convert(false, sellers, system.exchangeRatio);
+  const capCkb = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+  const turns = demand > 0n ? 1n + demand / capCkb : 1n;
+  return system.tip.timestamp + BOT_TURN_MS * turns;
+}
+
+/**
+ * A seller waits for CKB: one deposit's worth of assumed working capital, zeroed when
+ * another fillable seller has sat beyond the threshold, plus dated pool supply. Return
+ * the first date covering demand, plus a turn. Insufficient supply falls back to the last
+ * date; this can understate an above-par ask's wait for further DAO growth.
+ */
+function ickbToCkbOrderMaturity(
+  info: Info,
+  amount: bigint,
+  system: SystemState,
+  takenDeposits: readonly IckbDepositCell[],
+  self: ccc.OutPoint | undefined,
+): bigint {
+  const sellers = fillableOrders(system, false, self);
+  const sellersAhead = sellers
+    .filter((group) => info.udtToCkb.compare(group.order.data.info.udtToCkb) <= 0)
+    .reduce((udt, group) => udt + group.udtValue, 0n);
+  // The CKB an order has already received belongs to its earlier fills; what it still
+  // needs is the remaining iCKB at its price.
+  const needed =
+    info.udtToCkb.convert(false, amount, true) +
+    convert(false, sellersAhead, system.exchangeRatio);
+  const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
+  const steps = [
+    {
+      ckbValue: sellers.some((group) => sits(group, system))
+        ? 0n
+        : convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+      at: system.tip.timestamp,
+    },
+    // A claim the bot can no longer request in time rolls a cycle: the bot's rule, not the
+    // caller's, since the bot is the one making the requests.
+    ...system.poolDeposits
+      .filter((deposit) => !taken.has(deposit.cell.outPoint.toHex()))
+      .map((deposit) => ({
+        ckbValue: deposit.ckbValue,
+        at: depositMaturity(deposit.claimEpoch, system.tip, BOT_LOCK_UP).maturity.toUnix(
+          system.tip,
+        ),
+      }))
+      .toSorted((left, right) => compareBigInt(left.at, right.at)),
+  ];
+  let supply = 0n;
+  let at = system.tip.timestamp;
+  for (const step of steps) {
+    supply += step.ckbValue;
+    at = step.at;
+    if (supply >= needed) {
+      break;
+    }
+  }
+  return at + BOT_TURN_MS;
+}
+
+/** The book orders the bot would take whole in the given direction, this one aside. */
+function fillableOrders(
+  system: SystemState,
+  isCkb2Udt: boolean,
+  self: ccc.OutPoint | undefined,
+): OrderGroup[] {
+  return system.orderPool.filter(
+    (group) =>
+      (self === undefined || !group.order.cell.outPoint.eq(self)) &&
+      fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
+  );
+}
+
+/**
+ * Whether the order has been on the book for more than a turn, a twenty-fourth of an
+ * epoch in blocks: the bot has seen it and left it. An uncommitted origin is fresh.
+ */
+function sits(group: OrderGroup, { tip }: SystemState): boolean {
+  return (
+    group.blockNumber !== undefined &&
+    tip.number - group.blockNumber > tip.epoch.denominator / 24n
+  );
+}

@@ -1,0 +1,116 @@
+diff --git a/dist/index.js b/dist/index.js
+index 303ecd6d073b20e0ec7b0f8afa87a92990ed8379..c24b0e751a0c51bda1760dd3a980b9bd08d26ca9 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -15,7 +15,6 @@ var _common = require('@joyid/common');
+ var _ckbsdkutils = require('@nervosnetwork/ckb-sdk-utils'); var ckbUtils = _interopRequireWildcard(_ckbsdkutils);
+ 
+ // src/aggregator.ts
+-var _crossfetch = require('cross-fetch'); var _crossfetch2 = _interopRequireDefault(_crossfetch);
+ var payloadId = () => Date.now();
+ var Aggregator = class {
+   constructor(url) {
+@@ -29,7 +28,7 @@ var Aggregator = class {
+       params: _nullishCoalesce(req, () => ( null))
+     };
+     const body = JSON.stringify(payload, null, "");
+-    const data = await _crossfetch2.default.call(void 0, url, {
++    const data = await globalThis.fetch(url, {
+       method: "post",
+       headers: {
+         "Content-Type": "application/json"
+@@ -219,7 +218,7 @@ async function verifyCredential(credentialOrPubkey, addressOrJoyidServerURL, _ke
+     serverURL = addressOrJoyidServerURL;
+   }
+   try {
+-    const result = await _crossfetch2.default.call(void 0, `${serverURL}/credentials/${address}`, {
++    const result = await globalThis.fetch(`${serverURL}/credentials/${address}`, {
+       method: "GET",
+       headers: {
+         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+diff --git a/dist/index.mjs b/dist/index.mjs
+index e4d027a42dd1eb8439926e241864b137c6659128..0a46fc424aff0cd4377bf12b8fca767a25627ac5 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -15,7 +15,6 @@ import {
+ import * as ckbUtils from "@nervosnetwork/ckb-sdk-utils";
+ 
+ // src/aggregator.ts
+-import fetch from "cross-fetch";
+ var payloadId = () => Date.now();
+ var Aggregator = class {
+   constructor(url) {
+@@ -29,7 +28,7 @@ var Aggregator = class {
+       params: req ?? null
+     };
+     const body = JSON.stringify(payload, null, "");
+-    const data = await fetch(url, {
++    const data = await globalThis.fetch(url, {
+       method: "post",
+       headers: {
+         "Content-Type": "application/json"
+@@ -88,7 +87,6 @@ function deserializeWitnessArgs(hex) {
+ }
+ 
+ // src/verify.ts
+-import fetch2 from "cross-fetch";
+ import { subtle } from "uncrypto";
+ import {
+   SigningAlg,
+@@ -219,7 +217,7 @@ async function verifyCredential(credentialOrPubkey, addressOrJoyidServerURL, _ke
+     serverURL = addressOrJoyidServerURL;
+   }
+   try {
+-    const result = await fetch2(`${serverURL}/credentials/${address}`, {
++    const result = await globalThis.fetch(`${serverURL}/credentials/${address}`, {
+       method: "GET",
+       headers: {
+         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+diff --git a/package.json b/package.json
+index 411ee104ce03c47127132aa225fc1e47c55faa9e..b01b0dd29cf98d9c85f887d0cf7decfc035f669b 100644
+--- a/package.json
++++ b/package.json
+@@ -29,7 +29,6 @@
+   ],
+   "dependencies": {
+     "@nervosnetwork/ckb-sdk-utils": "^0.109.5",
+-    "cross-fetch": "4.0.0",
+     "uncrypto": "^0.1.3",
+     "@joyid/common": "0.2.2"
+   },
+diff --git a/src/aggregator.ts b/src/aggregator.ts
+index e27fb31ee99ce9105671ed6561de4ce7463c9a78..653d023f8d1f8ebf1cbce1ebab477786e9e96ba0 100644
+--- a/src/aggregator.ts
++++ b/src/aggregator.ts
+@@ -1,4 +1,3 @@
+-import fetch from 'cross-fetch'
+ import {
+   type BaseReq,
+   type BaseResp,
+@@ -28,7 +27,7 @@ export class Aggregator {
+     }
+     const body = JSON.stringify(payload, null, '')
+ 
+-    const data = await fetch(url, {
++    const data = await globalThis.fetch(url, {
+       method: 'post',
+       headers: {
+         'Content-Type': 'application/json',
+diff --git a/src/verify.ts b/src/verify.ts
+index 707d51fb591a43f734437b6a64f01c884fcba28f..bca9094c684ae8666b3e7d1eef7e79c47b234ff4 100644
+--- a/src/verify.ts
++++ b/src/verify.ts
+@@ -1,4 +1,3 @@
+-import fetch from 'cross-fetch'
+ import { subtle } from 'uncrypto'
+ import {
+   SigningAlg,
+@@ -218,7 +217,7 @@ export async function verifyCredential(
+   }
+ 
+   try {
+-    const result = await fetch(`${serverURL}/credentials/${address}`, {
++    const result = await globalThis.fetch(`${serverURL}/credentials/${address}`, {
+       method: 'GET',
+       headers: {
+         'User-Agent':

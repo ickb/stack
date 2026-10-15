@@ -1,0 +1,65 @@
+{
+  "name": "@ickb/sdk",
+  "version": "9000.0.0",
+  "description": "iCKB SDK built on top of CCC",
+  "keywords": [
+    "ickb",
+    "ccc",
+    "ckb",
+    "blockchain"
+  ],
+  "author": "phroi",
+  "license": "MIT",
+  "homepage": "https://ickb.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ickb/stack.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ickb/stack/issues"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "api-extractor": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest",
+    "build": "rm -fr dist && tsgo -p tsconfig.build.json && node ../scripts/tooling/build/rewrite-dts-imports.ts dist",
+    "lint:api": "api-extractor run",
+    "lint:publish": "publint --strict --pack pnpm"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "catalog:"
+  },
+  "devDependencies": {
+    "@ickb/testkit": "workspace:*"
+  }
+}
