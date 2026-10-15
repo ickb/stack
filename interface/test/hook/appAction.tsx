@@ -1,6 +1,7 @@
 import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { txInfoPadding } from "../../src/shared/utils.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import {
   actionProps,
@@ -25,7 +26,6 @@ import {
   Dashboard,
   Form,
   submitPendingTransaction,
-  txInfoPadding,
   WalletAppView,
   type ActionLayout,
   type PendingTransactionStore,
@@ -243,6 +243,41 @@ function registerActionAlternativeTests(): void {
     );
     expect(collect.action).toBe("collect converted funds");
     expect(collect.disabled).toBe(false);
+
+    // Nothing to sign, something converting: the date still shows; without either, it waits.
+    resetHooks();
+    const nothingToDo = {
+      ...txInfoPadding,
+      error: "Nothing to do",
+      estimatedMaturity: 180_000n,
+    };
+    queryMock.result = { data: nothingToDo, isFetching: false };
+    const converting = elementProps<Parameters<typeof ActionLayout>[0]>(
+      Action({
+        ...actionProps(),
+        amount: 0n,
+        l1State: { ...l1State(), hasConverting: true },
+      }),
+    );
+    expect(converting.disabled).toBe(true);
+    expect(converting.maturity).toBe("in 3 minutes");
+    expect(converting.fee).toBe("...");
+    resetHooks();
+    queryMock.result = { data: nothingToDo, isFetching: false };
+    const idle = elementProps<Parameters<typeof ActionLayout>[0]>(
+      Action({ ...actionProps(), amount: 0n, l1State: l1State() }),
+    );
+    expect(idle.maturity).toBe("...");
+    resetHooks();
+    queryMock.result = { data: undefined, isFetching: true };
+    const loading = elementProps<Parameters<typeof ActionLayout>[0]>(
+      Action({
+        ...actionProps(),
+        amount: 0n,
+        l1State: { ...l1State(), hasConverting: true },
+      }),
+    );
+    expect(loading.maturity).toBe("...");
 
     resetHooks();
     const callsBeforeIntermediate = transactMock.transact.mock.calls.length;

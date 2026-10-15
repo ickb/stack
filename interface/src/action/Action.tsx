@@ -194,9 +194,10 @@ export default function Action({
         });
       }}
       message={messageText}
-      // Maturity and fee describe a transaction; before a valid preview there is none.
+      // The fee describes a transaction; the date also covers what is converting, which a
+      // preview with nothing to sign still carries, so it shows whenever something is.
       fee={isValid ? `${toText(txInfo.fee)} CKB` : "..."}
-      maturity={isValid ? maturity : "..."}
+      maturity={txInfo !== txInfoPadding && (isValid || hasConverting) ? maturity : "..."}
     />
   );
 }
