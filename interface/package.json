@@ -42,7 +42,7 @@
     "oxc-transform-react": "^0.152.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vite": "^8.3.2"
+    "vite": "^8.3.4"
   },
   "dependencies": {
     "@ckb-ccc/ccc": "catalog:",
