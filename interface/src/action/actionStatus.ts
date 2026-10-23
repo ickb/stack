@@ -176,9 +176,9 @@ export function conversionIntentText(
     string
   > = {
     direct: "Converts at a fixed time, shown below.",
-    order: "Converts at a variable time, estimated below.",
+    order: "Converts when a bot fills it, estimated below.",
     "direct-plus-order":
-      "Part converts at a fixed time, the rest at a variable time, estimated below.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
   };
 
   return intent[kind];

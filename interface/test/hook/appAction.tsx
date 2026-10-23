@@ -454,7 +454,7 @@ function registerActionConfirmationTests(): void {
     expect(waiting.fee).toBe("0.00000009 CKB");
     expect(waiting.maturity).toBe("in 3 minutes");
     expect(waiting.message).toContain(
-      "Part converts at a fixed time, the rest at a variable time, estimated below.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
     );
 
     confirmation.resolve(undefined);
