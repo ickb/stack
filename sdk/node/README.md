@@ -30,7 +30,7 @@ The process owns the CCC client and disposes it at the end of the turn so open s
 
 ## Run
 
-From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.19+. The key file lives outside the checkout, in a private directory:
+From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.23.4+. The key file lives outside the checkout, in a private directory:
 
 ```bash
 pnpm install

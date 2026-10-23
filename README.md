@@ -28,7 +28,7 @@ Stack assumes user-owned cells have [locks whose signatures bind the whole trans
 
 ## Dependencies and checks
 
-Use Node 22.19 or later and the pinned pnpm 12.4.2. From a plain checkout:
+Use Node 22.23.4 or later and the pinned pnpm 12.4.2. From a plain checkout:
 
 ```bash
 pnpm install --frozen-lockfile

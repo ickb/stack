@@ -19,7 +19,7 @@
     "test": "vitest"
   },
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=22.23.4"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
