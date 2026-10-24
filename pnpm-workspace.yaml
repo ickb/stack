@@ -53,6 +53,9 @@ catalog:
 # rewrite merged).
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
+# A package whose registry metadata has no publish time fails resolution instead of
+# skipping the age check, which pnpm has done by default since 11.
+minimumReleaseAgeIgnoreMissingTime: false
 
 patchedDependencies:
   # JoyID only needs a standard fetch implementation, but 1.1.4 imports
