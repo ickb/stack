@@ -189,6 +189,7 @@ overrides:
   smol-toml@<1.9.0: 1.9.0
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
   ws@>=8.0.0 <8.21.1: 8.21.1
+  zod@<4.6.6: 4.6.6
   zod-validation-error@^3.5.0 || ^4.0.0: 4.0.2
   '@ckb-ccc/connector-react>react': 19.3.0
 
@@ -285,10 +286,10 @@ importers:
     dependencies:
       '@ckb-ccc/ccc':
         specifier: 'catalog:'
-        version: 1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
+        version: 1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
       '@ckb-ccc/connector-react':
         specifier: 'catalog:'
-        version: 2.2.2(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
+        version: 2.2.2(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
       '@ickb/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -340,7 +341,7 @@ importers:
     dependencies:
       '@ckb-ccc/core':
         specifier: 'catalog:'
-        version: 1.23.0(typescript@6.0.3)(zod@4.6.5)
+        version: 1.23.0(typescript@6.0.3)(zod@4.6.6)
     devDependencies:
       '@ickb/testkit':
         specifier: workspace:*
@@ -350,7 +351,7 @@ importers:
     dependencies:
       '@ckb-ccc/core':
         specifier: 'catalog:'
-        version: 1.23.0(typescript@6.0.3)(zod@4.6.5)
+        version: 1.23.0(typescript@6.0.3)(zod@4.6.6)
     devDependencies:
       '@ickb/testkit':
         specifier: workspace:*
@@ -363,7 +364,7 @@ importers:
     dependencies:
       '@ckb-ccc/core':
         specifier: 'catalog:'
-        version: 1.23.0(typescript@6.0.3)(zod@4.6.5)
+        version: 1.23.0(typescript@6.0.3)(zod@4.6.6)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1826,7 +1827,7 @@ packages:
     resolution: {integrity: sha512-wQ7hV8Yg/yKmGyFpqrNZufCxbszDe5es4AZGYPBitocfSqXtjrTG9JMWFcc4N30ukl2ve48aBTwt7NJxVQdU3w==}
     peerDependencies:
       typescript: '>=5.0.4'
-      zod: ^3 >=3.19.1
+      zod: 4.6.6
     peerDependenciesMeta:
       zod:
         optional: true
@@ -4099,10 +4100,10 @@ packages:
     resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
+      zod: 4.6.6
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
 snapshots:
 
@@ -4257,17 +4258,17 @@ snapshots:
     dependencies:
       '@chainsafe/is-ip': 2.1.0
 
-  '@ckb-ccc/ccc@1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/ccc@1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/eip6963': 1.1.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/joy-id': 1.2.6(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/nip07': 1.1.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/okx': 1.2.6(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/rei': 1.1.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/shell': 1.3.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/uni-sat': 1.2.6(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/utxo-global': 1.2.6(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/xverse': 1.2.6(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/eip6963': 1.1.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/joy-id': 1.2.6(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/nip07': 1.1.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/okx': 1.2.6(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/rei': 1.1.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/shell': 1.3.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/uni-sat': 1.2.6(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/utxo-global': 1.2.6(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/xverse': 1.2.6(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -4277,9 +4278,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/connector-react@2.2.2(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/connector-react@2.2.2(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/connector': 2.3.2(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/connector': 2.3.2(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
       '@lit/react': 1.0.8(@types/react@19.3.0)
       '@types/react': 19.3.0
       react: 19.3.0
@@ -4293,12 +4294,12 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/connector@2.3.2(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/connector@2.3.2(debug@4.4.3(supports-color@10.2.2))(react-native@0.87.1(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1
-      '@ckb-ccc/ccc': 1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/libp2p': 0.3.2(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/ccc': 1.3.6(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/libp2p': 0.3.2(typescript@6.0.3)(zod@4.6.6)
       '@libp2p/circuit-relay-v2': 4.2.13
       '@libp2p/identify': 4.1.14
       '@libp2p/interface': 3.3.0
@@ -4319,9 +4320,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/core@1.23.0(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/core@1.23.0(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@joyid/ckb': 1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.5)
+      '@joyid/ckb': 1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.6)
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
@@ -4338,10 +4339,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/did-ckb@0.2.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/did-ckb@0.2.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/type-id': 0.1.15(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/type-id': 0.1.15(typescript@6.0.3)(zod@4.6.6)
       '@ipld/dag-cbor': 10.0.2
       '@noble/curves': 2.4.0
     transitivePeerDependencies:
@@ -4351,9 +4352,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/eip6963@1.1.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/eip6963@1.1.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4361,11 +4362,11 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/joy-id@1.2.6(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/joy-id@1.2.6(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
-      '@joyid/ckb': 1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.5)
-      '@joyid/common': 0.2.2(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
+      '@joyid/ckb': 1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.6)
+      '@joyid/common': 0.2.2(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4373,9 +4374,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/libp2p@0.3.2(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/libp2p@0.3.2(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
       '@libp2p/interface': 3.3.0
       '@libp2p/interface-internal': 3.1.13
       '@libp2p/utils': 7.4.1
@@ -4388,9 +4389,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/nip07@1.1.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/nip07@1.1.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4398,11 +4399,11 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/okx@1.2.6(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/okx@1.2.6(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/nip07': 1.1.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/uni-sat': 1.2.6(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/nip07': 1.1.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/uni-sat': 1.2.6(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4410,9 +4411,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/rei@1.1.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/rei@1.1.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4420,14 +4421,14 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/shell@1.3.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/shell@1.3.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/did-ckb': 0.2.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/spore': 1.6.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/ssri': 0.4.5(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/type-id': 0.1.15(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/udt': 0.2.15(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/did-ckb': 0.2.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/spore': 1.6.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/ssri': 0.4.5(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/type-id': 0.1.15(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/udt': 0.2.15(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -4437,9 +4438,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/spore@1.6.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/spore@1.6.15(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
     transitivePeerDependencies:
       - bufferutil
@@ -4450,9 +4451,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/ssri@0.4.5(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/ssri@0.4.5(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4460,9 +4461,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/type-id@0.1.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/type-id@0.1.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4470,10 +4471,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/udt@0.2.15(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/udt@0.2.15(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
-      '@ckb-ccc/ssri': 0.4.5(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
+      '@ckb-ccc/ssri': 0.4.5(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4481,9 +4482,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/uni-sat@1.2.6(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/uni-sat@1.2.6(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4491,9 +4492,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/utxo-global@1.2.6(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/utxo-global@1.2.6(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -4501,9 +4502,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/xverse@1.2.6(typescript@6.0.3)(zod@4.6.5)':
+  '@ckb-ccc/xverse@1.2.6(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.5)
+      '@ckb-ccc/core': 1.23.0(typescript@6.0.3)(zod@4.6.6)
       bitcoinjs-lib: 7.0.2(typescript@6.0.3)
       valibot: 1.5.0(typescript@6.0.3)
     transitivePeerDependencies:
@@ -4615,9 +4616,9 @@ snapshots:
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
-  '@joyid/ckb@1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.5)':
+  '@joyid/ckb@1.1.4(patch_hash=d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424)(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      '@joyid/common': 0.2.2(typescript@6.0.3)(zod@4.6.5)
+      '@joyid/common': 0.2.2(typescript@6.0.3)(zod@4.6.6)
       '@nervosnetwork/ckb-sdk-utils': 0.109.5
       cross-fetch: 4.0.0
       uncrypto: 0.1.3
@@ -4626,9 +4627,9 @@ snapshots:
       - typescript
       - zod
 
-  '@joyid/common@0.2.2(typescript@6.0.3)(zod@4.6.5)':
+  '@joyid/common@0.2.2(typescript@6.0.3)(zod@4.6.6)':
     dependencies:
-      abitype: 0.8.7(typescript@6.0.3)(zod@4.6.5)
+      abitype: 0.8.7(typescript@6.0.3)(zod@4.6.6)
       type-fest: 4.6.0
     transitivePeerDependencies:
       - typescript
@@ -5853,11 +5854,11 @@ snapshots:
 
   '@vitest/spy@5.0.3': {}
 
-  abitype@0.8.7(typescript@6.0.3)(zod@4.6.5):
+  abitype@0.8.7(typescript@6.0.3)(zod@4.6.6):
     dependencies:
       typescript: 6.0.3
     optionalDependencies:
-      zod: 4.6.5
+      zod: 4.6.6
 
   abort-error@1.0.2: {}
 
@@ -6288,8 +6289,8 @@ snapshots:
       '@babel/parser': 7.29.9
       eslint: 10.11.0(jiti@2.7.0)(supports-color@10.2.2)
       hermes-parser: 0.25.1
-      zod: 4.6.5
-      zod-validation-error: 4.0.2(zod@4.6.5)
+      zod: 4.6.6
+      zod-validation-error: 4.0.2(zod@4.6.6)
     transitivePeerDependencies:
       - supports-color
 
@@ -6952,7 +6953,7 @@ snapshots:
       tinyglobby: 0.2.17
       unbash: 4.0.12
       yaml: 2.9.1
-      zod: 4.6.5
+      zod: 4.6.6
 
   leven@3.1.0: {}
 
@@ -8164,8 +8165,8 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod-validation-error@4.0.2(zod@4.6.5):
+  zod-validation-error@4.0.2(zod@4.6.6):
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.6
 
-  zod@4.6.5: {}
+  zod@4.6.6: {}
