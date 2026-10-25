@@ -34,6 +34,9 @@ export default defineConfig(({ command, mode }) => {
           : []),
       ],
     },
+    // Relative asset URLs: the bundle works at any mount point, the domain root or a
+    // project path such as ickb.github.io/stack/. The app has no client-side routes.
+    base: "./",
     server: { host },
     // The React Compiler runs natively in the plugin over the app's JSX and TSX modules.
     plugins: [
