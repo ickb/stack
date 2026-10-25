@@ -8,6 +8,15 @@ Description=iCKB stimulus generator testnet
 # Type=exec makes `systemctl start` fail when the node binary cannot be executed.
 Type=exec
 WorkingDirectory=/home/user/Projects/ickb/stack
+# Opt in to automatic updates by uncommenting these three lines, only when this unit is
+# alone on a checkout of master with an anonymous HTTPS remote: before each turn, pull
+# fast-forward and install. `-` lets the turn run when the pull fails; the install has
+# none, so a turn never runs new source on old node_modules and waits until the install
+# completes. git and pnpm need no Node, so an interrupted install repairs itself. The
+# start timeout covers each step; `timeout` bounds a fetch against a black hole.
+#TimeoutStartSec=15min
+#ExecStartPre=-/usr/bin/timeout 60 /usr/bin/git pull --ff-only --quiet
+#ExecStartPre=/usr/local/bin/pnpm install --frozen-lockfile --silent
 # The user manager does not see the shell PATH, so name the node binary by absolute path.
 ExecStart=/home/user/Projects/ickb/stack/node_modules/node/bin/node sdk/node/src/stimulus.ts
 Environment=STIMULUS_CHAIN=testnet

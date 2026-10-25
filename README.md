@@ -28,7 +28,7 @@ Stack assumes user-owned cells have [locks whose signatures bind the whole trans
 
 ## Dependencies and checks
 
-Install the pinned pnpm 12.4.2 with npm; `pnpm install` then fetches the Node the lockfile pins (`devEngines.runtime` in package.json) into `node_modules/node` and runs every script on it; a host that runs the bot from source points its units at that binary. Inside the checkout run npm as `pnpm exec npm ...`: npm 11 refuses to run on a host Node that differs from the pin, and `pnpm exec` puts the pinned one first on PATH. From a plain checkout:
+Install pnpm 12 as a native binary, from its standalone installer or Homebrew, no Node needed; it switches itself to the version `packageManager` names, and `pnpm install` then fetches the Node the lockfile pins (`devEngines.runtime` in package.json) into `node_modules/node` and runs every script on it; a host that runs the bot from source points its units at that binary. Inside the checkout run npm as `pnpm exec npm ...`: npm 11 refuses to run on a host Node that differs from the pin, and `pnpm exec` puts the pinned one first on PATH. From a plain checkout:
 
 ```bash
 pnpm install --frozen-lockfile
