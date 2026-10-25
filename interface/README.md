@@ -72,4 +72,4 @@ Views keep the order form, action, chart. Putting the chart between the form and
 
 A [version-changing release](../README.md#releases) deploys the `interface/dist` bundle produced by the successful check job. A failed check leaves the previous site live.
 
-Before the first deployment, set this repository's Pages source to GitHub Actions and attach `ickb.org` here, detaching it from `ickb/legacy-lumos-interface`. Archive that repository after the new site is live. `public/CNAME` records the domain; `public/favicon.png` is the other static file copied to the site root. Files added under `public/` are published as-is.
+Before the first deployment, set this repository's Pages source to GitHub Actions and attach `ickb.org` here, detaching it from `ickb/legacy-lumos-interface`. Archive that repository after the new site is live. The domain is a repository setting: with the Actions source GitHub ignores a `CNAME` file, so none is shipped. `public/favicon.png` is the only static file copied to the site root; files added under `public/` are published as-is.
