@@ -9,11 +9,6 @@ audit:
     # Unpatched upstream: @joyid/ckb -> @nervosnetwork/ckb-sdk-utils -> elliptic
     # (CVE-2025-14505; pnpm 11+ filters by GHSA only).
     - GHSA-848j-6mx2-7j84
-    # No patched version exists. image-size sits under Metro, React Native's build tool,
-    # pulled in by @ckb-ccc/connector 2.x through @libp2p/webrtc -> react-native-webrtc; it
-    # never runs in the browser bundle.
-    - GHSA-w3rx-r6r6-pgpr
-    - GHSA-5p2g-fcmc-qvqq
     # No patched version exists. braces sits under the same React Native chain.
     - GHSA-vfj7-8cjw-p6xm
     # No patched version exists. sprintf-js sits under @microsoft/api-extractor's argparse,
@@ -24,7 +19,6 @@ overrides:
   # Security pins for vulnerable transitive ranges not yet lifted by upstreams.
   axios@>=1.0.0 <1.20.0: 1.20.0
   brace-expansion@>=5.0.0 <5.0.12: 5.0.12
-  esbuild@>=0.27.3 <0.28.1: 0.28.1
   fast-uri@>=3.0.0 <3.1.9: 3.1.9
   follow-redirects@>=1.16.0 <1.16.1: 1.16.1
   form-data@>=4.0.0 <4.0.6: 4.0.6
@@ -74,9 +68,7 @@ patchedDependencies:
   # pnpm still resolves JoyID's original cross-fetch dependency in the lockfile;
   # scripts/test/build/native-source-smoke.ts guards the runtime path so it stays dormant.
   "@joyid/ckb@1.1.4": patches/@joyid__ckb@1.1.4.patch
-# pnpm 12 refuses unreviewed build scripts. Neither is needed: esbuild runs from its
-# platform package and core-js's postinstall only prints a funding notice; both were
-# ignored with a warning under pnpm 10 and the gate was green.
+# pnpm 12 refuses unreviewed build scripts. core-js's postinstall only prints a funding
+# notice; it was ignored with a warning under pnpm 10 and the gate was green.
 allowBuilds:
   core-js: false
-  esbuild: false
