@@ -1,4 +1,4 @@
-name: Check (lint, build and test)
+name: Check and release
 
 on:
   pull_request:
