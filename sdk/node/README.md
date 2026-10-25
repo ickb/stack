@@ -30,7 +30,7 @@ The process owns the CCC client and disposes it at the end of the turn so open s
 
 ## Run
 
-From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.23.4+. The key file lives outside the checkout, in a private directory:
+From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source on the Node that `pnpm install` placed in `node_modules/node`. The key file lives outside the checkout, in a private directory:
 
 ```bash
 pnpm install
@@ -194,7 +194,7 @@ systemctl --user enable --now ickb-bot-testnet.service
 journalctl --user -u ickb-bot-testnet.service -f -o cat
 ```
 
-`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
+`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH. Point at the checkout's `node_modules/node/bin/node`, the version the lockfile pins, which `pnpm install` keeps current. A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
 
 Operate the unit as usual:
 

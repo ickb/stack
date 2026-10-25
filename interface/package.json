@@ -20,9 +20,6 @@
   },
   "type": "module",
   "private": true,
-  "engines": {
-    "node": ">=22.23.4"
-  },
   "scripts": {
     "dev": "vite",
     "dev:testnet-wallet": "vite --mode testnet-wallet --host 127.0.0.1",

@@ -4,9 +4,6 @@
   "description": "iCKB bot, testnet stimulus generator, and rate sampler",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.23.4"
-  },
   "scripts": {
     "bot": "node src/bot.ts",
     "stimulus": "node src/stimulus.ts",
