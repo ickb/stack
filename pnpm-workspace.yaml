@@ -39,7 +39,7 @@ overrides:
   zod-validation-error@^3.5.0 || ^4.0.0: 4.0.2
   # Keep CCC React connector on the app's React instance; otherwise pnpm may
   # auto-install a second peer copy and React hooks fail at runtime.
-  "@ckb-ccc/connector-react>react": 19.3.0
+  "@ckb-ccc/connector-react>react": ^19.3.0
 
 # The one hold, which silences every typescript release, patches included: 7 ships the
 # native compiler only, without the JavaScript API that typescript-eslint

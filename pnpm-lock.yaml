@@ -194,7 +194,7 @@ overrides:
   ws@>=8.0.0 <8.21.1: 8.21.1
   zod@<4.6.6: 4.6.6
   zod-validation-error@^3.5.0 || ^4.0.0: 4.0.2
-  '@ckb-ccc/connector-react>react': 19.3.0
+  '@ckb-ccc/connector-react>react': ^19.3.0
 
 patchedDependencies:
   '@joyid/ckb@1.1.4': d19be4b61698e780a6eb914cf2d654b06b0f8ef49c5e78dc7c68475063355424
@@ -490,7 +490,7 @@ packages:
     resolution: {integrity: sha512-oCKX/UGeKAFNXiymCbXheW/ZG76AMQwfEacUQvFfgjQ9kIQSDfVuHN1XAVWgtfoslEJ6Rtaexy0qLStrq9m8HQ==}
     peerDependencies:
       '@types/react': '>=16'
-      react: 19.3.0
+      react: ^19.3.0
 
   '@ckb-ccc/connector@2.3.2':
     resolution: {integrity: sha512-HsNZ1g0N51Jkjj5/vTjFrbD2lIQ+BhsdZpXTVP3hqsJRMim+AArLkmW07VWoRoB78Ngj6SclTw7GrF7TftYXnw==}
