@@ -46,6 +46,7 @@ catalog:
   "@ckb-ccc/connector-react": ^2.2.2
   "@ckb-ccc/core": ^1.23.0
   "@types/node": ~22.20.4
+  "@typescript/native-preview": 7.0.0-dev.20260707.2
 
 # Three days. A freshly published release cannot be installed until it matures, so a
 # compromised one has time to be caught; the wait is also how long a fix stays

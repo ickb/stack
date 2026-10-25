@@ -59,6 +59,7 @@
     "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
-    "@ickb/testkit": "workspace:*"
+    "@ickb/testkit": "workspace:*",
+    "@typescript/native-preview": "catalog:"
   }
 }

@@ -25,8 +25,9 @@ jobs:
         with:
           # The declared Node floor; the example units run the current release.
           node-version: 22.23.4
-      # npm ships with Node and installs the pnpm version package.json pins, so no
-      # third-party action runs; pnpm/action-setup did the same with a vendored pnpm.
+      # npm ships with Node and installs the pnpm version package.json pins, verified by
+      # the registry's integrity field (npm ignores the hash in packageManager); no
+      # third-party action runs, pnpm/action-setup did the same with a vendored pnpm.
       - run: npm install --global pnpm@"$(node -p "require('./package.json').packageManager.split('@')[1]")"
 
       - name: Install pinned dependencies
@@ -34,11 +35,12 @@ jobs:
       - name: Run pnpm check
         run: pnpm check
 
-      # A release is a push to the default branch whose commit changes a package's version
-      # field. Every such push is one squash commit, so the
-      # previous commit is the comparison; a path absent there counts as changed.
+      # A release is a push to master (the only push trigger) whose commit changes a
+      # package's version field. The ruleset admits only merge commits of pull requests,
+      # whose first parent is the previous tip, so HEAD^ is the comparison; a path absent
+      # there counts as changed.
       - id: releases
-        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: github.event_name == 'push'
         run: |
           released() {
             now=$(node -p "require('./$1/package.json').version")
@@ -47,17 +49,16 @@ jobs:
           }
           echo "interface=$(released interface)" >> "$GITHUB_OUTPUT"
           echo "sdk=$(released sdk)" >> "$GITHUB_OUTPUT"
-      - if: steps.releases.outputs.interface == 'true'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
-        with:
-          path: interface/dist
 
-  # Deploy the bundle the gate just built; a failed run leaves the previous site live.
+  # The release jobs build again from a fresh checkout in which none of the gate's tooling
+  # has run; the interface job installs the workspace because its build bundles the SDK
+  # from source. A failed run leaves the previous release live.
   deploy:
     needs: build
     if: needs.build.outputs.interface == 'true'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -65,6 +66,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.23.4
+      - run: npm install --global pnpm@"$(node -p "require('./package.json').packageManager.split('@')[1]")"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ickb/interface build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: interface/dist
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
 
@@ -85,16 +98,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.23.4
-      # npm ships with Node and installs the pnpm version package.json pins, so no
-      # third-party action runs; pnpm/action-setup did the same with a vendored pnpm.
       - run: npm install --global pnpm@"$(node -p "require('./package.json').packageManager.split('@')[1]")"
-
-      - name: Install pinned dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build the SDK
-        run: pnpm build
+      # `pnpm deploy` resolves only the SDK's dependencies from the lockfile and refuses the
+      # package directory as its target, so its node_modules moves into place. npm runs the
+      # build script because `pnpm run` would first install the whole workspace
+      # (verifyDepsBeforeRun defaults to install).
+      - run: pnpm --filter @ickb/sdk deploy --frozen-lockfile /tmp/deploy && mv /tmp/deploy/node_modules sdk/node_modules
+      - run: npm run build
+        working-directory: sdk
       # Access comes from publishConfig. The flag keeps provenance explicit: without it pnpm
-      # decides from the OIDC token and skips silently when the visibility lookup fails. The
-      # checkout is a detached commit, so pnpm's branch and remote checks do not apply.
+      # decides from the OIDC token and, when the visibility lookup fails, warns and continues
+      # without provenance. The checkout is a detached commit, so pnpm's branch and remote
+      # checks do not apply.
       - name: Publish @ickb/sdk
         run: pnpm --filter @ickb/sdk publish --provenance --no-git-checks

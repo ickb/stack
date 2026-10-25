@@ -70,6 +70,6 @@ Views keep the order form, action, chart. Putting the chart between the form and
 
 ## Deployment
 
-A [version-changing release](../README.md#releases) deploys the `interface/dist` bundle produced by the successful check job. A failed check leaves the previous site live.
+A [version-changing release](../README.md#releases) builds `interface/dist` again in a fresh job where none of the gate's tooling runs, and deploys it. A failed check leaves the previous site live.
 
 The domain `ickb.org` is the repository's Pages setting; with the Actions source GitHub ignores a `CNAME` file, so none is shipped. `public/favicon.png` is the only static file copied to the site root; files added under `public/` are published as-is.
