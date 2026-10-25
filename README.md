@@ -56,7 +56,7 @@ Both jobs require the gate to pass, then build their package again in a fresh jo
 
 The rewrite's versioned packages start at `9000.0.1`, above the old `@ickb/sdk` line at `1000.0.82` (`9000.0.0` was never published: its release run failed before the settings below existed). The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
 
-The publish job depends on the npm trusted publisher registered for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `ci.yaml`, no environment. The deploy job depends on this repository's Pages settings: source GitHub Actions, custom domain `ickb.org`. Renaming the workflow file or moving the repository breaks the release until those settings follow. The [workflow](.github/workflows/ci.yaml) owns the release mechanics.
+The publish job depends on the npm trusted publisher registered for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `ci.yaml`, environment `npm`, whose branch policy in this repository admits `master` only; the package requires two-factor authentication and disallows tokens, so this workflow is the only publishing path. The deploy job depends on this repository's Pages settings: source GitHub Actions, custom domain `ickb.org`. Renaming the workflow file or moving the repository breaks the release until those settings follow. The [workflow](.github/workflows/ci.yaml) owns the release mechanics.
 
 ## Live testnet validation
 

@@ -82,7 +82,8 @@ jobs:
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
 
   # npm trusted publishing: the id token stands in for a registry token, and npm records
-  # the provenance of this run with the package.
+  # the provenance of this run with the package. The environment's branch policy admits
+  # master only, so a token minted on another branch is refused.
   publish:
     needs: build
     if: needs.build.outputs.sdk == 'true'
@@ -90,6 +91,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    environment: npm
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
