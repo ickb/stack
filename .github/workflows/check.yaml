@@ -89,6 +89,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build the SDK
         run: pnpm build
-      # The checkout is a detached commit, so pnpm's branch and remote checks do not apply.
+      # Access comes from publishConfig. The flag keeps provenance explicit: without it pnpm
+      # decides from the OIDC token and skips silently when the visibility lookup fails. The
+      # checkout is a detached commit, so pnpm's branch and remote checks do not apply.
       - name: Publish @ickb/sdk
-        run: pnpm --filter @ickb/sdk publish --provenance --access public --no-git-checks
+        run: pnpm --filter @ickb/sdk publish --provenance --no-git-checks
