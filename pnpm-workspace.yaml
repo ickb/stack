@@ -9,11 +9,6 @@ audit:
     # Unpatched upstream: @joyid/ckb -> @nervosnetwork/ckb-sdk-utils -> elliptic
     # (CVE-2025-14505; pnpm 11+ filters by GHSA only).
     - GHSA-848j-6mx2-7j84
-    # No patched version exists. braces sits under the same React Native chain.
-    - GHSA-vfj7-8cjw-p6xm
-    # No patched version exists. sprintf-js sits under @microsoft/api-extractor's argparse,
-    # a build-time tool that only parses its own command line.
-    - GHSA-hp3w-g68c-fv3c
 
 overrides:
   # Security pins for vulnerable transitive ranges not yet lifted by upstreams.
