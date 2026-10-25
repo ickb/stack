@@ -42,7 +42,8 @@
     "lint:publish": "publint --strict --pack pnpm"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "publishConfig": {
     "access": "public",
