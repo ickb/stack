@@ -74,9 +74,9 @@ describe("findCells", () => {
     const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
     const noCache = vi
       .spyOn(client, "findCellsPagedNoCache")
-      .mockImplementation(async (_key, _order, _limit, after) => {
+      .mockImplementation(async (_key, _order, _limit, after = "stuck") => {
         await Promise.resolve();
-        return { cells: fullPage, lastCursor: after ?? "stuck" };
+        return { cells: fullPage, lastCursor: after };
       });
 
     await expect(
