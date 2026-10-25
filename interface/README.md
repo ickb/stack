@@ -31,7 +31,7 @@ After a transaction error, the app gives the client a new cache object. CCC's `c
 
 The interface describes conversions by when funds return: direct actions have a claim date; standing orders depend on a bot. One [estimated date](../sdk/docs/pool_maturity_estimates.md) covers the wallet's converting funds and the new request. A position list or completed-history index would add protocol bookkeeping without another action the user needs here.
 
-Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [default order fee](../sdk/src/conversion/estimate.ts). The completed preview shows the actual plan: a direct conversion, a standing order, or both. Its rounded output can differ from the form quote. The SDK chooses the [first fundable direct-first plan](../sdk/README.md#transaction-completion), not the plan with the earliest estimated completion.
+Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [default order fee](../sdk/src/conversion/estimate.ts). Every order from the interface therefore asks the same price, and none can buy priority: a [bot fills by price](../sdk/node/docs/policy.md#matching-makes-progress-from-available-inventory), at equal price in an order of its choosing, and only while it holds the other side, so no order is promised eventual service; an unfilled sell comes back at the age cutoff below. The intent line says "when a bot fills it" for that reason. The completed preview shows the actual plan: a direct conversion, a standing order, or both. Its rounded output can differ from the form quote. The SDK chooses the [first fundable direct-first plan](../sdk/README.md#transaction-completion), not the plan with the earliest estimated completion.
 
 Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. The intent line of a collection says whether a withdrawal or order stays converting after it: the button reads the same either way, and the balance row's "converting" word alone went unnoticed when a receipt was collected while its sibling order was still open. Live orders join that collection when:
 
@@ -70,6 +70,6 @@ Views keep the order form, action, chart. Putting the chart between the form and
 
 ## Deployment
 
-A [version-changing release](../README.md#releases) deploys the `interface/dist` bundle produced by the successful check job. A failed check leaves the previous site live.
+A [version-changing release](../README.md#releases) builds `interface/dist` again in a fresh job where none of the gate's tooling runs, and deploys it. A failed check leaves the previous site live.
 
-Before the first deployment, set this repository's Pages source to GitHub Actions and attach `ickb.org` here, detaching it from `ickb/legacy-lumos-interface`. Archive that repository after the new site is live. `public/CNAME` records the domain; `public/favicon.png` is the other static file copied to the site root. Files added under `public/` are published as-is.
+The domain `ickb.org` is the repository's Pages setting; with the Actions source GitHub ignores a `CNAME` file, so none is shipped. `public/favicon.png` is the only static file copied to the site root; files added under `public/` are published as-is.

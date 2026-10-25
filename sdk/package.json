@@ -1,6 +1,6 @@
 {
   "name": "@ickb/sdk",
-  "version": "9000.0.0",
+  "version": "9000.0.1",
   "description": "iCKB SDK built on top of CCC",
   "keywords": [
     "ickb",
@@ -21,7 +21,7 @@
   "sideEffects": false,
   "type": "module",
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=26"
   },
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -42,11 +42,11 @@
     "lint:publish": "publint --strict --pack pnpm"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "publishConfig": {
     "access": "public",
-    "provenance": true,
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
@@ -60,6 +60,7 @@
     "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
-    "@ickb/testkit": "workspace:*"
+    "@ickb/testkit": "workspace:*",
+    "@typescript/native-preview": "catalog:"
   }
 }

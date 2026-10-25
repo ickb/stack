@@ -417,6 +417,11 @@ export default defineConfig(
     },
   },
   {
+    // A config module is evaluated for the value it builds; the rule targets libraries.
+    files: ["**/*.config.{ts,mts}"],
+    rules: { "unicorn/no-top-level-side-effects": "off" },
+  },
+  {
     // The oracle's independence from the SDK is a dependency-cruiser rule.
     files: ["testkit/src/contract_oracle.ts"],
     linterOptions: { noInlineConfig: true },

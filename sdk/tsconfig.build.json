@@ -5,9 +5,7 @@
     "removeComments": false,
     "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
-    "outDir": "dist",
-    "sourceRoot": "../src"
+    "outDir": "dist"
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*_test_support.ts"]
+  "include": ["src"]
 }

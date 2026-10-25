@@ -3,7 +3,7 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/{run-node-tests,tooling/build/rewrite-dts-imports}.ts!",
+        "scripts/{run-node-tests,tooling/build/rewrite-dts-imports,tooling/pins}.ts!",
         "scripts/test/**/*.ts",
         "!scripts/test/**/*support.ts",
       ],

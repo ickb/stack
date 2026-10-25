@@ -88,7 +88,7 @@ describe("action status", () => {
         { ...flags(), hasCollectable: true },
       ),
     ).toBe(
-      "Part converts at a fixed time, the rest at a variable time, estimated below. Also collects converted funds.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below. Also collects converted funds.",
     );
     expect(
       actionMessage(txInfo, { ...flags(), amount: undefined, amountError: "Bad amount" }),
@@ -110,10 +110,10 @@ describe("action status", () => {
 
   it.each([
     ["direct", "Converts at a fixed time, shown below."],
-    ["order", "Converts at a variable time, estimated below."],
+    ["order", "Converts when a bot fills it, estimated below."],
     [
       "direct-plus-order",
-      "Part converts at a fixed time, the rest at a variable time, estimated below.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
     ],
   ] as const)("describes %s intent exactly", (kind, expected) => {
     expect(conversionIntentText(kind)).toBe(expected);

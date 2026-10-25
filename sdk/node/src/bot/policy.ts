@@ -57,7 +57,7 @@ export interface RebalancePlan {
     candidates: IckbDepositCell[];
     /** iCKB the requests may consume: the balance minus the retained buffer. */
     budget: bigint;
-    /** Anchors were admitted because the bot's CKB, in hand or in flight, is under one deposit. */
+    /** Anchors were admitted because the bot's CKB, in hand or in flight, reserve included, is under one deposit's cost. */
     stress: boolean;
   };
   ring: RingSummary;
@@ -65,7 +65,7 @@ export interface RebalancePlan {
 
 /**
  * Refill under 2,000 iCKB keeping the reserve; seed the ring keeping one deposit more, the
- * line stress restores. Withdraw ready surplus while over 120,000 iCKB, keeping 20,000;
+ * line stress restores, measured on total CKB. Withdraw ready surplus while over 120,000 iCKB, keeping 20,000;
  * anchors too under stress. Rationale in node/docs/policy.md.
  */
 export function planRebalance(input: RebalanceInput): RebalancePlan {
@@ -83,7 +83,10 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
   if (ickb > ICKB_WITHDRAW_ABOVE) {
     const ready = sortByClaim(readyDeposits(poolDeposits, tip, lockUp));
     const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
-    const stress = spendable + pendingCkb < depositCost;
+    // Total CKB, reserve included: a matured cap anchor returns about the deposit's
+    // capacity, under its cost by the receipt and the fees, so a line beyond the reserve
+    // was never restored by one anchor and each dip took a second. The reserve is the slack.
+    const stress = ckb + pendingCkb < depositCost;
     const candidates = [
       ...ready.filter(isSurplus),
       ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),

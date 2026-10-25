@@ -26,7 +26,7 @@ For a material revision:
 
 ## The gate
 
-Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, once per commit and check its exit code. A green result on that tree makes the commit publishable.
+Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, once per commit and check its exit code. A green result on that tree makes the commit publishable. Pull requests also run `pnpm fresh`, whose result depends on the date, so run it before opening one.
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 

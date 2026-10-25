@@ -28,7 +28,7 @@ Stack assumes user-owned cells have [locks whose signatures bind the whole trans
 
 ## Dependencies and checks
 
-Use Node 22.19 or later and the pinned pnpm 12.4.2. From a plain checkout:
+Install the pinned pnpm 12.4.2 with npm; `pnpm install` then fetches the Node the lockfile pins (`devEngines.runtime` in package.json) into `node_modules/node` and runs every script on it; a host that runs the bot from source points its units at that binary. Inside the checkout run npm as `pnpm exec npm ...`: npm 11 refuses to run on a host Node that differs from the pin, and `pnpm exec` puts the pinned one first on PATH. From a plain checkout:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -39,31 +39,24 @@ CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.ya
 
 The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
 
-TypeScript stays on 6. The 7.x package ships the native compiler only, without the JavaScript compiler API that typescript-eslint and `scripts/tooling/dead-members.ts` use, and typescript-eslint declares `typescript <6.1.0`. Type checking already runs on the native preview.
+TypeScript stays on 6 until typescript-eslint supports 7; the reason sits with the hold in `pnpm-workspace.yaml`. Type checking already runs on the native preview.
 
-pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
+pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The release age, build-script permissions and advisory exceptions live with their reasons in [pnpm-workspace.yaml](pnpm-workspace.yaml).
 
-`pnpm check` runs the audit, full lint suite and interface build against installed dependencies. CI first installs from the pinned lockfile, then runs the same gate on the declared Node floor. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
+`pnpm check` runs the full lint suite and interface build against installed dependencies; its result is a function of the tree. `pnpm fresh` depends on the date instead: the audit fails on a newly published advisory; `pnpm outdated` fails when a dependency has a newer release past the release age, majors included, and when a pinned action has any newer release, since pnpm applies no release age to actions; the Node check, `scripts/tooling/pins.ts`, fails when the pinned major has a newer security release that is at least three days old. CI first installs from the pinned lockfile, then runs the gate on the pinned Node; pull requests also run the freshness checks, release pushes do not, so a release cannot fail on an advisory or a version that appeared after the review. pnpm itself is pinned by `packageManager` and bumped by hand. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
 
 ## Releases
 
 A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
 
 - A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
-- A change to `interface/package.json` deploys the bundle that the check job built to GitHub Pages at `ickb.org`.
+- A change to `interface/package.json` builds the interface again and deploys it to GitHub Pages at `ickb.org`.
 
-Both jobs require the gate to pass. Other merges release nothing. This assumes each reviewed change lands as a squash commit, so comparing with the previous commit covers it. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
+Both jobs require the gate to pass, then build their package again in a fresh job where none of the gate's tooling runs; the SDK job installs only the SDK's declared dependencies, resolved from the lockfile by `pnpm deploy`. Other merges release nothing. If a release job fails, rerun that run's failed jobs, unless a later release of the same package has already run: the next merge compares with its own parent and releases nothing. The ruleset admits only merge commits of pull requests, whose first parent is the previous tip, so comparing with it covers the whole change. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
 
-The rewrite's versioned packages start at `9000.0.0`, above the old `@ickb/sdk` line at `1000.0.82`. The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
+The rewrite's versioned packages start at `9000.0.1`, above the old `@ickb/sdk` line at `1000.0.82` (`9000.0.0` was never published: its release run failed before the settings below existed). The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
 
-### First release setup
-
-The maintainer must configure the external services before the release merge:
-
-1. Register the npm trusted publisher for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `check.yaml`, no environment. Configure the package to require two-factor authentication and disallow tokens.
-2. Enable GitHub Pages with GitHub Actions as its source. Move the `ickb.org` domain from `ickb/legacy-lumos-interface` to this repository, then archive the old repository after the new site is live.
-
-Whether to deprecate the old `1000.x` SDK line and its companion packages remains optional. The [workflow](.github/workflows/check.yaml) owns the release mechanics; the [interface README](interface/README.md#deployment) owns the site setup.
+The publish job depends on the npm trusted publisher registered for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `ci.yaml`, environment `npm`, whose branch policy in this repository admits `master` only; the package requires two-factor authentication and disallows tokens, so no token can publish and this workflow is the only unattended path. The deploy job depends on this repository's Pages settings: source GitHub Actions, custom domain `ickb.org`. Renaming the workflow file or moving the repository breaks the release until those settings follow. The [workflow](.github/workflows/ci.yaml) owns the release mechanics.
 
 ## Live testnet validation
 

@@ -22,7 +22,13 @@ import {
 import { BOT_TIP, readyDeposit } from "./fixtures/bot.ts";
 
 const TIP = BOT_TIP;
-const DEPOSIT_COST = ccc.fixedPointFrom(100_300);
+/** A cap-sized deposit's capacity and its receipt: what a deposit costs the bot. */
+const DEPOSIT_CAPACITY = ccc.fixedPointFrom(100_082);
+const RECEIPT = ccc.fixedPointFrom(218);
+const DEPOSIT_COST = DEPOSIT_CAPACITY + RECEIPT;
+/** What a cap-sized withdrawal request carries beyond the deposit: its owner marker. */
+const OWNER_MARKER = ccc.fixedPointFrom(98);
+const FEE = ccc.fixedPointFrom(1);
 /** Minutes in the nominal epoch: a whole number of these out is another ring segment. */
 const EPOCH_MINUTES = 240n;
 
@@ -132,12 +138,12 @@ describe("planRebalance withdrawal", () => {
     });
   });
 
-  it("admits anchors after the surplus only under stress, counting CKB in flight", () => {
+  it("admits anchors after the surplus only under stress, measured on total CKB in hand and in flight", () => {
     const surplus = readyDeposit("d1", ICKB_DEPOSIT_CAP);
     const anchor = readyDeposit("d2", ICKB_DEPOSIT_CAP + 1n);
     const stressed = input({
       ickb: ICKB_WITHDRAW_ABOVE + 1n,
-      ckb: CKB_RESERVE + DEPOSIT_COST - 1n,
+      ckb: DEPOSIT_COST - 1n,
       poolDeposits: [anchor, surplus],
     });
 
@@ -145,13 +151,34 @@ describe("planRebalance withdrawal", () => {
       candidates: [surplus, anchor],
       stress: true,
     });
-    expect(
-      planRebalance({ ...stressed, ckb: CKB_RESERVE + DEPOSIT_COST }).withdrawal,
-    ).toMatchObject({ candidates: [surplus], stress: false });
-    expect(planRebalance({ ...stressed, pendingCkb: 1n }).withdrawal).toMatchObject({
+    // The line counts the reserve: one deposit's cost in total CKB clears it.
+    expect(planRebalance({ ...stressed, ckb: DEPOSIT_COST }).withdrawal).toMatchObject({
       candidates: [surplus],
       stress: false,
     });
+
+    // A cap anchor requested from the floor: the marker left the liquid cells and rides in
+    // flight with the deposit's capacity, which is under the cost by the receipt. The
+    // reserve is what keeps that request on the line.
+    const inFlight = {
+      ...stressed,
+      ckb: CKB_RESERVE - OWNER_MARKER - FEE,
+      pendingCkb: DEPOSIT_CAPACITY + OWNER_MARKER,
+    };
+    expect(planRebalance(inFlight).withdrawal).toMatchObject({
+      candidates: [surplus],
+      stress: false,
+    });
+    // Matured: the same CKB in hand, less the fee, still clears the line.
+    expect(
+      planRebalance({ ...stressed, ckb: CKB_RESERVE + DEPOSIT_CAPACITY - FEE })
+        .withdrawal,
+    ).toMatchObject({ candidates: [surplus], stress: false });
+    // A half-cap anchor in flight does not.
+    expect(
+      planRebalance({ ...inFlight, pendingCkb: DEPOSIT_CAPACITY / 2n + OWNER_MARKER })
+        .withdrawal,
+    ).toMatchObject({ candidates: [surplus, anchor], stress: true });
   });
 
   it("returns both moves when coverage and excess apply, and none without ready deposits", () => {

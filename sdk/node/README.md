@@ -30,7 +30,7 @@ The process owns the CCC client and disposes it at the end of the turn so open s
 
 ## Run
 
-From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source under Node 22.19+. The key file lives outside the checkout, in a private directory:
+From a plain checkout, run `pnpm install` from the repo root. CCC is resolved as a normal package dependency, and the app runs from TypeScript source on the Node that `pnpm install` placed in `node_modules/node`. The key file lives outside the checkout, in a private directory:
 
 ```bash
 pnpm install
@@ -130,11 +130,13 @@ pnpm --filter ./sdk/node stimulus
 
 ### Alerting
 
-Neither program carries a notification channel: a run is one turn, and anything worth an operator's attention is a run of turns, which only the journal sees. Both journals are JSON lines with `type` and `timestamp` first, so a watcher is a pipe. Consecutive `bot.turn.failed` lines, or `bot.decision.skipped` lines whose `decision.match.reason` is `unfunded_gain`, are the two conditions worth forwarding; a `stale` count above zero in the generator's `orders` is a third. Put the destination in an environment file with mode `0600` next to the key, since a Telegram or ntfy URL carries the token, and let `curl` encode the message:
+Neither program carries a notification channel: a run is one turn, and anything worth an operator's attention is a run of turns, which only the journal sees. A single `bot.turn.failed` is noise: a DNS or RPC failure ends the turn and the next one rebuilds from committed state. The conditions worth forwarding are silence, a run of failed turns, hours of `bot.decision.skipped` lines whose `decision.match.reason` is `unfunded_gain` (sellers are waiting and only CKB serves them before the next anchor), and a `stale` count above zero in the generator's `orders`. Silence is the one a watcher on the same host cannot see, since it dies with the host, so check it from another machine over SSH. Put the destination in an environment file with mode `0600` next to the key, since a Telegram or ntfy URL carries the token, and let `curl` encode the message:
 
 ```bash
-journalctl -f --user -u ickb-bot-testnet.service -o cat | jq -R -c 'fromjson? | select(.type == "bot.turn.failed")' \
-  | while read -r line; do curl -sG --data-urlencode "text=$line" "$ALERT_URL" >/dev/null; done
+# From another host: the newest bot event must be under twenty minutes old.
+last=$(ssh "$HOST" journalctl --user -u ickb-bot-testnet.service -o cat -n 1 | jq -r .timestamp)
+[ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 1200 ] \
+  || curl -sG --data-urlencode "text=bot silent since $last" "$ALERT_URL" >/dev/null
 ```
 
 ### What the journals should show
@@ -160,12 +162,14 @@ jq -r '"\(.outcome) \(.draw.kind // "-") \(.draw.direction // "-") \(.skip.reaso
 | Empty book                             | Nothing live                                                                         | `match.reason` `no_market_orders`                                         | unattended                                                                   |
 | Deposit                                | Under 2,000 iCKB; or the tip's ring segment thin, with two deposits of CKB spendable | `core.kind` `deposit`, `rebalance.deposit` `low_ickb` or `ring_coverage`  | operator: fund or drain the bot; wait for maturity                           |
 | Withdrawal requests                    | Over 120,000 iCKB with ready surplus deposits                                        | `core.kind` `withdraw`, `core.withdrawalRequests`, `rebalance.withdrawal` | operator: fund the bot with iCKB; wait for maturity                          |
-| Anchors under stress                   | Spendable CKB, in hand and in flight, under one deposit                              | `rebalance.withdrawal.stress` `true`                                      | operator: drain the bot's CKB                                                |
+| Anchors under stress                   | CKB in hand and in flight, reserve included, under one deposit's cost                | `rebalance.withdrawal.stress` `true`                                      | operator: drain the bot's CKB                                                |
 | Nothing fundable                       | No core, match, or collection completes                                              | skip `no_fundable_candidate`, `core.attempts`                             | operator: a thin bot                                                         |
 
 ## systemd Deployment
 
 The actors run as the operator's user under systemd, from an ordinary git checkout with an absolute Node path. systemd 255 and later are supported. One hand-edited unit per network owns configuration; Git owns revisions. This trades per-network user isolation and atomic updates for a stopped-checkout update procedure. A root installer, release-directory swap or template/drop-in hierarchy would add deployment concepts without changing that operating model.
+
+The host must stay up. The bot requests a deposit only while its claim is twenty to sixty minutes out ([`BOT_LOCK_UP`](../src/dao.ts)), so every deposit whose window passes while the bot or its node is down waits a full cycle, about thirty days, and the sellers it would have served wait with it. A suspended laptop, a reboot of forty minutes, or a node outage of that length costs exactly that; the node's availability bounds the bot's. A user unit cannot order itself after the system's network target, so the first turn after boot can fail on DNS and retries a minute later, which is harmless.
 
 ### Host isolation
 
@@ -190,13 +194,12 @@ systemctl --user enable --now ickb-bot-testnet.service
 journalctl --user -u ickb-bot-testnet.service -f -o cat
 ```
 
-`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH, and a version manager's per-shell link vanishes at logout, so point at the versioned install itself (`readlink -f "$(command -v node)"`). A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
+`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH. Point at the checkout's `node_modules/node/bin/node`, the version the lockfile pins, which `pnpm install` keeps current. A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
 
 Operate the unit as usual:
 
 ```bash
 systemctl --user status ickb-bot-testnet.service
-systemctl --user --failed
 systemctl --user restart ickb-bot-testnet.service
 ```
 
