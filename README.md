@@ -54,16 +54,9 @@ A push to the default branch releases a package only when its version differs fr
 
 Both jobs require the gate to pass. Other merges release nothing. This assumes each reviewed change lands as a squash commit, so comparing with the previous commit covers it. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
 
-The rewrite's versioned packages start at `9000.0.1`, above the old `@ickb/sdk` line at `1000.0.82`; `9000.0.0` was the first release attempt, which failed before the services below were configured, so nothing was published under it. The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
+The rewrite's versioned packages start at `9000.0.1`, above the old `@ickb/sdk` line at `1000.0.82` (`9000.0.0` was never published: its release run failed before the settings below existed). The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
 
-### First release setup
-
-The maintainer must configure the external services before the release merge:
-
-1. Register the npm trusted publisher for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `check.yaml`, no environment. Configure the package to require two-factor authentication and disallow tokens.
-2. Enable GitHub Pages with GitHub Actions as its source. Move the `ickb.org` domain from `ickb/legacy-lumos-interface` to this repository, then archive the old repository after the new site is live.
-
-Whether to deprecate the old `1000.x` SDK line and its companion packages remains optional. The [workflow](.github/workflows/check.yaml) owns the release mechanics; the [interface README](interface/README.md#deployment) owns the site setup.
+The publish job depends on the npm trusted publisher registered for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `check.yaml`, no environment. The deploy job depends on this repository's Pages settings: source GitHub Actions, custom domain `ickb.org`. Renaming the workflow file or moving the repository breaks the release until those settings follow. The [workflow](.github/workflows/check.yaml) owns the release mechanics.
 
 ## Live testnet validation
 
