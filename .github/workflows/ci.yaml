@@ -30,6 +30,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run pnpm check
         run: pnpm check
+      # The freshness checks depend on the date, not the tree: an advisory is published, a
+      # dependency or Node release ages past its waiting period, an action releases. They
+      # gate pull requests only, so a release push cannot fail on something that appeared
+      # after the review; the next pull request catches it.
+      - if: github.event_name == 'pull_request'
+        run: pnpm fresh
 
       # A release is a push to master (the only push trigger) whose commit changes a
       # package's version field. The ruleset admits only merge commits of pull requests,

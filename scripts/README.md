@@ -10,7 +10,7 @@ Repository tooling, run from the root by the `package.json` scripts; nothing her
 
 ## What the gate enforces
 
-[`CI=true pnpm check`](../package.json) runs the audit, full lint suite and interface build against installed dependencies. The lint suite includes typechecking, formatting, duplication, unused code, dependency boundaries, API and package checks, coverage and ESLint.
+[`CI=true pnpm check`](../package.json) runs the full lint suite and interface build against installed dependencies; `pnpm fresh`, run on pull requests, holds the date-dependent checks that the root README's [dependency policy](../README.md#dependencies-and-checks) lists. The lint suite includes typechecking, formatting, duplication, unused code, dependency boundaries, API and package checks, coverage and ESLint.
 
 The custom ESLint rules sit beside their rationale in [`eslint.config.mts`](../eslint.config.mts): compare whole script identities, use one uncached paging loop, parse untyped input at its boundary, justify type assertions and keep `@__PURE__` annotations out of class static blocks. The last rule prevents the bundler from removing codec initialization while retaining the class. Other production restrictions keep test-only dependency bags and fallback implementations out of runtime APIs. General style and test-shape checks use established presets rather than another local metrics framework.
 

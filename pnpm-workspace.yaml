@@ -41,6 +41,14 @@ overrides:
   # auto-install a second peer copy and React hooks fail at runtime.
   "@ckb-ccc/connector-react>react": 19.3.0
 
+# The one hold, which silences every typescript release, patches included: 7 ships the
+# native compiler only, without the JavaScript API that typescript-eslint
+# (`typescript <6.1.0`) and scripts/tooling/dead-members.ts use. Drop the entry when
+# typescript-eslint supports 7.
+update:
+  ignoreDeps:
+    - typescript
+
 catalog:
   "@ckb-ccc/ccc": ^1.3.6
   "@ckb-ccc/connector-react": ^2.2.2
