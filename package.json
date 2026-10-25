@@ -4,7 +4,7 @@
   "scripts": {
     "build": "pnpm --filter @ickb/sdk build && node scripts/tooling/build/rewrite-dts-imports.ts --check sdk/dist",
     "check": "CI=true pnpm lint && CI=true pnpm --filter ./interface build",
-    "fresh": "CI=true pnpm audit && pnpm -r outdated --include-github-actions",
+    "fresh": "CI=true pnpm audit && pnpm -r outdated --include-github-actions && node scripts/tooling/pins.ts",
     "lint": "pnpm lint:typecheck && pnpm lint:format && pnpm lint:duplication && pnpm lint:knip && pnpm lint:architecture && pnpm lint:api && pnpm lint:publish && pnpm lint:coverage && pnpm lint:eslint",
     "lint:typecheck": "tsgo --noEmit -p tsconfig.json && pnpm --filter ./interface lint:typecheck",
     "lint:format": "prettier --check .",
