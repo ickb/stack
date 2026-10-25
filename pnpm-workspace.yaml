@@ -25,7 +25,7 @@ overrides:
   axios@>=1.0.0 <1.20.0: 1.20.0
   brace-expansion@>=5.0.0 <5.0.12: 5.0.12
   esbuild@>=0.27.3 <0.28.1: 0.28.1
-  fast-uri@>=3.0.0 <3.1.8: 3.1.8
+  fast-uri@>=3.0.0 <3.1.9: 3.1.9
   follow-redirects@>=1.16.0 <1.16.1: 1.16.1
   form-data@>=4.0.0 <4.0.6: 4.0.6
   nanoid@<3.3.18: 3.3.18
@@ -47,11 +47,11 @@ catalog:
   "@ckb-ccc/core": ^1.23.0
   "@types/node": ~22.20.4
 
-# Seven days. A freshly published patch cannot be installed until it matures, so a
-# compromised release has time to be caught (user decision 2026-09-14; the three-day
-# window that applied while the stack was unpublished was restored to this before the
-# rewrite merged).
-minimumReleaseAge: 10080
+# Three days. A freshly published release cannot be installed until it matures, so a
+# compromised one has time to be caught; the wait is also how long a fix stays
+# unadopted, and three days is what a pulled or regressed release needs to show (user
+# decision 2026-10-25, back from the seven days chosen on 2026-09-14).
+minimumReleaseAge: 4320
 minimumReleaseAgeStrict: true
 # A package whose registry metadata has no publish time fails resolution instead of
 # skipping the age check, which pnpm has done by default since 11.

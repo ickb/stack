@@ -41,7 +41,7 @@ The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, s
 
 TypeScript stays on 6. The 7.x package ships the native compiler only, without the JavaScript compiler API that typescript-eslint and `scripts/tooling/dead-members.ts` use, and typescript-eslint declares `typescript <6.1.0`. Type checking already runs on the native preview.
 
-pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The seven-day release age gives newly published dependencies time to be scrutinized; build-script permissions and advisory exceptions live beside their entries in [pnpm-workspace.yaml](pnpm-workspace.yaml).
+pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The release age, build-script permissions and advisory exceptions live with their reasons in [pnpm-workspace.yaml](pnpm-workspace.yaml).
 
 `pnpm check` runs the audit, full lint suite and interface build against installed dependencies. CI first installs from the pinned lockfile, then runs the same gate on the declared Node floor. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
 
