@@ -30,6 +30,8 @@ export interface StubClientHandlers {
   cache?: ccc.Client["cache"];
   findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
   getCell?: ClientMethod<"getCell">;
+  getCellWithHeader?: ClientMethod<"getCellWithHeader">;
+  getHeaderByHash?: ClientMethod<"getHeaderByHash">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
   getTransaction?: ClientMethod<"getTransaction">;

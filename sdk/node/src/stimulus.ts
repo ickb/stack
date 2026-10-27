@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
+import { WALLET_LOCK_UP } from "../../src/dao.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signerAccountLocks } from "../../src/send/sign_and_send_transaction.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
@@ -15,7 +16,7 @@ const override = readStimulusOverride(process.env);
 const startTime = new Date();
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  clientOwner = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, WALLET_LOCK_UP, rpcUrl);
   const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:

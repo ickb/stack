@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk } from "@ickb/sdk";
+import { IckbSdk, tipMaxAgeMs, verifiedClient, WALLET_LOCK_UP } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -22,14 +22,20 @@ export const queryClient = new QueryClient();
 // One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), owned here
 // for the app's lifetime: the connector's network list borrows them, and a chain tab lends
 // the chosen one through an Owner the Provider may dispose without effect.
-const clients = {
+const owners = {
   mainnet: ccc.ClientPublicMainnet.open(),
   testnet: ccc.ClientPublicTestnet.open(),
 };
-export const mainnetClient = clients.mainnet.value;
-export const testnetClient = clients.testnet.value;
+// Every header the app or CCC reads is verified, and the tip may trail the clock by the
+// wallet policy's slack, thirty minutes.
+const clients = {
+  mainnet: verifiedClient(owners.mainnet.value, tipMaxAgeMs(WALLET_LOCK_UP)),
+  testnet: verifiedClient(owners.testnet.value, tipMaxAgeMs(WALLET_LOCK_UP)),
+};
+export const mainnetClient = clients.mainnet;
+export const testnetClient = clients.testnet;
 export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
-  return new ccc.OwnerUnique(clients[chain].value, () => {
+  return new ccc.OwnerUnique(clients[chain], () => {
     // Borrowed: the app keeps the client for its lifetime.
   });
 }

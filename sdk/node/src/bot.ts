@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
+import { BOT_LOCK_UP } from "../../src/dao.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import {
   signAndSendTransaction,
@@ -22,7 +23,7 @@ const events = new BotEventEmitter({ chain, runId: createRunId() });
 events.emit({ type: "bot.turn.started" });
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  clientOwner = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, BOT_LOCK_UP, rpcUrl);
   const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   const managers = getConfig(chain);

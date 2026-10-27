@@ -55,7 +55,7 @@ export type {
   ConversionTransactionResult,
   SystemState,
 } from "./conversion/types.ts";
-export { WALLET_LOCK_UP } from "./dao.ts";
+export { tipMaxAgeMs, WALLET_LOCK_UP } from "./dao.ts";
 export type { LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
@@ -87,3 +87,4 @@ export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export type { SupportedChain } from "./utils/chain.ts";
 export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+export { verifiedClient } from "./utils/verified_client.ts";

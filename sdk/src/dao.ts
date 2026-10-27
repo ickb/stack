@@ -136,6 +136,22 @@ export const WALLET_LOCK_UP: LockUpPolicy = {
   broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 
+/** The nominal epoch the policies are written on, four hours. */
+const EPOCH_MS = 4n * 60n * 60_000n;
+
+/**
+ * How far a tip may trail the local clock under a policy: the selection margin less the
+ * broadcast reserve, the slack a stale tip would eat before a request commits after its
+ * claim. Five minutes for the bot, thirty for a wallet.
+ */
+export function tipMaxAgeMs(policy: LockUpPolicy): number {
+  return Number(epochMs(policy.minLockUp) - epochMs(policy.broadcastReserve));
+}
+
+function epochMs({ integer, numerator, denominator }: ccc.Epoch): bigint {
+  return ((integer * denominator + numerator) * EPOCH_MS) / denominator;
+}
+
 /** A deposit's maturity, rolled a cycle when its claim is too close, and whether it is ready. */
 export function depositMaturity(
   claim: ccc.Epoch,

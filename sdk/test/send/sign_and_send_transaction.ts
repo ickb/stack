@@ -280,6 +280,75 @@ function bodyTransaction(
   return tx;
 }
 
+describe("signAndSendTransaction DAO interest", () => {
+  // The fixture's known Nervos DAO script; a phase-2 input names its deposit block in data.
+  const DAO = ccc.Script.from({ codeHash: hash("90"), hashType: "type", args: "0x" });
+  const AR = 10n ** 16n;
+  const deposit = headerLike({
+    number: 1n,
+    hash: hash("a1"),
+    dao: { c: 0n, ar: AR, s: 0n, u: 0n },
+  });
+  const withdrawFlat = headerLike({
+    number: 2n,
+    hash: hash("b1"),
+    dao: { c: 0n, ar: AR, s: 0n, u: 0n },
+  });
+  const withdrawDoubled = headerLike({
+    number: 2n,
+    hash: hash("b2"),
+    dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
+  });
+
+  /** A body spending one phase-2 request created with `CAPACITY`, naming `deps`. */
+  function request(deps: ccc.Hex[]): { creating: ccc.Transaction; tx: ccc.Transaction } {
+    const creating = creatingTransaction(
+      CAPACITY,
+      ccc.hexFrom(ccc.numLeToBytes(1n, 8)),
+      1,
+      DAO,
+    );
+    const tx = bodyTransaction(undefined, creating);
+    tx.headerDeps = deps;
+    return { creating, tx };
+  }
+
+  it("values a phase-2 input at the headers the transaction names", async () => {
+    const flat = request([deposit.hash, withdrawFlat.hash]);
+    const { signer } = signerFixture(flat.tx, [flat.creating], {
+      deposit,
+      withdraw: withdrawFlat,
+    });
+
+    await expect(signAndSendTransaction(signer, flat.tx)).resolves.toBe(TX_HASH);
+
+    // The same body at a doubled rate collects the free capacity as interest: all fee.
+    const doubled = request([deposit.hash, withdrawDoubled.hash]);
+    const fixture = signerFixture(doubled.tx, [doubled.creating], {
+      deposit,
+      withdraw: withdrawDoubled,
+    });
+    await expect(
+      signAndSendTransaction(fixture.signer, doubled.tx),
+    ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+  });
+
+  it("refuses a phase-2 input valued at a header outside the deps", async () => {
+    for (const deps of [[deposit.hash], [withdrawFlat.hash]]) {
+      const { creating, tx } = request(deps);
+      const { signer, send } = signerFixture(tx, [creating], {
+        deposit,
+        withdraw: withdrawFlat,
+      });
+
+      await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+        "is valued at a header the transaction does not name",
+      );
+      expect(send).not.toHaveBeenCalled();
+    }
+  });
+});
+
 describe("signAndSendTransaction broadcast outcomes", () => {
   it("accepts a duplicate submission naming the same transaction", async () => {
     const { signer, send } = signerFixture();
@@ -374,6 +443,7 @@ function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransa
 function signerFixture(
   signed = ccc.Transaction.default(),
   creating: readonly ccc.Transaction[] = [CREATING],
+  dao?: { deposit: ccc.ClientBlockHeader; withdraw: ccc.ClientBlockHeader },
 ): {
   signer: ccc.Signer;
   signedHash: ReturnType<typeof vi.fn<() => ccc.Hex>>;
@@ -418,9 +488,34 @@ function signerFixture(
     await Promise.resolve();
     return headerLike({ epoch: TIP_EPOCH });
   });
+  // CCC values a phase-2 DAO input from the deposit header by number and the header
+  // beside the cell; the fixture answers both from `dao`.
+  const getHeaderByNumber = vi.fn(async () => {
+    await Promise.resolve();
+    return dao?.deposit;
+  });
+  const getCellWithHeader = vi.fn(async (outPointLike: ccc.OutPointLike) => {
+    await Promise.resolve();
+    const outPoint = ccc.OutPoint.from(outPointLike);
+    const created = creating
+      .find((tx) => tx.hash() === outPoint.txHash)
+      ?.getOutput(outPoint.index);
+    return dao === undefined || created === undefined
+      ? undefined
+      : {
+          cell: ccc.Cell.from({
+            outPoint,
+            cellOutput: created.cellOutput,
+            outputData: created.outputData,
+          }),
+          header: dao.withdraw,
+        };
+  });
   const client = {
     getTransaction,
     getTipHeader,
+    getHeaderByNumber,
+    getCellWithHeader,
     // CCC resolves the Nervos DAO script while checking inputs for withdrawal profit.
     getKnownScript: vi.fn(async () => {
       await Promise.resolve();
@@ -456,14 +551,17 @@ function creatingResponse(
     : undefined;
 }
 
-/** A transaction creating `count` plain cells of `capacity` with `data`. */
+/** A transaction creating `count` cells of `capacity` with `data`, typed when `type` is given. */
 function creatingTransaction(
   capacity: bigint,
   data: ccc.Hex = "0x",
   count = 1,
+  type?: ccc.Script,
 ): ccc.Transaction {
   return ccc.Transaction.from({
-    outputs: Array.from({ length: count }, () => plainCellOutput(capacity)),
+    outputs: Array.from({ length: count }, () =>
+      ccc.CellOutput.from({ capacity, lock: script("11"), type }),
+    ),
     outputsData: Array.from({ length: count }, () => data),
   });
 }

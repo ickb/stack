@@ -1,3 +1,4 @@
+import { tipMaxAgeMs, WALLET_LOCK_UP } from "@ickb/sdk";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { createRoot as reactCreateRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
@@ -26,9 +27,12 @@ vi.mock(import("react-dom/client"), () => ({ createRoot }));
 vi.mock(import("../../src/app/Interface.tsx"), () => ({ default: MockInterface }));
 
 describe("main entrypoint", () => {
-  it("opens the mainnet and testnet clients on their own chains", () => {
+  it("opens the mainnet and testnet clients on their own chains, verified, with the wallet's tip bound", () => {
     expect(mainnetClient.addressPrefix).toBe("ckb");
     expect(testnetClient.addressPrefix).toBe("ckt");
+    for (const client of [mainnetClient, testnetClient]) {
+      expect(client).toMatchObject({ tipMaxAgeMs: tipMaxAgeMs(WALLET_LOCK_UP) });
+    }
   });
 
   it("renders the interface directly into the wallet app mount", async () => {

@@ -3,6 +3,7 @@ import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   assertDaoOutputLimit,
+  BOT_LOCK_UP,
   broadcastDeadline,
   DAO_OUTPUT_LIMIT,
   DaoOutputLimitError,
@@ -10,6 +11,7 @@ import {
   depositMaturity,
   isDaoDeposit,
   isDaoWithdrawalRequest,
+  tipMaxAgeMs,
   WALLET_LOCK_UP,
 } from "../../src/dao.ts";
 
@@ -158,5 +160,12 @@ describe("broadcastDeadline", () => {
       ),
     ).toBe(true);
     expect(broadcastDeadline([], WALLET_LOCK_UP)).toBeUndefined();
+  });
+});
+
+describe("tipMaxAgeMs", () => {
+  it("is the policy's selection margin less its broadcast reserve on the four-hour epoch", () => {
+    expect(tipMaxAgeMs(BOT_LOCK_UP)).toBe(5 * 60_000);
+    expect(tipMaxAgeMs(WALLET_LOCK_UP)).toBe(30 * 60_000);
   });
 });

@@ -1,6 +1,7 @@
-import { ccc } from "@ckb-ccc/core";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { BOT_LOCK_UP } from "../../../../src/dao.ts";
+import { jsonRpcRequestor } from "../../../../src/utils/utils.ts";
 import { createPublicClient } from "../../../src/shared/chain.ts";
 
 const server = createServer((request, response) => {
@@ -17,13 +18,14 @@ if (address === null || typeof address === "string") {
 
 const clientOwner = createPublicClient(
   "testnet",
+  BOT_LOCK_UP,
   `http://127.0.0.1:${String(address.port)}`,
 );
-const client = clientOwner.value;
-if (!(client instanceof ccc.ClientJsonRpc)) {
+const requestor = jsonRpcRequestor(clientOwner.value);
+if (requestor === undefined) {
   throw new TypeError("Expected a JSON-RPC public client");
 }
-await client.requestor.request("test", []);
+await requestor.request("test", []);
 await clientOwner.dispose();
 await new Promise<void>((resolve, reject) => {
   server.close((error) => {

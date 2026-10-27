@@ -41,8 +41,9 @@ export class TransactionExpiredError extends Error {
  * nothing is signed. The connector must not alter the economic body it was handed: the
  * ordered inputs, outputs and outputs data are compared against a digest taken before
  * signing, so in-place mutation cannot evade the check. Witnesses and cell/header
- * dependency preparation stay signer-owned. The fee ceiling values the verified inputs
- * while measuring the signed bytes. When `broadcastBefore` is given, one fresh tip is read
+ * dependency preparation stay signer-owned. The fee ceiling values the verified inputs,
+ * a phase-2 DAO input at the headers the transaction names, while measuring the signed
+ * bytes. When `broadcastBefore` is given, one fresh tip is read
  * after the signature and the fee check, and the send is refused with
  * `TransactionExpiredError` once the tip's epoch has reached it: a withdrawal request that
  * commits after its claim locks the deposit for another cycle, and a wallet may hold the
@@ -67,11 +68,7 @@ export async function signAndSendTransaction(
     throw new Error("Signer altered the transaction inputs, outputs or outputs data");
   }
   const txHash = signed.hash();
-  // CCC values inputs from the metadata attached to them, so the verified cells go in
-  // place of whatever the connector-controlled result carries.
-  const feeTransaction = signed.clone();
-  feeTransaction.inputs = inputs;
-  const feeRate = await feeTransaction.getFeeRate(signer.client);
+  const feeRate = await verifiedFeeRate(signer.client, signed, inputs);
   if (feeRate > cccA.DEFAULT_MAX_FEE_RATE) {
     throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
   }
@@ -109,7 +106,7 @@ export async function signAndSendTransaction(
 async function verifiedInputs(
   client: ccc.Client,
   inputs: readonly ccc.CellInput[],
-): Promise<ccc.CellInput[]> {
+): Promise<ccc.Cell[]> {
   const transactions = new Map<ccc.Hex, Promise<ccc.Transaction>>();
   return Promise.all(
     inputs.map(async (input) => {
@@ -134,14 +131,42 @@ async function verifiedInputs(
           `Input ${outPoint} differs from the cell its transaction created`,
         );
       }
-      return ccc.CellInput.from({
-        previousOutput: input.previousOutput,
-        since: input.since,
+      return ccc.Cell.from({
+        outPoint: input.previousOutput,
         cellOutput: cell.cellOutput,
         outputData: cell.outputData,
       });
     }),
   );
+}
+
+// The fee rate the chain will see: the verified inputs' capacity, plus the interest a
+// phase-2 DAO input collects, less the outputs, over the signed size. CCC values that
+// interest from headers it reads afresh, and a node can answer a different real block
+// for a number or a transaction; the chain values it at the headers the transaction
+// names in its deps, so only those count, and a cell valued elsewhere is refused.
+async function verifiedFeeRate(
+  client: ccc.Client,
+  signed: ccc.Transaction,
+  inputs: readonly ccc.Cell[],
+): Promise<ccc.Num> {
+  const deps = new Set(signed.headerDeps);
+  let capacity = ccc.Zero;
+  for (const cell of inputs) {
+    capacity += cell.cellOutput.capacity;
+    const { depositHeader, withdrawHeader } = await cell.getNervosDaoInfo(client);
+    if (withdrawHeader === undefined) {
+      continue;
+    }
+    if (!deps.has(depositHeader.hash) || !deps.has(withdrawHeader.hash)) {
+      throw new Error(
+        `Input ${cell.outPoint.toHex()} is valued at a header the transaction does not name`,
+      );
+    }
+    capacity += ccc.calcDaoProfit(cell.capacityFree, depositHeader, withdrawHeader);
+  }
+  const fee = capacity - signed.getOutputsCapacity();
+  return (fee * 1000n) / BigInt(signed.toBytes().length + 4);
 }
 
 // The cache answers before the node, whatever status it recorded: the hash check makes a
