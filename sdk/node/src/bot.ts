@@ -5,6 +5,7 @@ import {
   signAndSendTransaction,
   signerAccountLocks,
 } from "../../src/send/sign_and_send_transaction.ts";
+import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createRunId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
 import type { Runtime } from "./bot/types.ts";
@@ -16,6 +17,7 @@ const { chain, privateKey, rpcUrl, rpcEndpoint } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
 );
+const maxFeeRate = readBotMaxFeeRate(process.env);
 const events = new BotEventEmitter({ chain, runId: createRunId() });
 events.emit({ type: "bot.turn.started" });
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
@@ -53,6 +55,7 @@ try {
     managers,
     primaryLock,
     accountLocks: await signerAccountLocks(signer, primaryLock),
+    ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, feeRate, cells) =>
       sdk.completeTransaction(tx, { signer, feeRate, cells }),
     sendTransaction: async (tx, recordTxHash, broadcastBefore) =>

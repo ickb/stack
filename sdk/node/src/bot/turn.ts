@@ -4,6 +4,7 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { minBigInt } from "../../../src/utils/utils.ts";
 import { transactionShape } from "../shared/format.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { summarizeBotState } from "./support.ts";
@@ -32,7 +33,8 @@ export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * Reads bot-owned account state and public market state for one planning attempt.
  *
  * @remarks The bot places no orders, so nothing here counts or collects any; the market
- * side of the state is every order past par.
+ * side of the state is every order past par. The fee rate is the sampled one, capped at
+ * the runtime's `maxFeeRate` when set.
  */
 export async function readBotState(runtime: Runtime): Promise<BotState> {
   const { system, account } = await runtime.sdk.getL1AccountState(
@@ -41,9 +43,15 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     BOT_LOCK_UP,
   );
   const projection = projectAccountAvailability(account, { available: [], pending: [] });
+  // The sampled rate is a node statistic nothing can verify: the cap bounds what a node
+  // can make the bot pay and what it can make the match gate refuse.
+  const feeRate =
+    runtime.maxFeeRate === undefined
+      ? system.feeRate
+      : minBigInt(system.feeRate, runtime.maxFeeRate);
 
   return {
-    system,
+    system: { ...system, feeRate },
     marketOrders: system.orderPool,
     receipts: account.receipts,
     readyWithdrawals: projection.readyWithdrawals,
@@ -54,6 +62,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     ickb: projection.ickbAvailable,
     pendingCkb: projection.ckbPending,
     depositCapacity: convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+    sampledFeeRate: system.feeRate,
   };
 }
 

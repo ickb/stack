@@ -24,6 +24,9 @@ export interface Runtime {
   /** Account locks derived once during signer initialization. */
   accountLocks: ccc.Script[];
 
+  /** The most the bot plans to pay per kB, in shannons, whatever rate the node reports. */
+  maxFeeRate?: ccc.Num;
+
   /** Completes a transaction through the initialization-owned signer closure. */
   completeTransaction: (
     tx: ccc.TransactionLike,
@@ -73,6 +76,9 @@ export interface BotState {
 
   /** Capacity of one cap-sized deposit output at the sampled exchange ratio. */
   depositCapacity: bigint;
+
+  /** The node's fee rate before the cap, so the journal shows when the cap binds. */
+  sampledFeeRate: ccc.Num;
 }
 
 /** Counts of actions a transaction carries. */
@@ -158,7 +164,7 @@ export interface BotDecision {
   /** The core the walk settled on and how many candidates it built on the way. */
   core: { kind: Core["kind"]; withdrawalRequests: number; attempts: number };
   actions: BotActions;
-  fee: { feeRate: ccc.Num; estimated?: bigint };
+  fee: { feeRate: ccc.Num; sampledFeeRate: ccc.Num; estimated?: bigint };
   transactionShape?: {
     inputs: number;
     outputs: number;

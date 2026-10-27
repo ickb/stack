@@ -260,6 +260,7 @@ export function botState(overrides: Partial<BotState>): BotState {
     ickb: 0n,
     pendingCkb: 0n,
     depositCapacity: ccc.fixedPointFrom(100_000),
+    sampledFeeRate: 1n,
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],

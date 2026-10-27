@@ -19,6 +19,7 @@ The bot reads these environment variables:
 - `BOT_CHAIN`: `testnet` or `mainnet`.
 - `BOT_RPC_URL` (optional): one node's HTTP(S) or WebSocket RPC URL, used as the only endpoint. Absent, the bot uses CCC's public endpoints for the chain, WebSocket first with HTTPS fallbacks, and the journal's `rpcEndpoint` reads `{"mode":"default"}`. Userinfo, whitespace, and control characters are rejected.
 - `BOT_PRIVATE_KEY_FILE`: path of a mode `0600` file holding only the signing key as lowercase `0x` plus 64 lowercase hex characters. Surrounding whitespace, such as an editor's final newline, is ignored. A relative path resolves against `INIT_CWD` when pnpm sets it, otherwise the working directory.
+- `BOT_MAX_FEE_RATE` (optional): the most the bot plans to pay per kB, in shannons, at least 1000, the default node admission floor. Planning uses the lower of the node's sampled rate and this value. The sampled rate is a node statistic nothing can verify, so the cap bounds what a node can make the bot pay in fees and what it can make the [match gate](docs/policy.md#matching-makes-progress-from-available-inventory) refuse by inflating the fee it subtracts. A mainnet unit sets 1000, since mainnet activity is low; the testnet unit sets none, because the testnet rate moves. The [send-side ceiling](../README.md#signing-and-broadcast) stays at CCC's maximum: with every input verified, the planned fee is the fee the chain charges, so the cap already bounds it at planning, and a send-side knob would add plumbing for no gain. The journal's `bot.state.read` carries both the sampled rate and the one planning uses, so a binding cap is visible.
 
 Use an RPC endpoint whose pathname contains no credential: preflight includes that path in the journal. Query and fragment are omitted from endpoint identity, but transport errors are logged whole, so this is not a general credential-removal layer. A credential-bearing provider needs a separate review of that output boundary before use.
 
@@ -194,7 +195,7 @@ systemctl --user enable --now ickb-bot-testnet.service
 journalctl --user -u ickb-bot-testnet.service -f -o cat
 ```
 
-`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH. Point at the checkout's `node_modules/node/bin/node`, the version the lockfile pins, which `pnpm install` keeps current. A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values and its own key file; the generator refuses any chain but testnet.
+`ExecStart` needs the absolute path of the node binary: the user manager never sees the shell PATH. Point at the checkout's `node_modules/node/bin/node`, the version the lockfile pins, which `pnpm install` keeps current. A literal `%` in any value must be written `%%`. Linger keeps the user manager running without a login session, so the unit survives logout and starts at boot. A mainnet bot unit is the same file with `mainnet` values, its own key file and `Environment=BOT_MAX_FEE_RATE=1000`; the generator refuses any chain but testnet.
 
 Operate the unit as usual:
 

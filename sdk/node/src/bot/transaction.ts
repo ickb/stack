@@ -239,6 +239,7 @@ function buildDecision({
     actions,
     fee: {
       feeRate: state.system.feeRate,
+      sampledFeeRate: state.sampledFeeRate,
       ...(tx === undefined ? {} : { estimated: tx.estimateFee(state.system.feeRate) }),
     },
     ...(tx === undefined ? {} : { transactionShape: transactionShape(tx) }),

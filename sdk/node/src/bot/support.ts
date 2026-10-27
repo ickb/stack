@@ -46,7 +46,7 @@ export function summarizeBotState(state: BotState): BotStateSummary {
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,
-    fee: { feeRate },
+    fee: { feeRate, sampledFeeRate: state.sampledFeeRate },
   };
 }
 
