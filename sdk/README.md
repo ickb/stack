@@ -51,7 +51,8 @@ DAO output and deposit-header limits come from the deployed script, not a genera
 
 `signAndSendTransaction(signer, tx, recordTxHash?, broadcastBefore?)` signs locally, then checks the body, fee rate and optional epoch deadline before sending.
 
-- Different ordered inputs, outputs or outputs data are rejected. Witnesses, `cellDeps` and `headerDeps` remain signer-owned. The fee ceiling values inputs from the pre-sign transaction.
+- Every input is verified before signing: its creating transaction is read from the client cache, else the node, and accepted only when its hash is the one the `OutPoint` names, so the output at the index is the real cell. A planned cell that differs from it in capacity, lock, type or data is rejected. The default lock signs each input as its `OutPoint` only, so without this a node understating a plain cell's capacity or an iCKB amount would turn the difference into fee or a burn on a transaction that passes every other check. One `get_transaction` per distinct creating transaction not already cached.
+- Different ordered inputs, outputs or outputs data are rejected. Witnesses, `cellDeps` and `headerDeps` remain signer-owned. The fee ceiling values the verified inputs.
 - The signed fee rate must not exceed CCC's maximum, which `sendTransactionNoCache` bypasses. There is no operator override that could silently disable this protection.
 - A withdrawal plan carries `broadcastBefore`, the earliest selected claim less the policy's reserve. After signing and the fee check, one fresh tip read rejects an expired plan with `TransactionExpiredError`, without broadcasting. Timing uses epochs because CKB has no transaction expiry and a request committed after its claim can lock the deposit for another cycle.
 

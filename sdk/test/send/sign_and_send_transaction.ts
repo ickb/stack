@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { headerLike, script } from "@ickb/testkit";
+import { committedTransactionResponse, headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   signAndSendTransaction,
@@ -10,23 +10,33 @@ import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("81");
 const TIP_EPOCH = ccc.Epoch.from([10n, 0n, 1n]);
-const INPUT_OUT_POINT = { txHash: hash("91"), index: 0n };
+// CCC raises a capacity below the occupied minimum wherever it builds a cell, so the
+// fixtures use real sizes to keep every byte compared as written.
+const CAPACITY = ccc.fixedPointFrom(100);
+const CREATING = creatingTransaction(CAPACITY);
+const INPUT_OUT_POINT = { txHash: CREATING.hash(), index: 0n };
 const ALTERED_BODY_ERROR =
   "Signer altered the transaction inputs, outputs or outputs data";
 
 describe("signAndSendTransaction", () => {
-  it("records signed chain identity before RPC and never marks the cache", async () => {
+  it("verifies inputs before signing and records the hash before the send RPC", async () => {
     const signed = bodyTransaction();
-    const { signer, signedHash, getCell, send, mark } = signerFixture(signed);
+    const { signer, signedHash, getTransaction, send, mark, signTransaction } =
+      signerFixture(signed);
     const calls: string[] = [];
     signedHash.mockImplementation(() => {
       calls.push("hash");
       return TX_HASH;
     });
-    getCell.mockImplementation(async (outPoint) => {
+    getTransaction.mockImplementation(async (txHash) => {
       await Promise.resolve();
-      calls.push("getCell");
-      return inputCell(outPoint, 100n);
+      calls.push("getTransaction");
+      return creatingResponse(txHash);
+    });
+    signTransaction.mockImplementation(async () => {
+      await Promise.resolve();
+      calls.push("sign");
+      return signed;
     });
     send.mockImplementation(async () => {
       await Promise.resolve();
@@ -41,24 +51,136 @@ describe("signAndSendTransaction", () => {
       }),
     ).resolves.toBe(TX_HASH);
 
-    expect(calls).toEqual(["hash", "getCell", "record", "send"]);
+    expect(calls).toEqual(["getTransaction", "sign", "hash", "record", "send"]);
     expect(mark).not.toHaveBeenCalled();
   });
 
   it("rejects an excessive signed fee rate before recording or broadcast", async () => {
-    const signed = bodyTransaction();
-    const { signer, getCell, send } = signerFixture(signed);
+    const creating = creatingTransaction(CAPACITY + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
+    const { signer, send } = signerFixture(bodyTransaction(undefined, creating), [
+      creating,
+    ]);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
-    getCell.mockResolvedValueOnce(
-      inputCell(INPUT_OUT_POINT, 100n + cccA.DEFAULT_MAX_FEE_RATE * 10_000n),
-    );
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(), recordTxHash),
+      signAndSendTransaction(signer, bodyTransaction(undefined, creating), recordTxHash),
     ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("signAndSendTransaction input verification", () => {
+  it("accepts a planned cell equal to the creating transaction's output", async () => {
+    const { signer } = signerFixture(bodyTransaction());
+
+    await expect(signAndSendTransaction(signer, bodyTransaction(CAPACITY))).resolves.toBe(
+      TX_HASH,
+    );
+  });
+
+  it("rejects a planned capacity under what the creating transaction created", async () => {
+    const { signer, signTransaction, send } = signerFixture(bodyTransaction());
+
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(CAPACITY - 1n)),
+    ).rejects.toThrow(
+      `Input ${ccc.OutPoint.from(INPUT_OUT_POINT).toHex()} differs from the cell its transaction created`,
+    );
+
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects a planned lock the creating transaction did not create", async () => {
+    const { signer, send } = signerFixture(bodyTransaction());
+    const requested = bodyTransaction(CAPACITY);
+    for (const input of requested.inputs) {
+      input.cellOutput = ccc.CellOutput.from({ capacity: CAPACITY, lock: script("22") });
+    }
+
+    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+      "differs from the cell its transaction created",
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects planned data the creating transaction did not create", async () => {
+    const { signer, send } = signerFixture(bodyTransaction());
+    const requested = bodyTransaction(CAPACITY);
+    for (const input of requested.inputs) {
+      input.outputData = "0x01";
+    }
+
+    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+      "differs from the cell its transaction created",
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects a node body whose hash is not the one the OutPoint names", async () => {
+    const { signer, getTransaction, send } = signerFixture(bodyTransaction());
+    getTransaction.mockResolvedValue(
+      committedTransactionResponse(creatingTransaction(CAPACITY, "0x02")),
+    );
+
+    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
+      `Transaction ${INPUT_OUT_POINT.txHash} was answered with a body of another hash`,
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects an input whose creating transaction is unknown", async () => {
+    const { signer, send } = signerFixture(bodyTransaction(), []);
+
+    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
+      `Transaction ${INPUT_OUT_POINT.txHash} not found`,
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects an input index beyond the creating transaction's outputs", async () => {
+    const requested = bodyTransaction(undefined, CREATING, 1n);
+    const { signer, send } = signerFixture(requested);
+
+    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+      `Input ${ccc.OutPoint.from({ ...INPUT_OUT_POINT, index: 1n }).toHex()} is not an output of its transaction`,
+    );
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("reads the cache before the node and each creating transaction once", async () => {
+    const creating = creatingTransaction(ccc.fixedPointFrom(50), "0x", 2);
+    const cached = creatingTransaction(CAPACITY);
+    const requested = ccc.Transaction.from({
+      inputs: [
+        { previousOutput: { txHash: creating.hash(), index: 0n } },
+        { previousOutput: { txHash: creating.hash(), index: 1n } },
+        { previousOutput: { txHash: cached.hash(), index: 0n } },
+      ],
+      outputs: [{ capacity: ccc.fixedPointFrom(200), lock: script("11") }],
+      outputsData: ["0x"],
+    });
+    const { signer, getTransaction, getTransactionResponse } = signerFixture(requested, [
+      creating,
+    ]);
+    getTransactionResponse.mockImplementation(async (txHash) => {
+      await Promise.resolve();
+      return ccc.hexFrom(txHash) === cached.hash()
+        ? committedTransactionResponse(cached)
+        : undefined;
+    });
+
+    await expect(signAndSendTransaction(signer, requested)).resolves.toBe(TX_HASH);
+
+    expect(getTransaction).toHaveBeenCalledTimes(1);
+    expect(getTransaction).toHaveBeenCalledWith(creating.hash());
   });
 });
 
@@ -83,14 +205,13 @@ describe("signAndSendTransaction economic body", () => {
     const altered = bodyTransaction();
     altered.outputs.push(ccc.CellOutput.from({ capacity: 200n, lock: script("22") }));
     altered.outputsData.push("0x");
-    const { signer, getCell, send } = signerFixture(altered);
+    const { signer, send } = signerFixture(altered);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
       signAndSendTransaction(signer, bodyTransaction(), recordTxHash),
     ).rejects.toThrow(ALTERED_BODY_ERROR);
 
-    expect(getCell).not.toHaveBeenCalled();
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
@@ -125,26 +246,29 @@ describe("signAndSendTransaction economic body", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("values inputs before signing when connector metadata understates the fee", async () => {
-    const requested = bodyTransaction(100n + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
-    const signed = bodyTransaction(100n);
-    const { signer, getCell, send } = signerFixture(signed);
+  it("values the verified inputs when connector metadata understates the fee", async () => {
+    const creating = creatingTransaction(CAPACITY + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
+    const signed = bodyTransaction(CAPACITY, creating);
+    const { signer, send } = signerFixture(signed, [creating]);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
-      signAndSendTransaction(signer, requested, recordTxHash),
+      signAndSendTransaction(signer, bodyTransaction(undefined, creating), recordTxHash),
     ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
 
-    expect(getCell).not.toHaveBeenCalled();
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 });
 
-function bodyTransaction(inputCapacity?: bigint): ccc.Transaction {
+function bodyTransaction(
+  inputCapacity?: bigint,
+  creating: ccc.Transaction = CREATING,
+  index = 0n,
+): ccc.Transaction {
   const tx = ccc.Transaction.from({
-    inputs: [{ previousOutput: INPUT_OUT_POINT }],
-    outputs: [{ capacity: 100n, lock: script("11") }],
+    inputs: [{ previousOutput: { txHash: creating.hash(), index } }],
+    outputs: [{ capacity: CAPACITY, lock: script("11") }],
     outputsData: ["0x01"],
   });
   if (inputCapacity !== undefined) {
@@ -247,11 +371,21 @@ function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransa
   );
 }
 
-function signerFixture(signed = ccc.Transaction.default()): {
+function signerFixture(
+  signed = ccc.Transaction.default(),
+  creating: readonly ccc.Transaction[] = [CREATING],
+): {
   signer: ccc.Signer;
   signedHash: ReturnType<typeof vi.fn<() => ccc.Hex>>;
-  getCell: ReturnType<
-    typeof vi.fn<(outPoint: ccc.OutPointLike) => Promise<ccc.Cell | undefined>>
+  getTransaction: ReturnType<
+    typeof vi.fn<
+      (txHash: ccc.HexLike) => Promise<ccc.ClientTransactionResponse | undefined>
+    >
+  >;
+  getTransactionResponse: ReturnType<
+    typeof vi.fn<
+      (txHash: ccc.HexLike) => Promise<ccc.ClientTransactionResponse | undefined>
+    >
   >;
   send: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<ccc.Hex>>>;
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
@@ -259,9 +393,19 @@ function signerFixture(signed = ccc.Transaction.default()): {
   getTipHeader: ReturnType<typeof vi.fn<() => Promise<ccc.ClientBlockHeader>>>;
 } {
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
-  const getCell = vi.fn(async (outPoint: ccc.OutPointLike) => {
+  // The node answers with the creating transaction whose hash is asked, as a chain would.
+  const getTransaction = vi.fn(async (txHash: ccc.HexLike) => {
     await Promise.resolve();
-    return inputCell(outPoint, 100n);
+    const transaction = creating.find((tx) => tx.hash() === ccc.hexFrom(txHash));
+    return transaction === undefined
+      ? undefined
+      : committedTransactionResponse(transaction);
+  });
+  // An empty cache by default; a test scripts a hit per hash.
+  const getTransactionResponse = vi.fn<
+    (txHash: ccc.HexLike) => Promise<ccc.ClientTransactionResponse | undefined>
+  >(async () => {
+    await Promise.resolve();
   });
   const send = vi.fn(async () => {
     await Promise.resolve();
@@ -275,7 +419,7 @@ function signerFixture(signed = ccc.Transaction.default()): {
     return headerLike({ epoch: TIP_EPOCH });
   });
   const client = {
-    getCell,
+    getTransaction,
     getTipHeader,
     // CCC resolves the Nervos DAO script while checking inputs for withdrawal profit.
     getKnownScript: vi.fn(async () => {
@@ -283,7 +427,7 @@ function signerFixture(signed = ccc.Transaction.default()): {
       return { codeHash: hash("90"), hashType: "type", cellDeps: [] };
     }),
     sendTransactionNoCache: send,
-    cache: { markTransactions: mark },
+    cache: { markTransactions: mark, getTransactionResponse },
   };
   const signTransaction = vi.fn(async () => {
     await Promise.resolve();
@@ -294,7 +438,8 @@ function signerFixture(signed = ccc.Transaction.default()): {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Focused fixture supplies only the public signer/client methods under test.
     signer: signer as unknown as ccc.Signer,
     signedHash,
-    getCell,
+    getTransaction,
+    getTransactionResponse,
     send,
     mark,
     signTransaction,
@@ -302,11 +447,24 @@ function signerFixture(signed = ccc.Transaction.default()): {
   };
 }
 
-function inputCell(outPoint: ccc.OutPointLike, capacity: bigint): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint,
-    cellOutput: plainCellOutput(capacity),
-    outputData: "0x",
+/** A node answer for one of the creating transactions, looked up by the hash asked. */
+function creatingResponse(
+  txHash: ccc.HexLike,
+): ccc.ClientTransactionResponse | undefined {
+  return CREATING.hash() === ccc.hexFrom(txHash)
+    ? committedTransactionResponse(CREATING)
+    : undefined;
+}
+
+/** A transaction creating `count` plain cells of `capacity` with `data`. */
+function creatingTransaction(
+  capacity: bigint,
+  data: ccc.Hex = "0x",
+  count = 1,
+): ccc.Transaction {
+  return ccc.Transaction.from({
+    outputs: Array.from({ length: count }, () => plainCellOutput(capacity)),
+    outputsData: Array.from({ length: count }, () => data),
   });
 }
 
