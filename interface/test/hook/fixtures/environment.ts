@@ -84,7 +84,6 @@ export const hookState = mocks.hookState;
 export const queryMock = mocks.queryMock;
 export const transactMock = mocks.transactMock;
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers React hook mocks before dynamic component imports.
 vi.mock(import("react"), async (importActual: () => Promise<typeof ReactModule>) => {
   const actual = await importActual();
   function mockUseState<S>(
@@ -145,7 +144,6 @@ vi.mock(import("react"), async (importActual: () => Promise<typeof ReactModule>)
   };
 });
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers React Query mocks before dynamic component imports.
 vi.mock(
   import("@tanstack/react-query"),
   async (importActual: () => Promise<typeof ReactQueryModule>) => {
@@ -167,7 +165,6 @@ vi.mock(
   },
 );
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers CCC connector mocks before dynamic component imports.
 vi.mock(import("@ckb-ccc/connector-react"), async () => {
   const React = await import("react");
   const Provider: typeof ConnectorModule.Provider = ({ children }) =>
@@ -180,10 +177,8 @@ vi.mock(import("@ckb-ccc/connector-react"), async () => {
   return { Provider, useCcc, useSigner };
 });
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture replaces transaction side effects with an observable mock.
 vi.mock(import("../../../src/action/actionTransaction.ts"), () => transactMock);
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture owns shared hook state reset for these tests.
 beforeEach(() => {
   resetHooks();
   queryMock.options = undefined;
@@ -200,7 +195,6 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", storage());
 });
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture restores global timer and storage state for these tests.
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
