@@ -284,18 +284,22 @@ describe("signAndSendTransaction DAO interest", () => {
   // The fixture's known Nervos DAO script; a phase-2 input names its deposit block in data.
   const DAO = ccc.Script.from({ codeHash: hash("90"), hashType: "type", args: "0x" });
   const AR = 10n ** 16n;
+  // The request headers sit one epoch after the deposit, as the deployed dao.c requires.
   const deposit = headerLike({
     number: 1n,
+    epoch: [1n, 0n, 1n],
     hash: hash("a1"),
     dao: { c: 0n, ar: AR, s: 0n, u: 0n },
   });
   const withdrawFlat = headerLike({
     number: 2n,
+    epoch: [2n, 0n, 1n],
     hash: hash("b1"),
     dao: { c: 0n, ar: AR, s: 0n, u: 0n },
   });
   const withdrawDoubled = headerLike({
     number: 2n,
+    epoch: [2n, 0n, 1n],
     hash: hash("b2"),
     dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
   });
@@ -331,6 +335,21 @@ describe("signAndSendTransaction DAO interest", () => {
     await expect(
       signAndSendTransaction(fixture.signer, doubled.tx),
     ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+  });
+
+  it("refuses a phase-2 input whose request header is its own deposit header", async () => {
+    // Both deps are real, and the node names the deposit block for the request cell: the
+    // interest would be valued at zero while the chain collects it at the doubled rate.
+    const { creating, tx } = request([deposit.hash, withdrawDoubled.hash]);
+    const { signer, send } = signerFixture(tx, [creating], {
+      deposit,
+      withdraw: deposit,
+    });
+
+    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+      "is valued at a request header not after its deposit",
+    );
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("refuses a phase-2 input valued at a header outside the deps", async () => {

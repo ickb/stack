@@ -142,9 +142,12 @@ async function verifiedInputs(
 
 // The fee rate the chain will see: the verified inputs' capacity, plus the interest a
 // phase-2 DAO input collects, less the outputs, over the signed size. CCC values that
-// interest from headers it reads afresh, and a node can answer a different real block
-// for a number or a transaction; the chain values it at the headers the transaction
-// names in its deps, so only those count, and a cell valued elsewhere is refused.
+// interest from headers it reads afresh, and a node names which block created a cell;
+// the chain values it at headers the transaction names in its deps, the deposit header
+// at the number the cell's data records and the request header strictly after it (the
+// deployed dao.c refuses a request epoch at or before its deposit), so a cell valued
+// elsewhere is refused. Among the deps, a node can still name another input's request
+// block: the difference is the interest between two request blocks of one transaction.
 async function verifiedFeeRate(
   client: ccc.Client,
   signed: ccc.Transaction,
@@ -161,6 +164,11 @@ async function verifiedFeeRate(
     if (!deps.has(depositHeader.hash) || !deps.has(withdrawHeader.hash)) {
       throw new Error(
         `Input ${cell.outPoint.toHex()} is valued at a header the transaction does not name`,
+      );
+    }
+    if (withdrawHeader.epoch.compare(depositHeader.epoch) <= 0) {
+      throw new Error(
+        `Input ${cell.outPoint.toHex()} is valued at a request header not after its deposit`,
       );
     }
     capacity += ccc.calcDaoProfit(cell.capacityFree, depositHeader, withdrawHeader);
