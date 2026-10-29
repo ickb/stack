@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
-import type { OrderGroup } from "../../../src/order/cells.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 
@@ -47,9 +46,6 @@ export interface BotState {
   /** Sampled public L1 state. */
   system: SystemState;
 
-  /** Every order past par on the book, including any owned by the bot. */
-  marketOrders: OrderGroup[];
-
   /** User receipt cells ready for deposit completion. */
   receipts: ReceiptCell[];
 
@@ -58,9 +54,6 @@ export interface BotState {
 
   /** User withdrawal groups that are not ready yet. */
   notReadyWithdrawals: WithdrawalGroup[];
-
-  /** Full public pool deposit snapshot. */
-  poolDeposits: IckbDepositCell[];
 
   /** The bot's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
   cells: ccc.Cell[];

@@ -52,11 +52,9 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
 
   return {
     system: { ...system, feeRate },
-    marketOrders: system.orderPool,
     receipts: account.receipts,
     readyWithdrawals: projection.readyWithdrawals,
     notReadyWithdrawals: projection.pendingWithdrawals,
-    poolDeposits: system.poolDeposits,
     cells: [...account.capacityCells, ...account.nativeUdtCells],
     ckb: projection.ckbAvailable,
     ickb: projection.ickbAvailable,

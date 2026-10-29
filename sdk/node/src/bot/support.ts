@@ -36,13 +36,16 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       cellCount: state.cells.length,
     },
     counts: {
-      marketOrders: state.marketOrders.length,
+      marketOrders: state.system.orderPool.length,
       receipts: state.receipts.length,
       readyWithdrawals: state.readyWithdrawals.length,
       pendingWithdrawals: state.notReadyWithdrawals.length,
-      poolDeposits: state.poolDeposits.length,
-      readyPoolDeposits: readyDeposits(state.poolDeposits, tip, state.system.lockUp)
-        .length,
+      poolDeposits: state.system.poolDeposits.length,
+      readyPoolDeposits: readyDeposits(
+        state.system.poolDeposits,
+        tip,
+        state.system.lockUp,
+      ).length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
+import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, depositData } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
 import {
@@ -251,9 +252,18 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   };
 }
 
-export function botState(overrides: Partial<BotState>): BotState {
-  const state: BotState = {
-    marketOrders: [],
+/**
+ * A bot state; `orderPool` and `poolDeposits` are shorthand for the system state's own,
+ * which the bot reads.
+ */
+export function botState({
+  orderPool,
+  poolDeposits,
+  system,
+  ...overrides
+}: Partial<BotState> &
+  Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
+  return {
     ckb: 0n,
     ickb: 0n,
     pendingCkb: 0n,
@@ -262,8 +272,8 @@ export function botState(overrides: Partial<BotState>): BotState {
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
-    poolDeposits: [],
     cells: [],
+    ...overrides,
     system: {
       feeRate: 1n,
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
@@ -271,10 +281,11 @@ export function botState(overrides: Partial<BotState>): BotState {
       orderPool: [],
       poolDeposits: [],
       lockUp: BOT_LOCK_UP,
+      ...system,
+      ...(orderPool === undefined ? {} : { orderPool }),
+      ...(poolDeposits === undefined ? {} : { poolDeposits }),
     },
-    ...overrides,
   };
-  return state;
 }
 
 /**

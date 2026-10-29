@@ -45,7 +45,7 @@ describe("buildTransaction matching", () => {
       ckbMinMatchLog: 44,
     });
     const state = (ckb: bigint): ReturnType<typeof botState> =>
-      botState({ marketOrders: [seller], ckb, ickb: BAND_ICKB_BALANCE });
+      botState({ orderPool: [seller], ckb, ickb: BAND_ICKB_BALANCE });
 
     const short = await buildTransaction(
       botRuntime(completing()),
@@ -97,7 +97,7 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        marketOrders: [seller],
+        orderPool: [seller],
         ckb: plain.cellOutput.capacity,
         ickb: BAND_ICKB_BALANCE,
         cells: [plain],
@@ -137,7 +137,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          marketOrders: [buyer({ ckbScale: 1n, udtScale: 2n })],
+          orderPool: [buyer({ ckbScale: 1n, udtScale: 2n })],
           ckb: CKB_RESERVE,
           ickb: 0n,
         }),
@@ -154,7 +154,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          marketOrders: [buyer({ ckbScale: 1n, udtScale: 1n })],
+          orderPool: [buyer({ ckbScale: 1n, udtScale: 1n })],
           ckb: CKB_RESERVE,
           ickb: ccc.fixedPointFrom(1000),
         }),
@@ -193,7 +193,7 @@ describe("buildTransaction matching", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ marketOrders: [buyer], ckb: CKB_RESERVE, ickb: BAND_ICKB_BALANCE }),
+        botState({ orderPool: [buyer], ckb: CKB_RESERVE, ickb: BAND_ICKB_BALANCE }),
       ),
     ).rejects.toThrow("fetch failed");
   });
@@ -211,7 +211,7 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       botRuntime(completing()),
       botState({
-        marketOrders: [buyer],
+        orderPool: [buyer],
         ckb: ccc.fixedPointFrom(5000),
         ickb: BAND_ICKB_BALANCE,
       }),

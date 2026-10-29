@@ -28,7 +28,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  if (state.marketOrders.length === 0) {
+  if (state.system.orderPool.length === 0) {
     return "no_market_orders";
   }
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
@@ -56,7 +56,7 @@ export async function buildTransaction(
     ckb: state.ckb + match.ckbDelta,
     pendingCkb: state.pendingCkb,
     depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
-    poolDeposits: state.poolDeposits,
+    poolDeposits: state.system.poolDeposits,
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
   const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
@@ -102,7 +102,7 @@ export async function buildTransaction(
 
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   const match = matchTurn({
-    orders: state.marketOrders,
+    orders: state.system.orderPool,
     ckb: matchableCkb(state.ckb),
     udt: state.ickb,
     exchangeRatio: state.system.exchangeRatio,

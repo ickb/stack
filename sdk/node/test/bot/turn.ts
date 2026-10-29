@@ -444,7 +444,7 @@ describe("readBotState pool snapshot", () => {
     expect(getL1AccountState).toHaveBeenCalledTimes(1);
     expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
     expect(findDeposits).not.toHaveBeenCalled();
-    expect(state.poolDeposits).toEqual(pool);
+    expect(state.system.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });
 });
@@ -485,7 +485,7 @@ describe("readBotState", () => {
     const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
-    expect(state.marketOrders).toEqual([marketOrder]);
+    expect(state.system.orderPool).toEqual([marketOrder]);
     expect(state.ckb).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );
