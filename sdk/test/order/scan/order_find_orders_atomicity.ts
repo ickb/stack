@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
+import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Relative } from "../../../src/order/relative.ts";
 import {
@@ -68,11 +68,10 @@ function twoGroupScan({
   ]);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) =>
-      query.scriptType === "lock"
+    cells: (query): readonly StubCell[] =>
+      query.script_type === "lock"
         ? [first.liveOrder, second.liveOrder]
         : [first.liveMaster, second.liveMaster],
-    ),
     getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
       await Promise.resolve();
       const requested = ccc.hexFrom(txHash);

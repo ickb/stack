@@ -2,11 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  defaultL1Sdk,
-  emptyCellScan,
-  FeeRateStubClient,
-} from "../l1_account/support/sdk_l1_support.ts";
+import { defaultL1Sdk, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
 import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
@@ -24,7 +20,7 @@ describe(L1_STATE_SUITE, () => {
     const sdk = defaultL1Sdk();
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await sdk.getL1AccountState(client, [], WALLET_LOCK_UP);

@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import { pagedCells, script, StubClient } from "@ickb/testkit";
+import { script, StubClient } from "@ickb/testkit";
 
 import { LogicManager } from "../../../../src/logic.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
@@ -32,8 +32,6 @@ export function tipHeaderHandler(
     return header;
   };
 }
-
-export const emptyCellScan = pagedCells([]);
 
 export function defaultL1Sdk(): IckbSdk {
   const dao = script("33");

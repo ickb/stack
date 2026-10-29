@@ -8,7 +8,6 @@ import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  emptyCellScan,
   FeeRateStubClient,
   l1SdkWithManagers,
   tipHeaderHandler,
@@ -41,7 +40,7 @@ describe(L1_STATE_SUITE, () => {
     const tip = headerLike(1n, { epoch: ccc.Epoch.from([181n, 0n, 1n]) });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
       getTransactionWithHeader: async (): ReturnType<
         ccc.Client["getTransactionWithHeader"]
       > => {

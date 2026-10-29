@@ -16,9 +16,10 @@ import {
   receiptDataBytes,
   type ReceiptData,
 } from "./udt.ts";
-import { transactionHeaders } from "./utils/transaction_header.ts";
+import { headersByNumber } from "./utils/transaction_header.ts";
 import {
   findCells,
+  type ScannedCell,
   type ScriptDeps,
   type TransactionHeader,
   type ValueComponents,
@@ -186,23 +187,25 @@ export class LogicManager implements ScriptDeps {
    */
   public async receiptsFrom(
     client: ccc.Client,
-    cells: readonly ccc.Cell[],
+    cells: readonly ScannedCell[],
   ): Promise<ReceiptCell[]> {
-    const receipts = cells.filter((cell) => this.isReceipt(cell));
-    const headers = await transactionHeaders(
+    const receipts = cells.filter(({ cell }) => this.isReceipt(cell));
+    const headers = await headersByNumber(
       client,
-      receipts.map((cell) => cell.outPoint.txHash),
+      receipts.map(({ blockNumber }) => blockNumber),
     );
-    return receipts.map((cell) => {
-      const { txHash } = cell.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's hash was read above.
-      return receiptCell(cell, { header: headers.get(txHash)!, txHash });
-    });
+    return receipts.map(({ cell, blockNumber }) =>
+      receiptCell(cell, {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's block was read above.
+        header: headers.get(blockNumber)!,
+        txHash: cell.outPoint.txHash,
+      }),
+    );
   }
 
   /**
    * Every live iCKB deposit, valued at its deposit header, with its claim epoch at the tip;
-   * each deposit transaction's header is read once.
+   * each deposit block's header is read once.
    */
   public async findDeposits(
     client: ccc.Client,
@@ -220,16 +223,19 @@ export class LogicManager implements ScriptDeps {
         scriptSearchMode: "exact",
         withData: true,
       })
-    ).filter((cell) => this.isDeposit(cell));
-    const headers = await transactionHeaders(
+    ).filter(({ cell }) => this.isDeposit(cell));
+    const headers = await headersByNumber(
       client,
-      cells.map((cell) => cell.outPoint.txHash),
+      cells.map(({ blockNumber }) => blockNumber),
     );
-    return cells.map((cell) => {
-      const { txHash } = cell.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's hash was read above.
-      return ickbDepositCell(cell, { header: headers.get(txHash)!, txHash }, tip);
-    });
+    return cells.map(({ cell, blockNumber }) =>
+      ickbDepositCell(
+        cell,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's block was read above.
+        { header: headers.get(blockNumber)!, txHash: cell.outPoint.txHash },
+        tip,
+      ),
+    );
   }
 }
 

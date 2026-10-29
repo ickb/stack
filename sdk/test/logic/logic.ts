@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 import {
   byte32FromByte,
   headerLike,
-  pagedCells,
   script,
   StubClient,
-  transactionWithHeader,
+  type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { DAO_OUTPUT_LIMIT, DaoOutputLimitError, depositData } from "../../src/dao.ts";
@@ -261,15 +261,16 @@ describe("LogicManager.receiptsFrom", () => {
     );
     const other = depositCellOf("12");
     const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+      getHeaderByNumber: async (): Promise<ccc.ClientBlockHeader> => {
         await Promise.resolve();
-        return transactionWithHeader(header);
+        return header;
       },
     });
 
-    const receipts = await manager().receiptsFrom(client, [other, receipt]);
+    const receipts = await manager().receiptsFrom(client, [
+      { cell: other, blockNumber: 1n },
+      { cell: receipt, blockNumber: 1n },
+    ]);
 
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
@@ -279,40 +280,34 @@ describe("LogicManager.receiptsFrom", () => {
     });
   });
 
-  it("reads each transaction header once, concurrently, and keeps batch order", async () => {
+  it("reads each block header once, concurrently, and keeps batch order", async () => {
     const first = receiptCellOf("11", receiptData(1n));
     const second = receiptCellOf("22", receiptData(1n));
-    const twin = ccc.Cell.from({
-      outPoint: { txHash: first.outPoint.txHash, index: 1n },
-      cellOutput: first.cellOutput,
-      outputData: first.outputData,
-    });
-    const requests: ccc.Hex[] = [];
+    const twin = receiptCellOf("33", receiptData(1n));
+    const requests: ccc.Num[] = [];
     const { promise: firstFetch, resolve: resolveFirst } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
+      Promise.withResolvers<ccc.ClientBlockHeader>();
     const { promise: secondFetch, resolve: resolveSecond } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
+      Promise.withResolvers<ccc.ClientBlockHeader>();
     const client = new StubClient({
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        const hash = ccc.hexFrom(txHash);
-        requests.push(hash);
-        return hash === first.outPoint.txHash ? firstFetch : secondFetch;
+      getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader> => {
+        const asked = ccc.numFrom(number);
+        requests.push(asked);
+        return asked === 1n ? firstFetch : secondFetch;
       },
     });
 
-    const receiptsPromise = manager().receiptsFrom(client, [first, second, twin]);
+    const receiptsPromise = manager().receiptsFrom(client, [
+      { cell: first, blockNumber: 1n },
+      { cell: second, blockNumber: 2n },
+      { cell: twin, blockNumber: 1n },
+    ]);
     await vi.waitFor(() => {
-      expect(requests).toEqual([first.outPoint.txHash, second.outPoint.txHash]);
+      expect(requests).toEqual([1n, 2n]);
     });
-    resolveSecond(transactionWithHeader(header));
+    resolveSecond(header);
     await Promise.resolve();
-    resolveFirst(transactionWithHeader(header));
+    resolveFirst(header);
 
     const receipts = await receiptsPromise;
 
@@ -329,20 +324,18 @@ describe("LogicManager.receiptsFrom", () => {
     );
   });
 
-  it("rejects a missing transaction header", async () => {
+  it("rejects a missing block header", async () => {
     const receipt = receiptCellOf("11", receiptData(1n));
     const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+      getHeaderByNumber: async (): Promise<undefined> => {
         await Promise.resolve();
         return undefined;
       },
     });
 
-    await expect(manager().receiptsFrom(client, [receipt])).rejects.toThrow(
-      `Header not found for txHash ${receipt.outPoint.txHash}`,
-    );
+    await expect(
+      manager().receiptsFrom(client, [{ cell: receipt, blockNumber: 7n }]),
+    ).rejects.toThrow("Header not found for block number 7");
   });
 });
 
@@ -357,24 +350,22 @@ describe("LogicManager.findDeposits", () => {
   it("scans the logic lock for DAO deposits and values them at their deposit header", async () => {
     const deposit = depositCellOf("44");
     const wrongLock = depositCellOf("55", script("77"));
-    const queries: ccc.ClientIndexerSearchKeyLike[] = [];
+    const queries: cccA.JsonRpcIndexerSearchKey[] = [];
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells((query) => {
+      cells: (query): readonly StubCell[] => {
         queries.push(query);
-        return [deposit, wrongLock];
-      }),
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+        return [deposit, wrongLock].map((cell) => ({ cell, blockNumber: 1n }));
+      },
+      getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader | undefined> => {
         await Promise.resolve();
-        return transactionWithHeader(depositHeader);
+        return ccc.numFrom(number) === 1n ? depositHeader : undefined;
       },
     });
 
     const deposits = await manager().findDeposits(client, tip);
 
     expect(queries).toHaveLength(1);
-    expect(ccc.Script.from(queries[0]?.script ?? logic).eq(logic)).toBe(true);
+    expect(queries[0]?.script).toEqual(cccA.JsonRpcTransformers.scriptFrom(logic));
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
       cell: deposit,
@@ -393,24 +384,25 @@ describe("LogicManager.findDeposits", () => {
     );
   });
 
-  it("reads one header per deposit transaction", async () => {
+  it("reads one header per deposit block", async () => {
     const first = depositCellOf("44", logic, 0n);
-    const second = depositCellOf("44", logic, 1n);
-    let transactionCalls = 0;
+    const second = depositCellOf("45", logic, 0n);
+    let headerCalls = 0;
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells([first, second]),
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        transactionCalls += 1;
+      cells: (): readonly StubCell[] => [first, second],
+      getHeaderByNumber: async (): Promise<ccc.ClientBlockHeader> => {
+        headerCalls += 1;
         await Promise.resolve();
-        return transactionWithHeader(depositHeader);
+        return depositHeader;
       },
     });
 
     const deposits = await manager().findDeposits(client, tip);
 
-    expect(transactionCalls).toBe(1);
-    expect(deposits.map((deposit) => deposit.cell.outPoint.index)).toEqual([0n, 1n]);
+    expect(headerCalls).toBe(1);
+    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
+      first.outPoint.txHash,
+      second.outPoint.txHash,
+    ]);
   });
 });

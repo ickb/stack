@@ -23,9 +23,9 @@ import {
   byte32FromByte,
   committedTransactionResponse,
   headerLike,
-  pagedCells,
   script,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import type { BotState, Runtime } from "../../../src/bot/types.ts";
 
@@ -323,9 +323,9 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   mint.outputsData.push("0x", order.outputData, master.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? order : master,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock" ? order : master,
+    ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(mint);

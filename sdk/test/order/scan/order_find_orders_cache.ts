@@ -2,8 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
   committedTransactionResponse,
-  pagedCells,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
@@ -146,9 +146,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     let fetched = false;
     const client = new StubClient({
       cache: new TransactionResponseCache(originMaster.txHash, cachedResponse),
-      findCellsPagedNoCache: pagedCells((query) => [
-        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
-      ]),
+      cells: (query): readonly StubCell[] => [
+        query.script_type === "lock" ? liveOrder.cell : liveMaster,
+      ],
       getTransaction: async (): GetTransactionReturn => {
         fetched = true;
         await Promise.resolve();
@@ -177,9 +177,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         originMaster.txHash,
         ccc.ClientTransactionResponse.from({ transaction: tx, status: "pending" }),
       ),
-      findCellsPagedNoCache: pagedCells((query) => [
-        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
-      ]),
+      cells: (query): readonly StubCell[] => [
+        query.script_type === "lock" ? liveOrder.cell : liveMaster,
+      ],
       getTransaction: async (): GetTransactionReturn => {
         await Promise.resolve();
         return committedTransactionResponse(tx, { blockNumber: 77n });
@@ -315,9 +315,8 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [firstOrder.cell, secondOrder.cell] : [liveMaster],
-      ),
+      cells: (query): readonly StubCell[] =>
+        query.script_type === "lock" ? [firstOrder.cell, secondOrder.cell] : [liveMaster],
       getTransaction: async (): GetTransactionReturn => {
         await Promise.resolve();
         return transactionResponse(tx);

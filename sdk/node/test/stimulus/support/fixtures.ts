@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import {
   committedTransactionResponse,
   headerLike,
-  pagedCells,
   script,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
@@ -168,9 +168,9 @@ export async function order(
   transaction.outputsData.push(orderCell.cell.outputData, master.cell.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? orderCell.cell : master.cell,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock" ? orderCell.cell : master.cell,
+    ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(

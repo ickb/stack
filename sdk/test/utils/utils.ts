@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 import { composedClient, offlineTestnetClient } from "@ickb/testkit";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   asyncBinarySearch,
   compareBigInt,
@@ -35,74 +36,105 @@ describe("compareBigInt", () => {
   });
 });
 
-describe("findCells", () => {
-  it("collects every page and stops on the first short page", async () => {
-    const client = offlineTestnetClient();
-    const cell = testCell({ type: undefined, outputData: "0x" });
-    const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
-    const afters: Array<string | undefined> = [];
-    const noCache = vi
-      .spyOn(client, "findCellsPagedNoCache")
-      .mockImplementation(async (_key, _order, _limit, after) => {
-        afters.push(after);
+/** A client whose node answers `get_cells` pages, block 5 for every cell, and nothing else. */
+function cellsClient(
+  page: (after: string | null) => { cells: ccc.Cell[]; lastCursor: string },
+): { client: ccc.Client; afters: Array<string | null>; limits: ccc.Hex[] } {
+  const afters: Array<string | null> = [];
+  const limits: ccc.Hex[] = [];
+  const client = ccc.ClientPublicTestnet.new({
+    transport: {
+      request: async (payload): Promise<ccc.JsonRpcResponse> => {
         await Promise.resolve();
-        return after === undefined
-          ? { cells: fullPage, lastCursor: "next" }
-          : { cells: [cell], lastCursor: "done" };
-      });
-    const recording = vi
-      .spyOn(client, "findCellsPaged")
-      .mockRejectedValue(new Error("cache-recording scan used"));
+        if (payload.method !== "get_cells") {
+          throw new Error(`Unexpected ${payload.method}`);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends the cursor fourth.
+        const [, , limit, after = null] = payload.params as [
+          unknown,
+          unknown,
+          ccc.Hex,
+          string | null | undefined,
+        ];
+        limits.push(limit);
+        afters.push(after);
+        const { cells, lastCursor } = page(after);
+        return {
+          id: payload.id,
+          jsonrpc: "2.0",
+          result: {
+            last_cursor: lastCursor,
+            objects: cells.map((cell) => ({
+              out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
+              output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
+              // A node leaves the data out when a scan does not ask for it.
+              ...(cell.outputData === "0x" ? {} : { output_data: cell.outputData }),
+              block_number: "0x5",
+              tx_index: "0x0",
+            })),
+          },
+        };
+      },
+    },
+  });
+  return { client, afters, limits };
+}
 
-    const cells = await findCells(client, {
-      script: cell.cellOutput.lock,
-      scriptType: "lock",
-      scriptSearchMode: "exact",
-    });
+describe("findCells", () => {
+  const cell = testCell({ type: undefined, outputData: "0x" });
+  const key = {
+    script: cell.cellOutput.lock,
+    scriptType: "lock",
+    scriptSearchMode: "exact",
+  } as const;
+
+  it("collects every page with each cell's block and stops on the first short page", async () => {
+    const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
+    const { client, afters, limits } = cellsClient((after) =>
+      after === null
+        ? { cells: fullPage, lastCursor: "0x01" }
+        : { cells: [cell], lastCursor: "0x02" },
+    );
+
+    const cells = await findCells(client, key);
 
     expect(cells).toHaveLength(defaultCellPageSize + 1);
-    expect(afters).toEqual([undefined, "next"]);
-    expect(noCache).toHaveBeenCalledTimes(2);
-    expect(recording).not.toHaveBeenCalled();
+    expect(cells[0]?.blockNumber).toBe(5n);
+    expect(cells[0]?.cell.outPoint.eq(cell.outPoint)).toBe(true);
+    expect(afters).toEqual([null, "0x01"]);
+    expect(limits).toEqual([
+      ccc.numToHex(defaultCellPageSize),
+      ccc.numToHex(defaultCellPageSize),
+    ]);
   });
 
   it("fails when a full page brings the cursor back unchanged", async () => {
     // A non-empty page always moves the indexer's cursor; a node that repeats it would
     // otherwise be read for ever.
-    const client = offlineTestnetClient();
-    const cell = testCell({ type: undefined, outputData: "0x" });
     const fullPage = Array.from({ length: defaultCellPageSize }, () => cell);
-    const noCache = vi
-      .spyOn(client, "findCellsPagedNoCache")
-      .mockImplementation(async (_key, _order, _limit, after = "stuck") => {
-        await Promise.resolve();
-        return { cells: fullPage, lastCursor: after };
-      });
+    const { client, afters } = cellsClient((after) => ({
+      cells: fullPage,
+      lastCursor: after ?? "0x01",
+    }));
 
-    await expect(
-      findCells(client, {
-        script: cell.cellOutput.lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-      }),
-    ).rejects.toThrow("Cell scan cursor did not advance");
-    expect(noCache).toHaveBeenCalledTimes(2);
+    await expect(findCells(client, key)).rejects.toThrow(
+      "Cell scan cursor did not advance",
+    );
+    expect(afters).toHaveLength(2);
   });
 
   it("completes after an empty first page", async () => {
-    const client = offlineTestnetClient();
-    const noCache = vi
-      .spyOn(client, "findCellsPagedNoCache")
-      .mockResolvedValue({ cells: [], lastCursor: "" });
+    const { client, afters } = cellsClient(() => ({ cells: [], lastCursor: "0x" }));
 
-    await expect(
-      findCells(client, {
-        script: testCell({ type: undefined, outputData: "0x" }).cellOutput.lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-      }),
-    ).resolves.toEqual([]);
-    expect(noCache).toHaveBeenCalledTimes(1);
+    await expect(findCells(client, key)).resolves.toEqual([]);
+    expect(afters).toHaveLength(1);
+  });
+
+  it("needs a JSON-RPC client", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- a client with no requestor at all.
+    await expect(findCells({} as unknown as ccc.Client, key)).rejects.toThrow(
+      "Cell scans need a JSON-RPC client",
+    );
   });
 });
 

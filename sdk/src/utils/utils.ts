@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 
 /**
  * The default page size used when querying cells from the chain.
@@ -8,11 +9,21 @@ import { ccc } from "@ckb-ccc/core";
  */
 export const defaultCellPageSize = 400;
 
+/** A committed cell and the block the node names for its creating transaction. */
+export interface ScannedCell {
+  cell: ccc.Cell;
+  blockNumber: ccc.Num;
+}
+
 /**
  * Reads every committed cell matching the key, page by page, without touching
  * CCC's cell cache. The scan ends on the first short page.
  *
- * @remarks A full page must advance the cursor; otherwise the read throws so a faulty
+ * @remarks The indexer answers each cell with its block number, which CCC's typed scan
+ * drops, so the read goes through the raw requestor: a header is then read by number
+ * instead of asking the node for each creating transaction's status. The number is the
+ * same node claim the status would be; the header read by it is still checked against its
+ * hash. A full page must advance the cursor; otherwise the read throws so a faulty
  * endpoint in the app's public node pool cannot keep the scan looping forever.
  * The cursor continues ordering, not a coherent snapshot. There is no aggregate budget:
  * a large book costs a slower read rather than a partial result.
@@ -20,26 +31,51 @@ export const defaultCellPageSize = 400;
 export async function findCells(
   client: ccc.Client,
   keyLike: ccc.ClientIndexerSearchKeyLike,
-): Promise<ccc.Cell[]> {
-  const key = ccc.ClientIndexerSearchKey.from(keyLike);
-  const cells: ccc.Cell[] = [];
+): Promise<ScannedCell[]> {
+  const requestor = jsonRpcRequestor(client);
+  if (requestor === undefined) {
+    throw new Error("Cell scans need a JSON-RPC client");
+  }
+  const key = cccA.JsonRpcTransformers.indexerSearchKeyFrom(keyLike);
+  const cells: ScannedCell[] = [];
   let after: string | undefined;
   for (;;) {
-    const page = await client.findCellsPagedNoCache(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the node's indexer answer, parsed field by field below as CCC's own transformer does.
+    const page = (await requestor.request("get_cells", [
       key,
       "asc",
-      defaultCellPageSize,
+      ccc.numToHex(defaultCellPageSize),
       after,
-    );
-    cells.push(...page.cells);
-    if (page.cells.length < defaultCellPageSize) {
+    ])) as RawCellsPage;
+    for (const object of page.objects) {
+      cells.push({
+        cell: ccc.Cell.from({
+          outPoint: cccA.JsonRpcTransformers.outPointTo(object.out_point),
+          cellOutput: cccA.JsonRpcTransformers.cellOutputTo(object.output),
+          outputData: object.output_data ?? "0x",
+        }),
+        blockNumber: ccc.numFrom(object.block_number),
+      });
+    }
+    if (page.objects.length < defaultCellPageSize) {
       return cells;
     }
-    if (page.lastCursor === after) {
+    if (page.last_cursor === after) {
       throw new Error("Cell scan cursor did not advance");
     }
-    after = page.lastCursor;
+    after = page.last_cursor;
   }
+}
+
+/** The fields of the indexer's `get_cells` answer the scan reads. */
+interface RawCellsPage {
+  last_cursor: string;
+  objects: Array<{
+    out_point: cccA.JsonRpcOutPoint;
+    output: cccA.JsonRpcCellOutput;
+    output_data?: ccc.Hex;
+    block_number: ccc.Hex;
+  }>;
 }
 
 /**

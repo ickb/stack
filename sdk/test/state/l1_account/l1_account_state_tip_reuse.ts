@@ -5,7 +5,6 @@ import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   defaultL1Sdk,
-  emptyCellScan,
   FeeRateStubClient,
   L1_STATE_SUITE,
 } from "./support/sdk_l1_support.ts";
@@ -26,7 +25,7 @@ describe(L1_STATE_SUITE, () => {
       .mockResolvedValueOnce(secondTip);
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await defaultL1Sdk().getL1AccountState(
@@ -55,7 +54,7 @@ describe(L1_STATE_SUITE, () => {
     const client = new FeeRateStubClient({
       getTipHeader,
       getHeaderByNumber,
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await defaultL1Sdk().getL1AccountState(
@@ -80,7 +79,7 @@ describe(L1_STATE_SUITE, () => {
       .mockResolvedValueOnce(replacementTip);
     const client = new FeeRateStubClient({
       getTipHeader,
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await defaultL1Sdk().getL1AccountState(

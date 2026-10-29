@@ -182,7 +182,7 @@ export class OrderManager implements ScriptDeps {
       scriptSearchMode: "exact",
       withData: true,
     });
-    return cells.flatMap((cell) => {
+    return cells.flatMap(({ cell }) => {
       const order = OrderCell.tryFrom(cell);
       return order !== undefined && this.isOrder(cell) ? [order] : [];
     });
@@ -196,7 +196,7 @@ export class OrderManager implements ScriptDeps {
       scriptSearchMode: "exact",
       withData: true,
     });
-    return cells.map((cell) => new MasterCell(cell));
+    return cells.map(({ cell }) => new MasterCell(cell));
   }
 
   /** Resolves one master and its descendant orders into a validated order group. */

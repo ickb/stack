@@ -1,15 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
+import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { OrderManager } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import { defaultCellPageSize } from "../../../src/utils/utils.ts";
 import {
-  mustPageSize,
-  NO_CELLS,
   ORDER_CELL_RESOLVE_SUITE,
   ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type FindCellsQuery,
   type GetTransactionHash,
   type GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
@@ -117,49 +113,6 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
 });
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
-  it("passes the default page size to order scanning", async () => {
-    await expectDefaultPageSizeScan("lock");
-  });
-
-  it("passes the default page size to master scanning", async () => {
-    await expectDefaultPageSizeScan("type");
-  });
-});
-
-async function expectDefaultPageSizeScan(
-  scriptType: FindCellsQuery["scriptType"],
-): Promise<void> {
-  const orderScript = ccc.Script.from({
-    codeHash: byte32FromByte("11"),
-    hashType: "type",
-    args: "0x",
-  });
-  const udtScript = ccc.Script.from({
-    codeHash: byte32FromByte("22"),
-    hashType: "type",
-    args: "0x",
-  });
-  const manager = new OrderManager(orderScript, [], udtScript);
-  let requestedPageSize = 0;
-  const client = new StubClient({
-    findCellsPagedNoCache: async (
-      query,
-      _order,
-      pageSize,
-    ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-      await Promise.resolve();
-      if (query.scriptType === scriptType) {
-        requestedPageSize = mustPageSize(pageSize);
-      }
-      return { cells: [...NO_CELLS], lastCursor: "0" };
-    },
-  });
-
-  await expect(manager.findOrders(client)).resolves.toEqual([]);
-  expect(requestedPageSize).toBe(defaultCellPageSize);
-}
-
-describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("accepts exact page-size order and master scans", async () => {
     const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
     const master = ccc.OutPoint.from({
@@ -190,8 +143,8 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
       // One full page each, then the empty page that ends the scan.
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock"
+      cells: (query): readonly StubCell[] =>
+        query.script_type === "lock"
           ? [
               order.cell,
               ...Array.from({ length: defaultCellPageSize - 1 }, () =>
@@ -204,7 +157,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
                 dummyCell("39", ownerLock, orderScript),
               ),
             ],
-      ),
       getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
         await Promise.resolve();
         return txHash === master.txHash ? transactionResponse(tx) : undefined;
@@ -242,9 +194,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     ]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      findCellsPagedNoCache: pagedCells((query) => [
-        query.scriptType === "lock" ? order.cell : liveMaster,
-      ]),
+      cells: (query): readonly StubCell[] => [
+        query.script_type === "lock" ? order.cell : liveMaster,
+      ],
       getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
         await Promise.resolve();
         return txHash === master.txHash ? transactionResponse(tx) : undefined;

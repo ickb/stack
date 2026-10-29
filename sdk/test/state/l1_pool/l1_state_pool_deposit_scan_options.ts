@@ -3,7 +3,6 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { baseTip } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  emptyCellScan,
   FeeRateStubClient,
   tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
@@ -19,7 +18,7 @@ describe(L1_STATE_SUITE, () => {
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockResolvedValue([]);
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(baseTip),
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): never[] => [],
     });
 
     const { system } = await sdk.getL1AccountState(client, [], BOT_LOCK_UP);

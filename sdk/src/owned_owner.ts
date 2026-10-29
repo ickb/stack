@@ -9,8 +9,13 @@ import {
 import type { IckbDepositCell } from "./logic.ts";
 import { ickbValue } from "./udt.ts";
 import { CheckedInt32LE, CheckedUint64LE } from "./utils/codec.ts";
-import { headersByNumber, transactionHeaders } from "./utils/transaction_header.ts";
-import type { ScriptDeps, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+import { headersByNumber } from "./utils/transaction_header.ts";
+import type {
+  ScannedCell,
+  ScriptDeps,
+  TransactionHeader,
+  ValueComponents,
+} from "./utils/utils.ts";
 
 /**
  * A live Nervos DAO withdrawal request cell, valued at the two headers it spans.
@@ -309,52 +314,45 @@ export class OwnedOwnerManager implements ScriptDeps {
 
   /**
    * The owner markers among `cells` paired with their owned withdrawal requests, which live
-   * in the marker's own transaction at the encoded distance. Markers whose target is not an
-   * owned withdrawal request are skipped. Each header is read once per batch.
+   * in the marker's own transaction at the encoded distance, so the marker's block is the
+   * request's. Markers whose target is not an owned withdrawal request are skipped. Each
+   * header is read once per batch.
    */
   public async withdrawalGroupsFrom(
     client: ccc.Client,
-    cells: readonly ccc.Cell[],
+    cells: readonly ScannedCell[],
     tip: ccc.ClientBlockHeader,
   ): Promise<WithdrawalGroup[]> {
     const owners = cells
-      .filter((cell) => this.isOwner(cell))
-      .map((cell) => new OwnerCell(cell));
+      .filter(({ cell }) => this.isOwner(cell))
+      .map(({ cell, blockNumber }) => ({ owner: new OwnerCell(cell), blockNumber }));
     const ownedCells = await Promise.all(
-      owners.map(async (owner) => client.getCell(owner.getOwned())),
+      owners.map(async ({ owner }) => client.getCell(owner.getOwned())),
     );
-    const pairs = owners.flatMap((owner, index) => {
+    const pairs = owners.flatMap(({ owner, blockNumber }, index) => {
       const owned = ownedCells[index];
       return owned !== undefined && this.isOwned(owned)
-        ? [{ owner, owned, depositBlockNumber: depositBlockNumberOf(owned) }]
+        ? [{ owner, owned, blockNumber, depositBlockNumber: depositBlockNumberOf(owned) }]
         : [];
     });
-    const [depositHeaders, requestHeaders] = await Promise.all([
-      headersByNumber(
-        client,
-        pairs.map((pair) => pair.depositBlockNumber),
-      ),
-      transactionHeaders(
-        client,
-        pairs.map((pair) => pair.owned.outPoint.txHash),
-      ),
-    ]);
-    return pairs.map(({ owner, owned, depositBlockNumber }) => {
-      const { txHash } = owned.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
-      const depositHeader = depositHeaders.get(depositBlockNumber)!;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
-      const requestHeader = requestHeaders.get(txHash)!;
-      return new WithdrawalGroup(
-        withdrawalRequestCell(
-          owned,
-          depositHeader,
-          { header: requestHeader, txHash },
-          tip,
+    const headers = await headersByNumber(
+      client,
+      pairs.flatMap((pair) => [pair.depositBlockNumber, pair.blockNumber]),
+    );
+    return pairs.map(
+      ({ owner, owned, blockNumber, depositBlockNumber }) =>
+        new WithdrawalGroup(
+          withdrawalRequestCell(
+            owned,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
+            headers.get(depositBlockNumber)!,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
+            { header: headers.get(blockNumber)!, txHash: owned.outPoint.txHash },
+            tip,
+          ),
+          owner,
         ),
-        owner,
-      );
-    });
+    );
   }
 }
 

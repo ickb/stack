@@ -2,8 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
   committedTransactionResponse,
-  pagedCells,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { OrderManager } from "../../../../src/order/order.ts";
 import type {
@@ -71,9 +71,9 @@ export function originLookupClient({
 }): ccc.Client {
   return new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? liveOrder : liveMaster,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock" ? liveOrder : liveMaster,
+    ],
     getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
       await Promise.resolve();
       return txHash === originMasterTxHash

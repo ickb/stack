@@ -5,6 +5,7 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 
 export {
   AR_0,
@@ -28,7 +29,8 @@ export type ClientMethod<K extends keyof ccc.Client> = Extract<
 export interface StubClientHandlers {
   addressPrefix?: string;
   cache?: ccc.Client["cache"];
-  findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
+  /** The cells the node's raw `get_cells` serves for a search key, paged by the stub. */
+  cells?: (key: cccA.JsonRpcIndexerSearchKey) => readonly StubCell[];
   getCell?: ClientMethod<"getCell">;
   getCellWithHeader?: ClientMethod<"getCellWithHeader">;
   getHeaderByHash?: ClientMethod<"getHeaderByHash">;
@@ -89,6 +91,13 @@ function stubTransport(
 ): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      if (payload.method === "get_cells" && raw.scripted?.cells !== undefined) {
+        return {
+          id: payload.id,
+          jsonrpc: "2.0",
+          result: cellsPage(raw.scripted.cells, payload.params),
+        };
+      }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
       if (
         raw.client === undefined ||
@@ -208,21 +217,39 @@ export class StubClient extends ccc.ClientPublicTestnet {
   }
 }
 
+/** A scanned cell, in block 0 unless the test names its block. */
+export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
+
 /**
- * A page handler over a cell list, sliced the way the SDK's `findCells` reads it: the
- * cursor is the count served so far and a short page ends the scan. A function picks the
- * list per search key.
+ * One raw `get_cells` page over the scripted list, sliced the way the SDK's `findCells`
+ * reads it: the cursor is the count served so far, so a short page ends the scan.
  */
-export function pagedCells(
-  cells:
-    readonly ccc.Cell[] | ((key: ccc.ClientIndexerSearchKeyLike) => readonly ccc.Cell[]),
-): ClientMethod<"findCellsPagedNoCache"> {
-  return async (key, _order, limit, after) => {
-    await Promise.resolve();
-    const all = typeof cells === "function" ? cells(key) : cells;
-    const offset = after === undefined ? 0 : Number(after);
-    const page = all.slice(offset, offset + Number(ccc.numFrom(limit ?? 10)));
-    return { cells: [...page], lastCursor: String(offset + page.length) };
+function cellsPage(
+  cells: NonNullable<StubClientHandlers["cells"]>,
+  params: unknown,
+): object {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends key, order, limit, cursor.
+  const [key, , limit, after] = params as [
+    cccA.JsonRpcIndexerSearchKey,
+    string,
+    ccc.Hex,
+    ccc.Hex | null | undefined,
+  ];
+  const offset = after === null || after === undefined ? 0 : Number(after);
+  const page = cells(key).slice(offset, offset + Number(limit));
+  return {
+    last_cursor: ccc.numToHex(offset + page.length),
+    objects: page.map((scanned) => {
+      const { cell, blockNumber } =
+        scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
+      return {
+        out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
+        output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
+        output_data: cell.outputData,
+        block_number: ccc.numToHex(blockNumber),
+        tx_index: "0x0",
+      };
+    }),
   };
 }
 

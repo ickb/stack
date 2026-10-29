@@ -145,8 +145,7 @@ export function fundedSigner(
   locks: readonly ccc.Script[],
 ): { client: StubClient; signer: ccc.Signer; cells: ccc.Cell[] } {
   const client = new StubClient({
-    findCellsPagedNoCache: async (): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-      await Promise.resolve();
+    cells: (): never => {
       throw new Error("Completion must not scan");
     },
     // Fixture deposits are worth their free capacity one to one, so the header they

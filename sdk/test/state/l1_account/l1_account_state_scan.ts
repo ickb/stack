@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
+import type { cccA } from "@ckb-ccc/core/advanced";
+import { script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { LogicManager } from "../../../src/logic.ts";
@@ -14,7 +15,6 @@ import {
   FeeRateStubClient,
   L1_STATE_SUITE,
   tipHeaderHandler,
-  transactionWithHeader,
 } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
@@ -70,34 +70,38 @@ describe(L1_STATE_SUITE, () => {
       daoScript: dao,
       depositHeaderNumber: 5n,
     });
+    // The account scan names each cell's block: the receipt's deposit block and each
+    // marker's request block, where its owned withdrawal request was created beside it.
     const cellsByLock = new Map([
       [
         accountLock.hash(),
-        [plain, dataCell, nativeUdt, udtPrefixExtension, receipt, owner, pendingOwner],
+        [
+          plain,
+          dataCell,
+          nativeUdt,
+          udtPrefixExtension,
+          { cell: receipt, blockNumber: 2n },
+          { cell: owner, blockNumber: 2n },
+          { cell: pendingOwner, blockNumber: 6n },
+        ],
       ],
     ]);
     const headersByNumber = new Map([
       [1n, headerLike(1n)],
+      [2n, headerLike(2n, { epoch: ccc.Epoch.from([2n, 0n, 1n]) })],
       [5n, headerLike(5n, { epoch: ccc.Epoch.from([399n, 0n, 1n]) })],
+      [6n, headerLike(6n, { epoch: ccc.Epoch.from([399n, 1n, 2n]) })],
     ]);
-    const withdrawalHeaders = new Map([
-      [hash("86"), headerLike(2n, { epoch: ccc.Epoch.from([2n, 0n, 1n]) })],
-      [hash("88"), headerLike(6n, { epoch: ccc.Epoch.from([399n, 1n, 2n]) })],
-    ]);
-    const scans: ccc.ClientIndexerSearchKey[] = [];
+    const scans: cccA.JsonRpcIndexerSearchKey[] = [];
     const tip = headerLike(1000n, { epoch: ccc.Epoch.from([400n, 0n, 1n]) });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
-      findCellsPagedNoCache: async (
-        keyLike,
-      ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-        await Promise.resolve();
-        const key = ccc.ClientIndexerSearchKey.from(keyLike);
+      cells: (key): readonly StubCell[] => {
         scans.push(key);
-        return {
-          cells: cellsByLock.get(ccc.Script.from(key.script).hash()) ?? [],
-          lastCursor: "end",
-        };
+        const { code_hash: codeHash, hash_type: hashType, args } = key.script;
+        return (
+          cellsByLock.get(ccc.Script.from({ codeHash, hashType, args }).hash()) ?? []
+        );
       },
       getCell: async (outPoint): ReturnType<ccc.Client["getCell"]> => {
         await Promise.resolve();
@@ -106,15 +110,6 @@ describe(L1_STATE_SUITE, () => {
       getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
         await Promise.resolve();
         return headersByNumber.get(ccc.numFrom(number));
-      },
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        await Promise.resolve();
-        // Withdrawal headers are keyed by transaction; the receipt takes the first one.
-        return transactionWithHeader(
-          withdrawalHeaders.get(ccc.hexFrom(txHash)) ?? headerLike(2n),
-        );
       },
     });
 
@@ -125,12 +120,15 @@ describe(L1_STATE_SUITE, () => {
     );
 
     // One scan per distinct lock, exact and unfiltered; the other three are public.
-    const lockScans = scans.filter((key) => key.script.eq(accountLock));
+    const lockScans = scans.filter(
+      ({ script: { code_hash: codeHash, hash_type: hashType, args } }) =>
+        ccc.Script.from({ codeHash, hashType, args }).eq(accountLock),
+    );
     expect(lockScans).toHaveLength(1);
     expect(lockScans[0]).toMatchObject({
-      scriptType: "lock",
-      scriptSearchMode: "exact",
-      withData: true,
+      script_type: "lock",
+      script_search_mode: "exact",
+      with_data: true,
     });
     expect(lockScans[0]?.filter).toBeUndefined();
     expect(scans).toHaveLength(4);

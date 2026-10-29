@@ -160,15 +160,16 @@ const IckbSdkImplementation = class IckbSdk {
     lock: ccc.Script,
     tip: ccc.ClientBlockHeader,
   ): Promise<AccountState> {
-    const cells = await findCells(client, {
+    const scanned = await findCells(client, {
       script: lock,
       scriptType: "lock",
       scriptSearchMode: "exact",
       withData: true,
     });
+    const cells = scanned.map(({ cell }) => cell);
     const [receipts, withdrawalGroups] = await Promise.all([
-      this.ickbLogic.receiptsFrom(client, cells),
-      this.ownedOwner.withdrawalGroupsFrom(client, cells, tip),
+      this.ickbLogic.receiptsFrom(client, scanned),
+      this.ownedOwner.withdrawalGroupsFrom(client, scanned, tip),
     ]);
     return {
       capacityCells: cells.filter(isPlainCapacityCell),

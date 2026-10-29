@@ -6,7 +6,6 @@ import { OrderManager } from "../../../src/order/order.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  emptyCellScan,
   FeeRateStubClient,
   l1SdkWithManagers,
   tipHeaderHandler,
@@ -51,7 +50,7 @@ describe(L1_STATE_SUITE, () => {
 
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(headerLike(1n)),
-      findCellsPagedNoCache: emptyCellScan,
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
@@ -119,7 +118,7 @@ function l1StateWithMarketOrder({
 
   const client = new FeeRateStubClient({
     getTipHeader: tipHeaderHandler(headerLike(1n)),
-    findCellsPagedNoCache: emptyCellScan,
+    cells: (): ccc.Cell[] => [],
   });
 
   return { client, marketOrder, sdk, userLock };

@@ -4,7 +4,6 @@ import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   defaultL1Sdk,
-  emptyCellScan,
   FeeRateStubClient,
   tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
@@ -36,7 +35,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
   it("rejects a negative fee rate returned by a custom client", async () => {
     const client = new FeeRateStubClient(
       {
-        findCellsPagedNoCache: emptyCellScan,
+        cells: (): ccc.Cell[] => [],
         getTipHeader: tipHeaderHandler(headerLike(3n)),
       },
       -1n,
