@@ -208,8 +208,9 @@ function buildDecision({
     completedDeposits: tx === undefined ? 0 : state.receipts.length,
     withdrawals: tx === undefined ? 0 : state.readyWithdrawals.length,
   };
+  const summary = summarizeBotState(state);
   return {
-    ...summarizeBotState(state),
+    ...summary,
     match: {
       reason: matchReason(match, state),
       partialCount: match.partials.length,
@@ -238,8 +239,7 @@ function buildDecision({
     core: { kind: core.kind, withdrawalRequests: actions.withdrawalRequests, attempts },
     actions,
     fee: {
-      feeRate: state.system.feeRate,
-      sampledFeeRate: state.sampledFeeRate,
+      ...summary.fee,
       ...(tx === undefined ? {} : { estimated: tx.estimateFee(state.system.feeRate) }),
     },
     ...(tx === undefined ? {} : { transactionShape: transactionShape(tx) }),
