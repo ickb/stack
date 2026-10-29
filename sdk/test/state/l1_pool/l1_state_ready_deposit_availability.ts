@@ -11,7 +11,6 @@ import {
   FeeRateStubClient,
   l1SdkWithManagers,
   tipHeaderHandler,
-  transactionWithHeader,
 } from "../l1_account/support/sdk_l1_support.ts";
 import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
@@ -41,12 +40,6 @@ describe(L1_STATE_SUITE, () => {
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
       cells: (): ccc.Cell[] => [],
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return transactionWithHeader(headerLike(0n));
-      },
     });
 
     const state = await sdk.getL1AccountState(client, [], WALLET_LOCK_UP);

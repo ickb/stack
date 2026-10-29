@@ -253,7 +253,6 @@ function cellsPage(
         output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
         output_data: cell.outputData,
         block_number: ccc.numToHex(blockNumber),
-        tx_index: "0x0",
       };
     }),
   };

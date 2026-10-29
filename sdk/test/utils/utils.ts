@@ -72,7 +72,6 @@ function cellsClient(
               // A node leaves the data out when a scan does not ask for it.
               ...(cell.outputData === "0x" ? {} : { output_data: cell.outputData }),
               block_number: "0x5",
-              tx_index: "0x0",
             })),
           },
         };
