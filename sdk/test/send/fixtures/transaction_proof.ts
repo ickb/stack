@@ -54,4 +54,8 @@ export const PROOF_TXS = {
         "0x4279d8fc556dfe34b3db5280b9e5b33f5ced866de09d0fb86f16e9c1049c0f62",
     },
   },
-} as const satisfies Record<string, { txHash: `0x${string}`; proof: TransactionProof }>;
+} as const satisfies Record<
+  string,
+  // The node answers the block hash too, which the check does not need.
+  { txHash: `0x${string}`; proof: TransactionProof & { block_hash: `0x${string}` } }
+>;

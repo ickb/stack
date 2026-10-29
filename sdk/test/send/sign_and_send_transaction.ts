@@ -8,6 +8,7 @@ import {
   TransactionExpiredError,
   type TransactionProof,
 } from "../../src/send/sign_and_send_transaction.ts";
+import { jsonRpcRequestor } from "../../src/utils/utils.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
 import { PROOF_BLOCK, PROOF_TXS } from "./fixtures/transaction_proof.ts";
 
@@ -356,7 +357,8 @@ describe("signAndSendTransaction DAO interest", () => {
 
   it("refuses a phase-2 input whose request header is its own deposit header", async () => {
     // Both deps are real, and the node names the deposit block for the request cell: the
-    // interest would be valued at zero while the chain collects it at the doubled rate.
+    // interest would be valued at zero while the chain collects it at the doubled rate, but
+    // the deposit block does not hold the request.
     const { creating, tx } = request([deposit.hash, withdrawDoubled.hash]);
     const { signer, send } = signerFixture(tx, [creating], {
       deposit,
@@ -364,9 +366,45 @@ describe("signAndSendTransaction DAO interest", () => {
     });
 
     await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
-      "is valued at a request header not after its deposit",
+      `Transaction ${REQUEST} is not proven in block ${deposit.hash}`,
     );
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("proves a request transaction once for all its requests in a send", async () => {
+    const pair = creatingTransaction(
+      CAPACITY,
+      ccc.hexFrom(ccc.numLeToBytes(1n, 8)),
+      2,
+      DAO,
+    );
+    const block = headerLike({
+      number: 2n,
+      epoch: [2n, 0n, 1n],
+      hash: hash("b5"),
+      transactionsRoot: ccc.hashCkb(pair.hash(), WITNESSES_ROOT),
+      dao: { c: 0n, ar: AR, s: 0n, u: 0n },
+    });
+    const tx = ccc.Transaction.from({
+      inputs: [0n, 1n].map((index) => ({
+        previousOutput: { txHash: pair.hash(), index },
+      })),
+      outputs: [{ capacity: 2n * CAPACITY, lock: script("11") }],
+      outputsData: ["0x"],
+      headerDeps: [deposit.hash, block.hash],
+    });
+    const { signer } = signerFixture(tx, [pair], { deposit, withdraw: block });
+    const requestor = jsonRpcRequestor(signer.client);
+    if (requestor === undefined) {
+      throw new Error("The fixture client has a requestor");
+    }
+    const requested = vi.spyOn(requestor, "request");
+
+    await expect(signAndSendTransaction(signer, tx)).resolves.toBe(TX_HASH);
+    expect(requested).toHaveBeenCalledExactlyOnceWith("get_transaction_proof", [
+      [pair.hash()],
+      block.hash,
+    ]);
   });
 
   it("needs a JSON-RPC client to prove a request block", async () => {
@@ -423,12 +461,11 @@ describe("isCommittedIn", () => {
     expect(isCommittedIn(last.txHash, header, last.proof)).toBe(true);
   });
 
-  it("refuses another transaction's path, another block, or an altered path", () => {
+  it("refuses another transaction's path or an altered path", () => {
     const { proof } = last.proof;
     expect(isCommittedIn(second.txHash, header, last.proof)).toBe(false);
     expect(isCommittedIn(last.txHash, header, second.proof)).toBe(false);
     const altered: TransactionProof[] = [
-      { ...last.proof, block_hash: hash("01") },
       { ...last.proof, witnesses_root: hash("02") },
       {
         ...last.proof,

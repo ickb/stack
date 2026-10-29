@@ -146,14 +146,16 @@ async function verifiedInputs(
 // interest from headers it reads afresh, and a node names which block created a cell;
 // the chain values it at headers the transaction names in its deps, the deposit header
 // at the number the cell's data records and the request header at the block that
-// committed the request, which the node must prove (assertCommittedIn). A request header
-// at or before its deposit is refused early, as the deployed dao.c refuses it.
+// committed the request, which the node must prove (assertCommittedIn), once per request
+// transaction. The deposit header is then the one the cell's data numbers and the request
+// header the real request block, so dao.c's own rules settle the rest on chain.
 async function verifiedFeeRate(
   client: ccc.Client,
   signed: ccc.Transaction,
   inputs: readonly ccc.Cell[],
 ): Promise<ccc.Num> {
   const deps = new Set(signed.headerDeps);
+  const proven = new Set<string>();
   let capacity = ccc.Zero;
   for (const cell of inputs) {
     capacity += cell.cellOutput.capacity;
@@ -166,12 +168,11 @@ async function verifiedFeeRate(
         `Input ${cell.outPoint.toHex()} is valued at a header the transaction does not name`,
       );
     }
-    if (withdrawHeader.epoch.compare(depositHeader.epoch) <= 0) {
-      throw new Error(
-        `Input ${cell.outPoint.toHex()} is valued at a request header not after its deposit`,
-      );
+    const { txHash } = cell.outPoint;
+    if (!proven.has(`${txHash}${withdrawHeader.hash}`)) {
+      await assertCommittedIn(client, txHash, withdrawHeader);
+      proven.add(`${txHash}${withdrawHeader.hash}`);
     }
-    await assertCommittedIn(client, cell.outPoint.txHash, withdrawHeader);
     capacity += ccc.calcDaoProfit(cell.capacityFree, depositHeader, withdrawHeader);
   }
   const fee = capacity - signed.getOutputsCapacity();
@@ -204,9 +205,8 @@ async function assertCommittedIn(
   }
 }
 
-/** The node's `get_transaction_proof` answer for one transaction. */
+/** The node's `get_transaction_proof` answer for one transaction, the fields checked. */
 export interface TransactionProof {
-  block_hash: ccc.Hex;
   witnesses_root: ccc.Hex;
   proof: { indices: readonly ccc.Hex[]; lemmas: readonly ccc.Hex[] };
 }
@@ -221,10 +221,10 @@ export interface TransactionProof {
 export function isCommittedIn(
   txHash: ccc.Hex,
   header: ccc.ClientBlockHeader,
-  { block_hash: blockHash, witnesses_root: witnessesRoot, proof }: TransactionProof,
+  { witnesses_root: witnessesRoot, proof }: TransactionProof,
 ): boolean {
   const [index, ...extra] = proof.indices;
-  if (blockHash !== header.hash || index === undefined || extra.length > 0) {
+  if (index === undefined || extra.length > 0) {
     return false;
   }
   let node = txHash;
