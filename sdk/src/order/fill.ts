@@ -75,9 +75,9 @@ export const STALE_ORDER_BLOCKS = (30n * 24n * 60n * 60n) / 8n;
 /**
  * Whether the order has sat on the book for thirty days: whatever the reason (dust under
  * the fill's cost, a remainder another matcher left, an ask above the market), it is
- * collected and its funds returned. Age from the origin's block, so an uncommitted origin
- * is as fresh as an order gets. The block count assumes eight-second blocks, not wall time.
+ * collected and its funds returned. Age from the origin's block. The block count assumes
+ * eight-second blocks, not wall time.
  */
 export function isStale(group: OrderGroup, tip: ccc.ClientBlockHeader): boolean {
-  return (group.blockNumber ?? tip.number) + STALE_ORDER_BLOCKS <= tip.number;
+  return group.blockNumber + STALE_ORDER_BLOCKS <= tip.number;
 }

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte } from "@ickb/testkit";
+import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
 import {
   attestResolvedOrderGroup,
   MasterCell,
@@ -142,6 +142,6 @@ export function resolvedOrderGroup(order: OrderCell): OrderGroup {
       outputData: "0x",
     }),
   );
-  const group = new OrderGroup(master, order, origin);
+  const group = new OrderGroup(master, order, origin, FRESH_BLOCK);
   return attestResolvedOrderGroup(group);
 }

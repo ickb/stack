@@ -149,11 +149,8 @@ function fillableOrders(
 
 /**
  * Whether the order has been on the book for more than a turn, a twenty-fourth of an
- * epoch in blocks: the bot has seen it and left it. An uncommitted origin is fresh.
+ * epoch in blocks: the bot has seen it and left it.
  */
 function sits(group: OrderGroup, { tip }: SystemState): boolean {
-  return (
-    group.blockNumber !== undefined &&
-    tip.number - group.blockNumber > tip.epoch.denominator / 24n
-  );
+  return tip.number - group.blockNumber > tip.epoch.denominator / 24n;
 }

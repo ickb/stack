@@ -4,6 +4,7 @@ import { TransactionBroadcastError } from "../../../src/send/sign_and_send_trans
 
 import {
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
   script,
   StubClient,
@@ -525,5 +526,6 @@ async function testOrderGroup(byte: string, ckbValue: bigint): Promise<OrderGrou
     ),
     order,
     order,
+    FRESH_BLOCK,
   );
 }

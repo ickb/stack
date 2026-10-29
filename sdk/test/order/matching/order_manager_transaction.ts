@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { FRESH_BLOCK } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { OrderCell, OrderGroup } from "../../../src/order/cells.ts";
 import { Info } from "../../../src/order/info.ts";
@@ -277,7 +278,12 @@ function registerOrderGroupProvenanceTests(): void {
         outputData: group.origin.cell.outputData,
       }),
     );
-    const fabricatedGroup = new OrderGroup(group.master, group.order, fabricatedOrigin);
+    const fabricatedGroup = new OrderGroup(
+      group.master,
+      group.order,
+      fabricatedOrigin,
+      FRESH_BLOCK,
+    );
 
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
@@ -353,6 +359,7 @@ function registerMeltGroupValidationTests(): void {
       resolved.master,
       OrderCell.mustFrom(order.cell.clone()),
       resolved.origin,
+      FRESH_BLOCK,
     );
 
     expect(() => manager.melt(ccc.Transaction.default(), [unattested])).toThrow(

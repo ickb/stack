@@ -68,6 +68,12 @@ export interface TransactionWithHeader {
  * invalid host. Tests should override every method expected to cross the RPC
  * boundary.
  */
+/**
+ * A block number past any tip: an order group dated by it is as fresh as an order gets,
+ * for tests whose orders' age does not matter.
+ */
+export const FRESH_BLOCK = 2n ** 64n;
+
 /** A transport that rejects every request: for clients a test never lets reach the network. */
 export function offlineTransport(): ccc.JsonRpcTransport {
   return {

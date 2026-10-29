@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { FRESH_BLOCK } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
@@ -488,13 +489,14 @@ describe("order groups", () => {
 
     const master = new MasterCell(masterCell());
     expect(() => {
-      OrderGroup.tryFrom(master, origin, origin)?.validate();
+      OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.validate();
     }).not.toThrow();
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
         origin,
         origin,
+        FRESH_BLOCK,
       ),
     ).toBeUndefined();
     expect(() => {

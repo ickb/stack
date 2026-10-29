@@ -22,6 +22,7 @@ import { IckbSdk } from "../../../../src/sdk.ts";
 import {
   byte32FromByte,
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
   script,
   StubClient,
@@ -157,7 +158,7 @@ export function marketOrder({
       outputData: "0x",
     }),
   );
-  return attestResolvedOrderGroup(new OrderGroup(master, order, order));
+  return attestResolvedOrderGroup(new OrderGroup(master, order, order, FRESH_BLOCK));
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */

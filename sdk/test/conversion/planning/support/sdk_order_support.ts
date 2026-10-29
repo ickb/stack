@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   committedTransactionResponse,
+  FRESH_BLOCK,
   script,
   StubClient,
   type StubCell,
@@ -73,7 +74,7 @@ class ProjectionOrderGroup extends OrderGroup {
       ),
       order,
       order,
-      projection.blockNumber,
+      projection.blockNumber ?? FRESH_BLOCK,
     );
     this.projection = projection;
   }
@@ -148,7 +149,7 @@ export function makeOrderGroup(options: {
   const origin = OrderCell.mustFrom(originCell);
 
   return {
-    group: new OrderGroup(new MasterCell(masterCell), order, origin),
+    group: new OrderGroup(new MasterCell(masterCell), order, origin, FRESH_BLOCK),
     orderCell,
     masterCell,
     originCell,

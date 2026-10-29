@@ -12,8 +12,6 @@ import type { Match } from "./matcher.ts";
 import { OrderData } from "./order_data.ts";
 import { Relative } from "./relative.ts";
 
-type TransactionResponse = Awaited<ReturnType<ccc.Client["getTransaction"]>>;
-
 /**
  * Builds and scans iCKB Stack order cells for one order script deployment.
  */
@@ -153,9 +151,9 @@ export class OrderManager implements ScriptDeps {
       this.findAllMasters(client),
     ]);
     const rawGroups = new Map(
-      masters.map((master) => [
+      masters.map(({ master, blockNumber }) => [
         master.cell.outPoint.toHex(),
-        { master, orders: new Array<OrderCell>() },
+        { master, blockNumber, orders: new Array<OrderCell>() },
       ]),
     );
     for (const order of orders) {
@@ -167,8 +165,8 @@ export class OrderManager implements ScriptDeps {
     const groups = await Promise.all(
       [...rawGroups.values()]
         .filter((rawGroup) => rawGroup.orders.length > 0)
-        .map(async ({ master, orders: candidates }) =>
-          this.resolveOrderGroup(client, master, candidates),
+        .map(async ({ master, blockNumber, orders: candidates }) =>
+          this.resolveOrderGroup(client, master, blockNumber, candidates),
         ),
     );
     return groups.filter((group) => group !== undefined);
@@ -188,7 +186,14 @@ export class OrderManager implements ScriptDeps {
     });
   }
 
-  private async findAllMasters(client: ccc.Client): Promise<MasterCell[]> {
+  /**
+   * Every master with the block that committed it, which is its mint order's block too:
+   * a master is created beside its mint order and never changes until melted, so this
+   * dates how long the order has been on the book.
+   */
+  private async findAllMasters(
+    client: ccc.Client,
+  ): Promise<Array<{ master: MasterCell; blockNumber: ccc.Num }>> {
     // An exact type search returns master cells only, so nothing re-filters here.
     const cells = await findCells(client, {
       script: this.script,
@@ -196,21 +201,25 @@ export class OrderManager implements ScriptDeps {
       scriptSearchMode: "exact",
       withData: true,
     });
-    return cells.map(({ cell }) => new MasterCell(cell));
+    return cells.map(({ cell, blockNumber }) => ({
+      master: new MasterCell(cell),
+      blockNumber,
+    }));
   }
 
   /** Resolves one master and its descendant orders into a validated order group. */
   private async resolveOrderGroup(
     client: ccc.Client,
     master: MasterCell,
+    blockNumber: ccc.Num,
     orders: OrderCell[],
   ): Promise<OrderGroup | undefined> {
-    const found = await this.findOrigin(client, master.cell.outPoint);
-    const order = found?.origin.resolve(orders);
-    if (found === undefined || order === undefined) {
+    const origin = await this.findOrigin(client, master.cell.outPoint);
+    const order = origin?.resolve(orders);
+    if (origin === undefined || order === undefined) {
       return undefined;
     }
-    const group = OrderGroup.tryFrom(master, order, found.origin, found.blockNumber);
+    const group = OrderGroup.tryFrom(master, order, origin, blockNumber);
     // A dual-ratio order, valid on chain but placed by nothing in the stack, is left to
     // whoever placed it: neither matched, estimated, shown nor melted here.
     if (group === undefined || group.order.data.info.isDualRatio()) {
@@ -221,15 +230,17 @@ export class OrderManager implements ScriptDeps {
 
   /**
    * The mint order created beside the master, read from the master's transaction: the
-   * client cache first, then the node, recording the response for the next read. The
-   * response's block number dates the order; an uncommitted origin has none.
+   * client cache first, then the node, which records the response for the next read.
    */
   private async findOrigin(
     client: ccc.Client,
     master: ccc.OutPoint,
-  ): Promise<{ origin: OrderCell; blockNumber: ccc.Num | undefined } | undefined> {
+  ): Promise<OrderCell | undefined> {
     const { txHash, index: masterIndex } = master;
-    const response = await cachedTransactionResponse(client, txHash);
+    // A cached body is the one its hash names (CCC keys them so), so it needs no recheck.
+    const response =
+      (await client.cache.getTransactionResponse(txHash)) ??
+      (await client.getTransaction(txHash));
     if (response === undefined) {
       return undefined;
     }
@@ -260,9 +271,7 @@ export class OrderManager implements ScriptDeps {
       }
       origin = order;
     }
-    return origin === undefined
-      ? undefined
-      : { origin, blockNumber: response.blockNumber };
+    return origin;
   }
 
   private validatedPartial({
@@ -283,20 +292,4 @@ export class OrderManager implements ScriptDeps {
     }
     return { group: validated, ckbOut, udtOut };
   }
-}
-
-async function cachedTransactionResponse(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-): Promise<TransactionResponse | undefined> {
-  // As CCC's own readers do, trust the cache only once the transaction is in a block: the
-  // cache also holds what CCC records at broadcast and what a lagging node answered, and a
-  // long-lived client would otherwise keep that answer for good.
-  const cached = await client.cache.getTransactionResponse(txHash);
-  if (cached?.blockNumber !== undefined) {
-    return cached;
-  }
-
-  // CCC's read records a found response in the cache itself.
-  return client.getTransaction(txHash);
 }

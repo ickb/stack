@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
   script,
   StubClient,
@@ -120,7 +121,7 @@ const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };
  * A resolver-produced order group under the testnet order scripts, so the real SDK melts
  * it; matchable orders carry 100 CKB and, by default, a buy price well above par.
  */
-/** An order group as the scan resolves it; `blockNumber` dates its origin, none is uncommitted. */
+/** An order group as the scan resolves it; `blockNumber` dates its master and origin, fresh when omitted. */
 export async function order(
   txHashByte: string,
   isMatchable: boolean,
@@ -169,14 +170,13 @@ export async function order(
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
     cells: (query): readonly StubCell[] => [
-      query.script_type === "lock" ? orderCell.cell : master.cell,
+      query.script_type === "lock"
+        ? orderCell.cell
+        : { cell: master.cell, blockNumber: blockNumber ?? FRESH_BLOCK },
     ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
-      return committedTransactionResponse(
-        transaction,
-        blockNumber === undefined ? {} : { blockNumber },
-      );
+      return committedTransactionResponse(transaction);
     },
   });
   const groups = await manager.findOrders(client);
