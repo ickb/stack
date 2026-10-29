@@ -369,26 +369,18 @@ describe("signAndSendTransaction DAO interest", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("proves each request block once, and needs a JSON-RPC client to prove it", async () => {
-    // A block no other test names, so the process-wide proven set starts without it.
-    const once = headerLike({
-      number: 2n,
-      epoch: [2n, 0n, 1n],
-      hash: hash("b4"),
-      transactionsRoot: committing,
-      dao: { c: 0n, ar: AR, s: 0n, u: 0n },
+  it("needs a JSON-RPC client to prove a request block", async () => {
+    const { creating, tx } = request([deposit.hash, withdrawFlat.hash]);
+    const { signer, send } = signerFixture(tx, [creating], {
+      deposit,
+      withdraw: withdrawFlat,
     });
-    const { creating, tx } = request([deposit.hash, once.hash]);
-    const fixture = signerFixture(tx, [creating], { deposit, withdraw: once });
-    const bare = signerFixture(tx, [creating], { deposit, withdraw: once });
-    Reflect.deleteProperty(bare.signer.client, "requestor");
+    Reflect.deleteProperty(signer.client, "requestor");
 
-    await expect(signAndSendTransaction(bare.signer, tx)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
       "Valuing a DAO withdrawal needs a JSON-RPC client",
     );
-    await signAndSendTransaction(fixture.signer, tx);
-    await signAndSendTransaction(fixture.signer, tx);
-    expect(fixture.proofs).toHaveBeenCalledExactlyOnceWith();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("refuses a phase-2 input whose request block does not hold the request", async () => {
@@ -566,7 +558,6 @@ function signerFixture(
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
   signTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
   getTipHeader: ReturnType<typeof vi.fn<() => Promise<ccc.ClientBlockHeader>>>;
-  proofs: ReturnType<typeof vi.fn>;
 } {
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
   // The node answers with the creating transaction whose hash is asked, as a chain would.
@@ -618,12 +609,10 @@ function signerFixture(
         };
   });
   // The node proves each request in a block of its own (see the DAO interest suite).
-  const proofs = vi.fn();
   const requestor = ccc.RequestorJsonRpc.new({
     transport: {
       request: async (payload): Promise<ccc.JsonRpcResponse> => {
         await Promise.resolve();
-        proofs();
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends the hashes, then the block.
         const [, blockHash] = payload.params as [ccc.Hex[], ccc.Hex];
         return {
@@ -667,7 +656,6 @@ function signerFixture(
     mark,
     signTransaction,
     getTipHeader,
-    proofs,
   };
 }
 

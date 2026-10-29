@@ -43,7 +43,8 @@ export class TransactionExpiredError extends Error {
  * signing, so in-place mutation cannot evade the check. Witnesses and cell/header
  * dependency preparation stay signer-owned. The fee ceiling values the verified inputs,
  * a phase-2 DAO input at the headers the transaction names, while measuring the signed
- * bytes. When `broadcastBefore` is given, one fresh tip is read
+ * bytes; the request transaction of a phase-2 input must be proven in its request block
+ * with `get_transaction_proof`, so such a send needs the client's JSON-RPC requestor. When `broadcastBefore` is given, one fresh tip is read
  * after the signature and the fee check, and the send is refused with
  * `TransactionExpiredError` once the tip's epoch has reached it: a withdrawal request that
  * commits after its claim locks the deposit for another cycle, and a wallet may hold the
@@ -177,11 +178,6 @@ async function verifiedFeeRate(
   return (fee * 1000n) / BigInt(signed.toBytes().length + 4);
 }
 
-// Transactions proven committed in a block, as `${txHash}${blockHash}`: a block's contents
-// never change, so a pair proven once holds for the process's life. A reorg that drops
-// the block makes a transaction naming it a refused one, which the chain decides anyway.
-const provenCommitments = new Set<string>();
-
 /**
  * Refuses unless the node proves `txHash` is among the transactions of `header`'s block.
  * An outpoint names its transaction, not the block that committed it, so a phase-2 input
@@ -194,10 +190,6 @@ async function assertCommittedIn(
   txHash: ccc.Hex,
   header: ccc.ClientBlockHeader,
 ): Promise<void> {
-  const key = `${txHash}${header.hash}`;
-  if (provenCommitments.has(key)) {
-    return;
-  }
   const requestor = jsonRpcRequestor(client);
   if (requestor === undefined) {
     throw new Error("Valuing a DAO withdrawal needs a JSON-RPC client");
@@ -210,7 +202,6 @@ async function assertCommittedIn(
   if (!isCommittedIn(txHash, header, proof)) {
     throw new Error(`Transaction ${txHash} is not proven in block ${header.hash}`);
   }
-  provenCommitments.add(key);
 }
 
 /** The node's `get_transaction_proof` answer for one transaction. */
