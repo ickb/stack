@@ -5,6 +5,7 @@ import {
   type ChainIdentity,
   type SupportedChain,
 } from "../../../src/utils/chain.ts";
+import { clientCache } from "../../../src/utils/utils.ts";
 import { verifiedClient } from "../../../src/utils/verified_client.ts";
 
 /** Public chain preflight evidence returned after identity verification. */
@@ -59,7 +60,10 @@ export function createPublicClient(
   lockUp: LockUpPolicy,
   rpcUrl?: string,
 ): ccc.Owner<ccc.Client> {
-  const config = rpcUrl === undefined ? {} : { urls: [rpcUrl] as const };
+  const config = {
+    cache: clientCache(),
+    ...(rpcUrl === undefined ? {} : { urls: [rpcUrl] as const }),
+  };
   const owner = (
     chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet
   ).open(config);

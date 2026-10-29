@@ -1,5 +1,11 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk, tipMaxAgeMs, verifiedClient, WALLET_LOCK_UP } from "@ickb/sdk";
+import {
+  clientCache,
+  IckbSdk,
+  tipMaxAgeMs,
+  verifiedClient,
+  WALLET_LOCK_UP,
+} from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -23,8 +29,8 @@ export const queryClient = new QueryClient();
 // for the app's lifetime: the connector's network list borrows them, and a chain tab lends
 // the chosen one through an Owner the Provider may dispose without effect.
 const owners = {
-  mainnet: ccc.ClientPublicMainnet.open(),
-  testnet: ccc.ClientPublicTestnet.open(),
+  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }),
+  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }),
 };
 // Every header the app or CCC reads is verified, and the tip may trail the clock by the
 // wallet policy's slack, thirty minutes.
@@ -57,7 +63,7 @@ export function createRootConfig(
     resetClient: (): void => {
       // The connector hands out a fee-rate proxy whose writes forward to the wrapped client.
       // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
-      cccClient.cache = new ccc.ClientCacheMemory();
+      cccClient.cache = clientCache();
     },
     sdk: sdks[chain],
   };

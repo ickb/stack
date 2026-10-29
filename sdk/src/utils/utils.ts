@@ -9,6 +9,16 @@ import { cccA } from "@ckb-ccc/core/advanced";
  */
 export const defaultCellPageSize = 400;
 
+/**
+ * A CCC client cache that holds a whole pool's headers. CCC's default keeps 128 blocks,
+ * and the testnet pool's deposits alone span 277 (2026-10-29), so every read refetched
+ * most of them; 4096 blocks fit pools many times larger in a few MB. Headers are cached
+ * only once CCC deems them confirmed, and every one is still checked by `verifiedClient`.
+ */
+export function clientCache(): ccc.ClientCacheMemory {
+  return new ccc.ClientCacheMemory(512, 256, 4096);
+}
+
 /** A committed cell and the block the node names for its creating transaction. */
 export interface ScannedCell {
   cell: ccc.Cell;
