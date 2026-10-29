@@ -127,6 +127,36 @@ describe("verifiedClient", () => {
     await expect(verifiedClient(answering(BLOCK)).getTipHeader()).resolves.toBe(BLOCK);
   });
 
+  it("hands out a transaction only under the hash of its body", async () => {
+    const response = ccc.ClientTransactionResponse.from({
+      transaction: ccc.Transaction.from({
+        outputs: [{ capacity: 1n, lock: script("22") }],
+      }),
+      status: "committed",
+    });
+    const real = response.transaction.hash();
+    const other: ccc.Hex = `0x${"33".repeat(32)}`;
+    const answer = async (
+      txHash: ccc.HexLike,
+    ): Promise<ccc.ClientTransactionResponse | undefined> => {
+      await Promise.resolve();
+      return ccc.hexFrom(txHash) === `0x${"44".repeat(32)}` ? undefined : response;
+    };
+    const client = verifiedClient(
+      new StubClient({ getTransaction: answer, getTransactionNoCache: answer }),
+    );
+    for (const method of ["getTransaction", "getTransactionNoCache"] as const) {
+      const read = async (
+        txHash: ccc.Hex,
+      ): Promise<ccc.ClientTransactionResponse | undefined> => client[method](txHash);
+      await expect(read(real)).resolves.toBe(response);
+      await expect(read(other)).rejects.toThrow(
+        `Transaction ${other} was answered with a body of another hash`,
+      );
+      await expect(read(`0x${"44".repeat(32)}`)).resolves.toBeUndefined();
+    }
+  });
+
   it("forwards everything else to the wrapped client", () => {
     const inner = new StubClient();
     const client = verifiedClient(inner, 1);

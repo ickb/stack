@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 
 /**
  * Wraps `inner` into a client that checks every header it hands out against the
- * header's own hash, a header read by number or by hash against what was asked for,
- * and refuses a tip that trails the local clock by more than `tipMaxAgeMs` when one
- * is given.
+ * header's own hash, a header read by number or by hash against what was asked for, a
+ * transaction read by hash against the hash of its body, and refuses a tip that trails
+ * the local clock by more than `tipMaxAgeMs` when one is given.
  *
  * @remarks The check sits on the client rather than in the SDK's readers because CCC's
  * own completion values a withdrawal's interest from headers it reads through the
@@ -68,6 +68,21 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     return header;
   }
 
+  public override async getTransaction(
+    ...args: Parameters<ccc.Client["getTransaction"]>
+  ): ReturnType<ccc.Client["getTransaction"]> {
+    return verifiedBody(await this[ccc.Proxy.inner].getTransaction(...args), args[0]);
+  }
+
+  public override async getTransactionNoCache(
+    ...args: Parameters<ccc.Client["getTransactionNoCache"]>
+  ): ReturnType<ccc.Client["getTransactionNoCache"]> {
+    return verifiedBody(
+      await this[ccc.Proxy.inner].getTransactionNoCache(...args),
+      args[0],
+    );
+  }
+
   public override async getTransactionWithHeader(
     ...args: Parameters<ccc.Client["getTransactionWithHeader"]>
   ): ReturnType<ccc.Client["getTransactionWithHeader"]> {
@@ -83,6 +98,18 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     ccc.apply(verified, result?.header);
     return result;
   }
+}
+
+/** The response when its body hashes to the hash asked for, else throws. */
+function verifiedBody(
+  response: ccc.ClientTransactionResponse | undefined,
+  txHash: ccc.HexLike,
+): ccc.ClientTransactionResponse | undefined {
+  const asked = ccc.hexFrom(txHash);
+  if (response !== undefined && response.transaction.hash() !== asked) {
+    throw new Error(`Transaction ${asked} was answered with a body of another hash`);
+  }
+  return response;
 }
 
 /** The header when its fields hash to the hash it carries, else throws. */
