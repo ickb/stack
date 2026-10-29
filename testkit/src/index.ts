@@ -258,8 +258,8 @@ class ComposedClient extends ccc.Proxy.Base(ccc.Client) {}
 
 /**
  * The client the connector hands the interface: a composition proxy over the public
- * client (`ClientWithFeeRate`), an instance of `ccc.Client` but not of `ccc.ClientJsonRpc`,
- * so the SDK takes its typed read paths. Tests reach those paths through this.
+ * client (`ClientWithFeeRate`), an instance of `ccc.Client` but not of `ccc.ClientJsonRpc`
+ * that still forwards the requestor the SDK's raw reads need. Tests check that through this.
  */
 export function composedClient(inner: ccc.Client): ccc.Client {
   return new ComposedClient(inner);

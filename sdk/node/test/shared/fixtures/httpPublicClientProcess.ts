@@ -22,9 +22,6 @@ const clientOwner = createPublicClient(
   `http://127.0.0.1:${String(address.port)}`,
 );
 const requestor = jsonRpcRequestor(clientOwner.value);
-if (requestor === undefined) {
-  throw new TypeError("Expected a JSON-RPC public client");
-}
 await requestor.request("test", []);
 await clientOwner.dispose();
 await new Promise<void>((resolve, reject) => {

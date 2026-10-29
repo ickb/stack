@@ -395,9 +395,6 @@ describe("signAndSendTransaction DAO interest", () => {
     });
     const { signer } = signerFixture(tx, [pair], { deposit, withdraw: block });
     const requestor = jsonRpcRequestor(signer.client);
-    if (requestor === undefined) {
-      throw new Error("The fixture client has a requestor");
-    }
     const requested = vi.spyOn(requestor, "request");
 
     await expect(signAndSendTransaction(signer, tx)).resolves.toBe(TX_HASH);
@@ -405,20 +402,6 @@ describe("signAndSendTransaction DAO interest", () => {
       [pair.hash()],
       block.hash,
     ]);
-  });
-
-  it("needs a JSON-RPC client to prove a request block", async () => {
-    const { creating, tx } = request([deposit.hash, withdrawFlat.hash]);
-    const { signer, send } = signerFixture(tx, [creating], {
-      deposit,
-      withdraw: withdrawFlat,
-    });
-    Reflect.deleteProperty(signer.client, "requestor");
-
-    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
-      "Valuing a DAO withdrawal needs a JSON-RPC client",
-    );
-    expect(send).not.toHaveBeenCalled();
   });
 
   it("refuses a phase-2 input whose request block does not hold the request", async () => {

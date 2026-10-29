@@ -192,9 +192,6 @@ async function assertCommittedIn(
   header: ccc.ClientBlockHeader,
 ): Promise<void> {
   const requestor = jsonRpcRequestor(client);
-  if (requestor === undefined) {
-    throw new Error("Valuing a DAO withdrawal needs a JSON-RPC client");
-  }
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the node's answer, checked field by field in isCommittedIn.
   const proof = (await requestor.request("get_transaction_proof", [
     [txHash],

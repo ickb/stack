@@ -2,22 +2,15 @@ import type { ccc } from "@ckb-ccc/core";
 import { jsonRpcRequestor, rawTransactionStatus } from "./utils.ts";
 
 /**
- * The header of the block that committed `txHash`, without the transaction body, which no
- * caller reads. A client with a JSON-RPC requestor, the connector's composed client
- * included, asks the node for the status only (verbosity 1) and then the header by number,
- * which CCC caches once confirmed; a cold read of the pool then moves a few bytes per
- * deposit instead of every deposit transaction. Any other client keeps the typed lookup.
+ * The header of the block that committed `txHash`: the status only (verbosity 1), then the
+ * header by number, which CCC caches once confirmed, instead of the whole transaction.
  */
 export async function getTransactionHeader(
   client: ccc.Client,
   txHash: ccc.Hex,
 ): Promise<ccc.ClientBlockHeader | undefined> {
-  const requestor = jsonRpcRequestor(client);
-  if (requestor === undefined) {
-    return (await client.getTransactionWithHeader(txHash))?.header;
-  }
   const { blockNumber } = rawTransactionStatus(
-    await requestor.request("get_transaction", [txHash, "0x1"]),
+    await jsonRpcRequestor(client).request("get_transaction", [txHash, "0x1"]),
   );
   return blockNumber === undefined ? undefined : client.getHeaderByNumber(blockNumber);
 }

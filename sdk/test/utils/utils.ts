@@ -20,10 +20,12 @@ describe("jsonRpcRequestor", () => {
     expect(jsonRpcRequestor(composedClient(client))).toBe(client.requestor);
   });
 
-  it("finds none on a client without one, or with another kind of requestor", () => {
+  it("refuses a client without one, or with another kind of requestor", () => {
     for (const shape of [{}, { requestor: {} }]) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the requestor field is inspected.
-      expect(jsonRpcRequestor(shape as unknown as ccc.Client)).toBeUndefined();
+      expect(() => jsonRpcRequestor(shape as unknown as ccc.Client)).toThrow(
+        "The SDK needs a JSON-RPC client",
+      );
     }
   });
 });
@@ -128,13 +130,6 @@ describe("findCells", () => {
 
     await expect(findCells(client, key)).resolves.toEqual([]);
     expect(afters).toHaveLength(1);
-  });
-
-  it("needs a JSON-RPC client", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- a client with no requestor at all.
-    await expect(findCells({} as unknown as ccc.Client, key)).rejects.toThrow(
-      "Cell scans need a JSON-RPC client",
-    );
   });
 });
 

@@ -81,72 +81,6 @@ describe("waitTransaction committed reads", () => {
 
     expect(noCache).toHaveBeenCalledTimes(2);
   });
-
-  it("reads status and body without the cache for non-JSON clients", async () => {
-    const response = committedResponse(10n);
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValueOnce(undefined).mockResolvedValue(response);
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toBe(response);
-
-    expect(getTransactionNoCache).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("waitTransaction generic client bodies", () => {
-  it("accepts a structurally valid committed body from a generic client", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue({
-      transaction: ccc.Transaction.default(),
-      status: "committed",
-      blockHash: hash("92"),
-      blockNumber: 10n,
-    });
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toMatchObject({ status: "committed", blockNumber: 10n });
-  });
-
-  it.each([
-    { name: "a missing transaction", body: { status: "committed", blockNumber: 10n } },
-    {
-      name: "invalid transaction data",
-      body: {
-        transaction: { version: "not-a-number" },
-        status: "committed",
-        blockNumber: 10n,
-      },
-    },
-    {
-      name: "an invalid block number",
-      body: {
-        transaction: ccc.Transaction.default(),
-        status: "committed",
-        blockNumber: "not-a-number",
-      },
-    },
-    {
-      name: "an invalid block hash",
-      body: {
-        transaction: ccc.Transaction.default(),
-        status: "committed",
-        blockNumber: 10n,
-        blockHash: "not-a-hash",
-      },
-    },
-  ])("treats a generic committed body with $name as unconfirmed", async ({ body }) => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue(body);
-
-    // The window must outlast one poll so the malformed body is normalized, and
-    // ending at the timeout is the proof that nothing committed was returned.
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 100, interval: 1 }),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
-  });
 });
 
 describe("waitTransaction terminal rejection", () => {
@@ -188,25 +122,6 @@ describe("waitTransaction terminal rejection", () => {
         status: "rejected",
         reason: undefined,
       }),
-    );
-  });
-
-  it("reports a rejection surfaced only by a non-JSON client response", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue(
-      new ccc.ClientTransactionResponse(
-        ccc.Transaction.default(),
-        "rejected",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "fallback rejection",
-      ),
-    );
-
-    await expect(waitTransaction(client, TX_HASH)).rejects.toBeInstanceOf(
-      TransactionWaitError,
     );
   });
 
@@ -367,7 +282,7 @@ describe("waitTransaction post-operation cancellation", () => {
   it("does not accept a committed body from an operation that aborted", async () => {
     const reason = new Error("stopped during the body read");
     const controller = new AbortController();
-    const { client, getTransactionNoCache } = nonJsonClient();
+    const { client, getTransactionNoCache } = committedClient();
     getTransactionNoCache.mockImplementation(async () => {
       controller.abort(reason);
       await Promise.resolve();
@@ -393,7 +308,7 @@ describe("waitTransaction post-operation cancellation", () => {
         return 10n;
       },
     });
-    const { client, getTransactionNoCache } = nonJsonClient();
+    const { client, getTransactionNoCache } = committedClient();
     getTransactionNoCache.mockResolvedValue(response);
 
     await expect(
@@ -506,7 +421,7 @@ describe("waitTransaction absolute budget", () => {
   });
 
   it("rejects an overdue result from an operation that starved the timer", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
+    const { client, getTransactionNoCache } = committedClient();
     getTransactionNoCache.mockImplementation(async () => {
       // Block the event loop past the deadline so the window timer cannot fire.
       const blockUntil = Date.now() + 30;
@@ -572,18 +487,15 @@ async function rejectionOf<T>(promise: Promise<T>): Promise<unknown> {
   throw new Error("Expected promise to reject");
 }
 
-function nonJsonClient(): {
+/** A JSON-RPC client whose node reports the transaction committed, its body read scripted. */
+function committedClient(): {
   client: ccc.Client;
-  // A generic client is not bound to CCC's response class, so the fake returns
-  // whatever such an implementation could.
-  getTransactionNoCache: Mock<() => Promise<unknown>>;
+  getTransactionNoCache: Mock<() => Promise<ccc.ClientTransactionResponse | undefined>>;
 } {
-  const getTransactionNoCache = vi.fn<() => Promise<unknown>>();
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- The fallback intentionally supports non-JSON Client implementations through this public surface.
-  const client = {
-    cache: new ccc.ClientCacheMemory(),
-    getTransactionNoCache,
-  } as unknown as ccc.Client;
+  const { client } = jsonRpcClient({ status: "committed", block_number: "0xa" });
+  const getTransactionNoCache =
+    vi.fn<() => Promise<ccc.ClientTransactionResponse | undefined>>();
+  client.getTransactionNoCache = getTransactionNoCache;
   return { client, getTransactionNoCache };
 }
 

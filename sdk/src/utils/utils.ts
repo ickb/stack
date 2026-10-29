@@ -43,9 +43,6 @@ export async function findCells(
   keyLike: ccc.ClientIndexerSearchKeyLike,
 ): Promise<ScannedCell[]> {
   const requestor = jsonRpcRequestor(client);
-  if (requestor === undefined) {
-    throw new Error("Cell scans need a JSON-RPC client");
-  }
   const key = cccA.JsonRpcTransformers.indexerSearchKeyFrom(keyLike);
   const cells: ScannedCell[] = [];
   let after: string | undefined;
@@ -177,16 +174,17 @@ export async function asyncBinarySearch(
 }
 
 /**
- * The client's JSON-RPC requestor, when it has one. The connector hands the interface a
+ * The client's JSON-RPC requestor, which the SDK's raw reads need: scans with block
+ * numbers, status polls and transaction proofs. The connector hands the interface a
  * composition proxy over the public client (`ClientWithFeeRate`, a `ccc.Client` but not a
  * `ccc.ClientJsonRpc`), so `instanceof` misses it; the proxy forwards the property.
  */
-export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc | undefined {
-  if (!("requestor" in client)) {
-    return undefined;
+export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc {
+  const requestor = "requestor" in client ? client.requestor : undefined;
+  if (!(requestor instanceof ccc.RequestorJsonRpc)) {
+    throw new TypeError("The SDK needs a JSON-RPC client");
   }
-  const { requestor } = client;
-  return requestor instanceof ccc.RequestorJsonRpc ? requestor : undefined;
+  return requestor;
 }
 
 /** A node's raw `get_transaction` status record (verbosity 1), the fields the stack reads. */

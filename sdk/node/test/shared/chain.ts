@@ -126,9 +126,6 @@ function testnetClient(): ccc.Client {
 
 function endpointPoolUrls(client: ccc.Client): string[] {
   const requestor = jsonRpcRequestor(client);
-  if (requestor === undefined) {
-    throw new TypeError("expected JSON-RPC public client");
-  }
   const { transport } = requestor;
   if (!("transports" in transport) || !Array.isArray(transport.transports)) {
     throw new Error("expected CCC TransportFallback endpoint pool");

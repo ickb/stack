@@ -101,19 +101,4 @@ describe("getTransactionHeader", () => {
     ).resolves.toMatchObject({ number: 7n, hash: header.hash });
     expect(methods).toEqual(["get_transaction", "get_header_by_number"]);
   });
-
-  it("keeps the typed lookup on a client without a JSON-RPC requestor", async () => {
-    const typedOnly = {
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return undefined;
-      },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the typed lookup is exercised.
-    const client = typedOnly as unknown as ccc.Client;
-
-    await expect(getTransactionHeader(client, TX_HASH)).resolves.toBeUndefined();
-  });
 });

@@ -46,9 +46,9 @@ export interface WaitTransactionOptions {
  * @remarks Stack waits at depth zero. Actors rebuild next turn; the app can reopen a
  * window on the same hash without signing again. Callers needing deeper confirmation
  * must observe it separately.
- * Clients with a JSON-RPC requestor, the connector's composed client included, poll
- * `get_transaction` verbosity 1 directly because CCC's typed response discards a null
- * transaction body, including its rejection status. Body reads separately bypass the cache.
+ * The status is polled with raw `get_transaction` verbosity 1, since CCC's typed response
+ * discards a null transaction body and its rejection status; the client must be JSON-RPC,
+ * the connector's composed client included. Body reads separately bypass the cache.
  * Timeout and abort also apply while awaiting client
  * operations, but the in-flight client operation receives no abort signal and may
  * finish after this function rejects. Nothing here mutates the client cache: later attempts rebuild
@@ -108,7 +108,6 @@ interface WaitPoll {
 interface TransactionStatus {
   status: string | undefined;
   reason: string | undefined;
-  response?: ccc.ClientTransactionResponse;
 }
 
 function validateWaitOptions(timeout: number, interval: number): void {
@@ -207,7 +206,7 @@ async function readCommittedTransaction(
     return undefined;
   }
 
-  const response = status.response ?? (await readTransactionBody(poll));
+  const response = await readTransactionBody(poll);
   if (response === undefined) {
     return undefined;
   }
@@ -225,40 +224,20 @@ async function readCommittedTransaction(
 async function readTransactionStatus(poll: WaitPoll): Promise<TransactionStatus> {
   const { client, txHash, budget } = poll;
   const requestor = jsonRpcRequestor(client);
-  if (requestor !== undefined) {
-    // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed
-    // transaction response discards (its body is null, so CCC returns nothing).
-    return rawTransactionStatus(
-      await within(
-        async () => requestor.request("get_transaction", [txHash, "0x1"]),
-        budget,
-      ),
-    );
-  }
-
-  const response = await readTransactionBody(poll);
-  return response === undefined
-    ? { status: undefined, reason: undefined }
-    : { status: response.status, reason: response.reason, response };
+  // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed transaction
+  // response discards (its body is null, so CCC returns nothing).
+  return rawTransactionStatus(
+    await within(
+      async () => requestor.request("get_transaction", [txHash, "0x1"]),
+      budget,
+    ),
+  );
 }
 
 async function readTransactionBody(
   poll: WaitPoll,
 ): Promise<ccc.ClientTransactionResponse | undefined> {
-  const response = await within(
-    async () => poll.client.getTransactionNoCache(poll.txHash),
-    poll.budget,
-  );
-  if (response === undefined) {
-    return undefined;
-  }
-  try {
-    // A generic client may return an unvalidated shape, and a body that cannot
-    // be normalized is not evidence of commitment: keep the window polling.
-    return ccc.ClientTransactionResponse.from(response);
-  } catch {
-    return undefined;
-  }
+  return within(async () => poll.client.getTransactionNoCache(poll.txHash), poll.budget);
 }
 
 function assertNotRejected(txHash: ccc.Hex, status: TransactionStatus): void {
