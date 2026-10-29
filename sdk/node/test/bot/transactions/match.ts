@@ -89,12 +89,13 @@ describe("buildTransaction matching", () => {
     const runtime = botRuntime({
       client,
       primaryLock,
-      completeTransaction: async (tx, rate, cells, protocolCells) =>
+      completeTransaction: async (tx, rate, cells, protocolCells, tip) =>
         runtime.sdk.completeTransaction(tx, {
           signer,
           feeRate: rate,
           cells,
           protocolCells,
+          tip,
         }),
     });
     const base = botState({});

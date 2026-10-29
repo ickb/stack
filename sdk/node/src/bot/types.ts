@@ -33,6 +33,7 @@ export interface Runtime {
     feeRate: ccc.Num,
     cells: ccc.Cell[],
     protocolCells: readonly ProtocolCell[],
+    tip: ccc.ClientBlockHeader,
   ) => Promise<ccc.Transaction>;
 
   /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */

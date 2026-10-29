@@ -8,6 +8,7 @@ import {
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
+  baseTip,
   conversionContext,
   hash,
   transactionWithOutputs,
@@ -35,6 +36,7 @@ function registerFundingTests(): void {
       feeRate,
       cells: [source],
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(1);
@@ -65,6 +67,7 @@ function registerFundingTests(): void {
       feeRate: 1_000n,
       cells,
       protocolCells: [],
+      tip: baseTip,
     });
     const toSecondary = await sdk.completeTransaction(tx, {
       signer,
@@ -72,6 +75,7 @@ function registerFundingTests(): void {
       feeRate: 1_000n,
       cells,
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(2);
@@ -97,6 +101,7 @@ function registerFundingTests(): void {
       feeRate: 1_000n,
       cells: [existing, additional],
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -119,6 +124,7 @@ function registerFundingTests(): void {
         feeRate: 1_000n,
         cells: [],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
@@ -139,6 +145,7 @@ function registerSweepTests(): void {
       feeRate: 1_000n,
       cells: [small, udt, large],
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -164,6 +171,7 @@ function registerSweepTests(): void {
       feeRate: 1_000n,
       cells,
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
@@ -222,6 +230,7 @@ function registerSweepTests(): void {
       feeRate: 1_000n,
       cells,
       protocolCells: [],
+      tip: baseTip,
     });
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
@@ -252,6 +261,7 @@ function registerIckbTests(): void {
       feeRate: 1_000n,
       cells,
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
@@ -275,6 +285,7 @@ function registerIckbTests(): void {
         feeRate: 1_000n,
         cells: [udtCell("96", lock, type, 40n)],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
   });
@@ -298,6 +309,7 @@ function registerFailureTests(): void {
         feeRate: 1_000n,
         cells: [source],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toMatchObject({
       name: "IckbError",
@@ -320,6 +332,7 @@ function registerFailureTests(): void {
         feeRate: 1_000n,
         cells: [source],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toMatchObject({ code: "insufficient_capacity" });
     expect(tx.toHex()).toBe(original);
@@ -342,6 +355,7 @@ function registerFailureTests(): void {
         feeRate: 1_000n,
         cells: [source],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
@@ -358,6 +372,7 @@ function registerFailureTests(): void {
         feeRate: 1_000n,
         cells: [],
         protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toBe(failure);
   });

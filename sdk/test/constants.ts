@@ -3,6 +3,7 @@ import { offlineTestnetClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
+import { baseTip } from "./transaction/base/support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,6 +36,7 @@ describe("getConfig", () => {
       feeRate: 1n,
       cells: [],
       protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed).not.toBe(tx);

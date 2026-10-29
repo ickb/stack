@@ -155,6 +155,13 @@ export interface CompleteIckbTransactionOptions {
    * any superset works, since only the spent ones are summed.
    */
   protocolCells: readonly ProtocolCell[];
+
+  /**
+   * The tip the plan was priced at, named as a header dep: the chain refuses a
+   * transaction whose deps are off the main chain, so a tip a node invented, whose DAO
+   * rate set the exchange ratio, cannot price an accepted transaction.
+   */
+  tip: ccc.ClientBlockHeader;
 }
 
 /**

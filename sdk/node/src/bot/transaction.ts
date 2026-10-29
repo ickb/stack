@@ -77,10 +77,13 @@ export async function buildTransaction(
         return buildCore(runtime, state, matched, core);
       },
       async (tx) =>
-        runtime.completeTransaction(tx, state.system.feeRate, state.cells, [
-          ...state.receipts,
-          ...state.system.poolDeposits,
-        ]),
+        runtime.completeTransaction(
+          tx,
+          state.system.feeRate,
+          state.cells,
+          [...state.receipts, ...state.system.poolDeposits],
+          state.system.tip,
+        ),
     );
   } catch (error) {
     if (!isFundabilityFailure(error)) {

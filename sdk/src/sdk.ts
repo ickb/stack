@@ -21,6 +21,7 @@ import {
   DaoHeaderIndexError,
   DaoOutputLimitError,
   type LockUpPolicy,
+  pushHeaderDep,
   tipMaxAgeMs,
 } from "./dao.ts";
 import type { IckbDepositCell, LogicManager } from "./logic.ts";
@@ -360,6 +361,7 @@ const IckbSdkImplementation = class IckbSdk {
         ...options.context.receipts,
         ...options.context.system.poolDeposits,
       ],
+      tip: options.context.system.tip,
     });
   }
 
@@ -446,6 +448,9 @@ const IckbSdkImplementation = class IckbSdk {
     );
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the limit.
     const swept = sweep(tx, plainCells);
+    // Last of the header deps, so no index another step names shifts, and before the fee so
+    // its 32 bytes are paid for.
+    pushHeaderDep(tx, options.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
     return tx;
