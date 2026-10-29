@@ -107,12 +107,12 @@ async function readChainPreflight(
 
 function assertChainPreflight(evidence: ChainPreflightEvidence): ChainPreflightEvidence {
   const failures: string[] = [];
-  if (evidence.observed.genesisHash !== evidence.expected.genesisHash) {
+  if (!evidence.matches.genesisHash) {
     failures.push(
       `genesis hash expected ${evidence.expected.genesisHash} observed ${evidence.observed.genesisHash}`,
     );
   }
-  if (evidence.observed.addressPrefix !== evidence.expected.addressPrefix) {
+  if (!evidence.matches.addressPrefix) {
     failures.push(
       `address prefix expected ${evidence.expected.addressPrefix} observed ${evidence.observed.addressPrefix}`,
     );
