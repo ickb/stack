@@ -3,8 +3,9 @@ import { ccc } from "@ckb-ccc/core";
 /**
  * Wraps `inner` into a client that checks every header it hands out against the
  * header's own hash, a header read by number or by hash against what was asked for, a
- * transaction read by hash against the hash of its body, and refuses a tip that trails
- * the local clock by more than `tipMaxAgeMs` when one is given.
+ * transaction read by hash against the hash of its body, a cell against the body of its
+ * creating transaction, and refuses a tip that trails the local clock by more than
+ * `tipMaxAgeMs` when one is given.
  *
  * @remarks The check sits on the client rather than in the SDK's readers because CCC's
  * own completion values a withdrawal's interest from headers it reads through the
@@ -81,6 +82,28 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
       await this[ccc.Proxy.inner].getTransactionNoCache(...args),
       args[0],
     );
+  }
+
+  /**
+   * The output of the verified creating transaction, cache first: CCC keys cached
+   * transactions by their body's hash, and its own `getCell` would build the cell from a
+   * read this wrapper never sees, then cache it.
+   */
+  public override async getCell(
+    ...args: Parameters<ccc.Client["getCell"]>
+  ): ReturnType<ccc.Client["getCell"]> {
+    const outPoint = ccc.OutPoint.from(args[0]);
+    const response =
+      (await this.cache.getTransactionResponse(outPoint.txHash)) ??
+      (await this.getTransaction(outPoint.txHash));
+    const output = response?.transaction.getOutput(outPoint.index);
+    return output === undefined
+      ? undefined
+      : ccc.Cell.from({
+          outPoint,
+          cellOutput: output.cellOutput,
+          outputData: output.outputData,
+        });
   }
 
   public override async getTransactionWithHeader(

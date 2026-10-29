@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { script, StubClient } from "@ickb/testkit";
+import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { verifiedClient } from "../../src/utils/verified_client.ts";
 import { TESTNET_HEADERS } from "./fixtures/testnet_headers.ts";
@@ -155,6 +155,43 @@ describe("verifiedClient", () => {
       );
       await expect(read(`0x${"44".repeat(32)}`)).resolves.toBeUndefined();
     }
+  });
+
+  it("serves a cell from its verified creating transaction, cache first", async () => {
+    const created = ccc.Transaction.from({
+      outputs: [{ capacity: 7n, lock: script("22") }],
+      outputsData: ["0xab"],
+    });
+    const forged = ccc.Transaction.from({
+      outputs: [{ capacity: 1n, lock: script("22") }],
+      outputsData: ["0x"],
+    });
+    const txHash = created.hash();
+    const reads: ccc.Hex[] = [];
+    const inner = new StubClient({
+      getTransaction: async (asked): Promise<ccc.ClientTransactionResponse> => {
+        await Promise.resolve();
+        reads.push(ccc.hexFrom(asked));
+        // An honest answer for the created transaction, a forged body for any other.
+        return committedTransactionResponse(
+          ccc.hexFrom(asked) === txHash ? created : forged,
+        );
+      },
+    });
+    const client = verifiedClient(inner);
+
+    const cell = await client.getCell({ txHash, index: 0n });
+    expect(cell?.cellOutput).toEqual(created.getOutput(0)?.cellOutput);
+    expect(cell?.outputData).toBe("0xab");
+    await expect(client.getCell({ txHash, index: 1n })).resolves.toBeUndefined();
+    await expect(
+      client.getCell({ txHash: `0x${"55".repeat(32)}`, index: 0n }),
+    ).rejects.toThrow("was answered with a body of another hash");
+
+    reads.length = 0;
+    await client.cache.recordTransactionResponses(committedTransactionResponse(created));
+    expect((await client.getCell({ txHash, index: 0n }))?.outputData).toBe("0xab");
+    expect(reads).toEqual([]);
   });
 
   it("forwards everything else to the wrapped client", () => {
