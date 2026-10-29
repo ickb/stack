@@ -45,7 +45,7 @@
     "@ckb-ccc/ccc": "catalog:",
     "@ckb-ccc/connector-react": "catalog:",
     "@ickb/sdk": "workspace:*",
-    "@tanstack/react-query": "^5.104.5",
+    "@tanstack/react-query": "^5.105.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }
