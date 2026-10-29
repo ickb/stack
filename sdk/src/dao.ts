@@ -171,13 +171,24 @@ export function depositMaturity(
  */
 export function broadcastDeadline(
   claims: readonly ccc.Epoch[],
-  { broadcastReserve }: LockUpPolicy,
-): ccc.Epoch | undefined {
+  policy: LockUpPolicy,
+): BroadcastDeadline | undefined {
   const earliest = claims.reduce<ccc.Epoch | undefined>(
     (best, claim) => (best === undefined || claim.compare(best) < 0 ? claim : best),
     undefined,
   );
-  return earliest?.sub(broadcastReserve);
+  return earliest === undefined
+    ? undefined
+    : { epoch: earliest.sub(policy.broadcastReserve), tipMaxAgeMs: tipMaxAgeMs(policy) };
+}
+
+/**
+ * The epoch a withdrawal request must be broadcast before, and how far the tip read to
+ * check it may trail the clock, the policy's slack: a stale tip would pass the check late.
+ */
+export interface BroadcastDeadline {
+  epoch: ccc.Epoch;
+  tipMaxAgeMs: number;
 }
 
 /** Adds the header dep once. */

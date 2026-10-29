@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { CKB_RESERVE } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/types.ts";
+import type { BroadcastDeadline } from "../../../src/dao.ts";
 import {
   OrderConversionRepresentabilityError,
   quoteConversion,
@@ -74,7 +75,8 @@ export interface StimulusLog {
 }
 
 type Built =
-  { tx: ccc.Transaction; action: Action; broadcastBefore?: ccc.Epoch } | { skip: Skip };
+  | { tx: ccc.Transaction; action: Action; broadcastBefore?: BroadcastDeadline }
+  | { skip: Skip };
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 

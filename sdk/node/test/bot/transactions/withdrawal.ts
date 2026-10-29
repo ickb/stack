@@ -94,7 +94,7 @@ describe("buildTransaction withdrawal", () => {
     // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
     expect(
       result.kind === "built" &&
-        result.broadcastBefore?.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
+        result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
     ).toBe(true);
   });
 

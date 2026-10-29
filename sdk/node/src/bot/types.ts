@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts";
+import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
@@ -40,7 +41,7 @@ export interface Runtime {
   sendTransaction: (
     tx: ccc.TransactionLike,
     recordTxHash?: (txHash: ccc.Hex) => void,
-    broadcastBefore?: ccc.Epoch,
+    broadcastBefore?: BroadcastDeadline,
   ) => Promise<ccc.Hex>;
 }
 
@@ -108,7 +109,7 @@ export type BuildTransactionResult =
       tx: ccc.Transaction;
       decision: BotDecision;
       /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
-      broadcastBefore?: ccc.Epoch;
+      broadcastBefore?: BroadcastDeadline;
     }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 

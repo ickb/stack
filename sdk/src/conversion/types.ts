@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { LockUpPolicy } from "../dao.ts";
+import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import type { Info } from "../order/info.ts";
@@ -119,7 +119,7 @@ export type ConversionTransactionResult =
        * The epoch the transaction must be broadcast before for its withdrawal requests to
        * claim at their sampled dates (`system.lockUp`); absent when it requests none.
        */
-      broadcastBefore?: ccc.Epoch;
+      broadcastBefore?: BroadcastDeadline;
     }
   | {
       ok: false;

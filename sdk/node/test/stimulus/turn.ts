@@ -47,7 +47,7 @@ vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) 
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
 const TX_HASH = byte32FromByte("46");
-const DEADLINE = ccc.Epoch.from([5n, 0n, 1n]);
+const DEADLINE = { epoch: ccc.Epoch.from([5n, 0n, 1n]), tipMaxAgeMs: 1_800_000 };
 const identity: StimulusIdentity = {
   chain: "testnet",
   address: "ckt1stimulus",

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import type { BroadcastDeadline } from "../dao.ts";
 import { jsonRpcRequestor, unique } from "../utils/utils.ts";
 import { verifiedClient } from "../utils/verified_client.ts";
 
@@ -49,7 +50,7 @@ export async function signAndSendTransaction(
   signer: ccc.Signer,
   tx: ccc.TransactionLike,
   recordTxHash?: (txHash: ccc.Hex) => void,
-  broadcastBefore?: ccc.Epoch,
+  broadcastBefore?: BroadcastDeadline,
 ): Promise<ccc.Hex> {
   // Transaction.from reuses Transaction instances, which a signer may mutate in place.
   const requested = ccc.Transaction.from(tx).clone();
@@ -67,9 +68,15 @@ export async function signAndSendTransaction(
     throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
   }
   if (broadcastBefore !== undefined) {
-    const { epoch } = await client.getTipHeader();
-    if (broadcastBefore.compare(epoch) <= 0) {
-      throw new TransactionExpiredError({ broadcastBefore, tip: epoch });
+    const { epoch } = await verifiedClient(
+      signer.client,
+      broadcastBefore.tipMaxAgeMs,
+    ).getTipHeader();
+    if (broadcastBefore.epoch.compare(epoch) <= 0) {
+      throw new TransactionExpiredError({
+        broadcastBefore: broadcastBefore.epoch,
+        tip: epoch,
+      });
     }
   }
   recordTxHash?.(txHash);

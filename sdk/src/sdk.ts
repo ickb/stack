@@ -452,6 +452,12 @@ const IckbSdkImplementation = class IckbSdk {
     // its 32 bytes are paid for.
     pushHeaderDep(tx, options.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
+    // CCC priced phase-2 interest through the signer's client, which may be unverified: a
+    // header with understated DAO fields would shorten the change and the miner would keep
+    // the difference, under any fee ceiling. Re-price through a verified client instead.
+    if ((await tx.getFee(verifiedClient(signer.client))) > tx.estimateFee(feeRate)) {
+      throw new Error("Completion priced the fee below what the chain would take");
+    }
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
     return tx;
   }

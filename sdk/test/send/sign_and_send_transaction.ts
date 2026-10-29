@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
+import type { BroadcastDeadline } from "../../src/dao.ts";
 import {
   isCommittedIn,
   signAndSendTransaction,
@@ -509,12 +510,23 @@ describe("signAndSendTransaction broadcast outcomes", () => {
 });
 
 describe("signAndSendTransaction broadcast deadline", () => {
+  // The fixture tip is dated 0, so its age passes only an unbounded check.
+  const deadline = (epoch: ccc.Epoch): BroadcastDeadline => ({
+    epoch,
+    tipMaxAgeMs: Number.MAX_SAFE_INTEGER,
+  });
+
   it("refuses the send once the tip has reached the deadline, before recording", async () => {
     const { signer, send, getTipHeader } = signerFixture(bodyTransaction());
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(), recordTxHash, TIP_EPOCH),
+      signAndSendTransaction(
+        signer,
+        bodyTransaction(),
+        recordTxHash,
+        deadline(TIP_EPOCH),
+      ),
     ).rejects.toBeInstanceOf(TransactionExpiredError);
 
     expect(getTipHeader).toHaveBeenCalledTimes(1);
@@ -530,7 +542,7 @@ describe("signAndSendTransaction broadcast deadline", () => {
         signer,
         bodyTransaction(),
         undefined,
-        TIP_EPOCH.add([0n, 1n, 2n]),
+        deadline(TIP_EPOCH.add([0n, 1n, 2n])),
       ),
     ).resolves.toBe(TX_HASH);
     await expect(signAndSendTransaction(signer, bodyTransaction())).resolves.toBe(

@@ -56,7 +56,7 @@ export type {
   SystemState,
 } from "./conversion/types.ts";
 export { WALLET_LOCK_UP } from "./dao.ts";
-export type { LockUpPolicy } from "./dao.ts";
+export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {

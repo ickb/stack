@@ -154,11 +154,10 @@ describe("broadcastDeadline", () => {
     const early = ccc.Epoch.from([181n, 0n, 1n]);
     const late = ccc.Epoch.from([190n, 0n, 1n]);
 
-    expect(
-      broadcastDeadline([late, early], WALLET_LOCK_UP)?.eq(
-        early.sub(WALLET_LOCK_UP.broadcastReserve),
-      ),
-    ).toBe(true);
+    const deadline = broadcastDeadline([late, early], WALLET_LOCK_UP);
+    expect(deadline?.epoch.eq(early.sub(WALLET_LOCK_UP.broadcastReserve))).toBe(true);
+    // The tip read to check it may be as stale as the policy's slack, no more.
+    expect(deadline?.tipMaxAgeMs).toBe(tipMaxAgeMs(WALLET_LOCK_UP));
     expect(broadcastDeadline([], WALLET_LOCK_UP)).toBeUndefined();
   });
 });

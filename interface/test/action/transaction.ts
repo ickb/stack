@@ -216,7 +216,10 @@ describe("buildTransactionPreview destination", () => {
   });
 
   it("carries the SDK's broadcast deadline into the preview", async () => {
-    const broadcastBefore = ccc.Epoch.from([7n, 0n, 1n]);
+    const broadcastBefore = {
+      epoch: ccc.Epoch.from([7n, 0n, 1n]),
+      tipMaxAgeMs: 1_800_000,
+    };
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({ broadcastBefore }),
     );

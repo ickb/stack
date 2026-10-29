@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ConversionMetadata, ConversionNotice, IckbSdk } from "@ickb/sdk";
+import type {
+  BroadcastDeadline,
+  ConversionMetadata,
+  ConversionNotice,
+  IckbSdk,
+} from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
@@ -57,7 +62,7 @@ export type TxInfo = Readonly<{
   move?: { to: string; isComplete: boolean };
   conversionNotice?: ConversionNotice;
   /** The epoch the transaction must be sent before, when it requests withdrawals. */
-  broadcastBefore?: ccc.Epoch;
+  broadcastBefore?: BroadcastDeadline;
 }>;
 
 export const txInfoPadding: TxInfo = Object.freeze({

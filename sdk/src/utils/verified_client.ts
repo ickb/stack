@@ -114,8 +114,9 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
   private async readBody(
     txHash: ccc.Hex,
   ): Promise<ccc.ClientTransactionResponse | undefined> {
+    // CCC's own cache keys bodies by their hash, but a consumer's cache need not.
     return (
-      (await this.cache.getTransactionResponse(txHash)) ??
+      verifiedBody(await this.cache.getTransactionResponse(txHash), txHash) ??
       (await this.getTransaction(txHash))
     );
   }
