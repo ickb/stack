@@ -6,7 +6,7 @@ import type { Info } from "../order/info.ts";
 import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
-import type { IckbUdt } from "../udt.ts";
+import type { IckbUdt, ProtocolCell } from "../udt.ts";
 import type { ValueComponents } from "../utils/utils.ts";
 
 /**
@@ -149,6 +149,12 @@ export interface CompleteIckbTransactionOptions {
 
   /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
   cells: ccc.Cell[];
+
+  /**
+   * The receipts and iCKB deposits the transaction may spend, valued by the state read;
+   * any superset works, since only the spent ones are summed.
+   */
+  protocolCells: readonly ProtocolCell[];
 }
 
 /**

@@ -5,10 +5,9 @@ import {
   script,
   StubClient,
   headerLike as testHeaderLike,
-  transactionWithHeader,
 } from "@ickb/testkit";
 import fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { depositData } from "../../src/dao.ts";
 import {
   convert,
@@ -87,17 +86,6 @@ function depositCell(txHashByte = "88", cellLock = logic): ccc.Cell {
   });
 }
 
-function clientWithHeader(header: ccc.ClientBlockHeader): ccc.Client {
-  return new StubClient({
-    getTransactionWithHeader: async (): ReturnType<
-      ccc.Client["getTransactionWithHeader"]
-    > => {
-      await Promise.resolve();
-      return transactionWithHeader(header);
-    },
-  });
-}
-
 function transactionWithInputs(...cells: ccc.Cell[]): ccc.Transaction {
   const tx = ccc.Transaction.default();
   for (const cell of cells) {
@@ -147,8 +135,6 @@ describe("IckbUdt cell deps and shapes", () => {
 });
 
 describe("IckbUdt.inputBalance", () => {
-  const header = headerLike(10000000000000000n);
-
   it("values xUDT inputs and ignores unrelated or prefix-matching foreign cells", async () => {
     const foreign = xudtCell(7n, script("77"), "98");
     const plain = ccc.Cell.from({
@@ -161,111 +147,37 @@ describe("IckbUdt.inputBalance", () => {
       udt().inputBalance(
         transactionWithInputs(xudtCell(5n), foreign, plain),
         new StubClient(),
+        [],
       ),
     ).resolves.toBe(5n);
   });
 
-  it("values receipt inputs at their deposit header, ignoring trailing bytes", async () => {
-    const tx = transactionWithInputs(
-      receiptCell(receiptOutputData(3n, ccc.fixedPointFrom(100000))),
-    );
-
-    await expect(udt().inputBalance(tx, clientWithHeader(header))).resolves.toBe(
-      ickbValue(ccc.fixedPointFrom(100000), header) * 3n,
-    );
-  });
-
-  it("values first-phase deposit inputs as negative iCKB, only under the logic lock", async () => {
+  it("adds a receipt and subtracts a logic-locked deposit at the state read's values", async () => {
+    const receipt = receiptCell(receiptOutputData(3n, ccc.fixedPointFrom(100000)));
     const deposit = depositCell();
-    const tx = transactionWithInputs(deposit, depositCell("87", script("21")));
+    const unspent = depositCell("89");
+    // A deposit under another lock is not iCKB, whatever list it is in.
+    const foreign = depositCell("87", script("21"));
+    const tx = transactionWithInputs(receipt, deposit, foreign);
 
-    await expect(udt().inputBalance(tx, clientWithHeader(header))).resolves.toBe(
-      -ickbValue(deposit.capacityFree, header),
-    );
+    await expect(
+      udt().inputBalance(tx, new StubClient(), [
+        { cell: receipt, udtValue: 11n },
+        { cell: deposit, udtValue: 4n },
+        { cell: unspent, udtValue: 100n },
+        { cell: foreign, udtValue: 100n },
+      ]),
+    ).resolves.toBe(7n);
   });
 
-  it("reads the headers of a batch concurrently, each transaction once", async () => {
-    const receipt = receiptCell(receiptOutputData(2n, ccc.fixedPointFrom(100000)));
-    const deposit = depositCell();
-    const twin = depositCell("88");
-    Object.assign(twin.outPoint, { index: 1n });
-    const requests: ccc.Hex[] = [];
-    const { promise: receiptFetch, resolve: resolveReceipt } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
-    const { promise: depositFetch, resolve: resolveDeposit } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
-    const client = new StubClient({
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        const hash = ccc.hexFrom(txHash);
-        requests.push(hash);
-        return hash === receipt.outPoint.txHash ? receiptFetch : depositFetch;
-      },
-    });
-
-    const balancePromise = udt().inputBalance(
-      transactionWithInputs(receipt, deposit, twin),
-      client,
-    );
-    await vi.waitFor(() => {
-      expect(requests).toEqual([receipt.outPoint.txHash, deposit.outPoint.txHash]);
-    });
-    resolveDeposit(transactionWithHeader(header));
-    await Promise.resolve();
-    resolveReceipt(transactionWithHeader(header));
-
-    await expect(balancePromise).resolves.toBe(
-      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
-        2n * ickbValue(deposit.capacityFree, header),
-    );
-  });
-
-  it("throws when a protocol input header is unavailable", async () => {
+  it("refuses a protocol input the state read did not value", async () => {
     const receipt = receiptCell(receiptOutputData(1n, ccc.fixedPointFrom(100000)));
-    const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return undefined;
-      },
-    });
 
     await expect(
-      udt().inputBalance(transactionWithInputs(receipt), client),
-    ).rejects.toThrow(`Header not found for txHash ${receipt.outPoint.txHash}`);
-  });
-
-  it("rejects malformed receipt inputs with out point context", async () => {
-    const receipt = receiptCell("0x12");
-
-    await expect(
-      udt().inputBalance(transactionWithInputs(receipt), clientWithHeader(header)),
+      udt().inputBalance(transactionWithInputs(receipt), new StubClient(), []),
     ).rejects.toThrow(
-      `Invalid iCKB receipt payload at ${receipt.outPoint.toHex()}: 0x12`,
+      `iCKB input ${receipt.outPoint.toHex()} has no value from the state read`,
     );
-  });
-
-  it("preserves the input out point when loading an input cell fails", async () => {
-    const tx = ccc.Transaction.default();
-    tx.addInput({ previousOutput: { txHash: byte32FromByte("96"), index: 0n } });
-    const failure = new Error("rpc failed");
-    const client = new StubClient({
-      getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        throw failure;
-      },
-    });
-
-    await expect(udt().inputBalance(tx, client)).rejects.toMatchObject({
-      message: `Failed to load input cell ${tx.inputs[0]?.previousOutput.toHex() ?? ""}`,
-      cause: failure,
-    });
   });
 });
 

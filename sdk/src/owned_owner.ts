@@ -9,8 +9,12 @@ import {
 import type { IckbDepositCell } from "./logic.ts";
 import { ickbValue } from "./udt.ts";
 import { CheckedInt32LE, CheckedUint64LE } from "./utils/codec.ts";
-import { headersByNumber } from "./utils/transaction_header.ts";
-import type { ScannedCell, ScriptDeps, ValueComponents } from "./utils/utils.ts";
+import {
+  headersByNumber,
+  type ScannedCell,
+  type ScriptDeps,
+  type ValueComponents,
+} from "./utils/utils.ts";
 
 /**
  * A live Nervos DAO withdrawal request cell, valued at the two headers it spans.

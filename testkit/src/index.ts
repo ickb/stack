@@ -85,16 +85,14 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 }
 
 /**
- * Answers the SDK's status-only `get_transaction` from the stub's scripted typed reads, so
- * a test stubs one typed method, not the wire: `getTransactionWithHeader` when scripted
- * (the header is remembered for the follow-up lookup by number), else
- * `getTransactionNoCache` (the body's status, with its block number or reason).
- * Everything else is offline.
+ * Answers the SDK's raw reads from the stub's scripted handlers, so a test stubs one typed
+ * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
+ * from `getTransactionNoCache` (the body's status and reason). Everything else is offline.
  */
-function stubTransport(
-  raw: { client?: StubClient; scripted?: StubClientHandlers },
-  headers: Map<bigint, ccc.ClientBlockHeader>,
-): ccc.JsonRpcTransport {
+function stubTransport(raw: {
+  client?: StubClient;
+  scripted?: StubClientHandlers;
+}): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
       if (payload.method === "get_cells" && raw.scripted?.cells !== undefined) {
@@ -112,7 +110,7 @@ function stubTransport(
       ) {
         return offlineTransport().request(payload);
       }
-      const status = await rawStatus(raw, headers, txHash);
+      const status = await rawStatus(raw, txHash);
       return {
         id: payload.id,
         jsonrpc: "2.0",
@@ -124,19 +122,10 @@ function stubTransport(
 
 async function rawStatus(
   raw: { client?: StubClient; scripted?: StubClientHandlers },
-  headers: Map<bigint, ccc.ClientBlockHeader>,
   txHash: string,
 ): Promise<object> {
   if (raw.client === undefined) {
     return { status: "unknown" };
-  }
-  if (raw.scripted?.getTransactionWithHeader !== undefined) {
-    const header = (await raw.client.getTransactionWithHeader(txHash))?.header;
-    if (header === undefined) {
-      return { status: "unknown" };
-    }
-    headers.set(header.number, header);
-    return { status: "committed", block_number: ccc.numToHex(header.number) };
   }
   if (raw.scripted?.getTransactionNoCache !== undefined) {
     const response = await raw.client.getTransactionNoCache(txHash);
@@ -145,9 +134,6 @@ async function rawStatus(
     }
     return {
       status: response.status,
-      ...(response.blockNumber === undefined
-        ? {}
-        : { block_number: ccc.numToHex(response.blockNumber) }),
       ...(response.reason === undefined ? {} : { reason: response.reason }),
     };
   }
@@ -166,37 +152,25 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
 
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly prefix: string | undefined;
-  private readonly rememberedHeaders: Map<bigint, ccc.ClientBlockHeader>;
-  private readonly headerByNumber: ClientMethod<"getHeaderByNumber"> | undefined;
 
   /**
    * Creates a stub client using the supplied method overrides. Each handler becomes the
    * instance's own method, ahead of the class's, so an unscripted method still runs CCC's
    * real code down to the offline transport.
    */
-  constructor({
-    addressPrefix,
-    cache,
-    getHeaderByNumber,
-    ...handlers
-  }: StubClientHandlers = {}) {
-    // The SDK reads a transaction's header through two raw calls on a JSON-RPC client; the
-    // stub answers them from its own handlers so a test stubs one method, not the wire.
+  constructor({ addressPrefix, cache, ...handlers }: StubClientHandlers = {}) {
     const raw: { client?: StubClient; scripted?: StubClientHandlers } = {};
-    const rememberedHeaders = new Map<bigint, ccc.ClientBlockHeader>();
     // A subclass has no factory, so the deprecated constructor is the only super call; the
     // offline transport keeps every unstubbed method off the network.
     // eslint-disable-next-line sonarjs/deprecation, @typescript-eslint/no-deprecated -- No non-deprecated constructor exists for a subclass.
     super({
       requestor: ccc.RequestorJsonRpc.new({
-        transport: stubTransport(raw, rememberedHeaders),
+        transport: stubTransport(raw),
       }),
     });
     raw.client = this;
     raw.scripted = handlers;
-    this.rememberedHeaders = rememberedHeaders;
     this.prefix = addressPrefix;
-    this.headerByNumber = getHeaderByNumber;
     if (cache !== undefined) {
       this.cache = cache;
     }
@@ -206,20 +180,6 @@ export class StubClient extends ccc.ClientPublicTestnet {
   /** Address prefix override used by address formatting tests. */
   public override get addressPrefix(): string {
     return this.prefix ?? super.addressPrefix;
-  }
-
-  /**
-   * Serves the header a stubbed transaction lookup already produced, so the SDK's follow-up
-   * by number lands on that header even when a test stubs the lookup with one fixed answer;
-   * otherwise delegates to the configured handler or the base client.
-   */
-  public override async getHeaderByNumber(
-    ...args: Parameters<ClientMethod<"getHeaderByNumber">>
-  ): ReturnType<ClientMethod<"getHeaderByNumber">> {
-    return (
-      this.rememberedHeaders.get(ccc.numFrom(args[0])) ??
-      (this.headerByNumber ?? super.getHeaderByNumber.bind(this))(...args)
-    );
   }
 }
 

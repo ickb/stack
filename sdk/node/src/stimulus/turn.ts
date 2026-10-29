@@ -167,6 +167,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
         signer: runtime.signer,
         feeRate: state.system.feeRate,
         cells: state.context.cells,
+        protocolCells: state.context.receipts,
       }),
       action: { order: { outputs: [orderOutput, orderOutput + 1] } },
     };

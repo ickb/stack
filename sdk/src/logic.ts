@@ -16,9 +16,9 @@ import {
   receiptDataBytes,
   type ReceiptData,
 } from "./udt.ts";
-import { headersByNumber } from "./utils/transaction_header.ts";
 import {
   findCells,
+  headersByNumber,
   type ScannedCell,
   type ScriptDeps,
   type ValueComponents,

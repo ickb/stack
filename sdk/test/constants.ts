@@ -34,6 +34,7 @@ describe("getConfig", () => {
       signer,
       feeRate: 1n,
       cells: [],
+      protocolCells: [],
     });
 
     expect(completed).not.toBe(tx);

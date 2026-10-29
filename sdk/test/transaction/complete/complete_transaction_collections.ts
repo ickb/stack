@@ -31,7 +31,12 @@ describe("completeTransaction with collections", () => {
     expect(tx.inputs).toHaveLength(2);
     expect(tx.outputs).toHaveLength(0);
 
-    const completed = await sdk.completeTransaction(tx, { signer, feeRate, cells: [] });
+    const completed = await sdk.completeTransaction(tx, {
+      signer,
+      feeRate,
+      cells: [],
+      protocolCells: [],
+    });
 
     expect(completed.inputs).toHaveLength(2);
     expect(completed.outputs).toHaveLength(1);

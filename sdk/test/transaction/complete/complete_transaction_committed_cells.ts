@@ -34,6 +34,7 @@ function registerFundingTests(): void {
       signer,
       feeRate,
       cells: [source],
+      protocolCells: [],
     });
 
     expect(completed.inputs).toHaveLength(1);
@@ -63,12 +64,14 @@ function registerFundingTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
     });
     const toSecondary = await sdk.completeTransaction(tx, {
       signer,
       lock: secondary,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
     });
 
     expect(completed.inputs).toHaveLength(2);
@@ -93,6 +96,7 @@ function registerFundingTests(): void {
       signer,
       feeRate: 1_000n,
       cells: [existing, additional],
+      protocolCells: [],
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -110,7 +114,12 @@ function registerFundingTests(): void {
     tx.addInput(existing);
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [],
+        protocolCells: [],
+      }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
 }
@@ -129,6 +138,7 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells: [small, udt, large],
+      protocolCells: [],
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -153,6 +163,7 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
     });
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
@@ -210,6 +221,7 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
     });
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
@@ -239,6 +251,7 @@ function registerIckbTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
@@ -261,6 +274,7 @@ function registerIckbTests(): void {
         signer,
         feeRate: 1_000n,
         cells: [udtCell("96", lock, type, 40n)],
+        protocolCells: [],
       }),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
   });
@@ -279,7 +293,12 @@ function registerFailureTests(): void {
     const original = tx.toHex();
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+      }),
     ).rejects.toMatchObject({
       name: "IckbError",
       code: "insufficient_capacity",
@@ -296,7 +315,12 @@ function registerFailureTests(): void {
     const original = tx.toHex();
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+      }),
     ).rejects.toMatchObject({ code: "insufficient_capacity" });
     expect(tx.toHex()).toBe(original);
   });
@@ -313,7 +337,12 @@ function registerFailureTests(): void {
     first.type = logicManager.dao.script;
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+      }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
   });
@@ -328,6 +357,7 @@ function registerFailureTests(): void {
         signer,
         feeRate: 1_000n,
         cells: [],
+        protocolCells: [],
       }),
     ).rejects.toBe(failure);
   });

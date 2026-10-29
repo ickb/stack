@@ -61,8 +61,8 @@ try {
     primaryLock,
     accountLocks: await signerAccountLocks(signer, primaryLock),
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
-    completeTransaction: async (tx, feeRate, cells) =>
-      sdk.completeTransaction(tx, { signer, feeRate, cells }),
+    completeTransaction: async (tx, feeRate, cells, protocolCells) =>
+      sdk.completeTransaction(tx, { signer, feeRate, cells, protocolCells }),
     sendTransaction: async (tx, recordTxHash, broadcastBefore) =>
       signAndSendTransaction(signer, tx, recordTxHash, broadcastBefore),
   };

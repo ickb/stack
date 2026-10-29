@@ -27,7 +27,7 @@ import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
-import { ickbExchangeRatio, type IckbUdt } from "./udt.ts";
+import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
 import type { SupportedChain } from "./utils/chain.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 
@@ -352,6 +352,10 @@ const IckbSdkImplementation = class IckbSdk {
       lock: options.lock,
       feeRate: options.context.system.feeRate,
       cells: options.context.cells,
+      protocolCells: [
+        ...options.context.receipts,
+        ...options.context.system.poolDeposits,
+      ],
     });
   }
 
@@ -429,7 +433,13 @@ const IckbSdkImplementation = class IckbSdk {
         compareBigInt(right.cellOutput.capacity, left.cellOutput.capacity),
       );
 
-    await this.completeIckb(tx, signer.client, changeLock, ickbCells);
+    await this.completeIckb(
+      tx,
+      signer.client,
+      changeLock,
+      ickbCells,
+      options.protocolCells,
+    );
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the limit.
     const swept = sweep(tx, plainCells);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
@@ -443,9 +453,10 @@ const IckbSdkImplementation = class IckbSdk {
     client: ccc.Client,
     changeLock: ccc.Script,
     ickbCells: readonly ccc.Cell[],
+    protocolCells: readonly ProtocolCell[],
   ): Promise<void> {
     const required = this.ickbUdt.outputBalance(tx);
-    let balance = await this.ickbUdt.inputBalance(tx, client);
+    let balance = await this.ickbUdt.inputBalance(tx, client, protocolCells);
     for (const cell of ickbCells) {
       if (balance >= required && tx.inputs.length >= SWEEP_INPUT_LIMIT) {
         break;

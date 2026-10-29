@@ -3,6 +3,7 @@ import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts"
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
+import type { ProtocolCell } from "../../../src/udt.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
 
@@ -31,6 +32,7 @@ export interface Runtime {
     tx: ccc.TransactionLike,
     feeRate: ccc.Num,
     cells: ccc.Cell[],
+    protocolCells: readonly ProtocolCell[],
   ) => Promise<ccc.Transaction>;
 
   /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */

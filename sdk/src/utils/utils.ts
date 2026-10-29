@@ -62,6 +62,26 @@ export async function findCells(
   }
 }
 
+/** The headers of a batch of block numbers, each read once; every block must exist. */
+export async function headersByNumber(
+  client: ccc.Client,
+  blockNumbers: Iterable<ccc.Num>,
+): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
+  const distinct = [...new Set(blockNumbers)];
+  const headers = await Promise.all(
+    distinct.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
+  );
+  return new Map(
+    distinct.map((blockNumber, index) => {
+      const header = headers[index];
+      if (header === undefined) {
+        throw new Error(`Header not found for block number ${String(blockNumber)}`);
+      }
+      return [blockNumber, header];
+    }),
+  );
+}
+
 /** The fields of the indexer's `get_cells` answer the scan reads. */
 interface RawCellsPage {
   last_cursor: string;
@@ -179,7 +199,6 @@ export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc {
 export function rawTransactionStatus(response: unknown): {
   status: string | undefined;
   reason: string | undefined;
-  blockNumber: ccc.Num | undefined;
 } {
   const record =
     typeof response === "object" &&
@@ -194,10 +213,6 @@ export function rawTransactionStatus(response: unknown): {
       "status" in record && typeof record.status === "string" ? record.status : undefined,
     reason:
       "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
-    blockNumber:
-      "block_number" in record && typeof record.block_number === "string"
-        ? ccc.numFrom(record.block_number)
-        : undefined,
   };
 }
 
