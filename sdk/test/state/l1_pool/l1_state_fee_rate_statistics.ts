@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
+import { headerHash } from "../../../src/utils/verified_client.ts";
 import { defaultL1Sdk } from "../l1_account/support/sdk_l1_support.ts";
 
 describe("IckbSdk.getL1State fee rate statistics", () => {
@@ -50,20 +52,24 @@ async function responseFor(method: string): Promise<unknown> {
   await Promise.resolve();
   switch (method) {
     case "get_tip_header": {
-      return {
+      // A real, fresh tip: the SDK checks its hash against its fields and its age.
+      const fields = {
         compact_target: "0x0",
         dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
         epoch: "0x1",
         extra_hash: byte32("aa"),
-        hash: byte32("bb"),
         nonce: "0x0",
         number: "0x3",
         parent_hash: byte32("cc"),
         proposals_hash: byte32("dd"),
-        timestamp: "0x0",
+        timestamp: ccc.numToHex(Date.now()),
         transactions_root: byte32("ee"),
         version: "0x0",
-      };
+      } as const;
+      const hash = headerHash(
+        cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32("bb") }),
+      );
+      return { ...fields, hash };
     }
     case "get_cells": {
       return { last_cursor: "0x", objects: [] };
@@ -74,6 +80,6 @@ async function responseFor(method: string): Promise<unknown> {
   }
 }
 
-function byte32(byte: string): string {
+function byte32(byte: string): ccc.Hex {
   return `0x${byte.repeat(32)}`;
 }

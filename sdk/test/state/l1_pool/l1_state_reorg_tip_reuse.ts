@@ -1,7 +1,7 @@
 import type { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
+import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { defaultL1Sdk, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
 import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
@@ -11,9 +11,12 @@ afterEach(() => {
 
 describe(L1_STATE_SUITE, () => {
   it("does not refetch the tip to detect reorgs during L1 state scanning", async () => {
-    const firstTip = headerLike(1n, { hash: hash("01") });
-    const secondTip = headerLike(2n, { hash: hash("02") });
-    const replacedFirstTip = headerLike(1n, { hash: hash("03") });
+    const firstTip = headerLike(1n, { timestamp: BigInt(Date.now()), nonce: 0x01n });
+    const secondTip = headerLike(2n, { timestamp: BigInt(Date.now()), nonce: 0x02n });
+    const replacedFirstTip = headerLike(1n, {
+      timestamp: BigInt(Date.now()),
+      nonce: 0x03n,
+    });
     const getTipHeader: ccc.Client["getTipHeader"] = vi
       .fn<ccc.Client["getTipHeader"]>()
       .mockResolvedValueOnce(firstTip)
@@ -36,8 +39,11 @@ describe(L1_STATE_SUITE, () => {
   });
 
   it("does not refetch the tip when the chain tip is replaced during L1 state scanning", async () => {
-    const firstTip = headerLike(1n, { hash: hash("01") });
-    const replacementTip = headerLike(1n, { hash: hash("02") });
+    const firstTip = headerLike(1n, { timestamp: BigInt(Date.now()), nonce: 0x01n });
+    const replacementTip = headerLike(1n, {
+      timestamp: BigInt(Date.now()),
+      nonce: 0x02n,
+    });
     const getTipHeader: ccc.Client["getTipHeader"] = vi
       .fn<ccc.Client["getTipHeader"]>()
       .mockResolvedValueOnce(firstTip)

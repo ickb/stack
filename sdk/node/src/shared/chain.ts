@@ -1,12 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { tipMaxAgeMs, type LockUpPolicy } from "../../../src/dao.ts";
 import {
   chainIdentities,
   type ChainIdentity,
   type SupportedChain,
 } from "../../../src/utils/chain.ts";
 import { clientCache } from "../../../src/utils/utils.ts";
-import { verifiedClient } from "../../../src/utils/verified_client.ts";
 
 /** Public chain preflight evidence returned after identity verification. */
 export interface ChainPreflightEvidence {
@@ -51,25 +49,17 @@ export async function verifyChainPreflight(
 /**
  * Opens the public client for one chain, owned by the caller: a configured `rpcUrl` is the
  * only endpoint (an operator's own node), otherwise CCC's public pool for the chain,
- * WebSocket first with HTTPS fallbacks. Every header it hands out is verified, and the
- * tip may trail the clock by at most the policy's slack. The caller disposes the owner at
- * the end of the turn so the sockets close and the process can exit.
+ * WebSocket first with HTTPS fallbacks. The SDK verifies what it reads through it. The
+ * caller disposes the owner when it is done, so the sockets close and the process can exit.
  */
 export function createPublicClient(
   chain: SupportedChain,
-  lockUp: LockUpPolicy,
   rpcUrl?: string,
 ): ccc.Owner<ccc.Client> {
-  const config = {
+  return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open({
     cache: clientCache(),
     ...(rpcUrl === undefined ? {} : { urls: [rpcUrl] as const }),
-  };
-  const owner = (
-    chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet
-  ).open(config);
-  return new ccc.OwnerUnique(verifiedClient(owner.value, tipMaxAgeMs(lockUp)), async () =>
-    owner.dispose(),
-  );
+  });
 }
 
 async function readChainPreflight(

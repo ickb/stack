@@ -49,7 +49,7 @@ describe(L1_STATE_SUITE, () => {
     ]);
 
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(headerLike(1n)),
+      getTipHeader: tipHeaderHandler(headerLike(1n, { timestamp: BigInt(Date.now()) })),
       cells: (): ccc.Cell[] => [],
     });
 
@@ -117,7 +117,7 @@ function l1StateWithMarketOrder({
   vi.spyOn(orderManager, "findOrders").mockResolvedValue([marketOrder.group]);
 
   const client = new FeeRateStubClient({
-    getTipHeader: tipHeaderHandler(headerLike(1n)),
+    getTipHeader: tipHeaderHandler(headerLike(1n, { timestamp: BigInt(Date.now()) })),
     cells: (): ccc.Cell[] => [],
   });
 

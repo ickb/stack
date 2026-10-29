@@ -5,7 +5,7 @@ import {
   fundedSigner,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { readyWithdrawalGroup } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { hash, headerLike } from "../base/support/sdk_core_support.ts";
+import { headerLike } from "../base/support/sdk_core_support.ts";
 
 // Adopted from the fable51 policy audit: a collection input funds the fee and the change
 // on its own, so an account with no plain cell still completes its collections.
@@ -18,8 +18,8 @@ describe("completeTransaction with collections", () => {
       ownerLock: botLock,
       ownedOwner,
       dao,
-      depositHeader: headerLike(10n, { hash: hash("a1") }),
-      withdrawalHeader: headerLike(12n, { hash: hash("a3") }),
+      depositHeader: headerLike(10n),
+      withdrawalHeader: headerLike(12n),
     });
     const { signer } = fundedSigner([], [botLock]);
     const feeRate = 1000n;

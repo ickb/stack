@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 import { jsonRpcRequestor, unique } from "../utils/utils.ts";
+import { verifiedClient } from "../utils/verified_client.ts";
 
 /** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
 export class TransactionBroadcastError extends Error {
@@ -53,18 +54,20 @@ export async function signAndSendTransaction(
   // Transaction.from reuses Transaction instances, which a signer may mutate in place.
   const requested = ccc.Transaction.from(tx).clone();
   const requestedBody = economicBody(requested);
-  const inputs = await verifiedInputs(signer.client, requested.inputs);
+  // The checks read through a verified client, whatever client the signer holds.
+  const client = verifiedClient(signer.client);
+  const inputs = await verifiedInputs(client, requested.inputs);
   const signed = await signer.signTransaction(tx);
   if (economicBody(signed) !== requestedBody) {
     throw new Error("Signer altered the transaction inputs, outputs or outputs data");
   }
   const txHash = signed.hash();
-  const feeRate = await verifiedFeeRate(signer.client, signed, inputs);
+  const feeRate = await verifiedFeeRate(client, signed, inputs);
   if (feeRate > cccA.DEFAULT_MAX_FEE_RATE) {
     throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
   }
   if (broadcastBefore !== undefined) {
-    const { epoch } = await signer.client.getTipHeader();
+    const { epoch } = await client.getTipHeader();
     if (broadcastBefore.compare(epoch) <= 0) {
       throw new TransactionExpiredError({ broadcastBefore, tip: epoch });
     }
@@ -91,28 +94,18 @@ export async function signAndSendTransaction(
 // The default lock signs each input as its OutPoint only, never the cell behind it, so
 // the capacity, lock, type and data attached to an input are a node's claim: a node
 // understating a plain cell's capacity or a UDT amount would turn the difference into
-// fee or a burn on a transaction that passes every other check. The creating transaction
-// certifies itself, since its hash is the hash of its raw body, so the output it holds at
-// the OutPoint's index is the real cell.
+// fee or a burn on a transaction that passes every other check. The verified client reads
+// the cell from its creating transaction, whose hash certifies its body.
 async function verifiedInputs(
   client: ccc.Client,
   inputs: readonly ccc.CellInput[],
 ): Promise<ccc.Cell[]> {
-  const transactions = new Map<ccc.Hex, Promise<ccc.Transaction>>();
   return Promise.all(
     inputs.map(async (input) => {
-      const { txHash, index } = input.previousOutput;
-      let transaction = transactions.get(txHash);
-      if (transaction === undefined) {
-        transaction = creatingTransaction(client, txHash);
-        transactions.set(txHash, transaction);
-      }
       const outPoint = input.previousOutput.toHex();
-      // The output comes from the parsed body the hash was computed over, so it is the
-      // one the hash covers.
-      const cell = (await transaction).getOutput(index);
+      const cell = await client.getCell(input.previousOutput);
       if (cell === undefined) {
-        throw new Error(`Input ${outPoint} is not an output of its transaction`);
+        throw new Error(`Input ${outPoint} is not an output of a known transaction`);
       }
       if (
         (input.cellOutput !== undefined && !cell.cellOutput.eq(input.cellOutput)) ||
@@ -122,11 +115,7 @@ async function verifiedInputs(
           `Input ${outPoint} differs from the cell its transaction created`,
         );
       }
-      return ccc.Cell.from({
-        outPoint: input.previousOutput,
-        cellOutput: cell.cellOutput,
-        outputData: cell.outputData,
-      });
+      return cell;
     }),
   );
 }
@@ -224,25 +213,6 @@ export function isCommittedIn(
     position = (position - 1) >> 1;
   }
   return position === 0 && ccc.hashCkb(node, witnessesRoot) === header.transactionsRoot;
-}
-
-// The cache answers before the node, whatever status it recorded: the hash check makes a
-// cached body as good as a fresh one, and CCC's own read asks the node first.
-async function creatingTransaction(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-): Promise<ccc.Transaction> {
-  const response =
-    (await client.cache.getTransactionResponse(txHash)) ??
-    (await client.getTransaction(txHash));
-  if (response === undefined) {
-    throw new Error(`Transaction ${txHash} not found`);
-  }
-  const { transaction } = response;
-  if (transaction.hash() !== txHash) {
-    throw new Error(`Transaction ${txHash} was answered with a body of another hash`);
-  }
-  return transaction;
 }
 
 // Hashing a body-only transaction reuses CCC serialization to freeze the ordered

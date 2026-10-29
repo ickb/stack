@@ -36,7 +36,10 @@ describe(L1_STATE_SUITE, () => {
       ownedOwnerManager,
       logicManager,
     });
-    const tip = headerLike(1n, { epoch: ccc.Epoch.from([181n, 0n, 1n]) });
+    const tip = headerLike(1n, {
+      epoch: ccc.Epoch.from([181n, 0n, 1n]),
+      timestamp: BigInt(Date.now()),
+    });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
       cells: (): ccc.Cell[] => [],

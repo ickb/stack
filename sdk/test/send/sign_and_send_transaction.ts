@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { committedTransactionResponse, headerLike, script } from "@ickb/testkit";
+import { committedTransactionResponse, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   isCommittedIn,
@@ -9,7 +9,7 @@ import {
   type TransactionProof,
 } from "../../src/send/sign_and_send_transaction.ts";
 import { jsonRpcRequestor } from "../../src/utils/utils.ts";
-import { hash } from "../transaction/base/support/sdk_core_support.ts";
+import { hash, headerLike } from "../transaction/base/support/sdk_core_support.ts";
 import { PROOF_BLOCK, PROOF_TXS } from "./fixtures/transaction_proof.ts";
 
 const TX_HASH = hash("81");
@@ -143,7 +143,7 @@ describe("signAndSendTransaction input verification", () => {
     const { signer, send } = signerFixture(bodyTransaction(), []);
 
     await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
-      `Transaction ${INPUT_OUT_POINT.txHash} not found`,
+      `Input ${ccc.OutPoint.from(INPUT_OUT_POINT).toHex()} is not an output of a known transaction`,
     );
 
     expect(send).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe("signAndSendTransaction input verification", () => {
     const { signer, send } = signerFixture(requested);
 
     await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
-      `Input ${ccc.OutPoint.from({ ...INPUT_OUT_POINT, index: 1n }).toHex()} is not an output of its transaction`,
+      `Input ${ccc.OutPoint.from({ ...INPUT_OUT_POINT, index: 1n }).toHex()} is not an output of a known transaction`,
     );
 
     expect(send).not.toHaveBeenCalled();
@@ -294,31 +294,23 @@ describe("signAndSendTransaction DAO interest", () => {
   const REQUEST = requestCreating().hash();
   const committing = ccc.hashCkb(REQUEST, WITNESSES_ROOT);
   // The request headers sit one epoch after the deposit, as the deployed dao.c requires.
-  const deposit = headerLike({
-    number: 1n,
+  const deposit = headerLike(1n, {
     epoch: [1n, 0n, 1n],
-    hash: hash("a1"),
     dao: { c: 0n, ar: AR, s: 0n, u: 0n },
   });
-  const withdrawFlat = headerLike({
-    number: 2n,
+  const withdrawFlat = headerLike(2n, {
     epoch: [2n, 0n, 1n],
-    hash: hash("b1"),
     transactionsRoot: committing,
     dao: { c: 0n, ar: AR, s: 0n, u: 0n },
   });
-  const withdrawDoubled = headerLike({
-    number: 2n,
+  const withdrawDoubled = headerLike(2n, {
     epoch: [2n, 0n, 1n],
-    hash: hash("b2"),
     transactionsRoot: committing,
     dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
   });
   // A real request block of the same height that committed some other transaction.
-  const withdrawElsewhere = headerLike({
-    number: 2n,
+  const withdrawElsewhere = headerLike(2n, {
     epoch: [2n, 0n, 1n],
-    hash: hash("b3"),
     transactionsRoot: hash("c2"),
     dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
   });
@@ -378,10 +370,8 @@ describe("signAndSendTransaction DAO interest", () => {
       2,
       DAO,
     );
-    const block = headerLike({
-      number: 2n,
+    const block = headerLike(2n, {
       epoch: [2n, 0n, 1n],
-      hash: hash("b5"),
       transactionsRoot: ccc.hashCkb(pair.hash(), WITNESSES_ROOT),
       dao: { c: 0n, ar: AR, s: 0n, u: 0n },
     });
@@ -603,7 +593,7 @@ function signerFixture(
   });
   const getTipHeader = vi.fn(async () => {
     await Promise.resolve();
-    return headerLike({ epoch: TIP_EPOCH });
+    return headerLike(0n, { epoch: TIP_EPOCH });
   });
   // CCC values a phase-2 DAO input from the deposit header by number and the header
   // beside the cell; the fixture answers both from `dao`.

@@ -1,8 +1,7 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BOT_LOCK_UP, tipMaxAgeMs, WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { jsonRpcRequestor } from "../../../src/utils/utils.ts";
 import { createPublicClient, verifyChainPreflight } from "../../src/shared/chain.ts";
 import {
@@ -21,13 +20,9 @@ const HTTP_CLIENT_PROCESS = fileURLToPath(
 describe("public clients and preflight identity", () => {
   it("opens network-specific public clients owned by the caller", async () => {
     const testnetUrl = "http://127.0.0.1:8114/";
-    const mainnet = createPublicClient("mainnet", BOT_LOCK_UP, MAINNET_RPC_URL);
-    const testnet = createPublicClient("testnet", WALLET_LOCK_UP, testnetUrl);
+    const mainnet = createPublicClient("mainnet", MAINNET_RPC_URL);
+    const testnet = createPublicClient("testnet", testnetUrl);
 
-    // Every header read goes through the verifying wrapper, with the policy's tip bound.
-    expect(ccc.Proxy.inner in mainnet.value).toBe(true);
-    expect(mainnet.value).toMatchObject({ tipMaxAgeMs: tipMaxAgeMs(BOT_LOCK_UP) });
-    expect(testnet.value).toMatchObject({ tipMaxAgeMs: tipMaxAgeMs(WALLET_LOCK_UP) });
     expect(mainnet.value.addressPrefix).toBe("ckb");
     expect(testnet.value.addressPrefix).toBe("ckt");
     // A configured URL is the only endpoint: an operator's node gets no public fallbacks.
@@ -39,9 +34,8 @@ describe("public clients and preflight identity", () => {
   });
 
   it("takes CCC's public pool when no RPC URL is configured", async () => {
-    const testnet = createPublicClient("testnet", BOT_LOCK_UP);
+    const testnet = createPublicClient("testnet");
 
-    expect(ccc.Proxy.inner in testnet.value).toBe(true);
     expect(endpointPoolUrls(testnet.value).length).toBeGreaterThan(1);
     await testnet.dispose();
   });

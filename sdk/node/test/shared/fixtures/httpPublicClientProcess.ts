@@ -1,6 +1,5 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { BOT_LOCK_UP } from "../../../../src/dao.ts";
 import { jsonRpcRequestor } from "../../../../src/utils/utils.ts";
 import { createPublicClient } from "../../../src/shared/chain.ts";
 
@@ -18,7 +17,6 @@ if (address === null || typeof address === "string") {
 
 const clientOwner = createPublicClient(
   "testnet",
-  BOT_LOCK_UP,
   `http://127.0.0.1:${String(address.port)}`,
 );
 const requestor = jsonRpcRequestor(clientOwner.value);

@@ -21,6 +21,7 @@ import {
   DaoHeaderIndexError,
   DaoOutputLimitError,
   type LockUpPolicy,
+  tipMaxAgeMs,
 } from "./dao.ts";
 import type { IckbDepositCell, LogicManager } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
@@ -30,6 +31,7 @@ import type { OwnedOwnerManager } from "./owned_owner.ts";
 import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
 import type { SupportedChain } from "./utils/chain.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
+import { verifiedClient } from "./utils/verified_client.ts";
 
 /**
  * The whole SDK, which the Node actors drive by relative import; the package barrel
@@ -110,12 +112,13 @@ const IckbSdkImplementation = class IckbSdk {
    * Reads system, user-order, and account state against one sampled tip, under the
    * caller's withdrawal timing rules (`BOT_LOCK_UP` or `WALLET_LOCK_UP`).
    *
-   * @remarks Every read is complete and uncapped: a large book or pool costs a slower
-   * read, never a partial or failed one. Each account lock is enumerated by one uncached
-   * unfiltered exact-lock scan and classified client-side.
+   * @remarks Every read goes through `verifiedClient`, the tip bounded by the policy's
+   * slack, so a caller passes a plain client. Every read is complete and uncapped: a large
+   * book or pool costs a slower read, never a partial or failed one. Each account lock is
+   * enumerated by one uncached unfiltered exact-lock scan and classified client-side.
    */
   public async getL1AccountState(
-    client: ccc.Client,
+    plainClient: ccc.Client,
     locks: ccc.Script[],
     lockUp: LockUpPolicy,
   ): Promise<{
@@ -123,6 +126,7 @@ const IckbSdkImplementation = class IckbSdk {
     user: { orders: OrderGroup[] };
     account: AccountState;
   }> {
+    const client = verifiedClient(plainClient, tipMaxAgeMs(lockUp));
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([

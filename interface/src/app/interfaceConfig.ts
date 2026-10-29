@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  clientCache,
-  IckbSdk,
-  tipMaxAgeMs,
-  verifiedClient,
-  WALLET_LOCK_UP,
-} from "@ickb/sdk";
+import { clientCache, IckbSdk } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -25,19 +19,13 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
-// One verified client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks),
-// kept for the app's lifetime, so its owner is never disposed: the connector's network
-// list borrows them, and a chain tab lends the chosen one through an Owner the Provider
-// may dispose without effect. The tip may trail the clock by the wallet policy's slack.
+// One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), kept for
+// the app's lifetime, so its owner is never disposed: the connector's network list borrows
+// them, and a chain tab lends the chosen one through an Owner the Provider may dispose
+// without effect. The SDK verifies what it reads through them.
 const clients = {
-  mainnet: verifiedClient(
-    ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
-    tipMaxAgeMs(WALLET_LOCK_UP),
-  ),
-  testnet: verifiedClient(
-    ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
-    tipMaxAgeMs(WALLET_LOCK_UP),
-  ),
+  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
+  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
 };
 export const mainnetClient = clients.mainnet;
 export const testnetClient = clients.testnet;

@@ -15,7 +15,7 @@ import {
   readyWithdrawalGroup,
   receiptCell,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, dep, hash, headerLike } from "./support/sdk_core_support.ts";
+import { baseTip, dep, headerLike } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -95,9 +95,9 @@ async function buildRealBaseTransactionCase(): Promise<
       orderDeps: [orderDep],
       ownedOwnerDeps: [ownedDep],
     });
-  const depositHeader = headerLike(10n, { hash: hash("a1") });
-  const receiptHeader = headerLike(11n, { hash: hash("a2") });
-  const withdrawalHeader = headerLike(12n, { hash: hash("a3") });
+  const depositHeader = headerLike(10n);
+  const receiptHeader = headerLike(11n);
+  const withdrawalHeader = headerLike(12n);
   const requestedDeposit = depositCell("70", logic, dao, depositHeader, baseTip, {
     isReady: true,
   });

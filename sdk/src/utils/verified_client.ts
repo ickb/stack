@@ -16,10 +16,16 @@ export function verifiedClient(inner: ccc.Client, tipMaxAgeMs?: number): ccc.Cli
 
 // @ts-expect-error TS2655: the abstract members are forwarded by the proxy at runtime, as in CCC's own connector.
 class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
-  public static readonly [ccc.Proxy.localKeys] = ["tipMaxAgeMs"];
+  public static readonly [ccc.Proxy.localKeys] = ["tipMaxAgeMs", "bodies"];
 
   /** How far the tip may trail the local clock, in ms; absent, any age passes. */
   public readonly tipMaxAgeMs: number | undefined;
+
+  /** Creating transactions `getCell` read, so concurrent reads of one share a request. */
+  private readonly bodies = new Map<
+    ccc.Hex,
+    Promise<ccc.ClientTransactionResponse | undefined>
+  >();
 
   /** Wraps `inner`, bounding the tip's age when `tipMaxAgeMs` is given. */
   constructor(inner: ccc.Client, tipMaxAgeMs?: number) {
@@ -89,10 +95,13 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     ...args: Parameters<ccc.Client["getCell"]>
   ): ReturnType<ccc.Client["getCell"]> {
     const outPoint = ccc.OutPoint.from(args[0]);
-    const response =
-      (await this.cache.getTransactionResponse(outPoint.txHash)) ??
-      (await this.getTransaction(outPoint.txHash));
-    const output = response?.transaction.getOutput(outPoint.index);
+    const { txHash } = outPoint;
+    let body = this.bodies.get(txHash);
+    if (body === undefined) {
+      body = this.readBody(txHash);
+      this.bodies.set(txHash, body);
+    }
+    const output = (await body)?.transaction.getOutput(outPoint.index);
     return output === undefined
       ? undefined
       : ccc.Cell.from({
@@ -100,6 +109,15 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
           cellOutput: output.cellOutput,
           outputData: output.outputData,
         });
+  }
+
+  private async readBody(
+    txHash: ccc.Hex,
+  ): Promise<ccc.ClientTransactionResponse | undefined> {
+    return (
+      (await this.cache.getTransactionResponse(txHash)) ??
+      (await this.getTransaction(txHash))
+    );
   }
 
   public override async getTransactionWithHeader(
@@ -144,7 +162,7 @@ function verified(header: ccc.ClientBlockHeader): ccc.ClientBlockHeader {
  * The hash of a header as the chain computes it: blake2b over the header struct, each
  * number little-endian, in declaration order, the nonce last.
  */
-function headerHash(header: ccc.ClientBlockHeader): ccc.Hex {
+export function headerHash(header: ccc.ClientBlockHeader): ccc.Hex {
   const { dao } = header;
   return ccc.hashCkb(
     ccc.numLeToBytes(header.version, 4),

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import type { cccA } from "@ckb-ccc/core/advanced";
-import { script, type StubCell } from "@ickb/testkit";
+import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { LogicManager } from "../../../src/logic.ts";
@@ -70,6 +70,18 @@ describe(L1_STATE_SUITE, () => {
       daoScript: dao,
       depositHeaderNumber: 5n,
     });
+    // Each request and its marker come from one real transaction body, which the SDK reads
+    // the request from and checks against the outpoint's hash.
+    const {
+      owned: ownedCell,
+      owner: ownerCell,
+      tx: ownedTx,
+    } = requestTransaction(owned, owner);
+    const {
+      owned: pendingOwnedCell,
+      owner: pendingOwnerCell,
+      tx: pendingTx,
+    } = requestTransaction(pendingOwned, pendingOwner);
     // The account scan names each cell's block: the receipt's deposit block and each
     // marker's request block, where its owned withdrawal request was created beside it.
     const cellsByLock = new Map([
@@ -81,8 +93,8 @@ describe(L1_STATE_SUITE, () => {
           nativeUdt,
           udtPrefixExtension,
           { cell: receipt, blockNumber: 2n },
-          { cell: owner, blockNumber: 2n },
-          { cell: pendingOwner, blockNumber: 6n },
+          { cell: ownerCell, blockNumber: 2n },
+          { cell: pendingOwnerCell, blockNumber: 6n },
         ],
       ],
     ]);
@@ -93,7 +105,10 @@ describe(L1_STATE_SUITE, () => {
       [6n, headerLike(6n, { epoch: ccc.Epoch.from([399n, 1n, 2n]) })],
     ]);
     const scans: cccA.JsonRpcIndexerSearchKey[] = [];
-    const tip = headerLike(1000n, { epoch: ccc.Epoch.from([400n, 0n, 1n]) });
+    const tip = headerLike(1000n, {
+      epoch: ccc.Epoch.from([400n, 0n, 1n]),
+      timestamp: BigInt(Date.now()),
+    });
     const client = new FeeRateStubClient({
       getTipHeader: tipHeaderHandler(tip),
       cells: (key): readonly StubCell[] => {
@@ -103,9 +118,10 @@ describe(L1_STATE_SUITE, () => {
           cellsByLock.get(ccc.Script.from({ codeHash, hashType, args }).hash()) ?? []
         );
       },
-      getCell: async (outPoint): ReturnType<ccc.Client["getCell"]> => {
+      getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
         await Promise.resolve();
-        return ccc.OutPoint.from(outPoint).txHash === hash("86") ? owned : pendingOwned;
+        const body = [ownedTx, pendingTx].find((tx) => tx.hash() === ccc.hexFrom(txHash));
+        return body === undefined ? undefined : committedTransactionResponse(body);
       },
       getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
         await Promise.resolve();
@@ -137,8 +153,12 @@ describe(L1_STATE_SUITE, () => {
     expect(account.nativeUdtCells).toEqual([nativeUdt]);
     expect(account.receipts.map((found) => found.cell)).toEqual([receipt]);
     expect(account.withdrawalGroups.map((group) => group.owner.cell)).toEqual([
-      owner,
-      pendingOwner,
+      ownerCell,
+      pendingOwnerCell,
+    ]);
+    expect(account.withdrawalGroups.map((group) => group.owned.cell)).toEqual([
+      ownedCell,
+      pendingOwnedCell,
     ]);
 
     // Account cells never count as system liquidity: the pool is empty here.
@@ -198,4 +218,18 @@ function ownedWithdrawalCell({
     },
     outputData: ccc.mol.Uint64LE.encode(depositHeaderNumber),
   });
+}
+
+/** A request and its owner marker as outputs 0 and 1 of one real transaction. */
+function requestTransaction(
+  owned: ccc.Cell,
+  owner: ccc.Cell,
+): { owned: ccc.Cell; owner: ccc.Cell; tx: ccc.Transaction } {
+  const tx = ccc.Transaction.from({
+    outputs: [owned.cellOutput, owner.cellOutput],
+    outputsData: [owned.outputData, owner.outputData],
+  });
+  const at = ({ cellOutput, outputData }: ccc.Cell, index: bigint): ccc.Cell =>
+    ccc.Cell.from({ outPoint: { txHash: tx.hash(), index }, cellOutput, outputData });
+  return { owned: at(owned, 0n), owner: at(owner, 1n), tx };
 }

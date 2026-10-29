@@ -6,6 +6,7 @@ import type {
 } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
+import { headerHash } from "../../../../src/utils/verified_client.ts";
 
 export const hash = byte32FromByte;
 export const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
@@ -19,15 +20,17 @@ export function dep(byte: string): ccc.CellDep {
   });
 }
 
+/** A real header: its hash is computed from its fields, as the SDK checks every header it reads. */
 export function headerLike(
   number: bigint,
-  overrides: Partial<ccc.ClientBlockHeader> = {},
+  overrides: Partial<Omit<ccc.ClientBlockHeaderLike, "hash">> = {},
 ): ccc.ClientBlockHeader {
-  return testHeaderLike({
+  const fields: Partial<ccc.ClientBlockHeaderLike> = {
     epoch: [1n, 0n, 1n],
     number,
     ...overrides,
-  });
+  };
+  return testHeaderLike({ ...fields, hash: headerHash(testHeaderLike(fields)) });
 }
 
 export function transactionWithOutputs(count: number, lock: ccc.Script): ccc.Transaction {
