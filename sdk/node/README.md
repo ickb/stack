@@ -25,9 +25,11 @@ Use an RPC endpoint whose pathname contains no credential: preflight includes th
 
 The key lives in a file rather than a variable because unit files, `systemctl show`, and every child process expose environment values. Invalid values fail with `Invalid env <NAME>` and never echo the value.
 
-Each bot process runs one turn and exits, so continuous matching is a loop around the process: a systemd user unit with `Restart=always`, or the operator between reads.
+The bot is a loop: one process connects once, then runs a turn every ten minutes, measured from the start of the previous turn, until a turn fails. Any failure exits `1`, and the unit's `Restart=always` starts a clean process after the same ten minutes, which also picks up an updated checkout. Ten minutes leaves four turns in each forty-minute deposit window ([`BOT_LOCK_UP`](../src/dao.ts)) and an order waits five minutes on average for a match; users converting enough to wait for deposits already wait hours. The process keeps CCC's cache across turns, so a warm turn reads only what changed: the cache holds headers and transactions checked by hash, and what a stale entry can cost is a refused transaction.
 
-The process owns the CCC client and disposes it at the end of the turn so open sockets do not keep the process alive. The SDK borrows that client; it does not choose endpoints or dispose it.
+This replaced one process per turn restarted every minute, which reloaded the code, about 0.75 s of a 1.3 s turn's CPU, and refetched every header and origin (669 calls on a cold testnet turn, measured 2026-10-29). Rejected with it: looping on after a failure, which would keep whatever state the failure left and delay updates; a scheduled exit, since an update can wait for the next restart; a per-turn timer, since every CCC request already times out and a node that pages forever would page forever after a restart too; a random interval, which lengthens the worst wait while a competing matcher can watch every block anyway; and a cache file, which the loop's memory makes unnecessary.
+
+The process owns the CCC client and disposes it when a failure ends the process, so open sockets do not keep it alive. The SDK borrows that client; it does not choose endpoints or dispose it.
 
 ## Run
 
@@ -65,7 +67,7 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 `bot.chain.preflight` emits the recommended address, primary lock, RPC endpoint identity, expected chain identity, observed genesis hash/address prefix/tip and match booleans before signing starts. Endpoint identity contains protocol, hostname, port and pathname, subject to the [RPC configuration restriction](#runtime-config); it omits the full URL, query and fragment.
 
-`bot.state.read` carries the tip, balances, order/withdrawal/deposit counts, exchange ratio, deposit capacity and fee rate. `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip exits `0`; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
+`bot.state.read` carries the tip, balances, order/withdrawal/deposit counts, exchange ratio, deposit capacity and fee rate. `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
 The decision transcript groups its evidence by purpose:
 
@@ -81,9 +83,9 @@ The decision transcript groups its evidence by purpose:
 
 `bot.turn.failed` carries the error's name, message, stack, cause chain and public enumerable fields. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. A rejection during confirmation includes `txHash`, `status` and `reason`; a timeout uses CCC's timeout error, with the hash in the preceding sent event of the same `runId`. Non-secret transaction, script and cell data may be logged when useful.
 
-Observed testnet full-node send rejection signatures for generic stale-state races are: in-pool same-input conflict can return `code:-1111` with `data:"RBFRejected(...)"` and CCC fields `currentFee`/`leastFee`; a post-commit spent input returns `code:-301` with `data:"Resolve(Unknown(OutPoint(...)))"` and CCC field `outPoint`; resending the same tx returns `code:-1107` with `data:"Duplicated(Byte32(...))"` and CCC field `txHash`. CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC response id mismatch errors such as `Id mismatched, got null, expected 319` are in the same family. The bot does not classify them: every failure exits `1`, and the next turn discards the failed state and rebuilds from fresh state rather than resending the same transaction.
+Observed testnet full-node send rejection signatures for generic stale-state races are: in-pool same-input conflict can return `code:-1111` with `data:"RBFRejected(...)"` and CCC fields `currentFee`/`leastFee`; a post-commit spent input returns `code:-301` with `data:"Resolve(Unknown(OutPoint(...)))"` and CCC field `outPoint`; resending the same tx returns `code:-1107` with `data:"Duplicated(Byte32(...))"` and CCC field `txHash`. CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC response id mismatch errors such as `Id mismatched, got null, expected 319` are in the same family. The bot does not classify them: every failure exits `1`, and the restarted process discards the failed state and rebuilds from fresh state rather than resending the same transaction.
 
-One process is one turn: `pnpm --filter ./sdk/node bot` exits `0` after a skip or commitment and `1` after any failure. The [two-minute wait](docs/policy.md#withdrawal-timing-and-confirmation) joins a send to its observed commit; it does not decide whether the next turn may run. That turn rebuilds from committed state rather than resending. It may conflict with a still-pending transaction or select disjoint inputs and produce a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
+`pnpm --filter ./sdk/node bot` runs turns until one fails, then exits `1`. The [two-minute wait](docs/policy.md#withdrawal-timing-and-confirmation) joins a send to its observed commit; it does not decide whether the next turn may run. That turn rebuilds from committed state rather than resending. It may conflict with a still-pending transaction or select disjoint inputs and produce a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
 
 ### Output boundary and retention
 
@@ -131,7 +133,7 @@ pnpm --filter ./sdk/node stimulus
 
 ### Alerting
 
-Neither program carries a notification channel: a run is one turn, and anything worth an operator's attention is a run of turns, which only the journal sees. A single `bot.turn.failed` is noise: a DNS or RPC failure ends the turn and the next one rebuilds from committed state. The conditions worth forwarding are silence, a run of failed turns, hours of `bot.decision.skipped` lines whose `decision.match.reason` is `unfunded_gain` (sellers are waiting and only CKB serves them before the next anchor), and a `stale` count above zero in the generator's `orders`. Silence is the one a watcher on the same host cannot see, since it dies with the host, so check it from another machine over SSH. Put the destination in an environment file with mode `0600` next to the key, since a Telegram or ntfy URL carries the token, and let `curl` encode the message:
+Neither program carries a notification channel: anything worth an operator's attention is a run of turns, which only the journal sees. A single `bot.turn.failed` is noise: a DNS or RPC failure ends the process and the restarted one rebuilds from committed state. The conditions worth forwarding are silence, a run of failed turns, hours of `bot.decision.skipped` lines whose `decision.match.reason` is `unfunded_gain` (sellers are waiting and only CKB serves them before the next anchor), and a `stale` count above zero in the generator's `orders`. Silence is the one a watcher on the same host cannot see, since it dies with the host, so check it from another machine over SSH. Put the destination in an environment file with mode `0600` next to the key, since a Telegram or ntfy URL carries the token, and let `curl` encode the message:
 
 ```bash
 # From another host: the newest bot event must be under twenty minutes old.
@@ -206,7 +208,7 @@ systemctl --user restart ickb-bot-testnet.service
 
 To update, stop every unit that shares the checkout, move the checkout to the reviewed revision, run `pnpm install --frozen-lockfile`, then start them again; a turn must never observe a half-updated tree. Editing a unit needs `systemd-analyze --user verify`, `systemctl --user daemon-reload`, and a restart of that unit, because a reload alone keeps the running process.
 
-A turn never holds: every exit starts the next turn after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
+A turn never holds: the next starts ten minutes after it started, a failure restarts the process after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
 
 ```bash
 journalctl --user -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | jq -c 'select(.type == "bot.decision.skipped" or .type == "bot.turn.failed")'

@@ -60,7 +60,7 @@ The publish job depends on the npm trusted publisher registered for `@ickb/sdk`:
 
 ## Live testnet validation
 
-Each actor runs one turn and prints JSON to stdout. The operator reads the outcome and decides the next action; systemd supplies continuous cadence when wanted. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
+Each actor prints JSON events to stdout. The generator runs one turn per process and systemd supplies its cadence; the bot loops a turn every ten minutes until one fails, and systemd restarts it. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
 
 To exercise matching, run a stimulus turn, then a bot turn. Correlate the generator's committed order outpoints with the bot's matched orders and committed transaction; a generator draw can also be skipped or produce an order the bot cannot profitably fill. The [journal guide](sdk/node/README.md#what-the-journals-should-show) names the preconditions for each observable case.
 

@@ -18,9 +18,10 @@ export interface BotIdentity {
 
 /**
  * The eight bot events, each complete on its own; one turn emits at most six. A turn emits `bot.turn.started`,
- * `bot.chain.preflight`, `bot.state.read`, then either `bot.decision.skipped` or
- * `bot.transaction.built`, `bot.transaction.sent`, and `bot.transaction.committed`;
- * any failure ends the turn with `bot.turn.failed` instead.
+ * `bot.state.read`, then either `bot.decision.skipped` or `bot.transaction.built`,
+ * `bot.transaction.sent`, and `bot.transaction.committed`; the process's first turn also
+ * emits `bot.chain.preflight` after its start. Any failure ends the turn and the process
+ * with `bot.turn.failed` instead. Every event of one process carries its `runId`.
  */
 export type BotEvent =
   | { type: "bot.turn.started" }

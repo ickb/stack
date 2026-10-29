@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { setTimeout as sleep } from "node:timers/promises";
 import { getConfig } from "../../src/constants.ts";
 import { BOT_LOCK_UP } from "../../src/dao.ts";
 import { IckbSdk } from "../../src/sdk.ts";
@@ -13,7 +14,10 @@ import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 
-// One process is one bot turn: read config, connect, act at most once, exit.
+// One process runs turns until one fails: read config and connect once, then act at most
+// once per turn, a turn starting ten minutes after the previous one started. Any failure
+// exits, so systemd restarts a clean process, which also picks up an updated checkout.
+const TURN_INTERVAL_MS = 10 * 60_000;
 const { chain, privateKey, rpcUrl, rpcEndpoint } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
@@ -62,15 +66,18 @@ try {
     sendTransaction: async (tx, recordTxHash, broadcastBefore) =>
       signAndSendTransaction(signer, tx, recordTxHash, broadcastBefore),
   };
-  await runBotTurn({ events, runtime });
+  for (;;) {
+    const started = Date.now();
+    await runBotTurn({ events, runtime });
+    await sleep(Math.max(0, started + TURN_INTERVAL_MS - Date.now()));
+    events.emit({ type: "bot.turn.started" });
+  }
 } catch (error) {
   // Every failure is safe to follow with a fresh turn: it rebuilds from committed state, and
   // a transaction still pending from this turn conflicts with the rebuilt one at the node.
   events.emit({ type: "bot.turn.failed", error });
   process.exitCode = 1;
 } finally {
-  // Closes the sockets the client opened, so nothing keeps the finished turn alive.
+  // Closes the sockets the client opened, so nothing keeps the failed process alive.
   await clientOwner?.dispose();
 }
-// The disposed client leaves nothing on the event loop, so the turn ends here on its own.
-process.exitCode ??= 0;
