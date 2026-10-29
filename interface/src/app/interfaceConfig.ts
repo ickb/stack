@@ -25,18 +25,19 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
-// One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), owned here
-// for the app's lifetime: the connector's network list borrows them, and a chain tab lends
-// the chosen one through an Owner the Provider may dispose without effect.
-const owners = {
-  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }),
-  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }),
-};
-// Every header the app or CCC reads is verified, and the tip may trail the clock by the
-// wallet policy's slack, thirty minutes.
+// One verified client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks),
+// kept for the app's lifetime, so its owner is never disposed: the connector's network
+// list borrows them, and a chain tab lends the chosen one through an Owner the Provider
+// may dispose without effect. The tip may trail the clock by the wallet policy's slack.
 const clients = {
-  mainnet: verifiedClient(owners.mainnet.value, tipMaxAgeMs(WALLET_LOCK_UP)),
-  testnet: verifiedClient(owners.testnet.value, tipMaxAgeMs(WALLET_LOCK_UP)),
+  mainnet: verifiedClient(
+    ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
+    tipMaxAgeMs(WALLET_LOCK_UP),
+  ),
+  testnet: verifiedClient(
+    ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
+    tipMaxAgeMs(WALLET_LOCK_UP),
+  ),
 };
 export const mainnetClient = clients.mainnet;
 export const testnetClient = clients.testnet;
