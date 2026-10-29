@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { unique } from "../utils/utils.ts";
+import { jsonRpcRequestor, unique } from "../utils/utils.ts";
 
 /** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
 export class TransactionBroadcastError extends Error {
@@ -144,10 +144,9 @@ async function verifiedInputs(
 // phase-2 DAO input collects, less the outputs, over the signed size. CCC values that
 // interest from headers it reads afresh, and a node names which block created a cell;
 // the chain values it at headers the transaction names in its deps, the deposit header
-// at the number the cell's data records and the request header strictly after it (the
-// deployed dao.c refuses a request epoch at or before its deposit), so a cell valued
-// elsewhere is refused. Among the deps, a node can still name another input's request
-// block: the difference is the interest between two request blocks of one transaction.
+// at the number the cell's data records and the request header at the block that
+// committed the request, which the node must prove (assertCommittedIn). A request header
+// at or before its deposit is refused early, as the deployed dao.c refuses it.
 async function verifiedFeeRate(
   client: ccc.Client,
   signed: ccc.Transaction,
@@ -171,10 +170,82 @@ async function verifiedFeeRate(
         `Input ${cell.outPoint.toHex()} is valued at a request header not after its deposit`,
       );
     }
+    await assertCommittedIn(client, cell.outPoint.txHash, withdrawHeader);
     capacity += ccc.calcDaoProfit(cell.capacityFree, depositHeader, withdrawHeader);
   }
   const fee = capacity - signed.getOutputsCapacity();
   return (fee * 1000n) / BigInt(signed.toBytes().length + 4);
+}
+
+// Transactions proven committed in a block, as `${txHash}${blockHash}`: a block's contents
+// never change, so a pair proven once holds for the process's life. A reorg that drops
+// the block makes a transaction naming it a refused one, which the chain decides anyway.
+const provenCommitments = new Set<string>();
+
+/**
+ * Refuses unless the node proves `txHash` is among the transactions of `header`'s block.
+ * An outpoint names its transaction, not the block that committed it, so a phase-2 input
+ * valued at the request header the node names could otherwise be valued at another
+ * request block of the same transaction. The proof is a Merkle path from the transaction
+ * hash to the header's transactions root, which the header's own hash binds.
+ */
+async function assertCommittedIn(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+  header: ccc.ClientBlockHeader,
+): Promise<void> {
+  const key = `${txHash}${header.hash}`;
+  if (provenCommitments.has(key)) {
+    return;
+  }
+  const requestor = jsonRpcRequestor(client);
+  if (requestor === undefined) {
+    throw new Error("Valuing a DAO withdrawal needs a JSON-RPC client");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the node's answer, checked field by field in isCommittedIn.
+  const proof = (await requestor.request("get_transaction_proof", [
+    [txHash],
+    header.hash,
+  ])) as TransactionProof;
+  if (!isCommittedIn(txHash, header, proof)) {
+    throw new Error(`Transaction ${txHash} is not proven in block ${header.hash}`);
+  }
+  provenCommitments.add(key);
+}
+
+/** The node's `get_transaction_proof` answer for one transaction. */
+export interface TransactionProof {
+  block_hash: ccc.Hex;
+  witnesses_root: ccc.Hex;
+  proof: { indices: readonly ccc.Hex[]; lemmas: readonly ccc.Hex[] };
+}
+
+/**
+ * Whether `proof` is a path from `txHash` to `header`'s transactions root. CKB builds that
+ * root over two subtrees, `blake2b(raw transactions root || witnesses root)`, each a
+ * complete binary Merkle tree whose node at position `i` has its parent at `(i - 1) / 2`
+ * and is a left child when `i` is odd; the index is the leaf's position and the lemmas are
+ * its siblings bottom up.
+ */
+export function isCommittedIn(
+  txHash: ccc.Hex,
+  header: ccc.ClientBlockHeader,
+  { block_hash: blockHash, witnesses_root: witnessesRoot, proof }: TransactionProof,
+): boolean {
+  const [index, ...extra] = proof.indices;
+  if (blockHash !== header.hash || index === undefined || extra.length > 0) {
+    return false;
+  }
+  let node = txHash;
+  let position = Number(index);
+  for (const lemma of proof.lemmas) {
+    if (position === 0) {
+      return false;
+    }
+    node = position % 2 === 1 ? ccc.hashCkb(node, lemma) : ccc.hashCkb(lemma, node);
+    position = (position - 1) >> 1;
+  }
+  return position === 0 && ccc.hashCkb(node, witnessesRoot) === header.transactionsRoot;
 }
 
 // The cache answers before the node, whatever status it recorded: the hash check makes a

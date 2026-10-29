@@ -3,13 +3,17 @@ import { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, headerLike, script } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
+  isCommittedIn,
   signAndSendTransaction,
   TransactionExpiredError,
+  type TransactionProof,
 } from "../../src/send/sign_and_send_transaction.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
+import { PROOF_BLOCK, PROOF_TXS } from "./fixtures/transaction_proof.ts";
 
 const TX_HASH = hash("81");
 const TIP_EPOCH = ccc.Epoch.from([10n, 0n, 1n]);
+const WITNESSES_ROOT = hash("c1");
 // CCC raises a capacity below the occupied minimum wherever it builds a cell, so the
 // fixtures use real sizes to keep every byte compared as written.
 const CAPACITY = ccc.fixedPointFrom(100);
@@ -284,6 +288,10 @@ describe("signAndSendTransaction DAO interest", () => {
   // The fixture's known Nervos DAO script; a phase-2 input names its deposit block in data.
   const DAO = ccc.Script.from({ codeHash: hash("90"), hashType: "type", args: "0x" });
   const AR = 10n ** 16n;
+  // Each request block holds the request transaction alone: its transactions root is the
+  // request's hash merged with the block's witnesses root, as `inBlockAlone` proves.
+  const REQUEST = requestCreating().hash();
+  const committing = ccc.hashCkb(REQUEST, WITNESSES_ROOT);
   // The request headers sit one epoch after the deposit, as the deployed dao.c requires.
   const deposit = headerLike({
     number: 1n,
@@ -295,23 +303,32 @@ describe("signAndSendTransaction DAO interest", () => {
     number: 2n,
     epoch: [2n, 0n, 1n],
     hash: hash("b1"),
+    transactionsRoot: committing,
     dao: { c: 0n, ar: AR, s: 0n, u: 0n },
   });
   const withdrawDoubled = headerLike({
     number: 2n,
     epoch: [2n, 0n, 1n],
     hash: hash("b2"),
+    transactionsRoot: committing,
+    dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
+  });
+  // A real request block of the same height that committed some other transaction.
+  const withdrawElsewhere = headerLike({
+    number: 2n,
+    epoch: [2n, 0n, 1n],
+    hash: hash("b3"),
+    transactionsRoot: hash("c2"),
     dao: { c: 0n, ar: 2n * AR, s: 0n, u: 0n },
   });
 
+  function requestCreating(): ccc.Transaction {
+    return creatingTransaction(CAPACITY, ccc.hexFrom(ccc.numLeToBytes(1n, 8)), 1, DAO);
+  }
+
   /** A body spending one phase-2 request created with `CAPACITY`, naming `deps`. */
   function request(deps: ccc.Hex[]): { creating: ccc.Transaction; tx: ccc.Transaction } {
-    const creating = creatingTransaction(
-      CAPACITY,
-      ccc.hexFrom(ccc.numLeToBytes(1n, 8)),
-      1,
-      DAO,
-    );
+    const creating = requestCreating();
     const tx = bodyTransaction(undefined, creating);
     tx.headerDeps = deps;
     return { creating, tx };
@@ -352,6 +369,43 @@ describe("signAndSendTransaction DAO interest", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("proves each request block once, and needs a JSON-RPC client to prove it", async () => {
+    // A block no other test names, so the process-wide proven set starts without it.
+    const once = headerLike({
+      number: 2n,
+      epoch: [2n, 0n, 1n],
+      hash: hash("b4"),
+      transactionsRoot: committing,
+      dao: { c: 0n, ar: AR, s: 0n, u: 0n },
+    });
+    const { creating, tx } = request([deposit.hash, once.hash]);
+    const fixture = signerFixture(tx, [creating], { deposit, withdraw: once });
+    const bare = signerFixture(tx, [creating], { deposit, withdraw: once });
+    Reflect.deleteProperty(bare.signer.client, "requestor");
+
+    await expect(signAndSendTransaction(bare.signer, tx)).rejects.toThrow(
+      "Valuing a DAO withdrawal needs a JSON-RPC client",
+    );
+    await signAndSendTransaction(fixture.signer, tx);
+    await signAndSendTransaction(fixture.signer, tx);
+    expect(fixture.proofs).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("refuses a phase-2 input whose request block does not hold the request", async () => {
+    // Both deps are real request blocks; the node names the one that committed another
+    // transaction, so its proof cannot reach that block's transactions root.
+    const { creating, tx } = request([deposit.hash, withdrawElsewhere.hash]);
+    const { signer, send } = signerFixture(tx, [creating], {
+      deposit,
+      withdraw: withdrawElsewhere,
+    });
+
+    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+      `Transaction ${REQUEST} is not proven in block ${withdrawElsewhere.hash}`,
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("refuses a phase-2 input valued at a header outside the deps", async () => {
     for (const deps of [[deposit.hash], [withdrawFlat.hash]]) {
       const { creating, tx } = request(deps);
@@ -364,6 +418,38 @@ describe("signAndSendTransaction DAO interest", () => {
         "is valued at a header the transaction does not name",
       );
       expect(send).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("isCommittedIn", () => {
+  const header = cccA.JsonRpcTransformers.blockHeaderTo(PROOF_BLOCK);
+  const { second, last } = PROOF_TXS;
+
+  it("follows a real mainnet path from a transaction to its block's root", () => {
+    expect(isCommittedIn(second.txHash, header, second.proof)).toBe(true);
+    expect(isCommittedIn(last.txHash, header, last.proof)).toBe(true);
+  });
+
+  it("refuses another transaction's path, another block, or an altered path", () => {
+    const { proof } = last.proof;
+    expect(isCommittedIn(second.txHash, header, last.proof)).toBe(false);
+    expect(isCommittedIn(last.txHash, header, second.proof)).toBe(false);
+    const altered: TransactionProof[] = [
+      { ...last.proof, block_hash: hash("01") },
+      { ...last.proof, witnesses_root: hash("02") },
+      {
+        ...last.proof,
+        proof: { ...proof, lemmas: [hash("03"), ...proof.lemmas.slice(1)] },
+      },
+      // A path cut short, or run past the root, never lands on the root's position.
+      { ...last.proof, proof: { ...proof, lemmas: proof.lemmas.slice(0, -1) } },
+      { ...last.proof, proof: { ...proof, lemmas: [...proof.lemmas, hash("04")] } },
+      { ...last.proof, proof: { ...proof, indices: [] } },
+      { ...last.proof, proof: { ...proof, indices: [...proof.indices, "0x0"] } },
+    ];
+    for (const variant of altered) {
+      expect(isCommittedIn(last.txHash, header, variant)).toBe(false);
     }
   });
 });
@@ -480,6 +566,7 @@ function signerFixture(
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
   signTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
   getTipHeader: ReturnType<typeof vi.fn<() => Promise<ccc.ClientBlockHeader>>>;
+  proofs: ReturnType<typeof vi.fn>;
 } {
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
   // The node answers with the creating transaction whose hash is asked, as a chain would.
@@ -530,7 +617,29 @@ function signerFixture(
           header: dao.withdraw,
         };
   });
+  // The node proves each request in a block of its own (see the DAO interest suite).
+  const proofs = vi.fn();
+  const requestor = ccc.RequestorJsonRpc.new({
+    transport: {
+      request: async (payload): Promise<ccc.JsonRpcResponse> => {
+        await Promise.resolve();
+        proofs();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends the hashes, then the block.
+        const [, blockHash] = payload.params as [ccc.Hex[], ccc.Hex];
+        return {
+          id: payload.id,
+          jsonrpc: "2.0",
+          result: {
+            block_hash: blockHash,
+            witnesses_root: WITNESSES_ROOT,
+            proof: { indices: ["0x0"], lemmas: [] },
+          },
+        };
+      },
+    },
+  });
   const client = {
+    requestor,
     getTransaction,
     getTipHeader,
     getHeaderByNumber,
@@ -558,6 +667,7 @@ function signerFixture(
     mark,
     signTransaction,
     getTipHeader,
+    proofs,
   };
 }
 
