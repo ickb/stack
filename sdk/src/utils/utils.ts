@@ -9,12 +9,7 @@ import { cccA } from "@ckb-ccc/core/advanced";
  */
 export const defaultCellPageSize = 400;
 
-/**
- * A CCC client cache that holds a whole pool's headers. CCC's default keeps 128 blocks,
- * and the testnet pool's deposits alone span 277 (2026-10-29), so every read refetched
- * most of them; 4096 blocks fit pools many times larger in a few MB. Headers are cached
- * only once CCC deems them confirmed, and every one is still checked by `verifiedClient`.
- */
+/** A CCC client cache sized for a whole pool's headers: 4096 blocks, where CCC's default keeps 128 (SDK README, Account state). */
 export function clientCache(): ccc.ClientCacheMemory {
   return new ccc.ClientCacheMemory(512, 256, 4096);
 }
@@ -26,17 +21,10 @@ export interface ScannedCell {
 }
 
 /**
- * Reads every committed cell matching the key, page by page, without touching
- * CCC's cell cache. The scan ends on the first short page.
- *
- * @remarks The indexer answers each cell with its block number, which CCC's typed scan
- * drops, so the read goes through the raw requestor: a header is then read by number
- * instead of asking the node for each creating transaction's status. The number is the
- * same node claim the status would be; the header read by it is still checked against its
- * hash. A full page must advance the cursor; otherwise the read throws so a faulty
- * endpoint in the app's public node pool cannot keep the scan looping forever.
- * The cursor continues ordering, not a coherent snapshot. There is no aggregate budget:
- * a large book costs a slower read rather than a partial result.
+ * Reads every committed cell matching the key with the block the node names for it, page
+ * by page through the raw requestor (CCC's typed scan drops the block), bypassing CCC's
+ * cell cache. A full page whose cursor does not advance throws. Why: SDK README, Account
+ * state.
  */
 export async function findCells(
   client: ccc.Client,

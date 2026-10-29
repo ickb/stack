@@ -35,24 +35,14 @@ export class TransactionExpiredError extends Error {
  * Verifies the inputs against the chain, signs locally, records chain identity before
  * RPC, then broadcasts without CCC's cache wrapper.
  *
- * @remarks Every input is first checked against its creating transaction, read from the
- * client cache or the node and accepted only when its hash is the one the OutPoint names:
- * the cell the planner attached must equal that transaction's output at the index, else
- * nothing is signed. The connector must not alter the economic body it was handed: the
- * ordered inputs, outputs and outputs data are compared against a digest taken before
- * signing, so in-place mutation cannot evade the check. Witnesses and cell/header
- * dependency preparation stay signer-owned. The fee ceiling values the verified inputs,
- * a phase-2 DAO input at the headers the transaction names, while measuring the signed
- * bytes; the request transaction of a phase-2 input must be proven in its request block
- * with `get_transaction_proof`, so such a send needs the client's JSON-RPC requestor. When `broadcastBefore` is given, one fresh tip is read
- * after the signature and the fee check, and the send is refused with
- * `TransactionExpiredError` once the tip's epoch has reached it: a withdrawal request that
- * commits after its claim locks the deposit for another cycle, and a wallet may hold the
- * signature for a while.
- * `recordTxHash` is called after these checks and before the send RPC starts. A node that
- * already holds this exact transaction is an acceptance; any other send failure remains
- * ambiguous and throws `TransactionBroadcastError`. The client cache is never marked:
- * later attempts rebuild from exact committed reads.
+ * @remarks Nothing is signed unless every input equals the output its creating
+ * transaction made and the signer kept the ordered inputs, outputs and outputs data. The
+ * fee is measured from verified values, a phase-2 DAO input proven in its request block
+ * with `get_transaction_proof`, so the client must be JSON-RPC. When `broadcastBefore` is
+ * given, the send is refused with `TransactionExpiredError` once a fresh tip reaches it.
+ * `recordTxHash` runs before the send RPC. A node already holding this exact transaction
+ * is an acceptance; any other send failure throws `TransactionBroadcastError`. Why each
+ * check exists: SDK README, Signing and broadcast.
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,

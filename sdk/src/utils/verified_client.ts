@@ -7,12 +7,8 @@ import { ccc } from "@ckb-ccc/core";
  * creating transaction, and refuses a tip that trails the local clock by more than
  * `tipMaxAgeMs` when one is given.
  *
- * @remarks The check sits on the client rather than in the SDK's readers because CCC's
- * own completion values a withdrawal's interest from headers it reads through the
- * client it is given. The header beside a transaction or a cell is pinned only to the
- * block the node names, so what a transaction is valued at is settled at the send
- * boundary against its header deps. CCC parses headers but has no codec for them, so
- * the encoding is here.
+ * @remarks It wraps the client, not the SDK's readers, because CCC's own completion reads
+ * headers through the client it is given. Why each check exists: SDK README, Account state.
  */
 export function verifiedClient(inner: ccc.Client, tipMaxAgeMs?: number): ccc.Client {
   return new VerifiedClient(inner, tipMaxAgeMs);
