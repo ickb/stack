@@ -32,10 +32,7 @@ export function depositCell(
   });
   return {
     cell,
-    headers: [
-      { header: depositHeader, txHash: cell.outPoint.txHash },
-      { header: tipHeader },
-    ],
+    header: depositHeader,
     interests: 0n,
     claimEpoch: claimEpochAt(tipHeader, options?.isReady ?? false),
     ckbValue: cell.cellOutput.capacity,
@@ -64,7 +61,7 @@ export function projectionReadyDeposit(
   });
   return {
     cell,
-    headers: [{ header: baseTip, txHash: cell.outPoint.txHash }, { header: baseTip }],
+    header: baseTip,
     interests: 0n,
     claimEpoch: new TestEpoch(
       claimEpochAt(baseTip, options.isReady ?? true),
@@ -87,7 +84,7 @@ export function receiptValue(
   });
   return {
     cell,
-    header: { header: baseTip, txHash: cell.outPoint.txHash },
+    header: baseTip,
     ckbValue,
     udtValue,
   };
@@ -145,7 +142,7 @@ export function receiptCell(
   });
   return {
     cell,
-    header: { header, txHash: cell.outPoint.txHash },
+    header,
     ckbValue: cell.cellOutput.capacity,
     udtValue: ccc.fixedPointFrom(100000),
   };
@@ -191,10 +188,7 @@ export function readyWithdrawalGroup(options: {
   return new WithdrawalGroup(
     {
       cell: ownedCell,
-      headers: [
-        { header: options.depositHeader },
-        { header: options.withdrawalHeader, txHash: ownedCell.outPoint.txHash },
-      ],
+      headers: [options.depositHeader, options.withdrawalHeader],
       interests: 0n,
       maturity: ccc.Epoch.from([1n, 0n, 1n]),
       isReady: true,
@@ -224,10 +218,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         },
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
-      headers: [
-        { header: baseTip },
-        { header: baseTip, txHash: hash(options.byte ?? "30") },
-      ],
+      headers: [baseTip, baseTip],
       interests: 0n,
       maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,

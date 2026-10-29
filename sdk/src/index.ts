@@ -87,5 +87,5 @@ export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export type { SupportedChain } from "./utils/chain.ts";
 export { clientCache } from "./utils/utils.ts";
-export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";
 export { verifiedClient } from "./utils/verified_client.ts";

@@ -89,21 +89,6 @@ interface RawCellsPage {
 }
 
 /**
- * Local transaction inclusion metadata.
- */
-export interface TransactionHeader {
-  /**
-   * The block header used for inclusion-dependent calculations.
-   */
-  header: ccc.ClientBlockHeader;
-
-  /**
-   * The transaction hash when the caller has resolved it for the header.
-   */
-  txHash?: ccc.Hex;
-}
-
-/**
  * CKB and UDT amounts carried by a cell, order, or planned value.
  */
 export interface ValueComponents {

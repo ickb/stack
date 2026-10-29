@@ -36,7 +36,7 @@ function deposit(udtValue: bigint, claimEpoch: ccc.Epoch, key: string): IckbDepo
   });
   return {
     cell,
-    headers: [{ header: TIP, txHash: cell.outPoint.txHash }, { header: TIP }],
+    header: TIP,
     interests: 0n,
     claimEpoch,
     ckbValue: udtValue,

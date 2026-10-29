@@ -80,7 +80,7 @@ export function readyDeposit(
   });
   return {
     cell,
-    headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
+    header: tip,
     interests: 0n,
     claimEpoch: ccc.Epoch.from([minutesOut / 240n, minutesOut % 240n, 240n]),
     ckbValue: udtValue,
@@ -185,10 +185,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
   });
   const owned: TestWithdrawalRequestCell = {
     cell,
-    headers: [
-      { header: depositHeader, txHash: depositHash },
-      { header: requestHeader, txHash: cell.outPoint.txHash },
-    ],
+    headers: [depositHeader, requestHeader],
     interests: 0n,
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
     isReady: true,

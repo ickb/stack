@@ -40,7 +40,7 @@ function depositOf(
   });
   return {
     cell,
-    headers: [{ header, txHash: cell.outPoint.txHash }, { header }],
+    header,
     interests: 0n,
     claimEpoch: ccc.Epoch.from([1n, 0n, 1n]),
     ckbValue: cell.cellOutput.capacity,
@@ -64,10 +64,7 @@ function requestOf(
   });
   return {
     cell,
-    headers: [
-      { header: depositHeader },
-      { header: requestHeader, txHash: cell.outPoint.txHash },
-    ],
+    headers: [depositHeader, requestHeader],
     interests: 0n,
     maturity: ccc.Epoch.from([180n, 0n, 1n]),
     isReady: true,
@@ -206,9 +203,7 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     );
 
     expect(tx.cellDeps).toEqual([dep]);
-    expect(tx.headerDeps).toEqual(
-      deposits.map((deposit) => deposit.headers[0].header.hash),
-    );
+    expect(tx.headerDeps).toEqual(deposits.map((deposit) => deposit.header.hash));
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       deposits.map((deposit) => deposit.cell.outPoint.toHex()),
     );
@@ -225,10 +220,10 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
   it("does not duplicate an existing deposit header dep", () => {
     const deposit = depositOf("66");
     const tx = ccc.Transaction.default();
-    tx.headerDeps.push(deposit.headers[0].header.hash);
+    tx.headerDeps.push(deposit.header.hash);
 
     expect(manager().requestWithdrawal(tx, [deposit], userLock).headerDeps).toEqual([
-      deposit.headers[0].header.hash,
+      deposit.header.hash,
     ]);
   });
 
@@ -239,15 +234,6 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     expect(() => manager().requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
       "Transaction has different inputs and outputs lengths",
     );
-  });
-
-  it("rejects a deposit whose header tx hash does not match the cell", () => {
-    const deposit = depositOf("66");
-    deposit.headers[0] = { ...deposit.headers[0], txHash: byte32FromByte("99") };
-
-    expect(() =>
-      manager().requestWithdrawal(ccc.Transaction.default(), [deposit], userLock),
-    ).toThrow("header txHash");
   });
 
   it("rejects a deposit whose lock args differ in size from the request lock", () => {
@@ -321,10 +307,10 @@ describe("OwnedOwnerManager.withdraw", () => {
     ]);
 
     expect(tx.headerDeps).toEqual([
-      first.headers[0].header.hash,
-      second.headers[0].header.hash,
-      first.headers[1].header.hash,
-      second.headers[1].header.hash,
+      first.headers[0].hash,
+      second.headers[0].hash,
+      first.headers[1].hash,
+      second.headers[1].hash,
     ]);
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
     expect(tx.getWitnessArgs(1)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(1n, 8)));
@@ -430,17 +416,6 @@ describe("OwnedOwnerManager.withdraw", () => {
       ]),
     ).toThrow("but group owned cell is");
   });
-
-  it("rejects a request whose header tx hash does not match the cell", () => {
-    const owned = requestOf(depositHeader, requestHeader);
-    owned.headers[1] = { ...owned.headers[1], txHash: byte32FromByte("99") };
-
-    expect(() =>
-      manager().withdraw(ccc.Transaction.default(), [
-        new WithdrawalGroup(owned, ownerOf(owned)),
-      ]),
-    ).toThrow("header txHash");
-  });
 });
 
 describe("withdrawalRequestCell", () => {
@@ -459,12 +434,7 @@ describe("withdrawalRequestCell", () => {
     const requestHeader = headerLike({ epoch: [180n, 0n, 1n], number: 2n });
     const tip = headerLike({ epoch: [181n, 0n, 1n], number: 3n });
 
-    const cell = withdrawalRequestCell(
-      withdrawalCell,
-      depositHeader,
-      { header: requestHeader, txHash: withdrawalCell.outPoint.txHash },
-      tip,
-    );
+    const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
     expect(cell.maturity.eq(ccc.calcDaoClaimEpoch(depositHeader, requestHeader))).toBe(
       true,
@@ -482,12 +452,7 @@ describe("withdrawalRequestCell", () => {
     const tip = headerLike({ epoch: [179n, 0n, 1n], number: 3n });
 
     expect(
-      withdrawalRequestCell(
-        withdrawalCell,
-        depositHeader,
-        { header: requestHeader, txHash: withdrawalCell.outPoint.txHash },
-        tip,
-      ).isReady,
+      withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip).isReady,
     ).toBe(false);
   });
 
@@ -496,12 +461,7 @@ describe("withdrawalRequestCell", () => {
     const requestHeader = headerLike({ epoch: [181n, 1n, 2n], number: 2n });
     const tip = headerLike({ epoch: [181n, 1n, 2n], number: 3n });
 
-    const cell = withdrawalRequestCell(
-      withdrawalCell,
-      depositHeader,
-      { header: requestHeader, txHash: withdrawalCell.outPoint.txHash },
-      tip,
-    );
+    const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
     expect(cell.maturity.eq([181n, 1n, 2n])).toBe(true);
     expect(cell.isReady).toBe(true);
@@ -570,10 +530,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
       owners.map((owner) => owner.cell.outPoint.toHex()),
     );
     expect(groups[0]?.owned).toMatchObject({ isReady: true });
-    expect(groups[0]?.owned.headers[1]).toEqual({
-      header: requestHeader,
-      txHash: first.cell.outPoint.txHash,
-    });
+    expect(groups[0]?.owned.headers[1]).toBe(requestHeader);
     expect(groups[0]?.udtValue).toBe(ickbValue(first.cell.capacityFree, depositHeader));
   });
 
@@ -673,7 +630,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
 
     const groups = await groupsPromise;
 
-    expect(groups[0]?.owned.headers[0].header.number).toBe(depositHeader.number);
-    expect(groups[0]?.owned.headers[1].header.number).toBe(requestHeader.number);
+    expect(groups[0]?.owned.headers[0].number).toBe(depositHeader.number);
+    expect(groups[0]?.owned.headers[1].number).toBe(requestHeader.number);
   });
 });

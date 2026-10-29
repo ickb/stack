@@ -197,7 +197,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
   const pendingWithdrawal: WithdrawalGroup = {
     owned: {
       cell: request,
-      headers: [{ header: tip }, { header: tip, txHash: request.outPoint.txHash }],
+      headers: [tip, tip],
       interests: 0n,
       maturity: ccc.Epoch.from([182n, 0n, 1n]),
       isReady: false,

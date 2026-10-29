@@ -65,7 +65,7 @@ function receiptFor(
   const cell = receiptCellOf(txHashByte, receiptData(1n), type);
   return {
     cell,
-    header: { header, txHash: cell.outPoint.txHash },
+    header,
     ckbValue: cell.cellOutput.capacity,
     udtValue: 0n,
   };
@@ -227,20 +227,15 @@ describe("LogicManager.completeDeposit", () => {
     expect(manager().completeDeposit(tx, [])).toEqual(tx);
   });
 
-  it("rejects structural receipts for another logic script or tx hash", () => {
+  it("rejects a receipt for another logic script", () => {
     const header = headerLike({ hash: byte32FromByte("44") });
     const wrongType = receiptFor("66", header, script("77"));
-    const wrongTxHash = receiptFor("88", header);
-    wrongTxHash.header = { ...wrongTxHash.header, txHash: byte32FromByte("99") };
 
     expect(() =>
       manager().completeDeposit(ccc.Transaction.default(), [wrongType]),
     ).toThrow(
       `Receipt ${wrongType.cell.outPoint.toHex()} is not an iCKB receipt for this logic script`,
     );
-    expect(() =>
-      manager().completeDeposit(ccc.Transaction.default(), [wrongTxHash]),
-    ).toThrow("header txHash");
   });
 });
 
@@ -276,7 +271,7 @@ describe("LogicManager.receiptsFrom", () => {
     expect(receipts[0]).toMatchObject({
       ckbValue: ccc.fixedPointFrom(100082),
       udtValue: ccc.fixedPointFrom(200000),
-      header: { header, txHash: receipt.outPoint.txHash },
+      header,
     });
   });
 
@@ -319,7 +314,7 @@ describe("LogicManager.receiptsFrom", () => {
   it("rejects a malformed receipt payload with out point context", () => {
     const cell = receiptCellOf("11", "0x12");
 
-    expect(() => receiptCell(cell, { header, txHash: cell.outPoint.txHash })).toThrow(
+    expect(() => receiptCell(cell, header)).toThrow(
       `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
     );
   });
@@ -369,10 +364,7 @@ describe("LogicManager.findDeposits", () => {
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
       cell: deposit,
-      headers: [
-        { header: depositHeader, txHash: deposit.outPoint.txHash },
-        { header: tip },
-      ],
+      header: depositHeader,
       interests: ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
       udtValue: ickbValue(deposit.capacityFree, depositHeader),
     });

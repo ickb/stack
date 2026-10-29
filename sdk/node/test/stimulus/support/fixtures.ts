@@ -67,7 +67,7 @@ export function receipt(
     cell,
     ckbValue,
     udtValue,
-    header: { header: headerLike({ number: 1n }), txHash },
+    header: headerLike({ number: 1n }),
   };
 }
 
