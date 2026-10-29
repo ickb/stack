@@ -11,16 +11,9 @@ export { transactionWithHeader } from "@ickb/testkit";
 export { L1_STATE_SUITE } from "../../../transaction/complete/support/sdk_suite_titles.ts";
 
 export class FeeRateStubClient extends StubClient {
-  private readonly feeRate: bigint;
-
-  constructor(handlers: ConstructorParameters<typeof StubClient>[0] = {}, feeRate = 1n) {
-    super(handlers);
-    this.feeRate = feeRate;
-  }
-
   public override async getFeeRate(): Promise<bigint> {
     await Promise.resolve();
-    return this.feeRate;
+    return 1n;
   }
 }
 

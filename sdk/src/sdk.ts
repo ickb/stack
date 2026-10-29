@@ -128,7 +128,7 @@ const IckbSdkImplementation = class IckbSdk {
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
       this.ickbLogic.findDeposits(client, tip),
       this.order.findOrders(client),
-      getFeeRate(client),
+      client.getFeeRate(),
       Promise.all(
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),
@@ -516,14 +516,6 @@ function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
 
 async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {
   return (await signer.getAddressObjs()).some(({ script }) => script.eq(lock));
-}
-
-async function getFeeRate(client: ccc.Client): Promise<ccc.Num> {
-  const feeRate = await client.getFeeRate();
-  if (feeRate < 0n) {
-    throw new Error("Client fee rate must be non-negative");
-  }
-  return feeRate;
 }
 
 function udtBalance(cell: ccc.Cell): ccc.Num {

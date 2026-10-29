@@ -1,12 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  defaultL1Sdk,
-  FeeRateStubClient,
-  tipHeaderHandler,
-} from "../l1_account/support/sdk_l1_support.ts";
+import { defaultL1Sdk } from "../l1_account/support/sdk_l1_support.ts";
 
 describe("IckbSdk.getL1State fee rate statistics", () => {
   it("uses CCC minimum fee rate when CKB returns null fee statistics", async () => {
@@ -30,20 +25,6 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     await expect(
       defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
     ).rejects.toBe(feeRateError);
-  });
-
-  it("rejects a negative fee rate returned by a custom client", async () => {
-    const client = new FeeRateStubClient(
-      {
-        cells: (): ccc.Cell[] => [],
-        getTipHeader: tipHeaderHandler(headerLike(3n)),
-      },
-      -1n,
-    );
-
-    await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
-    ).rejects.toThrow("Client fee rate must be non-negative");
   });
 });
 
