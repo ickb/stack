@@ -17,7 +17,7 @@ import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 // once per turn, a turn starting ten minutes after the previous one started. Any failure
 // exits, so systemd restarts a clean process, which also picks up an updated checkout.
 const TURN_INTERVAL_MS = 10 * 60_000;
-const { chain, privateKey, rpcUrl, rpcEndpoint } = await readRuntimeConfigEnv(
+const { chain, privateKey, rpcUrls, rpcEndpoint } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
 );
@@ -26,7 +26,7 @@ const events = new BotEventEmitter({ chain, runId: createRunId() });
 events.emit({ type: "bot.turn.started" });
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  clientOwner = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   const managers = getConfig(chain);

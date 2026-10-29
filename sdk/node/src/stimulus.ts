@@ -10,12 +10,12 @@ import { runStimulusTurn } from "./stimulus/turn.ts";
 if (process.argv.length > 2) {
   throw new Error(`Unknown argument: ${String(process.argv[2])}`);
 }
-const { chain, privateKey, rpcUrl, rpcEndpoint } = await readStimulusConfig(process.env);
+const { chain, privateKey, rpcUrls, rpcEndpoint } = await readStimulusConfig(process.env);
 const override = readStimulusOverride(process.env);
 const startTime = new Date();
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
-  clientOwner = createPublicClient(chain, rpcUrl);
+  clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   const preflight = await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:

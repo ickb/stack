@@ -54,10 +54,7 @@ const identity: StimulusIdentity = {
   primaryLock: { codeHash: PRIMARY_LOCK.codeHash, hashType: "type", args: "0x" },
   rpcEndpoint: {
     mode: "exclusive",
-    protocol: "https:",
-    hostname: "testnet.example",
-    port: "",
-    pathname: "/",
+    endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
   },
   preflight: {
     expected: chainIdentities.testnet,

@@ -20,8 +20,8 @@ const HTTP_CLIENT_PROCESS = fileURLToPath(
 describe("public clients and preflight identity", () => {
   it("opens network-specific public clients owned by the caller", async () => {
     const testnetUrl = "http://127.0.0.1:8114/";
-    const mainnet = createPublicClient("mainnet", MAINNET_RPC_URL);
-    const testnet = createPublicClient("testnet", testnetUrl);
+    const mainnet = createPublicClient("mainnet", [MAINNET_RPC_URL]);
+    const testnet = createPublicClient("testnet", [testnetUrl]);
 
     expect(mainnet.value.addressPrefix).toBe("ckb");
     expect(testnet.value.addressPrefix).toBe("ckt");

@@ -47,18 +47,18 @@ export async function verifyChainPreflight(
 }
 
 /**
- * Opens the public client for one chain, owned by the caller: a configured `rpcUrl` is the
- * only endpoint (an operator's own node), otherwise CCC's public pool for the chain,
- * WebSocket first with HTTPS fallbacks. The SDK verifies what it reads through it. The
+ * Opens the public client for one chain, owned by the caller: configured `rpcUrls` are the
+ * only endpoints, tried in order (an operator's own node first, then providers), otherwise
+ * CCC's public pool for the chain, WebSocket first with HTTPS fallbacks. The SDK verifies what it reads through it. The
  * caller disposes the owner when it is done, so the sockets close and the process can exit.
  */
 export function createPublicClient(
   chain: SupportedChain,
-  rpcUrl?: string,
+  rpcUrls?: readonly [string, ...string[]],
 ): ccc.Owner<ccc.Client> {
   return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open({
     cache: clientCache(),
-    ...(rpcUrl === undefined ? {} : { urls: [rpcUrl] as const }),
+    ...(rpcUrls === undefined ? {} : { urls: rpcUrls }),
   });
 }
 

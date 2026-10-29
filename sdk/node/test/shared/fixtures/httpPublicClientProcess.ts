@@ -15,10 +15,9 @@ if (address === null || typeof address === "string") {
   throw new TypeError("Expected a local TCP server address");
 }
 
-const clientOwner = createPublicClient(
-  "testnet",
+const clientOwner = createPublicClient("testnet", [
   `http://127.0.0.1:${String(address.port)}`,
-);
+]);
 const requestor = jsonRpcRequestor(clientOwner.value);
 await requestor.request("test", []);
 await clientOwner.dispose();

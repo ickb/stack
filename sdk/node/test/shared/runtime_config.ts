@@ -32,31 +32,30 @@ describe("runtime config env", () => {
     await expect(readConfig({})).resolves.toEqual({
       chain: "testnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: RPC_URL,
+      rpcUrls: [RPC_URL],
       rpcEndpoint: {
         mode: "exclusive",
-        protocol: "https:",
-        hostname: "testnet.example",
-        port: "",
-        pathname: "/",
+        endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
       },
     });
-    // The URL string reaches only the client; its identity carries no query.
+    // The URLs reach only the client, in order; their identities carry no path or query,
+    // where providers put API keys.
+    const urls = [
+      "https://rpc.example:8443/key-in-path?token=abc#private",
+      "wss://second.example/ws/another-key",
+    ];
     await expect(
-      readConfig({
-        BOT_CHAIN: "mainnet",
-        BOT_RPC_URL: "https://rpc.example:8443/path?token=abc#private",
-      }),
+      readConfig({ BOT_CHAIN: "mainnet", BOT_RPC_URL: urls.join(",") }),
     ).resolves.toEqual({
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: "https://rpc.example:8443/path?token=abc#private",
+      rpcUrls: urls,
       rpcEndpoint: {
         mode: "exclusive",
-        protocol: "https:",
-        hostname: "rpc.example",
-        port: "8443",
-        pathname: "/path",
+        endpoints: [
+          { protocol: "https:", hostname: "rpc.example", port: "8443" },
+          { protocol: "wss:", hostname: "second.example", port: "" },
+        ],
       },
     });
   });
@@ -148,6 +147,8 @@ describe("runtime config RPC URL", () => {
       "https://user@rpc.example/",
       "https://rpc.example/\t",
       " https://rpc.example/",
+      "https://rpc.example/, https://second.example/",
+      "https://rpc.example/,",
     ]) {
       let error: unknown;
       try {

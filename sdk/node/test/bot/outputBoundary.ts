@@ -36,10 +36,7 @@ describe("bot private key output boundary", () => {
       expect(config.privateKey).toBe(privateKey);
       expect(config.rpcEndpoint).toEqual({
         mode: "exclusive",
-        protocol: "https:",
-        hostname: "testnet.example",
-        port: "",
-        pathname: "/",
+        endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
       });
       expect(output.join("")).not.toContain(privateKey);
       expect(output.join("")).not.toContain("token=canary");
