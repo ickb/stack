@@ -17,7 +17,12 @@ describe("Ratio", () => {
 
   it("rejects a fee-bearing quote on an empty ratio", () => {
     expect(() =>
-      quoteConversion(true, Ratio.empty(), { ckbValue: 1n, udtValue: 0n }, { fee: 1n }),
+      quoteConversion(
+        true,
+        Ratio.empty(),
+        { ckbValue: 1n, udtValue: 0n },
+        { fee: 1n, feeBase: 100000n },
+      ),
     ).toThrow("Invalid ExchangeRatio");
   });
 

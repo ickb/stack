@@ -117,7 +117,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         { ckbValue: 0n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -128,7 +128,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
         { ckbValue: 2n ** 80n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -139,7 +139,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 96n }),
         { ckbValue: 1n << 96n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -152,7 +152,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: maxUint64 * 2n + 1n, udtScale: 2n }),
         { ckbValue: 2n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });

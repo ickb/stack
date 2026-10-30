@@ -35,15 +35,8 @@ export function quoteConversion(
   isCkb2Udt: boolean,
   midpoint: ExchangeRatio,
   amounts: ValueComponents,
-  options?: {
-    fee?: ccc.Num;
-    feeBase?: ccc.Num;
-  },
+  { fee, feeBase }: { fee: ccc.Num; feeBase: ccc.Num },
 ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-  const fee = options?.fee ?? 0n;
-  // Generic denominator for callers that pass a fee without a scale; Stack's
-  // own default pair is owned publicly by the SDK, not by this entity.
-  const feeBase = options?.feeBase ?? 100000n;
   const base = Ratio.from(midpoint);
   const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);

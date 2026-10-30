@@ -11,6 +11,7 @@ describe("order conversion and I/O", () => {
         true,
         { ckbScale: 1n, udtScale: 1n },
         { ckbValue: -1n, udtValue: 0n },
+        { fee: 0n, feeBase: 100000n },
       );
     }).toThrow("Order conversion amounts cannot be negative");
     expect(() => {
@@ -18,6 +19,7 @@ describe("order conversion and I/O", () => {
         true,
         { ckbScale: 1n, udtScale: 1n },
         { ckbValue: 0n, udtValue: 0n },
+        { fee: 0n, feeBase: 100000n },
       );
     }).toThrow(OrderConversionRepresentabilityError);
     expect(() => {
@@ -25,6 +27,7 @@ describe("order conversion and I/O", () => {
         true,
         { ckbScale: 1n << 80n, udtScale: 1n },
         { ckbValue: 1n, udtValue: 0n },
+        { fee: 0n, feeBase: 100000n },
       );
     }).toThrow(OrderConversionRepresentabilityError);
   });
