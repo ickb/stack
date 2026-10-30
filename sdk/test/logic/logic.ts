@@ -115,10 +115,17 @@ describe("LogicManager.deposit", () => {
     });
   });
 
-  it("leaves the transaction unchanged for non-positive deposit quantities", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().deposit(tx, 0, ccc.fixedPointFrom(100082), script("44"))).toBe(tx);
+  it("refuses a non-positive deposit quantity", () => {
+    for (const quantity of [0, -1]) {
+      expect(() =>
+        manager().deposit(
+          ccc.Transaction.default(),
+          quantity,
+          ccc.fixedPointFrom(100082),
+          script("44"),
+        ),
+      ).toThrow("iCKB deposit quantity must be a positive safe integer");
+    }
   });
 
   it("sizes receipt capacity from the actual user lock", () => {
@@ -163,7 +170,7 @@ describe("LogicManager.deposit", () => {
         ccc.fixedPointFrom(100082),
         script("44"),
       ),
-    ).toThrow("iCKB deposit quantity must be a safe integer");
+    ).toThrow("iCKB deposit quantity must be a positive safe integer");
   });
 
   it("rejects deposit quantities that cannot fit in one DAO transaction", () => {

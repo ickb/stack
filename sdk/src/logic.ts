@@ -101,13 +101,11 @@ export class LogicManager implements ScriptDeps {
     depositCapacity: ccc.FixedPoint,
     lock: ccc.Script,
   ): ccc.Transaction {
+    // A zero quantity would mint a receipt for no deposits, which iCKB Logic refuses on chain.
+    if (!Number.isSafeInteger(depositQuantity) || depositQuantity <= 0) {
+      throw new TypeError("iCKB deposit quantity must be a positive safe integer");
+    }
     const tx = ccc.Transaction.from(txLike);
-    if (depositQuantity <= 0) {
-      return tx;
-    }
-    if (!Number.isSafeInteger(depositQuantity)) {
-      throw new TypeError("iCKB deposit quantity must be a safe integer");
-    }
     if (depositQuantity > maxDepositQuantity) {
       // The completion walk steps a plan down on this error.
       throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
