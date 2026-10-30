@@ -75,7 +75,11 @@ try {
     if (Date.now() - processStarted >= PROCESS_MAX_MS) {
       break;
     }
-    await sleep(Math.max(0, started + TURN_INTERVAL_MS - Date.now()));
+    // Capped at the interval: a wall clock stepped back between turns would otherwise
+    // stretch the sleep by the step, up to the unit's runtime limit.
+    await sleep(
+      Math.min(TURN_INTERVAL_MS, Math.max(0, started + TURN_INTERVAL_MS - Date.now())),
+    );
     events.emit({ type: "bot.turn.started" });
   }
 } catch (error) {
