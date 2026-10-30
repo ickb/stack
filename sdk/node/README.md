@@ -138,7 +138,7 @@ Neither program carries a notification channel: anything worth an operator's att
 # From another host: the newest bot event must be under twenty minutes old.
 last=$(ssh "$HOST" journalctl --user -u ickb-bot-testnet.service -o cat -n 50 | grep '^{' | tail -n 1 | jq -r .timestamp)
 [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 1200 ] \
-  || curl -sG --data-urlencode "text=bot silent since $last" "$ALERT_URL" >/dev/null
+  || curl -sG --data-urlencode "text=bot silent since ${last:-unknown}" "$ALERT_URL" >/dev/null
 ```
 
 ### What the journals should show
