@@ -104,6 +104,8 @@ export type BuildTransactionResult =
   | {
       kind: "built";
       tx: ccc.Transaction;
+      /** The fee completion planned, which the send refuses to exceed. */
+      plannedFee: bigint;
       decision: BotDecision;
       /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
       broadcastBefore?: BroadcastDeadline;

@@ -76,16 +76,14 @@ export async function runBotTurn(context: BotTurnContext): Promise<void> {
     return;
   }
   context.events.emit({ type: "bot.transaction.built", decision: result.decision });
-  await sendBuiltTransaction({ context, state, result });
+  await sendBuiltTransaction({ context, result });
 }
 
 async function sendBuiltTransaction({
   context,
-  state,
   result,
 }: {
   context: BotTurnContext;
-  state: BotState;
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
@@ -93,7 +91,7 @@ async function sendBuiltTransaction({
   try {
     txHash = await context.runtime.sendTransaction(
       result.tx,
-      result.tx.estimateFee(state.system.feeRate),
+      result.plannedFee,
       result.broadcastBefore,
     );
     context.events.emit({

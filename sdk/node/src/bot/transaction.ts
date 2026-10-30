@@ -60,8 +60,11 @@ export async function buildTransaction(
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
   const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
-  const decision = (core: Core, attempts: number, tx?: ccc.Transaction): BotDecision =>
-    buildDecision({ state, matched, plan, core, attempts, tx });
+  const decision = (
+    core: Core,
+    attempts: number,
+    built?: { tx: ccc.Transaction; plannedFee: bigint },
+  ): BotDecision => buildDecision({ state, matched, plan, core, attempts, built });
 
   if (cores.length === 0) {
     return skipped("no_actions", decision({ kind: "none" }, 0));
@@ -99,10 +102,12 @@ export async function buildTransaction(
           state.system.lockUp,
         )
       : undefined;
+  const plannedFee = tx.estimateFee(state.system.feeRate);
   return {
     kind: "built",
     tx,
-    decision: decision(core, attempts, tx),
+    plannedFee,
+    decision: decision(core, attempts, { tx, plannedFee }),
     ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
   };
 }
@@ -198,22 +203,22 @@ function buildDecision({
   plan,
   core,
   attempts,
-  tx,
+  built,
 }: {
   state: BotState;
   matched: MatchOutcome;
   plan: RebalancePlan;
   core: Core;
   attempts: number;
-  tx?: ccc.Transaction;
+  built?: { tx: ccc.Transaction; plannedFee: bigint };
 }): BotDecision {
   const { match } = matched;
   const actions: BotActions = {
     matchedOrders: match.partials.length,
     deposits: core.kind === "deposit" ? 1 : 0,
     withdrawalRequests: core.kind === "withdraw" ? core.deposits.length : 0,
-    completedDeposits: tx === undefined ? 0 : state.receipts.length,
-    withdrawals: tx === undefined ? 0 : state.readyWithdrawals.length,
+    completedDeposits: built === undefined ? 0 : state.receipts.length,
+    withdrawals: built === undefined ? 0 : state.readyWithdrawals.length,
   };
   return {
     match: {
@@ -243,12 +248,9 @@ function buildDecision({
     },
     core: { kind: core.kind, attempts },
     actions,
-    ...(tx === undefined
+    ...(built === undefined
       ? {}
-      : {
-          plannedFee: tx.estimateFee(state.system.feeRate),
-          transactionShape: transactionShape(tx),
-        }),
+      : { plannedFee: built.plannedFee, transactionShape: transactionShape(built.tx) }),
   };
 }
 
