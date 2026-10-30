@@ -80,18 +80,16 @@ describe("runtime config env", () => {
     );
   });
 
-  it("resolves relative key paths against INIT_CWD, then the working directory", async () => {
+  it("refuses a relative key path", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
 
     await expect(
-      readConfig({ BOT_PRIVATE_KEY_FILE: KEY_FILE_NAME, INIT_CWD: KEY_DIR }),
-    ).resolves.toMatchObject({ privateKey: VALID_PRIVATE_KEY });
-    await expect(
       readConfig({ BOT_PRIVATE_KEY_FILE: path.relative(process.cwd(), KEY_FILE_PATH) }),
-    ).resolves.toMatchObject({ privateKey: VALID_PRIVATE_KEY });
-    await expect(readConfig({ BOT_PRIVATE_KEY_FILE: KEY_FILE_NAME })).rejects.toThrow(
-      "Invalid file from env BOT_PRIVATE_KEY_FILE",
-    );
+    ).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
+    // Absolute but unreadable: the error names the variable, never the path.
+    await expect(
+      readConfig({ BOT_PRIVATE_KEY_FILE: path.join(KEY_DIR, "missing.key") }),
+    ).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
   });
 });
 

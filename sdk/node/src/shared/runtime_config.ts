@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
 
 const SECP256K1_ORDER =
@@ -40,8 +39,9 @@ export interface RuntimeConfig {
  *
  * @remarks
  * The key lives in a file rather than a variable so it never sits in a unit file, an
- * inherited environment, or `systemctl show` output. A relative file path resolves against
- * `INIT_CWD` when present, otherwise `process.cwd()`. Errors name only the variable so
+ * inherited environment, or `systemctl show` output. The path must be absolute: pnpm runs the
+ * script from the package directory, so a relative one would name a different file depending
+ * on how the actor was started. Errors name only the variable so
  * config values and signing material are not copied into logs.
  */
 export async function readRuntimeConfigEnv(
@@ -51,7 +51,7 @@ export async function readRuntimeConfigEnv(
   const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
   const rpcUrl = requireEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
-  const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
+  const privateKey = parsePrivateKey(await readFileEnv(keyFile));
   // Commas only: a space around a URL is refused like any whitespace in it. Each process
   // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
   // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
@@ -96,17 +96,14 @@ function requireEnv(env: NodeJS.ProcessEnv, name: string): EnvValue {
   return { name, value };
 }
 
-async function readFileEnv(
-  env: NodeJS.ProcessEnv,
-  { name, value }: EnvValue,
-): Promise<EnvValue> {
-  const secretPath = path.isAbsolute(value)
-    ? value
-    : path.resolve(env["INIT_CWD"] ?? process.cwd(), value);
+async function readFileEnv({ name, value }: EnvValue): Promise<EnvValue> {
+  if (!path.isAbsolute(value)) {
+    throw invalidEnvError(name);
+  }
   let fileSecret: string;
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- the path is the operator's configured key file.
-    fileSecret = await readFile(secretPath, "utf8");
+    fileSecret = await readFile(value, "utf8");
   } catch (cause) {
     throw new Error(`Invalid file from env ${name}`, { cause });
   }
