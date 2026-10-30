@@ -3,7 +3,6 @@ import { cccA } from "@ckb-ccc/core/advanced";
 import { composedClient, offlineTestnetClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
-  asyncBinarySearch,
   compareBigInt,
   defaultCellPageSize,
   findCells,
@@ -148,17 +147,6 @@ describe("isPlainCapacityCell", () => {
 
     expect(isPlainCapacityCell(typed)).toBe(false);
     expect(isPlainCapacityCell(dataCarrying)).toBe(false);
-  });
-});
-
-describe("binary search helpers", () => {
-  it("finds the first matching index asynchronously", async () => {
-    await expect(
-      asyncBinarySearch(8, async (index) => {
-        await Promise.resolve();
-        return index >= 3;
-      }),
-    ).resolves.toBe(3);
   });
 });
 
