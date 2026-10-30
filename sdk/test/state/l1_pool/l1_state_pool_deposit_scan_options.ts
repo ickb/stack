@@ -6,13 +6,12 @@ import {
   FeeRateStubClient,
   tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
-import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("scans the pool at the tip and carries the caller's timing policy on the state", async () => {
     const { sdk, logicManager } = testSdk();
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockResolvedValue([]);

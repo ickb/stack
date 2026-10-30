@@ -2,10 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Relative } from "../../../src/order/relative.ts";
-import {
-  ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type GetTransactionHash,
-  type GetTransactionReturn,
+import type {
+  GetTransactionHash,
+  GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
 import {
   directionalInfo,
@@ -20,7 +19,7 @@ import {
 
 const ORIGIN_LOOKUP_FAILURE = "origin lookup failed";
 
-describe(`${ORDER_MANAGER_FIND_ORDERS_SUITE} resolution atomicity`, () => {
+describe("OrderManager.findOrders resolution atomicity", () => {
   it("resolves every scanned group", async () => {
     const { manager, client } = twoGroupScan({ failingMasterTxHash: undefined });
 

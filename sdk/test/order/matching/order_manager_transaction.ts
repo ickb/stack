@@ -4,7 +4,6 @@ import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
 
@@ -14,7 +13,7 @@ const OWNER_LOCK = script("33");
 const WRONG_MANAGER_ERROR = "does not match this order manager";
 const EXPECTED_MATCHER_ERROR = "Expected order to be matchable";
 
-describe(ORDER_MATCHER_SUITE, () => {
+describe("OrderMatcher", () => {
   registerOrderMatcherMinimumTests();
 });
 

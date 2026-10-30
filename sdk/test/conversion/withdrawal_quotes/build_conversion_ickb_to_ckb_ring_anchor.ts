@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   expectIckbToCkbDirectPlusOrder,
   mockWithdrawalWithRemainderOrder,
   testSdk,
@@ -13,7 +12,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("leaves the segment anchor and withdraws the surplus deposit", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;

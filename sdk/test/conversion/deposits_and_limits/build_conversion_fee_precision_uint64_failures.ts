@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-  stubSigner,
-  testSdk,
-} from "./support/sdk_fixture_support.ts";
+import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -17,7 +13,7 @@ const AMOUNT_TOO_SMALL = "amount-too-small";
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("returns a typed failure when default iCKB-to-CKB fee precision exceeds Uint64", async () => {
     const { sdk, lock } = testSdk();
 

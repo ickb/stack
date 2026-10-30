@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
-import {
-  baseTransactionFixture,
-  BUILD_BASE_TRANSACTION_SUITE,
-} from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
   makeOrderGroup,
   resolveOrderGroupFixture,
@@ -73,7 +70,7 @@ function expectRealBaseTransactionEffects(
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
-describe(BUILD_BASE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildBaseTransaction", () => {
   it("combines real manager transaction effects", async () => {
     const { tx, ...effects } = await buildRealBaseTransactionCase();
 

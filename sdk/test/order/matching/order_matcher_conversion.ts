@@ -7,7 +7,6 @@ import {
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import {
   exactAdjustedConversion,
   fullMatchOutput,
@@ -16,6 +15,9 @@ import {
   resolvedOrderGroups,
 } from "./support/order_match_helpers.ts";
 import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
+
+const ORDER_MATCHER_SUITE = "OrderMatcher";
+
 describe(ORDER_MATCHER_SUITE, () => {
   it("drops unmatchable orders before returning sorted matchers", () => {
     const validA = makeOrderCell({

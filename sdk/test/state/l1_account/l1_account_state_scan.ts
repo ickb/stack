@@ -11,15 +11,11 @@ import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts"
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  FeeRateStubClient,
-  L1_STATE_SUITE,
-  tipHeaderHandler,
-} from "./support/sdk_l1_support.ts";
+import { FeeRateStubClient, tipHeaderHandler } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
     const logic = script("22");

@@ -2,11 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-  stubSigner,
-  testSdk,
-} from "./support/sdk_fixture_support.ts";
+import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,7 +12,7 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("plans CKB-to-iCKB direct deposits before fallback orders", async () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
     const calls: string[] = [];

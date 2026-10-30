@@ -10,10 +10,7 @@ import { Info } from "../../../src/order/info.ts";
 import { OrderData } from "../../../src/order/order_data.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { Relative } from "../../../src/order/relative.ts";
-import {
-  ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type GetTransactionReturn,
-} from "../fixtures/order_constants.ts";
+import type { GetTransactionReturn } from "../fixtures/order_constants.ts";
 import {
   directionalInfo,
   makeOrderCell,
@@ -25,6 +22,8 @@ import {
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
+
+const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin skips parseable non-mint origins in the master transaction", async () => {

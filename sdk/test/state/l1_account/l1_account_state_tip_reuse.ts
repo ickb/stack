@@ -3,17 +3,13 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  defaultL1Sdk,
-  FeeRateStubClient,
-  L1_STATE_SUITE,
-} from "./support/sdk_l1_support.ts";
+import { defaultL1Sdk, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("uses the sampled L1 tip when account state scanning crosses forward tip progress", async () => {
     const accountLock = script("11");
     const firstTip = headerLike(1n, { timestamp: BigInt(Date.now()), nonce: 0x01n });

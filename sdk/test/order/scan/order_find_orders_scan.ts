@@ -3,11 +3,9 @@ import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Relative } from "../../../src/order/relative.ts";
 import { defaultCellPageSize } from "../../../src/utils/utils.ts";
-import {
-  ORDER_CELL_RESOLVE_SUITE,
-  ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type GetTransactionHash,
-  type GetTransactionReturn,
+import type {
+  GetTransactionHash,
+  GetTransactionReturn,
 } from "../fixtures/order_constants.ts";
 import {
   absoluteOrderCell,
@@ -22,6 +20,10 @@ import {
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
+
+const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
+const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
+
 describe(ORDER_CELL_RESOLVE_SUITE, () => {
   it("fails closed for ambiguous equal-progress non-mint candidates", () => {
     const master = {

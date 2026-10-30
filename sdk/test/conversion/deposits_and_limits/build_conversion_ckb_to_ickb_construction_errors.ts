@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-  stubSigner,
-  testSdk,
-} from "./support/sdk_fixture_support.ts";
+import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,7 +9,7 @@ afterEach(() => {
 
 const RPC_FAILED = "RPC failed";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("fails fast on non-retryable CKB-to-iCKB construction errors", async () => {
     const { sdk, logicManager, lock } = testSdk();
     const deposit = vi.spyOn(logicManager, "deposit").mockImplementation(() => {

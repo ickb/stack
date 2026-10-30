@@ -13,9 +13,8 @@ import {
   hash,
   transactionWithOutputs,
 } from "../base/support/sdk_core_support.ts";
-import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";
 
-describe(COMPLETE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.completeTransaction", () => {
   registerFundingTests();
   registerSweepTests();
   registerIckbTests();

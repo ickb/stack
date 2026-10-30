@@ -10,13 +10,12 @@ import {
   l1SdkWithManagers,
   tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
-import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
@@ -60,7 +59,7 @@ describe(L1_STATE_SUITE, () => {
   });
 });
 
-describe(`${L1_STATE_SUITE} system order liquidity`, () => {
+describe("IckbSdk.getL1AccountState system order liquidity", () => {
   it("classifies non-user UDT-to-CKB orders as system liquidity", async () => {
     const { client, marketOrder, sdk, userLock } = l1StateWithMarketOrder({
       ratio: { ckbScale: (1n << 64n) - 1n, udtScale: 1n },

@@ -3,13 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { defaultL1Sdk, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
-import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("does not refetch the tip to detect reorgs during L1 state scanning", async () => {
     const firstTip = headerLike(1n, { timestamp: BigInt(Date.now()), nonce: 0x01n });
     const secondTip = headerLike(2n, { timestamp: BigInt(Date.now()), nonce: 0x02n });

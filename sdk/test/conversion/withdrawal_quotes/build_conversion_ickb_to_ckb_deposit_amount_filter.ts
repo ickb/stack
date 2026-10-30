@@ -4,7 +4,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -16,7 +15,7 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("skips iCKB-to-CKB deposits above the requested amount even with high surplus", async () => {
     const { sdk, ownedOwnerManager, lock } = testSdk();
     const oversized = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 0n, {

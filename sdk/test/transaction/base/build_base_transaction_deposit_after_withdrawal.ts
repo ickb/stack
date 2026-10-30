@@ -1,9 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseTransactionFixture,
-  BUILD_BASE_TRANSACTION_SUITE,
-} from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, hash } from "./support/sdk_core_support.ts";
 
@@ -13,7 +10,7 @@ afterEach(() => {
 
 const NO_COLLECT = { availableOrders: [], receipts: [], readyWithdrawals: [] };
 
-describe(BUILD_BASE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildBaseTransaction", () => {
   it("lets callers append a deposit after the withdrawal request path", () => {
     const { botLock, dao, logic, logicManager, ownedOwnerManager, sdk } =
       baseTransactionFixture();

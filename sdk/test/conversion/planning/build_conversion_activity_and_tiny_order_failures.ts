@@ -3,7 +3,6 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   mockPassthroughMint,
   stubSigner,
   testSdk,
@@ -19,7 +18,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const AMOUNT_TOO_SMALL = "amount-too-small";
 const FULL_WORKSPACE_TIMEOUT_MS = 20_000;
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("returns typed failures for invalid requested amounts", async () => {
     const { sdk, lock } = testSdk();
 
@@ -139,7 +138,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
   });
 });
 
-describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} order-only paths`, () => {
+describe("IckbSdk.buildConversionTransaction order-only paths", () => {
   it(
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {

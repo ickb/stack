@@ -3,10 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IckbDepositCell, LogicManager } from "../../../src/logic.ts";
 import type { OrderManager } from "../../../src/order/order.ts";
 import type { OwnedOwnerManager } from "../../../src/owned_owner.ts";
-import {
-  baseTransactionFixture,
-  BUILD_BASE_TRANSACTION_SUITE,
-} from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderOrder } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   depositCell,
@@ -93,7 +90,7 @@ function cellInput(byte: string): ccc.CellInput {
   });
 }
 
-describe(BUILD_BASE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildBaseTransaction", () => {
   it("requests withdrawals before input-only base activity", () => {
     const { botLock, dao, logic, orderManager, logicManager, ownedOwnerManager, sdk } =
       baseTransactionFixture();

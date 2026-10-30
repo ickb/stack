@@ -14,11 +14,6 @@ import {
   hash,
 } from "../../../transaction/base/support/sdk_core_support.ts";
 
-export {
-  BUILD_BASE_TRANSACTION_SUITE,
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-} from "../../../transaction/complete/support/sdk_suite_titles.ts";
-
 interface WithdrawalRemainderOrderMocks {
   mint: MockInstance<OrderManager["mint"]>;
   requestWithdrawal: MockInstance<OwnedOwnerManager["requestWithdrawal"]>;

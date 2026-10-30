@@ -8,7 +8,6 @@ import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 
 export { transactionWithHeader } from "@ickb/testkit";
-export { L1_STATE_SUITE } from "../../../transaction/complete/support/sdk_suite_titles.ts";
 
 export class FeeRateStubClient extends StubClient {
   public override async getFeeRate(): Promise<bigint> {
