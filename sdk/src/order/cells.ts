@@ -321,18 +321,9 @@ function compareOrderScore(left: OrderCell, right: OrderCell): number {
 /**
  * Represents a master cell
  */
-export class MasterCell implements ValueComponents {
+export class MasterCell {
   /** Raw live master cell that anchors an order group. */
   public readonly cell: ccc.Cell;
-
-  /**
-   * Gets the UDT value of the cell.
-   *
-   * For a Master Cell, the UDT amount is always zero.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint` (0n).
-   */
-  public readonly udtValue = 0n;
 
   /**
    * Creates an instance of MasterCell.
@@ -340,15 +331,6 @@ export class MasterCell implements ValueComponents {
    */
   constructor(cell: ccc.Cell) {
     this.cell = cell;
-  }
-
-  /**
-   * Gets the CKB value of the cell.
-   *
-   * @returns The total CKB amount as a `ccc.FixedPoint`.
-   */
-  public get ckbValue(): ccc.FixedPoint {
-    return this.cell.cellOutput.capacity;
   }
 
   /**

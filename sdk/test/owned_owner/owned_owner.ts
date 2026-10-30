@@ -111,8 +111,6 @@ describe("owner data", () => {
     const owner = ownerOf(owned, -1n);
 
     expect(owner.getOwned().eq(owned.cell.outPoint)).toBe(true);
-    expect(owner.ckbValue).toBe(owner.cell.cellOutput.capacity);
-    expect(owner.udtValue).toBe(0n);
   });
 
   it("rejects owner markers that point before output zero", () => {

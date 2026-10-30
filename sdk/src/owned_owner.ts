@@ -66,21 +66,13 @@ export function decodeOwnerData(outputData: ccc.Hex): OwnerData {
 /**
  * Wraps an owner marker cell that references an owned withdrawal request.
  */
-export class OwnerCell implements ValueComponents {
+export class OwnerCell {
   /** The live owner marker cell whose output data points to the owned request. */
   public cell: ccc.Cell;
-
-  /** Owner marker cells carry no UDT value. */
-  public readonly udtValue = 0n;
 
   /** Creates an owner marker wrapper for a live cell. */
   constructor(cell: ccc.Cell) {
     this.cell = cell;
-  }
-
-  /** Returns the CKB capacity held by the owner marker cell. */
-  public get ckbValue(): ccc.FixedPoint {
-    return this.cell.cellOutput.capacity;
   }
 
   /**

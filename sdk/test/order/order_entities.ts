@@ -310,7 +310,6 @@ describe("order cells", () => {
     expect(order.isFulfilled()).toBe(false);
     expect(fulfilled.isMatchable()).toBe(false);
     expect(fulfilled.isFulfilled()).toBe(true);
-    expect(master.ckbValue).toBe(master.cell.cellOutput.capacity);
     expect(group.ckbValue).toBe(
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,
     );

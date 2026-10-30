@@ -204,8 +204,6 @@ it("flags a withdrawal that stays after the next collection", async () => {
     },
     owner: {
       cell: owner,
-      udtValue: 0n,
-      ckbValue: owner.cellOutput.capacity,
       getOwned: () => request.outPoint,
     },
     ckbValue: request.cellOutput.capacity + owner.cellOutput.capacity,
