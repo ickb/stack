@@ -226,19 +226,18 @@ async function send(
   { tx, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
+  const fee = tx.estimateFee(state.system.feeRate);
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: {
-      fee: formatCkb(tx.estimateFee(state.system.feeRate)),
-      feeRate: state.system.feeRate,
-    },
+    txFee: { fee: formatCkb(fee), feeRate: state.system.feeRate },
   });
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(
       runtime.signer,
       tx,
+      fee,
       (hash) => {
         Object.assign(log, { txHash: hash });
       },

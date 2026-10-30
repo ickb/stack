@@ -150,6 +150,7 @@ function sendAndStoreTransaction(
       signAndSendTransaction(
         walletConfig.signer,
         txInfo.tx,
+        txInfo.fee,
         recordTxHash,
         txInfo.broadcastBefore,
       ),

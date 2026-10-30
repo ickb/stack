@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { capacityCell } from "@ickb/testkit";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   baseTransactionFixture,
   fundedSigner,
@@ -52,32 +51,5 @@ describe("completeTransaction with collections", () => {
       group.owned.headers[1].hash,
       baseTip.hash,
     ]);
-  });
-  it("refuses a completion that a verified re-read prices higher", async () => {
-    const { botLock, sdk } = baseTransactionFixture({ completion: "real" });
-    const { signer, cells } = fundedSigner(
-      [capacityCell(ccc.fixedPointFrom(1000), botLock, "71")],
-      [botLock],
-    );
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- called with each transaction as `this` below.
-    const getFee = ccc.Transaction.prototype.getFee;
-    // A node answers the verified re-read differently from CCC's own read: one shannon more.
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockImplementation(async function (
-      this: ccc.Transaction,
-      client: ccc.Client,
-    ): Promise<ccc.Num> {
-      const fee = await getFee.call(this, client);
-      return ccc.Proxy.inner in client ? fee + 1n : fee;
-    });
-
-    await expect(
-      sdk.completeTransaction(ccc.Transaction.default(), {
-        signer,
-        feeRate: 1000n,
-        cells,
-        protocolCells: [],
-        tip: baseTip,
-      }),
-    ).rejects.toThrow("Completion priced the fee below what the chain would take");
   });
 });

@@ -21,6 +21,9 @@ const WITNESSES_ROOT = hash("c1");
 const CAPACITY = ccc.fixedPointFrom(100);
 const CREATING = creatingTransaction(CAPACITY);
 const INPUT_OUT_POINT = { txHash: CREATING.hash(), index: 0n };
+// The body fixtures spend exactly what they create, so the fee they plan is zero.
+const PLANNED_FEE = 0n;
+const OVERPAID = "shannons of fee, more than the";
 const ALTERED_BODY_ERROR =
   "Signer altered the transaction inputs, outputs or outputs data";
 
@@ -51,7 +54,7 @@ describe("signAndSendTransaction", () => {
     });
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(), (txHash) => {
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE, (txHash) => {
         expect(txHash).toBe(TX_HASH);
         calls.push("record");
       }),
@@ -61,16 +64,25 @@ describe("signAndSendTransaction", () => {
     expect(mark).not.toHaveBeenCalled();
   });
 
-  it("rejects an excessive signed fee rate before recording or broadcast", async () => {
-    const creating = creatingTransaction(CAPACITY + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
+  it("sends the planned fee and refuses a shannon more before recording or broadcast", async () => {
+    const creating = creatingTransaction(CAPACITY + 1000n);
     const { signer, send } = signerFixture(bodyTransaction(undefined, creating), [
       creating,
     ]);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(undefined, creating), recordTxHash),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+      signAndSendTransaction(signer, bodyTransaction(undefined, creating), 1000n),
+    ).resolves.toBe(TX_HASH);
+    send.mockClear();
+    await expect(
+      signAndSendTransaction(
+        signer,
+        bodyTransaction(undefined, creating),
+        999n,
+        recordTxHash,
+      ),
+    ).rejects.toThrow(OVERPAID);
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
@@ -81,16 +93,16 @@ describe("signAndSendTransaction input verification", () => {
   it("accepts a planned cell equal to the creating transaction's output", async () => {
     const { signer } = signerFixture(bodyTransaction());
 
-    await expect(signAndSendTransaction(signer, bodyTransaction(CAPACITY))).resolves.toBe(
-      TX_HASH,
-    );
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(CAPACITY), PLANNED_FEE),
+    ).resolves.toBe(TX_HASH);
   });
 
   it("rejects a planned capacity under what the creating transaction created", async () => {
     const { signer, signTransaction, send } = signerFixture(bodyTransaction());
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(CAPACITY - 1n)),
+      signAndSendTransaction(signer, bodyTransaction(CAPACITY - 1n), PLANNED_FEE),
     ).rejects.toThrow(
       `Input ${ccc.OutPoint.from(INPUT_OUT_POINT).toHex()} differs from the cell its transaction created`,
     );
@@ -106,7 +118,7 @@ describe("signAndSendTransaction input verification", () => {
       input.cellOutput = ccc.CellOutput.from({ capacity: CAPACITY, lock: script("22") });
     }
 
-    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).rejects.toThrow(
       "differs from the cell its transaction created",
     );
 
@@ -120,7 +132,7 @@ describe("signAndSendTransaction input verification", () => {
       input.outputData = "0x01";
     }
 
-    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).rejects.toThrow(
       "differs from the cell its transaction created",
     );
 
@@ -133,7 +145,9 @@ describe("signAndSendTransaction input verification", () => {
       committedTransactionResponse(creatingTransaction(CAPACITY, "0x02")),
     );
 
-    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE),
+    ).rejects.toThrow(
       `Transaction ${INPUT_OUT_POINT.txHash} was answered with a body of another hash`,
     );
 
@@ -143,7 +157,9 @@ describe("signAndSendTransaction input verification", () => {
   it("rejects an input whose creating transaction is unknown", async () => {
     const { signer, send } = signerFixture(bodyTransaction(), []);
 
-    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE),
+    ).rejects.toThrow(
       `Input ${ccc.OutPoint.from(INPUT_OUT_POINT).toHex()} is not an output of a known transaction`,
     );
 
@@ -154,7 +170,7 @@ describe("signAndSendTransaction input verification", () => {
     const requested = bodyTransaction(undefined, CREATING, 1n);
     const { signer, send } = signerFixture(requested);
 
-    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).rejects.toThrow(
       `Input ${ccc.OutPoint.from({ ...INPUT_OUT_POINT, index: 1n }).toHex()} is not an output of a known transaction`,
     );
 
@@ -183,7 +199,9 @@ describe("signAndSendTransaction input verification", () => {
         : undefined;
     });
 
-    await expect(signAndSendTransaction(signer, requested)).resolves.toBe(TX_HASH);
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).resolves.toBe(
+      TX_HASH,
+    );
 
     expect(getTransaction).toHaveBeenCalledTimes(1);
     expect(getTransaction).toHaveBeenCalledWith(creating.hash());
@@ -204,7 +222,9 @@ describe("signAndSendTransaction economic body", () => {
     prepared.headerDeps = [hash("94")];
     const { signer } = signerFixture(prepared);
 
-    await expect(signAndSendTransaction(signer, requested)).resolves.toBe(TX_HASH);
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).resolves.toBe(
+      TX_HASH,
+    );
   });
 
   it("rejects a connector-added output before fee inspection or broadcast", async () => {
@@ -215,7 +235,7 @@ describe("signAndSendTransaction economic body", () => {
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(), recordTxHash),
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE, recordTxHash),
     ).rejects.toThrow(ALTERED_BODY_ERROR);
 
     expect(recordTxHash).not.toHaveBeenCalled();
@@ -231,7 +251,7 @@ describe("signAndSendTransaction economic body", () => {
       return requested;
     });
 
-    await expect(signAndSendTransaction(signer, requested)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, requested, PLANNED_FEE)).rejects.toThrow(
       ALTERED_BODY_ERROR,
     );
 
@@ -245,22 +265,27 @@ describe("signAndSendTransaction economic body", () => {
     }
     const { signer, send } = signerFixture(altered);
 
-    await expect(signAndSendTransaction(signer, bodyTransaction())).rejects.toThrow(
-      ALTERED_BODY_ERROR,
-    );
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE),
+    ).rejects.toThrow(ALTERED_BODY_ERROR);
 
     expect(send).not.toHaveBeenCalled();
   });
 
   it("values the verified inputs when connector metadata understates the fee", async () => {
-    const creating = creatingTransaction(CAPACITY + cccA.DEFAULT_MAX_FEE_RATE * 10_000n);
+    const creating = creatingTransaction(CAPACITY + 1n);
     const signed = bodyTransaction(CAPACITY, creating);
     const { signer, send } = signerFixture(signed, [creating]);
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
     await expect(
-      signAndSendTransaction(signer, bodyTransaction(undefined, creating), recordTxHash),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+      signAndSendTransaction(
+        signer,
+        bodyTransaction(undefined, creating),
+        PLANNED_FEE,
+        recordTxHash,
+      ),
+    ).rejects.toThrow(OVERPAID);
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
@@ -335,17 +360,20 @@ describe("signAndSendTransaction DAO interest", () => {
       withdraw: withdrawFlat,
     });
 
-    await expect(signAndSendTransaction(signer, flat.tx)).resolves.toBe(TX_HASH);
+    await expect(signAndSendTransaction(signer, flat.tx, PLANNED_FEE)).resolves.toBe(
+      TX_HASH,
+    );
 
-    // The same body at a doubled rate collects the free capacity as interest: all fee.
+    // The same body at a doubled rate collects the free capacity as interest: all fee, more
+    // than completion planned at the flat rate a node could have named instead.
     const doubled = request([deposit.hash, withdrawDoubled.hash]);
     const fixture = signerFixture(doubled.tx, [doubled.creating], {
       deposit,
       withdraw: withdrawDoubled,
     });
     await expect(
-      signAndSendTransaction(fixture.signer, doubled.tx),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientMaxFeeRateExceeded);
+      signAndSendTransaction(fixture.signer, doubled.tx, PLANNED_FEE),
+    ).rejects.toThrow(OVERPAID);
   });
 
   it("refuses a phase-2 input whose request header is its own deposit header", async () => {
@@ -358,7 +386,7 @@ describe("signAndSendTransaction DAO interest", () => {
       withdraw: deposit,
     });
 
-    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, tx, PLANNED_FEE)).rejects.toThrow(
       `Transaction ${REQUEST} is not proven in block ${deposit.hash}`,
     );
     expect(send).not.toHaveBeenCalled();
@@ -388,7 +416,7 @@ describe("signAndSendTransaction DAO interest", () => {
     const requestor = jsonRpcRequestor(signer.client);
     const requested = vi.spyOn(requestor, "request");
 
-    await expect(signAndSendTransaction(signer, tx)).resolves.toBe(TX_HASH);
+    await expect(signAndSendTransaction(signer, tx, PLANNED_FEE)).resolves.toBe(TX_HASH);
     expect(requested).toHaveBeenCalledExactlyOnceWith("get_transaction_proof", [
       [pair.hash()],
       block.hash,
@@ -404,7 +432,7 @@ describe("signAndSendTransaction DAO interest", () => {
       withdraw: withdrawElsewhere,
     });
 
-    await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+    await expect(signAndSendTransaction(signer, tx, PLANNED_FEE)).rejects.toThrow(
       `Transaction ${REQUEST} is not proven in block ${withdrawElsewhere.hash}`,
     );
     expect(send).not.toHaveBeenCalled();
@@ -418,7 +446,7 @@ describe("signAndSendTransaction DAO interest", () => {
         withdraw: withdrawFlat,
       });
 
-      await expect(signAndSendTransaction(signer, tx)).rejects.toThrow(
+      await expect(signAndSendTransaction(signer, tx, PLANNED_FEE)).rejects.toThrow(
         "is valued at a header the transaction does not name",
       );
       expect(send).not.toHaveBeenCalled();
@@ -462,9 +490,9 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     const { signer, send } = signerFixture();
     send.mockRejectedValueOnce(duplicatedTransaction(TX_HASH));
 
-    await expect(signAndSendTransaction(signer, ccc.Transaction.default())).resolves.toBe(
-      TX_HASH,
-    );
+    await expect(
+      signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
+    ).resolves.toBe(TX_HASH);
   });
 
   it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {
@@ -473,7 +501,7 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     send.mockRejectedValueOnce(duplicate);
 
     await expect(
-      signAndSendTransaction(signer, ccc.Transaction.default()),
+      signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
     ).rejects.toEqual(
       expect.objectContaining({
         name: "TransactionBroadcastError",
@@ -489,7 +517,7 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     send.mockRejectedValueOnce(transportError);
 
     await expect(
-      signAndSendTransaction(signer, ccc.Transaction.default()),
+      signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
     ).rejects.toEqual(
       expect.objectContaining({
         name: "TransactionBroadcastError",
@@ -503,9 +531,9 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     const { signer, send } = signerFixture();
     send.mockResolvedValueOnce(hash("82"));
 
-    await expect(signAndSendTransaction(signer, ccc.Transaction.default())).resolves.toBe(
-      TX_HASH,
-    );
+    await expect(
+      signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
+    ).resolves.toBe(TX_HASH);
   });
 });
 
@@ -524,6 +552,7 @@ describe("signAndSendTransaction broadcast deadline", () => {
       signAndSendTransaction(
         signer,
         bodyTransaction(),
+        PLANNED_FEE,
         recordTxHash,
         deadline(TIP_EPOCH),
       ),
@@ -541,13 +570,14 @@ describe("signAndSendTransaction broadcast deadline", () => {
       signAndSendTransaction(
         signer,
         bodyTransaction(),
+        PLANNED_FEE,
         undefined,
         deadline(TIP_EPOCH.add([0n, 1n, 2n])),
       ),
     ).resolves.toBe(TX_HASH);
-    await expect(signAndSendTransaction(signer, bodyTransaction())).resolves.toBe(
-      TX_HASH,
-    );
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE),
+    ).resolves.toBe(TX_HASH);
     expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
 });

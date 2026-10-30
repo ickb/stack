@@ -106,6 +106,7 @@ async function sendBuiltTransaction({
   try {
     txHash = await context.runtime.sendTransaction(
       result.tx,
+      sent.fee,
       (hash) => {
         recordedHash = hash;
       },

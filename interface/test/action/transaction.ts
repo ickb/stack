@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("buildTransactionPreview", () => {
-  it("delegates planning and completion to the SDK and reports the completed fee", async () => {
+  it("delegates planning and completion to the SDK and reports the planned fee", async () => {
     const tx = txWithInput("99");
     const notice = { inputIckb: 1n, outputCkb: 1n, incentiveCkb: 0n };
     const buildConversionTransaction = buildConversionTransactionMock(
@@ -32,7 +32,9 @@ describe("buildTransactionPreview", () => {
         conversionNotice: notice,
       }),
     );
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(42n);
+    const estimateFee = vi
+      .spyOn(ccc.Transaction.prototype, "estimateFee")
+      .mockReturnValue(42n);
     const txContext = context({
       system: { ...context().system, feeRate: 9n },
     });
@@ -62,12 +64,12 @@ describe("buildTransactionPreview", () => {
       estimatedMaturity: 123n,
       conversionNotice: notice,
     });
+    expect(estimateFee).toHaveBeenCalledWith(9n);
   });
 
   it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await buildTransactionPreview(
       context({ ickbAvailable: 5n }),
@@ -96,7 +98,6 @@ describe("buildTransactionPreview", () => {
         ),
       },
     });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     await expect(
       buildTransactionPreview(context(), true, 0n, own(config), config),
@@ -201,7 +202,6 @@ describe("buildTransactionPreview destination", () => {
       hashType: config.primaryLock.hashType,
       args: "0x22",
     });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     const txInfo = await buildTransactionPreview(
       context(),
@@ -224,7 +224,6 @@ describe("buildTransactionPreview destination", () => {
       successfulPlan({ broadcastBefore }),
     );
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     const txInfo = await buildTransactionPreview(
       context(),
@@ -259,7 +258,6 @@ describe("buildTransactionPreview completion", () => {
     const completeFeeBy = vi
       .spyOn(ccc.Transaction.prototype, "completeFeeBy")
       .mockResolvedValue([0, false]);
-    vi.spyOn(ccc.Transaction.prototype, "getFee").mockResolvedValue(1n);
 
     const config = walletConfigWith({});
     await buildTransactionPreview(

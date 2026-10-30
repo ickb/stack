@@ -40,6 +40,7 @@ export interface Runtime {
   /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */
   sendTransaction: (
     tx: ccc.TransactionLike,
+    plannedFee: ccc.Num,
     recordTxHash?: (txHash: ccc.Hex) => void,
     broadcastBefore?: BroadcastDeadline,
   ) => Promise<ccc.Hex>;

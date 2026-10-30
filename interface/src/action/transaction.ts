@@ -78,7 +78,8 @@ export async function buildTransactionPreview(
     return Object.freeze({
       tx: result.tx,
       error: "",
-      fee: await result.tx.getFee(walletConfig.signer.client),
+      // The fee completion priced, which the send refuses to exceed.
+      fee: result.tx.estimateFee(context.system.feeRate),
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversion.kind,
       ...(destination.moveTo === undefined

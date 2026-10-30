@@ -50,11 +50,13 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   signAndSendTransaction.mockReset();
-  signAndSendTransaction.mockImplementation(async (_signer, _tx, recordTxHash) => {
-    recordTxHash?.(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
+  signAndSendTransaction.mockImplementation(
+    async (_signer, _tx, _plannedFee, recordTxHash) => {
+      recordTxHash?.(txHash);
+      await Promise.resolve();
+      return txHash;
+    },
+  );
   waitTransaction.mockReset();
   vi.unstubAllGlobals();
 });
@@ -125,7 +127,8 @@ describe("transact fresh preview boundary", () => {
     expect(signAndSendTransaction.mock.calls[0]?.[0]).toBe(calls.walletConfig.signer);
     expect(signAndSendTransaction.mock.calls[0]?.[1]).toBe(freshTxInfo.tx);
     expect(signAndSendTransaction.mock.calls[0]?.[1]).not.toBe(cachedTx);
-    expect(typeof signAndSendTransaction.mock.calls[0]?.[2]).toBe("function");
+    expect(signAndSendTransaction.mock.calls[0]?.[2]).toBe(freshTxInfo.fee);
+    expect(typeof signAndSendTransaction.mock.calls[0]?.[3]).toBe("function");
     expect(calls.formReset).toHaveBeenCalledTimes(1);
     expect(walletQueryClient(calls.walletConfig).invalidateQueries).toHaveBeenCalledWith({
       queryKey: l1StateQueryKey(calls.walletConfig),
@@ -478,11 +481,13 @@ describe("attempt ownership during send", () => {
     const controller = new AbortController();
     const sent = Promise.withResolvers<ccc.Hex>();
     const calls = transactionCalls(refreshedPreview(), undefined, controller);
-    signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-      const hash = await sent.promise;
-      recordTxHash?.(hash);
-      return hash;
-    });
+    signAndSendTransaction.mockImplementationOnce(
+      async (_signer, _tx, _plannedFee, recordTxHash) => {
+        const hash = await sent.promise;
+        recordTxHash?.(hash);
+        return hash;
+      },
+    );
     const attempt = transact(calls);
     await vi.waitFor(() => {
       expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
@@ -561,13 +566,15 @@ describe("attempt ownership after broadcast", () => {
 
 /** The next send records the hash, then loses the node's answer. */
 function ambiguousSend(): void {
-  signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-    await Promise.resolve();
-    recordTxHash?.(txHash);
-    throw new TransactionBroadcastError(txHash, {
-      cause: new TypeError(rpcUnavailable),
-    });
-  });
+  signAndSendTransaction.mockImplementationOnce(
+    async (_signer, _tx, _plannedFee, recordTxHash) => {
+      await Promise.resolve();
+      recordTxHash?.(txHash);
+      throw new TransactionBroadcastError(txHash, {
+        cause: new TypeError(rpcUnavailable),
+      });
+    },
+  );
 }
 
 /** Establishes pending state exactly as a completed submission does. */

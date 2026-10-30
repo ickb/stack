@@ -68,10 +68,12 @@ const { createRoot } = await import("react-dom/client");
 beforeEach(() => {
   mocks.layout = undefined;
   mocks.signAndSendTransaction.mockReset();
-  mocks.signAndSendTransaction.mockImplementation(async (signer, tx, recordTxHash) => {
-    recordTxHash?.(txHash);
-    return fakeSend(signer)(tx);
-  });
+  mocks.signAndSendTransaction.mockImplementation(
+    async (signer, tx, _plannedFee, recordTxHash) => {
+      recordTxHash?.(txHash);
+      return fakeSend(signer)(tx);
+    },
+  );
   mocks.waitTransaction.mockReset();
   mocks.waitTransaction.mockImplementation(waitUntilStopped);
 });

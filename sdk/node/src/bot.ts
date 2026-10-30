@@ -62,8 +62,8 @@ try {
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, feeRate, cells, protocolCells, tip) =>
       sdk.completeTransaction(tx, { signer, feeRate, cells, protocolCells, tip }),
-    sendTransaction: async (tx, recordTxHash, broadcastBefore) =>
-      signAndSendTransaction(signer, tx, recordTxHash, broadcastBefore),
+    sendTransaction: async (tx, plannedFee, recordTxHash, broadcastBefore) =>
+      signAndSendTransaction(signer, tx, plannedFee, recordTxHash, broadcastBefore),
   };
   for (;;) {
     const started = Date.now();

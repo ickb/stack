@@ -83,7 +83,7 @@ beforeEach(() => {
     return true;
   });
   sendMock.mockReset();
-  sendMock.mockImplementation(async (_signer, _tx, recordTxHash) => {
+  sendMock.mockImplementation(async (_signer, _tx, _plannedFee, recordTxHash) => {
     await Promise.resolve();
     recordTxHash?.(TX_HASH);
     return TX_HASH;
@@ -155,7 +155,7 @@ describe("runStimulusTurn", () => {
 
     expect(mint).not.toHaveBeenCalled();
     // The SDK's broadcast deadline reaches the sender.
-    expect(sendMock.mock.calls[0]?.[3]).toBe(DEADLINE);
+    expect(sendMock.mock.calls[0]?.[4]).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },

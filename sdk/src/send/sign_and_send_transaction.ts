@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { cccA } from "@ckb-ccc/core/advanced";
 import type { BroadcastDeadline } from "../dao.ts";
 import { jsonRpcRequestor, unique } from "../utils/utils.ts";
 import { verifiedClient } from "../utils/verified_client.ts";
@@ -38,10 +37,12 @@ export class TransactionExpiredError extends Error {
  * RPC, then broadcasts without CCC's cache wrapper.
  *
  * @remarks Nothing is signed unless every input equals the output its creating
- * transaction made and the signer kept the ordered inputs, outputs and outputs data. The
- * fee is measured from verified values, a phase-2 DAO input proven in its request block
- * with `get_transaction_proof`, so the client must be JSON-RPC. When `broadcastBefore` is
- * given, the send is refused with `TransactionExpiredError` once a fresh tip reaches it.
+ * transaction made and the signer kept the ordered inputs, outputs and outputs data.
+ * Nothing is sent when the chain would take more fee than `plannedFee`, the fee completion
+ * priced, `tx.estimateFee(feeRate)` at its rate. That fee is measured from verified values,
+ * a phase-2 DAO input proven in its request block with `get_transaction_proof`, so the
+ * client must be JSON-RPC. When `broadcastBefore` is given, the send is refused with
+ * `TransactionExpiredError` once a fresh tip reaches it.
  * `recordTxHash` runs before the send RPC. A node already holding this exact transaction
  * is an acceptance; any other send failure throws `TransactionBroadcastError`. Why each
  * check exists: SDK README, Signing and broadcast.
@@ -49,6 +50,7 @@ export class TransactionExpiredError extends Error {
 export async function signAndSendTransaction(
   signer: ccc.Signer,
   tx: ccc.TransactionLike,
+  plannedFee: ccc.Num,
   recordTxHash?: (txHash: ccc.Hex) => void,
   broadcastBefore?: BroadcastDeadline,
 ): Promise<ccc.Hex> {
@@ -63,9 +65,14 @@ export async function signAndSendTransaction(
     throw new Error("Signer altered the transaction inputs, outputs or outputs data");
   }
   const txHash = signed.hash();
-  const feeRate = await verifiedFeeRate(client, signed, inputs);
-  if (feeRate > cccA.DEFAULT_MAX_FEE_RATE) {
-    throw new ccc.ErrorClientMaxFeeRateExceeded(cccA.DEFAULT_MAX_FEE_RATE, feeRate);
+  // Completion priced phase-2 interest through the signer's client at whatever header the
+  // node named: a lower rate shortens the change, and the miner would keep the difference
+  // under any fee-rate ceiling.
+  const fee = await verifiedFee(client, signed, inputs);
+  if (fee > plannedFee) {
+    throw new Error(
+      `Transaction ${txHash} pays ${String(fee)} shannons of fee, more than the ${String(plannedFee)} planned`,
+    );
   }
   if (broadcastBefore !== undefined) {
     const { epoch } = await verifiedClient(
@@ -127,15 +134,15 @@ async function verifiedInputs(
   );
 }
 
-// The fee rate the chain will see: the verified inputs' capacity, plus the interest a
-// phase-2 DAO input collects, less the outputs, over the signed size. CCC values that
+// The fee the chain will take: the verified inputs' capacity, plus the interest a phase-2
+// DAO input collects, less the outputs. CCC values that
 // interest from headers it reads afresh, and a node names which block created a cell;
 // the chain values it at headers the transaction names in its deps, the deposit header
 // at the number the cell's data records and the request header at the block that
 // committed the request, which the node must prove (assertCommittedIn), once per request
 // transaction. The deposit header is then the one the cell's data numbers and the request
 // header the real request block, so dao.c's own rules settle the rest on chain.
-async function verifiedFeeRate(
+async function verifiedFee(
   client: ccc.Client,
   signed: ccc.Transaction,
   inputs: readonly ccc.Cell[],
@@ -161,8 +168,7 @@ async function verifiedFeeRate(
     }
     capacity += ccc.calcDaoProfit(cell.capacityFree, depositHeader, withdrawHeader);
   }
-  const fee = capacity - signed.getOutputsCapacity();
-  return (fee * 1000n) / BigInt(signed.toBytes().length + 4);
+  return capacity - signed.getOutputsCapacity();
 }
 
 /**
