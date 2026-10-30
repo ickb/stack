@@ -1,11 +1,10 @@
-// organize-imports-ignore: the fake hooks must replace React before anything imports it.
-import { hookState, resetHooks } from "./fixtures/fakeReact.ts";
 import { ccc } from "@ckb-ccc/ccc";
 import { StubClient } from "@ickb/testkit";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
+import { inAct, renderHook } from "../support/renderHook.ts";
 import {
   connectionInfoKey,
   quoteState,
@@ -30,200 +29,188 @@ import {
   type RootConfig,
 } from "./fixtures/modules.ts";
 
-/** What the landing page hands its header and action. */
-interface LandingView {
-  action: string;
-  message: string;
-  open: () => void;
-  selectChain: (chain: RootConfig["chain"]) => void;
-}
-
-interface LandingPageTestContext {
-  open: ReturnType<typeof vi.fn<() => void>>;
-  setClient: ReturnType<typeof vi.fn<(client: unknown) => void>>;
-  setIsCkb2Udt: ReturnType<typeof vi.fn<(value: boolean) => void>>;
-  setText: ReturnType<typeof vi.fn<(value: string) => void>>;
-}
+type LandingProps = Parameters<typeof LandingPage>[0];
 
 describe("hook-based wallet gate", () => {
-  registerWalletGateBranchTests();
-  registerLandingPageStateTests();
-});
-
-function registerWalletGateBranchTests(): void {
-  it("selects wallet gate branches from connector and signer state", () => {
-    connectorMock.signer = undefined;
+  it("selects wallet gate branches from connector and signer state", async () => {
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckt" });
-    expect(firstElement(childElements(WalletGate())).type).toBe(LandingPage);
+    const { result, rerender, unmount } = await renderHook(() => WalletGate(), undefined);
+    expect(firstElement(childElements(result.current)).type).toBe(LandingPage);
+    // The chain follows the connector's client and is saved, and a client change closes
+    // the connector's modal.
+    expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
+    expect(connectorMock.ccc.close).toHaveBeenCalledTimes(1);
 
-    resetHooks();
-    globalThis.localStorage.setItem(selectedChainKey, "testnet");
-    connectorMock.signer = undefined;
+    // The saved chain does not override the client's.
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
-    expect(firstElement(childElements(WalletGate())).type).toBe(LandingPage);
+    await rerender(undefined);
+    expect(firstElement(childElements(result.current)).type).toBe(LandingPage);
+    expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("mainnet");
+    expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
-    resetHooks();
+    // A signer change on the same client neither saves nor closes again.
     connectorMock.signer = signerInfo(ccc.SignerType.BTC, "ckb");
-    connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
-    expect(WalletGate().type).toBe(CkbSignerRequired);
+    await rerender(undefined);
+    expect(result.current.type).toBe(CkbSignerRequired);
+    expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
-    resetHooks();
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckb-dev");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb-dev" });
-    expect(WalletGate().type).toBe(UnsupportedNetwork);
+    await rerender(undefined);
+    expect(result.current.type).toBe(UnsupportedNetwork);
 
-    resetHooks();
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckt");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
-    expect(WalletGate().type).toBe(SwitchingWalletNetwork);
+    await rerender(undefined);
+    expect(result.current.type).toBe(SwitchingWalletNetwork);
 
-    resetHooks();
-    connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckt");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckt" });
     connectorMock.ccc.wallet = { name: "JoyID" };
     connectorMock.ccc.signerInfo = { name: "CKB" };
-    expect(WalletGate().type).toBe(WalletConfigGate);
-    // The chain follows the connector's client, connected or not, and a client pick in the
-    // modal closes it.
+    await rerender(undefined);
+    expect(result.current.type).toBe(WalletConfigGate);
+    expect(
+      elementProps<Parameters<typeof WalletConfigGate>[0]>(result.current),
+    ).toMatchObject({ walletName: "JoyID CKB", signer: connectorMock.signer });
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
-    expect(connectorMock.ccc.close).toHaveBeenCalledWith();
-  });
-}
-
-function registerLandingPageStateTests(): void {
-  it("drives landing page connect, restore, cleanup, and chain selection state", () => {
-    const context = landingPageTestContext();
-    expect(context.open).not.toHaveBeenCalled();
-    assertInitialLandingBranch(context);
-    const restoringProps = assertRestoringBranch(context);
-    assertCleanupBranch(context);
-    assertChainSelectionBranch(context, restoringProps);
+    await unmount();
   });
 
-  it("connects and selects a chain when localStorage acquisition throws", () => {
-    const context = landingPageTestContext();
+  it("connects at once without a saved connection", async () => {
+    const props = landingProps("mainnet", { data: quoteState() });
+    const { result, unmount } = await renderHook(LandingPage, props);
+
+    expect(landingView(result.current)).toMatchObject({ action: "Connect wallet" });
+    expect(landingView(result.current).message).toMatch(/^This is an estimate\./u);
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    expect(props.open).toHaveBeenCalledTimes(1);
+    expect(props.open).toHaveBeenCalledWith();
+    expect(props.setClient).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it("restores a saved connection before opening the connector", async () => {
+    vi.useFakeTimers();
+    saveConnection();
+    const props = landingProps("testnet", { data: undefined, isError: false });
+    const { result, unmount } = await renderHook(LandingPage, props);
+    expect(landingView(result.current).message).toMatch(
+      /^Loading live exchange rate\.\.\. This is an estimate\./u,
+    );
+
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    expect(landingView(result.current).action).toBe("Restoring Testnet wallet");
+    expect(props.open).not.toHaveBeenCalled();
+
+    await inAct(() => {
+      vi.runAllTimers();
+    });
+    expect(props.open).toHaveBeenCalledTimes(1);
+    expect(landingView(result.current).action).toBe("Connect wallet");
+    await unmount();
+  });
+
+  it("drops the pending open when the page unmounts or the chain changes", async () => {
+    vi.useFakeTimers();
+    saveConnection();
+    const props = landingProps("testnet", { data: undefined, isError: false });
+    const unmounted = await renderHook(LandingPage, props);
+    await inAct(() => {
+      landingView(unmounted.result.current).open();
+    });
+    await unmounted.unmount();
+    vi.runAllTimers();
+    expect(props.open).not.toHaveBeenCalled();
+
+    const { result, unmount } = await renderHook(LandingPage, props);
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    await inAct(() => {
+      landingView(result.current).selectChain("mainnet");
+    });
+    expect(lendsClient(props, mainnetClient)).toBe(true);
+    expect(landingView(result.current).action).toBe("Connect wallet");
+    await inAct(() => {
+      vi.runAllTimers();
+    });
+    expect(props.open).not.toHaveBeenCalled();
+    expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
+    await unmount();
+  });
+
+  it("connects and selects a chain when localStorage acquisition throws", async () => {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       get: () => {
         throw new Error("blocked");
       },
     });
+    const gate = await renderHook(() => WalletGate(), undefined);
+    expect(firstElement(childElements(gate.result.current)).type).toBe(LandingPage);
+    await gate.unmount();
 
-    expect(() => {
-      WalletGate();
-    }).not.toThrow();
-    resetHooks();
-    const props = renderLandingPage(context, "mainnet", { data: quoteState() });
-
-    expect(() => {
-      props.open();
-    }).not.toThrow();
-    expect(context.open).toHaveBeenCalledTimes(1);
-    expect(() => {
-      props.selectChain("testnet");
-    }).not.toThrow();
-    expect(lendsClient(context, testnetClient)).toBe(true);
+    const props = landingProps("mainnet", { data: quoteState() });
+    const { result, unmount } = await renderHook(LandingPage, props);
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    expect(props.open).toHaveBeenCalledTimes(1);
+    await inAct(() => {
+      landingView(result.current).selectChain("testnet");
+    });
+    expect(lendsClient(props, testnetClient)).toBe(true);
+    await unmount();
   });
-}
+});
 
-function landingPageTestContext(): LandingPageTestContext {
-  vi.useFakeTimers();
+/** The landing page's props, one object so every re-render sees the same config. */
+function landingProps(
+  chain: RootConfig["chain"],
+  liveQuote: Parameters<typeof quoteStateQuery>[0],
+): LandingProps & {
+  open: ReturnType<typeof vi.fn<() => void>>;
+  setClient: ReturnType<typeof vi.fn<(client: unknown) => void>>;
+} {
   return {
     open: vi.fn<() => void>(),
     setClient: vi.fn<(client: unknown) => void>(),
+    rootConfig: rootConfig(chain),
+    isCkb2Udt: true,
     setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+    text: "1",
     setText: vi.fn<(value: string) => void>(),
+    quoteStateQuery: quoteStateQuery(liveQuote),
   };
 }
 
-function assertInitialLandingBranch(context: LandingPageTestContext): void {
-  const props = renderLandingPage(context, "mainnet", { data: quoteState() });
-  props.open();
-  expect(context.open).toHaveBeenCalledTimes(1);
-  expect(context.open).toHaveBeenCalledWith();
-  expect(context.setClient).not.toHaveBeenCalled();
-  expect(props.action).toBe("Connect wallet");
-  expect(props.message).toMatch(/^This is an estimate\./u);
-  runEffectCleanups();
-}
-
-function assertRestoringBranch(context: LandingPageTestContext): LandingView {
-  resetLandingHooksWithStoredConnection();
-  const restoringProps = renderLandingPage(context, "testnet", {
-    data: undefined,
-    isError: false,
-  });
-  restoringProps.open();
-  hookState.index = 0;
-  expect(
-    renderLandingPage(context, "testnet", { data: undefined, isError: false }).action,
-  ).toBe("Restoring Testnet wallet");
-  vi.runAllTimers();
-  expect(context.open).toHaveBeenCalledTimes(2);
-  return restoringProps;
-}
-
-function assertCleanupBranch(context: LandingPageTestContext): void {
-  resetLandingHooksWithStoredConnection();
-  renderLandingPage(context, "testnet", { data: undefined, isError: false }).open();
-  runEffectCleanups();
-}
-
-function assertChainSelectionBranch(
-  context: LandingPageTestContext,
-  restoringProps: LandingView,
-): void {
-  resetLandingHooksWithStoredConnection();
-  renderLandingPage(context, "testnet", { data: undefined, isError: false }).open();
-  restoringProps.selectChain("mainnet");
-  vi.runAllTimers();
-  expect(lendsClient(context, mainnetClient)).toBe(true);
-  expect(restoringProps.message).toMatch(
-    /^Loading live exchange rate\.\.\. This is an estimate\./u,
-  );
-  expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
-}
-
-function renderLandingPage(
-  context: LandingPageTestContext,
-  chain: RootConfig["chain"],
-  liveQuote: Parameters<typeof quoteStateQuery>[0],
-): LandingView {
-  return landingView(
-    LandingPage({
-      open: context.open,
-      setClient: context.setClient,
-      rootConfig: rootConfig(chain),
-      isCkb2Udt: true,
-      setIsCkb2Udt: context.setIsCkb2Udt,
-      text: "1",
-      setText: context.setText,
-      quoteStateQuery: quoteStateQuery(liveQuote),
-    }),
-  );
-}
-
-function resetLandingHooksWithStoredConnection(): void {
-  resetHooks();
+function saveConnection(): void {
   globalThis.localStorage.setItem(
     connectionInfoKey,
     JSON.stringify({ walletName: "JoyID", signerName: "CKB" }),
   );
 }
 
-function runEffectCleanups(): void {
-  for (const cleanup of hookState.effects) {
-    cleanup();
-  }
-}
-
 /** Whether the landing tabs last lent the connector an Owner of this client. */
-function lendsClient(context: LandingPageTestContext, client: unknown): boolean {
-  const owner: unknown = context.setClient.mock.lastCall?.[0];
+function lendsClient(
+  props: { setClient: ReturnType<typeof vi.fn<(client: unknown) => void>> },
+  client: unknown,
+): boolean {
+  const owner: unknown = props.setClient.mock.lastCall?.[0];
   return ccc.Owner.is(owner) && owner.value === client;
 }
 
-function landingView(element: ReactElement): LandingView {
+/** What the landing page hands its header and action. */
+function landingView(element: ReactElement): {
+  action: string;
+  message: string;
+  open: () => void;
+  selectChain: (chain: RootConfig["chain"]) => void;
+} {
   const { header, action } = elementProps<{ header: ReactElement; action: ReactElement }>(
     element,
   );
@@ -234,7 +221,9 @@ function landingView(element: ReactElement): LandingView {
     open: (): void => {
       layout.onAction?.();
     },
-    selectChain: elementProps<Pick<LandingView, "selectChain">>(header).selectChain,
+    selectChain: elementProps<{ selectChain: (chain: RootConfig["chain"]) => void }>(
+      header,
+    ).selectChain,
   };
 }
 
