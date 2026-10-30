@@ -29,6 +29,10 @@ export const CheckedInt32LE = ccc.Codec.from<ccc.NumLike, number>({
   },
 });
 
+// CCC's unsigned codecs throw on overflow but encode a negative as its two's complement
+// without a word, and `Ratio.toBytes()` is public and skips `validate`, so these checked
+// codecs keep "never encode a negative" in one place; CCC has no signed Int32 codec at all.
+
 /** Checked codec for 8-bit unsigned integers. */
 export const CheckedUint8 = checkedUintLE(1);
 
