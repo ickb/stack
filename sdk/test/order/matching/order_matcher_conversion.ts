@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   OrderConversionRepresentabilityError,
@@ -14,7 +15,7 @@ import {
   resolvedOrderGroup,
   resolvedOrderGroups,
 } from "./support/order_match_helpers.ts";
-import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
+import { makeOrderCell } from "./support/order_order_helpers.ts";
 
 const ORDER_MATCHER_SUITE = "OrderMatcher";
 

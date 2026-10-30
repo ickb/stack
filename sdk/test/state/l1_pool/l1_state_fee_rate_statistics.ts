@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { headerHash } from "../../../src/utils/verified_client.ts";
@@ -95,17 +96,17 @@ async function responseFor(method: string): Promise<unknown> {
         compact_target: "0x0",
         dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
         epoch: "0x1",
-        extra_hash: byte32("aa"),
+        extra_hash: byte32FromByte("aa"),
         nonce: "0x0",
         number: "0x3",
-        parent_hash: byte32("cc"),
-        proposals_hash: byte32("dd"),
+        parent_hash: byte32FromByte("cc"),
+        proposals_hash: byte32FromByte("dd"),
         timestamp: ccc.numToHex(Date.now()),
-        transactions_root: byte32("ee"),
+        transactions_root: byte32FromByte("ee"),
         version: "0x0",
       } as const;
       const hash = headerHash(
-        cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32("bb") }),
+        cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32FromByte("bb") }),
       );
       return { ...fields, hash };
     }
@@ -116,8 +117,4 @@ async function responseFor(method: string): Promise<unknown> {
       throw new Error(`Unexpected JSON-RPC method: ${method}`);
     }
   }
-}
-
-function byte32(byte: string): ccc.Hex {
-  return `0x${byte.repeat(32)}`;
 }

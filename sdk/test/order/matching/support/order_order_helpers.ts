@@ -5,8 +5,6 @@ import { Info } from "../../../../src/order/info.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 
-export { byte32FromByte } from "@ickb/testkit";
-
 export function directionalInfo(): Info {
   return Info.from({
     ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 1n }),

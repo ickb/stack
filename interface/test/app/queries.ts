@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { Ratio, WALLET_LOCK_UP, type WithdrawalGroup } from "@ickb/sdk";
 
-import { headerLike, StubClient } from "@ickb/testkit";
+import { headerLike, offlineTestnetClient, script, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -13,14 +13,7 @@ import {
 } from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
-import {
-  cell,
-  script,
-  stateSdk,
-  testClient,
-  testSigner,
-  walletConfigForState,
-} from "./fixtures/query.ts";
+import { cell, stateSdk, testSigner, walletConfigForState } from "./fixtures/query.ts";
 
 function itKeysL1StateByAccountLocks(): void {
   it("keys L1 state by the wallet config object, not its shape", () => {
@@ -37,7 +30,7 @@ function itPollsLiveStateUnlessFrozen(): void {
   it("polls live state every minute unless a transaction is frozen", () => {
     const walletConfig = {
       chain: "testnet",
-      cccClient: testClient(),
+      cccClient: offlineTestnetClient(),
       resetClient: vi.fn<() => void>(),
       queryClient: new QueryClient(),
       signer: testSigner(),

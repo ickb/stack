@@ -8,7 +8,7 @@ import {
   WALLET_LOCK_UP,
 } from "@ickb/sdk";
 
-import { byte32FromByte, headerLike, offlineTestnetClient } from "@ickb/testkit";
+import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
@@ -36,7 +36,7 @@ export function walletConfigWith(
 function walletConfig(
   overrides: Partial<Parameters<typeof buildTransactionPreview>[4]> = {},
 ): Parameters<typeof buildTransactionPreview>[4] {
-  const cccClient = testClient();
+  const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",
     cccClient,
@@ -119,20 +119,8 @@ export function context(
   };
 }
 
-function testClient(): ccc.Client {
-  return offlineTestnetClient();
-}
-
 function testSigner(client: ccc.Client): ccc.Signer {
   return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
 }
 
 function testSdk(

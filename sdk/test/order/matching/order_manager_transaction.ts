@@ -1,11 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
-import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
+import { makeOrderCell } from "./support/order_order_helpers.ts";
 
 const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
@@ -304,14 +305,6 @@ function masterCell(): ccc.Cell {
     outPoint: { txHash: byte32FromByte("66"), index: 1n },
     cellOutput: { capacity: 61n, lock: OWNER_LOCK, type: ORDER_SCRIPT },
     outputData: "0x",
-  });
-}
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(byte),
-    hashType: "type",
-    args: "0x",
   });
 }
 
