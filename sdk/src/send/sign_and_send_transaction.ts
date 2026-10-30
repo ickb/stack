@@ -66,11 +66,10 @@ export async function signAndSendTransaction(
     throw new Error("Signer altered the transaction inputs, outputs or outputs data");
   }
   const txHash = signed.hash();
-  // Completion priced phase-2 interest through the signer's client at whatever header the
-  // node named: a lower rate shortens the change, and the miner would keep the difference
-  // under any fee-rate ceiling.
   const fee = await verifiedFee(client, signed, inputs);
-  if (fee > plannedFee) {
+  // numFrom throws on a missing or non-numeric fee, where a bare comparison of a bigint with
+  // undefined would be false and let a plain JavaScript caller through unchecked.
+  if (fee > ccc.numFrom(plannedFee)) {
     throw new Error(
       `Transaction ${txHash} pays ${String(fee)} shannons of fee, more than the ${String(plannedFee)} planned`,
     );
@@ -136,13 +135,15 @@ async function verifiedInputs(
 }
 
 // The fee the chain will take: the verified inputs' capacity, plus the interest a phase-2
-// DAO input collects, less the outputs. CCC values that
-// interest from headers it reads afresh, and a node names which block created a cell;
-// the chain values it at headers the transaction names in its deps, the deposit header
-// at the number the cell's data records and the request header at the block that
-// committed the request, which the node must prove (assertCommittedIn), once per request
-// transaction. The deposit header is then the one the cell's data numbers and the request
-// header the real request block, so dao.c's own rules settle the rest on chain.
+// DAO input collects, less the outputs. Completion priced that interest through the
+// signer's client at whatever header the node named, so a lower rate there shortened the
+// change; the miner would keep the difference under any fee-rate ceiling. A node names
+// which block created a cell; the chain values it at headers the transaction names in its
+// deps, the deposit header at the number the cell's data records and the request header
+// at the block that committed the request, which the node must prove
+// (assertCommittedIn), once per request transaction. The deposit header is then the one
+// the cell's data numbers and the request header the real request block, so dao.c's own
+// rules settle the rest on chain.
 async function verifiedFee(
   client: ccc.Client,
   signed: ccc.Transaction,
