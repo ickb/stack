@@ -1,4 +1,4 @@
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const args = process.argv.slice(2);
@@ -31,21 +31,11 @@ if (check && changed.length > 0) {
   throw new Error(`Declaration imports need rewriting:\n${changed.join("\n")}`);
 }
 
-async function declarationFiles(filePath: string): Promise<string[]> {
-  const stats = await stat(filePath);
-  if (stats.isFile()) {
-    return filePath.endsWith(".d.ts") ? [filePath] : [];
-  }
-  if (!stats.isDirectory()) {
-    return [];
-  }
-
-  const entries = await readdir(filePath, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    files.push(...(await declarationFiles(path.join(filePath, entry.name))));
-  }
-  return files;
+async function declarationFiles(root: string): Promise<string[]> {
+  const names = await readdir(root, { recursive: true });
+  return names
+    .filter((name) => name.endsWith(".d.ts"))
+    .map((name) => path.join(root, name));
 }
 
 function rewriteDeclarationImports(source: string): string {
