@@ -29,7 +29,7 @@ function preparedSize(tx: ccc.Transaction): number {
   return prepared.toBytes().length;
 }
 
-// Adopted from the fable5 audit: the marginal fee the matcher charges each partial is the
+// The marginal fee the matcher charges each partial is the
 // real serialized-size delta of one more prepared partial, not a formula that drifts.
 describe("prepared partial serialized size", () => {
   it("equals the measured serialization delta of one additional full partial", () => {

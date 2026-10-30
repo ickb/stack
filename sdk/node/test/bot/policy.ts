@@ -209,7 +209,7 @@ describe("planRebalance withdrawal", () => {
 
 const CKB = ccc.fixedPointFrom(1);
 
-// Adopted from the fable51, fable5, and grok46 policy audits: the facts the thresholds rest on.
+// The facts the thresholds rest on.
 describe("policy arithmetic", () => {
   it("prices a cap-sized deposit and a secp256k1 receipt at the tip", () => {
     const secpLock = ccc.Script.from({

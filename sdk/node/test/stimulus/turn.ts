@@ -262,7 +262,7 @@ describe("runStimulusTurn", () => {
   });
 
   it("collects the receipts alone when the drawn conversion is refused", async () => {
-    // Adopted from the astra audit: the fallback fires on receipts, not only on orders.
+    // The fallback fires on receipts, not only on orders.
     const target = runtime({
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
