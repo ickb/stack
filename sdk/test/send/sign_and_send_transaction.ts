@@ -83,11 +83,22 @@ describe("signAndSendTransaction", () => {
         recordTxHash,
       ),
     ).rejects.toThrow(OVERPAID);
-    // A JavaScript caller of the earlier signature passes no planned fee at all.
+    // A JavaScript caller of the earlier signature passes no planned fee, or its
+    // recordTxHash in that place.
     await expect(
       // @ts-expect-error -- the planned fee is missing on purpose.
       signAndSendTransaction(signer, bodyTransaction(undefined, creating)),
     ).rejects.toThrow(TypeError);
+    await expect(
+      signAndSendTransaction(
+        signer,
+        bodyTransaction(undefined, creating),
+        // @ts-expect-error -- the earlier signature on purpose.
+        (txHash: ccc.Hex) => {
+          recordTxHash(txHash);
+        },
+      ),
+    ).rejects.toThrow(OVERPAID);
 
     expect(recordTxHash).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();

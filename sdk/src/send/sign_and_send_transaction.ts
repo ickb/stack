@@ -67,11 +67,13 @@ export async function signAndSendTransaction(
   }
   const txHash = signed.hash();
   const fee = await verifiedFee(client, signed, inputs);
-  // numFrom throws on a missing or non-numeric fee, where a bare comparison of a bigint with
-  // undefined would be false and let a plain JavaScript caller through unchecked.
-  if (fee > ccc.numFrom(plannedFee)) {
+  // A plain JavaScript caller of the earlier signature passes undefined or its recordTxHash
+  // here: numFrom throws on undefined, and on a function either throws or reads 0n. A bare
+  // comparison of a bigint with either is false and would skip the check.
+  const planned = ccc.numFrom(plannedFee);
+  if (fee > planned) {
     throw new Error(
-      `Transaction ${txHash} pays ${String(fee)} shannons of fee, more than the ${String(plannedFee)} planned`,
+      `Transaction ${txHash} pays ${String(fee)} shannons of fee, more than the ${String(planned)} planned`,
     );
   }
   if (broadcastBefore !== undefined) {
