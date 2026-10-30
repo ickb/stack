@@ -10,12 +10,13 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { depositData } from "../../src/dao.ts";
 import {
-  convert,
+  ckbFromUdt,
   encodeReceiptData,
   ickbAccountingRatio,
   ickbExchangeRatio,
   IckbUdt,
   ickbValue,
+  udtFromCkb,
 } from "../../src/udt.ts";
 
 // This package is browser-safe and loads no node types; declare the one node
@@ -199,8 +200,8 @@ describe("iCKB conversion", () => {
   it("converts from iCKB to CKB using explicit ratios and header ratios", () => {
     const header = headerLike(20000000000000000n);
 
-    expect(convert(true, 100n, { ckbScale: 1n, udtScale: 2n })).toBe(50n);
-    expect(convert(false, 100n, { ckbScale: 1n, udtScale: 2n })).toBe(200n);
+    expect(udtFromCkb(100n, { ckbScale: 1n, udtScale: 2n })).toBe(50n);
+    expect(ckbFromUdt(100n, { ckbScale: 1n, udtScale: 2n })).toBe(200n);
     expect(ickbAccountingRatio(header)).toEqual({
       ckbScale: 10000000000000000n,
       udtScale: 20000000000000000n,
@@ -211,7 +212,7 @@ describe("iCKB conversion", () => {
   });
 
   it("rejects non-positive exchange ratio scales", () => {
-    expect(() => convert(true, 1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
+    expect(() => udtFromCkb(1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
       "Exchange ratio scales must be positive",
     );
   });
@@ -245,8 +246,8 @@ describe("iCKB conversion", () => {
         scaleArb,
         (amount, ckbScale, udtScale) => {
           const ratio = { ckbScale, udtScale };
-          const across = convert(isCkb2Udt, amount, ratio);
-          const back = convert(!isCkb2Udt, across, ratio);
+          const across = (isCkb2Udt ? udtFromCkb : ckbFromUdt)(amount, ratio);
+          const back = (isCkb2Udt ? ckbFromUdt : udtFromCkb)(across, ratio);
           // Forward floors amount*n/m, the return trip floors again, so the total
           // loss is ceil(r/n) for a remainder r < m: at most ceil((m - 1)/n).
           const [n, m] = isCkb2Udt ? [ckbScale, udtScale] : [udtScale, ckbScale];

@@ -3,7 +3,7 @@ import { projectAccountAvailability } from "../../../src/conversion/projection.t
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
-import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { minBigInt } from "../../../src/utils/utils.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { summarizeBotState } from "./support.ts";
@@ -58,7 +58,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     ckb: projection.ckbAvailable,
     ickb: projection.ickbAvailable,
     pendingCkb: projection.ckbPending,
-    depositCapacity: convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
     sampledFeeRate: system.feeRate,
   };
 }

@@ -1,6 +1,6 @@
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import { readyDeposits, type IckbDepositCell } from "../logic.ts";
-import { ICKB_DEPOSIT_CAP, convert } from "../udt.ts";
+import { ICKB_DEPOSIT_CAP, ckbFromUdt } from "../udt.ts";
 import { maxBigInt } from "../utils/utils.ts";
 import {
   DEFAULT_ORDER_FEE,
@@ -37,7 +37,7 @@ export function ckbToIckbConversionPlans(
   options: ConversionTransactionOptions,
 ): CkbToIckbConversionPlan[] {
   const { amount, context } = options;
-  const depositCapacity = convert(false, ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
+  const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
     depositQuotient > BigInt(MAX_PLANNED_DEPOSITS)

@@ -12,7 +12,7 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { convert, ickbExchangeRatio } from "../../../src/udt.ts";
+import { ckbFromUdt, ickbExchangeRatio } from "../../../src/udt.ts";
 
 /**
  * Yields the CSV header, the genesis row, one approximate row per sample date
@@ -102,7 +102,7 @@ function sampleTargets(startMs: bigint, endMs: bigint): Array<[Date, string]> {
 /** CSV row: block number, ISO date, CKB per 1 iCKB at that header, note. */
 function row(header: ccc.ClientBlockHeader, note: string): string {
   const date = new Date(Number(header.timestamp));
-  const val = convert(false, ccc.One, ickbExchangeRatio(header));
+  const val = ckbFromUdt(ccc.One, ickbExchangeRatio(header));
   return [
     String(header.number),
     date.toISOString(),

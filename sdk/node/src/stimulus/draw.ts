@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
-import { convert } from "../../../src/udt.ts";
+import { ckbFromUdt } from "../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
 export type Kind = "order" | "conversion";
@@ -95,7 +95,7 @@ function drawConversionDirection(
   random: () => number,
 ): ConversionDirection | undefined {
   const ckbWeight = budgets.ckb;
-  const ickbWeight = convert(false, budgets.ickb, budgets.ratio);
+  const ickbWeight = ckbFromUdt(budgets.ickb, budgets.ratio);
   const total = ckbWeight + ickbWeight;
   if (total <= 0n) {
     return undefined;

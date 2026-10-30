@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { ckbFromUdt } from "../udt.ts";
 import {
   ceilDiv,
   minBigInt,
@@ -45,8 +46,8 @@ export function quoteConversion(
 
   if (amount > 0n && fee !== 0n) {
     ckbFee = isCkb2Udt
-      ? amount - base.convert(false, convertedAmount, false)
-      : base.convert(false, amount, false) - convertedAmount;
+      ? amount - ckbFromUdt(convertedAmount, base)
+      : ckbFromUdt(amount, base) - convertedAmount;
   }
 
   // Every order this SDK creates carries the default minimum match, the one the bot's

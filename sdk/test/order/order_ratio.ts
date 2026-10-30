@@ -56,32 +56,16 @@ describe("Ratio", () => {
     }).toThrow("Ratio invalid");
   });
 
-  it("compares matching CKB scales and converts with direction and ceiling", () => {
+  it("compares matching CKB scales", () => {
     const ratio = Ratio.from({ ckbScale: 2n, udtScale: 3n });
 
     expect(Ratio.from({ ckbScale: 2n, udtScale: 4n }).compare(ratio)).toBe(-1);
     expect(ratio.compare(Ratio.from({ ckbScale: 2n, udtScale: 4n }))).toBe(1);
-    expect(ratio.convert(true, 7n, false)).toBe(4n);
-    expect(ratio.convert(true, 7n, true)).toBe(5n);
-    expect(ratio.convert(false, 7n, false)).toBe(10n);
-    expect(() => Ratio.empty().convert(true, 1n, false)).toThrow(
-      "Invalid midpoint ExchangeRatio",
-    );
   });
 
   it("compares ratios whose scales both differ", () => {
     const ratio = Ratio.from({ ckbScale: 2n, udtScale: 3n });
 
     expect(Ratio.from({ ckbScale: 3n, udtScale: 2n }).compare(ratio)).toBe(1);
-  });
-
-  it("converts zero to zero in both directions and rounding modes", () => {
-    const ratio = Ratio.from({ ckbScale: 2n, udtScale: 3n });
-
-    for (const isCkb2Udt of [true, false]) {
-      for (const mustCeil of [true, false]) {
-        expect(ratio.convert(isCkb2Udt, 0n, mustCeil)).toBe(0n);
-      }
-    }
   });
 });

@@ -200,7 +200,7 @@ export function ickbValue(
   ckbUnoccupiedCapacity: ccc.FixedPoint,
   header: ccc.ClientBlockHeader,
 ): ccc.FixedPoint {
-  let ickbAmount = convert(true, ckbUnoccupiedCapacity, ickbAccountingRatio(header));
+  let ickbAmount = udtFromCkb(ckbUnoccupiedCapacity, ickbAccountingRatio(header));
   if (ICKB_DEPOSIT_CAP < ickbAmount) {
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
     ickbAmount -= (ickbAmount - ICKB_DEPOSIT_CAP) / 10n;
@@ -209,25 +209,22 @@ export function ickbValue(
   return ickbAmount;
 }
 
-/**
- * Converts between CKB and iCKB based on an explicit ratio.
- *
- * @param isCkb2Udt - A boolean indicating the direction of conversion (CKB to iCKB or vice versa).
- * @param amount - The amount to convert.
- * @param ratio - The CKB and iCKB scales to use.
- * @returns The converted amount in the target unit as a `ccc.FixedPoint`.
- */
-export function convert(
-  isCkb2Udt: boolean,
-  amount: ccc.FixedPoint,
-  ratio: ExchangeRatio,
-): ccc.FixedPoint {
-  if (ratio.ckbScale <= 0n || ratio.udtScale <= 0n) {
+/** The iCKB worth `amount` CKB at `ratio`, rounded down. */
+export function udtFromCkb(amount: ccc.FixedPoint, ratio: ExchangeRatio): ccc.FixedPoint {
+  assertPositive(ratio);
+  return (amount * ratio.ckbScale) / ratio.udtScale;
+}
+
+/** The CKB worth `amount` iCKB at `ratio`, rounded down. */
+export function ckbFromUdt(amount: ccc.FixedPoint, ratio: ExchangeRatio): ccc.FixedPoint {
+  assertPositive(ratio);
+  return (amount * ratio.udtScale) / ratio.ckbScale;
+}
+
+function assertPositive({ ckbScale, udtScale }: ExchangeRatio): void {
+  if (ckbScale <= 0n || udtScale <= 0n) {
     throw new Error("Exchange ratio scales must be positive");
   }
-  return isCkb2Udt
-    ? (amount * ratio.ckbScale) / ratio.udtScale
-    : (amount * ratio.udtScale) / ratio.ckbScale;
 }
 
 /**
