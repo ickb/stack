@@ -50,7 +50,7 @@ export const SWEEP_INPUT_LIMIT = 1000;
 type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
 
 /** What every own transaction collects along: the context's collectable positions. */
-export type CollectSteps = Pick<
+type CollectSteps = Pick<
   ConversionTransactionContext,
   "availableOrders" | "receipts" | "readyWithdrawals"
 >;

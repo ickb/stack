@@ -43,10 +43,10 @@ describe("fitWithdrawalDeposits ring segments", () => {
     const doubled = ringSegments(pool);
     expect(doubled).toHaveLength(2 * before);
 
-    for (const segment of doubled) {
+    for (const [index, segment] of doubled.entries()) {
       if (segment.deposits.length === 0) {
-        const epoch = BigInt(Math.ceil((segment.index * 180) / doubled.length));
-        pool.push(ringDeposit(cap, epoch, { key: `fill-${String(segment.index)}` }));
+        const epoch = BigInt(Math.ceil((index * 180) / doubled.length));
+        pool.push(ringDeposit(cap, epoch, { key: `fill-${String(index)}` }));
       }
     }
     const filled = ringSegments(pool);

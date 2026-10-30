@@ -7,9 +7,6 @@ import { ICKB_DEPOSIT_CAP } from "../udt.ts";
  * Ring segment of pool deposits grouped by maturity around the DAO cycle.
  */
 export interface RingSegment {
-  /** Segment index in the ring. */
-  index: number;
-
   /** Deposits assigned to this segment. */
   deposits: IckbDepositCell[];
 
@@ -29,8 +26,7 @@ export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegm
   while (BigInt(segmentCount) * 2n * ICKB_DEPOSIT_CAP < totalUdt) {
     segmentCount *= 2;
   }
-  const segments = Array.from({ length: segmentCount }, (_, index): RingSegment => ({
-    index,
+  const segments = Array.from({ length: segmentCount }, (): RingSegment => ({
     deposits: [],
     udtValue: 0n,
   }));

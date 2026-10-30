@@ -88,7 +88,7 @@ function feeAdjustedScales(
  * The ratio that reproduces the quote exactly: the greatest Uint64 fraction at most
  * `quotedOutput / inputAmount`, which must still round the input up to the quoted output.
  */
-export function quotePreservingRatio(
+function quotePreservingRatio(
   inputAmount: ccc.FixedPoint,
   quotedOutput: ccc.FixedPoint,
   isCkb2Udt: boolean,
