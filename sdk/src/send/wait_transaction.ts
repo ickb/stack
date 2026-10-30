@@ -72,10 +72,9 @@ export async function waitTransaction(
   signal?.throwIfAborted();
 
   const budget = openWaitWindow(timeout, signal);
-  const poll = { client, txHash, budget };
   try {
     for (;;) {
-      if (await isCommitted(poll)) {
+      if (await isCommitted(client, txHash, budget)) {
         // An abort synchronized into the gap between the last read and this
         // return must not resolve the wait successfully.
         budget.throwIfStopped();
@@ -97,12 +96,6 @@ interface WaitWindow {
   stopped: Promise<never>;
   throwIfStopped: () => void;
   close: () => void;
-}
-
-interface WaitPoll {
-  client: ccc.Client;
-  txHash: ccc.Hex;
-  budget: WaitWindow;
 }
 
 function validateWaitOptions(timeout: number, interval: number): void {
@@ -192,8 +185,11 @@ async function pollingSleep(interval: number, budget: WaitWindow): Promise<void>
   }
 }
 
-async function isCommitted(poll: WaitPoll): Promise<boolean> {
-  const { client, txHash, budget } = poll;
+async function isCommitted(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+  budget: WaitWindow,
+): Promise<boolean> {
   const requestor = jsonRpcRequestor(client);
   // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed transaction
   // response discards (its body is null, so CCC returns nothing).
