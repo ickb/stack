@@ -16,11 +16,13 @@ The deployed contracts and CKB consensus constrain every implementation choice. 
 - Reopen a settled decision for a contradiction, infeasibility or previously unweighed risk, not merely because a test passes.
 - A finding earns new code for an observed or reproduced failure. Otherwise delete, narrow or leave it. Prefer deletion and inlining to abstractions without an evidenced shared reason to change.
 - Follow the [workspace boundaries](README.md#workspace-boundaries) and [dependency policy](README.md#dependencies-and-checks). Do not change a dependency or runtime pin just to make something resolve.
+- Treat every node answer as untrusted; [account state](sdk/README.md#account-state) and [signing and broadcast](sdk/README.md#signing-and-broadcast) list what a lie can still cost. The bot recovers from any error by exiting for systemd to restart it; the [runtime config](sdk/node/README.md#runtime-config) bounds the stalls it accepts.
+- Before writing a helper, use what CCC or the platform already provides when it behaves the same on every input the code passes; keep an own version only with its reason stated at the code.
 
 For a material revision:
 
 1. Pin the evidence and identify the behavior being changed.
-2. Trace every affected consumer: the bot, generator, app and public SDK surface. For transaction changes, follow build, completion, signing, send, confirmation and the next rebuild.
+2. Trace every affected consumer: the bot, generator, app and public SDK surface. For transaction changes, follow build, completion, signing, send, confirmation and the next rebuild. Compare against the change's base what it touches only indirectly, such as state that outlives a turn, event meanings, timings and defaults: a change made for one reason may have silently changed others.
 3. Update the owning explanation with the implementation. Remove superseded rules and repair or delete pointers to them.
 4. Run the gate and check its exit code.
 
@@ -31,6 +33,10 @@ Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, o
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 
 Every package keeps the same version. A release sets every workspace package's `version` to the new one in one commit, sized by the [release policy](README.md#releases).
+
+## Running units
+
+The testnet units may run from the working checkout. Before editing a checkout that a unit runs from, stop every such unit, and start them again only on a clean tree at a gated commit; a turn must never run a half-edited tree. Those units follow whatever branch the working checkout is on, while a deployment moves only to a reviewed revision ([install and operate](sdk/node/README.md#install-and-operate)).
 
 ## Keys and secrets
 
