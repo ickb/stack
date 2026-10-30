@@ -29,12 +29,13 @@ export function projectConversionTransactionContext(
     available: orders.filter(collectable),
     pending: orders.filter((group) => !collectable(group)),
   });
-  const estimatedMaturity = [
+  const estimatedMaturity = ccc.numMax(
+    system.tip.timestamp,
     ...projection.pendingWithdrawals.map((group) =>
       group.owned.maturity.toUnix(system.tip),
     ),
     ...projection.pendingOrders.map((group) => maturity(group.order, system)),
-  ].reduce((left, right) => ccc.numMax(left, right), system.tip.timestamp);
+  );
 
   return {
     projection,
