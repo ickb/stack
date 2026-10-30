@@ -3,12 +3,16 @@ import {
   TransactionBroadcastError,
   TransactionExpiredError,
   TransactionWaitError,
-  hasTransactionActivity,
   signAndSendTransaction,
   waitTransaction,
 } from "@ickb/sdk";
 import { l1StateQueryKey } from "../app/queries.ts";
-import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
+import {
+  errorMessageOf,
+  type SendableTx,
+  type TxInfo,
+  type WalletConfig,
+} from "../shared/utils.ts";
 import {
   clearPendingTransaction,
   submitPendingTransaction,
@@ -29,7 +33,7 @@ export interface RefreshedTransactionState extends RefreshedTransactionStateMeta
 }
 
 export interface RefreshedTransactionPreview extends RefreshedTransactionStateMetadata {
-  readonly txInfo: TxInfo;
+  readonly txInfo: SendableTx;
 }
 
 export interface TransactionCallbacks {
@@ -46,7 +50,6 @@ export interface TransactionCallbacks {
 interface TransactParams extends TransactionCallbacks {
   readonly lockIntent: () => void;
   readonly refreshPreview: () => Promise<RefreshedTransactionState>;
-  readonly unavailableMessage: string;
   readonly signal: AbortSignal;
   readonly yieldForPreview?: () => Promise<void>;
 }
@@ -67,7 +70,6 @@ class AttemptAbortedError extends Error {
 export async function transact({
   lockIntent,
   refreshPreview,
-  unavailableMessage,
   signal,
   yieldForPreview = yieldForPreviewRender,
   ...callbacks
@@ -84,8 +86,10 @@ export async function transact({
     assertCurrent(signal);
     const txInfo = await abortable(build(), signal);
     assertCurrent(signal);
+    if (!txInfo.ok) {
+      throw new Error(txInfo.error);
+    }
     callbacks.freezePreview({ txInfo, ...previewState });
-    assertBroadcastable(txInfo, unavailableMessage);
     await abortable(yieldForPreview(), signal);
     assertCurrent(signal);
     callbacks.setIsPreparing(false);
@@ -141,7 +145,7 @@ export async function transact({
 function sendAndStoreTransaction(
   pendingStore: PendingTransactionStore,
   walletConfig: WalletConfig,
-  txInfo: TxInfo,
+  txInfo: SendableTx,
 ): Promise<ccc.Hex> {
   return submitPendingTransaction(
     pendingStore,
@@ -205,18 +209,6 @@ export async function waitForConfirmation(
 ): Promise<void> {
   await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
   assertCurrent(signal);
-}
-
-function assertBroadcastable(txInfo: TxInfo, unavailableMessage: string): void {
-  if (txInfo.error !== "") {
-    throw new Error(txInfo.error);
-  }
-  if (!hasTransactionActivity(txInfo.tx)) {
-    throw new Error(unavailableMessage);
-  }
-  if (txInfo.fee <= 0n) {
-    throw new Error("Transaction fee is missing or invalid");
-  }
 }
 
 function releaseTransaction({ freezePreview }: TransactionCallbacks): void {

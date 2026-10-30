@@ -1,11 +1,9 @@
-import { hasTransactionActivity } from "@ickb/sdk";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { L1StateType } from "../app/queries.ts";
 import {
   errorMessageOf,
   toText,
-  txInfoPadding,
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
@@ -14,7 +12,6 @@ import {
   actionLabel,
   actionMessage,
   confirmPreviewMessage,
-  isTxInfoValid,
   timeUntilMaturity,
   unavailableConversionMessage,
 } from "./actionStatus.ts";
@@ -121,24 +118,29 @@ export default function Action({
     return missingStateActionLayout(stateError, isStateFetching, retryState);
   }
 
-  const txInfo = frozenPreview?.txInfo ?? txPreviewQuery.data ?? txInfoPadding;
+  const preview = frozenPreview?.txInfo ?? txPreviewQuery.data;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
-  const isValid = isTxInfoValid(txInfo, hasTransactionActivity(txInfo.tx));
-  // A move leaves the converting positions here, so their dates do not apply to it.
-  const maturity =
-    txInfo.move === undefined
-      ? timeUntilMaturity(
-          txInfo.estimatedMaturity,
-          frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
-        )
-      : "now";
+  const isValid = preview?.ok === true;
   const { hasCollectable, hasConverting } = sampled ?? l1State;
+  // The date also covers what is converting, which a preview with nothing to sign still
+  // carries, so it shows whenever something is. A move leaves the converting positions
+  // here, so their dates do not apply to it.
+  let maturity = "...";
+  if (preview !== undefined && (isValid || hasConverting)) {
+    maturity =
+      preview.ok && preview.move !== undefined
+        ? "now"
+        : timeUntilMaturity(
+            preview.estimatedMaturity,
+            frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
+          );
+  }
   const actionText =
     transactionHash === undefined
       ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
       : confirmationLabel(isConfirming);
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
-  const messageText = actionMessage(txInfo, {
+  const messageText = actionMessage(preview, {
     amount,
     amountError,
     destinationError,
@@ -180,7 +182,6 @@ export default function Action({
           destination,
           refreshPreview,
           freeze,
-          unavailableMessage,
           callbacks: {
             freezePreview,
             setMessage,
@@ -194,10 +195,8 @@ export default function Action({
         });
       }}
       message={messageText}
-      // The fee describes a transaction; the date also covers what is converting, which a
-      // preview with nothing to sign still carries, so it shows whenever something is.
-      fee={isValid ? `${toText(txInfo.fee)} CKB` : "..."}
-      maturity={txInfo !== txInfoPadding && (isValid || hasConverting) ? maturity : "..."}
+      fee={isValid ? `${toText(preview.fee)} CKB` : "..."}
+      maturity={maturity}
     />
   );
 }
@@ -235,7 +234,6 @@ function startAttempt({
   destination,
   refreshPreview,
   freeze,
-  unavailableMessage,
   callbacks,
 }: Readonly<{
   runAttempt: RunAttempt;
@@ -244,7 +242,6 @@ function startAttempt({
   destination: Destination | undefined;
   refreshPreview: ActionProps["refreshPreview"];
   freeze: (value: boolean) => void;
-  unavailableMessage: string;
   callbacks: TransactionCallbacks;
 }>): void {
   const current = callbacks.pendingStore.current;
@@ -266,7 +263,6 @@ function startAttempt({
         refreshPreview: async (): Promise<RefreshedTransactionState> =>
           refreshPreview(isCkb2Udt, amount, destination),
         signal,
-        unavailableMessage,
       }),
     );
   }

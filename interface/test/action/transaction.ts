@@ -58,8 +58,8 @@ describe("buildTransactionPreview", () => {
       context: txContext,
     });
     expect(txInfo).toMatchObject({
+      ok: true,
       tx,
-      error: "",
       fee: 42n,
       estimatedMaturity: 123n,
       conversionNotice: notice,
@@ -212,7 +212,7 @@ describe("buildTransactionPreview destination", () => {
     );
 
     expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({ lock });
-    expect(txInfo.move).toEqual({ to: "ckt1qzda…abcdef", isComplete: true });
+    expect(txInfo).toMatchObject({ move: { to: "ckt1qzda…abcdef", isComplete: true } });
   });
 
   it("carries the SDK's broadcast deadline into the preview", async () => {
@@ -233,7 +233,7 @@ describe("buildTransactionPreview destination", () => {
       config,
     );
 
-    expect(txInfo.broadcastBefore).toBe(broadcastBefore);
+    expect(txInfo).toMatchObject({ ok: true, broadcastBefore });
   });
 
   it("refuses a move with an amount before reaching the SDK", async () => {
@@ -248,7 +248,10 @@ describe("buildTransactionPreview destination", () => {
       config,
     );
 
-    expect(txInfo.error).toBe("A move to another address takes no amount");
+    expect(txInfo).toMatchObject({
+      ok: false,
+      error: "A move to another address takes no amount",
+    });
     expect(buildConversionTransaction).not.toHaveBeenCalled();
   });
 });

@@ -21,11 +21,10 @@ import {
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
 import { l1StateQueryKey } from "../../src/app/queries.ts";
-import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import type { SendableTx, TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 
-const nothingToDo = "Nothing to do";
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
@@ -151,22 +150,16 @@ describe("transact fresh preview boundary", () => {
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
-  it.each([
-    [{ error: "fresh preview failed" }, "fresh preview failed"],
-    [{ tx: ccc.Transaction.default() }, nothingToDo],
-    [{ fee: 0n }, "Transaction fee is missing or invalid"],
-  ] as const)("rejects invalid refreshed preview %#", async (overrides, failure) => {
-    const preview = refreshedPreview({
-      txInfo: activeTxInfo("22", overrides),
-      stateId: freshStateId,
+  it("refuses a refreshed preview that failed, without freezing it", async () => {
+    const calls = transactionCalls(refreshedPreview(), async () => {
+      await Promise.resolve();
+      return { ok: false, error: "fresh preview failed", estimatedMaturity: 0n };
     });
-    const calls = transactionCalls(preview);
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith(failure);
-    expect(calls.freezePreview).toHaveBeenNthCalledWith(1, preview);
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(calls.setFailure).toHaveBeenCalledWith("fresh preview failed");
+    expect(vi.mocked(calls.freezePreview).mock.calls).toEqual([[undefined]]);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
   });
 });
@@ -661,7 +654,6 @@ function transactionCalls(
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
     pendingStore: createPendingTransactionStore(ignoreChange),
-    unavailableMessage: nothingToDo,
     signal: controller.signal,
   };
 }
@@ -725,10 +717,10 @@ function walletQueryClient(config?: WalletConfig): {
   };
 }
 
-function activeTxInfo(byte: string, overrides: Partial<TxInfo> = {}): TxInfo {
+function activeTxInfo(byte: string, overrides: Partial<SendableTx> = {}): SendableTx {
   return {
+    ok: true,
     tx: txWithInput(byte),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",

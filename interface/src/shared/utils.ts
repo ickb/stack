@@ -44,17 +44,13 @@ export interface WalletConfig extends RootConfig {
   primaryLock: ccc.Script;
 }
 
-/**
- * Describes a transaction preview or a non-throwing preview error.
- *
- * @remarks A non-empty error means callers must treat the transaction as non-broadcastable even though padding fields are still present.
- */
-export type TxInfo = Readonly<{
+/** A completed, funded transaction: only signing remains. */
+export type SendableTx = Readonly<{
+  ok: true;
   tx: ccc.Transaction;
-  error: string;
   fee: bigint;
   estimatedMaturity: bigint;
-  conversionKind?: ConversionMetadata["kind"];
+  conversionKind: ConversionMetadata["kind"];
   /**
    * Set when the transaction moves the liquid funds to another lock: the shortened
    * destination, and whether the sweep took every liquid cell or another move is needed.
@@ -65,12 +61,12 @@ export type TxInfo = Readonly<{
   broadcastBefore?: BroadcastDeadline;
 }>;
 
-export const txInfoPadding: TxInfo = Object.freeze({
-  tx: ccc.Transaction.default(),
-  error: "",
-  fee: 0n,
-  estimatedMaturity: 0n,
-});
+/**
+ * A transaction preview, or why there is none. Both carry the maturity estimate, which
+ * also dates what is already converting.
+ */
+export type TxInfo =
+  SendableTx | Readonly<{ ok: false; error: string; estimatedMaturity: bigint }>;
 
 /** The small line under a value the user cannot edit, saying why, centred beneath it. */
 export const reasonLabelClass =

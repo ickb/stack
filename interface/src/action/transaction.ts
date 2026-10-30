@@ -8,7 +8,6 @@ import {
 import {
   errorMessageOf,
   toText,
-  txInfoPadding,
   type TxInfo,
   type WalletConfig,
 } from "../shared/utils.ts";
@@ -39,7 +38,8 @@ const completionFailureMessages: Record<IckbErrorCode, string> = {
 /**
  * Builds a non-broadcast transaction preview for one conversion request.
  *
- * @returns A frozen TxInfo with an empty error on success, or a non-empty error when the SDK cannot produce a broadcastable transaction.
+ * @returns A frozen TxInfo: the transaction to sign, or the error to show when the SDK
+ * cannot produce one.
  */
 export async function buildTransactionPreview(
   context: ConversionTransactionContext,
@@ -76,8 +76,8 @@ export async function buildTransactionPreview(
 
     // The SDK returns the transaction completed and funded; only signing remains.
     return Object.freeze({
+      ok: true,
       tx: result.tx,
-      error: "",
       // The fee completion priced, which the send refuses to exceed.
       fee: result.tx.estimateFee(context.system.feeRate),
       estimatedMaturity: result.estimatedMaturity,
@@ -103,11 +103,7 @@ export async function buildTransactionPreview(
 }
 
 function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
-  return Object.freeze({
-    ...txInfoPadding,
-    error,
-    estimatedMaturity,
-  });
+  return Object.freeze({ ok: false, error, estimatedMaturity });
 }
 
 function conversionFailureMessage(

@@ -1,12 +1,12 @@
 import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { txInfoPadding } from "../../src/shared/utils.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import {
   actionProps,
   activeTxInfo,
   l1State,
+  nothingToSign,
   quoteState,
   walletConfig,
 } from "./fixtures/data.ts";
@@ -87,7 +87,7 @@ function registerAppStateTests(): void {
       hasCollectable: loadedState.hasCollectable,
     });
     expect(loadedState.txBuilder).not.toHaveBeenCalled();
-    await expect(refreshedState.build()).resolves.toBe(txInfoPadding);
+    await expect(refreshedState.build()).resolves.toBe(nothingToSign);
     expect(loadedState.txBuilder).toHaveBeenCalledWith(false, 2n * CKB, {
       lock: script("11"),
     });
@@ -205,7 +205,7 @@ function registerActionPreviewTests(): void {
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     const ready = Action({ ...actionProps(), freeze, l1State: l1State() });
     const props = elementProps<Parameters<typeof ActionLayout>[0]>(ready);
-    await expect(queryFnOf(txPreviewQueryOptions())()).resolves.toBe(txInfoPadding);
+    await expect(queryFnOf(txPreviewQueryOptions())()).resolves.toBe(nothingToSign);
     props.onAction?.();
 
     expect(props.disabled).toBe(false);
@@ -246,11 +246,7 @@ function registerActionAlternativeTests(): void {
 
     // Nothing to sign, something converting: the date still shows; without either, it waits.
     resetHooks();
-    const nothingToDo = {
-      ...txInfoPadding,
-      error: "Nothing to do",
-      estimatedMaturity: 180_000n,
-    };
+    const nothingToDo = { ...nothingToSign, estimatedMaturity: 180_000n };
     queryMock.result = { data: nothingToDo, isFetching: false };
     const converting = elementProps<Parameters<typeof ActionLayout>[0]>(
       Action({
@@ -314,7 +310,10 @@ function registerActionRejectionTests(): void {
     transactMock.transact.mockImplementationOnce(async (params) => {
       params.lockIntent();
       const { build, ...state } = await params.refreshPreview();
-      params.freezePreview({ ...state, txInfo: await build() });
+      const txInfo = await build();
+      if (txInfo.ok) {
+        params.freezePreview({ ...state, txInfo });
+      }
       params.setFailure(failure);
       clearPendingTransaction(params.pendingStore);
       params.freezePreview(undefined);
@@ -428,7 +427,10 @@ function registerActionConfirmationTests(): void {
     transactMock.transact.mockImplementationOnce(async (params) => {
       params.lockIntent();
       const { build, ...state } = await params.refreshPreview();
-      params.freezePreview({ ...state, txInfo: await build() });
+      const txInfo = await build();
+      if (txInfo.ok) {
+        params.freezePreview({ ...state, txInfo });
+      }
       await recordPending(params.pendingStore, `0x${"ab".repeat(32)}`);
       params.setIsConfirming(true);
       waitingReady.resolve(undefined);

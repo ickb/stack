@@ -9,11 +9,11 @@ import {
   mainnetClient,
   queryClient,
   testnetClient,
-  txInfoPadding,
   type Action,
   type L1StateType,
   type QuoteState,
   type RootConfig,
+  type SendableTx,
   type TxInfo,
   type useQuoteState,
   type WalletConfig,
@@ -56,14 +56,22 @@ export function actionProps(): Parameters<typeof Action>[0] {
   };
 }
 
-export function activeTxInfo(): TxInfo {
+export function activeTxInfo(): SendableTx {
   return {
+    ok: true,
     tx: txWithInput("11"),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
+    conversionKind: "direct",
   };
 }
+
+/** What the state fixture's builder returns: nothing to sign. */
+export const nothingToSign: TxInfo = Object.freeze({
+  ok: false,
+  error: "Nothing to do",
+  estimatedMaturity: 0n,
+});
 
 export function l1State(): L1StateType {
   return {
@@ -85,7 +93,7 @@ export function l1State(): L1StateType {
     stateId: "state-id",
     txBuilder: vi.fn(async () => {
       await Promise.resolve();
-      return txInfoPadding;
+      return nothingToSign;
     }),
     hasCollectable: false,
     hasConverting: false,

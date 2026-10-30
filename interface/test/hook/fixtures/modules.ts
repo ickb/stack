@@ -3,7 +3,12 @@ import "./environment.ts";
 export type { ActionLayout } from "../../../src/action/ActionLayout.tsx";
 export type { PendingTransactionStore } from "../../../src/action/pendingTransaction.ts";
 export type { L1StateType, QuoteState } from "../../../src/app/queries.ts";
-export type { RootConfig, TxInfo, WalletConfig } from "../../../src/shared/utils.ts";
+export type {
+  RootConfig,
+  SendableTx,
+  TxInfo,
+  WalletConfig,
+} from "../../../src/shared/utils.ts";
 
 const actionModule = await import("../../../src/action/Action.tsx");
 const pendingTransactionModule =
@@ -43,7 +48,6 @@ export const testnetClient = interfaceConfigModule.testnetClient;
 export const liveQuoteStatus = queriesModule.liveQuoteStatus;
 export const useQuoteState = queriesModule.useQuoteState;
 export const CKB = sharedUtilsModule.CKB;
-export const txInfoPadding = sharedUtilsModule.txInfoPadding;
 export const chainFromClient = sharedUtilsModule.chainFromClient;
 export const walletLabel = sharedUtilsModule.walletLabel;
 export const CkbSignerRequired = walletGateModule.CkbSignerRequired;
