@@ -31,7 +31,7 @@ export interface IckbSdk {
     maxFeeRate?: ccc.NumLike,
   ) => Promise<{
     system: SystemState;
-    user: { orders: OrderGroup[] };
+    userOrders: OrderGroup[];
     account: AccountState;
   }>;
 }

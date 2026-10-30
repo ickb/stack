@@ -103,7 +103,7 @@ export function runtime({
     sdk: Object.assign(sdkOf(getConfig("testnet")), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
-        return { system, user: { orders }, account };
+        return { system, userOrders: orders, account };
       },
       ...sdk,
     }),

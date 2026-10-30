@@ -55,7 +55,7 @@ describe(L1_STATE_SUITE, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([ownerOrder.group]);
+    expect(state.userOrders).toEqual([ownerOrder.group]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 });
@@ -69,7 +69,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([]);
+    expect(state.userOrders).toEqual([]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 
@@ -81,7 +81,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([]);
+    expect(state.userOrders).toEqual([]);
     expect(state.system.orderPool).toEqual([]);
   });
 });

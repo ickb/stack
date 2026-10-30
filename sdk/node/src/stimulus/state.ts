@@ -38,19 +38,19 @@ export interface StimulusState {
 export const MAX_LIVE_ORDERS = 500;
 
 export async function readStimulusState(runtime: Runtime): Promise<StimulusState> {
-  const { system, user, account } = await runtime.sdk.getL1AccountState(
+  const { system, userOrders, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
     WALLET_LOCK_UP,
   );
-  const live = user.orders.filter((group) => group.order.isMatchable());
+  const live = userOrders.filter((group) => group.order.isMatchable());
   // The log tells a refused buy from a stale order: a stale one warrants inspection, but
   // can reflect inventory or price priority rather than a stopped bot.
   const refused = live.filter((group) => isRefused(group, system));
   const { context, projection } = projectConversionTransactionContext(
     system,
     account,
-    user.orders,
+    userOrders,
   );
   const ckbBudget = context.ckbAvailable - CKB_RESERVE;
   return {
@@ -58,7 +58,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     context,
     orders: {
       live: live.length,
-      fulfilled: user.orders.length - live.length,
+      fulfilled: userOrders.length - live.length,
       refused: refused.length,
       stale: live.filter(
         (group) => !refused.includes(group) && isStale(group, system.tip),

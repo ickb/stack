@@ -106,11 +106,11 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     walletConfig.accountLocks,
     WALLET_LOCK_UP,
   );
-  const { system, user, account } = sdkState;
+  const { system, userOrders, account } = sdkState;
   const { projection, context } = projectConversionTransactionContext(
     system,
     account,
-    user.orders,
+    userOrders,
   );
 
   return {

@@ -421,7 +421,7 @@ describe("readBotState pool snapshot", () => {
         poolDeposits: pool,
         lockUp: BOT_LOCK_UP,
       },
-      user: { orders: [] },
+      userOrders: [],
       account: {
         capacityCells: [],
         nativeUdtCells: [],
@@ -472,7 +472,7 @@ describe("readBotState", () => {
         lockUp: BOT_LOCK_UP,
         poolDeposits: [],
       },
-      user: { orders: [ownOrder] },
+      userOrders: [ownOrder],
       account: {
         capacityCells: [capacityCell],
         nativeUdtCells: [nativeUdtCell],

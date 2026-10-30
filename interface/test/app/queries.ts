@@ -53,7 +53,7 @@ function itPollsLiveStateUnlessFrozen(): void {
           poolDeposits: [],
           lockUp: WALLET_LOCK_UP,
         },
-        user: { orders: [] },
+        userOrders: [],
         account: {
           capacityCells: [],
           nativeUdtCells: [],
@@ -82,7 +82,7 @@ function itRunsL1StateOptionsQuery(): void {
           poolDeposits: [],
           lockUp: WALLET_LOCK_UP,
         },
-        user: { orders: [] },
+        userOrders: [],
         account: {
           capacityCells: [],
           nativeUdtCells: [],
@@ -157,7 +157,7 @@ it("loads display balances from an SDK account snapshot", async () => {
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [capacityCell],
       nativeUdtCells: [nativeUdtCell],
@@ -218,7 +218,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
       nativeUdtCells: [],
@@ -244,7 +244,7 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
       nativeUdtCells: [],

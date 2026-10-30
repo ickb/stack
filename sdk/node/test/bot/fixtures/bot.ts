@@ -354,7 +354,7 @@ export function l1AccountState(
       poolDeposits: [],
       lockUp: BOT_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [],
       nativeUdtCells: [],

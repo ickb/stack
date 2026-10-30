@@ -96,7 +96,7 @@ export class IckbSdk {
     maxFeeRate?: ccc.NumLike,
   ): Promise<{
     system: SystemState;
-    user: { orders: OrderGroup[] };
+    userOrders: OrderGroup[];
     account: AccountState;
   }> {
     // CCC reads a zero cap as no cap at all and would plan at a negative one.
@@ -127,7 +127,7 @@ export class IckbSdk {
         poolDeposits,
         lockUp,
       },
-      user: { orders: orders.filter((group) => group.isOwner(...locks)) },
+      userOrders: orders.filter((group) => group.isOwner(...locks)),
       account: {
         capacityCells: accounts.flatMap((account) => account.capacityCells),
         nativeUdtCells: accounts.flatMap((account) => account.nativeUdtCells),
