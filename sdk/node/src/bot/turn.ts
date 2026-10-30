@@ -5,7 +5,6 @@ import { TransactionBroadcastError } from "../../../src/send/sign_and_send_trans
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { convert, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { minBigInt } from "../../../src/utils/utils.ts";
-import { transactionShape } from "../shared/format.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { summarizeBotState } from "./support.ts";
 import { buildTransaction } from "./transaction.ts";
@@ -96,17 +95,12 @@ async function sendBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
-  const sent = {
-    fee: result.tx.estimateFee(state.system.feeRate),
-    feeRate: state.system.feeRate,
-    transactionShape: transactionShape(result.tx),
-  };
   let recordedHash: ccc.Hex | undefined;
   let txHash: ccc.Hex;
   try {
     txHash = await context.runtime.sendTransaction(
       result.tx,
-      sent.fee,
+      result.tx.estimateFee(state.system.feeRate),
       (hash) => {
         recordedHash = hash;
       },
@@ -117,7 +111,6 @@ async function sendBuiltTransaction({
       txHash,
       outcome: "broadcasted",
       elapsedMs: Date.now() - startedAt,
-      ...sent,
     });
   } catch (error) {
     if (!(error instanceof TransactionBroadcastError)) {
@@ -130,7 +123,6 @@ async function sendBuiltTransaction({
       txHash,
       outcome: "broadcast_ambiguous",
       elapsedMs: Date.now() - startedAt,
-      ...sent,
       error,
     });
   }

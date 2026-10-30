@@ -50,7 +50,7 @@ Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and
 
 The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `bot.*` event types, not generator output or log locations.
 
-The eight event types, each complete on its own:
+The eight event types, each carrying what is new at its step, so a sent transaction's fee and shape are in the `bot.transaction.built` event just before it:
 
 - `bot.turn.started`
 - `bot.chain.preflight`
@@ -79,7 +79,7 @@ The decision transcript groups its evidence by purpose:
 
 ### Transaction outcomes
 
-`bot.transaction.sent` carries the local hash, fee, fee rate, transaction shape, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the send error. An ambiguous send still waits for that hash. `bot.transaction.committed` carries the hash, status, elapsed time and wait policy.
+`bot.transaction.sent` carries the local hash, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the send error. An ambiguous send still waits for that hash. `bot.transaction.committed` carries the hash, status, elapsed time and wait policy.
 
 `bot.turn.failed` carries the error's name, message, stack, cause chain and public enumerable fields. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. A rejection during confirmation includes `txHash`, `status` and `reason`; a timeout uses CCC's timeout error, with the hash in the preceding sent event of the same `runId`. Non-secret transaction, script and cell data may be logged when useful.
 

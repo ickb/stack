@@ -17,7 +17,7 @@ export interface BotIdentity {
 }
 
 /**
- * The eight bot events, each complete on its own; one turn emits at most six. A turn emits `bot.turn.started`,
+ * The eight bot events, each carrying what is new at its step; one turn emits at most six. A turn emits `bot.turn.started`,
  * `bot.state.read`, then either `bot.decision.skipped` or `bot.transaction.built`,
  * `bot.transaction.sent`, and `bot.transaction.committed`; the process's first turn also
  * emits `bot.chain.preflight` after its start. Any failure ends the turn and the process
@@ -42,9 +42,6 @@ export type BotEvent =
       /** `broadcast_ambiguous` when the send failed after the hash was known; the wait continues. */
       outcome: "broadcasted" | "broadcast_ambiguous";
       elapsedMs: number;
-      fee: bigint;
-      feeRate: ccc.Num;
-      transactionShape: BotDecision["transactionShape"];
       error?: unknown;
     }
   | {
