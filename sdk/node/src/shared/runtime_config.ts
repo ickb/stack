@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
@@ -114,8 +115,8 @@ async function readFileEnv(
     : path.resolve(env["INIT_CWD"] ?? process.cwd(), value);
   let fileSecret: string;
   try {
-    const fileSystem = await import("node:fs/promises");
-    fileSecret = await fileSystem.readFile(secretPath, "utf8");
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- the path is the operator's configured key file.
+    fileSecret = await readFile(secretPath, "utf8");
   } catch (cause) {
     throw new Error(`Invalid file from env ${name}`, { cause });
   }
