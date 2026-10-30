@@ -6,9 +6,9 @@ import { OrderManager } from "../../../src/order/order.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
+  anchoredAt,
   FeeRateStubClient,
   l1SdkWithManagers,
-  tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
 
 afterEach(() => {
@@ -48,7 +48,7 @@ describe("IckbSdk.getL1AccountState", () => {
     ]);
 
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(headerLike(1n, { timestamp: BigInt(Date.now()) })),
+      ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),
       cells: (): ccc.Cell[] => [],
     });
 
@@ -116,7 +116,7 @@ function l1StateWithMarketOrder({
   vi.spyOn(orderManager, "findOrders").mockResolvedValue([marketOrder.group]);
 
   const client = new FeeRateStubClient({
-    getTipHeader: tipHeaderHandler(headerLike(1n, { timestamp: BigInt(Date.now()) })),
+    ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),
     cells: (): ccc.Cell[] => [],
   });
 

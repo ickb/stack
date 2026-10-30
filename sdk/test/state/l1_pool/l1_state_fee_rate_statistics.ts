@@ -69,6 +69,9 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
   });
 });
 
+// Built once: the tip names this exact header, timestamp included, as its parent.
+const PARENT = jsonHeader(2n, byte32FromByte("cc"));
+
 function clientWithFeeRateStatistics(feeRateStatistics: () => unknown): ccc.Client {
   return ccc.ClientPublicTestnet.new({
     transport: {
@@ -91,24 +94,10 @@ async function responseFor(method: string): Promise<unknown> {
   await Promise.resolve();
   switch (method) {
     case "get_tip_header": {
-      // A real, fresh tip: the SDK checks its hash against its fields and its age.
-      const fields = {
-        compact_target: "0x0",
-        dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
-        epoch: "0x1",
-        extra_hash: byte32FromByte("aa"),
-        nonce: "0x0",
-        number: "0x3",
-        parent_hash: byte32FromByte("cc"),
-        proposals_hash: byte32FromByte("dd"),
-        timestamp: ccc.numToHex(Date.now()),
-        transactions_root: byte32FromByte("ee"),
-        version: "0x0",
-      } as const;
-      const hash = headerHash(
-        cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32FromByte("bb") }),
-      );
-      return { ...fields, hash };
+      return jsonHeader(3n, PARENT.hash);
+    }
+    case "get_header_by_number": {
+      return PARENT;
     }
     case "get_cells": {
       return { last_cursor: "0x", objects: [] };
@@ -117,4 +106,25 @@ async function responseFor(method: string): Promise<unknown> {
       throw new Error(`Unexpected JSON-RPC method: ${method}`);
     }
   }
+}
+
+/** A real, fresh header: the SDK checks its hash against its fields and the tip's age. */
+function jsonHeader(number: bigint, parentHash: ccc.Hex): { hash: ccc.Hex } {
+  const fields = {
+    compact_target: "0x0",
+    dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
+    epoch: "0x1",
+    extra_hash: byte32FromByte("aa"),
+    nonce: "0x0",
+    number: ccc.numToHex(number),
+    parent_hash: parentHash,
+    proposals_hash: byte32FromByte("dd"),
+    timestamp: ccc.numToHex(Date.now()),
+    transactions_root: byte32FromByte("ee"),
+    version: "0x0",
+  } as const;
+  const hash = headerHash(
+    cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32FromByte("bb") }),
+  );
+  return { ...fields, hash };
 }

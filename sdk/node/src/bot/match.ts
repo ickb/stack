@@ -118,9 +118,9 @@ function bestFill(
   return best;
 }
 
-/** The low bits of the tip hash: a seed that changes every block and is logged with the turn. */
-export function seedOf(tipHash: ccc.Hex): number {
-  return Number(BigInt(tipHash) & 0xff_ff_ff_ffn);
+/** The low bits of the read block's hash: a seed that changes every block, logged with the turn. */
+export function seedOf(blockHash: ccc.Hex): number {
+  return Number(BigInt(blockHash) & 0xff_ff_ff_ffn);
 }
 
 /** A uniform shuffle from a 32-bit seed (mulberry32), so a turn is replayable. */

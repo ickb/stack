@@ -142,6 +142,13 @@ export function tipMaxAgeMs(policy: LockUpPolicy): number {
   );
 }
 
+/** Throws when `header` trails the local clock by more than `maxAgeMs`. */
+export function assertFresh(header: ccc.ClientBlockHeader, maxAgeMs: number): void {
+  if (BigInt(Date.now()) - header.timestamp > BigInt(maxAgeMs)) {
+    throw new Error(`Block ${header.hash} is more than ${String(maxAgeMs)} ms old`);
+  }
+}
+
 /** A deposit's maturity, rolled a cycle when its claim is too close, and whether it is ready. */
 export function depositMaturity(
   claim: ccc.Epoch,

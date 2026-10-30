@@ -596,6 +596,21 @@ describe("signAndSendTransaction broadcast deadline", () => {
     ).resolves.toBe(TX_HASH);
     expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
+
+  it("refuses the send when the tip read for the deadline is older than its bound", async () => {
+    const { signer, send } = signerFixture(bodyTransaction());
+    const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
+
+    await expect(
+      signAndSendTransaction(signer, bodyTransaction(), PLANNED_FEE, recordTxHash, {
+        epoch: TIP_EPOCH.add([0n, 1n, 2n]),
+        tipMaxAgeMs: 1,
+      }),
+    ).rejects.toThrow("ms old");
+
+    expect(recordTxHash).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
 });
 
 function duplicatedTransaction(txHash: ccc.Hex): ccc.ErrorClientDuplicatedTransaction {

@@ -13,7 +13,7 @@ A skip, commit or failure ends the turn, and the next one, in the same process o
 
 ## Matching makes progress from available inventory
 
-The bot places no orders. Its book is every order past par, regardless of owner. It shuffles once using a logged seed from the tip hash, then repeatedly:
+The bot places no orders. Its book is every order past par, regardless of owner. It shuffles once using a logged seed from the hash of the block the state was read at, then repeatedly:
 
 - sizes each order's largest fill payable from the remaining balances;
 - probes the exact matcher and subtracts ten mining fees from the fill's exchange value;

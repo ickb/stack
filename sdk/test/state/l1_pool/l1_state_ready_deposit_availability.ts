@@ -8,9 +8,9 @@ import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
+  anchoredAt,
   FeeRateStubClient,
   l1SdkWithManagers,
-  tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
 
 afterEach(() => {
@@ -40,7 +40,7 @@ describe("IckbSdk.getL1AccountState", () => {
       timestamp: BigInt(Date.now()),
     });
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(tip),
+      ...anchoredAt(tip),
       cells: (): ccc.Cell[] => [],
     });
 

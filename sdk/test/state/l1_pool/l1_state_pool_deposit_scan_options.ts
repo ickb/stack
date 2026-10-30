@@ -2,10 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  FeeRateStubClient,
-  tipHeaderHandler,
-} from "../l1_account/support/sdk_l1_support.ts";
+import { FeeRateStubClient, anchoredAt } from "../l1_account/support/sdk_l1_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -17,7 +14,7 @@ describe("IckbSdk.getL1AccountState", () => {
     const findDeposits = vi.spyOn(logicManager, "findDeposits").mockResolvedValue([]);
     const tip = headerLike(0n, { timestamp: BigInt(Date.now()) });
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(tip),
+      ...anchoredAt(tip),
       cells: (): never[] => [],
     });
 

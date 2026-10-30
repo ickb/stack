@@ -23,7 +23,7 @@ export interface IckbSdk {
   buildConversionTransaction: (
     options: ConversionTransactionOptions,
   ) => Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
+  /** Reads system, user-order, and account state at the sampled tip's parent, under one timing policy. */
   getL1AccountState: (
     client: ccc.Client,
     locks: ccc.Script[],

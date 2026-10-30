@@ -11,7 +11,7 @@ import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts"
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import { FeeRateStubClient, tipHeaderHandler } from "./support/sdk_l1_support.ts";
+import { anchoredAt, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
 
@@ -106,7 +106,7 @@ describe("IckbSdk.getL1AccountState", () => {
       timestamp: BigInt(Date.now()),
     });
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(tip),
+      ...anchoredAt(tip, headersByNumber),
       cells: (key): readonly StubCell[] => {
         scans.push(key);
         const { code_hash: codeHash, hash_type: hashType, args } = key.script;
@@ -118,10 +118,6 @@ describe("IckbSdk.getL1AccountState", () => {
         await Promise.resolve();
         const body = [ownedTx, pendingTx].find((tx) => tx.hash() === ccc.hexFrom(txHash));
         return body === undefined ? undefined : committedTransactionResponse(body);
-      },
-      getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
-        await Promise.resolve();
-        return headersByNumber.get(ccc.numFrom(number));
       },
     });
 

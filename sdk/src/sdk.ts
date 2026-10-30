@@ -17,6 +17,7 @@ import type {
 } from "./conversion/types.ts";
 import {
   assertDaoOutputLimit,
+  assertFresh,
   broadcastDeadline,
   DaoHeaderIndexError,
   DaoOutputLimitError,
@@ -80,12 +81,12 @@ export class IckbSdk {
   // ---- State reads -------------------------------------------------------------------
 
   /**
-   * Reads system, user-order, and account state against one sampled tip, under the
+   * Reads system, user-order, and account state at the sampled tip's parent, under the
    * caller's withdrawal timing rules (`BOT_LOCK_UP` or `WALLET_LOCK_UP`) and, when given, a
    * positive fee rate cap that replaces CCC's ceiling; a cap of zero or less throws.
    *
-   * @remarks Every read goes through `verifiedClient`, the tip bounded by the policy's
-   * slack, so a caller passes a plain client. Every read is complete and uncapped: a large
+   * @remarks Every read goes through `verifiedClient` and the tip's parent is bounded by the
+   * policy's slack, so a caller passes a plain client. Every read is complete and uncapped: a large
    * book or pool costs a slower read, never a partial or failed one. Each account lock is
    * enumerated by one uncached unfiltered exact-lock scan and classified client-side.
    */
@@ -103,8 +104,19 @@ export class IckbSdk {
     if (maxFeeRate !== undefined && ccc.numFrom(maxFeeRate) <= ccc.Zero) {
       throw new RangeError("maxFeeRate must be positive");
     }
-    const client = verifiedClient(plainClient, tipMaxAgeMs(lockUp));
-    const tip = await client.getTipHeader();
+    const client = verifiedClient(plainClient);
+    const live = await client.getTipHeader();
+    // The live tip can still lose a one-block race, and a transaction naming it as a header
+    // dep is then refused after signing; every recorded fork was one block deep.
+    const tip = await client.getHeaderByNumber(live.number - 1n);
+    if (tip?.hash !== live.parentHash) {
+      throw new Error(
+        `Block ${String(live.number - 1n)} is not the parent of tip ${live.hash}`,
+      );
+    }
+    // The age bound is on the header the read is priced at: a fresh tip a node invented can
+    // name any old block as its parent.
+    assertFresh(tip, tipMaxAgeMs(lockUp));
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
       this.ickbLogic.findDeposits(client, tip),

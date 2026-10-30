@@ -158,9 +158,10 @@ export interface CompleteIckbTransactionOptions {
   protocolCells: readonly ProtocolCell[];
 
   /**
-   * The tip the plan was priced at, named as a header dep: the chain refuses a
-   * transaction whose deps are off the main chain, so a tip a node invented, whose DAO
-   * rate set the exchange ratio, cannot price an accepted transaction.
+   * The header the plan was priced at, the state read's `system.tip`, named as a header
+   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
+   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
+   * transaction.
    */
   tip: ccc.ClientBlockHeader;
 }
@@ -258,7 +259,7 @@ export interface ConversionTransactionContextProjection {
 export interface SystemState {
   /** The fee rate for transactions. */
   feeRate: ccc.Num;
-  /** Sampled tip used for this L1 scan. It may be stale after scans complete. */
+  /** The sampled tip's parent, this L1 scan's anchor. It may be stale after scans complete. */
   tip: ccc.ClientBlockHeader;
   /** The exchange ratio between CKB and UDT. */
   exchangeRatio: Ratio;

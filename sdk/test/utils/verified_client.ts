@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { verifiedClient } from "../../src/utils/verified_client.ts";
 import { TESTNET_HEADERS } from "./fixtures/testnet_headers.ts";
 
@@ -48,10 +48,6 @@ const READS: Record<string, (client: ccc.Client) => Promise<unknown>> = {
     client.getCellWithHeader({ txHash: GENESIS.hash, index: 0n }),
 };
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 describe("verifiedClient", () => {
   it("hands out real testnet headers, genesis and a mined block, as the node answered them", async () => {
     for (const header of [GENESIS, BLOCK]) {
@@ -88,20 +84,6 @@ describe("verifiedClient", () => {
     await expect(
       client.getCellWithHeader({ txHash: GENESIS.hash, index: 0n }),
     ).resolves.toBeUndefined();
-  });
-
-  it("bounds the tip's age only when asked, against the local clock", async () => {
-    // The real block is the tip; the clock decides whether it is stale.
-    const bound = 300_000;
-    const bounded = verifiedClient(answering(BLOCK), bound);
-
-    vi.useFakeTimers({ now: Number(BLOCK.timestamp) + bound });
-    await expect(bounded.getTipHeader()).resolves.toBe(BLOCK);
-    vi.useFakeTimers({ now: Number(BLOCK.timestamp) + bound + 1 });
-    await expect(bounded.getTipHeader()).rejects.toThrow(
-      `Tip ${BLOCK.hash} is more than ${String(bound)} ms old`,
-    );
-    await expect(verifiedClient(answering(BLOCK)).getTipHeader()).resolves.toBe(BLOCK);
   });
 
   it("hands out a transaction only under the hash of its body", async () => {
@@ -188,10 +170,9 @@ describe("verifiedClient", () => {
 
   it("forwards everything else to the wrapped client", () => {
     const inner = new StubClient();
-    const client = verifiedClient(inner, 1);
+    const client = verifiedClient(inner);
 
     expect(client.addressPrefix).toBe(inner.addressPrefix);
     expect(client.cache).toBe(inner.cache);
-    expect(client).toMatchObject({ tipMaxAgeMs: 1 });
   });
 });

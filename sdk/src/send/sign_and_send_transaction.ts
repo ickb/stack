@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { BroadcastDeadline } from "../dao.ts";
+import { assertFresh, type BroadcastDeadline } from "../dao.ts";
 import { jsonRpcRequestor, unique } from "../utils/utils.ts";
 import { verifiedClient } from "../utils/verified_client.ts";
 
@@ -60,7 +60,7 @@ export async function signAndSendTransaction(
   const requested = ccc.Transaction.from(tx).clone();
   const requestedBody = economicBody(requested);
   // The checks read through a verified client, whatever client the signer holds.
-  const client = verifiedClient(signer.client, broadcastBefore?.tipMaxAgeMs);
+  const client = verifiedClient(signer.client);
   const inputs = await verifiedInputs(client, requested.inputs);
   const signed = await signer.signTransaction(tx);
   if (economicBody(signed) !== requestedBody) {
@@ -78,7 +78,9 @@ export async function signAndSendTransaction(
     );
   }
   if (broadcastBefore !== undefined) {
-    const { epoch } = await client.getTipHeader();
+    const tip = await client.getTipHeader();
+    assertFresh(tip, broadcastBefore.tipMaxAgeMs);
+    const { epoch } = tip;
     if (broadcastBefore.epoch.compare(epoch) <= 0) {
       throw new TransactionExpiredError({
         broadcastBefore: broadcastBefore.epoch,

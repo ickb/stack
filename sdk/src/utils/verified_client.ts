@@ -4,24 +4,20 @@ import { ccc } from "@ckb-ccc/core";
  * Wraps `inner` into a client that checks the reads the SDK makes: every header it hands
  * out against the header's own hash, a header read by number against the number asked
  * for, a transaction read by hash against the hash of its body, and a cell against the
- * body of its creating transaction. It refuses a tip that trails the local clock by more
- * than `tipMaxAgeMs` when one is given. Other reads pass through unchecked; the cell
+ * body of its creating transaction. Other reads pass through unchecked; the cell
  * beside `getCellWithHeader`'s header is one, since the SDK reads only its header.
  *
  * @remarks It wraps the client, not the SDK's readers, because CCC's own DAO valuation
  * (`Cell.getNervosDaoInfo`, in the send) reads headers through the client it is given.
  * Why each check exists: SDK README, Account state.
  */
-export function verifiedClient(inner: ccc.Client, tipMaxAgeMs?: number): ccc.Client {
-  return new VerifiedClient(inner, tipMaxAgeMs);
+export function verifiedClient(inner: ccc.Client): ccc.Client {
+  return new VerifiedClient(inner);
 }
 
 // @ts-expect-error TS2655: the abstract members are forwarded by the proxy at runtime, as in CCC's own connector.
 class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
-  public static readonly [ccc.Proxy.localKeys] = ["tipMaxAgeMs", "bodies"];
-
-  /** How far the tip may trail the local clock, in ms; absent, any age passes. */
-  public readonly tipMaxAgeMs: number | undefined;
+  public static readonly [ccc.Proxy.localKeys] = ["bodies"];
 
   /** Creating transactions `getCell` read, so concurrent reads of one share a request. */
   private readonly bodies = new Map<
@@ -29,21 +25,8 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     Promise<ccc.ClientTransactionResponse | undefined>
   >();
 
-  /** Wraps `inner`, bounding the tip's age when `tipMaxAgeMs` is given. */
-  constructor(inner: ccc.Client, tipMaxAgeMs?: number) {
-    super(inner);
-    this.tipMaxAgeMs = tipMaxAgeMs;
-  }
-
   public override async getTipHeader(): Promise<ccc.ClientBlockHeader> {
-    const tip = verified(await this[ccc.Proxy.inner].getTipHeader());
-    if (
-      this.tipMaxAgeMs !== undefined &&
-      BigInt(Date.now()) - tip.timestamp > BigInt(this.tipMaxAgeMs)
-    ) {
-      throw new Error(`Tip ${tip.hash} is more than ${String(this.tipMaxAgeMs)} ms old`);
-    }
-    return tip;
+    return verified(await this[ccc.Proxy.inner].getTipHeader());
   }
 
   public override async getHeaderByNumber(

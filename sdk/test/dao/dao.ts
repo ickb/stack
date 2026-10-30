@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertDaoOutputLimit,
+  assertFresh,
   BOT_LOCK_UP,
   broadcastDeadline,
   DAO_DEPOSIT_DATA,
@@ -166,5 +167,25 @@ describe("tipMaxAgeMs", () => {
   it("is the policy's selection margin less its broadcast reserve on the four-hour epoch", () => {
     expect(tipMaxAgeMs(BOT_LOCK_UP)).toBe(5 * 60_000);
     expect(tipMaxAgeMs(WALLET_LOCK_UP)).toBe(30 * 60_000);
+  });
+});
+
+describe("assertFresh", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("refuses a block that trails the local clock by more than the bound", () => {
+    const block = headerLike({ number: 1n, timestamp: 1_000_000n });
+    const bound = 300_000;
+
+    vi.useFakeTimers({ now: 1_000_000 + bound });
+    expect(() => {
+      assertFresh(block, bound);
+    }).not.toThrow();
+    vi.useFakeTimers({ now: 1_000_000 + bound + 1 });
+    expect(() => {
+      assertFresh(block, bound);
+    }).toThrow(`Block ${block.hash} is more than ${String(bound)} ms old`);
   });
 });
