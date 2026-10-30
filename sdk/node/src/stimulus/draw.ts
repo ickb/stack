@@ -27,7 +27,6 @@ export interface Budgets {
 }
 
 const RANDOM_BITS = 52n;
-const CKB = ccc.fixedPointFrom(1);
 // Three kinds of order per conversion: orders are what the bot matches, conversions are
 // what it competes with.
 const ORDER_WEIGHT = 3;
@@ -104,7 +103,7 @@ function drawConversionDirection(
 }
 
 function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigint {
-  if (isMax || budget <= CKB) {
+  if (isMax || budget <= ccc.One) {
     return budget;
   }
   const bucket = pickWeighted(
@@ -121,7 +120,7 @@ function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigin
   if (bucket === "max") {
     return budget;
   }
-  return logUniform(CKB, budget, random);
+  return logUniform(ccc.One, budget, random);
 }
 
 /** Uniform over bit lengths, then uniform within the chosen length, clamped to the range. */
