@@ -21,7 +21,7 @@ export async function readStimulusConfig(env: NodeJS.ProcessEnv): Promise<Runtim
 
 /**
  * Reads the optional knobs that pin one draw each: `STIMULUS_KIND`, `STIMULUS_DIRECTION`,
- * `STIMULUS_AMOUNT` (whole CKB or iCKB, or `max`), and `STIMULUS_FEE` (numerator over
+ * `STIMULUS_AMOUNT` (CKB or iCKB, up to eight decimals, or `max`), and `STIMULUS_FEE` (numerator over
  * the fixed base). Unset knobs leave their draw random.
  */
 export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {

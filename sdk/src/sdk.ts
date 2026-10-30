@@ -546,7 +546,7 @@ async function completeFee(
   }
 }
 
-/** Stable machine-readable failures owned by the Phase-2 SDK. */
+/** Stable machine-readable SDK failures. */
 export type IckbErrorCode = "insufficient_capacity" | "insufficient_ickb";
 
 /** Typed SDK failure with a stable machine-readable code. */
