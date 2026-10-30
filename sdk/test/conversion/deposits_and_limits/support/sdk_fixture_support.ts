@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  FakeCkbSigner,
-  headerLike,
-  script,
-  StubClient,
-  transactionWithHeader,
-} from "@ickb/testkit";
+import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
 
 import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
@@ -163,7 +157,11 @@ export function fundedSigner(
       );
     },
   });
-  return { client, signer: new FakeCkbSigner(client, [...locks]), cells: [...cells] };
+  return {
+    client,
+    signer: new ccc.SignerCkbScriptReadonly(client, [...locks]),
+    cells: [...cells],
+  };
 }
 
 export interface SdkFixture {

@@ -18,7 +18,6 @@ export {
   type OracleVerdict,
   type OrderState,
 } from "./contract_oracle.ts";
-export { FakeCkbSigner } from "./fake_signer.ts";
 
 export type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
