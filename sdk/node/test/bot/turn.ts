@@ -307,14 +307,20 @@ function turnHarness(
       }),
   );
   // The bot's client is a JSON-RPC one: the stub answers the raw status poll from the
-  // scripted body, as the node would.
+  // recorded responses, as the node would.
   const runtime = botRuntime({
     client: new StubClient({
-      getTransactionNoCache: async (
+      transactionStatus: async (
         txHash,
-      ): ReturnType<ccc.Client["getTransactionNoCache"]> => {
+      ): Promise<{ status: string; reason?: string } | undefined> => {
         await Promise.resolve();
-        return responses.get(ccc.hexFrom(txHash));
+        const response = responses.get(txHash);
+        return response === undefined
+          ? undefined
+          : {
+              status: response.status,
+              ...(response.reason === undefined ? {} : { reason: response.reason }),
+            };
       },
       ...options.client,
     }),

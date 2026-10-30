@@ -36,7 +36,10 @@ export interface StubClientHandlers {
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
   getTransaction?: ClientMethod<"getTransaction">;
-  getTransactionNoCache?: ClientMethod<"getTransactionNoCache">;
+  /** The node's status for a transaction, as the raw status poll reads it; absent, unknown. */
+  transactionStatus?: (
+    txHash: ccc.Hex,
+  ) => Promise<{ status: string; reason?: string } | undefined>;
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
 }
@@ -86,7 +89,7 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 /**
  * Answers the SDK's raw reads from the stub's scripted handlers, so a test stubs one typed
  * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
- * from `getTransactionNoCache` (the body's status and reason). Everything else is offline.
+ * from `transactionStatus`. Everything else is offline.
  */
 function stubTransport(raw: {
   client?: StubClient;
@@ -126,15 +129,12 @@ async function rawStatus(
   if (raw.client === undefined) {
     return { status: "unknown" };
   }
-  if (raw.scripted?.getTransactionNoCache !== undefined) {
-    const response = await raw.client.getTransactionNoCache(txHash);
-    if (response === undefined) {
-      return { status: "unknown" };
-    }
-    return {
-      status: response.status,
-      ...(response.reason === undefined ? {} : { reason: response.reason }),
-    };
+  if (raw.scripted?.transactionStatus !== undefined) {
+    return (
+      (await raw.scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
+        status: "unknown",
+      }
+    );
   }
   return offlineTransport().request({
     id: 0,
