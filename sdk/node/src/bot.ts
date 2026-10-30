@@ -48,9 +48,7 @@ try {
       },
       rpcEndpoint,
     },
-    expected: preflight.expected,
-    observed: preflight.observed,
-    matches: preflight.matches,
+    genesisHash: preflight.genesisHash,
   });
   const sdk = new IckbSdk(managers);
   const runtime: Runtime = {

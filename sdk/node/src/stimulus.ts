@@ -44,11 +44,7 @@ try {
         args: primaryLock.args,
       },
       rpcEndpoint,
-      preflight: {
-        expected: preflight.expected,
-        observed: preflight.observed,
-        matches: preflight.matches,
-      },
+      preflight,
     },
     override,
     random: Math.random,

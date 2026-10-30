@@ -34,7 +34,7 @@ export interface StimulusIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
   rpcEndpoint: PublicRpcEndpointIdentity;
-  preflight: Omit<ChainPreflightEvidence, "chain">;
+  preflight: ChainPreflightEvidence;
 }
 
 /** Every way a turn ends; `committed` is the only one that proves stimulus reached the chain. */

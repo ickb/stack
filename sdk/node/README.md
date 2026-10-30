@@ -65,7 +65,7 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 ### Preflight and decisions
 
-`bot.chain.preflight` emits the recommended address, primary lock, RPC endpoint identity, expected chain identity, observed genesis hash/address prefix/tip and match booleans before signing starts. Endpoint identity lists each configured endpoint's protocol, hostname and port ([runtime config](#runtime-config)); it omits the URL's path, query and fragment.
+`bot.chain.preflight` emits the recommended address, primary lock, RPC endpoint identity and the genesis hash, checked against the chain's, before signing starts. Endpoint identity lists each configured endpoint's protocol, hostname and port ([runtime config](#runtime-config)); it omits the URL's path, query and fragment.
 
 `bot.state.read` carries the tip, balances, order/withdrawal/deposit counts, exchange ratio, deposit capacity and fee rate. `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
@@ -100,7 +100,7 @@ Bot-only log queries over the unit's journal saved as one JSON line per event (a
 ```bash
 EVENT_FILE=$(mktemp) && journalctl --user -u ickb-bot-testnet.service -o cat | grep '^{' > "$EVENT_FILE"
 jq -r '.type' "$EVENT_FILE" | sort | uniq -c
-jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, expected, observed, matches}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, genesisHash}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions: .decision.actions, skip: .decision.skip}' "$EVENT_FILE"
 jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions: .decision.actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, elapsedMs}' "$EVENT_FILE"
@@ -122,7 +122,7 @@ Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|convers
 
 Collection uses the [SDK's refused-buy and age rules](../src/order/fill.ts), shared with the interface. A zero-fee sell can become profitable as the DAO ratio grows, so it stays until filled or aged out. Predicting a second profitability rule in the generator would let it disagree with the bot. Dust and low-fee draws are retained because seeing the bot skip them is part of the test.
 
-Each turn writes one JSON line with `type` `stimulus.turn`, `timestamp` and the bot's envelope. `identity` contains the chain, recommended address, primary lock, endpoint identity and preflight evidence; the same [RPC path restriction](#runtime-config) applies. Other fields are `balance`, `orders` (live, fulfilled, refused and stale counts), `draw` and `outcome`: `committed`, `unresolved`, `rejected`, `skipped` or `failed`.
+Each turn writes one JSON line with `type` `stimulus.turn`, `timestamp` and the bot's envelope. `identity` contains the chain, recommended address, primary lock, endpoint identity and the preflight's genesis hash; the same [RPC path restriction](#runtime-config) applies. Other fields are `balance`, `orders` (live, fulfilled, refused and stale counts), `draw` and `outcome`: `committed`, `unresolved`, `rejected`, `skipped` or `failed`.
 
 A sent transaction carries `action` (minted order/master output indices, or conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. Join that hash and output index to the bot's `decision.match.matchedOrderOutPoints`. A nonzero stale count means an order reached the nominal thirty-day age cutoff and deserves a look.
 

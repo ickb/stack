@@ -25,10 +25,7 @@ export interface BotIdentity {
  */
 export type BotEvent =
   | { type: "bot.turn.started" }
-  | ({ type: "bot.chain.preflight"; identity: BotIdentity } & Omit<
-      ChainPreflightEvidence,
-      "chain"
-    >)
+  | ({ type: "bot.chain.preflight"; identity: BotIdentity } & ChainPreflightEvidence)
   | ({ type: "bot.state.read" } & BotStateSummary)
   | {
       type: "bot.decision.skipped";

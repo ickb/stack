@@ -14,7 +14,6 @@ import {
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { chainIdentities } from "../../../src/utils/chain.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -57,13 +56,7 @@ const identity: StimulusIdentity = {
     endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
   },
   preflight: {
-    expected: chainIdentities.testnet,
-    observed: {
-      genesisHash: chainIdentities.testnet.genesisHash,
-      addressPrefix: "ckt",
-      tip: { hash: byte32FromByte("02"), number: 1n, timestamp: 0n },
-    },
-    matches: { genesisHash: true, addressPrefix: true },
+    genesisHash: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
   },
 };
 const FUNDED_CKB = 6000n * CKB;

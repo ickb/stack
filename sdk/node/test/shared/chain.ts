@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { jsonRpcRequestor } from "../../../src/utils/utils.ts";
 import { createPublicClient, verifyChainPreflight } from "../../src/shared/chain.ts";
 import {
-  byte32FromByte,
   MAINNET_GENESIS_HASH,
   preflightClient,
   TESTNET_GENESIS_HASH,
@@ -52,51 +51,27 @@ describe("finite public clients", () => {
 });
 
 describe("public client preflight identity", () => {
-  it("reads and verifies public chain identity evidence", async () => {
-    const client = preflightClient({
-      addressPrefix: "ckt",
-      genesisHash: TESTNET_GENESIS_HASH,
-      tipHash: byte32FromByte("22"),
-      tipNumber: 123n,
-      tipTimestamp: 456n,
-    });
-
-    await expect(verifyChainPreflight(client, "testnet")).resolves.toMatchObject({
-      chain: "testnet",
-      expected: {
-        chain: "testnet",
-        networkName: "ckb_testnet",
-        genesisHash: TESTNET_GENESIS_HASH,
-        genesisMessage: "aggron-v4",
-        addressPrefix: "ckt",
-      },
-      observed: {
-        genesisHash: TESTNET_GENESIS_HASH,
-        addressPrefix: "ckt",
-        tip: { hash: byte32FromByte("22"), number: 123n, timestamp: 456n },
-      },
-      matches: { genesisHash: true, addressPrefix: true },
-    });
+  it("accepts the chain's genesis and journals it", async () => {
+    await expect(
+      verifyChainPreflight(preflightClient(TESTNET_GENESIS_HASH), "testnet"),
+    ).resolves.toEqual({ genesisHash: TESTNET_GENESIS_HASH });
+    await expect(
+      verifyChainPreflight(preflightClient(MAINNET_GENESIS_HASH), "mainnet"),
+    ).resolves.toEqual({ genesisHash: MAINNET_GENESIS_HASH });
   });
 
-  it("rejects mismatched public chain identity evidence", async () => {
-    const client = preflightClient({
-      addressPrefix: "ckb",
-      genesisHash: MAINNET_GENESIS_HASH,
-      tipHash: byte32FromByte("22"),
-      tipNumber: 1n,
-      tipTimestamp: 2n,
-    });
-
-    await expect(verifyChainPreflight(client, "testnet")).rejects.toThrow(
+  it("rejects another chain's genesis", async () => {
+    await expect(
+      verifyChainPreflight(preflightClient(MAINNET_GENESIS_HASH), "testnet"),
+    ).rejects.toThrow(
       `Invalid testnet RPC chain identity: genesis hash expected ${
         TESTNET_GENESIS_HASH
-      } observed ${MAINNET_GENESIS_HASH}; address prefix expected ckt observed ckb`,
+      } observed ${MAINNET_GENESIS_HASH}`,
     );
   });
 
   it("rejects a missing genesis header as public identity evidence", async () => {
-    const client = testnetClient();
+    const client = preflightClient(TESTNET_GENESIS_HASH);
     client.getHeaderByNumber = async (): Promise<ccc.ClientBlockHeader | undefined> => {
       await Promise.resolve();
       return undefined;
@@ -107,16 +82,6 @@ describe("public client preflight identity", () => {
     );
   });
 });
-
-function testnetClient(): ccc.Client {
-  return preflightClient({
-    addressPrefix: "ckt",
-    genesisHash: TESTNET_GENESIS_HASH,
-    tipHash: byte32FromByte("22"),
-    tipNumber: 123n,
-    tipTimestamp: 456n,
-  });
-}
 
 function endpointPoolUrls(client: ccc.Client): string[] {
   const requestor = jsonRpcRequestor(client);

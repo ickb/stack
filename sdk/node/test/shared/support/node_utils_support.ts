@@ -12,37 +12,16 @@ export const TESTNET_GENESIS_HASH =
 export const MAINNET_GENESIS_HASH =
   "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
 
-export function preflightClient({
-  addressPrefix,
-  genesisHash,
-  tipHash,
-  tipNumber,
-  tipTimestamp,
-}: {
-  addressPrefix: string;
-  genesisHash: `0x${string}`;
-  tipHash: `0x${string}`;
-  tipNumber: bigint;
-  tipTimestamp: bigint;
-}): ccc.Client {
+/** A client that answers only the genesis header read, with `genesisHash`. */
+export function preflightClient(genesisHash: `0x${string}`): ccc.Client {
   return new StubClient({
-    addressPrefix,
     getHeaderByNumber: async (
       blockNumber,
     ): Promise<ccc.ClientBlockHeader | undefined> => {
       await Promise.resolve();
-      if (blockNumber !== 0n) {
-        return undefined;
-      }
-      return headerLike({ hash: genesisHash, number: 0n });
-    },
-    getTipHeader: async (): Promise<ccc.ClientBlockHeader> => {
-      await Promise.resolve();
-      return headerLike({
-        hash: tipHash,
-        number: tipNumber,
-        timestamp: tipTimestamp,
-      });
+      return blockNumber === 0n
+        ? headerLike({ hash: genesisHash, number: 0n })
+        : undefined;
     },
   });
 }
