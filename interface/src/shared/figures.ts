@@ -58,9 +58,6 @@ export function compactText(shannons: bigint, scale: number): string {
 /** Three significant digits with a K, M or G suffix, as the chart's axis labels read. */
 export function graphAmountText(shannons: bigint, scale: number): string {
   const value = fixedPointNumber(shannons) * scale;
-  if (!Number.isFinite(value)) {
-    return "184G";
-  }
   if (value >= 999500000) {
     return `${trimSignificant(value / 1000000000)}G`;
   }

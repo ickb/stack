@@ -136,7 +136,6 @@ describe("graphAmountText", () => {
     expect(graphAmountText(100000000000000000n, 10)).toBe("10.0G");
     expect(graphAmountText(1_000_000_000_000_000n, 1)).toBe("10.0M");
     expect(graphAmountText(1_000_000_000_000n, 1)).toBe("10.0K");
-    expect(graphAmountText(100000000n, Infinity)).toBe("184G");
   });
 
   it("formats deduplicated grid labels without suffixes", () => {
