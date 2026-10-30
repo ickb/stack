@@ -27,7 +27,7 @@ describe("bot private key output boundary", () => {
       );
       const emitter = new BotEventEmitter({
         chain: config.chain,
-        runId: "run-canary-test",
+        processId: "run-canary-test",
       });
 
       emitter.emit({ type: "bot.turn.started" });
@@ -43,7 +43,7 @@ describe("bot private key output boundary", () => {
       for (const line of output) {
         expect(JSON.parse(line)).toMatchObject({
           chain: "testnet",
-          runId: "run-canary-test",
+          runId: "run-canary-test-1",
         });
       }
     } finally {

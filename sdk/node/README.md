@@ -46,11 +46,11 @@ The start script runs the bot loop from source until a turn fails. Stdout is the
 
 ## Structured Events
 
-Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and a `bot.*` type. These events are the sole bot stdout contract.
+Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and a `bot.*` type. `runId` names the turn: the process's start time and pid, then the turn's number. These events are the sole bot stdout contract.
 
 The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `bot.*` event types, not generator output or log locations.
 
-The eight event types, each carrying what is new at its step, so a sent transaction's fee and shape are in the `bot.transaction.built` event just before it:
+The eight event types, each carrying what is new at its step, so a sent transaction's fee and shape are in the `bot.transaction.built` event of the same `runId`:
 
 - `bot.turn.started`
 - `bot.chain.preflight`

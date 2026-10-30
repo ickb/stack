@@ -21,7 +21,7 @@ export interface BotIdentity {
  * `bot.state.read`, then either `bot.decision.skipped` or `bot.transaction.built`,
  * `bot.transaction.sent`, and `bot.transaction.committed`; the process's first turn also
  * emits `bot.chain.preflight` after its start. Any failure ends the turn and the process
- * with `bot.turn.failed` instead. Every event of one process carries its `runId`.
+ * with `bot.turn.failed` instead. Every event of one turn carries its `runId`.
  */
 export type BotEvent =
   | { type: "bot.turn.started" }
@@ -58,24 +58,35 @@ export type BotEvent =
       error: unknown;
     };
 
-/** Emits bot events as JSON lines on stdout. */
+/**
+ * Emits bot events as JSON lines on stdout. Each `bot.turn.started` opens a new `runId`,
+ * the process id followed by the turn's number, so one turn's events share it and its
+ * prefix ties the process's turns together.
+ */
 export class BotEventEmitter {
-  private readonly context: { chain: SupportedChain; runId: string };
+  private readonly chain: SupportedChain;
+  private readonly processId: string;
+  private turn = 0;
 
-  constructor(context: { chain: SupportedChain; runId: string }) {
-    this.context = context;
+  constructor({ chain, processId }: { chain: SupportedChain; processId: string }) {
+    this.chain = chain;
+    this.processId = processId;
   }
 
   public emit(event: BotEvent): void {
+    if (event.type === "bot.turn.started") {
+      this.turn += 1;
+    }
     writeJsonLine({
       ...event,
-      chain: this.context.chain,
-      runId: this.context.runId,
+      chain: this.chain,
+      runId: `${this.processId}-${String(this.turn)}`,
       timestamp: new Date().toISOString(),
     });
   }
 }
 
-export function createRunId(): string {
+/** The process's start time and pid. */
+export function createProcessId(): string {
   return `${new Date().toISOString()}-${process.pid.toString(36)}`;
 }

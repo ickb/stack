@@ -7,7 +7,7 @@ import {
   signerAccountLocks,
 } from "../../src/send/sign_and_send_transaction.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
-import { BotEventEmitter, createRunId } from "./bot/events.ts";
+import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
 import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
@@ -22,7 +22,7 @@ const { chain, privateKey, rpcUrls, rpcEndpoint } = await readRuntimeConfigEnv(
   "BOT",
 );
 const maxFeeRate = readBotMaxFeeRate(process.env);
-const events = new BotEventEmitter({ chain, runId: createRunId() });
+const events = new BotEventEmitter({ chain, processId: createProcessId() });
 events.emit({ type: "bot.turn.started" });
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {

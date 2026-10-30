@@ -346,7 +346,7 @@ function turnHarness(
   });
   return {
     context: {
-      events: new BotEventEmitter({ chain: "testnet", runId: "run-1" }),
+      events: new BotEventEmitter({ chain: "testnet", processId: "run" }),
       runtime,
     },
     events,
