@@ -416,7 +416,8 @@ const IckbSdkImplementation = class IckbSdk {
     options: CompleteIckbTransactionOptions,
   ): Promise<ccc.Transaction> {
     const { signer, feeRate } = options;
-    const tx = this.ickbUdt.addCellDeps(ccc.Transaction.from(txLike).clone());
+    const tx = ccc.Transaction.from(txLike).clone();
+    tx.addCellDeps(this.ickbUdt.cellDeps);
     const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
     // Inputs come from one state read, each cell once, and each action spends its own
     // cell kind, so a repeated out point is a builder bug: this is the one place that

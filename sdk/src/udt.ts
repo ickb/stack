@@ -56,11 +56,8 @@ export class IckbUdt {
   /** The iCKB xUDT type script. */
   public readonly script: ccc.Script;
 
-  /** Out point of the xUDT code cell used by this iCKB token. */
-  public readonly udtCode: ccc.OutPoint;
-
-  /** Out point of the iCKB Logic code cell required by this token. */
-  public readonly logicCode: ccc.OutPoint;
+  /** The iCKB dep group, which also carries the xUDT and iCKB Logic code cells. */
+  public readonly cellDeps: ccc.CellDep[];
 
   /** Logic script whose hash is embedded in this iCKB xUDT type script. */
   public readonly logicScript: ccc.Script;
@@ -70,21 +67,18 @@ export class IckbUdt {
 
   /** Creates an instance of IckbUdt from its code and script references. */
   constructor({
-    code,
     script,
-    logicCode,
+    cellDeps,
     logicScript,
     daoScript,
   }: {
-    code: ccc.OutPointLike;
     script: ccc.ScriptLike;
-    logicCode: ccc.OutPointLike;
+    cellDeps: ccc.CellDepLike[];
     logicScript: ccc.ScriptLike;
     daoScript: ccc.ScriptLike;
   }) {
     this.script = ccc.Script.from(script);
-    this.udtCode = ccc.OutPoint.from(code);
-    this.logicCode = ccc.OutPoint.from(logicCode);
+    this.cellDeps = cellDeps.map((cellDep) => ccc.CellDep.from(cellDep));
     this.logicScript = ccc.Script.from(logicScript);
     this.daoScript = ccc.Script.from(daoScript);
   }
@@ -128,23 +122,6 @@ export class IckbUdt {
       cell.cellOutput.type?.eq(this.script) === true &&
       ccc.bytesFrom(cell.outputData).length >= udtDataSize
     );
-  }
-
-  /**
-   * Adds iCKB-specific cell dependencies to a transaction.
-   *
-   * Adds individual code deps (not dep group) for:
-   * - xUDT code cell (this.udtCode)
-   * - iCKB Logic code cell (this.logicCode)
-   *
-   * @param txLike - The transaction to add cell deps to.
-   * @returns The transaction with cell deps added.
-   */
-  public addCellDeps(txLike: ccc.TransactionLike): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    addCodeDep(tx, this.udtCode);
-    addCodeDep(tx, this.logicCode);
-    return tx;
   }
 
   /**
@@ -210,13 +187,6 @@ export class IckbUdt {
 
 function decodeUdtBalance(data: ccc.BytesLike): ccc.Num {
   return CheckedUint128LE.decode(ccc.bytesFrom(data).slice(0, udtDataSize));
-}
-
-function addCodeDep(tx: ccc.Transaction, outPoint: ccc.OutPoint): void {
-  if (tx.cellDeps.some((dep) => dep.depType === "code" && dep.outPoint.eq(outPoint))) {
-    return;
-  }
-  tx.addCellDeps({ outPoint, depType: "code" });
 }
 
 /**

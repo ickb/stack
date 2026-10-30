@@ -266,7 +266,7 @@ function registerIckbTests(): void {
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
     expect(ickbUdt.outputBalance(completed)).toBe(110n);
-    expect(completed.cellDeps).toHaveLength(2);
+    expect(completed.cellDeps).toEqual(ickbUdt.cellDeps);
   });
 
   it("fails typed when the given iCKB cells cannot cover the outputs", async () => {

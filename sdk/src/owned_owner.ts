@@ -184,8 +184,8 @@ export class OwnedOwnerManager implements ScriptDeps {
    * Spends the deposits into DAO withdrawal requests locked by the Owned Owner script,
    * each followed by an owner marker locked by `lock` that points back at it.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction, for example
-   * via `ickbUdt.addCellDeps(tx)`.
+   * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that also
+   * resolves the xUDT script.
    */
   public requestWithdrawal(
     txLike: ccc.TransactionLike,

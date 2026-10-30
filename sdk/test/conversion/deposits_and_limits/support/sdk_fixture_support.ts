@@ -240,9 +240,8 @@ export function mockWithdrawalWithRemainderOrder(
 class TestIckbUdt extends IckbUdt {
   constructor(udt: ccc.Script, logic: ccc.Script, daoScript: ccc.Script) {
     super({
-      code: { txHash: hash("a1"), index: 0n },
       script: udt,
-      logicCode: { txHash: hash("a2"), index: 0n },
+      cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
       logicScript: logic,
       daoScript,
     });

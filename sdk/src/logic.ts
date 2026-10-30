@@ -94,8 +94,8 @@ export class LogicManager implements ScriptDeps {
    * Adds `depositQuantity` DAO deposits of `depositCapacity` locked by the logic script,
    * then the receipt that mints their iCKB in phase 2, locked by `lock`.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction
-   * (e.g., via ickbUdt.addCellDeps(tx)).
+   * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that also
+   * resolves the xUDT script.
    */
   public deposit(
     txLike: ccc.TransactionLike,

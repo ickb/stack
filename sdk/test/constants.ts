@@ -40,7 +40,7 @@ describe("getConfig", () => {
     });
 
     expect(completed).not.toBe(tx);
-    expect(completed.cellDeps).toHaveLength(2);
+    expect(completed.cellDeps).toEqual(ickbUdt.cellDeps);
     expect(tx.cellDeps).toEqual([]);
   });
 });
@@ -65,13 +65,7 @@ describe("getConfig defaults", () => {
     );
     expect(ickbUdt.script.toHex()).toBe(udtScript);
     expect(order.udtScript.toHex()).toBe(udtScript);
-    expect(ickbUdt.udtCode.toHex()).toBe(
-      "0xc07844ce21b38e4b071dd0e1ee3b0e27afd8d7532491327f39b786343f558ab700000000",
-    );
-    expect(ickbUdt.logicCode.toHex()).toBe(
-      "0xd7309191381f5a8a2904b8a79958a9be2752dbba6871fa193dab6aeb29dc8f4400000000",
-    );
-    for (const manager of [ickbLogic.dao, ickbLogic, ownedOwner, order]) {
+    for (const manager of [ickbUdt, ickbLogic.dao, ickbLogic, ownedOwner, order]) {
       expect(manager.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
     }
   });

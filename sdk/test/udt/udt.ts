@@ -43,9 +43,8 @@ function headerLike(ar: bigint): ccc.ClientBlockHeader {
 
 function udt(): IckbUdt {
   return new IckbUdt({
-    code: { txHash: byte32FromByte("44"), index: 0n },
     script: type,
-    logicCode: { txHash: byte32FromByte("66"), index: 0n },
+    cellDeps: [],
     logicScript: logic,
     daoScript,
   });
@@ -117,16 +116,6 @@ describe("IckbUdt.typeScriptFrom", () => {
 });
 
 describe("IckbUdt cell deps and shapes", () => {
-  it("adds the xUDT and logic code deps once", () => {
-    const tx = udt().addCellDeps(ccc.Transaction.default());
-
-    expect(tx.cellDeps.map((dep) => dep.outPoint.txHash)).toEqual([
-      byte32FromByte("44"),
-      byte32FromByte("66"),
-    ]);
-    expect(udt().addCellDeps(tx).cellDeps).toHaveLength(2);
-  });
-
   it("identifies only xUDT cells with UDT data", () => {
     expect(udt().isUdt(xudtCell(1n))).toBe(true);
     expect(udt().isUdt(xudtCell(1n, script("77")))).toBe(false);

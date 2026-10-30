@@ -41,31 +41,18 @@ const ORDER = ccc.Script.from({
   args: "0x",
 });
 
-/** Each network's code cells, given as direct code deps, and the dep group of the rest. */
+/**
+ * Each network's iCKB dep group: it carries every iCKB script's code cell, xUDT's and
+ * iCKB Logic's included, so one group dep resolves them all.
+ */
 const DEPLOYMENTS = {
   mainnet: {
-    udtCode: {
-      txHash: "0xc07844ce21b38e4b071dd0e1ee3b0e27afd8d7532491327f39b786343f558ab7",
-      index: 0,
-    },
-    logicCode: {
-      txHash: "0xd7309191381f5a8a2904b8a79958a9be2752dbba6871fa193dab6aeb29dc8f44",
-      index: 0,
-    },
     depGroup: {
       txHash: "0x621a6f38de3b9f453016780edac3b26bfcbfa3e2ecb47c2da275471a5d3ed165",
       index: 0,
     },
   },
   testnet: {
-    udtCode: {
-      txHash: "0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc63a9d337f5f",
-      index: 0,
-    },
-    logicCode: {
-      txHash: "0x9ac989b3355764f76cdce02c69dedb819fdfbcbda49a7db1a2c9facdfdb9a7fe",
-      index: 0,
-    },
     depGroup: {
       txHash: "0xf7ece4fb33d8378344cab11fcd6a4c6f382fd4207ac921cf5821f30712dcd311",
       index: 0,
@@ -89,13 +76,12 @@ export function getConfig(chain: SupportedChain): SdkManagers {
   if (!Object.hasOwn(DEPLOYMENTS, chain)) {
     throw new TypeError("unsupported iCKB network");
   }
-  const { udtCode, logicCode, depGroup } = DEPLOYMENTS[chain];
+  const { depGroup } = DEPLOYMENTS[chain];
   const cellDeps = [ccc.CellDep.from({ outPoint: depGroup, depType: "depGroup" })];
   const dao = { script: DAO, cellDeps };
   const ickbUdt = new IckbUdt({
-    code: udtCode,
     script: IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC),
-    logicCode,
+    cellDeps,
     logicScript: ICKB_LOGIC,
     daoScript: DAO,
   });
