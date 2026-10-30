@@ -30,14 +30,11 @@ export function actionProps(): Parameters<typeof Action>[0] {
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    refreshPreview: vi.fn(async () => {
+    refreshState: vi.fn(async () => {
       await Promise.resolve();
       return {
-        stateId: "state-id",
-        tipTimestamp: 0n,
-        hasCollectable: false,
-        hasConverting: false,
-        build: async (): Promise<TxInfo> => {
+        ...l1State(),
+        txBuilder: async (): Promise<TxInfo> => {
           await Promise.resolve();
           return activeTxInfo();
         },

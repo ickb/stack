@@ -8,12 +8,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, Fragment, useState, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
-import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
   type PendingTransactionState,
 } from "../../src/action/pendingTransaction.ts";
-import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import type { L1StateType } from "../../src/app/queries.ts";
+import type { WalletConfig } from "../../src/shared/utils.ts";
 import { fakeDom } from "../support/dom.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
@@ -180,18 +180,9 @@ function actionProps(
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    refreshPreview: async (): Promise<RefreshedTransactionState> => {
+    refreshState: async (): Promise<L1StateType> => {
       await Promise.resolve();
-      return {
-        stateId: "state",
-        tipTimestamp: 0n,
-        hasCollectable: false,
-        hasConverting: false,
-        build: async (): Promise<TxInfo> => {
-          await Promise.resolve();
-          return activeTxInfo();
-        },
-      };
+      return l1State();
     },
     freeze: vi.fn<(value: boolean) => void>(),
     formReset: vi.fn<() => void>(),

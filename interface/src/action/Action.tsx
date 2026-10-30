@@ -19,7 +19,6 @@ import {
   retryConfirmation,
   transact,
   type RefreshedTransactionPreview,
-  type RefreshedTransactionState,
   type TransactionCallbacks,
 } from "./actionTransaction.ts";
 import type { Destination } from "./destination.ts";
@@ -36,11 +35,8 @@ type ActionProps = Readonly<{
   amountError: string;
   destination: Destination | undefined;
   destinationError: string;
-  refreshPreview: (
-    isCkb2Udt: boolean,
-    amount: bigint,
-    destination: Destination,
-  ) => Promise<RefreshedTransactionState>;
+  /** Refetches the wallet's state for a send, throwing when it cannot. */
+  refreshState: () => Promise<L1StateType>;
   freeze: (value: boolean) => void;
   formReset: () => void;
   walletConfig: WalletConfig;
@@ -58,7 +54,7 @@ export default function Action({
   amountError,
   destination,
   destinationError,
-  refreshPreview,
+  refreshState,
   freeze,
   formReset,
   walletConfig,
@@ -121,7 +117,7 @@ export default function Action({
   const preview = frozenPreview?.txInfo ?? txPreviewQuery.data;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
   const isValid = preview?.ok === true;
-  const { hasCollectable, hasConverting } = sampled ?? l1State;
+  const { hasCollectable, hasConverting, system } = sampled ?? l1State;
   // The date also covers what is converting, which a preview with nothing to sign still
   // carries, so it shows whenever something is. A move leaves the converting positions
   // here, so their dates do not apply to it.
@@ -130,10 +126,7 @@ export default function Action({
     maturity =
       preview.ok && preview.move !== undefined
         ? "now"
-        : timeUntilMaturity(
-            preview.estimatedMaturity,
-            frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
-          );
+        : timeUntilMaturity(preview.estimatedMaturity, system.tip.timestamp);
   }
   const actionText =
     transactionHash === undefined
@@ -180,7 +173,7 @@ export default function Action({
           isCkb2Udt,
           amount,
           destination,
-          refreshPreview,
+          refreshState,
           freeze,
           callbacks: {
             freezePreview,
@@ -232,7 +225,7 @@ function startAttempt({
   isCkb2Udt,
   amount,
   destination,
-  refreshPreview,
+  refreshState,
   freeze,
   callbacks,
 }: Readonly<{
@@ -240,7 +233,7 @@ function startAttempt({
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   destination: Destination | undefined;
-  refreshPreview: ActionProps["refreshPreview"];
+  refreshState: ActionProps["refreshState"];
   freeze: (value: boolean) => void;
   callbacks: TransactionCallbacks;
 }>): void {
@@ -260,8 +253,10 @@ function startAttempt({
         lockIntent: () => {
           freeze(true);
         },
-        refreshPreview: async (): Promise<RefreshedTransactionState> =>
-          refreshPreview(isCkb2Udt, amount, destination),
+        refreshState,
+        isCkb2Udt,
+        amount,
+        destination,
         signal,
       }),
     );

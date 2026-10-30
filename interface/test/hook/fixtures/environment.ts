@@ -72,8 +72,12 @@ const mocks = vi.hoisted(
       }),
       transact: vi.fn(async (params) => {
         params.lockIntent();
-        const { build, ...state } = await params.refreshPreview();
-        const txInfo = await build();
+        const state = await params.refreshState();
+        const txInfo = await state.txBuilder(
+          params.isCkb2Udt,
+          params.amount,
+          params.destination,
+        );
         if (txInfo.ok) {
           params.freezePreview({ ...state, txInfo });
         }

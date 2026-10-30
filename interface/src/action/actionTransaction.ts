@@ -6,13 +6,9 @@ import {
   signAndSendTransaction,
   waitTransaction,
 } from "@ickb/sdk";
-import { l1StateQueryKey } from "../app/queries.ts";
-import {
-  errorMessageOf,
-  type SendableTx,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
+import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
+import type { Destination } from "./destination.ts";
 import {
   clearPendingTransaction,
   submitPendingTransaction,
@@ -21,20 +17,8 @@ import {
 
 export const confirmationWindowMs = 60_000;
 
-interface RefreshedTransactionStateMetadata {
-  readonly stateId: string;
-  readonly tipTimestamp: bigint;
-  readonly hasCollectable: boolean;
-  readonly hasConverting: boolean;
-}
-
-export interface RefreshedTransactionState extends RefreshedTransactionStateMetadata {
-  readonly build: () => Promise<TxInfo>;
-}
-
-export interface RefreshedTransactionPreview extends RefreshedTransactionStateMetadata {
-  readonly txInfo: SendableTx;
-}
+/** The fresh state a send was built from, with the transaction it built. */
+export type RefreshedTransactionPreview = L1StateType & { readonly txInfo: SendableTx };
 
 export interface TransactionCallbacks {
   readonly freezePreview: (preview: RefreshedTransactionPreview | undefined) => void;
@@ -49,7 +33,10 @@ export interface TransactionCallbacks {
 
 interface TransactParams extends TransactionCallbacks {
   readonly lockIntent: () => void;
-  readonly refreshPreview: () => Promise<RefreshedTransactionState>;
+  readonly refreshState: () => Promise<L1StateType>;
+  readonly isCkb2Udt: boolean;
+  readonly amount: bigint;
+  readonly destination: Destination;
   readonly signal: AbortSignal;
   readonly yieldForPreview?: () => Promise<void>;
 }
@@ -69,7 +56,10 @@ class AttemptAbortedError extends Error {
 /** Sends a valid preview once, then observes it for one finite confirmation window. */
 export async function transact({
   lockIntent,
-  refreshPreview,
+  refreshState,
+  isCkb2Udt,
+  amount,
+  destination,
   signal,
   yieldForPreview = yieldForPreviewRender,
   ...callbacks
@@ -82,14 +72,17 @@ export async function transact({
     callbacks.setFailure("");
     callbacks.setIsPreparing(true);
     callbacks.setMessage("Refreshing transaction preview...");
-    const { build, ...previewState } = await abortable(refreshPreview(), signal);
+    const state = await abortable(refreshState(), signal);
     assertCurrent(signal);
-    const txInfo = await abortable(build(), signal);
+    const txInfo = await abortable(
+      state.txBuilder(isCkb2Udt, amount, destination),
+      signal,
+    );
     assertCurrent(signal);
     if (!txInfo.ok) {
       throw new Error(txInfo.error);
     }
-    callbacks.freezePreview({ txInfo, ...previewState });
+    callbacks.freezePreview({ ...state, txInfo });
     await abortable(yieldForPreview(), signal);
     assertCurrent(signal);
     callbacks.setIsPreparing(false);

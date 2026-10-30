@@ -73,24 +73,13 @@ function registerAppStateTests(): void {
 
     props.actionParams.formReset();
     props.actionParams.retryState();
-    const refreshedState = await props.actionParams.refreshPreview(false, 2n * CKB, {
-      lock: script("11"),
-    });
+    const refreshedState = await props.actionParams.refreshState();
 
     expect(props.isCkb2Udt).toBe(false);
     expect(props.amount).toBe(2n * CKB);
     expect(props.exchangeRatio).toBe(loadedState.system.exchangeRatio);
     expect(setText).toHaveBeenCalledWith("");
-    expect(refreshedState).toMatchObject({
-      stateId: loadedState.stateId,
-      tipTimestamp: loadedState.system.tip.timestamp,
-      hasCollectable: loadedState.hasCollectable,
-    });
-    expect(loadedState.txBuilder).not.toHaveBeenCalled();
-    await expect(refreshedState.build()).resolves.toBe(nothingToSign);
-    expect(loadedState.txBuilder).toHaveBeenCalledWith(false, 2n * CKB, {
-      lock: script("11"),
-    });
+    expect(refreshedState).toBe(loadedState);
     expect(refetch).toHaveBeenCalledTimes(2);
 
     resetHooks();
@@ -142,32 +131,8 @@ function registerAppRefreshTests(): void {
         }),
       );
 
-      await expect(
-        props.actionParams.refreshPreview(true, CKB, { lock: script("11") }),
-      ).rejects.toThrow(message);
+      await expect(props.actionParams.refreshState()).rejects.toThrow(message);
     }
-
-    resetHooks();
-    queryMock.result = {
-      data: l1State(),
-      error: null,
-      isFetching: false,
-      refetch: vi.fn().mockRejectedValue(new Error("transport failed")),
-    };
-    const rejected = elementProps<Parameters<typeof WalletAppView>[0]>(
-      App({
-        walletConfig: walletConfig(),
-        walletName: "JoyID",
-        openWallet: vi.fn<() => void>(),
-        isCkb2Udt: true,
-        setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
-        text: "1",
-        setText: vi.fn<(value: string) => void>(),
-      }),
-    );
-    await expect(
-      rejected.actionParams.refreshPreview(true, CKB, { lock: script("11") }),
-    ).rejects.toThrow("Unable to refresh wallet data: transport failed");
   });
 }
 
@@ -216,9 +181,13 @@ function registerActionPreviewTests(): void {
       throw new Error("transact was not called");
     }
     const [transactParams] = transactCall;
-    const refreshedState = await transactParams.refreshPreview();
+    const refreshedState = await transactParams.refreshState();
     expect(refreshedState.stateId).toBe("state-id");
-    await expect(refreshedState.build()).resolves.toEqual(activeTxInfo());
+    expect(transactParams).toMatchObject({
+      isCkb2Udt: true,
+      amount: CKB,
+      destination: { lock: script("11") },
+    });
     expect(freeze).toHaveBeenCalledWith(true);
 
     resetHooks();
@@ -309,8 +278,12 @@ function registerActionRejectionTests(): void {
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     transactMock.transact.mockImplementationOnce(async (params) => {
       params.lockIntent();
-      const { build, ...state } = await params.refreshPreview();
-      const txInfo = await build();
+      const state = await params.refreshState();
+      const txInfo = await state.txBuilder(
+        params.isCkb2Udt,
+        params.amount,
+        params.destination,
+      );
       if (txInfo.ok) {
         params.freezePreview({ ...state, txInfo });
       }
@@ -372,9 +345,9 @@ function registerFreshFailureIdentityTests(): void {
     const actionParams = { ...app.actionParams, freeze, l1State: stateA };
     transactMock.transact.mockImplementationOnce(async (params) => {
       params.lockIntent();
-      const freshState = await params.refreshPreview();
+      const freshState = await params.refreshState();
       try {
-        await freshState.build();
+        await freshState.txBuilder(params.isCkb2Udt, params.amount, params.destination);
       } catch (error) {
         params.setFailure(
           error instanceof Error ? error.message : "Fresh preview failed",
@@ -404,14 +377,12 @@ function registerActionConfirmationTests(): void {
     const waitingReady = Promise.withResolvers<undefined>();
     const base = {
       ...actionProps(),
-      refreshPreview: vi.fn(async () => {
+      refreshState: vi.fn(async () => {
         await Promise.resolve();
         return {
+          ...l1State(),
           stateId: "fresh-state",
-          tipTimestamp: 0n,
-          hasCollectable: false,
-          hasConverting: false,
-          build: async (): Promise<ReturnType<typeof activeTxInfo>> => {
+          txBuilder: async (): Promise<ReturnType<typeof activeTxInfo>> => {
             await Promise.resolve();
             return {
               ...activeTxInfo(),
@@ -426,8 +397,12 @@ function registerActionConfirmationTests(): void {
     queryMock.result = { data: activeTxInfo(), isFetching: false };
     transactMock.transact.mockImplementationOnce(async (params) => {
       params.lockIntent();
-      const { build, ...state } = await params.refreshPreview();
-      const txInfo = await build();
+      const state = await params.refreshState();
+      const txInfo = await state.txBuilder(
+        params.isCkb2Udt,
+        params.amount,
+        params.destination,
+      );
       if (txInfo.ok) {
         params.freezePreview({ ...state, txInfo });
       }
