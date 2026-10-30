@@ -73,9 +73,6 @@ export interface BotState {
 
   /** Capacity of one cap-sized deposit output at the sampled exchange ratio. */
   depositCapacity: bigint;
-
-  /** The node's fee rate before the cap, so the journal shows when the cap binds. */
-  sampledFeeRate: ccc.Num;
 }
 
 /** Counts of actions a transaction carries. */
@@ -140,7 +137,8 @@ export interface BotStateSummary {
   };
   exchangeRatio: { ckbScale: bigint; udtScale: bigint };
   depositCapacity: bigint;
-  fee: { feeRate: ccc.Num; sampledFeeRate: ccc.Num };
+  /** The rate the turn plans at: the sampled one, or `BOT_MAX_FEE_RATE` when that binds. */
+  feeRate: ccc.Num;
 }
 
 /** What a turn decided, beside the state its `bot.state.read` line journaled. */

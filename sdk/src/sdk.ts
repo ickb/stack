@@ -92,6 +92,7 @@ export class IckbSdk {
     plainClient: ccc.Client,
     locks: ccc.Script[],
     lockUp: LockUpPolicy,
+    maxFeeRate?: ccc.NumLike,
   ): Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };
@@ -103,7 +104,8 @@ export class IckbSdk {
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
       this.ickbLogic.findDeposits(client, tip),
       this.order.findOrders(client),
-      client.getFeeRate(),
+      // CCC clamps the sampled median at the cap; the connector's chosen rate honors it too.
+      client.getFeeRate(undefined, maxFeeRate === undefined ? undefined : { maxFeeRate }),
       Promise.all(
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),

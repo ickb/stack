@@ -4,7 +4,6 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { minBigInt } from "../../../src/utils/utils.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { summarizeBotState } from "./support.ts";
 import { buildTransaction } from "./transaction.ts";
@@ -32,25 +31,22 @@ export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * Reads bot-owned account state and public market state for one planning attempt.
  *
  * @remarks The bot places no orders, so nothing here counts or collects any; the market
- * side of the state is every order past par. The fee rate is the sampled one, capped at
- * the runtime's `maxFeeRate` when set.
+ * side of the state is every order past par. The fee rate is the sampled one, capped by
+ * the state read at the runtime's `maxFeeRate` when set: the sampled rate is a node
+ * statistic nothing can verify, so the cap bounds what a node can make the bot pay and
+ * what it can make the match gate refuse.
  */
 export async function readBotState(runtime: Runtime): Promise<BotState> {
   const { system, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
     BOT_LOCK_UP,
+    runtime.maxFeeRate,
   );
   const projection = projectAccountAvailability(account, { available: [], pending: [] });
-  // The sampled rate is a node statistic nothing can verify: the cap bounds what a node
-  // can make the bot pay and what it can make the match gate refuse.
-  const feeRate =
-    runtime.maxFeeRate === undefined
-      ? system.feeRate
-      : minBigInt(system.feeRate, runtime.maxFeeRate);
 
   return {
-    system: { ...system, feeRate },
+    system,
     receipts: account.receipts,
     readyWithdrawals: projection.readyWithdrawals,
     notReadyWithdrawals: projection.pendingWithdrawals,
@@ -59,7 +55,6 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     ickb: projection.ickbAvailable,
     pendingCkb: projection.ckbPending,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
-    sampledFeeRate: system.feeRate,
   };
 }
 

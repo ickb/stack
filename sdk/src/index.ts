@@ -29,6 +29,7 @@ export interface IckbSdk {
     client: ccc.Client,
     locks: ccc.Script[],
     lockUp: LockUpPolicy,
+    maxFeeRate?: ccc.NumLike,
   ) => Promise<{
     system: SystemState;
     user: { orders: OrderGroup[] };

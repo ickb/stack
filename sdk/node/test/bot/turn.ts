@@ -494,21 +494,14 @@ describe("readBotState", () => {
     expect(state.system.feeRate).toBe(1n);
   });
 
-  it("caps the sampled fee rate at the runtime's maximum", async () => {
+  it("asks the state read to cap the fee rate at the runtime's maximum", async () => {
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
-    getL1AccountState.mockResolvedValue({
-      ...l1AccountState(),
-      system: { ...l1AccountState().system, feeRate: 33_222n },
-    });
+    getL1AccountState.mockResolvedValue(l1AccountState());
     const runtime = botRuntime({ sdk: { getL1AccountState } });
 
-    await expect(readBotState({ ...runtime, maxFeeRate: 1000n })).resolves.toMatchObject({
-      system: { feeRate: 1000n },
-      sampledFeeRate: 33_222n,
-    });
-    await expect(
-      readBotState({ ...runtime, maxFeeRate: 40_000n }),
-    ).resolves.toMatchObject({ system: { feeRate: 33_222n } });
+    await readBotState({ ...runtime, maxFeeRate: 1000n });
+
+    expect(getL1AccountState.mock.calls[0]?.[3]).toBe(1000n);
   });
 });
 

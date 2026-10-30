@@ -35,7 +35,7 @@ Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [defa
 
 Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. The intent line of a collection says whether a withdrawal or order stays converting after it: the button reads the same either way, and the balance row's "converting" word alone went unnoticed when a receipt was collected while its sibling order was still open. Live orders join that collection when:
 
-- a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`);
+- a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`), judged at the fee rate the wallet's picker chose: Auto is the node's sampled rate, Economy the 1000 floor. A bot that caps its rate lower than the chosen one may still fill a buy this rule collects; the user gets the funds back less the fee, so the app does not guess at any bot's cap;
 - either direction reaches the block-age cutoff, nominally thirty days (`isStale`).
 
 DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The SDK applies these rules when it projects the conversion context, so the app and the generator cannot disagree; they live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.

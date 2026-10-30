@@ -16,6 +16,20 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     expect(state.system.feeRate).toBe(1000n);
   });
 
+  it("caps the sampled fee rate at the caller's maximum through CCC", async () => {
+    const client = clientWithFeeRateStatistics(() => ({
+      mean: "0x7a120",
+      median: "0x7a120",
+    }));
+
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+    ).resolves.toMatchObject({ system: { feeRate: 500_000n } });
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, 2000n),
+    ).resolves.toMatchObject({ system: { feeRate: 2000n } });
+  });
+
   it("propagates unrelated fee rate failures", async () => {
     const feeRateError = new TypeError(
       "Cannot destructure property 'mean' while parsing object null metadata",
