@@ -5,12 +5,7 @@ import {
   type ConversionTransactionFailureReason,
   type IckbErrorCode,
 } from "@ickb/sdk";
-import {
-  errorMessageOf,
-  toText,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import type { Destination } from "./destination.ts";
 
 export const noCollectionMessage = "Nothing to do";
@@ -115,7 +110,7 @@ function conversionFailureMessage(
     return amount === 0n ? noCollectionMessage : noRequestMessage;
   }
   if (reason === "amount-too-small" && minimum !== undefined) {
-    return `Enter at least ${toText(roundUpToTwoDigits(minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
+    return `Enter at least ${ccc.fixedPointToString(roundUpToTwoDigits(minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
   }
 
   return conversionFailureMessages[reason];

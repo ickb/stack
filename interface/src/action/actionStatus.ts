@@ -1,4 +1,5 @@
-import { toText, type SendableTx, type TxInfo } from "../shared/utils.ts";
+import { ccc } from "@ckb-ccc/ccc";
+import type { SendableTx, TxInfo } from "../shared/utils.ts";
 import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 
 /** What the action section knows beside the preview itself. */
@@ -146,7 +147,7 @@ function isAvailabilityMessage(message: string): boolean {
 function conversionNoticeText(
   notice: NonNullable<SendableTx["conversionNotice"]>,
 ): string {
-  return `This small request converts ${toText(notice.inputIckb)} iCKB to about ${toText(notice.outputCkb)} CKB and pays ${toText(notice.incentiveCkb)} CKB for the variable time.`;
+  return `This small request converts ${ccc.fixedPointToString(notice.inputIckb)} iCKB to about ${ccc.fixedPointToString(notice.outputCkb)} CKB and pays ${ccc.fixedPointToString(notice.incentiveCkb)} CKB for the variable time.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {

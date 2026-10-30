@@ -1,12 +1,8 @@
+import { ccc } from "@ckb-ccc/ccc";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { L1StateType } from "../app/queries.ts";
-import {
-  errorMessageOf,
-  toText,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import { ActionLayout } from "./ActionLayout.tsx";
 import {
   actionLabel,
@@ -188,7 +184,7 @@ export default function Action({
         });
       }}
       message={messageText}
-      fee={isValid ? `${toText(preview.fee)} CKB` : "..."}
+      fee={isValid ? `${ccc.fixedPointToString(preview.fee)} CKB` : "..."}
       maturity={maturity}
     />
   );

@@ -142,11 +142,6 @@ export function parseAmountInput(text: string): AmountInput {
   return { status: "valid", amount, error: "" };
 }
 
-export function toText(amount: bigint): string {
-  const text = ccc.fixedPointToString(amount);
-  return text.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0*$/u, "");
-}
-
 /** Two decimals, rounded half up: the estimate's precision on screen. */
 export function twoDecimals(shannons: bigint): string {
   const cents = (shannons + CKB / 200n) / (CKB / 100n);

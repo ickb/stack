@@ -1,8 +1,9 @@
-import { CKB, clampShannons, toText } from "./utils.ts";
+import { ccc } from "@ckb-ccc/ccc";
+import { CKB, clampShannons } from "./utils.ts";
 
 /** The figure at full precision with thousands grouped, for a wide screen. */
 export function figureText(shannons: bigint): string {
-  return groupDigits(toText(shannons));
+  return groupDigits(ccc.fixedPointToString(shannons));
 }
 
 /**
