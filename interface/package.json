@@ -25,8 +25,7 @@
     "dev:testnet-wallet": "vite --mode testnet-wallet --host 127.0.0.1",
     "build": "tsgo && vite build",
     "preview": "vite preview",
-    "test": "vitest",
-    "lint:typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p tsconfig.node.json"
+    "test": "vitest"
   },
   "devDependencies": {
     "@ickb/testkit": "workspace:*",
