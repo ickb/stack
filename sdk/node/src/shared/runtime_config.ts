@@ -29,8 +29,8 @@ export interface RuntimeConfig {
   privateKey: `0x${string}`;
 
   /**
-   * The configured nodes' RPC URLs, the only endpoints when set, tried in order as CCC
-   * falls back on errors; absent means CCC's public pool.
+   * The configured nodes' RPC URLs in this process's shuffled order, the only endpoints
+   * when set, tried in that order as CCC falls back on errors; absent means CCC's public pool.
    */
   rpcUrls?: [string, ...string[]];
 
@@ -59,8 +59,11 @@ export async function readRuntimeConfigEnv(
   if (rpcUrl === undefined) {
     return { chain, privateKey, rpcEndpoint: { mode: "default" } };
   }
-  // Commas only: a space around a URL is refused like any whitespace in it.
-  const [first = "", ...rest] = rpcUrl.value.split(",");
+  // Commas only: a space around a URL is refused like any whitespace in it. Each process
+  // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
+  // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
+  // of every restart from the same first URL.
+  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","));
   const rpcUrls: [string, ...string[]] = [first, ...rest];
   return {
     chain,
@@ -71,6 +74,17 @@ export async function readRuntimeConfigEnv(
       endpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
     },
   };
+}
+
+/** A uniform random order: each value sorted by its own random key. */
+function shuffled(values: string[]): string[] {
+  return (
+    values
+      // eslint-disable-next-line sonarjs/pseudo-random -- the order only spreads failures across restarts; nothing needs it unpredictable.
+      .map((value) => ({ value, key: Math.random() }))
+      .toSorted((left, right) => left.key - right.key)
+      .map(({ value }) => value)
+  );
 }
 
 interface EnvValue {

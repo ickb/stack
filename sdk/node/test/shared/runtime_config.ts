@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readRuntimeConfigEnv,
   type RuntimeConfig,
@@ -22,6 +22,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(KEY_DIR, { recursive: true, force: true });
 });
 
@@ -38,23 +39,24 @@ describe("runtime config env", () => {
         endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
       },
     });
-    // The URLs reach only the client, in order; their identities carry no path or query,
-    // where providers put API keys.
+    // The URLs reach only the client, shuffled per process, and the journaled identities
+    // follow the same order; they carry no path or query, where providers put API keys.
     const urls = [
       "https://rpc.example:8443/key-in-path?token=abc#private",
       "wss://second.example/ws/another-key",
     ];
+    vi.spyOn(Math, "random").mockReturnValueOnce(0.9).mockReturnValueOnce(0.1);
     await expect(
       readConfig({ BOT_CHAIN: "mainnet", BOT_RPC_URL: urls.join(",") }),
     ).resolves.toEqual({
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrls: urls,
+      rpcUrls: urls.toReversed(),
       rpcEndpoint: {
         mode: "exclusive",
         endpoints: [
-          { protocol: "https:", hostname: "rpc.example", port: "8443" },
           { protocol: "wss:", hostname: "second.example", port: "" },
+          { protocol: "https:", hostname: "rpc.example", port: "8443" },
         ],
       },
     });
