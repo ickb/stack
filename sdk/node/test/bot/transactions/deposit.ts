@@ -90,7 +90,7 @@ describe("buildTransaction deposit", () => {
       decision: {
         actions: { deposits: 0, withdrawalRequests: 1 },
         rebalance: { deposit: "ring_coverage", withdrawal: { candidateCount: 1 } },
-        core: { kind: "withdraw", withdrawalRequests: 1, attempts: 2 },
+        core: { kind: "withdraw", attempts: 2 },
       },
     });
   });

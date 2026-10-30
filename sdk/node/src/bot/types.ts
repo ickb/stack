@@ -160,7 +160,7 @@ export interface BotDecision {
     ring: RingSummary;
   };
   /** The core the walk settled on and how many candidates it built on the way. */
-  core: { kind: Core["kind"]; withdrawalRequests: number; attempts: number };
+  core: { kind: Core["kind"]; attempts: number };
   actions: BotActions;
   fee: { feeRate: ccc.Num; sampledFeeRate: ccc.Num; estimated?: bigint };
   transactionShape?: {

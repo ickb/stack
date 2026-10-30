@@ -243,7 +243,7 @@ function buildDecision({
           }),
       ring: plan.ring,
     },
-    core: { kind: core.kind, withdrawalRequests: actions.withdrawalRequests, attempts },
+    core: { kind: core.kind, attempts },
     actions,
     fee: {
       ...summary.fee,

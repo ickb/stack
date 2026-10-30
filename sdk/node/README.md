@@ -75,7 +75,7 @@ The decision transcript groups its evidence by purpose:
 - `balances`: CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count. `counts` covers orders, receipts, withdrawals and pool deposits.
 - `match`: reason, candidate and profitable-whole-fill counts, per-fill mining fee, shuffle seed and matched order outpoints. Reasons are `matched`, `no_market_orders`, `no_gain` or `unfunded_gain`; the last means profitable fills exist but the balances cannot pay them.
 - `rebalance`: deposit reason (`low_ickb` or `ring_coverage`), withdrawal candidates and stress flag, plus the compact ring summary.
-- `core`: the completed choice (`none`, `deposit` or `withdraw`), its withdrawal request count and candidate attempts. `actions` and `transactionShape` describe the result; `skip.reason` explains a skipped turn.
+- `core`: the completed choice (`none`, `deposit` or `withdraw`) and its candidate attempts; `actions` counts the withdrawal requests. `actions` and `transactionShape` describe the result; `skip.reason` explains a skipped turn.
 
 ### Transaction outcomes
 
