@@ -1,6 +1,6 @@
 # iCKB Node Actors
 
-`sdk/node` holds three one-turn entrypoints sharing preflight, configuration and logging:
+`sdk/node` holds three entrypoints sharing preflight, configuration and logging; the bot loops, the other two run one turn each:
 
 - `src/bot.ts`: reads the market, matches profitable orders, collects ready funds and optionally rebalances between CKB and iCKB, then completes, signs, sends and waits.
 - `src/stimulus.ts`: generates random testnet activity from a separate account.
@@ -42,7 +42,7 @@ export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
 pnpm --filter ./sdk/node bot
 ```
 
-The start script runs the bot once from source. Stdout is the NDJSON event stream and stderr carries diagnostics; both go wherever the caller sends them, which is journald under systemd. Balance and fee amounts are decimal strings so large on-chain values do not lose precision. Restart policy belongs to the service manager.
+The start script runs the bot loop from source until a turn fails. Stdout is the NDJSON event stream and stderr carries diagnostics; both go wherever the caller sends them, which is journald under systemd. Balance and fee amounts are decimal strings so large on-chain values do not lose precision. Restart policy belongs to the service manager.
 
 ## Structured Events
 
