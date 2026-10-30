@@ -14,7 +14,7 @@ The bot's own working capital is not read. Naming one operator's wallet in a pub
 
 ## The one duration
 
-`BOT_TURN_MS` assumes ten minutes per turn, the longest interval the bot's turns may start at, so a faster bot keeps every estimate an upper bound; a failed turn adds a ten-minute restart, which the model does not count. It is a modeling interval, not a runtime bound. The sitting-seller threshold below is its own heuristic, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
+`BOT_TURN_MS` assumes ten minutes per turn, the interval at which the bot's turns start; a failed turn adds a ten-minute restart, which the model does not count. It is a modeling interval, not a runtime bound. The sitting-seller threshold below is its own heuristic, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
 
 An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores does not queue ahead of anyone and does not supply anyone.
 
