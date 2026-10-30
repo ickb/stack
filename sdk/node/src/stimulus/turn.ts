@@ -156,7 +156,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     throw error;
   }
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    availableOrders: state.collectable,
+    availableOrders: state.context.availableOrders,
     receipts: state.context.receipts,
     readyWithdrawals: state.context.readyWithdrawals,
   });

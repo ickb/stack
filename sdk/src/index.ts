@@ -63,7 +63,6 @@ export {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "./order/conversion.ts";
-export { isRefused, isStale } from "./order/fill.ts";
 export type { Info, InfoLike } from "./order/info.ts";
 export type { Master, MasterLike } from "./order/master.ts";
 export type { OrderData, OrderDataLike } from "./order/order_data.ts";

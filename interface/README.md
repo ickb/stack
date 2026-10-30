@@ -38,7 +38,7 @@ Every transaction also collects fulfilled orders, receipts and matured withdrawa
 - a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`);
 - either direction reaches the block-age cutoff, nominally thirty days (`isStale`).
 
-DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The shared rules live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
+DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The SDK applies these rules when it projects the conversion context, so the app and the generator cannot disagree; they live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
 
 ### Sending to another wallet
 
