@@ -1,12 +1,15 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { script } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
-import { walletConfig } from "./fixtures/data.ts";
-import { hookState, resetHooks } from "./fixtures/environment.ts";
-import { mainnetClient, testnetClient } from "./fixtures/modules.ts";
-
-const destinationModule = await import("../../src/action/destination.ts");
-const { parseDestination, shortAddress, useDestination } = destinationModule;
+import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  parseDestination,
+  shortAddress,
+  useDestination,
+} from "../../src/action/destination.ts";
+import { mainnetClient, testnetClient } from "../../src/app/interfaceConfig.ts";
+import type { WalletConfig } from "../../src/shared/utils.ts";
+import { renderHook } from "../support/renderHook.ts";
 
 const flush = async (): Promise<void> => {
   await new Promise<void>((resolve) => {
@@ -54,60 +57,72 @@ describe("parseDestination", () => {
 });
 
 describe("useDestination", () => {
-  it("takes empty text as the wallet's own address without parsing", async () => {
-    resetHooks();
-    const config = walletConfig();
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    expect(useDestination("", config)).toEqual({
+  it("takes empty text as the wallet's own address without parsing", async () => {
+    const config = walletConfig();
+    const fromString = vi.spyOn(ccc.Address, "fromString");
+    const { result, unmount } = await renderHook(
+      (text: string) => useDestination(text, config),
+      "",
+    );
+
+    expect(result.current).toEqual({
       destination: { lock: config.primaryLock },
       error: "",
     });
-    await flush();
-    expect(hookState.states[0]).toBeUndefined();
+    expect(fromString).not.toHaveBeenCalled();
+    await unmount();
   });
 
   it("parses an edited address once and reports it, or its error", async () => {
-    resetHooks();
     const config = walletConfig();
     const foreign = ccc.Address.fromScript(script("22"), testnetClient).toString();
+    const { result, rerender, unmount } = await renderHook(
+      (text: string) => useDestination(text, config),
+      foreign,
+    );
 
-    expect(useDestination(foreign, config)).toEqual({ error: "" });
-    await flush();
-    rerender();
-    expect(useDestination(foreign, config)).toEqual({
+    // act drains the parse's microtasks, so each render resolves before it returns.
+    expect(result.current).toEqual({
       destination: { lock: script("22"), moveTo: shortAddress(foreign) },
       error: "",
     });
-
-    // The text changed: the parse in flight is dropped before the next one starts.
-    rerender();
-    expect(useDestination("nope", config)).toEqual({ error: "" });
-    await flush();
-    rerender();
-    expect(useDestination("nope", config)).toEqual({
-      error: "Enter a valid Testnet address",
-    });
+    await rerender("nope");
+    expect(result.current).toEqual({ error: "Enter a valid Testnet address" });
+    await unmount();
   });
 
   it("drops a parse the text outran", async () => {
-    resetHooks();
     const config = walletConfig();
     const foreign = ccc.Address.fromScript(script("22"), testnetClient).toString();
+    const slow = Promise.withResolvers<ccc.Address>();
+    vi.spyOn(ccc.Address, "fromString").mockReturnValueOnce(slow.promise);
+    const { result, rerender, unmount } = await renderHook(
+      (text: string) => useDestination(text, config),
+      foreign,
+    );
 
-    useDestination(foreign, config);
-    rerender();
-    useDestination("nope", config);
-    rerender();
-    await flush();
-    expect(hookState.states[0]).toBeUndefined();
+    expect(result.current).toEqual({ error: "" });
+    await rerender("nope");
+    expect(result.current).toEqual({ error: "Enter a valid Testnet address" });
+    // The first parse lands last; taking it would leave "nope" without a result.
+    slow.resolve(ccc.Address.fromScript(script("22"), testnetClient));
+    await act(flush);
+    expect(result.current).toEqual({ error: "Enter a valid Testnet address" });
+    await unmount();
   });
 });
 
-/** The mocked React runs every effect on every call, so a rerender cleans the last ones up. */
-function rerender(): void {
-  for (const cleanup of hookState.effects) {
-    cleanup();
-  }
-  hookState.effects = [];
-  hookState.index = 0;
+/** The wallet fields destination parsing reads. */
+function walletConfig(): WalletConfig {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Destination parsing reads only the chain, its client and the wallet's locks.
+  return {
+    chain: "testnet",
+    cccClient: testnetClient,
+    accountLocks: [script("11")],
+    primaryLock: script("11"),
+  } as unknown as WalletConfig;
 }
