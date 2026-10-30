@@ -15,9 +15,6 @@ export const DAO_OUTPUT_LIMIT = 64;
  */
 export const DAO_HEADER_INDEX_LIMIT = 256;
 
-/** One DAO cycle, the lock-up a deposit renews by when it is not withdrawn. */
-export const DAO_CYCLE_EPOCHS = 180n;
-
 /**
  * Error thrown when a transaction exceeds the deployed DAO script's output limit.
  */
@@ -136,20 +133,16 @@ export const WALLET_LOCK_UP: LockUpPolicy = {
   broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 
-/** The nominal epoch the policies are written on, four hours. */
-const EPOCH_MS = 4n * 60n * 60_000n;
-
 /**
  * How far a tip may trail the local clock under a policy: the selection margin less the
  * broadcast reserve, the slack a stale tip would eat before a request commits after its
  * claim. Five minutes for the bot, thirty for a wallet.
  */
 export function tipMaxAgeMs(policy: LockUpPolicy): number {
-  return Number(epochMs(policy.minLockUp) - epochMs(policy.broadcastReserve));
-}
-
-function epochMs({ integer, numerator, denominator }: ccc.Epoch): bigint {
-  return ((integer * denominator + numerator) * EPOCH_MS) / denominator;
+  // The span from the reserve to the margin, on CCC's nominal four-hour epoch.
+  return Number(
+    policy.minLockUp.toUnix({ epoch: policy.broadcastReserve, timestamp: 0n }),
+  );
 }
 
 /** A deposit's maturity, rolled a cycle when its claim is too close, and whether it is ready. */
@@ -160,7 +153,7 @@ export function depositMaturity(
 ): { maturity: ccc.Epoch; isReady: boolean } {
   const maturity =
     claim.compare(minLockUp.add(tip.epoch)) <= 0
-      ? claim.add([DAO_CYCLE_EPOCHS, 0n, 1n])
+      ? claim.add(ccc.Epoch.OneNervosDaoCycle)
       : claim;
   return { maturity, isReady: maxLockUp.add(tip.epoch).compare(maturity) > 0 };
 }

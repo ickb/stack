@@ -1,5 +1,5 @@
-import type { ccc } from "@ckb-ccc/core";
-import { DAO_CYCLE_EPOCHS, DAO_OUTPUT_LIMIT } from "../dao.ts";
+import { ccc } from "@ckb-ccc/core";
+import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../udt.ts";
 
@@ -53,7 +53,7 @@ export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number
     throw new Error("Epoch denominator must be positive");
   }
   const scaled = epoch.integer * denominator + epoch.numerator;
-  const ring = DAO_CYCLE_EPOCHS * denominator;
+  const ring = ccc.Epoch.OneNervosDaoCycle.integer * denominator;
   const wrapped = ((scaled % ring) + ring) % ring;
   return Number((wrapped * BigInt(segmentCount)) / ring);
 }
