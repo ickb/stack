@@ -21,22 +21,9 @@ export function Dashboard({
   disabled?: boolean;
 }>): JSX.Element {
   const { chain, address } = walletConfig;
-  const isTestnet = chain === "testnet";
-  const networkName = isTestnet ? "Testnet" : "Mainnet";
   return (
     <HeaderGrid>
-      <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
-        <button
-          className="block max-w-full min-w-0 cursor-pointer overflow-hidden rounded text-center font-medium text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
-          onClick={() => {
-            openWallet();
-          }}
-          disabled={disabled}
-          title={`${walletName} on ${networkName}`}
-        >
-          {walletName} on {networkName}
-        </button>
-      </span>
+      <WalletButton {...{ walletName, chain, openWallet, disabled }} />
       <AddressField {...{ destination, chain, disabled }} ownAddress={address} />
     </HeaderGrid>
   );
@@ -148,19 +135,37 @@ export function PendingDashboard({
 }>): JSX.Element {
   return (
     <HeaderGrid>
-      <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
-        <button
-          className="block max-w-full min-w-0 cursor-pointer overflow-hidden rounded text-center font-medium text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
-          onClick={() => {
-            openWallet();
-          }}
-          title={`${walletName} on ${chain === "mainnet" ? "Mainnet" : "Testnet"}`}
-        >
-          {walletName} on {chain === "mainnet" ? "Mainnet" : "Testnet"}
-        </button>
-      </span>
+      <WalletButton {...{ walletName, chain, openWallet }} />
       <span className="text-center text-ickb-muted">Loading address</span>
     </HeaderGrid>
+  );
+}
+
+function WalletButton({
+  walletName,
+  chain,
+  openWallet,
+  disabled,
+}: Readonly<{
+  walletName: string;
+  chain: RootConfig["chain"];
+  openWallet: () => unknown;
+  disabled?: boolean;
+}>): JSX.Element {
+  const label = `${walletName} on ${chain === "mainnet" ? "Mainnet" : "Testnet"}`;
+  return (
+    <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
+      <button
+        className="block max-w-full min-w-0 cursor-pointer overflow-hidden rounded text-center font-medium text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+        onClick={() => {
+          openWallet();
+        }}
+        disabled={disabled}
+        title={label}
+      >
+        {label}
+      </button>
+    </span>
   );
 }
 

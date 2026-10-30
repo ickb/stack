@@ -1,5 +1,5 @@
 import { Ratio } from "@ickb/sdk";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -82,7 +82,7 @@ describe("view components", () => {
       destination: ownDestination(),
     });
     const walletButton = findElement(
-      dashboard,
+      walletButtonOf(dashboard),
       (element) =>
         element.type === "button" &&
         elementProps<{ title?: string }>(element).title === "Neuron on Testnet",
@@ -120,8 +120,10 @@ describe("view components", () => {
       openWallet,
     });
     elementProps<{ onClick: () => void }>(
-      findElement(pending, (element) => element.type === "button"),
+      findElement(walletButtonOf(pending), (element) => element.type === "button"),
     ).onClick();
+    expect(openWallet).toHaveBeenCalledTimes(2);
+    expect(renderToStaticMarkup(pending)).toContain("JoyID on Mainnet");
     expect(renderToStaticMarkup(pending)).toContain("Loading address");
   });
 
@@ -437,6 +439,13 @@ describe("view components", () => {
     ).toContain("Unsupported CKB address prefix: ckb-dev");
   });
 });
+
+/** Renders the dashboard's wallet button, found by the callback only it receives. */
+function walletButtonOf(dashboard: ReactElement): ReactElement {
+  return invokeElement(
+    findElement(dashboard, (element) => "openWallet" in elementProps<object>(element)),
+  );
+}
 
 function dashboardWalletConfig(
   chain: Parameters<typeof Dashboard>[0]["walletConfig"]["chain"],
