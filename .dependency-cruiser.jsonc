@@ -18,7 +18,6 @@
           "^sdk/node/test/.+[.]ts$",
           "^(?:sdk|sdk/node|testkit|interface)/vitest[.]config[.]mts$",
           "^interface/vite[.]config[.]ts$",
-          "^interface/eslint[.]config[.]mts$",
         ],
       },
     },

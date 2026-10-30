@@ -352,10 +352,6 @@ export default defineConfig(
       "interface/src/**/*.tsx",
       "interface/test/**/*.ts",
       "interface/test/**/*.tsx",
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "test/**/*.ts",
-      "test/**/*.tsx",
     ],
     plugins: {
       ...reactHooks.configs.flat["recommended-latest"].plugins,
@@ -374,7 +370,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+    files: ["{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}"],
     plugins: {
       vitest,
     },

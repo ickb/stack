@@ -42,7 +42,6 @@
     "sdk/node/vitest.config.mts",
     "testkit/vitest.config.mts",
     "interface/vitest.config.mts",
-    "interface/eslint.config.mts",
     "interface/vite.config.ts",
     "sdk/test/**/*.ts",
     "sdk/node/test/**/*.ts",
