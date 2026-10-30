@@ -142,7 +142,7 @@ export class IckbUdt {
     for (const input of tx.inputs) {
       const cell = await input.getCell(client);
       if (this.isUdt(cell)) {
-        balance += decodeUdtBalance(cell.outputData);
+        balance += ccc.udtBalanceFrom(cell.outputData);
         continue;
       }
       const sign = this.protocolSign(cell);
@@ -169,13 +169,6 @@ export class IckbUdt {
     return this.logicScript.eq(lock) && isDaoDeposit(cell, this.daoScript) ? -1n : 0n;
   }
 
-  /** iCKB the transaction's outputs require. */
-  public outputBalance(tx: ccc.Transaction): ccc.Num {
-    return Array.from(tx.outputCells).reduce((required, cell) => {
-      return this.isUdt(cell) ? required + decodeUdtBalance(cell.outputData) : required;
-    }, ccc.Zero);
-  }
-
   /** Adds the iCKB change output when the surplus is positive; zero needs no output. */
   public addChange(tx: ccc.Transaction, lock: ccc.ScriptLike, balance: ccc.Num): void {
     if (balance <= ccc.Zero) {
@@ -183,10 +176,6 @@ export class IckbUdt {
     }
     tx.addOutput({ lock, type: this.script }, CheckedUint128LE.encode(balance));
   }
-}
-
-function decodeUdtBalance(data: ccc.BytesLike): ccc.Num {
-  return CheckedUint128LE.decode(ccc.bytesFrom(data).slice(0, udtDataSize));
 }
 
 /**

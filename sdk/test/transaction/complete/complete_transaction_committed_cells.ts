@@ -155,7 +155,7 @@ function registerSweepTests(): void {
     ]);
     // One plain change and one iCKB change carry the whole account.
     expect(completed.outputs).toHaveLength(3);
-    expect(ickbUdt.outputBalance(completed)).toBe(5n);
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(5n);
   });
 
   it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
@@ -235,7 +235,9 @@ function registerSweepTests(): void {
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
-    expect(ickbUdt.outputBalance(completed)).toBe(BigInt(SWEEP_INPUT_LIMIT + 1));
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(
+      BigInt(SWEEP_INPUT_LIMIT + 1),
+    );
   });
 }
 
@@ -265,7 +267,7 @@ function registerIckbTests(): void {
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
-    expect(ickbUdt.outputBalance(completed)).toBe(110n);
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(110n);
     expect(completed.cellDeps).toEqual(ickbUdt.cellDeps);
   });
 

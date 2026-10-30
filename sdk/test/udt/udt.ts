@@ -186,13 +186,13 @@ describe("IckbUdt outputs", () => {
       ],
     });
 
-    expect(udt().outputBalance(tx)).toBe(11n);
+    expect(tx.getOutputsUdtBalance(type)).toBe(11n);
 
     udt().addChange(tx, lock, 0n);
     expect(tx.outputs).toHaveLength(3);
     udt().addChange(tx, lock, 4n);
     expect(tx.outputs).toHaveLength(4);
-    expect(udt().outputBalance(tx)).toBe(15n);
+    expect(tx.getOutputsUdtBalance(type)).toBe(15n);
   });
 });
 

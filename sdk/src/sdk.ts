@@ -439,7 +439,7 @@ export class IckbSdk {
     ickbCells: readonly ccc.Cell[],
     protocolCells: readonly ProtocolCell[],
   ): Promise<void> {
-    const required = this.ickbUdt.outputBalance(tx);
+    const required = tx.getOutputsUdtBalance(this.ickbUdt.script);
     let balance = await this.ickbUdt.inputBalance(tx, client, protocolCells);
     for (const cell of ickbCells) {
       if (balance >= required && tx.inputs.length >= SWEEP_INPUT_LIMIT) {
