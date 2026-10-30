@@ -153,7 +153,7 @@ describe("balance figures", () => {
     expect(phoneFigureText(9999999n * CKB + 1n)).toBe("9,999,999+");
     expect(phoneFigureText(12345678n * CKB)).toBe("12.3M");
     expect(phoneFigureText(123456789n * CKB + 1n)).toBe("123M");
-    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23G");
+    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23B");
     // The chart caption compacts a digit earlier.
     expect(phoneFigureText(999999n * CKB + 1n, 1_000_000n)).toBe("999,999+");
     expect(phoneFigureText(1234567n * CKB, 1_000_000n)).toBe("1.23M");

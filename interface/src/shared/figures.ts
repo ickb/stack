@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CKB, clampShannons } from "./utils.ts";
+import { CKB } from "./utils.ts";
 
 /** The figure at full precision with thousands grouped, for a wide screen. */
 export function figureText(shannons: bigint): string {
@@ -51,51 +51,16 @@ export function chartAmountText(shannons: bigint): string {
   return compactText(shannons, 1);
 }
 
-/** Three significant digits with a K, M or G suffix, trailing zeros trimmed. */
+// Three significant digits with a K, M or B suffix and no trailing zeros; below 1 the
+// two-decimal cap wins, so 0.8283 reads 0.83 rather than 0.828.
+const compactFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumSignificantDigits: 3,
+  maximumFractionDigits: 2,
+  roundingPriority: "lessPrecision",
+});
+
+/** The amount scaled by `scale`, as the chart's axis labels read. */
 export function compactText(shannons: bigint, scale: number): string {
-  return trimTrailingDecimalZeros(graphAmountText(shannons, scale));
-}
-
-/** Three significant digits with a K, M or G suffix, as the chart's axis labels read. */
-export function graphAmountText(shannons: bigint, scale: number): string {
-  const value = fixedPointNumber(shannons) * scale;
-  if (value >= 999500000) {
-    return `${trimSignificant(value / 1000000000)}G`;
-  }
-  if (value >= 999500) {
-    return `${trimSignificant(value / 1000000)}M`;
-  }
-  if (value >= 999.5) {
-    return `${trimSignificant(value / 1000)}K`;
-  }
-  return trimSignificant(value);
-}
-
-function fixedPointNumber(shannons: bigint): number {
-  const clamped = clampShannons(shannons);
-  return Number(clamped / CKB) + Number(clamped % CKB) / Number(CKB);
-}
-
-function trimSignificant(value: number): string {
-  const absValue = Math.abs(value);
-  if (absValue >= 100) {
-    return value.toFixed(0);
-  }
-  if (absValue >= 10) {
-    return value.toFixed(1);
-  }
-  return value.toFixed(2);
-}
-
-function trimTrailingDecimalZeros(value: string): string {
-  const lastCharacter = value.slice(-1);
-  const suffix = ["K", "M", "G"].includes(lastCharacter) ? lastCharacter : "";
-  let trimmed = suffix !== "" ? value.slice(0, -1) : value;
-  while (trimmed.includes(".") && trimmed.endsWith("0")) {
-    trimmed = trimmed.slice(0, -1);
-  }
-  if (trimmed.endsWith(".")) {
-    trimmed = trimmed.slice(0, -1);
-  }
-  return `${trimmed}${suffix}`;
+  return compactFormat.format(Number(ccc.fixedPointToString(shannons)) * scale);
 }

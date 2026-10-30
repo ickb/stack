@@ -1,5 +1,5 @@
 import type { QuoteState } from "../app/queries.ts";
-import { chartAmountText, compactText, graphAmountText } from "../shared/figures.ts";
+import { chartAmountText, compactText } from "../shared/figures.ts";
 import { CKB, clampShannons, type RootConfig } from "../shared/utils.ts";
 
 export const chartWidth = 640;
@@ -221,7 +221,7 @@ export function rateChartView({
     caption: isCkb2Udt
       ? "iCKB earns NervosDAO compensation, so 1 CKB buys a little less iCKB every day."
       : "iCKB earns NervosDAO compensation, so 1 iCKB is worth a little more CKB every day.",
-    description: `Protocol-derived ${chainLabel[chain]} curve from ${String(first.date.getUTCFullYear())} to ${String(tip.date.getUTCFullYear())}, showing ${amountText} ${sourceSymbol} changing from ${graphAmountText(chartAmount, first.value)} ${targetSymbol} to ${graphAmountText(chartAmount, tip.value)} ${targetSymbol}.`,
+    description: `Protocol-derived ${chainLabel[chain]} curve from ${String(first.date.getUTCFullYear())} to ${String(tip.date.getUTCFullYear())}, showing ${amountText} ${sourceSymbol} changing from ${compactText(chartAmount, first.value)} ${targetSymbol} to ${compactText(chartAmount, tip.value)} ${targetSymbol}.`,
     tip,
     minX,
     maxX,
