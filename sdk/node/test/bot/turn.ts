@@ -298,7 +298,7 @@ function turnHarness(
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
   // The default node accepts and commits whatever the bot sends; the confirmation wait
-  // then reads the recorded response through the typed path of a composed client.
+  // then reads its recorded status.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
       (async (txLike): Promise<ccc.Hex> => {
