@@ -9,9 +9,13 @@ import { cccA } from "@ckb-ccc/core/advanced";
  */
 export const defaultCellPageSize = 400;
 
-/** A CCC client cache sized for a whole pool's headers: 4096 blocks, where CCC's default keeps 128 (SDK README, Account state). */
+/**
+ * A CCC client cache sized for a whole pool: 4096 headers and 4096 transaction bodies,
+ * where CCC's defaults keep 128 and 256 (SDK README, Account state). An LRU fills only as
+ * far as the book and pool need.
+ */
 export function clientCache(): ccc.ClientCacheMemory {
-  return new ccc.ClientCacheMemory(512, 256, 4096);
+  return new ccc.ClientCacheMemory(512, 4096, 4096);
 }
 
 /** A committed cell and the block the node names for its creating transaction. */
