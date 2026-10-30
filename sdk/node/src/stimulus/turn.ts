@@ -6,7 +6,7 @@ import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../../../src/order/conversion.ts";
-import { IckbError } from "../../../src/sdk.ts";
+import { isFundabilityFailure } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -208,11 +208,10 @@ async function buildConversion(
   }
 }
 
+// The SDK's own test of what completion steps past, so a draw the account cannot fund or
+// fit in one transaction is a skip, as it would be for the bot.
 function unfundableOrThrow(error: unknown): Built {
-  if (
-    error instanceof IckbError ||
-    error instanceof ccc.ErrorTransactionInsufficientCapacity
-  ) {
+  if (isFundabilityFailure(error)) {
     return { skip: { reason: "unfundable", error } };
   }
   throw error;
