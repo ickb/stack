@@ -10,7 +10,7 @@ import type {
 } from "./types.ts";
 
 /** Public identity of one bot process, emitted once with the chain preflight evidence. */
-export interface BotIdentity {
+interface BotIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
   rpcEndpoint: PublicRpcEndpointIdentity;

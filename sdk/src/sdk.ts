@@ -458,7 +458,7 @@ export class IckbSdk {
 }
 
 /** Whether the transaction already carries any input or output. */
-export function hasTransactionActivity(tx: ccc.Transaction): boolean {
+function hasTransactionActivity(tx: ccc.Transaction): boolean {
   return tx.inputs.length > 0 || tx.outputs.length > 0;
 }
 

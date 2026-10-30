@@ -38,9 +38,9 @@ export interface StimulusIdentity {
 }
 
 /** Every way a turn ends; `committed` is the only one that proves stimulus reached the chain. */
-export type Outcome = "committed" | "unresolved" | "rejected" | "skipped" | "failed";
+type Outcome = "committed" | "unresolved" | "rejected" | "skipped" | "failed";
 
-export type Skip =
+type Skip =
   | { reason: "nothing-to-spend" }
   | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
@@ -48,7 +48,7 @@ export type Skip =
   | { reason: "conversion-not-buildable"; conversion: string };
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
-export type Action =
+type Action =
   { order: { outputs: [number, number] } } | { conversion: ConversionMetadata };
 
 /**

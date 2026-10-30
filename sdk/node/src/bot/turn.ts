@@ -24,7 +24,7 @@ export interface BotTurnContext {
 // longer wait would only delay the exit after a stuck send; the ten-minute restart, not this
 // wait, now dominates how long a failed withdrawal request waits to be rebuilt.
 export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
-export const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
+const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /**
  * Reads bot-owned account state and public market state for one planning attempt.

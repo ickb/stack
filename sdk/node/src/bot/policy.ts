@@ -102,7 +102,7 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
  * Whether the ring segment containing the tip lacks coverage: under half its equal share
  * of the pool's iCKB. The full public pool shapes the ring, not only ready deposits.
  */
-export function ringCoverage(
+function ringCoverage(
   poolDeposits: readonly IckbDepositCell[],
   tip: ccc.ClientBlockHeader,
 ): { needsSeed: boolean; summary: RingSummary } {

@@ -26,7 +26,7 @@ export interface Budgets {
   ratio: ExchangeRatio;
 }
 
-export const RANDOM_BITS = 52n;
+const RANDOM_BITS = 52n;
 const CKB = ccc.fixedPointFrom(1);
 // Three kinds of order per conversion: orders are what the bot matches, conversions are
 // what it competes with.

@@ -79,7 +79,7 @@ function previewMessage(
  * transaction, always at amount zero, so it replaces the collect-only intent; converting
  * positions stay, and a sweep the input limit cut short asks for another run.
  */
-export function transactionIntentMessage(
+function transactionIntentMessage(
   txInfo: Pick<SendableTx, "conversionKind" | "conversionNotice" | "move">,
   hasCollectable: boolean,
   hasConverting: boolean,

@@ -3,7 +3,7 @@ import process from "node:process";
 const CIRCULAR_LOG_VALUE = "[Circular]";
 
 /** JSON-line-safe value after log normalization. */
-export type JsonLogValue =
+type JsonLogValue =
   string | number | boolean | null | undefined | JsonLogValue[] | JsonLogRecord;
 
 export interface JsonLogRecord {

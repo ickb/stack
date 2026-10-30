@@ -223,7 +223,7 @@ export class LogicManager implements ScriptDeps {
 }
 
 /** Values a DAO deposit cell at its deposit header and samples its claim epoch at the tip. */
-export function ickbDepositCell(
+function ickbDepositCell(
   cell: ccc.Cell,
   header: ccc.ClientBlockHeader,
   tip: ccc.ClientBlockHeader,

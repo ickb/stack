@@ -28,7 +28,7 @@ export function scaleY(value: number, min: number, max: number): number {
   );
 }
 
-export interface IckbWorthSample {
+interface IckbWorthSample {
   readonly date: Date;
   readonly value: number;
 }
@@ -151,7 +151,7 @@ function accumulatedDaoRate(elapsedYears: number): number {
   return accumulatedRate;
 }
 
-export function valueGridMarks(
+function valueGridMarks(
   minY: number,
   maxY: number,
   unit: string,

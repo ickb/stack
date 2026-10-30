@@ -46,9 +46,7 @@ export function estimateConversionOrder(
  * This conservative proxy stays separate from partialOrderFee: the quote has no built
  * order whose serialized size could supply that fee yet.
  */
-export function estimateMaturityFeeThreshold(
-  system: Pick<SystemState, "feeRate">,
-): bigint {
+function estimateMaturityFeeThreshold(system: Pick<SystemState, "feeRate">): bigint {
   return 10n * system.feeRate;
 }
 
