@@ -82,57 +82,36 @@ export function offlineTransport(): ccc.JsonRpcTransport {
  * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
  * from `transactionStatus`. Everything else is offline.
  */
-function stubTransport(raw: {
-  client?: StubClient;
-  scripted?: StubClientHandlers;
-}): ccc.JsonRpcTransport {
+function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
-      if (payload.method === "get_cells" && raw.scripted?.cells !== undefined) {
+      if (payload.method === "get_cells" && scripted.cells !== undefined) {
         return {
           id: payload.id,
           jsonrpc: "2.0",
-          result: cellsPage(raw.scripted.cells, payload.params),
+          result: cellsPage(scripted.cells, payload.params),
         };
       }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
       if (
-        raw.client === undefined ||
         payload.method !== "get_transaction" ||
-        typeof txHash !== "string"
+        typeof txHash !== "string" ||
+        scripted.transactionStatus === undefined
       ) {
         return offlineTransport().request(payload);
       }
-      const status = await rawStatus(raw, txHash);
       return {
         id: payload.id,
         jsonrpc: "2.0",
-        result: { transaction: null, tx_status: status },
+        result: {
+          transaction: null,
+          tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
+            status: "unknown",
+          },
+        },
       };
     },
   };
-}
-
-async function rawStatus(
-  raw: { client?: StubClient; scripted?: StubClientHandlers },
-  txHash: string,
-): Promise<object> {
-  if (raw.client === undefined) {
-    return { status: "unknown" };
-  }
-  if (raw.scripted?.transactionStatus !== undefined) {
-    return (
-      (await raw.scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
-        status: "unknown",
-      }
-    );
-  }
-  return offlineTransport().request({
-    id: 0,
-    jsonrpc: "2.0",
-    method: "get_transaction",
-    params: [txHash],
-  });
 }
 
 /** A testnet client on the offline transport. */
@@ -157,17 +136,14 @@ export class StubClient extends ccc.ClientPublicTestnet {
    * real code down to the offline transport.
    */
   constructor({ addressPrefix, cache, ...handlers }: StubClientHandlers = {}) {
-    const raw: { client?: StubClient; scripted?: StubClientHandlers } = {};
     // A subclass has no factory, so the deprecated constructor is the only super call; the
     // offline transport keeps every unstubbed method off the network.
     // eslint-disable-next-line sonarjs/deprecation, @typescript-eslint/no-deprecated -- No non-deprecated constructor exists for a subclass.
     super({
       requestor: ccc.RequestorJsonRpc.new({
-        transport: stubTransport(raw),
+        transport: stubTransport(handlers),
       }),
     });
-    raw.client = this;
-    raw.scripted = handlers;
     this.prefix = addressPrefix;
     if (cache !== undefined) {
       this.cache = cache;
