@@ -96,7 +96,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
   expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(7n);
-  expect(harness.events[1]).toMatchObject({ decision: { fee: { estimated: "7" } } });
+  expect(harness.events[1]).toMatchObject({ decision: { plannedFee: "7" } });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
   });

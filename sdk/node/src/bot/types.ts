@@ -113,8 +113,8 @@ export type BuildTransactionResult =
     }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 
-/** Structured evidence for one bot planning attempt. */
-export interface BotDecision {
+/** What a turn read, as `bot.state.read` journals it. */
+export interface BotStateSummary {
   chainTip: {
     blockNumber: bigint;
     blockHash: ccc.Hex;
@@ -138,6 +138,13 @@ export interface BotDecision {
     poolDeposits: number;
     readyPoolDeposits: number;
   };
+  exchangeRatio: { ckbScale: bigint; udtScale: bigint };
+  depositCapacity: bigint;
+  fee: { feeRate: ccc.Num; sampledFeeRate: ccc.Num };
+}
+
+/** What a turn decided, beside the state its `bot.state.read` line journaled. */
+export interface BotDecision {
   match: {
     reason: BotMatchReason;
     partialCount: number;
@@ -161,7 +168,8 @@ export interface BotDecision {
   /** The core the walk settled on and how many candidates it built on the way. */
   core: { kind: Core["kind"]; attempts: number };
   actions: BotActions;
-  fee: { feeRate: ccc.Num; sampledFeeRate: ccc.Num; estimated?: bigint };
+  /** The fee completion planned, which the send refuses to exceed; absent without a transaction. */
+  plannedFee?: bigint;
   transactionShape?: {
     inputs: number;
     outputs: number;
@@ -169,12 +177,5 @@ export interface BotDecision {
     headerDeps: number;
     witnesses: number;
   };
-  exchangeRatio: { ckbScale: bigint; udtScale: bigint };
-  depositCapacity: bigint;
   skip?: { reason: BuildTransactionSkipReason };
 }
-
-export type BotStateSummary = Pick<
-  BotDecision,
-  "chainTip" | "balances" | "counts" | "exchangeRatio" | "depositCapacity" | "fee"
->;

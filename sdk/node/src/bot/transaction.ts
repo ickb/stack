@@ -7,7 +7,7 @@ import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
 import { planRebalance, type RebalancePlan } from "./policy.ts";
-import { matchableCkb, matchedOrderOutPoints, summarizeBotState } from "./support.ts";
+import { matchableCkb, matchedOrderOutPoints } from "./support.ts";
 import type {
   BotActions,
   BotDecision,
@@ -215,9 +215,7 @@ function buildDecision({
     completedDeposits: tx === undefined ? 0 : state.receipts.length,
     withdrawals: tx === undefined ? 0 : state.readyWithdrawals.length,
   };
-  const summary = summarizeBotState(state);
   return {
-    ...summary,
     match: {
       reason: matchReason(match, state),
       partialCount: match.partials.length,
@@ -245,11 +243,12 @@ function buildDecision({
     },
     core: { kind: core.kind, attempts },
     actions,
-    fee: {
-      ...summary.fee,
-      ...(tx === undefined ? {} : { estimated: tx.estimateFee(state.system.feeRate) }),
-    },
-    ...(tx === undefined ? {} : { transactionShape: transactionShape(tx) }),
+    ...(tx === undefined
+      ? {}
+      : {
+          plannedFee: tx.estimateFee(state.system.feeRate),
+          transactionShape: transactionShape(tx),
+        }),
   };
 }
 

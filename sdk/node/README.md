@@ -50,7 +50,7 @@ Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp`, and
 
 The stable event contract is the bot NDJSON object stream, not a particular file path. Under systemd the stream is the unit's journal; elsewhere it is whatever file stdout was redirected to. Consumers should depend on records with `bot.*` event types, not generator output or log locations.
 
-The eight event types, each carrying what is new at its step, so a sent transaction's fee and shape are in the `bot.transaction.built` event of the same `runId`:
+The eight event types, each carrying what is new at its step: a decision follows the `bot.state.read` line it judged, and a sent transaction's planned fee and shape are in the `bot.transaction.built` event, all under the turn's `runId`:
 
 - `bot.turn.started`
 - `bot.chain.preflight`
@@ -69,13 +69,11 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 `bot.state.read` carries the tip, balances, order/withdrawal/deposit counts, exchange ratio, deposit capacity and fee rate. `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
-The decision transcript groups its evidence by purpose:
+`bot.state.read` groups what the turn read: `chainTip`, `exchangeRatio`, `depositCapacity` and `fee` (the sampled and the planning rate) are the sampled conditions; `balances` holds CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count; `counts` covers orders, receipts, withdrawals and pool deposits. The decision transcript groups what the turn decided:
 
-- `chainTip`, `exchangeRatio`, `depositCapacity` and `fee.feeRate`: the sampled conditions.
-- `balances`: CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count. `counts` covers orders, receipts, withdrawals and pool deposits.
 - `match`: reason, candidate and profitable-whole-fill counts, per-fill mining fee, shuffle seed and matched order outpoints. Reasons are `matched`, `no_market_orders`, `no_gain` or `unfunded_gain`; the last means profitable fills exist but the balances cannot pay them.
 - `rebalance`: deposit reason (`low_ickb` or `ring_coverage`), withdrawal candidates and stress flag, plus the compact ring summary.
-- `core`: the completed choice (`none`, `deposit` or `withdraw`) and its candidate attempts; `actions` counts the withdrawal requests. `actions` and `transactionShape` describe the result; `skip.reason` explains a skipped turn.
+- `core`: the completed choice (`none`, `deposit` or `withdraw`) and its candidate attempts; `actions` counts the withdrawal requests. `actions`, `plannedFee` and `transactionShape` describe the result; `skip.reason` explains a skipped turn.
 
 ### Transaction outcomes
 
@@ -105,6 +103,7 @@ jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reaso
 jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions: .decision.actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, elapsedMs}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
+jq -sc 'group_by(.runId)[] | add' "$EVENT_FILE"  # one object per turn: what it read, decided, sent
 ```
 
 ## Stimulus Generator

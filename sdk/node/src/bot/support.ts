@@ -12,7 +12,7 @@ import type { BotState, BotStateSummary } from "./types.ts";
  */
 export const MAX_MATCH_PARTIALS = 58;
 
-/** Builds the stable public state summary emitted with bot decisions. */
+/** Builds the state summary a turn journals as `bot.state.read`. */
 export function summarizeBotState(state: BotState): BotStateSummary {
   const { tip, exchangeRatio, feeRate } = state.system;
   return {

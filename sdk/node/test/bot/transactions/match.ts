@@ -237,7 +237,7 @@ describe("buildTransaction matching", () => {
           fee: partialOrderFee([buyer], 1n),
         },
         core: { kind: "none", attempts: 1 },
-        fee: { estimated: 1000n },
+        plannedFee: 1000n,
       },
     });
     expect(typeof result.decision.match.seed).toBe("number");
