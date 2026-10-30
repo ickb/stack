@@ -36,8 +36,9 @@ export class TransactionExpiredError extends Error {
  * Verifies the inputs against the chain, signs locally, records chain identity before
  * RPC, then broadcasts without CCC's cache wrapper.
  *
- * @remarks Nothing is signed unless every input equals the output its creating
- * transaction made and the signer kept the ordered inputs, outputs and outputs data.
+ * @remarks Nothing is signed unless every cell attached to an input equals the output
+ * its creating transaction made, a bare `OutPoint` being valued from that output, and the
+ * signer kept the ordered inputs, outputs and outputs data.
  * Nothing is sent when the chain would take more fee than `plannedFee`, the fee completion
  * priced, `tx.estimateFee(feeRate)` at its rate. That fee is measured from verified values,
  * a phase-2 DAO input proven in its request block with `get_transaction_proof`, so the
