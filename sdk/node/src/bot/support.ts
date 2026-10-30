@@ -1,8 +1,7 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { readyDeposits } from "../../../src/logic.ts";
 import type { Match } from "../../../src/order/matcher.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
-import { maxBigInt } from "../../../src/utils/utils.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { BotState, BotStateSummary } from "./types.ts";
 
@@ -55,7 +54,7 @@ export function summarizeBotState(state: BotState): BotStateSummary {
 
 /** CKB a match may spend: what is available above the reserve. */
 export function matchableCkb(ckb: bigint): bigint {
-  return maxBigInt(0n, ckb - CKB_RESERVE);
+  return ccc.numMax(0n, ckb - CKB_RESERVE);
 }
 
 export function matchedOrderOutPoints(

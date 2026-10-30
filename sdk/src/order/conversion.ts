@@ -1,11 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { ckbFromUdt } from "../udt.ts";
-import {
-  ceilDiv,
-  minBigInt,
-  type ExchangeRatio,
-  type ValueComponents,
-} from "../utils/utils.ts";
+import { ceilDiv, type ExchangeRatio, type ValueComponents } from "../utils/utils.ts";
 import { Info } from "./info.ts";
 import { Ratio } from "./ratio.ts";
 
@@ -141,10 +136,10 @@ export function greatestBoundedFractionAtMost(
     const quotient = n / d;
     let term = quotient;
     if (p !== 0n) {
-      term = minBigInt(term, (maxTerm - previousP) / p);
+      term = ccc.numMin(term, (maxTerm - previousP) / p);
     }
     if (q !== 0n) {
-      term = minBigInt(term, (maxTerm - previousQ) / q);
+      term = ccc.numMin(term, (maxTerm - previousQ) / q);
     }
     const candidate = {
       numerator: term * p + previousP,

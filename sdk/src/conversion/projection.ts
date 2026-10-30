@@ -3,7 +3,6 @@ import { DAO_HEADER_INDEX_LIMIT } from "../dao.ts";
 import type { OrderGroup } from "../order/cells.ts";
 import { isRefused, isStale } from "../order/fill.ts";
 import type { WithdrawalGroup } from "../owned_owner.ts";
-import { maxBigInt } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
 import type {
   AccountAvailabilityProjection,
@@ -35,7 +34,7 @@ export function projectConversionTransactionContext(
       group.owned.maturity.toUnix(system.tip),
     ),
     ...projection.pendingOrders.map((group) => maturity(group.order, system)),
-  ].reduce(maxBigInt, system.tip.timestamp);
+  ].reduce((left, right) => ccc.numMax(left, right), system.tip.timestamp);
 
   return {
     projection,

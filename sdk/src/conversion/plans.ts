@@ -1,7 +1,7 @@
+import { ccc } from "@ckb-ccc/core";
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import { readyDeposits, type IckbDepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP, ckbFromUdt } from "../udt.ts";
-import { maxBigInt } from "../utils/utils.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
@@ -98,7 +98,7 @@ function ckbToIckbConversionPlan(
     if (estimate?.maturity === undefined) {
       return undefined;
     }
-    estimatedMaturity = maxBigInt(estimatedMaturity, estimate.maturity);
+    estimatedMaturity = ccc.numMax(estimatedMaturity, estimate.maturity);
     order = { amounts, estimate };
   }
 
@@ -118,7 +118,7 @@ function ickbToCkbConversionPlan(
   let estimatedMaturity = context.estimatedMaturity;
   // Selected deposits are ready, so their sampled claim is their date.
   for (const deposit of selectedDeposits) {
-    estimatedMaturity = maxBigInt(
+    estimatedMaturity = ccc.numMax(
       estimatedMaturity,
       deposit.claimEpoch.toUnix(context.system.tip),
     );
@@ -132,7 +132,7 @@ function ickbToCkbConversionPlan(
     if (estimate === undefined) {
       return undefined;
     }
-    estimatedMaturity = maxBigInt(estimatedMaturity, estimate.maturity);
+    estimatedMaturity = ccc.numMax(estimatedMaturity, estimate.maturity);
     order = { amounts, estimate };
   }
 
