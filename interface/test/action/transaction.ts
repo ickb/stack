@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   IckbError,
-  type ConversionMetadata,
+  type ConversionKind,
   type ConversionTransactionFailureReason,
 } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -84,26 +84,24 @@ describe("buildTransactionPreview", () => {
     });
   });
 
-  it.each<ConversionMetadata["kind"]>([
-    "collect-only",
-    "direct",
-    "order",
-    "direct-plus-order",
-  ])("preserves SDK conversion intent %s", async (kind) => {
-    const config = walletConfigWith({
-      sdk: {
-        buildConversionTransaction: buildConversionTransactionMock(
-          successfulPlan({ conversion: { kind } }),
-        ),
-      },
-    });
+  it.each<ConversionKind>(["collect-only", "direct", "order", "direct-plus-order"])(
+    "preserves SDK conversion intent %s",
+    async (kind) => {
+      const config = walletConfigWith({
+        sdk: {
+          buildConversionTransaction: buildConversionTransactionMock(
+            successfulPlan({ conversionKind: kind }),
+          ),
+        },
+      });
 
-    await expect(
-      buildTransactionPreview(context(), true, 0n, own(config), config),
-    ).resolves.toMatchObject({
-      conversionKind: kind,
-    });
-  });
+      await expect(
+        buildTransactionPreview(context(), true, 0n, own(config), config),
+      ).resolves.toMatchObject({
+        conversionKind: kind,
+      });
+    },
+  );
 });
 
 describe("buildTransactionPreview failure messages", () => {

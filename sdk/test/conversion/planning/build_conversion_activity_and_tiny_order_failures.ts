@@ -105,7 +105,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         signer: stubSigner,
         context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
       }),
-    ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
+    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
   });
 
   it("moves the liquid cells when the empty collection is for another lock", async () => {
@@ -125,7 +125,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
         signer: stubSigner,
         context: conversionContext({ cells: [cell] }),
       }),
-    ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
+    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
     // Nothing liquid to move is nothing to do, whatever the lock.
     await expect(
       sdk.buildConversionTransaction({
@@ -160,7 +160,7 @@ describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} order-only paths`, () => {
             ickbAvailable: ccc.fixedPointFrom(1),
           }),
         }),
-      ).resolves.toMatchObject({ ok: true, conversion: { kind: "order" } });
+      ).resolves.toMatchObject({ ok: true, conversionKind: "order" });
     },
     FULL_WORKSPACE_TIMEOUT_MS,
   );

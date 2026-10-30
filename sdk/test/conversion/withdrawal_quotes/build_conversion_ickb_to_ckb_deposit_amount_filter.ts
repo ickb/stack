@@ -49,7 +49,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
           ickbAvailable: ICKB_DEPOSIT_CAP,
         }),
       }),
-    ).resolves.toMatchObject({ ok: true, conversion: { kind: "direct" } });
+    ).resolves.toMatchObject({ ok: true, conversionKind: "direct" });
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
   });

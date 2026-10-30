@@ -46,7 +46,7 @@ export type {
   AccountAvailabilityProjection,
   AccountState,
   ConversionDirection,
-  ConversionMetadata,
+  ConversionKind,
   ConversionNotice,
   ConversionTransactionContext,
   ConversionTransactionContextProjection,

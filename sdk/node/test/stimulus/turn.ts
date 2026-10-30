@@ -121,7 +121,7 @@ describe("runStimulusTurn", () => {
         ok: true,
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
-        conversion: { kind: "collect-only" },
+        conversionKind: "collect-only",
         isSweepComplete: true,
         broadcastBefore: DEADLINE,
       };
@@ -240,7 +240,7 @@ describe("runStimulusTurn", () => {
         ok: true,
         tx,
         estimatedMaturity: 0n,
-        conversion: { kind: "collect-only" },
+        conversionKind: "collect-only",
         isSweepComplete: true,
       };
     });
@@ -257,7 +257,7 @@ describe("runStimulusTurn", () => {
       outcome: "committed",
       draw: { kind: "collect-only" },
       skip: { reason: "unrepresentable-amount" },
-      action: { conversion: { kind: "collect-only" } },
+      action: { conversionKind: "collect-only" },
     });
   });
 

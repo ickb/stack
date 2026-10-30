@@ -219,7 +219,7 @@ export class IckbSdk {
       ok: true,
       tx: completed,
       estimatedMaturity: context.estimatedMaturity,
-      conversion: { kind: "collect-only" },
+      conversionKind: "collect-only",
       isSweepComplete: sweepsAll(completed, context.cells),
     };
   }
@@ -266,9 +266,7 @@ export class IckbSdk {
       ok: true,
       tx,
       estimatedMaturity: plan.estimatedMaturity,
-      conversion: {
-        kind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
-      },
+      conversionKind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
       isSweepComplete: sweepsAll(tx, context.cells),
     };
   }
@@ -314,9 +312,10 @@ export class IckbSdk {
       ok: true,
       tx,
       estimatedMaturity: plan.estimatedMaturity,
-      conversion: {
-        kind: conversionKind(plan.selectedDeposits.length > 0, plan.order !== undefined),
-      },
+      conversionKind: conversionKind(
+        plan.selectedDeposits.length > 0,
+        plan.order !== undefined,
+      ),
       ...(notice === undefined ? {} : { conversionNotice: notice }),
       isSweepComplete: sweepsAll(tx, context.cells),
       ...(broadcastBefore === undefined ? {} : { broadcastBefore }),

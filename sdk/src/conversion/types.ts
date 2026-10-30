@@ -88,13 +88,8 @@ export interface ConversionNotice {
   incentiveCkb: bigint;
 }
 
-/**
- * High-level conversion composition used by a built transaction.
- */
-export interface ConversionMetadata {
-  /** Composition category selected for the built conversion. */
-  kind: "direct" | "order" | "direct-plus-order" | "collect-only";
-}
+/** Composition category selected for a built conversion. */
+export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";
 
 /**
  * Result of attempting to build a conversion transaction.
@@ -107,7 +102,7 @@ export type ConversionTransactionResult =
       /** Estimated maturity timestamp for the conversion result. */
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */
-      conversion: ConversionMetadata;
+      conversionKind: ConversionKind;
       /** Optional notice about the selected path. */
       conversionNotice?: ConversionNotice;
       /**

@@ -59,7 +59,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       }),
     ).resolves.toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversionKind: DIRECT_PLUS_ORDER,
     });
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

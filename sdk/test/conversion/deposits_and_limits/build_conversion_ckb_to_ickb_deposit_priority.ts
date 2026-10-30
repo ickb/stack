@@ -57,7 +57,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
 
     expect(result).toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversionKind: DIRECT_PLUS_ORDER,
     });
     expect(deposit).toHaveBeenCalledTimes(1);
     expect(mint).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type {
   BroadcastDeadline,
-  ConversionMetadata,
+  ConversionKind,
   ConversionNotice,
   IckbSdk,
 } from "@ickb/sdk";
@@ -50,7 +50,7 @@ export type SendableTx = Readonly<{
   tx: ccc.Transaction;
   fee: bigint;
   estimatedMaturity: bigint;
-  conversionKind: ConversionMetadata["kind"];
+  conversionKind: ConversionKind;
   /**
    * Set when the transaction moves the liquid funds to another lock: the shortened
    * destination, and whether the sweep took every liquid cell or another move is needed.

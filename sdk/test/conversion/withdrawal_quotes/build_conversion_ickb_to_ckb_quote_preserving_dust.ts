@@ -56,7 +56,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
 
     expect(result).toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversionKind: DIRECT_PLUS_ORDER,
       conversionNotice: { inputIckb: 1000000n },
     });
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

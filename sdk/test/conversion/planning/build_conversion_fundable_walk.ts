@@ -88,7 +88,7 @@ describe("buildConversionTransaction fundable walk", () => {
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
-    expect(result).toMatchObject({ ok: true, conversion: { kind: "direct-plus-order" } });
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
     if (!result.ok) {
       throw new Error(result.reason);
     }

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
-import type { ConversionMetadata } from "../../../src/conversion/types.ts";
+import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import {
   OrderConversionRepresentabilityError,
@@ -47,7 +47,7 @@ type Skip =
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
 type Action =
-  { order: { outputs: [number, number] } } | { conversion: ConversionMetadata };
+  { order: { outputs: [number, number] } } | { conversionKind: ConversionKind };
 
 /**
  * The one JSON record a turn writes; fields fill in as the turn advances, and the logger
@@ -194,7 +194,7 @@ async function buildConversion(
     return result.ok
       ? {
           tx: result.tx,
-          action: { conversion: result.conversion },
+          action: { conversionKind: result.conversionKind },
           ...(result.broadcastBefore === undefined
             ? {}
             : { broadcastBefore: result.broadcastBefore }),

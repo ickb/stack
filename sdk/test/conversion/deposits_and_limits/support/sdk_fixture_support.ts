@@ -211,7 +211,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
     }),
   ).resolves.toMatchObject({
     ok: true,
-    conversion: { kind: DIRECT_PLUS_ORDER },
+    conversionKind: DIRECT_PLUS_ORDER,
   });
 }
 

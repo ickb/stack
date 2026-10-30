@@ -59,7 +59,7 @@ export function buildConversionTransactionMock(
       ok: true,
       tx: txWithInput("aa"),
       estimatedMaturity: 0n,
-      conversion: { kind: "order" },
+      conversionKind: "order",
       isSweepComplete: true,
     },
   );
@@ -70,7 +70,7 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     ok: true,
     tx: txWithInput("aa"),
     estimatedMaturity: 0n,
-    conversion: { kind: "order" },
+    conversionKind: "order",
     isSweepComplete: true,
     ...overrides,
   };
@@ -147,7 +147,7 @@ function testSdk(
         ok: true,
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
-        conversion: { kind: "order" },
+        conversionKind: "order",
         isSweepComplete: true,
       }),
   );
