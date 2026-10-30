@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionMetadata } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
@@ -19,6 +18,7 @@ import {
 import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
 import { type Draw, drawTurn, type Override } from "./draw.ts";
 import {

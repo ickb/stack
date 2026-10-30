@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type {
   AccountState,
@@ -10,6 +9,7 @@ import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { isRefused, isStale } from "../../../src/order/fill.ts";
 import type { OrderManager } from "../../../src/order/order.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { Budgets } from "./draw.ts";
 
 /** Runtime dependencies of one stimulus turn. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import { STALE_ORDER_BLOCKS } from "../../../src/order/fill.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import { readStimulusState } from "../../src/stimulus/state.ts";
 import {
   accountState,

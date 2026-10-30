@@ -61,11 +61,6 @@ const DEPLOYMENTS = {
 } as const;
 
 /**
- * Plain CKB the bot keeps for its own cells and fees: its sizing line for matches and deposits.
- */
-export const CKB_RESERVE = ccc.fixedPointFrom(1000);
-
-/**
  * The managers of one network's iCKB deployment.
  *
  * @remarks Builders still return partial transactions. `IckbSdk` owns the shared iCKB

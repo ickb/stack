@@ -11,7 +11,6 @@ import {
 
 import { headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import {
   ICKB_REFILL_BELOW,
   ICKB_RETAIN,
@@ -19,6 +18,7 @@ import {
   planRebalance,
   type RebalanceInput,
 } from "../../src/bot/policy.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import { BOT_TIP, readyDeposit } from "./fixtures/bot.ts";
 
 const TIP = BOT_TIP;

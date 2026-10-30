@@ -4,8 +4,8 @@ import { OrderManager } from "../../../../src/order/order.ts";
 
 import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CKB_RESERVE } from "../../../../src/constants.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
+import { CKB_RESERVE } from "../../../src/shared/reserve.ts";
 import {
   BAND_ICKB_BALANCE,
   botRuntime,

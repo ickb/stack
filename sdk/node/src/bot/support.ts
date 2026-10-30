@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import type { Match } from "../../../src/order/matcher.ts";
 import { convert } from "../../../src/udt.ts";
 import { maxBigInt } from "../../../src/utils/utils.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { BotState, BotStateSummary } from "./types.ts";
 
 /**
