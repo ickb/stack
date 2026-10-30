@@ -44,7 +44,7 @@ export function actionProps(): Parameters<typeof Action>[0] {
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
     pendingTransaction: undefined,
-    // Built inline: this fixture loads before the React mock, so it must not import the hook module.
+    // No App owns this store, so a change re-renders nothing; a test passes the record down.
     pendingStore: { current: undefined, onChange: (): undefined => undefined },
     l1State: l1State(),
     isStateFetching: false,

@@ -54,13 +54,15 @@ export async function renderHook<P, R>(
   };
 }
 
-/** Runs `update` inside `act`, so the renders and effects it causes commit before it resolves. */
-export async function inAct(update: () => void): Promise<void> {
+/**
+ * Runs `update` inside `act`, so the renders and effects it causes, including those of
+ * the promise it returns, commit before it resolves.
+ */
+export async function inAct(update: () => void | Promise<void>): Promise<void> {
   // act's typed overload for a void callback returns nothing to await; the async form
   // settles once React has flushed the work the update caused.
   await act(async () => {
-    update();
-    await Promise.resolve();
+    await update();
   });
 }
 
