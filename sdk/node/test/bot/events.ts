@@ -12,10 +12,7 @@ describe("bot events", () => {
       new BotEventEmitter({ chain: "testnet", processId: "run" }).emit({
         type: "bot.transaction.committed",
         txHash: `0x${"44".repeat(32)}`,
-        status: "committed",
         elapsedMs: 12,
-        timeoutMs: 120_000,
-        intervalMs: 10_000,
       });
     } finally {
       stdoutWrite.mockRestore();
@@ -29,7 +26,7 @@ describe("bot events", () => {
       chain: "testnet",
       runId: "run-0",
       txHash: `0x${"44".repeat(32)}`,
-      status: "committed",
+      elapsedMs: 12,
     });
     expect(line).toMatch(/"timestamp":"\d{4}-\d\d-\d\dT[^"]*Z"/u);
   });

@@ -62,9 +62,9 @@ DAO output and deposit-header limits come from the deployed script, not a genera
 
 ## Confirmation
 
-`waitTransaction(client, txHash, { timeout?, interval?, signal? })` observes one already-broadcast transaction for a bounded window and returns it once the node reports commitment, at depth zero. `timeout` defaults to 60,000 ms and covers the whole wait, including in-flight client operations; it must be a non-negative safe integer no larger than a host timer delay. `interval` defaults to 2,000 ms.
+`waitTransaction(client, txHash, { timeout?, interval?, signal? })` observes one already-broadcast transaction for a bounded window and resolves once the node reports commitment, at depth zero. `timeout` defaults to 60,000 ms and covers the whole wait, including in-flight client operations; it must be a non-negative safe integer no larger than a host timer delay. `interval` defaults to 2,000 ms.
 
-The client is polled with `get_transaction` verbosity 1. CCC's typed read hides a rejected transaction with a null body, so raw status is needed to preserve rejection evidence. Body reads use `getTransactionNoCache`.
+The client is polled with `get_transaction` verbosity 1. CCC's typed read hides a rejected transaction with a null body, so raw status is needed to preserve rejection evidence. The body is never read: no caller uses it, and a second answer from the same node would verify nothing.
 
 A terminal rejection throws `TransactionWaitError` with the hash, status and node reason. Timeout uses CCC's `ErrorClientWaitTransactionTimeout`. Aborting or timing out stops the wait, but CCC transports may still finish their in-flight work; late settlement is handled. Nothing clears or marks the cache here.
 

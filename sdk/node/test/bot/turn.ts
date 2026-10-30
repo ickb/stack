@@ -18,7 +18,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
-  BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
   readBotState,
   runBotTurn,
@@ -102,9 +101,6 @@ it("sends explicitly and waits with the finite production policy", async () => {
   expect(harness.events[1]).toMatchObject({ decision: { fee: { estimated: "7" } } });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
-    status: "committed",
-    timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
 });
 

@@ -47,10 +47,7 @@ export type BotEvent =
   | {
       type: "bot.transaction.committed";
       txHash: ccc.Hex;
-      status: string;
       elapsedMs: number;
-      timeoutMs: number;
-      intervalMs: number;
     }
   | {
       type: "bot.turn.failed";

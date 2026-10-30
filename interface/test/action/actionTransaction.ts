@@ -98,7 +98,7 @@ describe("finite-window confirmation", () => {
 describe("transact fresh preview boundary", () => {
   it("freezes and sends only the freshly rebuilt transaction", async () => {
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const cachedTx = activeTxInfo("11").tx;
     const freshTxInfo = activeTxInfo("22", {
       fee: 9n,
@@ -184,7 +184,7 @@ describe("transact post-broadcast outcomes", () => {
     });
 
     await recordPending(calls.pendingStore);
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     releasePreview.resolve(undefined);
     await attempt;
 
@@ -206,7 +206,7 @@ describe("transact post-broadcast outcomes", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const retry = retryConfirmation({ ...calls, txHash });
     await vi.runAllTimersAsync();
     await retry;
@@ -219,7 +219,7 @@ describe("transact post-broadcast outcomes", () => {
 describe("transact broadcast identity and rejection", () => {
   it("watches the hash of an ambiguous send and completes when it commits", async () => {
     ambiguousSend();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -336,7 +336,7 @@ describe("transact broadcast identity and rejection", () => {
   });
 
   it("keeps the client after a committed transaction", async () => {
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -548,7 +548,7 @@ describe("attempt ownership after broadcast", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     const retryController = new AbortController();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     await retryConfirmation({
       ...calls,
       signal: retryController.signal,
@@ -590,16 +590,6 @@ function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
   return store.current?.status === "pending" ? store.current.txHash : undefined;
 }
 
-function committedResponse(): ccc.ClientTransactionResponse {
-  return new ccc.ClientTransactionResponse(
-    ccc.Transaction.default(),
-    "committed",
-    undefined,
-    `0x${"cd".repeat(32)}`,
-    10n,
-  );
-}
-
 function attemptCallbackCounts(calls: Parameters<typeof transact>[0]): number[] {
   return [
     vi.mocked(calls.freezePreview).mock.calls.length,
@@ -615,7 +605,7 @@ describe("attempt ownership during completion", () => {
   it("does not reset or clear the hash when unmounted during invalidation", async () => {
     const controller = new AbortController();
     const invalidation = Promise.withResolvers<undefined>();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const calls = transactionCalls(refreshedPreview(), undefined, controller);
     walletQueryClient(calls.walletConfig).invalidateQueries.mockReturnValueOnce(
       invalidation.promise,

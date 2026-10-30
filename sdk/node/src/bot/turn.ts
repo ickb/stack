@@ -140,16 +140,13 @@ async function confirmTransaction({
 }): Promise<void> {
   // A terminal status or the timeout throws an SDK error that names the hash and status;
   // it ends the turn through `bot.turn.failed`.
-  const committed = await waitTransaction(context.runtime.client, txHash, {
+  await waitTransaction(context.runtime.client, txHash, {
     timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
     interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
   context.events.emit({
     type: "bot.transaction.committed",
     txHash,
-    status: committed.status,
     elapsedMs: Date.now() - startedAt,
-    timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
 }

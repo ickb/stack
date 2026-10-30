@@ -79,7 +79,7 @@ The decision transcript groups its evidence by purpose:
 
 ### Transaction outcomes
 
-`bot.transaction.sent` carries the local hash, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the send error. An ambiguous send still waits for that hash. `bot.transaction.committed` carries the hash, status, elapsed time and wait policy.
+`bot.transaction.sent` carries the local hash, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the send error. An ambiguous send still waits for that hash. `bot.transaction.committed` carries the hash and elapsed time.
 
 `bot.turn.failed` carries the error's name, message, stack, cause chain and public enumerable fields. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. A rejection during confirmation includes `txHash`, `status` and `reason`; a timeout uses CCC's timeout error, with the hash in the preceding sent event of the same `runId`. Non-secret transaction, script and cell data may be logged when useful.
 
@@ -103,7 +103,7 @@ jq -r '.type' "$EVENT_FILE" | sort | uniq -c
 jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity, expected, observed, matches}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions: .decision.actions, skip: .decision.skip}' "$EVENT_FILE"
 jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions: .decision.actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
-jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, status, elapsedMs}' "$EVENT_FILE"
+jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, elapsedMs}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
 ```
 

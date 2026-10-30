@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
+import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
@@ -89,7 +89,7 @@ beforeEach(() => {
     return TX_HASH;
   });
   waitMock.mockReset();
-  waitMock.mockResolvedValue(committedTransactionResponse(ccc.Transaction.default()));
+  waitMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {

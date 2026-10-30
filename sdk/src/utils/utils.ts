@@ -195,27 +195,6 @@ export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc {
   return requestor;
 }
 
-/** A node's raw `get_transaction` status record (verbosity 1), the fields the stack reads. */
-export function rawTransactionStatus(response: unknown): {
-  status: string | undefined;
-  reason: string | undefined;
-} {
-  const record =
-    typeof response === "object" &&
-    response !== null &&
-    "tx_status" in response &&
-    typeof response.tx_status === "object" &&
-    response.tx_status !== null
-      ? response.tx_status
-      : {};
-  return {
-    status:
-      "status" in record && typeof record.status === "string" ? record.status : undefined,
-    reason:
-      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
-  };
-}
-
 export function minBigInt(left: bigint, right: bigint): bigint {
   return left < right ? left : right;
 }
