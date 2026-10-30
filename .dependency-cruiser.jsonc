@@ -28,22 +28,10 @@
       "severity": "error",
       "from": {
         "path": "^(?:(?:sdk|sdk/node|testkit|interface)/src/|scripts/)",
-        "pathNot": [
-          "(?:^|/)test/",
-          "[.]test[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
-        ],
+        "pathNot": "(?:^|/)test/",
       },
       "to": {
-        "path": [
-          "(?:^|/)test/",
-          "[.]test[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
-        ],
+        "path": "(?:^|/)test/",
       },
     },
     {
@@ -52,14 +40,7 @@
       "severity": "error",
       "from": {
         "path": "^(?:sdk|sdk/node|testkit|interface)/src/",
-        "pathNot": [
-          "^testkit/src/",
-          "(?:^|/)test/",
-          "[.]test[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:Suite[0-9]*[.]test|Suite|Test(?:Assertions|CommandFixtures|Constants|Fixtures|ProcessFixtures|RunFixtures|Support)|TestFixtures|TestSupport)[.][^/]+[.](?:mts|ts|tsx)$",
-          "(?:^|/)[^/]*(?:_test_|_test_constants[.]|_test_fixtures[.]|_test_support[.])[^/]*$",
-        ],
+        "pathNot": ["^testkit/src/", "(?:^|/)test/"],
       },
       "to": {
         "path": "^testkit/src/",
