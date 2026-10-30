@@ -49,8 +49,8 @@ describe("stimulus process", () => {
   }, 30_000);
 });
 
-function run(env: Record<string, string>, args: string[] = []): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [entrypoint, ...args], {
+function run(env: Record<string, string>): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, [entrypoint], {
     encoding: "utf8",
     env: { PATH: process.env["PATH"] ?? "", ...env },
     timeout: 25_000,
