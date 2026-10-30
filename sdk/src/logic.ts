@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   assertDaoOutputLimit,
+  DAO_DEPOSIT_DATA,
   DaoOutputLimitError,
-  depositData,
   depositMaturity,
   isDaoDeposit,
   pushHeaderDep,
@@ -114,7 +114,7 @@ export class LogicManager implements ScriptDeps {
     const depositCell = ccc.Cell.from({
       previousOutput: { txHash: `0x${"00".repeat(32)}`, index: 0 },
       cellOutput: { capacity: depositCapacity, lock: this.script, type: this.dao.script },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
     const depositAmount = depositCell.capacityFree;
     if (depositAmount < ccc.fixedPointFrom(1000)) {
@@ -204,7 +204,7 @@ export class LogicManager implements ScriptDeps {
         scriptType: "lock",
         filter: {
           script: this.dao.script,
-          outputData: depositData(),
+          outputData: DAO_DEPOSIT_DATA,
           outputDataSearchMode: "exact",
         },
         scriptSearchMode: "exact",

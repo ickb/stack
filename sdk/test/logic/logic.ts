@@ -8,7 +8,11 @@ import {
   type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import { DAO_OUTPUT_LIMIT, DaoOutputLimitError, depositData } from "../../src/dao.ts";
+import {
+  DAO_DEPOSIT_DATA,
+  DAO_OUTPUT_LIMIT,
+  DaoOutputLimitError,
+} from "../../src/dao.ts";
 import {
   LogicManager,
   receiptCell,
@@ -53,7 +57,7 @@ function depositCellOf(txHashByte: string, lock = logic, index = 0n): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: dao.script },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
 }
 
@@ -106,7 +110,7 @@ describe("LogicManager.deposit", () => {
     expect(tx.outputs).toHaveLength(3);
     expect(tx.outputs[0]?.type?.eq(dao.script)).toBe(true);
     expect(tx.outputs[0]?.lock.eq(logic)).toBe(true);
-    expect(tx.outputsData.slice(0, 2)).toEqual([depositData(), depositData()]);
+    expect(tx.outputsData.slice(0, 2)).toEqual([DAO_DEPOSIT_DATA, DAO_DEPOSIT_DATA]);
     expect(tx.outputs[2]?.capacity).toBe(receiptPhase2Capacity(lock));
     expect(tx.outputs[2]?.type?.eq(logic)).toBe(true);
     expect(decodeReceiptData(tx.outputsData[2] ?? "0x")).toEqual({

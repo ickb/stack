@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
-import { BOT_LOCK_UP, depositData } from "../../../../src/dao.ts";
+import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
@@ -73,7 +73,7 @@ export function readyDeposit(
       lock: logic.script,
       type: dao.script,
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,

@@ -8,7 +8,7 @@ import {
 } from "@ickb/testkit";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { depositData } from "../../src/dao.ts";
+import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
 import {
   ckbFromUdt,
   encodeReceiptData,
@@ -82,7 +82,7 @@ function depositCell(txHashByte = "88", cellLock = logic): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: cellLock, type: daoScript },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
 }
 

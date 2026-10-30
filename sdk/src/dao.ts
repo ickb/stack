@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { CheckedUint64LE } from "./utils/codec.ts";
 
 /**
  * Maximum outputs accepted by deployed dao.c, not a general CKB consensus cap.
@@ -73,15 +72,13 @@ export function assertDaoOutputLimit(
   }
 }
 
-/** The canonical DAO deposit data payload. */
-export function depositData(): ccc.Hex {
-  return ccc.hexFrom(CheckedUint64LE.encode(0n));
-}
+/** The canonical DAO deposit data payload: a zero Uint64, eight zero bytes. */
+export const DAO_DEPOSIT_DATA: ccc.Hex = "0x0000000000000000";
 
 /** Whether the cell is a DAO deposit of the given DAO script. */
 export function isDaoDeposit(cell: ccc.CellAny, daoScript: ccc.Script): boolean {
   return (
-    cell.outputData === depositData() && cell.cellOutput.type?.eq(daoScript) === true
+    cell.outputData === DAO_DEPOSIT_DATA && cell.cellOutput.type?.eq(daoScript) === true
   );
 }
 
@@ -94,7 +91,7 @@ export function isDaoWithdrawalRequest(
   daoScript: ccc.Script,
 ): boolean {
   return (
-    cell.outputData !== depositData() && cell.cellOutput.type?.eq(daoScript) === true
+    cell.outputData !== DAO_DEPOSIT_DATA && cell.cellOutput.type?.eq(daoScript) === true
   );
 }
 

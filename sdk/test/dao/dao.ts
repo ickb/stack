@@ -5,9 +5,9 @@ import {
   assertDaoOutputLimit,
   BOT_LOCK_UP,
   broadcastDeadline,
+  DAO_DEPOSIT_DATA,
   DAO_OUTPUT_LIMIT,
   DaoOutputLimitError,
-  depositData,
   depositMaturity,
   isDaoDeposit,
   isDaoWithdrawalRequest,
@@ -70,7 +70,7 @@ describe("assertDaoOutputLimit", () => {
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
         cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
-        outputData: depositData(),
+        outputData: DAO_DEPOSIT_DATA,
       }),
     );
 
@@ -96,7 +96,7 @@ describe("DAO cell shapes", () => {
     const deposit = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("22"), index: 0n },
       cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
     const request = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("23"), index: 0n },
@@ -106,7 +106,7 @@ describe("DAO cell shapes", () => {
     const plain = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("24"), index: 0n },
       cellOutput: { capacity: 1n, lock: script("99") },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
 
     expect(isDaoDeposit(deposit, daoScript)).toBe(true);

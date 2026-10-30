@@ -2,11 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
+  DAO_DEPOSIT_DATA,
   DAO_HEADER_INDEX_LIMIT,
   DAO_OUTPUT_LIMIT,
   DaoHeaderIndexError,
   DaoOutputLimitError,
-  depositData,
 } from "../../src/dao.ts";
 import type { IckbDepositCell } from "../../src/logic.ts";
 import {
@@ -36,7 +36,7 @@ function depositOf(
   const cell = ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao.script },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
@@ -538,7 +538,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     });
     const deposit = cellWith(owned.cell, {
       outPoint: { txHash: byte32FromByte("57"), index: 0n },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
     const missing = cellWith(owned.cell, {
       outPoint: { txHash: byte32FromByte("58"), index: 0n },

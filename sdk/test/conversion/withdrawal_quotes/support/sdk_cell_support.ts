@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
-import { depositData } from "../../../../src/dao.ts";
+import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
 import {
   encodeOwnerData,
@@ -28,7 +28,7 @@ export function depositCell(
       lock: logic,
       type: dao,
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
@@ -56,7 +56,7 @@ export function projectionReadyDeposit(
       lock: script("22"),
       type: script("33"),
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
