@@ -33,7 +33,7 @@ let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
-  const preflight = await verifyChainPreflight(client, chain);
+  await verifyChainPreflight(client, chain);
   const managers = getConfig(chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
@@ -53,7 +53,6 @@ try {
       },
       rpcEndpoints,
     },
-    genesisHash: preflight.genesisHash,
   });
   const sdk = new IckbSdk(managers);
   const runtime: Runtime = {

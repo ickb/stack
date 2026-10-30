@@ -177,5 +177,4 @@ export interface BotDecision {
     headerDeps: number;
     witnesses: number;
   };
-  skip?: { reason: BuildTransactionSkipReason };
 }

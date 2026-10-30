@@ -52,9 +52,6 @@ const identity: StimulusIdentity = {
   address: "ckt1stimulus",
   primaryLock: { codeHash: PRIMARY_LOCK.codeHash, hashType: "type", args: "0x" },
   rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
-  preflight: {
-    genesisHash: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
-  },
 };
 const FUNDED_CKB = 6000n * CKB;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });

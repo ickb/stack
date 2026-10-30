@@ -258,5 +258,5 @@ function skipped(
   reason: BuildTransactionSkipReason,
   decision: BotDecision,
 ): BuildTransactionResult {
-  return { kind: "skipped", reason, decision: { ...decision, skip: { reason } } };
+  return { kind: "skipped", reason, decision };
 }

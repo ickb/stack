@@ -1,6 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
-import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { writeJsonLine } from "../shared/logging.ts";
 import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import type {
@@ -9,7 +8,7 @@ import type {
   BuildTransactionSkipReason,
 } from "./types.ts";
 
-/** Public identity of one bot process, emitted once with the chain preflight evidence. */
+/** Public identity of one bot process, emitted once its chain preflight passes. */
 interface BotIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
@@ -25,7 +24,7 @@ interface BotIdentity {
  */
 export type BotEvent =
   | { type: "bot.turn.started" }
-  | ({ type: "bot.chain.preflight"; identity: BotIdentity } & ChainPreflightEvidence)
+  | { type: "bot.chain.preflight"; identity: BotIdentity }
   | ({ type: "bot.state.read" } & BotStateSummary)
   | {
       type: "bot.decision.skipped";

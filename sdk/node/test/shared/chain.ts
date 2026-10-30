@@ -44,13 +44,13 @@ describe("finite public clients", () => {
 });
 
 describe("public client preflight identity", () => {
-  it("accepts the chain's genesis and journals it", async () => {
+  it("accepts the chain's genesis", async () => {
     await expect(
       verifyChainPreflight(preflightClient(TESTNET_GENESIS_HASH), "testnet"),
-    ).resolves.toEqual({ genesisHash: TESTNET_GENESIS_HASH });
+    ).resolves.toBeUndefined();
     await expect(
       verifyChainPreflight(preflightClient(MAINNET_GENESIS_HASH), "mainnet"),
-    ).resolves.toEqual({ genesisHash: MAINNET_GENESIS_HASH });
+    ).resolves.toBeUndefined();
   });
 
   it("rejects another chain's genesis", async () => {

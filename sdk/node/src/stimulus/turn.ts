@@ -15,7 +15,6 @@ import {
   TransactionWaitError,
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
-import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -34,7 +33,6 @@ export interface StimulusIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
   rpcEndpoints: RpcEndpointIdentity[];
-  preflight: ChainPreflightEvidence;
 }
 
 /** Every way a turn ends; `committed` is the only one that proves stimulus reached the chain. */

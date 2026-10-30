@@ -8,11 +8,6 @@ const GENESIS_HASHES = {
   testnet: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
 } as const satisfies Record<SupportedChain, ccc.Hex>;
 
-/** What the preflight saw, journaled once per process. */
-export interface ChainPreflightEvidence {
-  genesisHash: ccc.Hex;
-}
-
 /**
  * Refuses an RPC client whose genesis is not `chain`'s: the one identity check a public
  * client needs, since its class already fixes the address prefix. Transport failures
@@ -21,7 +16,7 @@ export interface ChainPreflightEvidence {
 export async function verifyChainPreflight(
   client: ccc.Client,
   chain: SupportedChain,
-): Promise<ChainPreflightEvidence> {
+): Promise<void> {
   const genesis = await client.getHeaderByNumber(0n);
   if (genesis === undefined) {
     throw new Error(`Missing ${chain} genesis header`);
@@ -32,7 +27,6 @@ export async function verifyChainPreflight(
       `Invalid ${chain} RPC chain identity: genesis hash expected ${expected} observed ${genesis.hash}`,
     );
   }
-  return { genesisHash: genesis.hash };
 }
 
 /**

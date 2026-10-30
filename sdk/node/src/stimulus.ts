@@ -19,7 +19,7 @@ let clientOwner: ccc.Owner<ccc.Client> | undefined;
 try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
-  const preflight = await verifyChainPreflight(client, chain);
+  await verifyChainPreflight(client, chain);
   // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
@@ -46,7 +46,6 @@ try {
         args: primaryLock.args,
       },
       rpcEndpoints,
-      preflight,
     },
     override,
     random: Math.random,
