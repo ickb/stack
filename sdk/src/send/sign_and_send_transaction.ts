@@ -44,7 +44,8 @@ export class TransactionExpiredError extends Error {
  * a phase-2 DAO input proven in its request block with `get_transaction_proof`, so the
  * client must be JSON-RPC. When `broadcastBefore` is given, the send is refused with
  * `TransactionExpiredError` once a fresh tip reaches it.
- * `recordTxHash` runs before the send RPC. A node already holding this exact transaction
+ * `recordTxHash` runs before the send RPC, for a caller that must record the hash before a
+ * send that may never answer; every later failure carries it as `TransactionBroadcastError`. A node already holding this exact transaction
  * is an acceptance; any other send failure throws `TransactionBroadcastError`. Why each
  * check exists: SDK README, Signing and broadcast.
  */
@@ -59,7 +60,7 @@ export async function signAndSendTransaction(
   const requested = ccc.Transaction.from(tx).clone();
   const requestedBody = economicBody(requested);
   // The checks read through a verified client, whatever client the signer holds.
-  const client = verifiedClient(signer.client);
+  const client = verifiedClient(signer.client, broadcastBefore?.tipMaxAgeMs);
   const inputs = await verifiedInputs(client, requested.inputs);
   const signed = await signer.signTransaction(tx);
   if (economicBody(signed) !== requestedBody) {
@@ -77,10 +78,7 @@ export async function signAndSendTransaction(
     );
   }
   if (broadcastBefore !== undefined) {
-    const { epoch } = await verifiedClient(
-      signer.client,
-      broadcastBefore.tipMaxAgeMs,
-    ).getTipHeader();
+    const { epoch } = await client.getTipHeader();
     if (broadcastBefore.epoch.compare(epoch) <= 0) {
       throw new TransactionExpiredError({
         broadcastBefore: broadcastBefore.epoch,
