@@ -37,7 +37,7 @@ export interface Runtime {
     tip: ccc.ClientBlockHeader,
   ) => Promise<ccc.Transaction>;
 
-  /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */
+  /** Signs and sends through the initialization-owned signer. */
   sendTransaction: (
     tx: ccc.TransactionLike,
     plannedFee: ccc.Num,

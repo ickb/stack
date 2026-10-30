@@ -68,7 +68,7 @@ The reserve is not a loss limiter. A builder defect that gave capacity away woul
 
 The bot uses [`BOT_LOCK_UP`](../../src/dao.ts). Its selection window and broadcast reserve use epochs; the minutes in that source comment assume a nominal four-hour epoch. A fresh tip read after signing refuses an expired request before broadcast, because committing after the claim can lock the deposit for another cycle. CKB has no transaction expiry that can enforce this after broadcast.
 
-The bot waits up to two minutes so its journal can join a send to a commit. It rebuilds next turn whether that wait succeeds or not. A long wait on a stuck request consumes time that could be used to rebuild before the claim; rebuilding can repair a dropped or replaceable request, not accelerate one still pending. The timeout and interval live in [`turn.ts`](../src/bot/turn.ts).
+The bot waits up to two minutes so its journal can join a send to a commit. It rebuilds next turn whether that wait succeeds or not; rebuilding can repair a dropped or replaceable request, not accelerate one still pending. A failed send exits, and the ten-minute restart dominates the time to rebuild: a request selected with its claim less than about 31 minutes out (`BOT_LOCK_UP` selects 20 to 60 minutes and sends while 15 remain) can no longer be re-requested after a failure, where the one-minute restart left room down to about 23. That deposit waits a cycle, the accepted cost of the restart cadence. The timeout and interval live in [`turn.ts`](../src/bot/turn.ts).
 
 ## Operating assumptions
 

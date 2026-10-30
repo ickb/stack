@@ -63,14 +63,6 @@ export interface TransactionWithHeader {
 }
 
 /**
- * CCC client test double with per-method handler overrides.
- *
- * @remarks
- * Unspecified methods fall back to `ClientPublicTestnet`, whose URL is an
- * invalid host. Tests should override every method expected to cross the RPC
- * boundary.
- */
-/**
  * A block number past any tip: an order group dated by it is as fresh as an order gets,
  * for tests whose orders' age does not matter.
  */
@@ -149,6 +141,14 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
   return ccc.ClientPublicTestnet.new({ transport: offlineTransport() });
 }
 
+/**
+ * CCC client test double with per-method handler overrides.
+ *
+ * @remarks
+ * Unspecified methods fall back to `ClientPublicTestnet`, whose URL is an
+ * invalid host. Tests should override every method expected to cross the RPC
+ * boundary.
+ */
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly prefix: string | undefined;
 
