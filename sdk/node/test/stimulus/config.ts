@@ -30,8 +30,16 @@ describe("readStimulusConfig", () => {
 });
 
 describe("readStimulusOverride", () => {
-  it("leaves every draw random when no knob is set", () => {
+  it("leaves every draw random when no knob is set, empty counting as unset", () => {
     expect(readStimulusOverride({})).toEqual({});
+    expect(
+      readStimulusOverride({
+        STIMULUS_KIND: "",
+        STIMULUS_DIRECTION: "",
+        STIMULUS_AMOUNT: "",
+        STIMULUS_FEE: "",
+      }),
+    ).toEqual({});
   });
 
   it("pins each draw from its knob", () => {

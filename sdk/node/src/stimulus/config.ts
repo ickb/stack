@@ -1,7 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
-import { readRuntimeConfigEnv, type RuntimeConfig } from "../shared/runtime_config.ts";
+import {
+  optionalEnv,
+  readRuntimeConfigEnv,
+  type RuntimeConfig,
+} from "../shared/runtime_config.ts";
 import type { Kind, Override } from "./draw.ts";
 
 /**
@@ -22,15 +26,15 @@ export async function readStimulusConfig(env: NodeJS.ProcessEnv): Promise<Runtim
 /**
  * Reads the optional knobs that pin one draw each: `STIMULUS_KIND`, `STIMULUS_DIRECTION`,
  * `STIMULUS_AMOUNT` (CKB or iCKB, up to eight decimals, or `max`), and `STIMULUS_FEE` (numerator over
- * the fixed base). Unset knobs leave their draw random.
+ * the fixed base). Unset or empty knobs leave their draw random.
  */
 export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
   const override: Override = {};
-  const kind = env["STIMULUS_KIND"];
+  const kind = optionalEnv(env, "STIMULUS_KIND")?.value;
   if (kind !== undefined) {
     override.kind = parseChoice<Kind>(kind, ["order", "conversion"], "STIMULUS_KIND");
   }
-  const direction = env["STIMULUS_DIRECTION"];
+  const direction = optionalEnv(env, "STIMULUS_DIRECTION")?.value;
   if (direction !== undefined) {
     override.direction = parseChoice<ConversionDirection>(
       direction,
@@ -38,11 +42,11 @@ export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
       "STIMULUS_DIRECTION",
     );
   }
-  const amount = env["STIMULUS_AMOUNT"];
+  const amount = optionalEnv(env, "STIMULUS_AMOUNT")?.value;
   if (amount !== undefined) {
     override.amount = amount === "max" ? "max" : parseAmount(amount);
   }
-  const fee = env["STIMULUS_FEE"];
+  const fee = optionalEnv(env, "STIMULUS_FEE")?.value;
   if (fee !== undefined) {
     const numerator = parseUnsigned(fee, "STIMULUS_FEE");
     if (numerator >= DEFAULT_ORDER_FEE_BASE) {
