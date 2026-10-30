@@ -17,7 +17,7 @@ import {
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
 import type { ChainPreflightEvidence } from "../shared/chain.ts";
-import { formatCkb, transactionShape } from "../shared/format.ts";
+import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
 import { type Draw, drawTurn, type Override } from "./draw.ts";
@@ -230,7 +230,7 @@ async function send(
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: { fee: formatCkb(fee), feeRate: state.system.feeRate },
+    txFee: { fee: ccc.fixedPointToString(fee), feeRate: state.system.feeRate },
   });
   let txHash: ccc.Hex;
   try {
@@ -272,10 +272,10 @@ function hasCollectible({ context }: StimulusState): boolean {
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      liquid: formatCkb(state.liquidCkb),
-      budget: formatCkb(state.budgets.ckb),
-      reserve: formatCkb(CKB_RESERVE),
+      liquid: ccc.fixedPointToString(state.liquidCkb),
+      budget: ccc.fixedPointToString(state.budgets.ckb),
+      reserve: ccc.fixedPointToString(CKB_RESERVE),
     },
-    ICKB: { budget: formatCkb(state.budgets.ickb) },
+    ICKB: { budget: ccc.fixedPointToString(state.budgets.ickb) },
   };
 }
