@@ -21,8 +21,8 @@ Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
 # The bot loops turns ten minutes apart and exits on any failure (1) or after six hours (0);
 # Restart=always, not on-failure, restarts both, and the same ten minutes keeps the
 # cadence. Every CCC request times out on its own; RuntimeMaxSec only backstops a turn
-# that never ends, such as a node paging forever: a healthy process exits at six hours
-# plus one turn, and the restart reshuffles a configured endpoint list.
+# that never ends, such as a node paging forever: a healthy process exits within about
+# six hours and a quarter, and the restart reshuffles a configured endpoint list.
 Restart=always
 RestartSec=10min
 RuntimeMaxSec=7h
