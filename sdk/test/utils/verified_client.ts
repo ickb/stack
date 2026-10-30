@@ -23,10 +23,6 @@ function answering(header: ccc.ClientBlockHeader | undefined): ccc.Client {
     cellOutput: { capacity: 0n, lock: script("22") },
     outputData: "0x",
   });
-  const transaction = ccc.ClientTransactionResponse.from({
-    transaction: ccc.Transaction.default(),
-    status: "committed",
-  });
   const answer = async (): Promise<ccc.ClientBlockHeader | undefined> => {
     await Promise.resolve();
     return header;
@@ -36,13 +32,6 @@ function answering(header: ccc.ClientBlockHeader | undefined): ccc.Client {
       getTipHeader: async (): Promise<ccc.ClientBlockHeader> =>
         (await answer()) ?? GENESIS,
       getHeaderByNumber: answer,
-      getHeaderByHash: answer,
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        const answered = await answer();
-        return answered === undefined ? undefined : { transaction, header: answered };
-      },
       getCellWithHeader: async (): ReturnType<ccc.Client["getCellWithHeader"]> => {
         const answered = await answer();
         return answered === undefined ? undefined : { cell, header: answered };
@@ -55,9 +44,6 @@ function answering(header: ccc.ClientBlockHeader | undefined): ccc.Client {
 const READS: Record<string, (client: ccc.Client) => Promise<unknown>> = {
   getTipHeader: async (client) => client.getTipHeader(),
   getHeaderByNumber: async (client) => client.getHeaderByNumber(0n),
-  getHeaderByHash: async (client) => client.getHeaderByHash(GENESIS.hash),
-  getTransactionWithHeader: async (client) =>
-    client.getTransactionWithHeader(GENESIS.hash),
   getCellWithHeader: async (client) =>
     client.getCellWithHeader({ txHash: GENESIS.hash, index: 0n }),
 };
@@ -72,10 +58,6 @@ describe("verifiedClient", () => {
       const client = answering(header);
       await expect(client.getTipHeader()).resolves.toBe(header);
       await expect(client.getHeaderByNumber(header.number)).resolves.toBe(header);
-      await expect(client.getHeaderByHash(header.hash)).resolves.toBe(header);
-      await expect(client.getTransactionWithHeader(header.hash)).resolves.toMatchObject({
-        header,
-      });
       await expect(
         client.getCellWithHeader({ txHash: header.hash, index: 0n }),
       ).resolves.toMatchObject({ header });
@@ -98,16 +80,11 @@ describe("verifiedClient", () => {
     await expect(client.getHeaderByNumber(GENESIS.number)).rejects.toThrow(
       `Header ${BLOCK.hash} answers for block 0`,
     );
-    await expect(client.getHeaderByHash(GENESIS.hash)).rejects.toThrow(
-      `Header ${BLOCK.hash} answers for ${GENESIS.hash}`,
-    );
   });
 
   it("passes an absent header through", async () => {
     const client = answering(undefined);
     await expect(client.getHeaderByNumber(1n)).resolves.toBeUndefined();
-    await expect(client.getHeaderByHash(BLOCK.hash)).resolves.toBeUndefined();
-    await expect(client.getTransactionWithHeader(BLOCK.hash)).resolves.toBeUndefined();
     await expect(
       client.getCellWithHeader({ txHash: GENESIS.hash, index: 0n }),
     ).resolves.toBeUndefined();
@@ -142,19 +119,12 @@ describe("verifiedClient", () => {
       await Promise.resolve();
       return ccc.hexFrom(txHash) === `0x${"44".repeat(32)}` ? undefined : response;
     };
-    const client = verifiedClient(
-      new StubClient({ getTransaction: answer, getTransactionNoCache: answer }),
+    const client = verifiedClient(new StubClient({ getTransaction: answer }));
+    await expect(client.getTransaction(real)).resolves.toBe(response);
+    await expect(client.getTransaction(other)).rejects.toThrow(
+      `Transaction ${other} was answered with a body of another hash`,
     );
-    for (const method of ["getTransaction", "getTransactionNoCache"] as const) {
-      const read = async (
-        txHash: ccc.Hex,
-      ): Promise<ccc.ClientTransactionResponse | undefined> => client[method](txHash);
-      await expect(read(real)).resolves.toBe(response);
-      await expect(read(other)).rejects.toThrow(
-        `Transaction ${other} was answered with a body of another hash`,
-      );
-      await expect(read(`0x${"44".repeat(32)}`)).resolves.toBeUndefined();
-    }
+    await expect(client.getTransaction(`0x${"44".repeat(32)}`)).resolves.toBeUndefined();
   });
 
   it("serves a cell from its verified creating transaction, cache first", async () => {

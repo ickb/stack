@@ -1,11 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 
 /**
- * Wraps `inner` into a client that checks every header it hands out against the
- * header's own hash, a header read by number or by hash against what was asked for, a
- * transaction read by hash against the hash of its body, a cell against the body of its
- * creating transaction, and refuses a tip that trails the local clock by more than
- * `tipMaxAgeMs` when one is given.
+ * Wraps `inner` into a client that checks the reads the SDK makes: every header it hands
+ * out against the header's own hash, a header read by number against the number asked
+ * for, a transaction read by hash against the hash of its body, and a cell against the
+ * body of its creating transaction. It refuses a tip that trails the local clock by more
+ * than `tipMaxAgeMs` when one is given. Other reads pass through unchecked; the cell
+ * beside `getCellWithHeader`'s header is one, since the SDK reads only its header.
  *
  * @remarks It wraps the client, not the SDK's readers, because CCC's own completion reads
  * headers through the client it is given. Why each check exists: SDK README, Account state.
@@ -58,32 +59,10 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     return header;
   }
 
-  public override async getHeaderByHash(
-    ...args: Parameters<ccc.Client["getHeaderByHash"]>
-  ): Promise<ccc.ClientBlockHeader | undefined> {
-    const header = ccc.apply(
-      verified,
-      await this[ccc.Proxy.inner].getHeaderByHash(...args),
-    );
-    if (header !== undefined && header.hash !== ccc.hexFrom(args[0])) {
-      throw new Error(`Header ${header.hash} answers for ${ccc.hexFrom(args[0])}`);
-    }
-    return header;
-  }
-
   public override async getTransaction(
     ...args: Parameters<ccc.Client["getTransaction"]>
   ): ReturnType<ccc.Client["getTransaction"]> {
     return verifiedBody(await this[ccc.Proxy.inner].getTransaction(...args), args[0]);
-  }
-
-  public override async getTransactionNoCache(
-    ...args: Parameters<ccc.Client["getTransactionNoCache"]>
-  ): ReturnType<ccc.Client["getTransactionNoCache"]> {
-    return verifiedBody(
-      await this[ccc.Proxy.inner].getTransactionNoCache(...args),
-      args[0],
-    );
   }
 
   /**
@@ -119,14 +98,6 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
       verifiedBody(await this.cache.getTransactionResponse(txHash), txHash) ??
       (await this.getTransaction(txHash))
     );
-  }
-
-  public override async getTransactionWithHeader(
-    ...args: Parameters<ccc.Client["getTransactionWithHeader"]>
-  ): ReturnType<ccc.Client["getTransactionWithHeader"]> {
-    const result = await this[ccc.Proxy.inner].getTransactionWithHeader(...args);
-    ccc.apply(verified, result?.header);
-    return result;
   }
 
   public override async getCellWithHeader(
