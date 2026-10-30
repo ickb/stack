@@ -102,7 +102,7 @@ export function walletLabel(
   return "Wallet";
 }
 
-export const CKB = ccc.fixedPointFrom(1);
+export const CKB = ccc.One;
 export const maxShannons = (1n << 64n) - 1n;
 
 export type AmountInput =
@@ -120,8 +120,7 @@ export function parseAmountInput(text: string): AmountInput {
   }
   // ASCII digits only: `\d` never matches other scripts' digits, with or without `u`.
   // eslint-disable-next-line security/detect-unsafe-regex -- The optional group starts with a literal dot, so no input backtracks.
-  const parts = /^(\d*)(?:\.(\d{0,8}))?$/u.exec(text);
-  if (parts === null) {
+  if (!/^\d*(?:\.\d{0,8})?$/u.test(text)) {
     return {
       status: "invalid",
       amount: undefined,
@@ -129,8 +128,8 @@ export function parseAmountInput(text: string): AmountInput {
     };
   }
 
-  const [, whole = "", fraction = ""] = parts;
-  const amount = BigInt(`0${whole}`) * CKB + BigInt(fraction.padEnd(8, "0"));
+  // CCC would drop a ninth decimal and take a sign; the grammar above refuses both first.
+  const amount = ccc.fixedPointFrom(text);
   if (amount > maxShannons) {
     return {
       status: "invalid",
