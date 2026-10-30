@@ -2,10 +2,6 @@ import type { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "../utils/utils.ts";
 import { OrderData } from "./order_data.ts";
 
-// The resolver's own group, keyed by its order cell: matching and transactions use this
-// parse, so a caller's own wrapper is only ever a key into it.
-const resolvedOrderGroups = new WeakMap<ccc.Cell, OrderGroup>();
-
 /**
  * Represents a parsed order cell on the blockchain.
  *
@@ -474,47 +470,4 @@ export class OrderGroup implements ValueComponents {
     const lock = this.master.cell.cellOutput.lock;
     return locks.some((l) => lock.eq(l));
   }
-}
-
-/**
- * Records canonical resolver output without exposing forgeable provenance data. The
- * group and its parsed parts are frozen, since matching and transactions build on them.
- */
-export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
-  group.validate();
-  for (const order of [group.order, group.origin]) {
-    const { info } = order.data;
-    for (const part of [
-      order,
-      order.data,
-      order.data.master,
-      info,
-      info.ckbToUdt,
-      info.udtToCkb,
-    ]) {
-      Object.freeze(part);
-    }
-  }
-  Object.freeze(group.master);
-  resolvedOrderGroups.set(group.order.cell, Object.freeze(group));
-  return group;
-}
-
-/** Returns the resolver's group at a matching or transaction boundary. */
-export function validatedOrderGroup(group: OrderGroup): OrderGroup {
-  if (!(group instanceof OrderGroup)) {
-    throw new TypeError("Matching requires resolved OrderGroups from findOrders()");
-  }
-
-  const attested = resolvedOrderGroups.get(group.order.cell);
-  if (attested === undefined) {
-    throw new TypeError("OrderGroup was not produced by the order resolver");
-  }
-  if (
-    group.master.cell !== attested.master.cell ||
-    group.origin.cell !== attested.origin.cell
-  ) {
-    throw new TypeError("OrderGroup does not match its resolver attestation");
-  }
-  return attested;
 }

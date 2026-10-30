@@ -3,12 +3,7 @@ import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, depositData } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
-import {
-  attestResolvedOrderGroup,
-  MasterCell,
-  OrderCell,
-  OrderGroup,
-} from "../../../../src/order/cells.ts";
+import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -104,7 +99,7 @@ export async function testMatch(
 }
 
 /**
- * A market order the resolver would attest, from the bot's side: a buyer offers CKB for
+ * A market order the resolver would return, from the bot's side: a buyer offers CKB for
  * iCKB at the ratio, a seller iCKB for CKB, and the minimum match is the exponent.
  */
 export function marketOrder({
@@ -159,7 +154,7 @@ export function marketOrder({
       outputData: "0x",
     }),
   );
-  return attestResolvedOrderGroup(new OrderGroup(master, order, order, FRESH_BLOCK));
+  return new OrderGroup(master, order, order, FRESH_BLOCK);
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */

@@ -1,7 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { FRESH_BLOCK } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { OrderCell, OrderGroup } from "../../../src/order/cells.ts";
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { OrderManager } from "../../../src/order/order.ts";
@@ -96,7 +94,6 @@ describe("OrderManager match and melt transaction helpers", () => {
   registerMintTransactionValidationTests();
   registerMatchAccountingValidationTests();
   registerMatchPartialValidationTests();
-  registerOrderGroupProvenanceTests();
   registerMeltGroupValidationTests();
 });
 
@@ -260,63 +257,7 @@ function registerMatchPartialValidationTests(): void {
   });
 }
 
-function registerOrderGroupProvenanceTests(): void {
-  it("rejects a fabricated origin at a resolved group's claimed outpoint", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 10n,
-      info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("57"), index: 0n },
-    });
-    const group = resolvedOrderGroup(order);
-    const fabricatedOrigin = OrderCell.mustFrom(
-      ccc.Cell.from({
-        outPoint: group.origin.cell.outPoint,
-        cellOutput: group.origin.cell.cellOutput,
-        outputData: group.origin.cell.outputData,
-      }),
-    );
-    const fabricatedGroup = new OrderGroup(
-      group.master,
-      group.order,
-      fabricatedOrigin,
-      FRESH_BLOCK,
-    );
-
-    expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [
-          { group: fabricatedGroup, ckbOut: order.ckbValue, udtOut: order.udtValue },
-        ],
-      }),
-    ).toThrow("OrderGroup does not match its resolver attestation");
-  });
-}
-
 function registerMeltGroupValidationTests(): void {
-  it("hands out frozen groups, so a caller cannot reprice a resolved order", () => {
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.from({
-        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
-        udtToCkb: Ratio.empty(),
-        ckbMinMatchLog: 0,
-      }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("79"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("5d"), index: 0n },
-    });
-    const group = resolvedOrderGroup(order);
-
-    for (const target of [group, group.order, group.order.data, group.order.data.info]) {
-      expect(Object.isFrozen(target)).toBe(true);
-    }
-  });
-
   it("builds the transaction of a matcher's fill from the resolver's group", () => {
     const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
@@ -339,32 +280,6 @@ function registerMeltGroupValidationTests(): void {
 
     expect(fill.partials).toHaveLength(1);
     expect(manager.addMatch(ccc.Transaction.default(), fill).inputs).toHaveLength(1);
-  });
-
-  it("rejects a structurally valid group that was never resolver-produced", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-    const order = makeOrderCell({
-      ckbUnoccupied: ccc.fixedPointFrom(1000),
-      udtValue: 0n,
-      info: Info.from({
-        ckbToUdt: { ckbScale: 1n, udtScale: 1n },
-        udtToCkb: Ratio.empty(),
-        ckbMinMatchLog: 0,
-      }),
-      master: { type: "absolute", value: { txHash: byte32FromByte("7a"), index: 1n } },
-      outPoint: { txHash: byte32FromByte("5e"), index: 0n },
-    });
-    const resolved = resolvedOrderGroup(order);
-    const unattested = new OrderGroup(
-      resolved.master,
-      OrderCell.mustFrom(order.cell.clone()),
-      resolved.origin,
-      FRESH_BLOCK,
-    );
-
-    expect(() => manager.melt(ccc.Transaction.default(), [unattested])).toThrow(
-      "OrderGroup was not produced by the order resolver",
-    );
   });
 
   it("rejects melt groups from a different manager", () => {

@@ -1,11 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
-import {
-  attestResolvedOrderGroup,
-  MasterCell,
-  OrderCell,
-  OrderGroup,
-} from "../../../../src/order/cells.ts";
+import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import { OrderMatcher } from "../../../../src/order/matcher.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -142,6 +137,5 @@ export function resolvedOrderGroup(order: OrderCell): OrderGroup {
       outputData: "0x",
     }),
   );
-  const group = new OrderGroup(master, order, origin, FRESH_BLOCK);
-  return attestResolvedOrderGroup(group);
+  return new OrderGroup(master, order, origin, FRESH_BLOCK);
 }

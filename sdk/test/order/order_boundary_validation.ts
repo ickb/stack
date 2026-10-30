@@ -1,32 +1,6 @@
-import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
-import type { OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
-import { OrderManager } from "../../src/order/order.ts";
 import { Ratio } from "../../src/order/ratio.ts";
-import { byte32FromByte } from "./matching/support/order_order_helpers.ts";
-
-const UDT_SCRIPT = script("22");
-
-describe("order transaction boundary validation", () => {
-  it("rejects unresolved groups at match and melt boundaries", () => {
-    const manager = new OrderManager(script("11"), [], UDT_SCRIPT);
-    // Runtime JavaScript callers can bypass the public TypeScript contract.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Deliberately malformed boundary input.
-    const unresolved = {} as OrderGroup;
-
-    expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [{ group: unresolved, ckbOut: 0n, udtOut: 0n }],
-      }),
-    ).toThrow("Matching requires resolved OrderGroups from findOrders()");
-    expect(() => manager.melt(ccc.Transaction.default(), [unresolved])).toThrow(
-      "Matching requires resolved OrderGroups from findOrders()",
-    );
-  });
-});
 
 describe("order info fallback validation", () => {
   it("rejects ratios that bypass their own classification validation", () => {
@@ -51,12 +25,4 @@ class UnvalidatedRatio extends Ratio {
   public override validate(): void {
     // Simulates an external subtype that bypasses its nested validator.
   }
-}
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(byte),
-    hashType: "type",
-    args: "0x",
-  });
 }

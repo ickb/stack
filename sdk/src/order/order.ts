@@ -1,12 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { findCells, type ScriptDeps, type ValueComponents } from "../utils/utils.ts";
-import {
-  attestResolvedOrderGroup,
-  MasterCell,
-  OrderCell,
-  OrderGroup,
-  validatedOrderGroup,
-} from "./cells.ts";
+import { MasterCell, OrderCell, OrderGroup } from "./cells.ts";
 import { Info, type InfoLike } from "./info.ts";
 import type { Match } from "./matcher.ts";
 import { OrderData } from "./order_data.ts";
@@ -122,11 +116,10 @@ export class OrderManager implements ScriptDeps {
    */
   public melt(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction {
     const tx = ccc.Transaction.from(txLike);
-    const selected = groups.map(validatedOrderGroup);
-    if (selected.length === 0) {
+    if (groups.length === 0) {
       return tx;
     }
-    for (const group of selected) {
+    for (const group of groups) {
       if (!this.isOrder(group.order.cell)) {
         throw new Error(
           `Melt order ${group.order.cell.outPoint.toHex()} does not match this order manager`,
@@ -134,7 +127,7 @@ export class OrderManager implements ScriptDeps {
       }
     }
     tx.addCellDeps(this.cellDeps);
-    for (const group of selected) {
+    for (const group of groups) {
       tx.addInput(group.order.cell);
       tx.addInput(group.master.cell);
     }
@@ -225,7 +218,7 @@ export class OrderManager implements ScriptDeps {
     if (group === undefined || group.order.data.info.isDualRatio()) {
       return undefined;
     }
-    return attestResolvedOrderGroup(group);
+    return group;
   }
 
   /**
@@ -280,9 +273,8 @@ export class OrderManager implements ScriptDeps {
     ckbOut,
     udtOut,
   }: Match["partials"][number]): Match["partials"][number] {
-    const validated = validatedOrderGroup(group);
-    const outPoint = validated.order.cell.outPoint.toHex();
-    if (!this.isOrder(validated.order.cell)) {
+    const outPoint = group.order.cell.outPoint.toHex();
+    if (!this.isOrder(group.order.cell)) {
       throw new Error(`Match order ${outPoint} does not match this order manager`);
     }
     if (ckbOut < 0n) {
@@ -291,6 +283,6 @@ export class OrderManager implements ScriptDeps {
     if (udtOut < 0n) {
       throw new Error(`Match order ${outPoint} has negative UDT output`);
     }
-    return { group: validated, ckbOut, udtOut };
+    return { group, ckbOut, udtOut };
   }
 }

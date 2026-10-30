@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { validatedOrderGroup } from "../../../src/order/cells.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import {
   absoluteOrderCell,
@@ -15,7 +14,7 @@ import {
 } from "./support/order_scan_helpers.ts";
 
 describe("OrderManager.findOrders provenance", () => {
-  it("attests a genuinely resolved group for matching and transaction boundaries", async () => {
+  it("returns a genuinely resolved group", async () => {
     const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("68"), index: 1n };
     const origin = makeOrderCell({
@@ -50,9 +49,7 @@ describe("OrderManager.findOrders provenance", () => {
     if (group === undefined) {
       throw new Error("Expected a resolved group");
     }
-    expect(validatedOrderGroup(group).order.cell.outPoint.toHex()).toBe(
-      liveOrder.cell.outPoint.toHex(),
-    );
+    expect(group.order.cell.outPoint.toHex()).toBe(liveOrder.cell.outPoint.toHex());
   });
 
   it("skips a group whose master carries another order script", async () => {
