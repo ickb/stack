@@ -18,11 +18,7 @@ afterEach(async () => {
 });
 
 describe("stimulus process", () => {
-  it("rejects arguments and fails fast without config", () => {
-    const withArgument = run({}, ["--unknown"]);
-    expect(withArgument.status).toBe(1);
-    expect(withArgument.stderr).toContain("Unknown argument: --unknown");
-
+  it("fails fast without config", () => {
     const withoutConfig = run({});
     expect(withoutConfig.status).toBe(1);
     expect(withoutConfig.stdout).toBe("");

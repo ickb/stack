@@ -46,11 +46,7 @@ try {
     type: "bot.chain.preflight",
     identity: {
       address: address.toString(),
-      primaryLock: {
-        codeHash: primaryLock.codeHash,
-        hashType: primaryLock.hashType,
-        args: primaryLock.args,
-      },
+      primaryLock,
       rpcEndpoints,
     },
   });

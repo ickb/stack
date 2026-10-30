@@ -8,7 +8,7 @@ import {
   type StubCell,
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/types.ts";
+import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import type { ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
@@ -17,7 +17,7 @@ import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { encodeReceiptData } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
-import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
+import type { Runtime } from "../../../src/stimulus/state.ts";
 
 export const CKB = ccc.fixedPointFrom(1);
 export const PRIMARY_LOCK = script("11");
@@ -34,9 +34,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
   };
 }
 
-export function accountState(
-  overrides: Partial<StimulusState["account"]> = {},
-): StimulusState["account"] {
+export function accountState(overrides: Partial<AccountState> = {}): AccountState {
   return {
     capacityCells: [],
     nativeUdtCells: [],
@@ -92,7 +90,7 @@ export function runtime({
   order = getConfig("testnet").order,
 }: {
   system?: SystemState;
-  account?: StimulusState["account"];
+  account?: AccountState;
   orders?: OrderGroup[];
   sdk?: Partial<Runtime["sdk"]>;
   order?: Runtime["order"];

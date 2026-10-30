@@ -10,7 +10,7 @@ export interface JsonLogRecord {
   [key: string]: JsonLogValue;
 }
 
-/** Writes one turn as one JSON line, `type` and `timestamp` first like the bot's events. */
+/** Writes one turn as one JSON line, `type` first like the bot's events. */
 export function logExecution(type: string, executionLog: object, startTime: Date): void {
   writeJsonLine({
     type,

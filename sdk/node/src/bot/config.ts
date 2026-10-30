@@ -8,7 +8,7 @@ import { optionalEnv } from "../shared/runtime_config.ts";
  * leaves the sampled rate uncapped. Errors name only the variable.
  */
 export function readBotMaxFeeRate(env: NodeJS.ProcessEnv): ccc.Num | undefined {
-  const value = optionalEnv(env, "BOT_MAX_FEE_RATE")?.value;
+  const value = optionalEnv(env, "BOT_MAX_FEE_RATE");
   if (value === undefined) {
     return undefined;
   }

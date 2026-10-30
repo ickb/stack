@@ -5,6 +5,7 @@ import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import type { ProtocolCell } from "../../../src/udt.ts";
+import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
 
@@ -170,11 +171,5 @@ export interface BotDecision {
   actions: BotActions;
   /** The fee completion planned, which the send refuses to exceed; absent without a transaction. */
   plannedFee?: bigint;
-  transactionShape?: {
-    inputs: number;
-    outputs: number;
-    cellDeps: number;
-    headerDeps: number;
-    witnesses: number;
-  };
+  transactionShape?: ReturnType<typeof transactionShape>;
 }

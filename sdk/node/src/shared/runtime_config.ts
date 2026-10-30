@@ -83,14 +83,14 @@ interface EnvValue {
 }
 
 /** The variable's value, or undefined when it is unset or empty: one rule for every optional setting. */
-export function optionalEnv(env: NodeJS.ProcessEnv, name: string): EnvValue | undefined {
+export function optionalEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const value = env[name];
-  return value === undefined || value === "" ? undefined : { name, value };
+  return value === "" ? undefined : value;
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): EnvValue {
-  const value = env[name];
-  if (value === undefined || value === "") {
+  const value = optionalEnv(env, name);
+  if (value === undefined) {
     throw new Error(`Empty env ${name}`);
   }
   return { name, value };

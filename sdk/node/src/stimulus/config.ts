@@ -30,11 +30,11 @@ export async function readStimulusConfig(env: NodeJS.ProcessEnv): Promise<Runtim
  */
 export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
   const override: Override = {};
-  const kind = optionalEnv(env, "STIMULUS_KIND")?.value;
+  const kind = optionalEnv(env, "STIMULUS_KIND");
   if (kind !== undefined) {
     override.kind = parseChoice<Kind>(kind, ["order", "conversion"], "STIMULUS_KIND");
   }
-  const direction = optionalEnv(env, "STIMULUS_DIRECTION")?.value;
+  const direction = optionalEnv(env, "STIMULUS_DIRECTION");
   if (direction !== undefined) {
     override.direction = parseChoice<ConversionDirection>(
       direction,
@@ -42,11 +42,11 @@ export function readStimulusOverride(env: NodeJS.ProcessEnv): Override {
       "STIMULUS_DIRECTION",
     );
   }
-  const amount = optionalEnv(env, "STIMULUS_AMOUNT")?.value;
+  const amount = optionalEnv(env, "STIMULUS_AMOUNT");
   if (amount !== undefined) {
     override.amount = amount === "max" ? "max" : parseAmount(amount);
   }
-  const fee = optionalEnv(env, "STIMULUS_FEE")?.value;
+  const fee = optionalEnv(env, "STIMULUS_FEE");
   if (fee !== undefined) {
     const numerator = parseUnsigned(fee, "STIMULUS_FEE");
     if (numerator >= DEFAULT_ORDER_FEE_BASE) {

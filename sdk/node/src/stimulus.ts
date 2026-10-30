@@ -7,9 +7,6 @@ import { logExecution } from "./shared/logging.ts";
 import { readStimulusConfig, readStimulusOverride } from "./stimulus/config.ts";
 import { runStimulusTurn } from "./stimulus/turn.ts";
 // One process is one stimulus turn: read config, connect, send at most one transaction, exit.
-if (process.argv.length > 2) {
-  throw new Error(`Unknown argument: ${String(process.argv[2])}`);
-}
 const { chain, privateKey, rpcUrls, rpcEndpoints } = await readStimulusConfig(
   process.env,
 );
@@ -40,11 +37,7 @@ try {
     identity: {
       chain: "testnet",
       address: address.toString(),
-      primaryLock: {
-        codeHash: primaryLock.codeHash,
-        hashType: primaryLock.hashType,
-        args: primaryLock.args,
-      },
+      primaryLock,
       rpcEndpoints,
     },
     override,
@@ -58,5 +51,3 @@ try {
   // Closes the sockets the client opened, so nothing keeps the finished turn alive.
   await clientOwner?.dispose();
 }
-// The disposed client leaves nothing on the event loop, so the turn ends here on its own.
-process.exitCode ??= 0;

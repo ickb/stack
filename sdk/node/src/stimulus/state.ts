@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type {
-  AccountState,
   ConversionTransactionContext,
   SystemState,
 } from "../../../src/conversion/types.ts";
@@ -27,7 +26,6 @@ export interface Runtime {
 /** Account and market state read once per turn. */
 export interface StimulusState {
   system: SystemState;
-  account: AccountState;
   /** Conversion context; its `availableOrders`, the SDK's collectable orders, are melted this turn. */
   context: ConversionTransactionContext;
   /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
@@ -57,7 +55,6 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   const ckbBudget = context.ckbAvailable - CKB_RESERVE;
   return {
     system,
-    account,
     context,
     orders: {
       live: live.length,
