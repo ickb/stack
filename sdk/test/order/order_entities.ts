@@ -388,19 +388,10 @@ describe("order descendant identity", () => {
       outPointIndex: 1n,
     });
 
-    expect(() => {
-      origin.validate(same);
-    }).not.toThrow();
-    expect(() => {
-      origin.validate(wrongLock);
-    }).toThrow("Order script different");
-    expect(() => {
-      origin.validate(wrongType);
-    }).toThrow("UDT type is different");
-    expect(() => {
-      origin.validate(wrongMaster);
-    }).toThrow("Master is different");
+    expect(origin.isValid(same)).toBe(true);
     expect(origin.isValid(wrongLock)).toBe(false);
+    expect(origin.isValid(wrongType)).toBe(false);
+    expect(origin.isValid(wrongMaster)).toBe(false);
     expect(origin.resolve([wrongLock])).toBeUndefined();
   });
 });
@@ -439,18 +430,11 @@ describe("order descendant values", () => {
       outPointIndex: 4n,
     });
 
-    expect(() => {
-      origin.validate(wrongInfo);
-    }).toThrow("Info is different");
-    expect(() => {
-      origin.validate(lowerTotal);
-    }).toThrow("Total value is lower");
-    expect(() => {
-      udtOrigin.validate(lowerProgress);
-    }).toThrow("Progress is lower");
-    expect(() => {
-      wrongInfo.validate(origin);
-    }).toThrow("Origin is not a mint order");
+    expect(origin.isValid(wrongInfo)).toBe(false);
+    expect(origin.isValid(lowerTotal)).toBe(false);
+    expect(udtOrigin.isValid(lowerProgress)).toBe(false);
+    // Only a mint order can be an origin.
+    expect(wrongInfo.isValid(origin)).toBe(false);
   });
 });
 
@@ -487,9 +471,7 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(() => {
-      OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.validate();
-    }).not.toThrow();
+    expect(OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.order).toBe(origin);
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
@@ -498,12 +480,10 @@ describe("order groups", () => {
         FRESH_BLOCK,
       ),
     ).toBeUndefined();
-    expect(() => {
-      new MasterCell(masterCell({ type: script("99") })).validate(origin);
-    }).toThrow("Order script different");
-    expect(() => {
-      new MasterCell(masterCell({ index: 2n })).validate(origin);
-    }).toThrow("Master is different");
+    expect(new MasterCell(masterCell({ type: script("99") })).anchors(origin)).toBe(
+      false,
+    );
+    expect(new MasterCell(masterCell({ index: 2n })).anchors(origin)).toBe(false);
   });
 });
 

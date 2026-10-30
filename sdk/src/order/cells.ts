@@ -162,56 +162,25 @@ export class OrderCell implements ValueComponents {
   }
 
   /**
-   * Validates a descendant order against this origin order.
+   * Whether `descendant` can be this origin order's live continuation.
    *
    * @remarks
    * This confusion-attack guard requires the same order script, UDT type,
    * master, and info, while forbidding lower total value or lower progress.
    * See {@link https://github.com/ickb/whitepaper/issues/19}.
    */
-  public validate(descendant: OrderCell): void {
-    if (!this.data.isMint()) {
-      throw new Error("Origin is not a mint order");
-    }
-
-    if (!this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock)) {
-      throw new Error("Order script different");
-    }
-
-    const udt = this.cell.cellOutput.type;
-    if (udt === undefined || descendant.cell.cellOutput.type?.eq(udt) !== true) {
-      throw new Error("UDT type is different");
-    }
-
-    if (!descendant.getMaster().eq(this.getMaster())) {
-      throw new Error("Master is different");
-    }
-
-    if (!this.data.info.eq(descendant.data.info)) {
-      throw new Error("Info is different");
-    }
-
-    if (this.absTotal > descendant.absTotal) {
-      throw new Error("Total value is lower than the original one");
-    }
-
-    if (this.absProgress > descendant.absProgress) {
-      throw new Error("Progress is lower than the original one");
-    }
-  }
-
-  /**
-   * Checks if the descendant order is valid against this order.
-   * @param descendant - The descendant order to validate.
-   * @returns True if the descendant is valid, otherwise false.
-   */
   public isValid(descendant: OrderCell): boolean {
-    try {
-      this.validate(descendant);
-      return true;
-    } catch {
-      return false;
-    }
+    const udt = this.cell.cellOutput.type;
+    return (
+      this.data.isMint() &&
+      this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock) &&
+      udt !== undefined &&
+      descendant.cell.cellOutput.type?.eq(udt) === true &&
+      descendant.getMaster().eq(this.getMaster()) &&
+      this.data.info.eq(descendant.data.info) &&
+      this.absTotal <= descendant.absTotal &&
+      this.absProgress <= descendant.absProgress
+    );
   }
 
   /**
@@ -313,19 +282,12 @@ export class MasterCell {
     this.cell = cell;
   }
 
-  /**
-   * Validates the MasterCell against an OrderCell.
-   * @param order - The OrderCell to validate against.
-   * @throws Error if the order script is different or if the master is different.
-   */
-  public validate(order: OrderCell): void {
-    if (this.cell.cellOutput.type?.eq(order.cell.cellOutput.lock) !== true) {
-      throw new Error("Order script different");
-    }
-
-    if (!order.getMaster().eq(this.cell.outPoint)) {
-      throw new Error("Master is different");
-    }
+  /** Whether this master anchors `order`: its type is the order script and the order names it. */
+  public anchors(order: OrderCell): boolean {
+    return (
+      this.cell.cellOutput.type?.eq(order.cell.cellOutput.lock) === true &&
+      order.getMaster().eq(this.cell.outPoint)
+    );
   }
 }
 
@@ -399,27 +361,13 @@ export class OrderGroup implements ValueComponents {
     return undefined;
   }
 
-  /**
-   * Validates the order group against its master and origin orders.
-   * @throws Will throw an error if validation fails.
-   */
-  public validate(): void {
-    this.master.validate(this.origin);
-    this.master.validate(this.order);
-    this.origin.validate(this.order);
-  }
-
-  /**
-   * Checks if the order group is valid.
-   * @returns True if the order group is valid, otherwise false.
-   */
+  /** Whether the master anchors both orders and the order continues its origin. */
   public isValid(): boolean {
-    try {
-      this.validate();
-      return true;
-    } catch {
-      return false;
-    }
+    return (
+      this.master.anchors(this.origin) &&
+      this.master.anchors(this.order) &&
+      this.origin.isValid(this.order)
+    );
   }
 
   /**
