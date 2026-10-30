@@ -8,8 +8,9 @@ import { ccc } from "@ckb-ccc/core";
  * than `tipMaxAgeMs` when one is given. Other reads pass through unchecked; the cell
  * beside `getCellWithHeader`'s header is one, since the SDK reads only its header.
  *
- * @remarks It wraps the client, not the SDK's readers, because CCC's own completion reads
- * headers through the client it is given. Why each check exists: SDK README, Account state.
+ * @remarks It wraps the client, not the SDK's readers, because CCC's own DAO valuation
+ * (`Cell.getNervosDaoInfo`, in the send) reads headers through the client it is given.
+ * Why each check exists: SDK README, Account state.
  */
 export function verifiedClient(inner: ccc.Client, tipMaxAgeMs?: number): ccc.Client {
   return new VerifiedClient(inner, tipMaxAgeMs);
