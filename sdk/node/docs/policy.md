@@ -9,7 +9,7 @@ Each turn reads committed state, builds at most one transaction, signs, sends an
 3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the sampled liquid cells, sweeping spare cells along.
 4. Send only if a match, deposit, withdrawal request or collection remains. Compaction alone never sends.
 
-A skip or commit ends the turn; any failure exits `1` and systemd restarts the process. Either way the next turn reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
+A skip or commit ends the turn; any failure exits `1`, a day-old process exits `0` after its turn, and systemd restarts the process. Either way the next turn reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
 
 ## Matching makes progress from available inventory
 

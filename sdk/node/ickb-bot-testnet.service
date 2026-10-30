@@ -15,8 +15,9 @@ Environment=BOT_CHAIN=testnet
 Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
 # Testnet follows the node's fee rate; a mainnet unit caps it (sdk/node/README.md, Runtime Config).
 # Environment=BOT_MAX_FEE_RATE=1000
-# The bot loops turns ten minutes apart and exits on any failure; a restart after the
-# same ten minutes keeps the cadence. Every CCC request times out on its own, so no
+# The bot loops turns ten minutes apart and exits on any failure (1) or after a day (0);
+# Restart=always, not on-failure, restarts both, and the same ten minutes keeps the
+# cadence. Every CCC request times out on its own, so no
 # runtime limit watches a turn: a node that pages forever would page forever after a
 # restart too, and the journal's silence is what shows it.
 Restart=always

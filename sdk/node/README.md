@@ -25,11 +25,11 @@ The journal names each endpoint by protocol, hostname and port only, never its p
 
 The key lives in a file rather than a variable because unit files, `systemctl show`, and every child process expose environment values. Invalid values fail with `Invalid env <NAME>` and never echo the value.
 
-The bot is a loop: one process connects once, then runs a turn every ten minutes, measured from the start of the previous turn, until a turn fails. Any failure exits `1`, and the unit's `Restart=always` starts a clean process after the same ten minutes, which also picks up an updated checkout. Ten minutes leaves four turns in each forty-minute deposit window ([`BOT_LOCK_UP`](../src/dao.ts)) and an order waits five minutes on average for a match; users converting enough to wait for deposits already wait hours. The process keeps CCC's cache across turns, so a warm turn reads only what changed. The SDK's verified reads take headers checked by hash, and cells from transaction bodies that hash to their key, so a wrong cache entry can only refuse or skip. One remains: a header one endpoint invented under its own hash passes the hash check, and the bot rereads it every turn, which keeps it in the cache, so it can make the bot skip a ready withdrawal until a failure restarts the process. That is the price of a warm cache; before the loop it lasted one turn.
+The bot is a loop: one process connects once, then runs a turn every ten minutes, measured from the start of the previous turn, until a turn fails or the process is a day old. Any failure exits `1`, the day exits `0` right after a turn, and the unit's `Restart=always` (not `on-failure`, which would leave the bot stopped after the clean exit) starts a clean process after the same ten minutes, which also picks up an updated checkout. Ten minutes leaves four turns in each forty-minute deposit window ([`BOT_LOCK_UP`](../src/dao.ts)) and an order waits five minutes on average for a match; users converting enough to wait for deposits already wait hours. The process keeps CCC's cache across turns, so a warm turn reads only what changed. The SDK's verified reads take headers checked by hash, and cells from transaction bodies that hash to their key, so a wrong cache entry can only refuse or skip. One remains: a header one endpoint invented under its own hash passes the hash check, and the bot rereads it every turn, which keeps it in the cache, so it can make the bot skip a ready withdrawal until the process ends, at most a day. That is the price of a warm cache; before the loop it lasted one turn.
 
-This replaced one process per turn restarted every minute, which reloaded the code, about 0.75 s of a 1.3 s turn's CPU, and refetched every header and origin (669 calls on a cold testnet turn, measured 2026-10-29). Rejected with it: looping on after a failure, which would keep whatever state the failure left and delay updates; a scheduled exit, since an update can wait for the next restart; a per-turn timer, since every CCC request already times out and a node that pages forever would page forever after a restart too; a random interval, which lengthens the worst wait while a competing matcher can watch every block anyway; and a cache file, which the loop's memory makes unnecessary.
+This replaced one process per turn restarted every minute, which reloaded the code, about 0.75 s of a 1.3 s turn's CPU, and refetched every header and origin (669 calls on a cold testnet turn, measured 2026-10-29). Rejected with it: looping on after a failure, which would keep whatever state the failure left and delay updates; a per-turn timer, since every CCC request already times out and a node that pages forever would page forever after a restart too; a random interval, which lengthens the worst wait while a competing matcher can watch every block anyway; and a cache file, which the loop's memory makes unnecessary. The daily exit came later, after a liveness review traced restart cycles: a process that never fails keeps whatever no failure clears, such as a fallback endpoint it stays on while that node lags, or a cached invented header. A day bounds that for one cold turn a day, and exiting between turns never cuts a send short, which a unit `RuntimeMaxSec` would.
 
-The process owns the CCC client and disposes it when a failure ends the process, so open sockets do not keep it alive. The SDK borrows that client; it does not choose endpoints or dispose it.
+The process owns the CCC client and disposes it when the process ends, so open sockets do not keep it alive. The SDK borrows that client; it does not choose endpoints or dispose it.
 
 ## Run
 
@@ -42,7 +42,7 @@ export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
 pnpm --filter ./sdk/node bot
 ```
 
-The start script runs the bot loop from source until a turn fails. Stdout is the NDJSON event stream and stderr carries diagnostics; both go wherever the caller sends them, which is journald under systemd. Balance and fee amounts are decimal strings so large on-chain values do not lose precision. Restart policy belongs to the service manager.
+The start script runs the bot loop from source until a turn fails or the process is a day old. Stdout is the NDJSON event stream and stderr carries diagnostics; both go wherever the caller sends them, which is journald under systemd. Balance and fee amounts are decimal strings so large on-chain values do not lose precision. Restart policy belongs to the service manager.
 
 ## Structured Events
 
@@ -65,7 +65,7 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 ### Preflight and decisions
 
-`bot.chain.preflight` emits the recommended address, primary lock, RPC endpoint identity and the genesis hash, checked against the chain's, before signing starts. Endpoint identity lists each configured endpoint's protocol, hostname and port ([runtime config](#runtime-config)); it omits the URL's path, query and fragment.
+`bot.chain.preflight` emits the recommended address, primary lock, RPC endpoint identity and the genesis hash, checked against the chain's, before signing starts. It opens every process, so one with no `bot.turn.failed` before it marks the daily exit. Endpoint identity lists each configured endpoint's protocol, hostname and port ([runtime config](#runtime-config)); it omits the URL's path, query and fragment.
 
 `bot.state.read` carries the tip, balances, order/withdrawal/deposit counts, exchange ratio, deposit capacity and fee rate. `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
@@ -85,7 +85,7 @@ The decision transcript groups its evidence by purpose:
 
 Observed testnet full-node send rejection signatures for generic stale-state races are: in-pool same-input conflict can return `code:-1111` with `data:"RBFRejected(...)"` and CCC fields `currentFee`/`leastFee`; a post-commit spent input returns `code:-301` with `data:"Resolve(Unknown(OutPoint(...)))"` and CCC field `outPoint`; resending the same tx returns `code:-1107` with `data:"Duplicated(Byte32(...))"` and CCC field `txHash`. CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC response id mismatch errors such as `Id mismatched, got null, expected 319` are in the same family. The bot does not classify them: every failure exits `1`, and the restarted process discards the failed state and rebuilds from fresh state rather than resending the same transaction.
 
-`pnpm --filter ./sdk/node bot` runs turns until one fails, then exits `1`. The [two-minute wait](docs/policy.md#withdrawal-timing-and-confirmation) joins a send to its observed commit; it does not decide whether the next turn may run. That turn rebuilds from committed state rather than resending. It may conflict with a still-pending transaction or select disjoint inputs and produce a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
+`pnpm --filter ./sdk/node bot` runs turns until one fails, then exits `1`, or for a day, then exits `0`. The [two-minute wait](docs/policy.md#withdrawal-timing-and-confirmation) joins a send to its observed commit; it does not decide whether the next turn may run. That turn rebuilds from committed state rather than resending. It may conflict with a still-pending transaction or select disjoint inputs and produce a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
 
 ### Output boundary and retention
 
@@ -208,7 +208,7 @@ systemctl --user restart ickb-bot-testnet.service
 
 To update, stop every unit that shares the checkout, move the checkout to the reviewed revision, run `pnpm install --frozen-lockfile`, then start them again; a turn must never observe a half-updated tree. Editing a unit needs `systemd-analyze --user verify`, `systemctl --user daemon-reload`, and a restart of that unit, because a reload alone keeps the running process.
 
-A turn never holds: the next starts ten minutes after it started, a failure restarts the process after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
+A turn never holds: the next starts ten minutes after it started, a failure or the daily exit restarts the process after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
 
 ```bash
 journalctl --user -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | grep '^{' | jq -c 'select(.type == "bot.decision.skipped" or .type == "bot.turn.failed")'

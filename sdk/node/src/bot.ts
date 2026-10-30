@@ -13,10 +13,15 @@ import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 
-// One process runs turns until one fails: read config and connect once, then act at most
-// once per turn, a turn starting ten minutes after the previous one started. Any failure
-// exits, so systemd restarts a clean process, which also picks up an updated checkout.
+// One process runs turns for a day or until one fails: read config and connect once, then
+// act at most once per turn, a turn starting ten minutes after the previous one started.
+// Any failure exits 1 and a day exits 0; either way systemd restarts a clean process.
 const TURN_INTERVAL_MS = 10 * 60_000;
+// A day bounds what one process can carry that no failure clears, such as a fallback
+// endpoint it stays on while that node lags, or a cached invented header. Wall clock on
+// purpose: it keeps counting through a host suspend, as cached state ages.
+const PROCESS_MAX_MS = 24 * 60 * 60_000;
+const processStarted = Date.now();
 const { chain, privateKey, rpcUrls, rpcEndpoint } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
@@ -66,6 +71,10 @@ try {
   for (;;) {
     const started = Date.now();
     await runBotTurn({ events, runtime });
+    // Checked before the sleep: the unit's restart delay then keeps the usual cadence.
+    if (Date.now() - processStarted >= PROCESS_MAX_MS) {
+      break;
+    }
     await sleep(Math.max(0, started + TURN_INTERVAL_MS - Date.now()));
     events.emit({ type: "bot.turn.started" });
   }
@@ -75,6 +84,6 @@ try {
   events.emit({ type: "bot.turn.failed", error });
   process.exitCode = 1;
 } finally {
-  // Closes the sockets the client opened, so nothing keeps the failed process alive.
+  // Closes the sockets the client opened, so nothing keeps the ending process alive.
   await clientOwner?.dispose();
 }
