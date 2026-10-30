@@ -227,11 +227,12 @@ export class IckbSdk {
     // A plan is dropped only for an unrepresentable remainder order.
     const plans = ckbToIckbConversionPlans(options);
     if (plans.length === 0) {
-      return conversionFailure(
-        "amount-too-small",
-        context.estimatedMaturity,
-        minimumOrderAmount(true, context.system),
-      );
+      return {
+        ok: false,
+        reason: "amount-too-small",
+        estimatedMaturity: context.estimatedMaturity,
+        minimum: minimumOrderAmount(true, context.system),
+      };
     }
     const { candidate: plan, tx } = await completeFirstFundable(
       plans,
@@ -275,11 +276,12 @@ export class IckbSdk {
     const { context, lock } = options;
     const plans = ickbToCkbConversionPlans(options, context.system.poolDeposits);
     if (plans.length === 0) {
-      return conversionFailure(
-        "amount-too-small",
-        context.estimatedMaturity,
-        minimumOrderAmount(false, context.system),
-      );
+      return {
+        ok: false,
+        reason: "amount-too-small",
+        estimatedMaturity: context.estimatedMaturity,
+        minimum: minimumOrderAmount(false, context.system),
+      };
     }
     const { candidate: plan, tx } = await completeFirstFundable(
       plans,
@@ -469,16 +471,10 @@ function isPastPar(group: OrderGroup, exchangeRatio: Ratio): boolean {
 }
 
 function conversionFailure(
-  reason: ConversionTransactionFailureReason,
+  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
   estimatedMaturity: bigint,
-  minimum?: bigint,
 ): ConversionTransactionResult {
-  return {
-    ok: false,
-    reason,
-    estimatedMaturity,
-    ...(minimum === undefined ? {} : { minimum }),
-  };
+  return { ok: false, reason, estimatedMaturity };
 }
 
 /** A plan always carries a deposit or an order, else it would be a collection. */

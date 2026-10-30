@@ -357,6 +357,7 @@ describe("runStimulusTurn", () => {
               ok: false,
               reason: "amount-too-small",
               estimatedMaturity: options.context.estimatedMaturity,
+              minimum: 1n,
             };
           },
         },

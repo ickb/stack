@@ -3,6 +3,7 @@ import {
   IckbError,
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
+  type ConversionTransactionResult,
   type IckbErrorCode,
 } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
@@ -12,13 +13,12 @@ export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
 
 const conversionFailureMessages: Record<
-  Exclude<ConversionTransactionFailureReason, "nothing-to-do">,
+  Exclude<ConversionTransactionFailureReason, "nothing-to-do" | "amount-too-small">,
   string
 > = {
   "amount-negative": "Amount cannot be negative",
   "insufficient-ckb": "More CKB than you have",
   "insufficient-ickb": "More iCKB than you have",
-  "amount-too-small": "Enter a larger amount",
 };
 
 // Completion fails past the SDK's pre-check when the change cells, an order's master cell or
@@ -102,18 +102,18 @@ function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
 }
 
 function conversionFailureMessage(
-  { reason, minimum }: { reason: ConversionTransactionFailureReason; minimum?: bigint },
+  failure: Extract<ConversionTransactionResult, { ok: false }>,
   amount: bigint,
   isCkb2Udt: boolean,
 ): string {
-  if (reason === "nothing-to-do") {
+  if (failure.reason === "nothing-to-do") {
     return amount === 0n ? noCollectionMessage : noRequestMessage;
   }
-  if (reason === "amount-too-small" && minimum !== undefined) {
-    return `Enter at least ${ccc.fixedPointToString(roundUpToTwoDigits(minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
+  if (failure.reason === "amount-too-small") {
+    return `Enter at least ${ccc.fixedPointToString(roundUpToTwoDigits(failure.minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
   }
 
-  return conversionFailureMessages[reason];
+  return conversionFailureMessages[failure.reason];
 }
 
 /** Rounds up to two significant digits, so a minimum reads as a round figure and still holds. */

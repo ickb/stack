@@ -109,8 +109,9 @@ describe("buildTransactionPreview", () => {
 
 describe("buildTransactionPreview failure messages", () => {
   it("maps SDK planner failures to interface copy", async () => {
-    const cases: Array<[ConversionTransactionFailureReason, string]> = [
-      ["amount-too-small", "Enter a larger amount"],
+    const cases: Array<
+      [Exclude<ConversionTransactionFailureReason, "amount-too-small">, string]
+    > = [
       ["amount-negative", "Amount cannot be negative"],
       ["insufficient-ckb", "More CKB than you have"],
       ["insufficient-ickb", "More iCKB than you have"],
@@ -140,7 +141,7 @@ describe("buildTransactionPreview failure messages", () => {
     }
   });
 
-  it("names the rounded-up minimum when the SDK reports one", async () => {
+  it("names the SDK's minimum, rounded up", async () => {
     for (const [isCkb2Udt, minimum, message] of [
       [true, 33_222_000_000n, "Enter at least 340 CKB"],
       [true, 1_040_000_000n, "Enter at least 11 CKB"],
@@ -149,7 +150,9 @@ describe("buildTransactionPreview failure messages", () => {
       const config = walletConfigWith({
         sdk: {
           buildConversionTransaction: buildConversionTransactionMock({
-            ...failedPlan("amount-too-small", 77n),
+            ok: false,
+            reason: "amount-too-small",
+            estimatedMaturity: 77n,
             minimum,
           }),
         },

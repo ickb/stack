@@ -77,7 +77,7 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
 }
 
 export function failedPlan(
-  reason: ConversionTransactionFailureReason,
+  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
   estimatedMaturity = 0n,
 ): FailedPlan {
   return { ok: false, reason, estimatedMaturity };
