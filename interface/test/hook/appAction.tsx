@@ -1,3 +1,5 @@
+// organize-imports-ignore: the fake hooks must replace React before anything imports it.
+import { hookState, resetHooks } from "./fixtures/fakeReact.ts";
 import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -11,10 +13,8 @@ import {
   walletConfig,
 } from "./fixtures/data.ts";
 import {
-  hookState,
   queryFnOf,
   queryMock,
-  resetHooks,
   transactMock,
   txPreviewQueryOptions,
 } from "./fixtures/environment.ts";

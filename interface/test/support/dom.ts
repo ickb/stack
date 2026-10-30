@@ -28,15 +28,21 @@ export function stubDom(): void {
 /**
  * Stubs the fake document, then loads React DOM under it.
  *
- * `restoreDom` waits a macrotask first, so React's scheduled work still finds the fake.
+ * `restoreDom` waits a macrotask first, so React's scheduled work still finds the fake;
+ * `restoreNow` is for a caller whose work `act` has already flushed.
  */
 export async function fakeDom(): Promise<{
   createRoot: () => Root;
   flushSync: typeof flushSync;
   restoreDom: () => Promise<void>;
+  restoreNow: () => void;
 }> {
   const originalDocument: unknown = Reflect.get(globalThis, "document");
   const originalWindow: unknown = Reflect.get(globalThis, "window");
+  const restoreNow = (): void => {
+    vi.stubGlobal("document", originalDocument);
+    vi.stubGlobal("window", originalWindow);
+  };
   stubDom();
   const reactDom = await import("react-dom");
   const reactDomClient = await import("react-dom/client");
@@ -49,9 +55,9 @@ export async function fakeDom(): Promise<{
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 0);
       });
-      vi.stubGlobal("document", originalDocument);
-      vi.stubGlobal("window", originalWindow);
+      restoreNow();
     },
+    restoreNow,
   };
 }
 

@@ -1,3 +1,5 @@
+// organize-imports-ignore: the fake hooks must replace React before anything imports it.
+import { hookState, resetHooks } from "./fixtures/fakeReact.ts";
 import { ccc } from "@ckb-ccc/ccc";
 import { StubClient } from "@ickb/testkit";
 import type { ReactElement } from "react";
@@ -12,7 +14,7 @@ import {
   selectedChainKey,
   signerInfo,
 } from "./fixtures/data.ts";
-import { connectorMock, hookState, resetHooks } from "./fixtures/environment.ts";
+import { connectorMock } from "./fixtures/environment.ts";
 import {
   chainFromClient,
   CkbSignerRequired,

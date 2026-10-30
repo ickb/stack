@@ -1,7 +1,8 @@
+// organize-imports-ignore: the fake hooks must replace React before anything imports it.
+import { hookState } from "./fixtures/fakeReact.ts";
 import { describe, expect, it } from "vitest";
 import { elementProps } from "../support/react.ts";
 import { walletConfigGateProps, walletSigner } from "./fixtures/data.ts";
-import { hookState } from "./fixtures/environment.ts";
 import {
   App,
   QuotePage,

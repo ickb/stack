@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { script } from "@ickb/testkit";
-import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   parseDestination,
@@ -9,13 +8,7 @@ import {
 } from "../../src/action/destination.ts";
 import { mainnetClient, testnetClient } from "../../src/app/interfaceConfig.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
-import { renderHook } from "../support/renderHook.ts";
-
-const flush = async (): Promise<void> => {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
-};
+import { renderHook, settle } from "../support/renderHook.ts";
 
 describe("parseDestination", () => {
   it("resolves a full address on the wallet's chain and names it when foreign", async () => {
@@ -110,7 +103,7 @@ describe("useDestination", () => {
     expect(result.current).toEqual({ error: "Enter a valid Testnet address" });
     // The first parse lands last; taking it would leave "nope" without a result.
     slow.resolve(ccc.Address.fromScript(script("22"), testnetClient));
-    await act(flush);
+    await settle();
     expect(result.current).toEqual({ error: "Enter a valid Testnet address" });
     await unmount();
   });
