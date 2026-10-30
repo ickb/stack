@@ -114,23 +114,13 @@ const productionRestrictedSyntax = [
     message:
       "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
   },
-  // Cell reads go through the SDK's one uncached paging loop:
-  // CCC's cached iterators are never used for financial state.
+  // Cell reads go through the SDK's one uncached raw get_cells loop (findCells): CCC's
+  // cached iterators and paged scans are never used for financial state.
   {
     selector:
-      "CallExpression[callee.property.name='findCellsOnChain'], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
+      "CallExpression[callee.property.name=/^(?:findCellsOnChain|findCellsPaged(?:NoCache)?)$/u], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
     message:
-      "Read cells through the SDK's findCells helper, never CCC's cached iterators.",
-  },
-  {
-    selector:
-      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u]:not(FunctionDeclaration[id.name='findCells'] CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u])",
-    message: "Page through the client only inside the SDK's findCells helper.",
-  },
-  {
-    selector:
-      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u][arguments.length<4]",
-    message: "Pass the page size and the cursor to every paged cell scan.",
+      "Read cells through the SDK's findCells helper, never CCC's cached iterators or paged scans.",
   },
 ];
 
