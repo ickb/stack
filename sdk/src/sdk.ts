@@ -81,7 +81,8 @@ export class IckbSdk {
 
   /**
    * Reads system, user-order, and account state against one sampled tip, under the
-   * caller's withdrawal timing rules (`BOT_LOCK_UP` or `WALLET_LOCK_UP`).
+   * caller's withdrawal timing rules (`BOT_LOCK_UP` or `WALLET_LOCK_UP`) and, when given, a
+   * positive fee rate cap that replaces CCC's ceiling; a cap of zero or less throws.
    *
    * @remarks Every read goes through `verifiedClient`, the tip bounded by the policy's
    * slack, so a caller passes a plain client. Every read is complete and uncapped: a large

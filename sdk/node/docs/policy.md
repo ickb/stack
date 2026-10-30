@@ -1,6 +1,6 @@
 # Bot Policy
 
-Each turn reads committed state, builds at most one transaction, signs, sends and waits; the process then runs the next turn ten minutes after this one started, as the [loop](../README.md#runtime-config) explains. [`policy.ts`](../src/bot/policy.ts) chooses rebalances, [`match.ts`](../src/bot/match.ts) chooses fills, [`transaction.ts`](../src/bot/transaction.ts) builds candidates, and [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
+Each turn reads committed state, builds at most one transaction, signs, sends and waits; the process then runs the next turn `BOT_TURN_MINUTES` (default ten) after this one started, as the [loop](../README.md#runtime-config) explains. [`policy.ts`](../src/bot/policy.ts) chooses rebalances, [`match.ts`](../src/bot/match.ts) chooses fills, [`transaction.ts`](../src/bot/transaction.ts) builds candidates, and [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
 
 ## One turn
 
