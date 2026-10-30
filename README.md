@@ -47,7 +47,7 @@ pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its loc
 
 ## Releases
 
-A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
+Every package carries the same version, and a release moves all of them together by [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver): a breaking change to the SDK takes the next major, and the release both publishes the SDK and deploys the interface. A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
 
 - A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
 - A change to `interface/package.json` builds the interface again and deploys it to GitHub Pages at `ickb.org`.

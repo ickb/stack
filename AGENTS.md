@@ -30,6 +30,8 @@ Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, o
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 
+Every package keeps the same version. A release sets every workspace package's `version` to the new one in one commit, sized by the [release policy](README.md#releases).
+
 ## Keys and secrets
 
 - Signing keys live in mode `0600` files outside the checkout, named by the unit. Never read the operator's key files.
