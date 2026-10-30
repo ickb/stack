@@ -1,9 +1,11 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CKB } from "./utils.ts";
+import { CKB, exactDecimal } from "./utils.ts";
+
+const fullFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 });
 
 /** The figure at full precision with thousands grouped, for a wide screen. */
 export function figureText(shannons: bigint): string {
-  return groupDigits(ccc.fixedPointToString(shannons));
+  return fullFormat.format(exactDecimal(shannons));
 }
 
 /**

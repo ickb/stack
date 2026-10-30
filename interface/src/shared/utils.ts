@@ -142,10 +142,24 @@ export function parseAmountInput(text: string): AmountInput {
   return { status: "valid", amount, error: "" };
 }
 
+const twoDecimalFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+});
+
 /** Two decimals, rounded half up: the estimate's precision on screen. */
 export function twoDecimals(shannons: bigint): string {
-  const cents = (shannons + CKB / 200n) / (CKB / 100n);
-  return `${String(cents / 100n)}.${String(cents % 100n).padStart(2, "0")}`;
+  return twoDecimalFormat.format(exactDecimal(shannons));
+}
+
+/**
+ * CCC's exact decimal string, typed for Intl, which formats a numeric string as written
+ * rather than through a double that cannot hold eight decimals of a large amount.
+ */
+export function exactDecimal(shannons: bigint): `${number}` {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- fixedPointToString returns a plain decimal numeral.
+  return ccc.fixedPointToString(shannons) as `${number}`;
 }
 
 export function clampShannons(amount: bigint): bigint {
