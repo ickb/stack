@@ -160,7 +160,10 @@ describe("timeUntilMaturity", () => {
 
     expect(timeUntilMaturity(9n, 10n)).toBe("now");
     expect(timeUntilMaturity(10n, 10n)).toBe("now");
+    expect(timeUntilMaturity(10n + minute, 10n)).toBe("in 1 minute");
     expect(timeUntilMaturity(10n + minute + 1n, 10n)).toBe("in 2 minutes");
+    expect(timeUntilMaturity(10n + 90n * minute, 10n)).toBe("in 90 minutes");
+    expect(timeUntilMaturity(10n + 90n * minute + 1n, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("in 2 days");
   });

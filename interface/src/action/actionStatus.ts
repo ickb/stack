@@ -200,6 +200,8 @@ export function unavailableConversionMessage(amount: bigint): string {
   return noCollectionMessage;
 }
 
+const relativeTime = new Intl.RelativeTimeFormat("en-US", { numeric: "always" });
+
 /** Completes the "Ready:" label: "now" or "in 3 days". */
 export function timeUntilMaturity(
   estimatedMaturity: bigint,
@@ -211,17 +213,24 @@ export function timeUntilMaturity(
   }
 
   const minute = 60_000n;
-
   if (remaining <= 90n * minute) {
-    return `in ${String(Number((remaining + minute - 1n) / minute))} minutes`;
+    return inUnits(remaining, minute, "minute");
   }
 
   const hour = 60n * minute;
   const day = 24n * hour;
-
   if (remaining <= day) {
-    return `in ${String(Number((remaining + hour - 1n) / hour))} hours`;
+    return inUnits(remaining, hour, "hour");
   }
 
-  return `in ${String(Number((remaining + day - 1n) / day))} days`;
+  return inUnits(remaining, day, "day");
+}
+
+/** `remaining` milliseconds in whole units of `size`, rounded up. */
+function inUnits(
+  remaining: bigint,
+  size: bigint,
+  unit: Intl.RelativeTimeFormatUnit,
+): string {
+  return relativeTime.format(Number((remaining + size - 1n) / size), unit);
 }
