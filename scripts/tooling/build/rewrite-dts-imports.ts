@@ -1,4 +1,3 @@
-import type { Dirent, Stats } from "node:fs";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -16,14 +15,14 @@ const changed: string[] = [];
 
 for (const root of roots) {
   for (const file of await declarationFiles(root)) {
-    const original = await readText(file);
+    const original = await readFile(file, "utf8");
     const rewritten = rewriteDeclarationImports(original);
     if (rewritten === original) {
       continue;
     }
     changed.push(file);
     if (!check) {
-      await writeText(file, rewritten);
+      await writeFile(file, rewritten);
     }
   }
 }
@@ -33,7 +32,7 @@ if (check && changed.length > 0) {
 }
 
 async function declarationFiles(filePath: string): Promise<string[]> {
-  const stats = await statPath(filePath);
+  const stats = await stat(filePath);
   if (stats.isFile()) {
     return filePath.endsWith(".d.ts") ? [filePath] : [];
   }
@@ -41,28 +40,12 @@ async function declarationFiles(filePath: string): Promise<string[]> {
     return [];
   }
 
-  const entries = await readDirectory(filePath);
+  const entries = await readdir(filePath, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
     files.push(...(await declarationFiles(path.join(filePath, entry.name))));
   }
   return files;
-}
-
-async function readDirectory(filePath: string): Promise<Dirent[]> {
-  return readdir(filePath, { encoding: "utf8", withFileTypes: true });
-}
-
-async function readText(filePath: string): Promise<string> {
-  return readFile(filePath, "utf8");
-}
-
-async function statPath(filePath: string): Promise<Stats> {
-  return stat(filePath);
-}
-
-async function writeText(filePath: string, data: string): Promise<void> {
-  await writeFile(filePath, data);
 }
 
 function rewriteDeclarationImports(source: string): string {
