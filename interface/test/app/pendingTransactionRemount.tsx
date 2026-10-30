@@ -14,23 +14,9 @@ import {
   type PendingTransactionState,
 } from "../../src/action/pendingTransaction.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import { fakeDom } from "../support/dom.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
-
-class TestElement {
-  public readonly nodeType = 1;
-}
-class TestIFrameElement extends TestElement {}
-interface TestDocument {
-  readonly activeElement: null;
-  readonly addEventListener: ReturnType<typeof vi.fn>;
-  readonly defaultView: {
-    readonly event: undefined;
-    readonly HTMLElement: typeof TestElement;
-    readonly HTMLIFrameElement: typeof TestIFrameElement;
-  };
-  readonly nodeType: 9;
-}
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -57,13 +43,7 @@ vi.mock(import("@ickb/sdk"), async (importActual) => ({
 }));
 
 const Action = (await import("../../src/action/Action.tsx")).default;
-const originalDocument: unknown = Reflect.get(globalThis, "document");
-const originalWindow: unknown = Reflect.get(globalThis, "window");
-const testDocument = fakeDocument();
-vi.stubGlobal("document", testDocument);
-vi.stubGlobal("window", testDocument.defaultView);
-const { flushSync } = await import("react-dom");
-const { createRoot } = await import("react-dom/client");
+const { createRoot, flushSync, restoreDom } = await fakeDom();
 
 beforeEach(() => {
   mocks.layout = undefined;
@@ -79,13 +59,7 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  await new Promise<undefined>((resolve) => {
-    setTimeout(() => {
-      resolve(undefined);
-    }, 0);
-  });
-  vi.stubGlobal("document", originalDocument);
-  vi.stubGlobal("window", originalWindow);
+  await restoreDom();
   vi.unstubAllGlobals();
 });
 
@@ -125,7 +99,7 @@ describe("pending transaction remount ownership", () => {
     });
 
     const replacementRoot = renderHost(
-      createRootForTest(),
+      createRoot(),
       walletConfig(new QueryClient(), vi.fn()),
       0,
     );
@@ -148,7 +122,7 @@ async function submittedAction(): Promise<{
 }> {
   const sent = Promise.withResolvers<ccc.Hex>();
   const send = vi.fn(async () => sent.promise);
-  const root = renderHost(createRootForTest(), walletConfig(new QueryClient(), send), 0);
+  const root = renderHost(createRoot(), walletConfig(new QueryClient(), send), 0);
   const freshAction = currentLayout().action;
   expect(freshAction).not.toBe("retry confirmation");
 
@@ -157,11 +131,6 @@ async function submittedAction(): Promise<{
     expect(send).toHaveBeenCalledTimes(1);
   });
   return { freshAction, root, send, sent };
-}
-
-function createRootForTest(): ReturnType<typeof createRoot> {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React DOM owns this structural test container boundary.
-  return createRoot(fakeContainer(testDocument) as unknown as Element);
 }
 
 /** Renders the session host; a new generation remounts the action under the same host. */
@@ -297,28 +266,4 @@ function waitUntilStopped(
       { once: true },
     );
   });
-}
-
-function fakeDocument(): TestDocument {
-  return {
-    activeElement: null,
-    addEventListener: vi.fn(),
-    defaultView: {
-      event: undefined,
-      HTMLElement: TestElement,
-      HTMLIFrameElement: TestIFrameElement,
-    },
-    nodeType: 9,
-  };
-}
-
-function fakeContainer(ownerDocument: TestDocument): object {
-  return {
-    addEventListener: vi.fn(),
-    nodeName: "DIV",
-    nodeType: 1,
-    ownerDocument,
-    removeEventListener: vi.fn(),
-    tagName: "DIV",
-  };
 }
