@@ -238,9 +238,7 @@ async function send(
       runtime.signer,
       tx,
       fee,
-      (hash) => {
-        Object.assign(log, { txHash: hash });
-      },
+      undefined,
       broadcastBefore,
     );
   } catch (error) {
@@ -250,6 +248,7 @@ async function send(
     // The hash is known, so the node may have the transaction: wait for it.
     txHash = error.txHash;
   }
+  Object.assign(log, { txHash });
   try {
     await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });
   } catch (error) {

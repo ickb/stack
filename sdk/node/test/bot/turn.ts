@@ -81,8 +81,6 @@ it("sends explicitly and waits with the finite production policy", async () => {
 
   await runBotTurn(harness.context);
 
-  const recordTxHash = harness.sendTransaction.mock.calls[0]?.[2];
-  expect(typeof recordTxHash).toBe("function");
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
     BOT_TRANSACTION_BUILT,
@@ -125,10 +123,9 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike, _plannedFee, recordTxHash) => {
+    sendTransaction: async (txLike) => {
       await Promise.resolve();
       const txHash = commitTransaction(responses, txLike);
-      recordTxHash?.(txHash);
       throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
     },
   });

@@ -76,9 +76,8 @@ beforeEach(() => {
     return true;
   });
   sendMock.mockReset();
-  sendMock.mockImplementation(async (_signer, _tx, _plannedFee, recordTxHash) => {
+  sendMock.mockImplementation(async () => {
     await Promise.resolve();
-    recordTxHash?.(TX_HASH);
     return TX_HASH;
   });
   waitMock.mockReset();
@@ -425,7 +424,8 @@ describe("runStimulusTurn", () => {
       outcome: "rejected",
       error: { name: "TransactionWaitError" },
     });
-    expect(rejected).not.toHaveProperty("txHash");
+    // The ambiguous send's hash is the one the wait watched, so the line names it.
+    expect(rejected).toMatchObject({ txHash: TX_HASH });
     expect(waitMock).toHaveBeenCalledWith(expect.anything(), TX_HASH, {
       timeout: 600_000,
     });

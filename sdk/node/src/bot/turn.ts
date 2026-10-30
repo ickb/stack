@@ -95,15 +95,11 @@ async function sendBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
-  let recordedHash: ccc.Hex | undefined;
   let txHash: ccc.Hex;
   try {
     txHash = await context.runtime.sendTransaction(
       result.tx,
       result.tx.estimateFee(state.system.feeRate),
-      (hash) => {
-        recordedHash = hash;
-      },
       result.broadcastBefore,
     );
     context.events.emit({
@@ -117,7 +113,7 @@ async function sendBuiltTransaction({
       throw error;
     }
     // The hash is known, so the node may have the transaction: wait for it.
-    txHash = recordedHash ?? error.txHash;
+    txHash = error.txHash;
     context.events.emit({
       type: "bot.transaction.sent",
       txHash,
