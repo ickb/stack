@@ -32,10 +32,6 @@ void test("rewrite-dts-imports rewrites relative .ts declaration specifiers", as
       ].join("\n"),
     );
 
-    const checkBefore = run("--check", dir);
-    assert.equal(checkBefore.status, 1);
-    assert.match(checkBefore.stderr, /Declaration imports need rewriting/u);
-
     const rewrite = run(dir);
     assert.equal(rewrite.status, 0, rewrite.stderr);
     assert.equal(
@@ -50,9 +46,6 @@ void test("rewrite-dts-imports rewrites relative .ts declaration specifiers", as
         "",
       ].join("\n"),
     );
-
-    const checkAfter = run("--check", dir);
-    assert.equal(checkAfter.status, 0, checkAfter.stderr);
   } finally {
     await rm(dir, { force: true, recursive: true });
   }

@@ -3,7 +3,7 @@
 Repository tooling, run from the root by the `package.json` scripts; nothing here ships in a package.
 
 - `test/build/`: the build tests, run by Node's own test runner (`node --test 'scripts/test/**/*.ts'`) after vitest in `pnpm lint:coverage`. `native-source-smoke.ts` proves the workspace runs from TypeScript source (no deprecated `punycode` load, the two Node entrypoints fail fast without config); `rewrite-dts-imports.ts` covers the declaration rewrite below.
-- `tooling/build/rewrite-dts-imports.ts`: rewrites the relative `.ts` specifiers `tsgo` leaves in the SDK's emitted declarations; `pnpm build` runs it and checks the result.
+- `tooling/build/rewrite-dts-imports.ts`: rewrites the relative `.ts` specifiers `tsgo` leaves in the SDK's emitted declarations; the SDK build runs it.
 - `tooling/dead-members.ts`: the dead-member lint knip cannot do, since knip sees exports and not class members; `pnpm lint:knip` runs it. Test-only references do not keep a production member alive. A TypeScript program supplies the references without the heavier language-service machinery.
 - `tooling/eslint-plugin-types.d.ts`: the declaration shim for the ESLint plugins that publish no types.
 

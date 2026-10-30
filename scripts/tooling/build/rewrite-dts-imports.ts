@@ -1,34 +1,20 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const args = process.argv.slice(2);
-const check = args[0] === "--check";
-const roots = check ? args.slice(1) : args;
+const roots = process.argv.slice(2);
 
 if (roots.length === 0) {
-  throw new Error(
-    "Usage: node scripts/rewrite-dts-imports.ts [--check] <dist-dir> [...]",
-  );
+  throw new Error("Usage: node scripts/rewrite-dts-imports.ts <dist-dir> [...]");
 }
-
-const changed: string[] = [];
 
 for (const root of roots) {
   for (const file of await declarationFiles(root)) {
     const original = await readFile(file, "utf8");
     const rewritten = rewriteDeclarationImports(original);
-    if (rewritten === original) {
-      continue;
-    }
-    changed.push(file);
-    if (!check) {
+    if (rewritten !== original) {
       await writeFile(file, rewritten);
     }
   }
-}
-
-if (check && changed.length > 0) {
-  throw new Error(`Declaration imports need rewriting:\n${changed.join("\n")}`);
 }
 
 async function declarationFiles(root: string): Promise<string[]> {
