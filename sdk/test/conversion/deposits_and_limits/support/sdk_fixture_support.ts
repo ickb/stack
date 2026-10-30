@@ -195,7 +195,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
   exchangeRatio: ReturnType<typeof Ratio.from>;
 }): Promise<void> {
   await expect(
-    options.sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    options.sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       lock: options.lock,

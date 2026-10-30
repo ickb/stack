@@ -49,8 +49,7 @@ describe("buildTransactionPreview", () => {
     );
 
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toBeInstanceOf(ccc.Transaction);
-    expect(buildConversionTransaction.mock.calls[0]?.[1]).toEqual({
+    expect(buildConversionTransaction.mock.calls[0]?.[0]).toEqual({
       direction: "ckb-to-ickb",
       amount: 7n,
       lock: config.primaryLock,
@@ -79,7 +78,7 @@ describe("buildTransactionPreview", () => {
       config,
     );
 
-    expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({
+    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({
       direction: "ickb-to-ckb",
       amount: 5n,
     });
@@ -214,7 +213,7 @@ describe("buildTransactionPreview destination", () => {
       config,
     );
 
-    expect(buildConversionTransaction.mock.calls[0]?.[1]).toMatchObject({ lock });
+    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({ lock });
     expect(txInfo).toMatchObject({ move: { to: "ckt1qzda…abcdef", isComplete: true } });
   });
 

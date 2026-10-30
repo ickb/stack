@@ -1,4 +1,3 @@
-import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
@@ -22,7 +21,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: ICKB_DEPOSIT_CAP * 2n,
         lock,

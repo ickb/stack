@@ -184,16 +184,13 @@ async function buildConversion(
   amount: bigint,
 ): Promise<Built> {
   try {
-    const result = await runtime.sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      {
-        direction,
-        amount,
-        lock: runtime.primaryLock,
-        signer: runtime.signer,
-        context: state.context,
-      },
-    );
+    const result = await runtime.sdk.buildConversionTransaction({
+      direction,
+      amount,
+      lock: runtime.primaryLock,
+      signer: runtime.signer,
+      context: state.context,
+    });
     return result.ok
       ? {
           tx: result.tx,

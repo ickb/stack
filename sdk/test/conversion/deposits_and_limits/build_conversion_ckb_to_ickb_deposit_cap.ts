@@ -29,7 +29,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       ccc.Transaction.from(txLike),
     );
 
-    await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
       lock,

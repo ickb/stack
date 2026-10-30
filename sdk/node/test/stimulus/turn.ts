@@ -114,7 +114,7 @@ describe("runStimulusTurn", () => {
     const mint = vi.spyOn(orderManager, "mint");
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
-    >(async (_txLike, options) => {
+    >(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({ amount: 0n, context: { receipts: [{}] } });
       return {
@@ -227,7 +227,7 @@ describe("runStimulusTurn", () => {
     const stale = await order("a3", true, undefined, 1n);
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
-    >(async (_txLike, options) => {
+    >(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({
         amount: 0n,
@@ -277,7 +277,7 @@ describe("runStimulusTurn", () => {
       amount: ICKB_DEPOSIT_CAP + 1n,
     });
 
-    expect(build.mock.calls.map(([, options]) => options.amount)).toEqual([
+    expect(build.mock.calls.map(([options]) => options.amount)).toEqual([
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);
@@ -345,7 +345,7 @@ describe("runStimulusTurn", () => {
       runtime({
         account: fundedAccount,
         sdk: {
-          buildConversionTransaction: async (_txLike, options) => {
+          buildConversionTransaction: async (options) => {
             await Promise.resolve();
             return {
               ok: false,

@@ -52,16 +52,13 @@ export async function buildTransactionPreview(
     );
   }
   try {
-    const result = await walletConfig.sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      {
-        direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-        amount,
-        lock: destination.lock,
-        signer: walletConfig.signer,
-        context,
-      },
-    );
+    const result = await walletConfig.sdk.buildConversionTransaction({
+      direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+      amount,
+      lock: destination.lock,
+      signer: walletConfig.signer,
+      context,
+    });
     if (!result.ok) {
       return txInfoWithError(
         conversionFailureMessage(result, amount, isCkb2Udt),

@@ -189,7 +189,7 @@ function registerSweepTests(): void {
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
     const funding = plainCell("ff", lock, ccc.fixedPointFrom(1000));
 
-    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    const result = await sdk.buildConversionTransaction({
       direction: "ckb-to-ickb",
       amount: 0n,
       lock: script("77"),

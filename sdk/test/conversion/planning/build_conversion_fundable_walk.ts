@@ -50,8 +50,7 @@ function conversion(
   fixture: BaseTransactionFixture,
   amount: bigint,
   userCkb: bigint,
-  fundingCells: ccc.Cell[] = [],
-): Parameters<BaseTransactionFixture["sdk"]["buildConversionTransaction"]>[1] {
+): Parameters<BaseTransactionFixture["sdk"]["buildConversionTransaction"]>[0] {
   const lock = fixture.botLock;
   // The user's iCKB sits in one minimum-capacity cell; its capacity is taken off the
   // plain cell so the CKB arithmetic below stays the measured one.
@@ -63,7 +62,6 @@ function conversion(
       capacity: UDT_CELL_CKB,
       byte: "f0",
     }),
-    ...fundingCells,
   ];
   return {
     direction: ICKB_TO_CKB,
@@ -87,7 +85,6 @@ describe("buildConversionTransaction fundable walk", () => {
     const userCkb = MARKER_CKB + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(4);
 
     const result = await fixture.sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
@@ -102,44 +99,13 @@ describe("buildConversionTransaction fundable walk", () => {
     expect(result.tx.outputs).toHaveLength(5);
   });
 
-  it("falls back to the whole-request order when every direct prefix exceeds the DAO output limit", async () => {
-    const fixture = baseTransactionFixture({ completion: "real" });
-    // A DAO withdrawal request keeps input and output positions aligned, so the crowded
-    // base transaction moves sixty plain cells.
-    const cells = Array.from({ length: 60 }, (_, index) =>
-      plainCapacityCell(
-        ccc.fixedPointFrom(100),
-        fixture.botLock,
-        (0x10 + index).toString(16),
-      ),
-    );
-    const baseTx = ccc.Transaction.default();
-    for (const cell of cells) {
-      baseTx.addInput(cell);
-      baseTx.addOutput(cell.cellOutput, cell.outputData);
-    }
-
-    const result = await fixture.sdk.buildConversionTransaction(
-      baseTx,
-      conversion(fixture, 2n * DEPOSIT, ccc.fixedPointFrom(100_000), cells),
-    );
-
-    // 60 base outputs leave no room for two requests and their markers plus change, nor
-    // for one request, its marker, and the order; the order alone fits.
-    expect(result).toMatchObject({ ok: true, conversion: { kind: "order" } });
-    if (!result.ok) {
-      throw new Error(result.reason);
-    }
-    expect(result.tx.outputs).toHaveLength(63);
-  });
-
   it("throws the last completion failure when no CKB-to-iCKB candidate can be funded", async () => {
     const fixture = baseTransactionFixture({ completion: "real" });
     const lock = fixture.botLock;
     const cells = [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")];
 
     await expect(
-      fixture.sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      fixture.sdk.buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: DEPOSIT,
         lock,
@@ -157,7 +123,6 @@ describe("buildConversionTransaction fundable walk", () => {
 
     await expect(
       fixture.sdk.buildConversionTransaction(
-        ccc.Transaction.default(),
         conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, ccc.fixedPointFrom(100)),
       ),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_capacity" });

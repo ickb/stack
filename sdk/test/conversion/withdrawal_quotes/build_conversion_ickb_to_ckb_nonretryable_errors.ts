@@ -1,10 +1,6 @@
-import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
-import {
-  conversionContext,
-  hash,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   BUILD_CONVERSION_TRANSACTION_SUITE,
   stubSigner,
@@ -29,17 +25,8 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       throw new Error(WITHDRAWAL_FAILED);
     });
 
-    const tx = ccc.Transaction.default();
-    tx.inputs.push(
-      ccc.CellInput.from({
-        previousOutput: { txHash: hash("90"), index: 0n },
-      }),
-    );
-    tx.outputs.push(ccc.CellOutput.from({ capacity: 1n, lock }));
-    tx.outputsData.push("0x");
-
     await expect(
-      sdk.buildConversionTransaction(tx, {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,

@@ -176,7 +176,6 @@ export class IckbSdk {
    * expected planning outcomes; when no plan can be funded the last completion error throws.
    */
   public async buildConversionTransaction(
-    txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
     const { amount, context, direction } = options;
@@ -190,25 +189,23 @@ export class IckbSdk {
       return conversionFailure("insufficient-ickb", context.estimatedMaturity);
     }
 
-    const baseTx = ccc.Transaction.from(txLike);
     const resolved = {
       ...options,
       lock: options.lock ?? (await options.signer.getRecommendedAddressObj()).script,
     };
     if (amount === 0n) {
-      return this.buildCollectOnlyConversion(baseTx, resolved);
+      return this.buildCollectOnlyConversion(resolved);
     }
     return direction === "ckb-to-ickb"
-      ? this.buildCkbToIckbConversion(baseTx, resolved)
-      : this.buildIckbToCkbConversion(baseTx, resolved);
+      ? this.buildCkbToIckbConversion(resolved)
+      : this.buildIckbToCkbConversion(resolved);
   }
 
   private async buildCollectOnlyConversion(
-    baseTx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock, signer } = options;
-    const tx = this.buildBaseTransaction(baseTx, context);
+    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     // An empty collection to a lock of the signer's own would only compact the account;
     // to another lock it moves the liquid cells, which completion builds from the sweep.
     if (
@@ -228,7 +225,6 @@ export class IckbSdk {
   }
 
   private async buildCkbToIckbConversion(
-    baseTx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock } = options;
@@ -245,7 +241,7 @@ export class IckbSdk {
     const { candidate: plan, tx } = await completeFirstFundable(
       plans,
       (candidate) => {
-        let partial = this.buildBaseTransaction(baseTx.clone(), context);
+        let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
         if (candidate.depositCount > 0) {
           partial = this.ickbLogic.deposit(
             partial,
@@ -278,7 +274,6 @@ export class IckbSdk {
   }
 
   private async buildIckbToCkbConversion(
-    baseTx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock } = options;
@@ -294,7 +289,7 @@ export class IckbSdk {
     const { candidate: plan, tx } = await completeFirstFundable(
       plans,
       (candidate) => {
-        let partial = this.buildBaseTransaction(baseTx.clone(), context, {
+        let partial = this.buildBaseTransaction(ccc.Transaction.default(), context, {
           deposits: candidate.selectedDeposits,
           lock,
         });

@@ -38,7 +38,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const amount = ICKB_DEPOSIT_CAP;
 
-    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    const result = await sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount,
       lock,

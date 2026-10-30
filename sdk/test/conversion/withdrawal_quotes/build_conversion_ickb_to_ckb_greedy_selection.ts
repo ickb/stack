@@ -43,7 +43,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       .mockImplementation((txLike) => ccc.Transaction.from(txLike));
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,

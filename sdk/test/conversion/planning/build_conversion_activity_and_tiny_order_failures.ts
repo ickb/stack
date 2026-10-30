@@ -24,7 +24,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const { sdk, lock } = testSdk();
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: -1n,
         lock,
@@ -33,7 +33,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "amount-negative" });
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 2n,
         lock,
@@ -42,7 +42,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ckb" });
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 2n,
         lock,
@@ -56,7 +56,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     const { sdk, lock } = testSdk();
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         lock,
@@ -70,7 +70,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 1n,
         lock,
@@ -89,18 +89,21 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
   });
 
-  it("returns collect-only success when the base transaction already has activity", async () => {
-    const { sdk, lock } = testSdk();
-    const tx = ccc.Transaction.default();
-    tx.addOutput({ lock }, "0x");
+  it("returns collect-only success when the collection has activity", async () => {
+    const { sdk, lock, ownedOwnerManager } = testSdk();
+    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
+      const tx = ccc.Transaction.from(txLike);
+      tx.addOutput({ lock }, "0x");
+      return tx;
+    });
 
     // No lock given: the signer's recommended lock is the owner.
     await expect(
-      sdk.buildConversionTransaction(tx, {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
-        context: conversionContext(),
+        context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
       }),
     ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
   });
@@ -115,7 +118,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         lock: foreign,
@@ -125,7 +128,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     ).resolves.toMatchObject({ ok: true, conversion: { kind: "collect-only" } });
     // Nothing liquid to move is nothing to do, whatever the lock.
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         lock: foreign,
@@ -147,7 +150,7 @@ describe(`${BUILD_CONVERSION_TRANSACTION_SUITE} order-only paths`, () => {
       );
 
       await expect(
-        sdk.buildConversionTransaction(ccc.Transaction.default(), {
+        sdk.buildConversionTransaction({
           direction: ICKB_TO_CKB,
           amount: ccc.fixedPointFrom(1),
           lock,

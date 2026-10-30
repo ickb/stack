@@ -21,7 +21,6 @@ import type { SupportedChain } from "./utils/chain.ts";
 export interface IckbSdk {
   /** Builds and completes a conversion, or returns a typed planning failure. */
   buildConversionTransaction: (
-    txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,
   ) => Promise<ConversionTransactionResult>;
   /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
