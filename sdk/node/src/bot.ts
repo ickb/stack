@@ -13,14 +13,14 @@ import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 
-// One process runs turns for a day or until one fails: read config and connect once, then
+// One process runs turns for six hours or until one fails: read config and connect once, then
 // act at most once per turn, a turn starting ten minutes after the previous one started.
-// Any failure exits 1 and a day exits 0; either way systemd restarts a clean process.
+// Any failure exits 1 and the six hours exit 0; either way systemd restarts a clean process.
 const TURN_INTERVAL_MS = 10 * 60_000;
-// A day bounds what one process can carry that no failure clears, such as a fallback
+// Six hours bound what one process can carry that no failure clears, such as a fallback
 // endpoint it stays on while that node lags, or a cached invented header. Wall clock on
 // purpose: it keeps counting through a host suspend, as cached state ages.
-const PROCESS_MAX_MS = 24 * 60 * 60_000;
+const PROCESS_MAX_MS = 6 * 60 * 60_000;
 const processStarted = Date.now();
 const { chain, privateKey, rpcUrls, rpcEndpoint } = await readRuntimeConfigEnv(
   process.env,
