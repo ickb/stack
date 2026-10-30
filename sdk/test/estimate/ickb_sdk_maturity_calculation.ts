@@ -78,7 +78,7 @@ describe("maturity of a seller", () => {
       amounts: { ckbValue: 0n, udtValue: 4n },
     };
     const deposit = projectionReadyDeposit(CAP, 3000n);
-    // Block 0 under a tip at block 1 in a one-block epoch: over a twenty-fourth of an epoch.
+    // Block 0 under a tip at block 1 in a one-block epoch: over an eighth of an epoch.
     expect(
       maturity(
         cheap,
@@ -94,13 +94,22 @@ describe("maturity of a seller", () => {
     ]) {
       expect(maturity(cheap, system({ tip, orderPool: pool }))).toBe(100n + BOT_TURN_MS);
     }
-    const longEpoch = headerLike(75n, {
-      timestamp: 100n,
-      epoch: ccc.Epoch.from([1n, 0n, 1800n]),
-    });
+    // An eighth of an 1800-block epoch is 225 blocks: fresh at 225, sitting at 226.
+    const atEighth = (number: bigint): ccc.ClientBlockHeader =>
+      headerLike(number, { timestamp: 100n, epoch: ccc.Epoch.from([1n, 0n, 1800n]) });
     expect(
-      maturity(cheap, system({ tip: longEpoch, orderPool: [sittingSeller(0n)] })),
+      maturity(cheap, system({ tip: atEighth(225n), orderPool: [sittingSeller(0n)] })),
     ).toBe(100n + BOT_TURN_MS);
+    expect(
+      maturity(
+        cheap,
+        system({
+          tip: atEighth(226n),
+          orderPool: [sittingSeller(0n)],
+          poolDeposits: [deposit],
+        }),
+      ),
+    ).toBe(3000n + BOT_TURN_MS);
   });
 
   it("queues behind fillable sellers asking at most its CKB per iCKB, valued at the DAO ratio", () => {

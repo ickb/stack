@@ -14,7 +14,7 @@ The bot's own working capital is not read. Naming one operator's wallet in a pub
 
 ## The one duration
 
-`BOT_TURN_MS` assumes ten minutes per turn, allowing for a one-minute restart delay, confirmation and slow reads. It is a modeling interval, not a runtime bound. The sitting-seller threshold below is its own heuristic, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
+`BOT_TURN_MS` assumes ten minutes per turn, the interval at which the bot's turns start; a failed turn adds a ten-minute restart, which the model does not count. It is a modeling interval, not a runtime bound. The sitting-seller threshold below is its own heuristic, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
 
 An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores does not queue ahead of anyone and does not supply anyone.
 
@@ -22,7 +22,7 @@ An order counts on the book only when the bot would take it whole (`fillsWhole`:
 
 The seller waits for CKB. Supply, in time order:
 
-1. Now: one deposit's worth of CKB (the cap at the DAO ratio) as assumed working capital. When another fillable seller has sat for more than a twenty-fourth of an epoch of blocks, the model treats that as a shortage signal and zeros this term. It does not measure the bot's balance.
+1. Now: one deposit's worth of CKB (the cap at the DAO ratio) as assumed working capital. When another fillable seller has sat for more than an eighth of an epoch of blocks, about three turns, the model treats that as a shortage signal and zeros this term; a single turn left no margin for an order placed just after a turn or for a failed turn's restart. It does not measure the bot's balance.
 2. Each pool deposit at its real claim date, earliest first, less the deposits the same plan withdraws directly (they cannot fill its order leg too).
 
 Demand is the CKB this order pays out, plus the CKB of every fillable seller priced at or better than it (asking at most its CKB per iCKB; a tie is filled in an order of the bot's choosing, so it counts as ahead), valued at the DAO ratio. When the order is already on the book it is left out of its own queue.

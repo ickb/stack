@@ -9,7 +9,7 @@ import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import type { MaturityOrderInput, SystemState } from "./types.ts";
 
 /**
- * Assumed turn duration, allowing for restart delay, confirmation and slow reads.
+ * Assumed turn duration: the bot's turns start ten minutes apart.
  * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
  */
 export const BOT_TURN_MS = 10n * 60n * 1000n;
@@ -148,9 +148,11 @@ function fillableOrders(
 }
 
 /**
- * Whether the order has been on the book for more than a turn, a twenty-fourth of an
- * epoch in blocks: the bot has seen it and left it.
+ * Whether the order has been on the book for more than an eighth of an epoch in blocks,
+ * about three ten-minute turns: the bot has seen it and left it. A turn alone left no
+ * margin, since an order placed just after a turn waits a turn to be seen, and a failed
+ * turn adds the restart delay.
  */
 function sits(group: OrderGroup, { tip }: SystemState): boolean {
-  return tip.number - group.blockNumber > tip.epoch.denominator / 24n;
+  return tip.number - group.blockNumber > tip.epoch.denominator / 8n;
 }
