@@ -11,11 +11,9 @@ export {
   AR_0,
   ckbMinMatchFromLog,
   depositToIckb,
-  ICKB_SOFT_CAP,
   validateMatch,
   type OracleInfo,
   type OracleRatio,
-  type OracleVerdict,
   type OrderState,
 } from "./contract_oracle.ts";
 

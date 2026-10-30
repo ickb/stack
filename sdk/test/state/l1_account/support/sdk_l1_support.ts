@@ -7,8 +7,6 @@ import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 
-export { transactionWithHeader } from "@ickb/testkit";
-
 export class FeeRateStubClient extends StubClient {
   public override async getFeeRate(): Promise<bigint> {
     await Promise.resolve();

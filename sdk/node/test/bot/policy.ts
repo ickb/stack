@@ -10,7 +10,7 @@ import {
   udtFromCkb,
 } from "../../../src/udt.ts";
 
-import { headerLike } from "@ickb/testkit";
+import { AR_0, headerLike } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   ICKB_REFILL_BELOW,
@@ -208,7 +208,6 @@ describe("planRebalance withdrawal", () => {
 });
 
 const CKB = ccc.fixedPointFrom(1);
-const AR_0 = 10_000_000_000_000_000n;
 
 // Adopted from the fable51, fable5, and grok46 policy audits: the facts the thresholds rest on.
 describe("policy arithmetic", () => {

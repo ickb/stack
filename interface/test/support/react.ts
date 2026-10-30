@@ -1,10 +1,25 @@
-import type { ReactElement, ReactNode } from "react";
-import { childNodes, isReactElement } from "./reactNode.ts";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 
-export { elementProps } from "./reactNode.ts";
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Call sites provide the prop shape being inspected.
+export function elementProps<T>(element: ReactElement): T {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React element tests intentionally inspect props.
+  return element.props as T;
+}
+
+/** Every node an element carries in its props: `children` and the slots a page names. */
+export function childNodes(element: ReactElement): ReactNode[] {
+  const props = elementProps<Record<string, unknown>>(element);
+  return Object.values(props).flatMap((value): ReactNode[] => {
+    if (Array.isArray(value)) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- React children arrays come from ReactElement props.
+      return value;
+    }
+    return isValidElement(value) || typeof value === "string" ? [value] : [];
+  });
+}
 
 export function childElements(element: ReactElement): ReactElement[] {
-  return childNodes(element).filter(isReactElement);
+  return childNodes(element).filter(isValidElement);
 }
 
 export function firstElement(elements: ReactElement[]): ReactElement {
@@ -50,7 +65,7 @@ export function findElements(
       return;
     }
 
-    if (!isReactElement(node)) {
+    if (!isValidElement(node)) {
       return;
     }
 
