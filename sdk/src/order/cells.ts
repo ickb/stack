@@ -110,15 +110,13 @@ export class OrderCell implements ValueComponents {
       : 0n;
 
     const absTotal = absoluteOrderTotal(ckb2UdtValue, udt2CkbValue, data.info);
-    const absProgress = absoluteOrderProgress({
-      absTotal,
-      ckbUnoccupied,
-      isCkb2Udt,
-      isDualRatio,
-      udtScale: ckbToUdt.udtScale,
-      udtValue,
-      udtToCkbCkbScale: udtToCkb.ckbScale,
-    });
+    // What the order already holds of its output side; a dual-ratio order is complete.
+    let absProgress = ckbUnoccupied * udtToCkb.ckbScale;
+    if (isDualRatio) {
+      absProgress = absTotal;
+    } else if (isCkb2Udt) {
+      absProgress = udtValue * ckbToUdt.udtScale;
+    }
 
     return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress });
   }
@@ -266,24 +264,6 @@ function absoluteOrderTotal(
       udt2CkbValue * ckbToUdt.ckbScale * ckbToUdt.udtScale) >>
     1n
   );
-}
-
-function absoluteOrderProgress(options: {
-  absTotal: bigint;
-  ckbUnoccupied: bigint;
-  isCkb2Udt: boolean;
-  isDualRatio: boolean;
-  udtScale: bigint;
-  udtToCkbCkbScale: bigint;
-  udtValue: bigint;
-}): bigint {
-  if (options.isDualRatio) {
-    return options.absTotal;
-  }
-  if (options.isCkb2Udt) {
-    return options.udtValue * options.udtScale;
-  }
-  return options.ckbUnoccupied * options.udtToCkbCkbScale;
 }
 
 function betterOrderResolution(
