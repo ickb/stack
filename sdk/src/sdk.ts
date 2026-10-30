@@ -98,6 +98,10 @@ export class IckbSdk {
     user: { orders: OrderGroup[] };
     account: AccountState;
   }> {
+    // CCC reads a zero cap as no cap at all and would plan at a negative one.
+    if (maxFeeRate !== undefined && ccc.numFrom(maxFeeRate) <= ccc.Zero) {
+      throw new RangeError("maxFeeRate must be positive");
+    }
     const client = verifiedClient(plainClient, tipMaxAgeMs(lockUp));
     const tip = await client.getTipHeader();
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));

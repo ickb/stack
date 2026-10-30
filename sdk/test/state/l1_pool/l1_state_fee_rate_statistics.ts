@@ -44,6 +44,16 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     ).resolves.toMatchObject({ system: { feeRate: cccA.DEFAULT_MAX_FEE_RATE * 5n } });
   });
 
+  it("refuses a cap of zero or less", async () => {
+    const client = clientWithFeeRateStatistics(() => null);
+
+    for (const cap of [0n, -5n]) {
+      await expect(
+        defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, cap),
+      ).rejects.toThrow("maxFeeRate must be positive");
+    }
+  });
+
   it("propagates unrelated fee rate failures", async () => {
     const feeRateError = new TypeError(
       "Cannot destructure property 'mean' while parsing object null metadata",
