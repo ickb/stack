@@ -137,7 +137,7 @@ Neither program carries a notification channel: anything worth an operator's att
 
 ```bash
 # From another host: the newest bot event must be under twenty minutes old.
-last=$(ssh "$HOST" journalctl --user -u ickb-bot-testnet.service -o cat -n 1 | jq -r .timestamp)
+last=$(ssh "$HOST" journalctl --user -u ickb-bot-testnet.service -o cat -n 50 | grep '^{' | tail -n 1 | jq -r .timestamp)
 [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 1200 ] \
   || curl -sG --data-urlencode "text=bot silent since $last" "$ALERT_URL" >/dev/null
 ```
@@ -211,7 +211,7 @@ To update, stop every unit that shares the checkout, move the checkout to the re
 A turn never holds: the next starts ten minutes after it started, a failure restarts the process after `RestartSec`, and an underfunded account skips turn after turn until it is funded. To see why a unit keeps skipping or failing, inspect the journal for the last event and the exit status:
 
 ```bash
-journalctl --user -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | jq -c 'select(.type == "bot.decision.skipped" or .type == "bot.turn.failed")'
+journalctl --user -u ickb-bot-testnet.service -o cat -n 2000 --no-pager | grep '^{' | jq -c 'select(.type == "bot.decision.skipped" or .type == "bot.turn.failed")'
 systemctl --user show ickb-bot-testnet.service -p ActiveState -p Result -p ExecMainStatus
 ```
 
