@@ -237,7 +237,8 @@ export class OrderManager implements ScriptDeps {
     master: ccc.OutPoint,
   ): Promise<OrderCell | undefined> {
     const { txHash, index: masterIndex } = master;
-    // A cached body is the one its hash names (CCC keys them so), so it needs no recheck.
+    // A cached body is trusted like the scan that found the master: an order is a node's
+    // claim until the send checks every cell it spends against its creating transaction.
     const response =
       (await client.cache.getTransactionResponse(txHash)) ??
       (await client.getTransaction(txHash));
