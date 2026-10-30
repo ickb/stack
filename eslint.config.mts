@@ -1,39 +1,19 @@
 // @ts-check
 
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslint from "@eslint/js";
-import type { ESLint, Linter, Rule } from "eslint";
+import vitest from "@vitest/eslint-plugin";
+import type { ESLint, Rule } from "eslint";
+import promise from "eslint-plugin-promise";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import regexp from "eslint-plugin-regexp";
+import security from "eslint-plugin-security";
+import sonarjs from "eslint-plugin-sonarjs";
+import tsdoc from "eslint-plugin-tsdoc";
+import unicorn from "eslint-plugin-unicorn";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
-import {
-  eslintComments,
-  promise,
-  reactHooks,
-  reactRefresh,
-  regexp,
-  security,
-  sonarjs,
-  tsdoc,
-  unicorn,
-  vitest,
-} from "./scripts/tooling/eslint/plugins.ts";
-
-type RuleSeverity = Linter.RuleSeverity;
-type RuleEntry = RuleSeverity | [RuleSeverity, ...unknown[]];
-interface ConfigObject extends Omit<Linter.Config, "rules"> {
-  rules?: Record<string, RuleEntry>;
-}
-type ConfigInput = ConfigObject | ConfigInput[];
-interface PluginWithConfigs {
-  configs: Record<string, ConfigInput>;
-}
-
-function pluginConfig(plugin: PluginWithConfigs, name: string): ConfigInput {
-  const config = plugin.configs[name];
-  if (config === undefined) {
-    throw new Error(`Missing ESLint plugin config ${name}`);
-  }
-  return config;
-}
 
 const guardedVitestRuleErrors = {
   "vitest/max-nested-describe": "error",
@@ -157,8 +137,8 @@ export default defineConfig(
   sonarjs.configs.recommended,
   unicorn.configs.unopinionated,
   regexp.configs["flat/recommended"],
-  pluginConfig(security, "recommended"),
-  pluginConfig(promise, "flat/recommended"),
+  security.configs.recommended,
+  promise.configs["flat/recommended"],
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
   {
