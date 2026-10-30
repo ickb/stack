@@ -33,7 +33,6 @@ export interface StubClientHandlers {
   cells?: (key: cccA.JsonRpcIndexerSearchKey) => readonly StubCell[];
   getCell?: ClientMethod<"getCell">;
   getCellWithHeader?: ClientMethod<"getCellWithHeader">;
-  getHeaderByHash?: ClientMethod<"getHeaderByHash">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
   getTransaction?: ClientMethod<"getTransaction">;
