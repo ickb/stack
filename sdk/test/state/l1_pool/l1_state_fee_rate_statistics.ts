@@ -30,7 +30,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     ).resolves.toMatchObject({ system: { feeRate: 2000n } });
   });
 
-  it("never lets a cap raise the rate past CCC's default ceiling", async () => {
+  it("lets a cap replace CCC's default ceiling", async () => {
     const median = ccc.numToHex(cccA.DEFAULT_MAX_FEE_RATE * 5n);
     const client = clientWithFeeRateStatistics(() => ({ mean: median, median }));
 
@@ -41,7 +41,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
         WALLET_LOCK_UP,
         cccA.DEFAULT_MAX_FEE_RATE * 5n,
       ),
-    ).resolves.toMatchObject({ system: { feeRate: cccA.DEFAULT_MAX_FEE_RATE } });
+    ).resolves.toMatchObject({ system: { feeRate: cccA.DEFAULT_MAX_FEE_RATE * 5n } });
   });
 
   it("propagates unrelated fee rate failures", async () => {

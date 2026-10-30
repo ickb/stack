@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { cccA } from "@ckb-ccc/core/advanced";
 import { getConfig } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
@@ -106,14 +105,8 @@ export class IckbSdk {
       this.ickbLogic.findDeposits(client, tip),
       this.order.findOrders(client),
       // CCC clamps the sampled median at the cap, the connector's chosen rate too. A given cap
-      // replaces CCC's default ceiling, so it is held under that ceiling: a cap can only lower
-      // what a node can make the caller plan.
-      client.getFeeRate(
-        undefined,
-        maxFeeRate === undefined
-          ? undefined
-          : { maxFeeRate: ccc.numMin(maxFeeRate, cccA.DEFAULT_MAX_FEE_RATE) },
-      ),
+      // replaces CCC's default ceiling, on purpose: the caller's cap is the ceiling.
+      client.getFeeRate(undefined, maxFeeRate === undefined ? undefined : { maxFeeRate }),
       Promise.all(
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),
