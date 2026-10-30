@@ -164,6 +164,28 @@ describe("verifiedClient", () => {
     expect(reads).toEqual([]);
   });
 
+  it("refuses a cached body filed under a hash it does not have", async () => {
+    // A consumer's cache that files node answers under the hash asked for, unlike CCC's,
+    // which files each body under its own hash: a node could plant a forged body there.
+    const forged = committedTransactionResponse(
+      ccc.Transaction.from({
+        outputs: [{ capacity: 1n, lock: script("22") }],
+        outputsData: ["0x"],
+      }),
+    );
+    class MisfilingCache extends ccc.ClientCacheMemory {
+      public override async getTransactionResponse(): Promise<ccc.ClientTransactionResponse> {
+        await Promise.resolve();
+        return forged;
+      }
+    }
+    const client = verifiedClient(new StubClient({ cache: new MisfilingCache() }));
+
+    await expect(
+      client.getCell({ txHash: `0x${"66".repeat(32)}`, index: 0n }),
+    ).rejects.toThrow("was answered with a body of another hash");
+  });
+
   it("forwards everything else to the wrapped client", () => {
     const inner = new StubClient();
     const client = verifiedClient(inner, 1);
