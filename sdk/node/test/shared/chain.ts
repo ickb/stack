@@ -31,13 +31,6 @@ describe("public clients and preflight identity", () => {
     expect(mainnet.isValid).toBe(false);
     await testnet.dispose();
   });
-
-  it("takes CCC's public pool when no RPC URL is configured", async () => {
-    const testnet = createPublicClient("testnet");
-
-    expect(endpointPoolUrls(testnet.value).length).toBeGreaterThan(1);
-    await testnet.dispose();
-  });
 });
 describe("finite public clients", () => {
   it("lets a process exit naturally after a real HTTP client request", () => {

@@ -10,7 +10,9 @@ import { runStimulusTurn } from "./stimulus/turn.ts";
 if (process.argv.length > 2) {
   throw new Error(`Unknown argument: ${String(process.argv[2])}`);
 }
-const { chain, privateKey, rpcUrls, rpcEndpoint } = await readStimulusConfig(process.env);
+const { chain, privateKey, rpcUrls, rpcEndpoints } = await readStimulusConfig(
+  process.env,
+);
 const override = readStimulusOverride(process.env);
 const startTime = new Date();
 let clientOwner: ccc.Owner<ccc.Client> | undefined;
@@ -43,7 +45,7 @@ try {
         hashType: primaryLock.hashType,
         args: primaryLock.args,
       },
-      rpcEndpoint,
+      rpcEndpoints,
       preflight,
     },
     override,

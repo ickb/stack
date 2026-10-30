@@ -22,7 +22,7 @@ const TURN_INTERVAL_MS = 10 * 60_000;
 // purpose: it keeps counting through a host suspend, as cached state ages.
 const PROCESS_MAX_MS = 6 * 60 * 60_000;
 const processStarted = Date.now();
-const { chain, privateKey, rpcUrls, rpcEndpoint } = await readRuntimeConfigEnv(
+const { chain, privateKey, rpcUrls, rpcEndpoints } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
 );
@@ -51,7 +51,7 @@ try {
         hashType: primaryLock.hashType,
         args: primaryLock.args,
       },
-      rpcEndpoint,
+      rpcEndpoints,
     },
     genesisHash: preflight.genesisHash,
   });

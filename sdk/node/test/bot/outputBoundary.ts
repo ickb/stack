@@ -34,10 +34,9 @@ describe("bot private key output boundary", () => {
       emitter.emit({ type: "bot.turn.failed", error: new TypeError("fetch failed") });
 
       expect(config.privateKey).toBe(privateKey);
-      expect(config.rpcEndpoint).toEqual({
-        mode: "exclusive",
-        endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
-      });
+      expect(config.rpcEndpoints).toEqual([
+        { protocol: "https:", hostname: "testnet.example", port: "" },
+      ]);
       expect(output.join("")).not.toContain(privateKey);
       expect(output.join("")).not.toContain("token=canary");
       for (const line of output) {

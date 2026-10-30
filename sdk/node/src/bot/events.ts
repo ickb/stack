@@ -2,7 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
 import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { writeJsonLine } from "../shared/logging.ts";
-import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
+import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import type {
   BotDecision,
   BotStateSummary,
@@ -13,7 +13,7 @@ import type {
 interface BotIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
-  rpcEndpoint: PublicRpcEndpointIdentity;
+  rpcEndpoints: RpcEndpointIdentity[];
 }
 
 /**

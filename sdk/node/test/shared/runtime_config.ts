@@ -34,10 +34,7 @@ describe("runtime config env", () => {
       chain: "testnet",
       privateKey: VALID_PRIVATE_KEY,
       rpcUrls: [RPC_URL],
-      rpcEndpoint: {
-        mode: "exclusive",
-        endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
-      },
+      rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
     });
     // The URLs reach only the client, shuffled per process, and the journaled identities
     // follow the same order; they carry no path or query, where providers put API keys.
@@ -52,13 +49,10 @@ describe("runtime config env", () => {
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
       rpcUrls: urls.toReversed(),
-      rpcEndpoint: {
-        mode: "exclusive",
-        endpoints: [
-          { protocol: "wss:", hostname: "second.example", port: "" },
-          { protocol: "https:", hostname: "rpc.example", port: "8443" },
-        ],
-      },
+      rpcEndpoints: [
+        { protocol: "wss:", hostname: "second.example", port: "" },
+        { protocol: "https:", hostname: "rpc.example", port: "8443" },
+      ],
     });
   });
 
@@ -78,12 +72,9 @@ describe("runtime config env", () => {
     await expect(readConfig({ BOT_CHAIN: undefined })).rejects.toThrow(
       "Empty env BOT_CHAIN",
     );
-    // No RPC URL means CCC's public pool.
-    await expect(readConfig({ BOT_RPC_URL: "" })).resolves.toEqual({
-      chain: "testnet",
-      privateKey: VALID_PRIVATE_KEY,
-      rpcEndpoint: { mode: "default" },
-    });
+    await expect(readConfig({ BOT_RPC_URL: "" })).rejects.toThrow(
+      "Empty env BOT_RPC_URL",
+    );
     await expect(readConfig({ BOT_PRIVATE_KEY_FILE: undefined })).rejects.toThrow(
       "Empty env BOT_PRIVATE_KEY_FILE",
     );

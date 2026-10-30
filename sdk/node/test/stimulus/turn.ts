@@ -51,10 +51,7 @@ const identity: StimulusIdentity = {
   chain: "testnet",
   address: "ckt1stimulus",
   primaryLock: { codeHash: PRIMARY_LOCK.codeHash, hashType: "type", args: "0x" },
-  rpcEndpoint: {
-    mode: "exclusive",
-    endpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
-  },
+  rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
   preflight: {
     genesisHash: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
   },

@@ -19,7 +19,7 @@ import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
-import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
+import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import { type Draw, drawTurn, type Override } from "./draw.ts";
 import {
   MAX_LIVE_ORDERS,
@@ -33,7 +33,7 @@ export interface StimulusIdentity {
   chain: "testnet";
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
-  rpcEndpoint: PublicRpcEndpointIdentity;
+  rpcEndpoints: RpcEndpointIdentity[];
   preflight: ChainPreflightEvidence;
 }
 

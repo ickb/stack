@@ -7,19 +7,14 @@ const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
 /**
- * Journaled endpoint identity: each configured endpoint's protocol, host and port, never
- * its path or query, where providers put API keys.
+ * Journaled endpoint identity: a configured endpoint's protocol, host and port, never its
+ * path or query, where providers put API keys.
  */
-export type PublicRpcEndpointIdentity =
-  | {
-      mode: "exclusive";
-      endpoints: Array<{
-        protocol: "http:" | "https:" | "ws:" | "wss:";
-        hostname: string;
-        port: string;
-      }>;
-    }
-  | { mode: "default" };
+export interface RpcEndpointIdentity {
+  protocol: "http:" | "https:" | "ws:" | "wss:";
+  hostname: string;
+  port: string;
+}
 
 /** Runtime configuration read from one prefix of environment variables. */
 export interface RuntimeConfig {
@@ -30,17 +25,17 @@ export interface RuntimeConfig {
   privateKey: `0x${string}`;
 
   /**
-   * The configured nodes' RPC URLs in this process's shuffled order, the only endpoints
-   * when set, tried in that order as CCC falls back on errors; absent means CCC's public pool.
+   * The configured nodes' RPC URLs in this process's shuffled order, the only endpoints,
+   * tried in that order as CCC falls back on errors.
    */
-  rpcUrls?: [string, ...string[]];
+  rpcUrls: [string, ...string[]];
 
-  /** What the journal may say about the endpoint: never the URL, which may carry a token. */
-  rpcEndpoint: PublicRpcEndpointIdentity;
+  /** What the journal may say about the endpoints, in the same order: never a URL, which may carry a token. */
+  rpcEndpoints: RpcEndpointIdentity[];
 }
 
 /**
- * Reads and validates `<prefix>_CHAIN`, the optional `<prefix>_RPC_URL`, and the private key
+ * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private key
  * held in the file named by `<prefix>_PRIVATE_KEY_FILE`.
  *
  * @remarks
@@ -54,12 +49,9 @@ export async function readRuntimeConfigEnv(
   prefix: string,
 ): Promise<RuntimeConfig> {
   const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
-  const rpcUrl = optionalEnv(env, `${prefix}_RPC_URL`);
+  const rpcUrl = requireEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
   const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
-  if (rpcUrl === undefined) {
-    return { chain, privateKey, rpcEndpoint: { mode: "default" } };
-  }
   // Commas only: a space around a URL is refused like any whitespace in it. Each process
   // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
   // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
@@ -70,10 +62,7 @@ export async function readRuntimeConfigEnv(
     chain,
     privateKey,
     rpcUrls,
-    rpcEndpoint: {
-      mode: "exclusive",
-      endpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
-    },
+    rpcEndpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
   };
 }
 
@@ -143,13 +132,7 @@ function parsePrivateKey({ name, value }: EnvValue): `0x${string}` {
 }
 
 /** The URL string reaches only the client; the journal gets these fields, never the URL. */
-function parseRpcUrl({
-  name,
-  value,
-}: EnvValue): Extract<
-  PublicRpcEndpointIdentity,
-  { mode: "exclusive" }
->["endpoints"][number] {
+function parseRpcUrl({ name, value }: EnvValue): RpcEndpointIdentity {
   let url: URL;
   try {
     url = new URL(value);
