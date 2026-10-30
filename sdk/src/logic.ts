@@ -38,8 +38,6 @@ export interface IckbDepositCell extends ValueComponents {
   cell: ccc.Cell;
   /** The header of the block that committed the deposit, which values it. */
   header: ccc.ClientBlockHeader;
-  /** The DAO interest accrued from the deposit header to the tip. */
-  interests: ccc.Num;
   /**
    * The DAO claim epoch as sampled at the tip, not rolled: each reader judges it against
    * its own {@link LockUpPolicy} with `depositMaturity`.
@@ -236,7 +234,6 @@ export function ickbDepositCell(
   return {
     cell,
     header,
-    interests,
     claimEpoch: ccc.calcDaoClaimEpoch(header, tip),
     ckbValue: cell.cellOutput.capacity + interests,
     udtValue: ickbValue(cell.capacityFree, header),

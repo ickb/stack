@@ -37,7 +37,6 @@ function deposit(udtValue: bigint, claimEpoch: ccc.Epoch, key: string): IckbDepo
   return {
     cell,
     header: TIP,
-    interests: 0n,
     claimEpoch,
     ckbValue: udtValue,
     udtValue,

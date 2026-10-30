@@ -78,7 +78,6 @@ export function readyDeposit(
   return {
     cell,
     header: tip,
-    interests: 0n,
     claimEpoch: ccc.Epoch.from([minutesOut / 240n, minutesOut % 240n, 240n]),
     ckbValue: udtValue,
     udtValue,
@@ -183,7 +182,6 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
   const owned: TestWithdrawalRequestCell = {
     cell,
     headers: [depositHeader, requestHeader],
-    interests: 0n,
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
     isReady: true,
     ckbValue: cell.cellOutput.capacity,

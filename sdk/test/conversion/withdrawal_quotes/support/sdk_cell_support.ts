@@ -33,7 +33,6 @@ export function depositCell(
   return {
     cell,
     header: depositHeader,
-    interests: 0n,
     claimEpoch: claimEpochAt(tipHeader, options?.isReady ?? false),
     ckbValue: cell.cellOutput.capacity,
     udtValue: ccc.fixedPointFrom(100000),
@@ -62,7 +61,6 @@ export function projectionReadyDeposit(
   return {
     cell,
     header: baseTip,
-    interests: 0n,
     claimEpoch: new TestEpoch(
       claimEpochAt(baseTip, options.isReady ?? true),
       maturityUnix,
@@ -189,7 +187,6 @@ export function readyWithdrawalGroup(options: {
     {
       cell: ownedCell,
       headers: [options.depositHeader, options.withdrawalHeader],
-      interests: 0n,
       maturity: ccc.Epoch.from([1n, 0n, 1n]),
       isReady: true,
       ckbValue: ownedCell.cellOutput.capacity,
@@ -219,7 +216,6 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
       headers: [baseTip, baseTip],
-      interests: 0n,
       maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,
       ckbValue: options.ckbValue,

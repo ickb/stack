@@ -41,7 +41,6 @@ function depositOf(
   return {
     cell,
     header,
-    interests: 0n,
     claimEpoch: ccc.Epoch.from([1n, 0n, 1n]),
     ckbValue: cell.cellOutput.capacity,
     udtValue: 0n,
@@ -65,7 +64,6 @@ function requestOf(
   return {
     cell,
     headers: [depositHeader, requestHeader],
-    interests: 0n,
     maturity: ccc.Epoch.from([180n, 0n, 1n]),
     isReady: true,
     ckbValue: cell.cellOutput.capacity,

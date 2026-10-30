@@ -365,11 +365,11 @@ describe("LogicManager.findDeposits", () => {
     expect(deposits[0]).toMatchObject({
       cell: deposit,
       header: depositHeader,
-      interests: ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
       udtValue: ickbValue(deposit.capacityFree, depositHeader),
     });
     expect(deposits[0]?.ckbValue).toBe(
-      deposit.cellOutput.capacity + (deposits[0]?.interests ?? 0n),
+      deposit.cellOutput.capacity +
+        ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
     );
     expect(deposits[0]?.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, tip))).toBe(
       true,

@@ -24,8 +24,6 @@ export interface DaoWithdrawalRequestCell {
   cell: ccc.Cell;
   /** The deposit header and the request's own header. */
   headers: [ccc.ClientBlockHeader, ccc.ClientBlockHeader];
-  /** The DAO interest accrued between the two headers. */
-  interests: ccc.Num;
   /** The DAO claim epoch of the request. */
   maturity: ccc.Epoch;
   /** Whether the claim epoch is at or before the tip: the request can be withdrawn. */
@@ -355,7 +353,6 @@ export function withdrawalRequestCell(
   return {
     cell,
     headers: [depositHeader, requestHeader],
-    interests,
     maturity,
     isReady: maturity.compare(tip.epoch) <= 0,
     ckbValue: cell.cellOutput.capacity + interests,

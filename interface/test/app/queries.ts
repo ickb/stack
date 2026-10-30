@@ -198,7 +198,6 @@ it("flags a withdrawal that stays after the next collection", async () => {
     owned: {
       cell: request,
       headers: [tip, tip],
-      interests: 0n,
       maturity: ccc.Epoch.from([182n, 0n, 1n]),
       isReady: false,
       ckbValue: request.cellOutput.capacity,
