@@ -17,11 +17,12 @@ Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
 # Environment=BOT_MAX_FEE_RATE=1000
 # The bot loops turns ten minutes apart and exits on any failure (1) or after six hours (0);
 # Restart=always, not on-failure, restarts both, and the same ten minutes keeps the
-# cadence. Every CCC request times out on its own, so no
-# runtime limit watches a turn: a node that pages forever would page forever after a
-# restart too, and the journal's silence is what shows it.
+# cadence. Every CCC request times out on its own; RuntimeMaxSec only backstops a turn
+# that never ends, such as a node paging forever: a healthy process exits at six hours
+# plus one turn, and the restart reshuffles a configured endpoint list.
 Restart=always
 RestartSec=10min
+RuntimeMaxSec=7h
 NoNewPrivileges=yes
 # The process holds a private key, so never write a core file.
 LimitCORE=0
