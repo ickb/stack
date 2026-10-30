@@ -21,20 +21,7 @@ type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
 type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
 export function walletConfigWith(
-  overrides: WalletConfigTestOverrides,
-): Parameters<typeof buildTransactionPreview>[4] {
-  const base = walletConfig();
-  return walletConfig({
-    sdk: testSdk({
-      buildConversionTransaction:
-        overrides.sdk?.buildConversionTransaction ??
-        base.sdk.buildConversionTransaction.bind(base.sdk),
-    }),
-  });
-}
-
-function walletConfig(
-  overrides: Partial<Parameters<typeof buildTransactionPreview>[4]> = {},
+  overrides: { sdk?: NonNullable<Parameters<typeof testSdk>[0]> } = {},
 ): Parameters<typeof buildTransactionPreview>[4] {
   const cccClient = offlineTestnetClient();
   return {
@@ -46,8 +33,7 @@ function walletConfig(
     address: "ckt1test",
     accountLocks: [script("11")],
     primaryLock: script("11"),
-    sdk: testSdk(),
-    ...overrides,
+    sdk: testSdk(overrides.sdk),
   };
 }
 
@@ -140,10 +126,4 @@ function testSdk(
       }),
   );
   return sdk;
-}
-
-interface WalletConfigTestOverrides {
-  sdk?: {
-    buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-  };
 }
