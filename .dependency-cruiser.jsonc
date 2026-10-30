@@ -6,10 +6,7 @@
       "from": {
         "orphan": true,
         "pathNot": [
-          "(^|/)\\.[^/]+\\.(js|cjs|mjs|ts|json)$",
           "\\.d\\.(c|m)?ts$",
-          "(^|/)tsconfig\\.json$",
-          "(^|/)(?:babel|webpack)\\.config\\.(?:js|cjs|mjs|ts|json)$",
           "^scripts/tooling/build/rewrite-dts-imports[.](?:mts|ts)$",
           "^scripts/tooling/dead-members[.]ts$",
           "^scripts/tooling/pins[.]ts$",
