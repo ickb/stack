@@ -35,39 +35,6 @@ import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/u
 import { verifiedClient } from "./utils/verified_client.ts";
 
 /**
- * The whole SDK, which the Node actors drive by relative import; the package barrel
- * exposes the two conversion-workflow methods, and its assignment checks they agree.
- */
-export interface IckbSdk {
-  /** Builds and completes a conversion, or returns a typed planning failure. */
-  buildConversionTransaction(
-    txLike: ccc.TransactionLike,
-    options: ConversionTransactionOptions,
-  ): Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
-  getL1AccountState(
-    client: ccc.Client,
-    locks: ccc.Script[],
-    lockUp: LockUpPolicy,
-  ): Promise<{
-    system: SystemState;
-    user: { orders: OrderGroup[] };
-    account: AccountState;
-  }>;
-  /** Adds requested withdrawal, collection, receipt, and ready-withdrawal steps. */
-  buildBaseTransaction(
-    txLike: ccc.TransactionLike,
-    steps: CollectSteps,
-    withdrawalRequest?: { deposits: IckbDepositCell[]; lock: ccc.Script },
-  ): ccc.Transaction;
-  /** Completes iCKB inputs and fees without signing or sending the transaction. */
-  completeTransaction(
-    txLike: ccc.TransactionLike,
-    options: CompleteIckbTransactionOptions,
-  ): Promise<ccc.Transaction>;
-}
-
-/**
  * Input count up to which one own transaction sweeps liquid cells.
  *
  * @remarks A compaction target, not a validity bound: required funding and the fee may go
@@ -88,8 +55,11 @@ export type CollectSteps = Pick<
   "availableOrders" | "receipts" | "readyWithdrawals"
 >;
 
-// eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
-const IckbSdkImplementation = class IckbSdk {
+/**
+ * The whole SDK, which the Node actors drive by relative import; the package barrel
+ * exposes the two conversion-workflow methods, and its assignment checks they agree.
+ */
+export class IckbSdk {
   private readonly ickbUdt: IckbUdt;
   private readonly ownedOwner: OwnedOwnerManager;
   private readonly ickbLogic: LogicManager;
@@ -481,14 +451,7 @@ const IckbSdkImplementation = class IckbSdk {
     }
     this.ickbUdt.addChange(tx, changeLock, balance - required);
   }
-};
-
-/** Concrete iCKB SDK constructor and static estimators. */
-// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and runtime constructor intentionally share a name.
-export const IckbSdk: {
-  new (managers: SdkManagers): IckbSdk;
-  fromChain: (chain: SupportedChain) => IckbSdk;
-} = IckbSdkImplementation;
+}
 
 /** Whether the transaction already carries any input or output. */
 export function hasTransactionActivity(tx: ccc.Transaction): boolean {
