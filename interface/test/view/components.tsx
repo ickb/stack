@@ -19,11 +19,10 @@ import {
   DisconnectedDashboard,
   Form,
   PendingDashboard,
+  QuotePage,
   RateChart,
   SwitchingWalletNetwork,
   UnsupportedNetwork,
-  WalletAppShell,
-  WalletConfigPendingView,
   WalletPage,
 } from "./fixtures/modules.ts";
 import { projection } from "./fixtures/projection.ts";
@@ -295,15 +294,13 @@ describe("view components", () => {
     expect(chart).toContain(" iCKB");
   });
 
-  it("renders wallet section shells and pending wallet config states", () => {
-    const openWallet = vi.fn<() => void>();
+  it("renders the wallet page and the quote page around the caller's slots", () => {
     const draft = {
       isCkb2Udt: true,
       setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
       text: "1",
       setText: vi.fn<(value: string) => void>(),
     };
-    const selectChain = vi.fn<Parameters<typeof WalletAppShell>[0]["selectChain"]>();
     vi.stubGlobal("document", { getElementById: () => ({}) });
 
     const page = <WalletPage header="Header" form="Form" action="Act" chart="Chart" />;
@@ -314,111 +311,30 @@ describe("view components", () => {
     expect(renderToStaticMarkup(page)).not.toContain("Header");
     expect(renderToStaticMarkup(page)).toContain("Chart");
     vi.stubGlobal("document", { getElementById: () => ({}) });
-    const restoredShell = (
-      <WalletAppShell
-        {...draft}
-        chain="mainnet"
-        selectChain={selectChain}
-        isRestoring={true}
-        open={openWallet}
-        liveStatus="Loading live exchange rate."
-      />
+    const quote = renderToStaticMarkup(
+      <QuotePage {...draft} chain="testnet" header="Pending header" action="Connect" />,
     );
-    expect(renderToStaticMarkup(restoredShell)).toContain("Restoring Mainnet wallet");
-    expect(
-      renderToStaticMarkup(
-        <WalletAppShell
-          {...draft}
-          chain="testnet"
-          selectChain={selectChain}
-          isRestoring={false}
-          open={openWallet}
-          liveStatus=""
-        />,
-      ),
-    ).toContain("Connect wallet");
-    const pendingError = WalletConfigPendingView({
-      rootConfig: pendingRootConfig("testnet"),
-      walletName: "JoyID",
-      openWallet,
-      ...draft,
-      isCkb2Udt: false,
-      text: "2",
-      error: new Error("denied"),
-      retry: vi.fn<() => void>(),
-    });
-    const pendingAction = findElement(
-      pendingError,
-      (element) => element.type === ActionLayout,
-    );
-    elementProps<Parameters<typeof ActionLayout>[0]>(pendingAction).onAction?.();
-    expect(renderToStaticMarkup(pendingError)).toContain(
-      "Unable to connect to JoyID: denied",
-    );
-    expect(openWallet).not.toHaveBeenCalled();
-    const pendingConnect = WalletConfigPendingView({
-      rootConfig: pendingRootConfig("mainnet"),
-      walletName: "JoyID",
-      openWallet,
-      ...draft,
-      text: "2",
-    });
-    expect(
-      elementProps<Parameters<typeof ActionLayout>[0]>(
-        findElement(pendingConnect, (element) => element.type === ActionLayout),
-      ),
-    ).toMatchObject({
-      action: "Connect wallet",
-      disabled: true,
-      isDone: false,
-      onAction: undefined,
-      message: "JoyID may ask you to authorize this connection.",
-    });
+    expect(quote).toContain("Pending header");
+    expect(quote).toContain("Connect");
+    expect(quote).toContain('value="1"');
   });
 
-  it("keeps invalid disconnected and pending amounts out of chart calculations", () => {
+  it("keeps an invalid quote amount out of chart calculations", () => {
     vi.stubGlobal("document", { getElementById: () => ({}) });
-    const draft = {
+    const quote = QuotePage({
       isCkb2Udt: false,
       setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
       text: ".",
       setText: vi.fn<(value: string) => void>(),
-    };
-    const invalidShell = WalletAppShell({
-      ...draft,
-      isCkb2Udt: true,
       chain: "mainnet",
-      selectChain: vi.fn<(chain: "mainnet" | "testnet") => void>(),
-      isRestoring: false,
-      open: vi.fn<() => void>(),
-      liveStatus: "",
+      header: undefined,
+      action: undefined,
     });
-    const shellChart = findElement(invalidShell, (element) => element.type === RateChart);
-    expect(elementProps<Parameters<typeof RateChart>[0]>(shellChart).amount).toBe(0n);
-
-    const pending = WalletConfigPendingView({
-      rootConfig: pendingRootConfig("testnet"),
-      walletName: "JoyID",
-      openWallet: vi.fn<() => void>(),
-      ...draft,
-      error: new Error("denied"),
-    });
-    const pendingChart = findElement(pending, (element) => element.type === RateChart);
-    const pendingAction = findElement(
-      pending,
-      (element) => element.type === ActionLayout,
-    );
-    expect(elementProps<Parameters<typeof RateChart>[0]>(pendingChart)).toMatchObject({
+    const chart = findElement(quote, (element) => element.type === RateChart);
+    expect(elementProps<Parameters<typeof RateChart>[0]>(chart)).toMatchObject({
       amount: 0n,
       isCkb2Udt: false,
     });
-    expect(elementProps<Parameters<typeof ActionLayout>[0]>(pendingAction)).toMatchObject(
-      {
-        action: "Retry wallet data",
-        disabled: true,
-        onAction: undefined,
-      },
-    );
   });
 
   it("renders wallet gate support actions", () => {
@@ -453,13 +369,6 @@ function dashboardWalletConfig(
 ): Parameters<typeof Dashboard>[0]["walletConfig"] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Dashboard only reads chain and address from the wallet config.
   return { chain, address } as Parameters<typeof Dashboard>[0]["walletConfig"];
-}
-
-function pendingRootConfig(
-  chain: Parameters<typeof WalletConfigPendingView>[0]["rootConfig"]["chain"],
-): Parameters<typeof WalletConfigPendingView>[0]["rootConfig"] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Pending view only reads rootConfig.chain in these branches.
-  return { chain } as Parameters<typeof WalletConfigPendingView>[0]["rootConfig"];
 }
 
 function ownDestination(): Parameters<typeof Dashboard>[0]["destination"] {

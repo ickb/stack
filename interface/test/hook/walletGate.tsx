@@ -24,9 +24,17 @@ import {
   UnsupportedNetwork,
   WalletConfigGate,
   WalletGate,
+  type ActionLayout,
   type RootConfig,
-  type WalletAppShell,
 } from "./fixtures/modules.ts";
+
+/** What the landing page hands its header and action. */
+interface LandingView {
+  action: string;
+  message: string;
+  open: () => void;
+  selectChain: (chain: RootConfig["chain"]) => void;
+}
 
 interface LandingPageTestContext {
   open: ReturnType<typeof vi.fn<() => void>>;
@@ -132,19 +140,22 @@ function assertInitialLandingBranch(context: LandingPageTestContext): void {
   expect(context.open).toHaveBeenCalledTimes(1);
   expect(context.open).toHaveBeenCalledWith();
   expect(context.setClient).not.toHaveBeenCalled();
-  expect(props.liveStatus).toBe("");
+  expect(props.action).toBe("Connect wallet");
+  expect(props.message).toMatch(/^This is an estimate\./u);
   runEffectCleanups();
 }
 
-function assertRestoringBranch(
-  context: LandingPageTestContext,
-): Parameters<typeof WalletAppShell>[0] {
+function assertRestoringBranch(context: LandingPageTestContext): LandingView {
   resetLandingHooksWithStoredConnection();
   const restoringProps = renderLandingPage(context, "testnet", {
     data: undefined,
     isError: false,
   });
   restoringProps.open();
+  hookState.index = 0;
+  expect(
+    renderLandingPage(context, "testnet", { data: undefined, isError: false }).action,
+  ).toBe("Restoring Testnet wallet");
   vi.runAllTimers();
   expect(context.open).toHaveBeenCalledTimes(2);
   return restoringProps;
@@ -158,14 +169,16 @@ function assertCleanupBranch(context: LandingPageTestContext): void {
 
 function assertChainSelectionBranch(
   context: LandingPageTestContext,
-  restoringProps: Parameters<typeof WalletAppShell>[0],
+  restoringProps: LandingView,
 ): void {
   resetLandingHooksWithStoredConnection();
   renderLandingPage(context, "testnet", { data: undefined, isError: false }).open();
   restoringProps.selectChain("mainnet");
   vi.runAllTimers();
   expect(lendsClient(context, mainnetClient)).toBe(true);
-  expect(restoringProps.liveStatus).toBe("Loading live exchange rate...");
+  expect(restoringProps.message).toMatch(
+    /^Loading live exchange rate\.\.\. This is an estimate\./u,
+  );
   expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
 }
 
@@ -173,8 +186,8 @@ function renderLandingPage(
   context: LandingPageTestContext,
   chain: RootConfig["chain"],
   liveQuote: Parameters<typeof quoteStateQuery>[0],
-): Parameters<typeof WalletAppShell>[0] {
-  return landingShellProps(
+): LandingView {
+  return landingView(
     LandingPage({
       open: context.open,
       setClient: context.setClient,
@@ -208,8 +221,19 @@ function lendsClient(context: LandingPageTestContext, client: unknown): boolean 
   return ccc.Owner.is(owner) && owner.value === client;
 }
 
-function landingShellProps(element: ReactElement): Parameters<typeof WalletAppShell>[0] {
-  return elementProps<Parameters<typeof WalletAppShell>[0]>(element);
+function landingView(element: ReactElement): LandingView {
+  const { header, action } = elementProps<{ header: ReactElement; action: ReactElement }>(
+    element,
+  );
+  const layout = elementProps<Parameters<typeof ActionLayout>[0]>(action);
+  return {
+    action: layout.action,
+    message: layout.message,
+    open: (): void => {
+      layout.onAction?.();
+    },
+    selectChain: elementProps<Pick<LandingView, "selectChain">>(header).selectChain,
+  };
 }
 
 describe("chainFromClient", () => {

@@ -7,9 +7,8 @@ export {
   PendingDashboard,
 } from "../../../src/view/Dashboard.tsx";
 export { default as Form } from "../../../src/view/Form.tsx";
-export { WalletAppShell } from "../../../src/view/WalletAppShell.tsx";
+export { QuotePage } from "../../../src/view/QuotePage.tsx";
 export { WalletPage } from "../../../src/view/WalletPage.tsx";
-export { WalletConfigPendingView } from "../../../src/wallet/WalletConfigPendingView.tsx";
 export {
   CkbSignerRequired,
   SwitchingWalletNetwork,

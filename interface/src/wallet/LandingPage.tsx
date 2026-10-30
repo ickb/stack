@@ -1,9 +1,11 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import { useEffect, useRef, useState, type JSX } from "react";
+import { ActionLayout } from "../action/ActionLayout.tsx";
 import { lendClient, savedConnectionRestoreMs } from "../app/interfaceConfig.ts";
 import { liveQuoteStatus, type QuoteStateQuery } from "../app/queries.ts";
 import type { RootConfig } from "../shared/utils.ts";
-import { WalletAppShell } from "../view/WalletAppShell.tsx";
+import { DisconnectedDashboard } from "../view/Dashboard.tsx";
+import { QuotePage } from "../view/QuotePage.tsx";
 import { hasSavedCccConnection } from "./cccConnection.ts";
 
 export function LandingPage({
@@ -69,14 +71,25 @@ export function LandingPage({
     setClient(lendClient(nextChain));
   };
 
+  const networkName = chain === "mainnet" ? "Mainnet" : "Testnet";
+  const liveStatus =
+    quoteStateQuery.data !== undefined ? "" : `${liveQuoteStatus(quoteStateQuery)} `;
   return (
-    <WalletAppShell
-      {...{ chain, isCkb2Udt, setIsCkb2Udt, text, setText, isRestoring, selectChain }}
-      liveStatus={
-        quoteStateQuery.data !== undefined ? "" : liveQuoteStatus(quoteStateQuery)
-      }
-      open={connect}
+    <QuotePage
+      {...{ chain, isCkb2Udt, setIsCkb2Udt, text, setText }}
       quoteState={quoteStateQuery.data}
+      header={<DisconnectedDashboard {...{ chain, selectChain }} />}
+      action={
+        <ActionLayout
+          action={isRestoring ? `Restoring ${networkName} wallet` : "Connect wallet"}
+          disabled={isRestoring}
+          isDone={!isRestoring}
+          onAction={connect}
+          message={`${liveStatus}This is an estimate. Wallet balance, fee, and exact availability are checked after you connect.`}
+          fee="..."
+          maturity="..."
+        />
+      }
     />
   );
 }
