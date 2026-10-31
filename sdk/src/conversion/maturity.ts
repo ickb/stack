@@ -9,7 +9,7 @@ import { ceilDiv, compareBigInt, type ValueComponents } from "../utils/utils.ts"
 import type { MaturityOrderInput, SystemState } from "./types.ts";
 
 /**
- * Assumed turn duration: the bot's turns start ten minutes apart.
+ * The bot's turn interval: its loop starts turns ten minutes apart, and the estimates assume it.
  * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
  */
 export const BOT_TURN_MS = 10n * 60n * 1000n;

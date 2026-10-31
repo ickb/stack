@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getConfig } from "../../src/constants.ts";
+import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import {
   signAndSendTransaction,
@@ -15,9 +16,9 @@ import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
 
 // One process runs turns for six hours or until one fails: read config and connect once, then
-// act at most once per turn, a turn starting ten minutes after the previous one started.
+// act at most once per turn, a turn starting BOT_TURN_MS after the previous one started.
 // Any failure exits 1 and the six hours exit 0; either way systemd restarts a clean process.
-const TURN_INTERVAL_MS = 10 * 60_000;
+const TURN_INTERVAL_MS = Number(BOT_TURN_MS);
 // Six hours bound what one process can carry that no failure clears, such as a fallback
 // endpoint it stays on while that node lags, or a cached invented header. Wall clock on
 // purpose: it keeps counting through a host suspend, as cached state ages.
