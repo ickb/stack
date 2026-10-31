@@ -8,6 +8,7 @@ export function hasSavedCccConnection(): boolean {
   try {
     // A missing or empty record fails the parse like a malformed one.
     const connection: unknown = JSON.parse(
+      // Stryker disable next-line StringLiteral: any fallback text either fails the parse or parses to no record with both names, so it only satisfies the type checker.
       globalThis.localStorage.getItem(cccConnectionInfoKey) ?? "",
     );
     return (
@@ -27,6 +28,7 @@ function isConnectionRecord(
   value: unknown,
 ): value is { signerName?: unknown; walletName?: unknown } {
   // An array passes, but has neither name.
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: a primitive has neither name and null throws into the caller's catch, so weakening the guard changes no result; this also skips replacing it with false, which the tests kill.
   return typeof value === "object" && value !== null;
 }
 
