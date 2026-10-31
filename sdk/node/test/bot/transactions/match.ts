@@ -19,20 +19,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const RESERVE_CHANGE = ccc.fixedPointFrom(1500);
-
-/** A completion that returns the reserve as plain change to the bot. */
-function completing(change = RESERVE_CHANGE): Parameters<typeof botRuntime>[0] {
-  return {
-    completeTransaction: async (txLike): Promise<ccc.Transaction> => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
-      return tx;
-    },
-  };
-}
-
 describe("buildTransaction matching", () => {
   it("offers the CKB above the reserve to a seller", async () => {
     // The seller hands over twice its CKB ask in iCKB, whole only.
@@ -47,14 +33,8 @@ describe("buildTransaction matching", () => {
     const state = (ckb: bigint): ReturnType<typeof botState> =>
       botState({ orderPool: [seller], ckb, ickb: BAND_ICKB_BALANCE });
 
-    const short = await buildTransaction(
-      botRuntime(completing()),
-      state(CKB_RESERVE + ask - 1n),
-    );
-    const enough = await buildTransaction(
-      botRuntime(completing()),
-      state(CKB_RESERVE + ask),
-    );
+    const short = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask - 1n));
+    const enough = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask));
 
     expect(short.decision.match).toMatchObject({
       reason: "unfunded_gain",
@@ -215,7 +195,7 @@ describe("buildTransaction matching", () => {
     vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1000n);
 
     const result = await buildTransaction(
-      botRuntime(completing()),
+      botRuntime(),
       botState({
         orderPool: [buyer],
         ckb: ccc.fixedPointFrom(5000),
@@ -244,7 +224,7 @@ describe("buildTransaction matching", () => {
   });
 
   it("sends collections alone and counts them", async () => {
-    const runtime = botRuntime(completing());
+    const runtime = botRuntime();
     const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
 
     const result = await buildTransaction(

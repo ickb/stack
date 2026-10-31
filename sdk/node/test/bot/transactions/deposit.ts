@@ -5,7 +5,6 @@ import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
-import type { Runtime } from "../../../src/bot/types.ts";
 import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
 
 afterEach(() => {
@@ -14,21 +13,9 @@ afterEach(() => {
 
 const RICH_CKB = ccc.fixedPointFrom(500_000);
 
-/** Completion that leaves `change` plain CKB with the bot. */
-function completing(change: bigint): Runtime["completeTransaction"] {
-  return async (txLike): Promise<ccc.Transaction> => {
-    await Promise.resolve();
-    const tx = ccc.Transaction.from(txLike).clone();
-    tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
-    return tx;
-  };
-}
-
 describe("buildTransaction deposit", () => {
   it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
-    const runtime = botRuntime({
-      completeTransaction: completing(ccc.fixedPointFrom(2000)),
-    });
+    const runtime = botRuntime();
     const deposit = vi.spyOn(runtime.managers.ickbLogic, "deposit");
 
     const result = await buildTransaction(
