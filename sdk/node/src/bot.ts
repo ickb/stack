@@ -50,8 +50,8 @@ try {
     primaryLock,
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
-    completeTransaction: async (tx, feeRate, cells, protocolCells, tip) =>
-      sdk.completeTransaction(tx, { signer, feeRate, cells, protocolCells, tip }),
+    completeTransaction: async (tx, { system, receipts, cells }) =>
+      sdk.completeTransaction(tx, { signer, system, receipts, cells }),
     sendTransaction: async (tx, plannedFee, broadcastBefore) =>
       signAndSendTransaction(signer, tx, plannedFee, undefined, broadcastBefore),
   };

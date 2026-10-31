@@ -8,9 +8,9 @@ import {
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
-  baseTip,
   conversionContext,
   hash,
+  system,
   transactionWithOutputs,
 } from "../base/support/sdk_core_support.ts";
 
@@ -32,10 +32,9 @@ function registerFundingTests(): void {
 
     const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate,
+      system: system({ feeRate }),
+      receipts: [],
       cells: [source],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(1);
@@ -64,18 +63,16 @@ function registerFundingTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
     const { tx: toSecondary } = await sdk.completeTransaction(tx, {
       signer,
       lock: secondary,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(2);
@@ -98,10 +95,9 @@ function registerFundingTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells: [existing, additional],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -121,10 +117,9 @@ function registerFundingTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
@@ -142,10 +137,9 @@ function registerSweepTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells: [small, udt, large],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -168,10 +162,9 @@ function registerSweepTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
@@ -227,10 +220,9 @@ function registerSweepTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
@@ -260,10 +252,9 @@ function registerIckbTests(): void {
 
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
@@ -284,10 +275,9 @@ function registerIckbTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [udtCell("96", lock, type, 40n)],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
   });
@@ -308,10 +298,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({
       name: "IckbError",
@@ -331,10 +320,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({ code: "insufficient_capacity" });
     expect(tx.toHex()).toBe(original);
@@ -354,10 +342,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
@@ -371,10 +358,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(ccc.Transaction.default(), {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toBe(failure);
   });

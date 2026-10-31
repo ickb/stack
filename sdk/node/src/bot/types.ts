@@ -4,7 +4,6 @@ import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
-import type { ProtocolCell } from "../../../src/udt.ts";
 import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
@@ -29,13 +28,10 @@ export interface Runtime {
   /** The most the bot plans to pay per kB, in shannons, whatever rate the node reports. */
   maxFeeRate?: ccc.Num;
 
-  /** Completes a transaction through the initialization-owned signer closure. */
+  /** Completes a transaction from the turn's state through the initialization-owned signer closure. */
   completeTransaction: (
     tx: ccc.TransactionLike,
-    feeRate: ccc.Num,
-    cells: ccc.Cell[],
-    protocolCells: readonly ProtocolCell[],
-    tip: ccc.ClientBlockHeader,
+    state: Pick<BotState, "system" | "receipts" | "cells">,
   ) => Promise<CompletedTransaction>;
 
   /** Signs and sends through the initialization-owned signer. */

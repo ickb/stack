@@ -5,7 +5,7 @@ import {
   fundedSigner,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { readyWithdrawalGroup } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, headerLike } from "../base/support/sdk_core_support.ts";
+import { baseTip, headerLike, system } from "../base/support/sdk_core_support.ts";
 
 // A collection input funds the fee and the change
 // on its own, so an account with no plain cell still completes its collections.
@@ -33,10 +33,9 @@ describe("completeTransaction with collections", () => {
 
     const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate,
+      system: system({ feeRate }),
+      receipts: [],
       cells: [],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(2);

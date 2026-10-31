@@ -24,7 +24,7 @@ import {
   pushHeaderDep,
   tipMaxAgeMs,
 } from "./dao.ts";
-import type { IckbDepositCell, LogicManager } from "./logic.ts";
+import type { IckbDepositCell, LogicManager, ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
@@ -50,25 +50,20 @@ export interface CompleteIckbTransactionOptions {
   /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
   lock?: ccc.Script;
 
-  /** Fee rate passed to CCC fee completion. */
-  feeRate: ccc.Num;
-
-  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
-  cells: ccc.Cell[];
-
   /**
-   * The receipts and iCKB deposits the transaction may spend, valued by the state read;
-   * any superset works, since only the spent ones are summed.
-   */
-  protocolCells: readonly ProtocolCell[];
-
-  /**
-   * The header the plan was priced at, the state read's `system.tip`, named as a header
+   * The state read the plan was priced at. Its fee rate prices the fee; its pool deposits,
+   * valued there, are the ones a withdrawal request may spend; its tip is named as a header
    * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
    * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
    * transaction.
    */
-  tip: ccc.ClientBlockHeader;
+  system: SystemState;
+
+  /** The receipts the transaction may spend, valued by the state read. */
+  receipts: readonly ReceiptCell[];
+
+  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
+  cells: readonly ccc.Cell[];
 }
 
 /** A completed transaction and the fee its completion planned. */
@@ -394,17 +389,9 @@ export class IckbSdk {
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<CompletedTransaction> {
-    return this.completeTransaction(tx, {
-      signer: options.signer,
-      lock: options.lock,
-      feeRate: options.context.system.feeRate,
-      cells: options.context.cells,
-      protocolCells: [
-        ...options.context.receipts,
-        ...options.context.system.poolDeposits,
-      ],
-      tip: options.context.system.tip,
-    });
+    const { signer, lock, context } = options;
+    const { system, receipts, cells } = context;
+    return this.completeTransaction(tx, { signer, lock, system, receipts, cells });
   }
 
   // ---- Transaction building ----------------------------------------------------------
@@ -457,7 +444,8 @@ export class IckbSdk {
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
   ): Promise<CompletedTransaction> {
-    const { signer, feeRate } = options;
+    const { signer, system } = options;
+    const { feeRate } = system;
     const tx = ccc.Transaction.from(txLike).clone();
     tx.addCellDeps(this.ickbUdt.cellDeps);
     const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
@@ -487,13 +475,14 @@ export class IckbSdk {
       signer.client,
       changeLock,
       ickbCells,
-      options.protocolCells,
+      // Only the spent ones are summed, so every receipt and pool deposit can be offered.
+      [...options.receipts, ...system.poolDeposits],
     );
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the limit.
     const swept = sweep(tx, plainCells);
     // Last of the header deps, so no index another step names shifts, and before the fee so
     // its 32 bytes are paid for.
-    pushHeaderDep(tx, options.tip.hash);
+    pushHeaderDep(tx, system.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
     const plannedFee = tx.estimateFee(feeRate);
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);

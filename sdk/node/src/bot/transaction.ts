@@ -88,14 +88,7 @@ export async function buildTransaction(
         attempts += 1;
         return buildCore(runtime, state, matched, core);
       },
-      async (tx) =>
-        runtime.completeTransaction(
-          tx,
-          state.system.feeRate,
-          state.cells,
-          [...state.receipts, ...state.system.poolDeposits],
-          state.system.tip,
-        ),
+      async (tx) => runtime.completeTransaction(tx, state),
     );
   } catch (error) {
     if (!isFundabilityFailure(error)) {

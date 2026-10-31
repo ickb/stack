@@ -37,14 +37,8 @@ describe("buildTransaction with a second key", () => {
     const runtime = botRuntime({
       client,
       primaryLock,
-      completeTransaction: async (tx, feeRate, cells, protocolCells, tip) =>
-        runtime.sdk.completeTransaction(tx, {
-          signer,
-          feeRate,
-          cells,
-          protocolCells,
-          tip,
-        }),
+      completeTransaction: async (tx, state) =>
+        runtime.sdk.completeTransaction(tx, { ...state, signer }),
     });
     const state = (cells: ccc.Cell[]): ReturnType<typeof botState> =>
       botState({
