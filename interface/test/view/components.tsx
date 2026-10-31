@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { groupDigits } from "../../src/shared/figures.ts";
 import {
   childElements,
   elementProps,
@@ -188,6 +189,8 @@ describe("view components", () => {
       ),
     ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
+    // Neither frozen nor moving, every control stays editable.
+    expect(renderToStaticMarkup(element)).not.toContain('disabled=""');
     const invalidMarkup = renderToStaticMarkup(
       <Form {...draft} text="1e2" chain="testnet" />,
     );
@@ -280,6 +283,35 @@ describe("view components", () => {
     );
     expect(move).toContain("all CKB and iCKB go to the address above");
     expect(move.match(/disabled=""/gu)).toHaveLength(3);
+  });
+
+  it("puts the caret back after the digits it followed once commas regroup", async () => {
+    // Typing "9" after the "1,2" of "1,234": the box regroups to "12,934".
+    const target = {
+      value: "1,2934",
+      selectionStart: 4,
+      setSelectionRange: vi.fn<(start: number, end: number) => void>(),
+    };
+    const element = Form({
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1234",
+      setText: (raw: string) => {
+        target.value = groupDigits(raw);
+      },
+      isFrozen: false,
+      chain: "mainnet",
+    });
+    const input = findElement(element, (node) => node.type === "input");
+
+    elementProps<{ onChange: (event: { target: typeof target }) => void }>(
+      input,
+    ).onChange({
+      target,
+    });
+    await Promise.resolve();
+
+    expect(target.setSelectionRange).toHaveBeenCalledWith(4, 4);
   });
 
   it("renders chart layout elements", () => {
