@@ -57,12 +57,3 @@ export function createRootConfig(
     sdk: sdks[chain],
   };
 }
-
-export async function ckbSignerOnly(signerInfo: ccc.SignerInfo): Promise<boolean> {
-  await Promise.resolve();
-  return isCkbSigner(signerInfo.signer);
-}
-
-export function isCkbSigner(signer: ccc.Signer): boolean {
-  return signer.type === ccc.SignerType.CKB;
-}

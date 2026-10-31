@@ -14,7 +14,6 @@ import {
 import {
   ActionLayout,
   CKB,
-  CkbSignerRequired,
   Dashboard,
   DisconnectedDashboard,
   Form,
@@ -342,7 +341,6 @@ describe("view components", () => {
   it("renders wallet gate support actions", () => {
     const open = vi.fn<() => void>();
     for (const element of [
-      CkbSignerRequired({ open }),
       UnsupportedNetwork({ addressPrefix: "ckb-dev", open }),
       SwitchingWalletNetwork({ open }),
     ]) {
@@ -351,7 +349,7 @@ describe("view components", () => {
       ).onClick();
     }
 
-    expect(open).toHaveBeenCalledTimes(3);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(
       renderToStaticMarkup(<UnsupportedNetwork addressPrefix="ckb-dev" open={open} />),
     ).toContain("Unsupported CKB address prefix: ckb-dev");

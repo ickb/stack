@@ -16,7 +16,6 @@ import {
 import { connectorMock } from "./fixtures/environment.ts";
 import {
   chainFromClient,
-  CkbSignerRequired,
   LandingPage,
   mainnetClient,
   SwitchingWalletNetwork,
@@ -48,10 +47,11 @@ describe("hook-based wallet gate", () => {
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("mainnet");
     expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
-    // A signer change on the same client neither saves nor closes again.
+    // A signer change on the same client neither saves nor closes again. A BTC signer, like
+    // any CCC signer, opens the wallet: it signs through its CKB lock.
     connectorMock.signer = signerInfo(ccc.SignerType.BTC, "ckb");
     await rerender(undefined);
-    expect(result.current.type).toBe(CkbSignerRequired);
+    expect(result.current.type).toBe(WalletConfigGate);
     expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckb-dev");

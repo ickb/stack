@@ -170,11 +170,6 @@ export function quoteStateQuery(value: unknown): ReturnType<typeof useQuoteState
   return value as ReturnType<typeof useQuoteState>;
 }
 
-export function signerFilterInfo(signer: ccc.Signer): ccc.SignerInfo {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Signer filter only reads signer.type in this test.
-  return { signer } as ccc.SignerInfo;
-}
-
 export function signerInfo(type: ccc.SignerType, addressPrefix: string): ccc.Signer {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- WalletGate branch tests need only signer type and client prefix.
   return {

@@ -10,7 +10,6 @@ export { default as Form } from "../../../src/view/Form.tsx";
 export { QuotePage } from "../../../src/view/QuotePage.tsx";
 export { WalletPage } from "../../../src/view/WalletPage.tsx";
 export {
-  CkbSignerRequired,
   SwitchingWalletNetwork,
   UnsupportedNetwork,
 } from "../../../src/wallet/WalletGate.tsx";
