@@ -84,6 +84,20 @@ describe("IckbSdk.buildConversionTransaction", () => {
       // Ten mining fees at fee rate 1, plus one, at the 0.001% order fee.
       minimum: 110_000n,
     });
+    await expect(
+      sdk.buildConversionTransaction({
+        direction: ICKB_TO_CKB,
+        amount: 1n,
+        lock,
+        signer: stubSigner,
+        context: conversionContext({ ickbAvailable: 1n }),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      reason: AMOUNT_TOO_SMALL,
+      // A sell can pay its whole value as fee: ten mining fees plus one, at par.
+      minimum: 11n,
+    });
   });
 
   it("returns collect-only success when the collection has activity", async () => {
