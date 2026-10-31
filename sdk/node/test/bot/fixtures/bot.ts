@@ -218,7 +218,8 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
       ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
     },
-    sdk: Object.assign(sdkOf(config), {
+    // The SDK over the same manager instances, so spies on those managers see the bot's calls.
+    sdk: Object.assign(new IckbSdk(config), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
         await Promise.resolve();
         return l1AccountState();
@@ -386,9 +387,4 @@ class TestEpoch extends ccc.Epoch {
   public override toUnix(): bigint {
     return this.unix;
   }
-}
-
-/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
-function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  return new IckbSdk(config);
 }

@@ -96,7 +96,7 @@ export function runtime({
   return {
     client,
     signer,
-    sdk: Object.assign(sdkOf(getConfig("testnet")), {
+    sdk: Object.assign(new IckbSdk(getConfig("testnet")), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
         return { system, userOrders: orders, account };
@@ -179,9 +179,4 @@ export async function order(
     throw new Error("Expected one resolver-produced order fixture");
   }
   return group;
-}
-
-/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
-function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  return new IckbSdk(config);
 }
