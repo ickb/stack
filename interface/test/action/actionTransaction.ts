@@ -17,14 +17,13 @@ import {
 } from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
-  submitPendingTransaction,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
 import { l1StateQueryKey, type L1StateType } from "../../src/app/queries.ts";
-import type { SendableTx, TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { l1State } from "../app/fixtures/l1State.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { txWithInput } from "./fixtures/transaction.ts";
+import { activeTxInfo, recordPending } from "./fixtures/transaction.ts";
 
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
@@ -157,7 +156,7 @@ describe("transact fresh preview boundary", () => {
       refreshedPreview({
         txBuilder: async () => {
           await Promise.resolve();
-          return { ok: false, error: "fresh preview failed", estimatedMaturity: 0n };
+          return { ok: false, error: "fresh preview failed" };
         },
       }),
     );
@@ -182,7 +181,7 @@ describe("transact post-broadcast outcomes", () => {
       expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     });
 
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
     waitTransaction.mockResolvedValueOnce(undefined);
     releasePreview.resolve(undefined);
     await attempt;
@@ -349,7 +348,7 @@ describe("retryConfirmation", () => {
   it("silently ignores retry after its owner has already unmounted", async () => {
     const controller = new AbortController();
     const calls = transactionCalls(refreshedPreview(), controller);
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
     controller.abort();
 
     await retryConfirmation({ ...calls, txHash });
@@ -368,7 +367,7 @@ describe("retryConfirmation", () => {
       }),
     );
     const calls = transactionCalls();
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
 
     await retryConfirmation({ ...calls, txHash });
 
@@ -576,15 +575,6 @@ function ambiguousSend(): void {
   );
 }
 
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(store: PendingTransactionStore): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
-}
-
 function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
   return store.current?.status === "pending" ? store.current.txHash : undefined;
 }
@@ -683,7 +673,6 @@ function walletConfig(): WalletConfig {
     resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     accountLocks: [{ toHex: () => "0x22" }],
-    primaryLock: { toHex: () => "0x11" },
     queryClient,
     sdk: {},
   } as unknown as WalletConfig;
@@ -702,16 +691,5 @@ function walletQueryClient(config?: WalletConfig): {
     invalidateQueries: vi.fn(async () => {
       await Promise.resolve();
     }),
-  };
-}
-
-function activeTxInfo(byte: string, overrides: Partial<SendableTx> = {}): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput(byte),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "order",
-    ...overrides,
   };
 }

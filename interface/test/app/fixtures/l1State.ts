@@ -1,16 +1,5 @@
 import type { L1StateType } from "../../../src/app/queries.ts";
-import type { SendableTx } from "../../../src/shared/utils.ts";
-import { txWithInput } from "../../action/fixtures/transaction.ts";
-
-export function activeTxInfo(): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput("11"),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "order",
-  };
-}
+import { activeTxInfo } from "../../action/fixtures/transaction.ts";
 
 export function l1State(): L1StateType {
   const candidate: unknown = {

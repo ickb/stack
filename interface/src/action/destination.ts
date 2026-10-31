@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { errorMessageOf, type WalletConfig } from "../shared/utils.ts";
 
 /**
- * The lock that owns every cell the next transaction creates for the user.
+ * The lock that owns every cell the next transaction creates for the user; absent, the
+ * SDK's default, the signer's recommended lock.
  *
  * @remarks `moveTo` names the destination when it is not one of the wallet's own locks:
  * completion sweeps liquid cells to it within the input limit, making this a wallet move.
  */
 export interface Destination {
-  readonly lock: ccc.Script;
+  readonly lock?: ccc.Script;
   readonly moveTo?: string;
 }
 
@@ -56,7 +57,7 @@ export function useDestination(
   }, [text, walletConfig, isEmpty]);
 
   if (isEmpty) {
-    return { destination: { lock: walletConfig.primaryLock }, error: "" };
+    return { destination: {}, error: "" };
   }
   if (read?.text !== text) {
     return { error: "" };

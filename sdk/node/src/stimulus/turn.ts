@@ -6,7 +6,7 @@ import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../../../src/order/conversion.ts";
-import { isFundabilityFailure } from "../../../src/sdk.ts";
+import { hasCollectable, isFundabilityFailure } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -62,9 +62,12 @@ export interface StimulusLog {
     ICKB: { budget: string };
   };
   orders?: StimulusState["orders"];
-  draw?: Draw | { kind: "collect-only" };
+  draw?: Draw;
   outcome?: Outcome;
+  /** Why the drawn action was not built. */
   skip?: Skip;
+  /** Why the collection sent in its place was not built either. */
+  collectSkip?: Skip;
   action?: Action;
   transactionShape?: ReturnType<typeof transactionShape>;
   txFee?: { fee: string; feeRate: ccc.Num };
@@ -73,7 +76,12 @@ export interface StimulusLog {
 }
 
 type Built =
-  | { tx: ccc.Transaction; action: Action; broadcastBefore?: BroadcastDeadline }
+  | {
+      tx: ccc.Transaction;
+      plannedFee: bigint;
+      action: Action;
+      broadcastBefore?: BroadcastDeadline;
+    }
   | { skip: Skip };
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -122,12 +130,17 @@ async function stimulate(
   }
   // Whatever stopped the drawn action, collecting what the account has keeps it liquid;
   // the SDK's zero-amount conversion is exactly that transaction.
-  if ("skip" in built && hasCollectible(state)) {
-    Object.assign(log, { skip: built.skip, draw: { kind: "collect-only" } });
-    built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
+  if ("skip" in built) {
+    Object.assign(log, { skip: built.skip });
+    if (hasCollectable(state.context)) {
+      built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
+      if ("skip" in built) {
+        Object.assign(log, { collectSkip: built.skip });
+      }
+    }
   }
   if ("skip" in built) {
-    Object.assign(log, { outcome: "skipped", skip: built.skip });
+    Object.assign(log, { outcome: "skipped" });
     return;
   }
   await send(runtime, state, built, log);
@@ -153,23 +166,18 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     }
     throw error;
   }
-  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    availableOrders: state.context.availableOrders,
-    receipts: state.context.receipts,
-    readyWithdrawals: state.context.readyWithdrawals,
-  });
+  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
   const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
   try {
     return {
-      tx: await runtime.sdk.completeTransaction(tx, {
+      ...(await runtime.sdk.completeTransaction(tx, {
         signer: runtime.signer,
-        feeRate: state.system.feeRate,
+        system: state.system,
+        receipts: state.context.receipts,
         cells: state.context.cells,
-        protocolCells: state.context.receipts,
-        tip: state.system.tip,
-      }),
+      })),
       action: { order: { outputs: [orderOutput, orderOutput + 1] } },
     };
   } catch (error) {
@@ -187,13 +195,13 @@ async function buildConversion(
     const result = await runtime.sdk.buildConversionTransaction({
       direction,
       amount,
-      lock: runtime.primaryLock,
       signer: runtime.signer,
       context: state.context,
     });
     return result.ok
       ? {
           tx: result.tx,
+          plannedFee: result.plannedFee,
           action: { conversionKind: result.conversionKind },
           ...(result.broadcastBefore === undefined
             ? {}
@@ -217,21 +225,20 @@ function unfundableOrThrow(error: unknown): Built {
 async function send(
   runtime: Runtime,
   state: StimulusState,
-  { tx, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
+  { tx, plannedFee, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
-  const fee = tx.estimateFee(state.system.feeRate);
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: { fee: ccc.fixedPointToString(fee), feeRate: state.system.feeRate },
+    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.system.feeRate },
   });
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(
       runtime.signer,
       tx,
-      fee,
+      plannedFee,
       undefined,
       broadcastBefore,
     );
@@ -252,14 +259,6 @@ async function send(
     throw error;
   }
   Object.assign(log, { outcome: "committed" });
-}
-
-function hasCollectible({ context }: StimulusState): boolean {
-  return (
-    context.availableOrders.length > 0 ||
-    context.receipts.length > 0 ||
-    context.readyWithdrawals.length > 0
-  );
 }
 
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {

@@ -3,7 +3,7 @@ import { Ratio } from "@ickb/sdk";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
-import { txWithInput } from "../../action/fixtures/transaction.ts";
+import { activeTxInfo } from "../../action/fixtures/transaction.ts";
 import {
   CKB,
   mainnetClient,
@@ -13,7 +13,6 @@ import {
   type L1StateType,
   type QuoteState,
   type RootConfig,
-  type SendableTx,
   type TxInfo,
   type useQuoteState,
   type WalletConfig,
@@ -53,21 +52,10 @@ export function actionProps(): Parameters<typeof Action>[0] {
   };
 }
 
-export function activeTxInfo(): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput("11"),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "direct",
-  };
-}
-
 /** What the state fixture's builder returns: nothing to sign. */
 export const nothingToSign: TxInfo = Object.freeze({
   ok: false,
   error: "Nothing to do",
-  estimatedMaturity: 0n,
 });
 
 export function l1State(): L1StateType {
@@ -94,6 +82,7 @@ export function l1State(): L1StateType {
     }),
     hasCollectable: false,
     hasConverting: false,
+    estimatedMaturity: 0n,
   };
 }
 
@@ -110,7 +99,6 @@ export function walletConfig(): WalletConfig {
     signer: signerInfo(ccc.SignerType.CKB, "ckt"),
     address: "ckt1test",
     accountLocks: [script("11")],
-    primaryLock: script("11"),
   };
 }
 

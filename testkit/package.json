@@ -1,6 +1,6 @@
 {
   "name": "@ickb/testkit",
-  "version": "9001.0.0",
+  "version": "9002.0.0",
   "private": true,
   "sideEffects": false,
   "type": "module",

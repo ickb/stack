@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
 import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
-import { IckbError } from "../../../../src/sdk.ts";
+import { IckbError, type CompletedTransaction } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import {
   botState,
   FUNDED_CHANGE,
   l1AccountState,
+  PLANNED_FEE,
   readyDeposit,
   testWithdrawal,
 } from "../fixtures/bot.ts";
@@ -25,7 +26,7 @@ afterEach(() => {
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
   const daoScript = botRuntime().managers.ickbLogic.dao.script;
-  return async (txLike): Promise<ccc.Transaction> => {
+  return async (txLike): Promise<CompletedTransaction> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();
     const requests = tx.outputs.filter((output) => output.type?.eq(daoScript) === true);
@@ -35,7 +36,7 @@ function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
     if (requests.length === 0) {
       tx.addOutput({ capacity: FUNDED_CHANGE, lock: botRuntime().primaryLock }, "0x");
     }
-    return tx;
+    return { tx, plannedFee: PLANNED_FEE };
   };
 }
 
@@ -48,8 +49,8 @@ describe("buildTransaction withdrawal", () => {
   it("counts CKB in flight against stress", async () => {
     const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
     const drained = {
-      ckb: ccc.fixedPointFrom(1000),
-      ickb: ICKB_WITHDRAW_ABOVE + 1n,
+      ckbAvailable: ccc.fixedPointFrom(1000),
+      ickbAvailable: ICKB_WITHDRAW_ABOVE + 1n,
       poolDeposits: pool([]),
     };
 
@@ -76,8 +77,8 @@ describe("buildTransaction withdrawal", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: ccc.fixedPointFrom(500_000),
-        ickb: ICKB_WITHDRAW_ABOVE + 100n,
+        ckbAvailable: ccc.fixedPointFrom(500_000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
         poolDeposits: pool([third, first, second]),
       }),
     );
@@ -108,8 +109,8 @@ describe("buildTransaction withdrawal", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: ccc.fixedPointFrom(500_000),
-        ickb: ICKB_WITHDRAW_ABOVE + 100n,
+        ckbAvailable: ccc.fixedPointFrom(500_000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
         poolDeposits: [readyDeposit("a0", ICKB_DEPOSIT_CAP + 300n), oversize, fitting],
       }),
     );
@@ -129,8 +130,8 @@ describe("buildTransaction withdrawal", () => {
     const only = readyDeposit("87", 4n);
     const runtime = botRuntime({ completeTransaction: completingUpTo(0) });
     const state = {
-      ckb: ccc.fixedPointFrom(500_000),
-      ickb: ICKB_WITHDRAW_ABOVE + 100n,
+      ckbAvailable: ccc.fixedPointFrom(500_000),
+      ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
       poolDeposits: pool([only]),
     };
 
@@ -172,7 +173,7 @@ describe("buildTransaction withdrawal", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ ckb: ccc.fixedPointFrom(500_000), ...collections }),
+        botState({ ckbAvailable: ccc.fixedPointFrom(500_000), ...collections }),
       ),
     ).resolves.toMatchObject({
       kind: "built",
@@ -187,8 +188,8 @@ describe("buildTransaction withdrawal", () => {
       buildTransaction(
         runtime,
         botState({
-          ckb: ccc.fixedPointFrom(500_000),
-          ickb: ICKB_WITHDRAW_ABOVE + 100n,
+          ckbAvailable: ccc.fixedPointFrom(500_000),
+          ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
           poolDeposits: pool([readyDeposit("81", 4n)]),
           ...collections,
         }),
@@ -205,8 +206,8 @@ describe("buildTransaction withdrawal", () => {
       buildTransaction(
         runtime,
         botState({
-          ckb: ccc.fixedPointFrom(500_000),
-          ickb: ICKB_WITHDRAW_ABOVE + 100n,
+          ckbAvailable: ccc.fixedPointFrom(500_000),
+          ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
           poolDeposits: pool([readyDeposit("81", 4n)]),
           readyWithdrawals: readyWithdrawals.slice(1),
           notReadyWithdrawals: pendingWithdrawals,

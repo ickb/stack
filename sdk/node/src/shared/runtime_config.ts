@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { SupportedChain } from "../../../src/utils/chain.ts";
+import type { SupportedChain } from "../../../src/constants.ts";
+import { shuffled } from "./shuffle.ts";
 
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
@@ -20,8 +21,12 @@ export interface RuntimeConfig {
   /** Public CKB chain expected by the app. */
   chain: SupportedChain;
 
-  /** Secp256k1 private key used only for signing. */
-  privateKey: `0x${string}`;
+  /**
+   * Secp256k1 private keys used only for signing, in key file order. The first is the
+   * primary: its lock receives change and its CKB pays fees, and the turns move every other
+   * key's cells to that lock.
+   */
+  privateKeys: [`0x${string}`, ...Array<`0x${string}`>];
 
   /**
    * The configured nodes' RPC URLs in this process's shuffled order, the only endpoints,
@@ -34,8 +39,8 @@ export interface RuntimeConfig {
 }
 
 /**
- * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private key
- * held in the file named by `<prefix>_PRIVATE_KEY_FILE`.
+ * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private keys
+ * held in the file named by `<prefix>_PRIVATE_KEY_FILE`, one per line, the primary first.
  *
  * @remarks
  * The key lives in a file rather than a variable so it never sits in a unit file, an
@@ -51,30 +56,33 @@ export async function readRuntimeConfigEnv(
   const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
   const rpcUrl = requireEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
-  const privateKey = parsePrivateKey(await readFileEnv(keyFile));
+  const keyText = await readFileEnv(keyFile);
+  // One key per line, the primary first; split never returns an empty list. Keys are
+  // canonical lowercase hex, so equal strings are the only equal keys: a repeated one would
+  // sign its group twice, the second signature over the first, and every send would fail.
+  const [firstLine = "", ...otherLines] = keyText.value.split("\n");
+  const parse = (line: string): `0x${string}` =>
+    parsePrivateKey({ name: keyText.name, value: line.trim() });
+  const privateKeys: RuntimeConfig["privateKeys"] = [
+    parse(firstLine),
+    ...otherLines.map(parse),
+  ];
+  if (new Set(privateKeys).size !== privateKeys.length) {
+    throw invalidEnvError(keyFile.name);
+  }
   // Commas only: a space around a URL is refused like any whitespace in it. Each process
   // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
   // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
-  // of every restart from the same first URL.
-  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","));
+  // of every restart from the same first URL. Math.random suffices: nothing needs the order
+  // unpredictable.
+  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","), Math.random);
   const rpcUrls: [string, ...string[]] = [first, ...rest];
   return {
     chain,
-    privateKey,
+    privateKeys,
     rpcUrls,
     rpcEndpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
   };
-}
-
-/** A uniform random order: each value sorted by its own random key. */
-function shuffled(values: string[]): string[] {
-  return (
-    values
-      // eslint-disable-next-line sonarjs/pseudo-random -- the order only spreads failures across restarts; nothing needs it unpredictable.
-      .map((value) => ({ value, key: Math.random() }))
-      .toSorted((left, right) => left.key - right.key)
-      .map(({ value }) => value)
-  );
 }
 
 interface EnvValue {

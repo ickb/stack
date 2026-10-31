@@ -3,7 +3,7 @@ import { offlineTestnetClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
-import { baseTip } from "./transaction/base/support/sdk_core_support.ts";
+import { system } from "./transaction/base/support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -31,12 +31,11 @@ describe("getConfig", () => {
     expect(ickbLogic.dao.script.eq(ownedOwner.dao.script)).toBe(true);
     expect(ickbUdt.daoScript.eq(ickbLogic.dao.script)).toBe(true);
     expect(order.udtScript.eq(ickbUdt.script)).toBe(true);
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1n,
+      system: system(),
+      receipts: [],
       cells: [],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed).not.toBe(tx);

@@ -2,11 +2,11 @@ import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import { inAct, renderHook, settle } from "../support/renderHook.ts";
 import {
   actionProps,
-  activeTxInfo,
   l1State,
   nothingToSign,
   quoteState,
@@ -28,7 +28,6 @@ import {
   submitPendingTransaction,
   WalletAppView,
   type ActionLayout,
-  type PendingTransactionStore,
 } from "./fixtures/modules.ts";
 
 type ActionProps = Parameters<typeof Action>[0];
@@ -177,15 +176,13 @@ function registerActionAlternativeTests(): void {
     expect(collect.action).toBe("collect converted funds");
     expect(collect.disabled).toBe(false);
 
-    // Nothing to sign, something converting: the date still shows; without either, it waits.
-    queryMock.result = {
-      data: { ...nothingToSign, estimatedMaturity: 180_000n },
-      isFetching: false,
-    };
+    // Nothing to sign, something converting: the state's date still shows; without either,
+    // it waits.
+    queryMock.result = { data: nothingToSign, isFetching: false };
     const converting = await actionLayout({
       ...actionProps(),
       amount: 0n,
-      l1State: { ...l1State(), hasConverting: true },
+      l1State: { ...l1State(), hasConverting: true, estimatedMaturity: 180_000n },
     });
     expect(converting.disabled).toBe(true);
     expect(converting.maturity).toBe("in 3 minutes");
@@ -289,7 +286,7 @@ function registerActionAttemptTests(): void {
     await rerender({ ...props, l1State: stateB });
     const recovered = layout(result.current);
 
-    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, { lock: script("11") });
+    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, {});
     expect(recovered.message).toBe("⚠️ fresh build failed");
     expect(recovered.disabled).toBe(false);
     expect(props.freeze).toHaveBeenLastCalledWith(false);
@@ -542,16 +539,4 @@ async function freezeBuiltPreview(
   if (txInfo.ok) {
     params.freezePreview({ ...state, txInfo });
   }
-}
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(
-  store: PendingTransactionStore,
-  txHash: `0x${string}`,
-): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
 }

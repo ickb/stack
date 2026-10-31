@@ -8,8 +8,7 @@ import {
   type ActionFlags,
 } from "../../src/action/actionStatus.ts";
 import { noCollectionMessage, noRequestMessage } from "../../src/action/transaction.ts";
-import type { SendableTx } from "../../src/shared/utils.ts";
-import { txWithInput } from "./fixtures/transaction.ts";
+import { activeTxInfo } from "./fixtures/transaction.ts";
 
 const walletRejected = "wallet rejected";
 const requestConversion = "request conversion";
@@ -187,16 +186,6 @@ function flags(): ActionFlags {
   };
 }
 
-function activeTxInfo(): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput("11"),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "direct",
-  };
-}
-
 function failedTxInfo(error: string): Parameters<typeof actionMessage>[0] {
-  return { ok: false, error, estimatedMaturity: 0n };
+  return { ok: false, error };
 }

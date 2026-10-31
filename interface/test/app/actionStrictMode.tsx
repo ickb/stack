@@ -6,14 +6,13 @@ import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type * as TransactionModule from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
-  submitPendingTransaction,
   type PendingTransactionState,
-  type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
 import type { L1StateType } from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
+import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
 import { fakeDom, stubDom } from "../support/dom.ts";
-import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
+import { l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -116,7 +115,7 @@ async function waitThenRetry(): Promise<void> {
   mocks.transact.mockImplementationOnce(async (params) => {
     params.lockIntent();
     params.setIsConfirming(true);
-    submitted = recordPending(params.pendingStore);
+    submitted = recordPending(params.pendingStore, txHash);
     await submitted;
     await windowClosed.promise;
     params.setIsConfirming(false);
@@ -163,15 +162,6 @@ async function waitThenRetry(): Promise<void> {
 
 function flushScheduledRender(): void {
   // Deliberately empty: flushSync itself renders the already-scheduled update.
-}
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(store: PendingTransactionStore): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
 }
 
 function strictAction(
@@ -273,7 +263,6 @@ function walletFixture(): {
     resetClient: vi.fn<() => void>(),
     signer: { sendTransaction },
     accountLocks: [],
-    primaryLock: {},
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {

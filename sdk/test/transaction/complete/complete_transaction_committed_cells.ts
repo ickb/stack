@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { script, StubClient } from "@ickb/testkit";
+import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { SWEEP_INPUT_LIMIT } from "../../../src/sdk.ts";
@@ -8,9 +8,9 @@ import {
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
-  baseTip,
   conversionContext,
   hash,
+  system,
   transactionWithOutputs,
 } from "../base/support/sdk_core_support.ts";
 
@@ -24,18 +24,17 @@ describe("IckbSdk.completeTransaction", () => {
 function registerFundingTests(): void {
   it("funds from the given plain cells and creates exact plain change", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const source = plainCell("81", lock, ccc.fixedPointFrom(200));
+    const source = capacityCell(ccc.fixedPointFrom(200), lock, "81");
     const { client, signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
     const feeRate = 1_000n;
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate,
+      system: system({ feeRate }),
+      receipts: [],
       cells: [source],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(1);
@@ -45,7 +44,8 @@ function registerFundingTests(): void {
     expect(change?.cellOutput.lock.eq(lock)).toBe(true);
     expect(change?.cellOutput.type).toBeUndefined();
     expect(change?.outputData).toBe("0x");
-    await expect(completed.getFee(client)).resolves.toBe(completed.estimateFee(feeRate));
+    expect(plannedFee).toBe(completed.estimateFee(feeRate));
+    await expect(completed.getFee(client)).resolves.toBe(plannedFee);
     expect(tx.inputs).toHaveLength(0);
   });
 
@@ -54,27 +54,25 @@ function registerFundingTests(): void {
     const recommended = script("11");
     const secondary = script("12");
     const cells = [
-      plainCell("82", recommended, ccc.fixedPointFrom(200)),
-      plainCell("83", secondary, ccc.fixedPointFrom(200)),
+      capacityCell(ccc.fixedPointFrom(200), recommended, "82"),
+      capacityCell(ccc.fixedPointFrom(200), secondary, "83"),
     ];
     const { signer } = fundedSigner(cells, [recommended, secondary]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock: recommended }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
-    const toSecondary = await sdk.completeTransaction(tx, {
+    const { tx: toSecondary } = await sdk.completeTransaction(tx, {
       signer,
       lock: secondary,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(2);
@@ -88,19 +86,18 @@ function registerFundingTests(): void {
 
   it("does not add a caller-supplied input twice when it reappears in the cells", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const existing = plainCell("87", lock, ccc.fixedPointFrom(200));
-    const additional = plainCell("88", lock, ccc.fixedPointFrom(200));
+    const existing = capacityCell(ccc.fixedPointFrom(200), lock, "87");
+    const additional = capacityCell(ccc.fixedPointFrom(200), lock, "88");
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addInput(existing);
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells: [existing, additional],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -111,7 +108,7 @@ function registerFundingTests(): void {
 
   it("names an input the builders spent twice", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const existing = plainCell("89", lock, ccc.fixedPointFrom(200));
+    const existing = capacityCell(ccc.fixedPointFrom(200), lock, "89");
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addInput(existing);
@@ -120,10 +117,9 @@ function registerFundingTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
@@ -132,19 +128,18 @@ function registerFundingTests(): void {
 function registerSweepTests(): void {
   it("sweeps every given cell largest first while the input limit allows", async () => {
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-    const small = plainCell("90", lock, ccc.fixedPointFrom(70));
-    const large = plainCell("91", lock, ccc.fixedPointFrom(300));
+    const small = capacityCell(ccc.fixedPointFrom(70), lock, "90");
+    const large = capacityCell(ccc.fixedPointFrom(300), lock, "91");
     const udt = udtCell("92", lock, ickbUdt.script, 5n);
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells: [small, udt, large],
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -165,12 +160,11 @@ function registerSweepTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(100 * SWEEP_INPUT_LIMIT), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
@@ -186,7 +180,7 @@ function registerSweepTests(): void {
       udtCell(byte, lock, ickbUdt.script, 10n),
     );
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
-    const funding = plainCell("ff", lock, ccc.fixedPointFrom(1000));
+    const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
 
     const result = await sdk.buildConversionTransaction({
       direction: "ckb-to-ickb",
@@ -221,15 +215,14 @@ function registerSweepTests(): void {
     );
     const cells = [
       ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
-      plainCell("e5", lock, ccc.fixedPointFrom(1000)),
+      capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
     ];
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
@@ -248,7 +241,7 @@ function registerIckbTests(): void {
     const cells = [
       udtCell("93", lock, type, 30n),
       largest,
-      plainCell("95", lock, ccc.fixedPointFrom(500)),
+      capacityCell(ccc.fixedPointFrom(500), lock, "95"),
     ];
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
@@ -257,12 +250,11 @@ function registerIckbTests(): void {
       ccc.numLeToBytes(100n, 16),
     );
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
-      feeRate: 1_000n,
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
       cells,
-      protocolCells: [],
-      tip: baseTip,
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
@@ -283,10 +275,9 @@ function registerIckbTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [udtCell("96", lock, type, 40n)],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
   });
@@ -295,7 +286,7 @@ function registerIckbTests(): void {
 function registerFailureTests(): void {
   it("fails typed instead of routing sub-minimum change into a protocol output", async () => {
     const { sdk, logicManager, lock } = testSdk({ completion: "real" });
-    const source = plainCell("84", lock, ccc.fixedPointFrom(50));
+    const source = capacityCell(ccc.fixedPointFrom(50), lock, "84");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput(
@@ -307,10 +298,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({
       name: "IckbError",
@@ -321,7 +311,7 @@ function registerFailureTests(): void {
 
   it("does not reinterpret a pre-existing plain output as fee change", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const source = plainCell("89", lock, ccc.fixedPointFrom(50));
+    const source = capacityCell(ccc.fixedPointFrom(50), lock, "89");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
@@ -330,10 +320,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toMatchObject({ code: "insufficient_capacity" });
     expect(tx.toHex()).toBe(original);
@@ -341,7 +330,7 @@ function registerFailureTests(): void {
 
   it("rejects DAO output 65 rather than hiding change in an existing output", async () => {
     const { sdk, logicManager, lock } = testSdk({ completion: "real" });
-    const source = plainCell("85", lock, ccc.fixedPointFrom(10_000));
+    const source = capacityCell(ccc.fixedPointFrom(10_000), lock, "85");
     const { signer } = fundedSigner([source], [lock]);
     const tx = transactionWithOutputs(64, lock);
     const first = tx.outputs[0];
@@ -353,10 +342,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(tx, {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [source],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
@@ -370,10 +358,9 @@ function registerFailureTests(): void {
     await expect(
       sdk.completeTransaction(ccc.Transaction.default(), {
         signer,
-        feeRate: 1_000n,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
         cells: [],
-        protocolCells: [],
-        tip: baseTip,
       }),
     ).rejects.toBe(failure);
   });
@@ -396,15 +383,7 @@ function manyCells(
 }
 
 function plainCells(count: number, lock: ccc.Script, capacity: ccc.Num): ccc.Cell[] {
-  return manyCells(count, "d0", () => plainCell("d0", lock, capacity));
-}
-
-function plainCell(byte: string, lock: ccc.Script, capacity: ccc.Num): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity, lock },
-    outputData: "0x",
-  });
+  return manyCells(count, "d0", () => capacityCell(capacity, lock, "d0"));
 }
 
 function udtCell(

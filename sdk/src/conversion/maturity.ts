@@ -1,15 +1,25 @@
 import type { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
-import type { OrderGroup } from "../order/cells.ts";
+import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
-import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../udt.ts";
+import { ckbFromUdt } from "../udt.ts";
 import { ceilDiv, compareBigInt, type ValueComponents } from "../utils/utils.ts";
-import type { MaturityOrderInput, SystemState } from "./types.ts";
+import type { SystemState } from "./types.ts";
 
 /**
- * Assumed turn duration: the bot's turns start ten minutes apart.
+ * Input accepted by maturity estimation, either a live order cell or raw order data plus values.
+ */
+export type MaturityOrderInput =
+  | OrderCell
+  | {
+      info: Info;
+      amounts: ValueComponents;
+    };
+
+/**
+ * The bot's turn interval: its loop starts turns ten minutes apart, and the estimates assume it.
  * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
  */
 export const BOT_TURN_MS = 10n * 60n * 1000n;
@@ -75,8 +85,7 @@ function ckbToIckbOrderMaturity(
     0n,
   );
   const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
-  const capCkb = ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio);
-  const turns = demand > 0n ? 1n + demand / capCkb : 1n;
+  const turns = demand > 0n ? 1n + demand / system.depositCapacity : 1n;
   return system.tip.timestamp + BOT_TURN_MS * turns;
 }
 
@@ -107,7 +116,7 @@ function ickbToCkbOrderMaturity(
     {
       ckbValue: sellers.some((group) => sits(group, system))
         ? 0n
-        : ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
+        : system.depositCapacity,
       at: system.tip.timestamp,
     },
     // A claim the bot can no longer request in time rolls a cycle: the bot's rule, not the

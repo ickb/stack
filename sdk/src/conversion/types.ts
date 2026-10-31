@@ -1,13 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
-import type { OrderCell, OrderGroup } from "../order/cells.ts";
-import type { Info } from "../order/info.ts";
+import type { OrderGroup } from "../order/cells.ts";
 import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
-import type { IckbUdt, ProtocolCell } from "../udt.ts";
-import type { ValueComponents } from "../utils/utils.ts";
+import type { IckbUdt } from "../udt.ts";
 
 /**
  * Direction requested by a conversion transaction.
@@ -99,6 +97,8 @@ export type ConversionTransactionResult =
       ok: true;
       /** Completed transaction, funded from the signer's committed cells. Callers own signing and send. */
       tx: ccc.Transaction;
+      /** The fee completion planned: the `plannedFee` to pass to `signAndSendTransaction`. */
+      plannedFee: bigint;
       /** Estimated maturity timestamp for the conversion result. */
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */
@@ -119,8 +119,6 @@ export type ConversionTransactionResult =
   | {
       ok: false;
       reason: "amount-too-small";
-      /** Best available maturity estimate from the input context. */
-      estimatedMaturity: bigint;
       /**
        * The smallest amount this direction accepts at the current fee rate, in the
        * request's unit (CKB shannons or iCKB), so a caller can name it.
@@ -131,65 +129,6 @@ export type ConversionTransactionResult =
       ok: false;
       /** Machine-readable failure reason. */
       reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">;
-      /** Best available maturity estimate from the input context. */
-      estimatedMaturity: bigint;
-    };
-
-/**
- * Options for completing a partial iCKB transaction before signing and sending.
- */
-export interface CompleteIckbTransactionOptions {
-  /** Signer that prepares the transaction; its recommended lock owns the change by default. */
-  signer: ccc.Signer;
-
-  /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
-  lock?: ccc.Script;
-
-  /** Fee rate passed to CCC fee completion. */
-  feeRate: ccc.Num;
-
-  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
-  cells: ccc.Cell[];
-
-  /**
-   * The receipts and iCKB deposits the transaction may spend, valued by the state read;
-   * any superset works, since only the spent ones are summed.
-   */
-  protocolCells: readonly ProtocolCell[];
-
-  /**
-   * The header the plan was priced at, the state read's `system.tip`, named as a header
-   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
-   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
-   * transaction.
-   */
-  tip: ccc.ClientBlockHeader;
-}
-
-/**
- * Quote details for one order-based conversion path.
- */
-export interface ConversionOrderEstimate {
-  /** Output amount after applying the order ratio and fee. */
-  convertedAmount: ccc.FixedPoint;
-  /** CKB fee component embedded in the order conversion. */
-  ckbFee: ccc.FixedPoint;
-  /** Order info that should be encoded into a created order. */
-  info: Info;
-  /** Estimated maturity timestamp, or `undefined` when it cannot be estimated. */
-  maturity: ccc.Num | undefined;
-  /** A non-fatal notice about the path this estimate took, for the caller to surface. */
-  notice?: ConversionNotice;
-}
-
-/**
- * Input accepted by maturity estimation, either a live order cell or raw order data plus values.
- */
-export type MaturityOrderInput =
-  | OrderCell
-  | {
-      info: Info;
-      amounts: ValueComponents;
     };
 
 /**
@@ -263,6 +202,8 @@ export interface SystemState {
   tip: ccc.ClientBlockHeader;
   /** The exchange ratio between CKB and UDT. */
   exchangeRatio: Ratio;
+  /** The CKB of one deposit worth `ICKB_DEPOSIT_CAP` iCKB at `exchangeRatio`. */
+  depositCapacity: bigint;
   /** Every order past par on the book, the wallet's own included: what the bot can fill. */
   orderPool: OrderGroup[];
   /** Every iCKB pool deposit with its claim epoch at this tip: the CKB supply. */
@@ -281,22 +222,4 @@ export interface SdkManagers {
   ickbLogic: LogicManager;
   /** Limit order manager. */
   order: OrderManager;
-}
-
-export interface ConversionOrder {
-  amounts: ValueComponents;
-  estimate: ConversionOrderEstimate;
-}
-
-export interface CkbToIckbConversionPlan {
-  depositCapacity: bigint;
-  depositCount: number;
-  estimatedMaturity: bigint;
-  order?: ConversionOrder;
-}
-
-export interface IckbToCkbConversionPlan {
-  estimatedMaturity: bigint;
-  order?: ConversionOrder;
-  selectedDeposits: IckbDepositCell[];
 }

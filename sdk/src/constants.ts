@@ -4,7 +4,6 @@ import { LogicManager } from "./logic.ts";
 import { OrderManager } from "./order/order.ts";
 import { OwnedOwnerManager } from "./owned_owner.ts";
 import { IckbUdt } from "./udt.ts";
-import type { SupportedChain } from "./utils/chain.ts";
 
 /** Nervos DAO type script. */
 const DAO = ccc.Script.from({
@@ -41,6 +40,9 @@ const ORDER = ccc.Script.from({
   args: "0x",
 });
 
+/** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
+export type SupportedChain = "mainnet" | "testnet";
+
 /**
  * Each network's iCKB dep group: it carries every iCKB script's code cell, xUDT's and
  * iCKB Logic's included, so one group dep resolves them all.
@@ -58,7 +60,7 @@ const DEPLOYMENTS = {
       index: 0,
     },
   },
-} as const;
+} as const satisfies Record<SupportedChain, { depGroup: ccc.OutPointLike }>;
 
 /**
  * The managers of one network's iCKB deployment.

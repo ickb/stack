@@ -4,13 +4,14 @@ import type {
   ConversionKind,
   ConversionNotice,
   IckbSdk,
+  SupportedChain,
 } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
 export interface RootConfig {
   /** Public CKB chain selected by the interface. */
-  chain: "mainnet" | "testnet";
+  chain: SupportedChain;
 
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
@@ -39,9 +40,6 @@ export interface WalletConfig extends RootConfig {
 
   /** Unique account locks scanned as wallet-owned state. */
   accountLocks: ccc.Script[];
-
-  /** Primary lock used for new conversion requests. */
-  primaryLock: ccc.Script;
 }
 
 /** A completed, funded transaction: only signing remains. */
@@ -62,11 +60,10 @@ export type SendableTx = Readonly<{
 }>;
 
 /**
- * A transaction preview, or why there is none. Both carry the maturity estimate, which
- * also dates what is already converting.
+ * A transaction preview, or why there is none. A failure has no date of its own: what is
+ * already converting is dated by the state it was built from.
  */
-export type TxInfo =
-  SendableTx | Readonly<{ ok: false; error: string; estimatedMaturity: bigint }>;
+export type TxInfo = SendableTx | Readonly<{ ok: false; error: string }>;
 
 /** The small line under a value the user cannot edit, saying why, centred beneath it. */
 export const reasonLabelClass =
@@ -139,26 +136,6 @@ export function parseAmountInput(text: string): AmountInput {
   }
 
   return { status: "valid", amount, error: "" };
-}
-
-const twoDecimalFormat = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: false,
-});
-
-/** Two decimals, rounded half up: the estimate's precision on screen. */
-export function twoDecimals(shannons: bigint): string {
-  return twoDecimalFormat.format(exactDecimal(shannons));
-}
-
-/**
- * CCC's exact decimal string, typed for Intl, which formats a numeric string as written
- * rather than through a double that cannot hold eight decimals of a large amount.
- */
-export function exactDecimal(shannons: bigint): `${number}` {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- fixedPointToString returns a plain decimal numeral.
-  return ccc.fixedPointToString(shannons) as `${number}`;
 }
 
 export function clampShannons(amount: bigint): bigint {

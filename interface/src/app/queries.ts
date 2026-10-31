@@ -1,4 +1,5 @@
 import {
+  hasCollectable,
   ickbExchangeRatio,
   projectConversionTransactionContext,
   Ratio,
@@ -28,6 +29,8 @@ export interface L1StateType {
   hasCollectable: boolean;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
   hasConverting: boolean;
+  /** When everything already converting is collectable, the date a failed preview shows. */
+  estimatedMaturity: bigint;
 }
 
 export interface QuoteState {
@@ -119,12 +122,10 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     stateId: String(objectIdentityKey(sdkState)),
     txBuilder: async (isCkb2Udt, amount, destination) =>
       buildTransactionPreview(context, isCkb2Udt, amount, destination, walletConfig),
-    hasCollectable:
-      context.availableOrders.length > 0 ||
-      context.receipts.length > 0 ||
-      context.readyWithdrawals.length > 0,
+    hasCollectable: hasCollectable(context),
     // Every pending position holds capacity, so the CKB row's own pending sum decides.
     hasConverting: projection.ckbPending > 0n,
+    estimatedMaturity: context.estimatedMaturity,
   };
 }
 

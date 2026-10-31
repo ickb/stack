@@ -1,25 +1,39 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import { readyDeposits, type IckbDepositCell } from "../logic.ts";
-import { ICKB_DEPOSIT_CAP, ckbFromUdt } from "../udt.ts";
+import type { ValueComponents } from "../utils/utils.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
   estimateConversionOrder,
   estimateIckbToCkbOrder,
+  type ConversionOrderEstimate,
 } from "./estimate.ts";
 import { sumUdt } from "./projection.ts";
-import type {
-  CkbToIckbConversionPlan,
-  ConversionOrder,
-  ConversionTransactionOptions,
-  IckbToCkbConversionPlan,
-} from "./types.ts";
+import type { ConversionTransactionOptions } from "./types.ts";
 import {
   fitWithdrawalDeposits,
   ringSurplusDepositFilter,
   sortByClaim,
 } from "./withdrawal_ring.ts";
+
+export interface ConversionOrder {
+  amounts: ValueComponents;
+  estimate: ConversionOrderEstimate;
+}
+
+export interface CkbToIckbConversionPlan {
+  depositCapacity: bigint;
+  depositCount: number;
+  estimatedMaturity: bigint;
+  order?: ConversionOrder;
+}
+
+export interface IckbToCkbConversionPlan {
+  estimatedMaturity: bigint;
+  order?: ConversionOrder;
+  selectedDeposits: IckbDepositCell[];
+}
 
 // The planner starts at the most `DAO_OUTPUT_LIMIT` can hold, one change output beside the
 // deposits, and the completion walk steps down from there when change and fees need more room.
@@ -37,7 +51,7 @@ export function ckbToIckbConversionPlans(
   options: ConversionTransactionOptions,
 ): CkbToIckbConversionPlan[] {
   const { amount, context } = options;
-  const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, context.system.exchangeRatio);
+  const { depositCapacity } = context.system;
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
     depositQuotient > BigInt(MAX_PLANNED_DEPOSITS)

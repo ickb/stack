@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/core";
+import { ccc, mol } from "@ckb-ccc/core";
 import {
   assertDaoOutputLimit,
   DAO_DEPOSIT_DATA,
@@ -8,14 +8,8 @@ import {
   pushHeaderDep,
   type LockUpPolicy,
 } from "./dao.ts";
-import {
-  decodeReceiptData,
-  encodeReceiptData,
-  IckbUdt,
-  ickbValue,
-  receiptDataBytes,
-  type ReceiptData,
-} from "./udt.ts";
+import { IckbUdt, ickbValue } from "./udt.ts";
+import { CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
 import {
   findCells,
   headersByNumber,
@@ -23,6 +17,38 @@ import {
   type ScriptDeps,
   type ValueComponents,
 } from "./utils/utils.ts";
+
+// A receipt's fixed prefix: 4 bytes of deposit quantity and 8 of deposit amount.
+const receiptDataBytes = 12;
+
+/** The receipt payload for one or more identical iCKB deposits. */
+export interface ReceiptData {
+  /** Number of identical deposits represented by this receipt. */
+  depositQuantity: ccc.Num;
+  /** Free CKB capacity of each represented deposit before iCKB conversion. */
+  depositAmount: ccc.FixedPoint;
+}
+
+const ReceiptDataCodec = mol.struct({
+  depositQuantity: CheckedUint32LE,
+  depositAmount: CheckedUint64LE,
+});
+
+/** Encodes a receipt payload. */
+export function encodeReceiptData(data: ReceiptData): ccc.Bytes {
+  return ReceiptDataCodec.encode(data);
+}
+
+/**
+ * Decodes the fixed receipt-data prefix and ignores trailing cell payload bytes.
+ *
+ * @remarks The receipt data prefix is 12 bytes after the `0x` marker: 4 bytes for deposit
+ * quantity and 8 bytes for deposit amount. Later payload bytes belong to other protocol
+ * data and are intentionally tolerated here.
+ */
+export function decodeReceiptData(outputData: ccc.Hex): ReceiptData {
+  return ReceiptDataCodec.decode(outputData.slice(0, 2 + 2 * receiptDataBytes));
+}
 
 const maxDepositQuantity = 63;
 // Receipts must carry enough capacity for phase 2 when the wallet has no other

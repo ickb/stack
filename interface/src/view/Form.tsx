@@ -1,13 +1,17 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
-import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
+import {
+  figureText,
+  groupDigits,
+  phoneFigureText,
+  twoDecimals,
+} from "../shared/figures.ts";
 import {
   CKB,
   parseAmountInput,
   reasonLabelClass,
   type RootConfig,
-  twoDecimals,
 } from "../shared/utils.ts";
 import {
   amountQuoteText,

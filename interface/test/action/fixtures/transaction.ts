@@ -1,18 +1,22 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
-  type ConversionTransactionContext,
-  type ConversionTransactionFailureReason,
-  type ConversionTransactionResult,
   IckbSdk,
   Ratio,
   WALLET_LOCK_UP,
+  type ConversionTransactionContext,
+  type ConversionTransactionFailureReason,
+  type ConversionTransactionResult,
 } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
+import {
+  submitPendingTransaction,
+  type PendingTransactionStore,
+} from "../../../src/action/pendingTransaction.ts";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
-import type { WalletConfig } from "../../../src/shared/utils.ts";
+import type { SendableTx, WalletConfig } from "../../../src/shared/utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
   typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
@@ -32,7 +36,6 @@ export function walletConfigWith(
     signer: testSigner(cccClient),
     address: "ckt1test",
     accountLocks: [script("11")],
-    primaryLock: script("11"),
     sdk: testSdk(overrides.sdk),
   };
 }
@@ -40,21 +43,16 @@ export function walletConfigWith(
 export function buildConversionTransactionMock(
   result?: ConversionTransactionResult,
 ): BuildConversionTransactionMock {
-  return vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue(
-    result ?? {
-      ok: true,
-      tx: txWithInput("aa"),
-      estimatedMaturity: 0n,
-      conversionKind: "order",
-      isSweepComplete: true,
-    },
-  );
+  return vi
+    .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+    .mockResolvedValue(result ?? successfulPlan());
 }
 
 export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): SuccessfulPlan {
   return {
     ok: true,
     tx: txWithInput("aa"),
+    plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",
     isSweepComplete: true,
@@ -64,9 +62,23 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
 
 export function failedPlan(
   reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-  estimatedMaturity = 0n,
 ): FailedPlan {
-  return { ok: false, reason, estimatedMaturity };
+  return { ok: false, reason };
+}
+
+/** A completed conversion ready to sign, spending one input from `txHashByte`. */
+export function activeTxInfo(
+  txHashByte = "11",
+  overrides: Partial<SendableTx> = {},
+): SendableTx {
+  return {
+    ok: true,
+    tx: txWithInput(txHashByte),
+    fee: 1n,
+    estimatedMaturity: 0n,
+    conversionKind: "direct",
+    ...overrides,
+  };
 }
 
 export function txWithInput(txHashByte: string): ccc.Transaction {
@@ -90,6 +102,8 @@ export function context(
       feeRate: 1n,
       tip: headerLike({ timestamp: 0n }),
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+      // A cap's 100,000 iCKB at one to one.
+      depositCapacity: ccc.fixedPointFrom(100_000),
       orderPool: [],
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
@@ -117,13 +131,21 @@ function testSdk(
   const sdk = IckbSdk.fromChain("testnet");
   vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
     options.buildConversionTransaction ??
-      vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue({
-        ok: true,
-        tx: ccc.Transaction.default(),
-        estimatedMaturity: 0n,
-        conversionKind: "order",
-        isSweepComplete: true,
-      }),
+      vi
+        .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+        .mockResolvedValue(successfulPlan({ tx: ccc.Transaction.default() })),
   );
   return sdk;
+}
+
+/** Records `txHash` as the store's pending transaction through a send that succeeds. */
+export async function recordPending(
+  store: PendingTransactionStore,
+  txHash: ccc.Hex,
+): Promise<void> {
+  await submitPendingTransaction(store, async (recordTxHash) => {
+    recordTxHash(txHash);
+    await Promise.resolve();
+    return txHash;
+  });
 }

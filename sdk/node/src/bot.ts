@@ -1,28 +1,27 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getConfig } from "../../src/constants.ts";
+import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
-import {
-  signAndSendTransaction,
-  signerAccountLocks,
-} from "../../src/send/sign_and_send_transaction.ts";
+import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
 import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
+import { keyAccount } from "./shared/signer.ts";
 
 // One process runs turns for six hours or until one fails: read config and connect once, then
-// act at most once per turn, a turn starting ten minutes after the previous one started.
+// act at most once per turn, a turn starting BOT_TURN_MS after the previous one started.
 // Any failure exits 1 and the six hours exit 0; either way systemd restarts a clean process.
-const TURN_INTERVAL_MS = 10 * 60_000;
+const TURN_INTERVAL_MS = Number(BOT_TURN_MS);
 // Six hours bound what one process can carry that no failure clears, such as a fallback
 // endpoint it stays on while that node lags, or a cached invented header. Wall clock on
 // purpose: it keeps counting through a host suspend, as cached state ages.
 const PROCESS_MAX_MS = 6 * 60 * 60_000;
 const processStarted = Date.now();
-const { chain, privateKey, rpcUrls, rpcEndpoints } = await readRuntimeConfigEnv(
+const { chain, privateKeys, rpcUrls, rpcEndpoints } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
 );
@@ -35,20 +34,13 @@ try {
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
   const managers = getConfig(chain);
-  // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
-  // - OWNER: secret purpose boundary.
-  // - INVARIANT: private keys pass only to signer construction and signing.
-  // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
-  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
-  const address = await signer.getRecommendedAddressObj();
-  const primaryLock = address.script;
+  const { signer, address, primaryLock, accountLocks } = await keyAccount(
+    client,
+    privateKeys,
+  );
   events.emit({
     type: "bot.chain.preflight",
-    identity: {
-      address: address.toString(),
-      primaryLock,
-      rpcEndpoints,
-    },
+    identity: { address, primaryLock, rpcEndpoints },
   });
   const sdk = new IckbSdk(managers);
   const runtime: Runtime = {
@@ -56,10 +48,10 @@ try {
     sdk,
     managers,
     primaryLock,
-    accountLocks: await signerAccountLocks(signer, primaryLock),
+    accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
-    completeTransaction: async (tx, feeRate, cells, protocolCells, tip) =>
-      sdk.completeTransaction(tx, { signer, feeRate, cells, protocolCells, tip }),
+    completeTransaction: async (tx, { system, receipts, cells }) =>
+      sdk.completeTransaction(tx, { signer, system, receipts, cells }),
     sendTransaction: async (tx, plannedFee, broadcastBefore) =>
       signAndSendTransaction(signer, tx, plannedFee, undefined, broadcastBefore),
   };

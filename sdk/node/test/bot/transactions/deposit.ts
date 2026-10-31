@@ -5,8 +5,13 @@ import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
-import type { Runtime } from "../../../src/bot/types.ts";
-import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
+import {
+  botRuntime,
+  botState,
+  botSystem,
+  PLANNED_FEE,
+  readyDeposit,
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,26 +19,18 @@ afterEach(() => {
 
 const RICH_CKB = ccc.fixedPointFrom(500_000);
 
-/** Completion that leaves `change` plain CKB with the bot. */
-function completing(change: bigint): Runtime["completeTransaction"] {
-  return async (txLike): Promise<ccc.Transaction> => {
-    await Promise.resolve();
-    const tx = ccc.Transaction.from(txLike).clone();
-    tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
-    return tx;
-  };
-}
-
 describe("buildTransaction deposit", () => {
   it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
-    const runtime = botRuntime({
-      completeTransaction: completing(ccc.fixedPointFrom(2000)),
-    });
+    const runtime = botRuntime();
     const deposit = vi.spyOn(runtime.managers.ickbLogic, "deposit");
 
     const result = await buildTransaction(
       runtime,
-      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
+      botState({
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: 0n,
+        system: { ...botSystem(), depositCapacity: ccc.fixedPointFrom(1100) },
+      }),
     );
 
     expect(deposit).toHaveBeenCalledWith(
@@ -71,15 +68,15 @@ describe("buildTransaction deposit", () => {
         throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
       }
       tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
-      return tx;
+      return { tx, plannedFee: PLANNED_FEE };
     });
     const runtime = botRuntime({ completeTransaction });
 
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: RICH_CKB,
-        ickb: ICKB_WITHDRAW_ABOVE + 1n,
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 1n,
         poolDeposits: [surplus, anchor, whale],
       }),
     );

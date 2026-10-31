@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio, WALLET_LOCK_UP, type WithdrawalGroup } from "@ickb/sdk";
+import type { WithdrawalGroup } from "@ickb/sdk";
 
 import { headerLike, offlineTestnetClient, script, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
@@ -13,7 +13,13 @@ import {
 } from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
-import { cell, stateSdk, testSigner, walletConfigForState } from "./fixtures/query.ts";
+import {
+  cell,
+  sampledSystem,
+  stateSdk,
+  testSigner,
+  walletConfigForState,
+} from "./fixtures/query.ts";
 
 function itKeysL1StateByAccountLocks(): void {
   it("keys L1 state by the wallet config object, not its shape", () => {
@@ -35,17 +41,9 @@ function itPollsLiveStateUnlessFrozen(): void {
       queryClient: new QueryClient(),
       signer: testSigner(),
       address: "ckt1same",
-      primaryLock: script("11"),
       accountLocks: [script("22")],
       sdk: stateSdk({
-        system: {
-          feeRate: 1n,
-          tip: headerLike({ timestamp: 0n }),
-          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-          orderPool: [],
-          poolDeposits: [],
-          lockUp: WALLET_LOCK_UP,
-        },
+        system: sampledSystem(headerLike({ timestamp: 0n })),
         userOrders: [],
         account: {
           capacityCells: [],
@@ -67,14 +65,7 @@ function itRunsL1StateOptionsQuery(): void {
     const lock = script("11");
     const options = l1StateOptions(
       walletConfigForState(lock, {
-        system: {
-          feeRate: 1n,
-          tip: headerLike({ timestamp: 42n }),
-          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-          orderPool: [],
-          poolDeposits: [],
-          lockUp: WALLET_LOCK_UP,
-        },
+        system: sampledSystem(headerLike({ timestamp: 42n })),
         userOrders: [],
         account: {
           capacityCells: [],
@@ -142,14 +133,7 @@ it("loads display balances from an SDK account snapshot", async () => {
   const capacityCell = cell(nativeCapacity, lock);
   const nativeUdtCell = cell(7n, lock, ccc.hexFrom(ccc.numLeToBytes(11n, 16)));
   const walletConfig = walletConfigForState(lock, {
-    system: {
-      feeRate: 1n,
-      tip,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: WALLET_LOCK_UP,
-    },
+    system: sampledSystem(tip),
     userOrders: [],
     account: {
       capacityCells: [capacityCell],
@@ -172,10 +156,13 @@ it("loads display balances from an SDK account snapshot", async () => {
     ickbBalance: 11n,
   });
   expect(state.stateId).toMatch(/^\d+$/u);
-  expect(state).toMatchObject({ hasCollectable: false, hasConverting: false });
+  expect(state).toMatchObject({
+    hasCollectable: false,
+    hasConverting: false,
+    estimatedMaturity: 10n,
+  });
   await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
     error: "No conversion request available for this amount",
-    estimatedMaturity: 10n,
   });
 });
 
@@ -203,14 +190,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
     udtValue: 0n,
   };
   const walletConfig = walletConfigForState(lock, {
-    system: {
-      feeRate: 1n,
-      tip,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: WALLET_LOCK_UP,
-    },
+    system: sampledSystem(tip),
     userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
@@ -229,14 +209,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
 it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {
   const lock = script("11");
   const sampledState = (): Parameters<typeof walletConfigForState>[1] => ({
-    system: {
-      feeRate: 1n,
-      tip: headerLike({ timestamp: 10n }),
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: WALLET_LOCK_UP,
-    },
+    system: sampledSystem(headerLike({ timestamp: 10n })),
     userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],

@@ -9,9 +9,9 @@ import {
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
+import { encodeReceiptData } from "../../src/logic.ts";
 import {
   ckbFromUdt,
-  encodeReceiptData,
   ickbAccountingRatio,
   ickbExchangeRatio,
   IckbUdt,

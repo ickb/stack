@@ -46,10 +46,7 @@ export async function buildTransactionPreview(
   // A move carries only native CKB and iCKB, never a converting position, so it takes no
   // amount; the form fixes it at zero and this boundary refuses anything else.
   if (destination.moveTo !== undefined && amount !== 0n) {
-    return txInfoWithError(
-      "A move to another address takes no amount",
-      context.estimatedMaturity,
-    );
+    return txInfoWithError("A move to another address takes no amount");
   }
   try {
     const result = await walletConfig.sdk.buildConversionTransaction({
@@ -60,10 +57,7 @@ export async function buildTransactionPreview(
       context,
     });
     if (!result.ok) {
-      return txInfoWithError(
-        conversionFailureMessage(result, amount, isCkb2Udt),
-        result.estimatedMaturity,
-      );
+      return txInfoWithError(conversionFailureMessage(result, amount, isCkb2Udt));
     }
 
     // The SDK returns the transaction completed and funded; only signing remains.
@@ -71,7 +65,7 @@ export async function buildTransactionPreview(
       ok: true,
       tx: result.tx,
       // The fee completion priced, which the send refuses to exceed.
-      fee: result.tx.estimateFee(context.system.feeRate),
+      fee: result.plannedFee,
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversionKind,
       ...(destination.moveTo === undefined
@@ -89,13 +83,12 @@ export async function buildTransactionPreview(
       error instanceof IckbError
         ? completionFailureMessages[error.code]
         : errorMessageOf(error),
-      context.estimatedMaturity,
     );
   }
 }
 
-function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
-  return Object.freeze({ ok: false, error, estimatedMaturity });
+function txInfoWithError(error: string): TxInfo {
+  return Object.freeze({ ok: false, error });
 }
 
 function conversionFailureMessage(

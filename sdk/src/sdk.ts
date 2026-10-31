@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig } from "./constants.ts";
+import { getConfig, type SupportedChain } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -7,7 +7,6 @@ import {
 } from "./conversion/plans.ts";
 import type {
   AccountState,
-  CompleteIckbTransactionOptions,
   ConversionTransactionContext,
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
@@ -25,15 +24,58 @@ import {
   pushHeaderDep,
   tipMaxAgeMs,
 } from "./dao.ts";
-import type { IckbDepositCell, LogicManager } from "./logic.ts";
+import type { IckbDepositCell, LogicManager, ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
-import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
-import type { SupportedChain } from "./utils/chain.ts";
+import {
+  ckbFromUdt,
+  ICKB_DEPOSIT_CAP,
+  ickbExchangeRatio,
+  type IckbUdt,
+  type ProtocolCell,
+} from "./udt.ts";
+import { signerAccountLocks } from "./utils/signer.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
+
+/**
+ * Options for completing a partial iCKB transaction before signing and sending.
+ */
+export interface CompleteIckbTransactionOptions {
+  /** Signer that prepares the transaction; its recommended lock owns the change by default. */
+  signer: ccc.Signer;
+
+  /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
+  lock?: ccc.Script;
+
+  /**
+   * The state read the plan was priced at. Its fee rate prices the fee; its pool deposits,
+   * valued there, are the ones a withdrawal request may spend; its tip is named as a header
+   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
+   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
+   * transaction.
+   */
+  system: SystemState;
+
+  /** The receipts the transaction may spend, valued by the state read. */
+  receipts: readonly ReceiptCell[];
+
+  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
+  cells: readonly ccc.Cell[];
+}
+
+/** A completed transaction and the fee its completion planned. */
+export interface CompletedTransaction {
+  tx: ccc.Transaction;
+
+  /**
+   * The fee completion priced, `tx.estimateFee(feeRate)`, which CCC's fee completion meets
+   * exactly: the limit `signAndSendTransaction` checks the verified fee against.
+   */
+  plannedFee: bigint;
+}
 
 /**
  * Input count up to which one own transaction sweeps liquid cells.
@@ -133,6 +175,7 @@ export class IckbSdk {
         feeRate,
         tip,
         exchangeRatio,
+        depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
         // One book, two filters: the market side is every order
         // past par, the wallet's own included, since the bot fills by price, not by owner.
         orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),
@@ -192,13 +235,13 @@ export class IckbSdk {
   ): Promise<ConversionTransactionResult> {
     const { amount, context, direction } = options;
     if (amount < 0n) {
-      return conversionFailure("amount-negative", context.estimatedMaturity);
+      return conversionFailure("amount-negative");
     }
     if (direction === "ckb-to-ickb" && amount > context.ckbAvailable) {
-      return conversionFailure("insufficient-ckb", context.estimatedMaturity);
+      return conversionFailure("insufficient-ckb");
     }
     if (direction === "ickb-to-ckb" && amount > context.ickbAvailable) {
-      return conversionFailure("insufficient-ickb", context.estimatedMaturity);
+      return conversionFailure("insufficient-ickb");
     }
 
     const resolved = {
@@ -217,22 +260,22 @@ export class IckbSdk {
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock, signer } = options;
-    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     // An empty collection to a lock of the signer's own would only compact the account;
     // to another lock it moves the liquid cells, which completion builds from the sweep.
     if (
-      !hasTransactionActivity(tx) &&
+      !hasCollectable(context) &&
       (context.cells.length === 0 || (await isOwnLock(signer, lock)))
     ) {
-      return conversionFailure("nothing-to-do", context.estimatedMaturity);
+      return conversionFailure("nothing-to-do");
     }
+    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     const completed = await this.completeConversion(tx, options);
     return {
       ok: true,
-      tx: completed,
+      ...completed,
       estimatedMaturity: context.estimatedMaturity,
       conversionKind: "collect-only",
-      isSweepComplete: sweepsAll(completed, context.cells),
+      isSweepComplete: sweepsAll(completed.tx, context.cells),
     };
   }
 
@@ -246,11 +289,14 @@ export class IckbSdk {
       return {
         ok: false,
         reason: "amount-too-small",
-        estimatedMaturity: context.estimatedMaturity,
         minimum: minimumOrderAmount(true, context.system),
       };
     }
-    const { candidate: plan, tx } = await completeFirstFundable(
+    const {
+      candidate: plan,
+      tx,
+      plannedFee,
+    } = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
@@ -277,6 +323,7 @@ export class IckbSdk {
     return {
       ok: true,
       tx,
+      plannedFee,
       estimatedMaturity: plan.estimatedMaturity,
       conversionKind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
       isSweepComplete: sweepsAll(tx, context.cells),
@@ -292,11 +339,14 @@ export class IckbSdk {
       return {
         ok: false,
         reason: "amount-too-small",
-        estimatedMaturity: context.estimatedMaturity,
         minimum: minimumOrderAmount(false, context.system),
       };
     }
-    const { candidate: plan, tx } = await completeFirstFundable(
+    const {
+      candidate: plan,
+      tx,
+      plannedFee,
+    } = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context, {
@@ -323,6 +373,7 @@ export class IckbSdk {
     return {
       ok: true,
       tx,
+      plannedFee,
       estimatedMaturity: plan.estimatedMaturity,
       conversionKind: conversionKind(
         plan.selectedDeposits.length > 0,
@@ -337,18 +388,10 @@ export class IckbSdk {
   private async completeConversion(
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
-  ): Promise<ccc.Transaction> {
-    return this.completeTransaction(tx, {
-      signer: options.signer,
-      lock: options.lock,
-      feeRate: options.context.system.feeRate,
-      cells: options.context.cells,
-      protocolCells: [
-        ...options.context.receipts,
-        ...options.context.system.poolDeposits,
-      ],
-      tip: options.context.system.tip,
-    });
+  ): Promise<CompletedTransaction> {
+    const { signer, lock, context } = options;
+    const { system, receipts, cells } = context;
+    return this.completeTransaction(tx, { signer, lock, system, receipts, cells });
   }
 
   // ---- Transaction building ----------------------------------------------------------
@@ -400,8 +443,9 @@ export class IckbSdk {
   public async completeTransaction(
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
-  ): Promise<ccc.Transaction> {
-    const { signer, feeRate } = options;
+  ): Promise<CompletedTransaction> {
+    const { signer, system } = options;
+    const { feeRate } = system;
     const tx = ccc.Transaction.from(txLike).clone();
     tx.addCellDeps(this.ickbUdt.cellDeps);
     const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
@@ -431,16 +475,18 @@ export class IckbSdk {
       signer.client,
       changeLock,
       ickbCells,
-      options.protocolCells,
+      // Only the spent ones are summed, so every receipt and pool deposit can be offered.
+      [...options.receipts, ...system.poolDeposits],
     );
     // Plain CKB: the sweep first, then whatever the fee still needs beyond the limit.
     const swept = sweep(tx, plainCells);
     // Last of the header deps, so no index another step names shifts, and before the fee so
     // its 32 bytes are paid for.
-    pushHeaderDep(tx, options.tip.hash);
+    pushHeaderDep(tx, system.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
+    const plannedFee = tx.estimateFee(feeRate);
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
-    return tx;
+    return { tx, plannedFee };
   }
 
   /** iCKB: what the outputs need first, then the sweep while the limit allows, then change. */
@@ -469,9 +515,16 @@ export class IckbSdk {
   }
 }
 
-/** Whether the transaction already carries any input or output. */
-function hasTransactionActivity(tx: ccc.Transaction): boolean {
-  return tx.inputs.length > 0 || tx.outputs.length > 0;
+/**
+ * Whether the context holds anything the collect steps take, so that a zero-amount
+ * conversion, `buildBaseTransaction` alone, has something to collect.
+ */
+export function hasCollectable(context: ConversionTransactionContext): boolean {
+  return (
+    context.availableOrders.length > 0 ||
+    context.receipts.length > 0 ||
+    context.readyWithdrawals.length > 0
+  );
 }
 
 /** An order the market can fill at a gain: priced past the DAO ratio on its matchable side. */
@@ -486,9 +539,8 @@ function isPastPar(group: OrderGroup, exchangeRatio: Ratio): boolean {
 
 function conversionFailure(
   reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-  estimatedMaturity: bigint,
 ): ConversionTransactionResult {
-  return { ok: false, reason, estimatedMaturity };
+  return { ok: false, reason };
 }
 
 /** A plan always carries a deposit or an order, else it would be a collection. */
@@ -509,7 +561,7 @@ function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
 }
 
 async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {
-  return (await signer.getAddressObjs()).some(({ script }) => script.eq(lock));
+  return (await signerAccountLocks(signer)).some((own) => own.eq(lock));
 }
 
 function udtBalance(cell: ccc.Cell): ccc.Num {
@@ -585,12 +637,12 @@ export class IckbError extends Error {
 export async function completeFirstFundable<T>(
   candidates: Iterable<T>,
   build: (candidate: T) => ccc.Transaction,
-  complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
-): Promise<{ candidate: T; tx: ccc.Transaction }> {
+  complete: (tx: ccc.Transaction) => Promise<CompletedTransaction>,
+): Promise<CompletedTransaction & { candidate: T }> {
   let error: Error | undefined;
   for (const candidate of candidates) {
     try {
-      return { candidate, tx: await complete(build(candidate)) };
+      return { candidate, ...(await complete(build(candidate))) };
     } catch (failure) {
       if (!isFundabilityFailure(failure)) {
         throw failure;
