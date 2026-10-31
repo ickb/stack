@@ -131,8 +131,10 @@ describe("DAO cell shapes", () => {
 describe("depositMaturity", () => {
   it("rolls a claim at the exact min boundary to the next cycle", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
-    const tip = headerLike({ epoch: [180n, 23n, 24n], number: 2n });
+    // The claim, epoch 181, is exactly half an epoch, the wallet minimum, past the tip.
+    const tip = headerLike({ epoch: [180n, 1n, 2n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
+    expect(claim.eq([181n, 0n, 1n])).toBe(true);
 
     const { maturity, isReady } = depositMaturity(claim, tip, WALLET_LOCK_UP);
 
