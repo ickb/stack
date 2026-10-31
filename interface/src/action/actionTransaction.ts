@@ -103,7 +103,6 @@ export async function transact({
         : `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
     if (signal.aborted) {
@@ -167,7 +166,6 @@ export async function retryConfirmation({
       `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
     if (signal.aborted) {
@@ -194,7 +192,6 @@ export async function waitForConfirmation(
   signal: AbortSignal,
 ): Promise<void> {
   await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
-  signal.throwIfAborted();
 }
 
 function releaseTransaction({ freezePreview }: TransactionCallbacks): void {

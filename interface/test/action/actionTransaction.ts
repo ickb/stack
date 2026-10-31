@@ -577,6 +577,25 @@ describe("attempt ownership after broadcast", () => {
     expect(retryController.signal).not.toBe(controller.signal);
     expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
   });
+
+  it("reports nothing when the wait resolves as ownership aborts", async () => {
+    const controller = new AbortController();
+    const committed = Promise.withResolvers<undefined>();
+    waitTransaction.mockReturnValueOnce(committed.promise);
+    const calls = transactionCalls(refreshedPreview(), controller);
+    const attempt = transact(calls);
+    await vi.waitFor(() => {
+      expect(waitTransaction).toHaveBeenCalledTimes(1);
+    });
+    const callbackCounts = attemptCallbackCounts(calls);
+
+    committed.resolve(undefined);
+    controller.abort();
+    await attempt;
+
+    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
+  });
 });
 
 /** The next send records the hash, then loses the node's answer. */
