@@ -59,6 +59,13 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toMatchObject({
       ok: true,
       conversionKind: DIRECT_PLUS_ORDER,
+      // The claim, half an hour out, is later than the remainder order's one bot turn.
+      estimatedMaturity: 30n * 60n * 1000n,
+      // The claim, one epoch past the tip, less the wallet's reserve of three eighths.
+      broadcastBefore: {
+        epoch: ccc.Epoch.from([1n, 5n, 8n]),
+        tipMaxAgeMs: 30 * 60 * 1000,
+      },
     });
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
