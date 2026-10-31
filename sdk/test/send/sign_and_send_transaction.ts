@@ -564,15 +564,21 @@ describe("signAndSendTransaction broadcast deadline", () => {
     const { signer, send, getTipHeader } = signerFixture(bodyTransaction());
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
-    await expect(
-      signAndSendTransaction(
-        signer,
-        bodyTransaction(),
-        PLANNED_FEE,
-        recordTxHash,
-        deadline(TIP_EPOCH),
-      ),
-    ).rejects.toBeInstanceOf(TransactionExpiredError);
+    const refused = signAndSendTransaction(
+      signer,
+      bodyTransaction(),
+      PLANNED_FEE,
+      recordTxHash,
+      deadline(TIP_EPOCH),
+    );
+
+    await expect(refused).rejects.toBeInstanceOf(TransactionExpiredError);
+    await expect(refused).rejects.toEqual(
+      expect.objectContaining({
+        name: "TransactionExpiredError",
+        epochs: { broadcastBefore: TIP_EPOCH, tip: TIP_EPOCH },
+      }),
+    );
 
     expect(getTipHeader).toHaveBeenCalledTimes(1);
     expect(recordTxHash).not.toHaveBeenCalled();
