@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { SupportedChain } from "../../../src/utils/chain.ts";
+import type { SupportedChain } from "../../../src/constants.ts";
 import { clientCache } from "../../../src/utils/utils.ts";
 
 /** Each chain's genesis block hash, as CKB's mainnet.toml and testnet.toml specs give it. */

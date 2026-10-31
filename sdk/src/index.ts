@@ -6,6 +6,7 @@
  */
 
 import type { ccc } from "@ckb-ccc/core";
+import type { SupportedChain } from "./constants.ts";
 import type {
   AccountState,
   ConversionTransactionOptions,
@@ -15,7 +16,6 @@ import type {
 import type { LockUpPolicy } from "./dao.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
-import type { SupportedChain } from "./utils/chain.ts";
 
 /** The SDK an integrator drives: the state read and the conversion builder. */
 export interface IckbSdk {
@@ -40,6 +40,7 @@ export interface IckbSdk {
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor namespace intentionally share a name.
 export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
 
+export type { SupportedChain } from "./constants.ts";
 export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/estimate.ts";
 export { projectConversionTransactionContext } from "./conversion/projection.ts";
 export type {
@@ -83,7 +84,6 @@ export {
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
-export type { SupportedChain } from "./utils/chain.ts";
 export { signerAccountLocks } from "./utils/signer.ts";
 export { clientCache } from "./utils/utils.ts";
 export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

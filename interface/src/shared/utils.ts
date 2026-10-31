@@ -4,13 +4,14 @@ import type {
   ConversionKind,
   ConversionNotice,
   IckbSdk,
+  SupportedChain,
 } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
 export interface RootConfig {
   /** Public CKB chain selected by the interface. */
-  chain: "mainnet" | "testnet";
+  chain: SupportedChain;
 
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;

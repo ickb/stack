@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig } from "./constants.ts";
+import { getConfig, type SupportedChain } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -31,7 +31,6 @@ import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
 import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
-import type { SupportedChain } from "./utils/chain.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
 

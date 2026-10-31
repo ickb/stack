@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { SupportedChain } from "../../../src/utils/chain.ts";
+import type { SupportedChain } from "../../../src/constants.ts";
 import { writeJsonLine } from "../shared/logging.ts";
 import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import type {
