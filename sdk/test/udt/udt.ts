@@ -215,6 +215,9 @@ describe("iCKB conversion", () => {
     expect(() => udtFromCkb(1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
       "Exchange ratio scales must be positive",
     );
+    expect(() => ckbFromUdt(1n, { ckbScale: 1n, udtScale: 0n })).toThrow(
+      "Exchange ratio scales must be positive",
+    );
   });
 
   it("ickbValue equals the oracle deposit_to_ickb across deposits and ARs", () => {
