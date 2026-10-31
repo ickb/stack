@@ -28,10 +28,24 @@ describe("hook-based wallet config gate", () => {
       message: "JoyID may ask you to authorize this connection.",
     });
     expect(connecting.onAction).toBeUndefined();
+    // The draft and the wallet button stay live while the wallet is read.
+    expect(elementProps<object>(result.current)).toMatchObject({
+      isCkb2Udt: true,
+      text: "1",
+    });
+    expect(
+      elementProps<object>(elementProps<{ header: GateElement }>(result.current).header),
+    ).toMatchObject({ walletName: "JoyID", openWallet: props.openWallet });
 
     connected.resolve(undefined);
     await settle();
     expect(result.current.type).toBe(App);
+    expect(elementProps<object>(result.current)).toMatchObject({
+      walletName: "JoyID",
+      openWallet: props.openWallet,
+      isCkb2Udt: true,
+      text: "1",
+    });
     const { walletConfig } = elementProps<Parameters<typeof App>[0]>(result.current);
     expect(walletConfig.address).toBe("ckt1recommended");
     expect(walletConfig.accountLocks).toHaveLength(2);
@@ -65,16 +79,50 @@ describe("hook-based wallet config gate", () => {
       message: "⚠️ Unable to connect to JoyID: denied",
     });
 
+    // The retry's read is pending: the gate shows the connect step, not the old error.
+    const retried = Promise.withResolvers<unknown>();
+    signer.getRecommendedAddressObj.mockReturnValueOnce(retried.promise);
     await inAct(() => {
       failed.onAction?.();
     });
+    expect(pendingAction(result.current).action).toBe("Connect wallet");
+    retried.reject(new Error("denied again"));
+    await settle();
+
+    // A second retry reads again too.
+    await inAct(() => {
+      pendingAction(result.current).onAction?.();
+    });
     await settle();
     expect(result.current.type).toBe(App);
-    // The failed read stopped at its first ask; the retry asked twice.
+    // Each failed read stopped at its first ask; the last retry asked twice.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(3);
+    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(4);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it("shows the connect step, not the last account, while a new signer or config is read", async () => {
+    const first = walletSigner(true);
+    const second = walletSigner(true);
+    const props = walletConfigGateProps(first);
+    const { result, rerender, unmount } = await renderGate(props);
+    await settle();
+    expect(result.current.type).toBe(App);
+
+    for (const next of [
+      { ...props, signer: second },
+      { ...props, signer: second, rootConfig: { ...props.rootConfig } },
+    ]) {
+      const read = Promise.withResolvers<unknown>();
+      second.getRecommendedAddressObj.mockReturnValueOnce(read.promise);
+      await rerender(next);
+      expect(pendingAction(result.current).action).toBe("Connect wallet");
+      read.resolve(await first.getRecommendedAddressObj());
+      await settle();
+      expect(result.current.type).toBe(App);
+    }
     await unmount();
   });
 
