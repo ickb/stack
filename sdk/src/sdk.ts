@@ -429,24 +429,18 @@ export class IckbSdk {
     steps: CollectSteps,
     withdrawalRequest?: { deposits: IckbDepositCell[]; lock: ccc.Script },
   ): ccc.Transaction {
+    // Each step returns the transaction unchanged when it has nothing to add.
     let tx = ccc.Transaction.from(txLike);
-    if (withdrawalRequest !== undefined && withdrawalRequest.deposits.length > 0) {
+    if (withdrawalRequest !== undefined) {
       tx = this.ownedOwner.requestWithdrawal(
         tx,
         withdrawalRequest.deposits,
         withdrawalRequest.lock,
       );
     }
-    if (steps.availableOrders.length > 0) {
-      tx = this.order.melt(tx, steps.availableOrders);
-    }
-    if (steps.receipts.length > 0) {
-      tx = this.ickbLogic.completeDeposit(tx, steps.receipts);
-    }
-    if (steps.readyWithdrawals.length > 0) {
-      tx = this.ownedOwner.withdraw(tx, steps.readyWithdrawals);
-    }
-    return tx;
+    tx = this.order.melt(tx, steps.availableOrders);
+    tx = this.ickbLogic.completeDeposit(tx, steps.receipts);
+    return this.ownedOwner.withdraw(tx, steps.readyWithdrawals);
   }
 
   /**
