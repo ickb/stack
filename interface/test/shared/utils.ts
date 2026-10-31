@@ -53,6 +53,10 @@ describe("errorMessageOf", () => {
       "User rejected the request.",
     );
     expect(errorMessageOf({ reason: "bad" })).toBe('{"reason":"bad"}');
+    // Only a non-empty string message stands for the object.
+    expect(errorMessageOf({ message: 5 })).toBe('{"message":5}');
+    expect(errorMessageOf({ message: "" })).toBe('{"message":""}');
+    expect(errorMessageOf(null)).toBe("Unknown error");
   });
 
   it("falls back when object errors cannot be stringified", () => {
