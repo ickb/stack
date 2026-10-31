@@ -63,11 +63,10 @@ export type SendableTx = Readonly<{
 }>;
 
 /**
- * A transaction preview, or why there is none. Both carry the maturity estimate, which
- * also dates what is already converting.
+ * A transaction preview, or why there is none. A failure has no date of its own: what is
+ * already converting is dated by the state it was built from.
  */
-export type TxInfo =
-  SendableTx | Readonly<{ ok: false; error: string; estimatedMaturity: bigint }>;
+export type TxInfo = SendableTx | Readonly<{ ok: false; error: string }>;
 
 /** The small line under a value the user cannot edit, saying why, centred beneath it. */
 export const reasonLabelClass =

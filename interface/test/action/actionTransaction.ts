@@ -156,7 +156,7 @@ describe("transact fresh preview boundary", () => {
       refreshedPreview({
         txBuilder: async () => {
           await Promise.resolve();
-          return { ok: false, error: "fresh preview failed", estimatedMaturity: 0n };
+          return { ok: false, error: "fresh preview failed" };
         },
       }),
     );

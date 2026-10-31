@@ -176,15 +176,13 @@ function registerActionAlternativeTests(): void {
     expect(collect.action).toBe("collect converted funds");
     expect(collect.disabled).toBe(false);
 
-    // Nothing to sign, something converting: the date still shows; without either, it waits.
-    queryMock.result = {
-      data: { ...nothingToSign, estimatedMaturity: 180_000n },
-      isFetching: false,
-    };
+    // Nothing to sign, something converting: the state's date still shows; without either,
+    // it waits.
+    queryMock.result = { data: nothingToSign, isFetching: false };
     const converting = await actionLayout({
       ...actionProps(),
       amount: 0n,
-      l1State: { ...l1State(), hasConverting: true },
+      l1State: { ...l1State(), hasConverting: true, estimatedMaturity: 180_000n },
     });
     expect(converting.disabled).toBe(true);
     expect(converting.maturity).toBe("in 3 minutes");

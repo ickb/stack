@@ -56,7 +56,6 @@ export function actionProps(): Parameters<typeof Action>[0] {
 export const nothingToSign: TxInfo = Object.freeze({
   ok: false,
   error: "Nothing to do",
-  estimatedMaturity: 0n,
 });
 
 export function l1State(): L1StateType {
@@ -83,6 +82,7 @@ export function l1State(): L1StateType {
     }),
     hasCollectable: false,
     hasConverting: false,
+    estimatedMaturity: 0n,
   };
 }
 

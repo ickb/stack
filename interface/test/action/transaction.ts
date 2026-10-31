@@ -118,16 +118,13 @@ describe("buildTransactionPreview failure messages", () => {
 
       await expect(
         buildTransactionPreview(
-          context({ ckbAvailable: 1n, estimatedMaturity: 77n }),
+          context({ ckbAvailable: 1n }),
           true,
           1n,
           own(config),
           config,
         ),
-      ).resolves.toMatchObject({
-        error: message,
-        estimatedMaturity: 77n,
-      });
+      ).resolves.toEqual({ ok: false, error: message });
     }
   });
 
@@ -174,13 +171,13 @@ describe("buildTransactionPreview failure messages", () => {
 
       await expect(
         buildTransactionPreview(
-          context({ ckbAvailable: 1n, estimatedMaturity: 77n }),
+          context({ ckbAvailable: 1n }),
           true,
           amount,
           own(config),
           config,
         ),
-      ).resolves.toMatchObject({ error: message, estimatedMaturity: 77n });
+      ).resolves.toEqual({ ok: false, error: message });
     }
   });
 });

@@ -113,17 +113,9 @@ export default function Action({
   const preview = frozenPreview?.txInfo ?? txPreviewQuery.data;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
   const isValid = preview?.ok === true;
-  const { hasCollectable, hasConverting, system } = sampled ?? l1State;
-  // The date also covers what is converting, which a preview with nothing to sign still
-  // carries, so it shows whenever something is. A move leaves the converting positions
-  // here, so their dates do not apply to it.
-  let maturity = "...";
-  if (preview !== undefined && (isValid || hasConverting)) {
-    maturity =
-      preview.ok && preview.move !== undefined
-        ? "now"
-        : timeUntilMaturity(preview.estimatedMaturity, system.tip.timestamp);
-  }
+  const state = sampled ?? l1State;
+  const { hasCollectable, hasConverting } = state;
+  const maturity = maturityLabel(preview, state);
   const actionText =
     transactionHash === undefined
       ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
@@ -257,6 +249,23 @@ function startAttempt({
       }),
     );
   }
+}
+
+/**
+ * The "Ready:" value. The date also covers what is converting, which the state dates when
+ * the preview has nothing to sign, so it shows whenever something is.
+ */
+function maturityLabel(preview: TxInfo | undefined, state: L1StateType): string {
+  const tip = state.system.tip.timestamp;
+  if (preview?.ok === true) {
+    // A move leaves the converting positions here, so their dates do not apply to it.
+    return preview.move === undefined
+      ? timeUntilMaturity(preview.estimatedMaturity, tip)
+      : "now";
+  }
+  return preview !== undefined && state.hasConverting
+    ? timeUntilMaturity(state.estimatedMaturity, tip)
+    : "...";
 }
 
 /** The preview builder for the settled draft; the query parks while any part is missing. */

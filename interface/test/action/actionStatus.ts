@@ -187,5 +187,5 @@ function flags(): ActionFlags {
 }
 
 function failedTxInfo(error: string): Parameters<typeof actionMessage>[0] {
-  return { ok: false, error, estimatedMaturity: 0n };
+  return { ok: false, error };
 }

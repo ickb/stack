@@ -172,10 +172,13 @@ it("loads display balances from an SDK account snapshot", async () => {
     ickbBalance: 11n,
   });
   expect(state.stateId).toMatch(/^\d+$/u);
-  expect(state).toMatchObject({ hasCollectable: false, hasConverting: false });
+  expect(state).toMatchObject({
+    hasCollectable: false,
+    hasConverting: false,
+    estimatedMaturity: 10n,
+  });
   await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
     error: "No conversion request available for this amount",
-    estimatedMaturity: 10n,
   });
 });
 
