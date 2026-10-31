@@ -89,7 +89,11 @@ describe("runtime config env", () => {
     // Absolute but unreadable: the error names the variable, never the path.
     await expect(
       readConfig({ BOT_PRIVATE_KEY_FILE: path.join(KEY_DIR, "missing.key") }),
-    ).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
+    ).rejects.toMatchObject({
+      message: "Invalid file from env BOT_PRIVATE_KEY_FILE",
+      // The read error stays attached, so the operator sees why the file failed.
+      cause: { code: "ENOENT" },
+    });
   });
 });
 
@@ -128,6 +132,9 @@ describe("runtime config private key file", () => {
       `${VALID_PRIVATE_KEY}\n${VALID_PRIVATE_KEY}`,
       `${VALID_PRIVATE_KEY}\n\n0x${"22".repeat(32)}`,
       `${VALID_PRIVATE_KEY}\n0x${"22".repeat(31)}`,
+      // Text around a key: refused here, never handed to BigInt, whose error quotes it.
+      `x${VALID_PRIVATE_KEY}`,
+      `${VALID_PRIVATE_KEY}x`,
     ]) {
       await writeKeyFile(text);
       await expect(readConfig({})).rejects.toThrow(
@@ -138,6 +145,18 @@ describe("runtime config private key file", () => {
 });
 
 describe("runtime config RPC URL", () => {
+  it("accepts plain HTTP and WebSocket URLs, as a local node serves them", async () => {
+    await writeKeyFile(VALID_PRIVATE_KEY);
+    for (const [rpcUrl, protocol] of [
+      ["http://127.0.0.1:8114/", "http:"],
+      ["ws://127.0.0.1:28114/", "ws:"],
+    ]) {
+      await expect(readConfig({ BOT_RPC_URL: rpcUrl })).resolves.toMatchObject({
+        rpcEndpoints: [{ protocol }],
+      });
+    }
+  });
+
   it("rejects malformed, non-HTTP, credentialed and whitespace URLs without exposing them", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
     for (const rpcUrl of [
@@ -146,6 +165,7 @@ describe("runtime config RPC URL", () => {
       "not a url",
       "https://user:password@rpc.example/",
       "https://user@rpc.example/",
+      "https://:password@rpc.example/",
       "https://rpc.example/\t",
       " https://rpc.example/",
       "https://rpc.example/, https://second.example/",
