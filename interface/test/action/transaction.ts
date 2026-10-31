@@ -28,16 +28,12 @@ describe("buildTransactionPreview", () => {
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({
         tx,
+        plannedFee: 42n,
         estimatedMaturity: 123n,
         conversionNotice: notice,
       }),
     );
-    const estimateFee = vi
-      .spyOn(ccc.Transaction.prototype, "estimateFee")
-      .mockReturnValue(42n);
-    const txContext = context({
-      system: { ...context().system, feeRate: 9n },
-    });
+    const txContext = context();
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
     const txInfo = await buildTransactionPreview(
@@ -63,7 +59,6 @@ describe("buildTransactionPreview", () => {
       estimatedMaturity: 123n,
       conversionNotice: notice,
     });
-    expect(estimateFee).toHaveBeenCalledWith(9n);
   });
 
   it("delegates iCKB-to-CKB direction without leaking app managers", async () => {

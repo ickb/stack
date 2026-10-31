@@ -5,7 +5,7 @@ import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
-import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
+import { botRuntime, botState, PLANNED_FEE, readyDeposit } from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -58,7 +58,7 @@ describe("buildTransaction deposit", () => {
         throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
       }
       tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
-      return tx;
+      return { tx, plannedFee: PLANNED_FEE };
     });
     const runtime = botRuntime({ completeTransaction });
 

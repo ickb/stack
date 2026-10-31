@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import { Info } from "../../../src/order/info.ts";
-import { IckbError } from "../../../src/sdk.ts";
+import { IckbError, type CompletedTransaction } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -54,6 +54,7 @@ const identity: StimulusIdentity = {
   rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
 };
 const FUNDED_CKB = 6000n * CKB;
+const PLANNED_FEE = 1000n;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
 const orderDraw: Override = {
   kind: "order",
@@ -86,12 +87,12 @@ afterEach(() => {
 /** A completion that spends the funded cell and returns `change` CKB to the account. */
 function completing(change: bigint): Partial<Runtime["sdk"]> {
   return {
-    completeTransaction: async (txLike): Promise<ccc.Transaction> => {
+    completeTransaction: async (txLike): Promise<CompletedTransaction> => {
       await Promise.resolve();
       const tx = ccc.Transaction.from(txLike).clone();
       tx.addInput(plainCell(FUNDED_CKB, "b1"));
       tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
-      return tx;
+      return { tx, plannedFee: PLANNED_FEE };
     },
   };
 }
@@ -120,6 +121,7 @@ describe("runStimulusTurn", () => {
       return {
         ok: true,
         tx: ccc.Transaction.default(),
+        plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
         isSweepComplete: true,
@@ -198,8 +200,11 @@ describe("runStimulusTurn", () => {
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 3, outputs: 3 },
+      txFee: { fee: ccc.fixedPointToString(PLANNED_FEE) },
       txHash: TX_HASH,
     });
+    // The send refuses a fee above the one completion planned, the one journaled.
+    expect(sendMock.mock.calls[0]?.[2]).toBe(PLANNED_FEE);
     expect(log).not.toHaveProperty("skip");
     // The base carries the fulfilled order's two melt inputs before the mint.
     expect(mint.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
@@ -241,6 +246,7 @@ describe("runStimulusTurn", () => {
       return {
         ok: true,
         tx,
+        plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
         isSweepComplete: true,

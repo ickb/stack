@@ -71,7 +71,7 @@ export async function buildTransactionPreview(
       ok: true,
       tx: result.tx,
       // The fee completion priced, which the send refuses to exceed.
-      fee: result.tx.estimateFee(context.system.feeRate),
+      fee: result.plannedFee,
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversionKind,
       ...(destination.moveTo === undefined

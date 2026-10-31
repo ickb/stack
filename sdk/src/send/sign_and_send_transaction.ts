@@ -40,7 +40,7 @@ export class TransactionExpiredError extends Error {
  * its creating transaction made, a bare `OutPoint` being valued from that output, and the
  * signer kept the ordered inputs, outputs and outputs data.
  * Nothing is sent when the chain would take more fee than `plannedFee`, the fee completion
- * priced, `tx.estimateFee(feeRate)` at its rate. That fee is measured from verified values,
+ * priced, which a built conversion returns. That fee is measured from verified values,
  * a phase-2 DAO input proven in its request block with `get_transaction_proof`, so the
  * client must be JSON-RPC. When `broadcastBefore` is given, the send is refused with
  * `TransactionExpiredError` once a fresh tip reaches it.

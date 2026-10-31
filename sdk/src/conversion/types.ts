@@ -97,6 +97,8 @@ export type ConversionTransactionResult =
       ok: true;
       /** Completed transaction, funded from the signer's committed cells. Callers own signing and send. */
       tx: ccc.Transaction;
+      /** The fee completion planned: the `plannedFee` to pass to `signAndSendTransaction`. */
+      plannedFee: bigint;
       /** Estimated maturity timestamp for the conversion result. */
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */

@@ -12,6 +12,7 @@ import {
   botState,
   hash,
   marketOrder,
+  PLANNED_FEE,
   testWithdrawal,
 } from "../fixtures/bot.ts";
 
@@ -192,7 +193,6 @@ describe("buildTransaction matching", () => {
       udt: 0n,
       ratio: { ckbScale: 1n, udtScale: 2n },
     });
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1000n);
 
     const result = await buildTransaction(
       botRuntime(),
@@ -217,7 +217,7 @@ describe("buildTransaction matching", () => {
           fee: partialOrderFee([buyer], 1n),
         },
         core: { kind: "none", attempts: 1 },
-        plannedFee: 1000n,
+        plannedFee: PLANNED_FEE,
       },
     });
     expect(typeof result.decision.match.seed).toBe("number");

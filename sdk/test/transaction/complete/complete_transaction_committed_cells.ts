@@ -30,7 +30,7 @@ function registerFundingTests(): void {
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
     const feeRate = 1_000n;
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
       signer,
       feeRate,
       cells: [source],
@@ -45,7 +45,8 @@ function registerFundingTests(): void {
     expect(change?.cellOutput.lock.eq(lock)).toBe(true);
     expect(change?.cellOutput.type).toBeUndefined();
     expect(change?.outputData).toBe("0x");
-    await expect(completed.getFee(client)).resolves.toBe(completed.estimateFee(feeRate));
+    expect(plannedFee).toBe(completed.estimateFee(feeRate));
+    await expect(completed.getFee(client)).resolves.toBe(plannedFee);
     expect(tx.inputs).toHaveLength(0);
   });
 
@@ -61,14 +62,14 @@ function registerFundingTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock: recommended }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells,
       protocolCells: [],
       tip: baseTip,
     });
-    const toSecondary = await sdk.completeTransaction(tx, {
+    const { tx: toSecondary } = await sdk.completeTransaction(tx, {
       signer,
       lock: secondary,
       feeRate: 1_000n,
@@ -95,7 +96,7 @@ function registerFundingTests(): void {
     tx.addInput(existing);
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells: [existing, additional],
@@ -139,7 +140,7 @@ function registerSweepTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells: [small, udt, large],
@@ -165,7 +166,7 @@ function registerSweepTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(100 * SWEEP_INPUT_LIMIT), lock }, "0x");
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells,
@@ -224,7 +225,7 @@ function registerSweepTests(): void {
       capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
     ];
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells,
@@ -257,7 +258,7 @@ function registerIckbTests(): void {
       ccc.numLeToBytes(100n, 16),
     );
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1_000n,
       cells,

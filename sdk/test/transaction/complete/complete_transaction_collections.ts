@@ -31,7 +31,7 @@ describe("completeTransaction with collections", () => {
     expect(tx.inputs).toHaveLength(2);
     expect(tx.outputs).toHaveLength(0);
 
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
       signer,
       feeRate,
       cells: [],
@@ -44,7 +44,8 @@ describe("completeTransaction with collections", () => {
     const collected =
       group.owned.cell.cellOutput.capacity + group.owner.cell.cellOutput.capacity;
     const change = completed.outputs[0]?.capacity ?? 0n;
-    expect(collected - change).toBe(completed.estimateFee(feeRate));
+    expect(plannedFee).toBe(completed.estimateFee(feeRate));
+    expect(collected - change).toBe(plannedFee);
     // The deposit header leads, as dao.c reads one byte of its index; the priced tip trails.
     expect(completed.headerDeps).toEqual([
       group.owned.headers[0].hash,

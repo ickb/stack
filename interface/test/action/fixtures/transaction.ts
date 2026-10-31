@@ -44,21 +44,16 @@ export function walletConfigWith(
 export function buildConversionTransactionMock(
   result?: ConversionTransactionResult,
 ): BuildConversionTransactionMock {
-  return vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue(
-    result ?? {
-      ok: true,
-      tx: txWithInput("aa"),
-      estimatedMaturity: 0n,
-      conversionKind: "order",
-      isSweepComplete: true,
-    },
-  );
+  return vi
+    .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+    .mockResolvedValue(result ?? successfulPlan());
 }
 
 export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): SuccessfulPlan {
   return {
     ok: true,
     tx: txWithInput("aa"),
+    plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",
     isSweepComplete: true,
@@ -136,13 +131,9 @@ function testSdk(
   const sdk = IckbSdk.fromChain("testnet");
   vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
     options.buildConversionTransaction ??
-      vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>().mockResolvedValue({
-        ok: true,
-        tx: ccc.Transaction.default(),
-        estimatedMaturity: 0n,
-        conversionKind: "order",
-        isSweepComplete: true,
-      }),
+      vi
+        .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+        .mockResolvedValue(successfulPlan({ tx: ccc.Transaction.default() })),
   );
   return sdk;
 }

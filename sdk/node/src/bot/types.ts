@@ -3,7 +3,7 @@ import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts"
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
-import type { IckbSdk } from "../../../src/sdk.ts";
+import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
 import type { ProtocolCell } from "../../../src/udt.ts";
 import type { transactionShape } from "../shared/format.ts";
 
@@ -36,7 +36,7 @@ export interface Runtime {
     cells: ccc.Cell[],
     protocolCells: readonly ProtocolCell[],
     tip: ccc.ClientBlockHeader,
-  ) => Promise<ccc.Transaction>;
+  ) => Promise<CompletedTransaction>;
 
   /** Signs and sends through the initialization-owned signer. */
   sendTransaction: (

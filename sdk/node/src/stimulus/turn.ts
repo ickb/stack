@@ -76,7 +76,12 @@ export interface StimulusLog {
 }
 
 type Built =
-  | { tx: ccc.Transaction; action: Action; broadcastBefore?: BroadcastDeadline }
+  | {
+      tx: ccc.Transaction;
+      plannedFee: bigint;
+      action: Action;
+      broadcastBefore?: BroadcastDeadline;
+    }
   | { skip: Skip };
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -171,13 +176,13 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
   try {
     return {
-      tx: await runtime.sdk.completeTransaction(tx, {
+      ...(await runtime.sdk.completeTransaction(tx, {
         signer: runtime.signer,
         feeRate: state.system.feeRate,
         cells: state.context.cells,
         protocolCells: state.context.receipts,
         tip: state.system.tip,
-      }),
+      })),
       action: { order: { outputs: [orderOutput, orderOutput + 1] } },
     };
   } catch (error) {
@@ -202,6 +207,7 @@ async function buildConversion(
     return result.ok
       ? {
           tx: result.tx,
+          plannedFee: result.plannedFee,
           action: { conversionKind: result.conversionKind },
           ...(result.broadcastBefore === undefined
             ? {}
@@ -225,21 +231,20 @@ function unfundableOrThrow(error: unknown): Built {
 async function send(
   runtime: Runtime,
   state: StimulusState,
-  { tx, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
+  { tx, plannedFee, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
-  const fee = tx.estimateFee(state.system.feeRate);
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: { fee: ccc.fixedPointToString(fee), feeRate: state.system.feeRate },
+    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.system.feeRate },
   });
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(
       runtime.signer,
       tx,
-      fee,
+      plannedFee,
       undefined,
       broadcastBefore,
     );

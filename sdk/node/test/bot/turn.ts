@@ -30,6 +30,7 @@ import {
   hash,
   l1AccountState,
   NO_DEPOSITS,
+  PLANNED_FEE,
   readyDeposit,
   testMatch,
   testWithdrawal,
@@ -74,7 +75,6 @@ it("keeps turning below the recommended funding instead of holding", async () =>
 
 it("sends explicitly and waits with the finite production policy", async () => {
   // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
-  vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(7n);
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
   });
@@ -95,8 +95,10 @@ it("sends explicitly and waits with the finite production policy", async () => {
     outcome: "broadcasted",
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
-  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(7n);
-  expect(harness.events[1]).toMatchObject({ decision: { plannedFee: "7" } });
+  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(PLANNED_FEE);
+  expect(harness.events[1]).toMatchObject({
+    decision: { plannedFee: String(PLANNED_FEE) },
+  });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
   });

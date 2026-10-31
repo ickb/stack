@@ -13,7 +13,7 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
+import { IckbSdk, type CompletedTransaction } from "../../../../src/sdk.ts";
 
 import {
   byte32FromByte,
@@ -45,6 +45,8 @@ export interface BotRuntimeOptions {
 export const hash = byte32FromByte;
 /** Plain change the default test completion returns: comfortably above the reserve. */
 export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
+/** The fee every test completion reports as planned. */
+export const PLANNED_FEE = 1000n;
 /** An iCKB balance inside the band: above the refill line, below the withdrawal line. */
 export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
 export const NO_DEPOSITS: IckbDepositCell[] = [];
@@ -231,11 +233,11 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
-      (async (tx): Promise<ccc.Transaction> => {
+      (async (tx): Promise<CompletedTransaction> => {
         await Promise.resolve();
         const completed = ccc.Transaction.from(tx).clone();
         completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
-        return completed;
+        return { tx: completed, plannedFee: PLANNED_FEE };
       }),
     sendTransaction:
       overrides.sendTransaction ??

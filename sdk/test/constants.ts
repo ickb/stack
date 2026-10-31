@@ -31,7 +31,7 @@ describe("getConfig", () => {
     expect(ickbLogic.dao.script.eq(ownedOwner.dao.script)).toBe(true);
     expect(ickbUdt.daoScript.eq(ickbLogic.dao.script)).toBe(true);
     expect(order.udtScript.eq(ickbUdt.script)).toBe(true);
-    const completed = await sdk.completeTransaction(tx, {
+    const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       feeRate: 1n,
       cells: [],

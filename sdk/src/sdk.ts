@@ -64,6 +64,17 @@ export interface CompleteIckbTransactionOptions {
   tip: ccc.ClientBlockHeader;
 }
 
+/** A completed transaction and the fee its completion planned. */
+export interface CompletedTransaction {
+  tx: ccc.Transaction;
+
+  /**
+   * The fee completion priced, `tx.estimateFee(feeRate)`, which CCC's fee completion meets
+   * exactly: the limit `signAndSendTransaction` checks the verified fee against.
+   */
+  plannedFee: bigint;
+}
+
 /**
  * Input count up to which one own transaction sweeps liquid cells.
  *
@@ -258,10 +269,10 @@ export class IckbSdk {
     const completed = await this.completeConversion(tx, options);
     return {
       ok: true,
-      tx: completed,
+      ...completed,
       estimatedMaturity: context.estimatedMaturity,
       conversionKind: "collect-only",
-      isSweepComplete: sweepsAll(completed, context.cells),
+      isSweepComplete: sweepsAll(completed.tx, context.cells),
     };
   }
 
@@ -279,7 +290,11 @@ export class IckbSdk {
         minimum: minimumOrderAmount(true, context.system),
       };
     }
-    const { candidate: plan, tx } = await completeFirstFundable(
+    const {
+      candidate: plan,
+      tx,
+      plannedFee,
+    } = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
@@ -306,6 +321,7 @@ export class IckbSdk {
     return {
       ok: true,
       tx,
+      plannedFee,
       estimatedMaturity: plan.estimatedMaturity,
       conversionKind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
       isSweepComplete: sweepsAll(tx, context.cells),
@@ -325,7 +341,11 @@ export class IckbSdk {
         minimum: minimumOrderAmount(false, context.system),
       };
     }
-    const { candidate: plan, tx } = await completeFirstFundable(
+    const {
+      candidate: plan,
+      tx,
+      plannedFee,
+    } = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context, {
@@ -352,6 +372,7 @@ export class IckbSdk {
     return {
       ok: true,
       tx,
+      plannedFee,
       estimatedMaturity: plan.estimatedMaturity,
       conversionKind: conversionKind(
         plan.selectedDeposits.length > 0,
@@ -366,7 +387,7 @@ export class IckbSdk {
   private async completeConversion(
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
-  ): Promise<ccc.Transaction> {
+  ): Promise<CompletedTransaction> {
     return this.completeTransaction(tx, {
       signer: options.signer,
       lock: options.lock,
@@ -429,7 +450,7 @@ export class IckbSdk {
   public async completeTransaction(
     txLike: ccc.TransactionLike,
     options: CompleteIckbTransactionOptions,
-  ): Promise<ccc.Transaction> {
+  ): Promise<CompletedTransaction> {
     const { signer, feeRate } = options;
     const tx = ccc.Transaction.from(txLike).clone();
     tx.addCellDeps(this.ickbUdt.cellDeps);
@@ -468,8 +489,9 @@ export class IckbSdk {
     // its 32 bytes are paid for.
     pushHeaderDep(tx, options.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
+    const plannedFee = tx.estimateFee(feeRate);
     assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
-    return tx;
+    return { tx, plannedFee };
   }
 
   /** iCKB: what the outputs need first, then the sweep while the limit allows, then change. */
@@ -614,12 +636,12 @@ export class IckbError extends Error {
 export async function completeFirstFundable<T>(
   candidates: Iterable<T>,
   build: (candidate: T) => ccc.Transaction,
-  complete: (tx: ccc.Transaction) => Promise<ccc.Transaction>,
-): Promise<{ candidate: T; tx: ccc.Transaction }> {
+  complete: (tx: ccc.Transaction) => Promise<CompletedTransaction>,
+): Promise<CompletedTransaction & { candidate: T }> {
   let error: Error | undefined;
   for (const candidate of candidates) {
     try {
-      return { candidate, tx: await complete(build(candidate)) };
+      return { candidate, ...(await complete(build(candidate))) };
     } catch (failure) {
       if (!isFundabilityFailure(failure)) {
         throw failure;

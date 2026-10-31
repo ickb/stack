@@ -102,7 +102,7 @@ export async function buildTransaction(
     }
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
-  const { candidate: core, tx } = completion;
+  const { candidate: core, tx, plannedFee } = completion;
   const broadcastBefore =
     core.kind === "withdraw"
       ? broadcastDeadline(
@@ -110,7 +110,6 @@ export async function buildTransaction(
           state.system.lockUp,
         )
       : undefined;
-  const plannedFee = tx.estimateFee(state.system.feeRate);
   return {
     kind: "built",
     tx,
