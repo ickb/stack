@@ -431,6 +431,23 @@ describe("attempt ownership during refresh", () => {
   });
 });
 
+describe("attempt ownership during a step that never settles", () => {
+  it("ends the attempt when ownership aborts, without waiting for the step", async () => {
+    const controller = new AbortController();
+    const calls = transactionCalls(refreshedPreview(), controller);
+    calls.refreshState.mockReturnValueOnce(Promise.withResolvers<L1StateType>().promise);
+    const attempt = transact(calls);
+    await vi.waitFor(() => {
+      expect(calls.refreshState).toHaveBeenCalledTimes(1);
+    });
+
+    controller.abort();
+
+    await expect(attempt).resolves.toBeUndefined();
+    expect(calls.freezePreview).not.toHaveBeenCalled();
+  });
+});
+
 describe("attempt ownership during fresh build", () => {
   it("suppresses preview callbacks when build resolves as ownership aborts", async () => {
     const controller = new AbortController();
