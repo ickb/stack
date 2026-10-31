@@ -127,6 +127,9 @@ function registerActionPreviewTests(): void {
       stateError: new Error("RPC down"),
       retryState,
     });
+    expect(layout(errored.result.current).message).toBe(
+      "⚠️ Unable to load wallet data: RPC down",
+    );
     layout(errored.result.current).onAction?.();
     expect(retryState).toHaveBeenCalledTimes(1);
     expect(retryState).toHaveBeenCalledWith();
@@ -137,6 +140,8 @@ function registerActionPreviewTests(): void {
     const ready = await renderAction({ ...actionProps(), freeze, l1State: l1State() });
     const props = layout(ready.result.current);
     await expect(queryFnOf(txPreviewQueryOptions())()).resolves.toBe(nothingToSign);
+    // A failed build is shown, not retried: each one completes a real transaction.
+    expect(txPreviewQueryOptions()).toMatchObject({ retry: false });
     expect(props.disabled).toBe(false);
     expect(props.fee).toBe("0.00000001 CKB");
 
@@ -155,10 +160,87 @@ function registerActionPreviewTests(): void {
     expect(freeze).toHaveBeenCalledWith(true);
     await ready.unmount();
 
+    const refreshing = await actionLayout({
+      ...actionProps(),
+      l1State: l1State(),
+      isStateFetching: true,
+    });
+    expect(refreshing.disabled).toBe(true);
+
     queryMock.result = { data: undefined, isFetching: false };
     const empty = await renderAction({ ...actionProps(), l1State: l1State() });
-    expect(layout(empty.result.current).disabled).toBe(true);
+    expect(layout(empty.result.current)).toMatchObject({
+      disabled: true,
+      message: "No conversion request available for this amount.",
+    });
     await empty.unmount();
+  });
+
+  it("keys the preview by state and draft, following the amount once typing settles", async () => {
+    vi.useFakeTimers();
+    queryMock.result = { data: activeTxInfo(), isFetching: false };
+    const props = { ...actionProps(), l1State: l1State() };
+    const { rerender, unmount } = await renderAction(props);
+    const key = (): readonly unknown[] => txPreviewQueryOptions().queryKey;
+    const wait = async (ms: number): Promise<void> => {
+      await inAct(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    };
+
+    expect(key()).toEqual(
+      expect.arrayContaining(["state-id", String(CKB), script("11").hash()]),
+    );
+    await rerender({ ...props, amount: 2n * CKB });
+    await wait(200);
+    await rerender({ ...props, amount: 3n * CKB });
+    await wait(200);
+    // The second edit restarted the wait, so the first edit never builds a preview.
+    expect(key()).toContain(String(CKB));
+    await wait(100);
+    expect(key()).toContain(String(3n * CKB));
+    await rerender({ ...props, amount: 3n * CKB, destination: {} });
+    expect(key()).toContain("own");
+    await unmount();
+  });
+
+  it("parks the preview and refuses the action while the destination is unresolved", async () => {
+    queryMock.result = { data: activeTxInfo(), isFetching: false };
+    const { result, unmount } = await renderAction({
+      ...actionProps(),
+      destination: undefined,
+      l1State: l1State(),
+    });
+    const unresolved = layout(result.current);
+    await click(unresolved);
+
+    expect(unresolved).toMatchObject({
+      disabled: true,
+      message: "Checking the destination address...",
+    });
+    expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
+    expect(txPreviewQueryOptions().queryKey).toContain("invalid");
+    expect(transactMock.transact).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it("labels a move and dates it now, since converting funds stay behind", async () => {
+    const moveTo = "ckt1qzda...abcdef";
+    queryMock.result = {
+      data: activeTxInfo("11", {
+        move: { to: moveTo, isComplete: true },
+        estimatedMaturity: 600_000n,
+      }),
+      isFetching: false,
+    };
+    const move = await actionLayout({
+      ...actionProps(),
+      amount: 0n,
+      destination: { lock: script("22"), moveTo },
+      l1State: l1State(),
+    });
+
+    expect(move).toMatchObject({ action: "send all CKB and iCKB", maturity: "now" });
   });
 }
 
@@ -209,6 +291,7 @@ function registerActionAlternativeTests(): void {
     expect(unfinished.action).toBe(requestConversion);
     expect(unfinished.disabled).toBe(true);
     expect(unfinished.message).toBe("Finish entering the amount.");
+    expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
     expect(transactMock.transact).not.toHaveBeenCalled();
     await intermediate.unmount();
 
@@ -229,7 +312,7 @@ function registerActionAttemptTests(): void {
       clearPendingTransaction(params.pendingStore);
       params.freezePreview(undefined);
     });
-    const { result, unmount } = await renderAction(props);
+    const { result, rerender, unmount } = await renderAction(props);
 
     await click(layout(result.current));
     const recovered = layout(result.current);
@@ -240,6 +323,40 @@ function registerActionAttemptTests(): void {
     expect(props.freeze).toHaveBeenNthCalledWith(1, true);
     expect(props.freeze).toHaveBeenLastCalledWith(false);
     expect(props.formReset).not.toHaveBeenCalled();
+    // The failure belongs to the draft it was built for: an edit clears it.
+    await rerender({ ...props, amount: 2n * CKB });
+    expect(layout(result.current).message).toBe("Converts at a fixed time, shown below.");
+    await unmount();
+  });
+
+  it("holds the action on the fresh preview and its state while the wallet signs", async () => {
+    queryMock.result = { data: activeTxInfo(), isFetching: false };
+    const props = {
+      ...actionProps(),
+      amount: 0n,
+      l1State: l1State(),
+      refreshState: vi.fn(async () => {
+        await Promise.resolve();
+        return {
+          ...l1State(),
+          hasCollectable: true,
+          txBuilder: async (): Promise<ReturnType<typeof activeTxInfo>> => {
+            await Promise.resolve();
+            return activeTxInfo();
+          },
+        };
+      }),
+    };
+    const { result, unmount } = await renderAction(props);
+
+    await click(layout(result.current));
+    const signing = layout(result.current);
+
+    // The live state has nothing to collect; the frozen one the wallet signs does.
+    expect(signing.action).toBe("collect converted funds");
+    expect(signing.disabled).toBe(true);
+    expect(signing.message).toContain("Confirm the transaction in your wallet.");
+    expect(txPreviewQueryOptions().enabled).toBe(false);
     await unmount();
   });
 
@@ -287,6 +404,8 @@ function registerActionAttemptTests(): void {
     const recovered = layout(result.current);
 
     expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, {});
+    // The click froze the form before any preview existed to freeze it.
+    expect(props.freeze).toHaveBeenCalledWith(true);
     expect(recovered.message).toBe("⚠️ fresh build failed");
     expect(recovered.disabled).toBe(false);
     expect(props.freeze).toHaveBeenLastCalledWith(false);
@@ -413,6 +532,7 @@ function registerPendingTransactionRecoveryTests(): void {
 
     await click(layout(result.current));
 
+    expect(layout(result.current).disabled).toBe(true);
     expect(transactMock.transact).not.toHaveBeenCalled();
     expect(transactMock.retryConfirmation).not.toHaveBeenCalled();
     sent.resolve(`0x${"ef".repeat(32)}`);
