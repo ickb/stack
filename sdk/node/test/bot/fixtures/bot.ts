@@ -181,8 +181,12 @@ export function marketOrder({
   return new OrderGroup(master, order, order, FRESH_BLOCK);
 }
 
-/** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */
-export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup {
+/** A withdrawal request under the owned-owner lock with its owner marker one output later. */
+export function testWithdrawal(
+  byte: string,
+  distinct?: number,
+  isReady = true,
+): WithdrawalGroup {
   const { ownedOwner } = getConfig("testnet");
   const { dao } = ownedOwner;
   // `distinct` numbers the request and its deposit header past what one byte can, so a
@@ -208,7 +212,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
     cell,
     headers: [depositHeader, requestHeader],
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
-    isReady: true,
+    isReady,
     ckbValue: cell.cellOutput.capacity,
   };
   const owner = new OwnerCell(

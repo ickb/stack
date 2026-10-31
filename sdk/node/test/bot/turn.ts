@@ -23,8 +23,10 @@ import {
   type BotTurnContext,
 } from "../../src/bot/turn.ts";
 import type { Runtime } from "../../src/bot/types.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import {
   BAND_ICKB_BALANCE,
+  BOT_TIP,
   botRuntime,
   botSystem,
   hash,
@@ -61,6 +63,56 @@ it("records a skipped decision with its evidence and no ring segment list", asyn
   });
   expect(JSON.stringify(harness.events[1])).not.toContain("segments");
   expect(harness.sendTransaction).not.toHaveBeenCalled();
+});
+
+it("journals what the turn read: the tip, the projected balances, and the counts", async () => {
+  const account = fundedAccount();
+  const pending = testWithdrawal("63", undefined, false);
+  account.account.withdrawalGroups.push(pending);
+  account.system.poolDeposits = [readyDeposit("64", 1n), readyDeposit("65", 1n, 15n)];
+  const harness = turnHarness({ account });
+
+  await runBotTurn(harness.context);
+
+  const ckb = [
+    ...account.account.capacityCells,
+    ...account.account.nativeUdtCells,
+  ].reduce((sum, cell) => sum + cell.cellOutput.capacity, 0n);
+  const pendingCkb = pending.ckbValue;
+  const { epoch } = BOT_TIP;
+  expect(harness.events[0]).toMatchObject({
+    type: BOT_STATE_READ,
+    chainTip: {
+      blockNumber: String(BOT_TIP.number),
+      blockHash: BOT_TIP.hash,
+      timestamp: String(BOT_TIP.timestamp),
+      epoch: {
+        integer: String(epoch.integer),
+        numerator: String(epoch.numerator),
+        denominator: String(epoch.denominator),
+      },
+    },
+    balances: {
+      ckb: String(ckb),
+      ickb: String(BAND_ICKB_BALANCE),
+      pendingCkb: String(pendingCkb),
+      // At the one-to-one test rate an iCKB counts as one CKB.
+      totalEquivalentCkb: String(ckb + pendingCkb + BAND_ICKB_BALANCE),
+      matchableCkb: String(ckb - CKB_RESERVE),
+      cellCount: 2,
+    },
+    counts: {
+      marketOrders: 0,
+      receipts: 0,
+      readyWithdrawals: 0,
+      pendingWithdrawals: 1,
+      poolDeposits: 2,
+      readyPoolDeposits: 1,
+    },
+    exchangeRatio: { ckbScale: "1", udtScale: "1" },
+    depositCapacity: String(account.system.depositCapacity),
+    feeRate: "1",
+  });
 });
 
 it("keeps turning below the recommended funding instead of holding", async () => {
@@ -102,6 +154,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
   });
+  expectElapsed(harness.events.slice(2));
 });
 
 it("ends the turn with the broadcast error when the send fails without a hash", async () => {
@@ -147,6 +200,7 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
     error: { name: "TransactionBroadcastError", cause: { message: FETCH_FAILED } },
   });
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
+  expectElapsed(harness.events.slice(2, 3));
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
@@ -403,6 +457,16 @@ function commitTransaction(
 
 function hashScript(byte: string): ccc.Script {
   return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
+}
+
+/** Elapsed time since the send began: the test's turn takes well under a minute. */
+function expectElapsed(events: object[]): void {
+  for (const event of events) {
+    expect(event).toHaveProperty("elapsedMs", expect.any(Number));
+    const elapsedMs = Number(Reflect.get(event, "elapsedMs"));
+    expect(elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(elapsedMs).toBeLessThan(60_000);
+  }
 }
 
 function eventTypes(events: object[]): string[] {
