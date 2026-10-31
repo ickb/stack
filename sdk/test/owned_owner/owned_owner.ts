@@ -22,7 +22,11 @@ import { ickbValue } from "../../src/udt.ts";
 
 const ownedOwner = script("11", "0x1234");
 const logic = script("22", "0x5678");
-const dao = { script: script("33"), cellDeps: [] };
+const daoDep = ccc.CellDep.from({
+  outPoint: { txHash: byte32FromByte("dd"), index: 0n },
+  depType: "code",
+});
+const dao = { script: script("33"), cellDeps: [daoDep] };
 const userLock = script("44");
 
 function manager(cellDeps: ccc.CellDep[] = []): OwnedOwnerManager {
@@ -177,9 +181,10 @@ describe("OwnedOwnerManager cell shapes", () => {
 
 describe("OwnedOwnerManager.requestWithdrawal", () => {
   it("leaves the transaction unchanged when no deposits are given", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().requestWithdrawal(tx, [], userLock)).toEqual(tx);
+    // Transaction.from returns the instance it is given, so compare with a fresh one.
+    expect(manager().requestWithdrawal(ccc.Transaction.default(), [], userLock)).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("spends each deposit into a request and an owner marker pointing back at it", () => {
@@ -198,7 +203,7 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
       userLock,
     );
 
-    expect(tx.cellDeps).toEqual([dep]);
+    expect(tx.cellDeps).toEqual([dep, daoDep]);
     expect(tx.headerDeps).toEqual(deposits.map((deposit) => deposit.header.hash));
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       deposits.map((deposit) => deposit.cell.outPoint.toHex()),
@@ -230,6 +235,11 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     expect(() => manager().requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
       "Transaction has different inputs and outputs lengths",
     );
+    const strayData = ccc.Transaction.default();
+    strayData.outputsData.push("0xab");
+    expect(() =>
+      manager().requestWithdrawal(strayData, [depositOf("66")], userLock),
+    ).toThrow("Transaction has different inputs and outputs lengths");
   });
 
   it("rejects a deposit whose lock args differ in size from the request lock", () => {
@@ -261,19 +271,24 @@ describe("OwnedOwnerManager.withdraw", () => {
   const requestHeader = headerLike({ number: 2n, hash: byte32FromByte("b1") });
 
   it("leaves the transaction unchanged when no groups are given", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().withdraw(tx, [])).toEqual(tx);
+    expect(manager().withdraw(ccc.Transaction.default(), [])).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("writes since, header deps, witness input types, then the owner inputs", () => {
     const owned = requestOf(depositHeader, requestHeader);
     const owner = ownerOf(owned);
+    const dep = ccc.CellDep.from({
+      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
+      depType: "code",
+    });
 
-    const tx = manager().withdraw(ccc.Transaction.default(), [
+    const tx = manager([dep]).withdraw(ccc.Transaction.default(), [
       new WithdrawalGroup(owned, owner),
     ]);
 
+    expect(tx.cellDeps).toEqual([dep, daoDep]);
     expect(tx.headerDeps).toEqual([depositHeader.hash, requestHeader.hash]);
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual([
       owned.cell.outPoint.toHex(),
