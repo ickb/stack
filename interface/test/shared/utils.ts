@@ -48,6 +48,11 @@ describe("errorMessageOf", () => {
     expect(errorMessageOf(undefined)).toBe("Unknown error");
   });
 
+  it("shows the fallback for an Error without a message, not its empty JSON", () => {
+    // eslint-disable-next-line unicorn/error-message -- The empty message is the case under test.
+    expect(errorMessageOf(new Error(""))).toBe("Unknown error");
+  });
+
   it("uses a plain object's message and stringifies the rest", () => {
     expect(errorMessageOf({ code: 4001, message: "User rejected the request." })).toBe(
       "User rejected the request.",

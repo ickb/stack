@@ -143,8 +143,9 @@ export function clampShannons(amount: bigint): bigint {
 }
 
 export function errorMessageOf(error: unknown): string {
-  if (error instanceof Error && error.message !== "") {
-    return error.message;
+  if (error instanceof Error) {
+    // An empty message would fall to JSON.stringify, which shows "{}" for an Error.
+    return error.message === "" ? "Unknown error" : error.message;
   }
 
   if (typeof error === "string") {
