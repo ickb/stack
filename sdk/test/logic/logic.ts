@@ -252,7 +252,9 @@ describe("LogicManager.completeDeposit", () => {
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       receipts.map((receipt) => receipt.cell.outPoint.toHex()),
     );
-    expect(manager().completeDeposit(tx, [])).toEqual(tx);
+    expect(manager([dep]).completeDeposit(ccc.Transaction.default(), [])).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("rejects a receipt for another logic script", () => {
@@ -387,8 +389,19 @@ describe("LogicManager.findDeposits", () => {
 
     const deposits = await manager().findDeposits(client, tip);
 
-    expect(queries).toHaveLength(1);
-    expect(queries[0]?.script).toEqual(cccA.JsonRpcTransformers.scriptFrom(logic));
+    expect(queries).toEqual([
+      {
+        script: cccA.JsonRpcTransformers.scriptFrom(logic),
+        script_type: "lock",
+        script_search_mode: "exact",
+        filter: {
+          script: cccA.JsonRpcTransformers.scriptFrom(dao.script),
+          output_data: DAO_DEPOSIT_DATA,
+          output_data_filter_mode: "exact",
+        },
+        with_data: true,
+      },
+    ]);
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
       cell: deposit,
