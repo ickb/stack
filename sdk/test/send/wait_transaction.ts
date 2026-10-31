@@ -65,16 +65,18 @@ describe("waitTransaction terminal rejection", () => {
     });
   });
 
-  it("preserves a status-only rejection without a reason", async () => {
-    const { client } = jsonRpcClient({ status: "rejected" });
+  it("preserves a status-only rejection without a string reason", async () => {
+    for (const txStatus of [{ status: "rejected" }, { status: "rejected", reason: 1 }]) {
+      const { client } = jsonRpcClient(txStatus);
 
-    await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
-      expect.objectContaining({
-        message: `Transaction ${TX_HASH} ended with status rejected`,
-        status: "rejected",
-        reason: undefined,
-      }),
-    );
+      await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
+        expect.objectContaining({
+          message: `Transaction ${TX_HASH} ended with status rejected`,
+          status: "rejected",
+          reason: undefined,
+        }),
+      );
+    }
   });
 
   it("treats malformed raw status records as unconfirmed", async () => {
