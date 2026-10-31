@@ -56,6 +56,8 @@ describe("buildTransactionPreview", () => {
       estimatedMaturity: 123n,
       orderOccupiedCapacity: 9n,
     });
+    // Only a foreign destination makes the preview a move.
+    expect(txInfo).not.toHaveProperty("move");
   });
 
   it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
@@ -118,6 +120,9 @@ describe("buildTransactionPreview failure messages", () => {
       [true, 33_222_000_000n, "Enter at least 340 CKB"],
       [true, 1_040_000_000n, "Enter at least 11 CKB"],
       [false, 95n, "Enter at least 0.00000095 iCKB"],
+      [false, 5n, "Enter at least 0.00000005 iCKB"],
+      // A minimum already round stays as it is.
+      [true, 1_200_000_000n, "Enter at least 12 CKB"],
     ] as const) {
       const config = walletConfigWith({
         sdk: {
