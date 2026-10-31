@@ -169,6 +169,8 @@ describe("waitTransaction option domains", () => {
 
 describe("waitTransaction window closing", () => {
   it("times out before starting work when the budget is already spent", async () => {
+    // A frozen clock keeps the first poll at the deadline itself rather than past it.
+    vi.useFakeTimers();
     const { client, request } = jsonRpcClient({ status: "pending" });
 
     await expect(waitTransaction(client, TX_HASH, { timeout: 0 })).rejects.toBeInstanceOf(
@@ -353,15 +355,13 @@ describe("waitTransaction in-flight operations", () => {
 });
 
 describe("waitTransaction absolute budget", () => {
-  it("rejects an overdue result from an operation that starved the timer", async () => {
+  it("rejects a result that arrives at the deadline before the window timer fires", async () => {
+    vi.useFakeTimers();
     const { client, request } = jsonRpcClient({ status: "committed" });
     request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
-      // Block the event loop past the deadline so the window timer cannot fire.
-      const blockUntil = Date.now() + 30;
-      while (Date.now() < blockUntil) {
-        // Deliberately empty: a synchronous client operation holds the loop.
-      }
-      // A microtask still cannot let the starved timer run before this returns.
+      // The clock reaches the deadline without running the window timer, as when an
+      // operation blocks the event loop.
+      vi.setSystemTime(Date.now() + 5);
       await Promise.resolve();
       return {
         id: payload.id,
@@ -375,6 +375,27 @@ describe("waitTransaction absolute budget", () => {
     ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
 
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out as soon as the next poll could not start inside the window", async () => {
+    vi.useFakeTimers();
+    const { client, request } = jsonRpcClient({ status: "pending" });
+    const start = Date.now();
+    let rejectedAt = NaN;
+    const timedOut = (async (): Promise<unknown> => {
+      const error = await rejectionOf(
+        waitTransaction(client, TX_HASH, { timeout: 2_000, interval: 1_000 }),
+      );
+      rejectedAt = Date.now();
+      return error;
+    })();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+    // The second poll at 1 s leaves no room for a third, so the wait ends there.
+    expect(rejectedAt - start).toBe(1_000);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
 
