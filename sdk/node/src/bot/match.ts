@@ -109,9 +109,7 @@ function bestFill(
       allowance >= matcher.bMaxMatch
         ? matcher.bMaxMatch
         : ccc.numMin(allowance, matcher.bMaxMatch - matcher.bMinMatch);
-    if (payment < matcher.bMinMatch) {
-      continue;
-    }
+    // A payment under the minimum matches nothing, whose net is never positive.
     const fill = matcher.match(payment);
     const net = netOf(fill, cost, { ckbScale, udtScale });
     const paid = matcher.isCkb2Udt
