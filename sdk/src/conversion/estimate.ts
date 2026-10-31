@@ -125,10 +125,11 @@ function estimateDustIckbToCkbOrder(
     return undefined;
   }
   const targetFee = estimateMaturityFeeThreshold(system);
-  const feeBase = baseEstimate.convertedAmount + 1n;
-  if (targetFee <= 0n || feeBase <= 1n) {
+  if (targetFee <= 0n) {
     return baseEstimate;
   }
+  // A quote's converted amount is positive, so the fee base is at least two.
+  const feeBase = baseEstimate.convertedAmount + 1n;
   const estimateWithFee = (fee: bigint): ConversionOrderEstimate | undefined =>
     estimateConversionOrder(false, amounts, system, { fee, feeBase });
   return lowestFeeEstimateAtThreshold(estimateWithFee, feeBase - 1n, targetFee);
