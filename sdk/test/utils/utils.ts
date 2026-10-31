@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { composedClient, offlineTestnetClient } from "@ickb/testkit";
+import { composedClient, headerLike, offlineTestnetClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
+  clientCache,
   compareBigInt,
   defaultCellPageSize,
   findCells,
@@ -26,6 +27,18 @@ describe("jsonRpcRequestor", () => {
         "The SDK needs a JSON-RPC client",
       );
     }
+  });
+});
+
+describe("clientCache", () => {
+  it("keeps 4096 headers, where CCC's default cache keeps 128", async () => {
+    const cache = clientCache();
+    const headers = Array.from({ length: 4096 }, (_, number) =>
+      headerLike({ number, hash: ccc.hexFrom(ccc.numBeToBytes(number + 1, 32)) }),
+    );
+    await cache.recordHeaders(headers);
+
+    expect((await cache.getHeaderByNumber(0n))?.hash).toBe(headers[0]?.hash);
   });
 });
 
