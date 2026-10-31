@@ -17,7 +17,7 @@ The custom ESLint rules sit beside their rationale in [`eslint.config.mts`](../e
 
 ### Coverage
 
-[`vitest.config.mts`](../vitest.config.mts) requires 100% statements, branches, functions and lines on `sdk/src` and `sdk/node/src`. The three process entrypoints are tested by spawning them and excluded from imported-module coverage. Coverage-ignore comments are prohibited under `sdk/`.
+[`vitest.config.mts`](../vitest.config.mts) requires 100% statements, branches, functions and lines on `sdk/src` and `sdk/node/src`. The bot and generator entrypoints are tested by spawning them and excluded from imported-module coverage; the sampler entrypoint is imported with its sampling mocked, so it is covered. Coverage-ignore comments are prohibited under `sdk/`.
 
 Those thresholds cover the transaction and actor paths. Applying them to test doubles and presentation glue would require tests of the apparatus whenever its shape changes; those workspaces still have tests, without a universal percentage target. The bot fixture uses the real SDK builders so their constraints remain visible: a no-op builder once hid a prefix walk reusing a transaction that earlier candidates had mutated. See the [test kit](../testkit/README.md) for the shared doubles and oracle.
 
