@@ -204,33 +204,35 @@ function registerSweepTests(): void {
     expect(result.isSweepComplete).toBe(false);
   });
 
-  it("funds iCKB past the limit, then stops the sweep", async () => {
-    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-    const type = ickbUdt.script;
-    const { signer } = fundedSigner([], [lock]);
-    const tx = ccc.Transaction.default();
-    tx.addOutput(
-      { capacity: ccc.fixedPointFrom(150), lock, type },
-      ccc.numLeToBytes(BigInt(SWEEP_INPUT_LIMIT + 1), 16),
-    );
-    const cells = [
-      ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
-      capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
-    ];
+  // One iCKB unit per cell, so the funding alone takes as many inputs as units.
+  it.each([SWEEP_INPUT_LIMIT, SWEEP_INPUT_LIMIT + 1])(
+    "funds %i iCKB units, then sweeps no further at the input limit",
+    async (required) => {
+      const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
+      const type = ickbUdt.script;
+      const { signer } = fundedSigner([], [lock]);
+      const tx = ccc.Transaction.default();
+      tx.addOutput(
+        { capacity: ccc.fixedPointFrom(150), lock, type },
+        ccc.numLeToBytes(BigInt(required), 16),
+      );
+      const cells = [
+        ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
+        capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
+      ];
 
-    const { tx: completed } = await sdk.completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells,
-    });
+      const { tx: completed } = await sdk.completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells,
+      });
 
-    // Required funding passes the limit; neither sweep adds a cell beyond it.
-    expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
-    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(
-      BigInt(SWEEP_INPUT_LIMIT + 1),
-    );
-  });
+      // Funding at or past the limit; neither sweep adds a cell beyond it.
+      expect(completed.inputs).toHaveLength(required);
+      expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(BigInt(required));
+    },
+  );
 }
 
 function registerIckbTests(): void {
@@ -279,7 +281,11 @@ function registerIckbTests(): void {
         receipts: [],
         cells: [udtCell("96", lock, type, 40n)],
       }),
-    ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
+    ).rejects.toMatchObject({
+      name: "IckbError",
+      code: "insufficient_ickb",
+      message: "Insufficient iCKB, need 60 more",
+    });
   });
 }
 
