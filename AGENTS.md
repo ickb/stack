@@ -15,6 +15,7 @@ The deployed contracts and CKB consensus constrain every implementation choice. 
 
 - Reopen a settled decision for a contradiction, infeasibility or previously unweighed risk, not merely because a test passes.
 - A finding earns new code for an observed or reproduced failure. Otherwise delete, narrow or leave it. Prefer deletion and inlining to abstractions without an evidenced shared reason to change.
+- A fix for a bug a test can observe lands with the fewest tests that fail on its base commit for the bug's own reason, at the lowest layer that fails; its commit message names that failing run.
 - Follow the [workspace boundaries](README.md#workspace-boundaries) and [dependency policy](README.md#dependencies-and-checks). Do not change a dependency or runtime pin just to make something resolve.
 - Treat every node answer as untrusted; [account state](sdk/README.md#account-state) and [signing and broadcast](sdk/README.md#signing-and-broadcast) list what a lie can still cost. The bot recovers from any error by exiting for systemd to restart it; the [runtime config](sdk/node/README.md#runtime-config) bounds the stalls it accepts.
 - Before writing a helper, use what CCC or the platform already provides when it behaves the same on every input the code passes; keep an own version only with its reason stated at the code.
