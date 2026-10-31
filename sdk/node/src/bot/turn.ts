@@ -1,13 +1,19 @@
 import type { ccc } from "@ckb-ccc/core";
 import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
+import { readyDeposits } from "../../../src/logic.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import type { BotEventEmitter } from "./events.ts";
-import { summarizeBotState } from "./support.ts";
+import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
-import type { BotState, BuildTransactionResult, Runtime } from "./types.ts";
+import type {
+  BotState,
+  BotStateSummary,
+  BuildTransactionResult,
+  Runtime,
+} from "./types.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 
@@ -137,4 +143,45 @@ async function confirmTransaction({
     txHash,
     elapsedMs: Date.now() - startedAt,
   });
+}
+
+/** Builds the state summary a turn journals as `bot.state.read`. */
+function summarizeBotState(state: BotState): BotStateSummary {
+  const { tip, exchangeRatio, feeRate } = state.system;
+  return {
+    chainTip: {
+      blockNumber: tip.number,
+      blockHash: tip.hash,
+      timestamp: tip.timestamp,
+      epoch: {
+        integer: tip.epoch.integer,
+        numerator: tip.epoch.numerator,
+        denominator: tip.epoch.denominator,
+      },
+    },
+    balances: {
+      ckb: state.ckb,
+      ickb: state.ickb,
+      pendingCkb: state.pendingCkb,
+      totalEquivalentCkb:
+        state.ckb + state.pendingCkb + ckbFromUdt(state.ickb, exchangeRatio),
+      matchableCkb: spendableCkb(state.ckb),
+      cellCount: state.cells.length,
+    },
+    counts: {
+      marketOrders: state.system.orderPool.length,
+      receipts: state.receipts.length,
+      readyWithdrawals: state.readyWithdrawals.length,
+      pendingWithdrawals: state.notReadyWithdrawals.length,
+      poolDeposits: state.system.poolDeposits.length,
+      readyPoolDeposits: readyDeposits(
+        state.system.poolDeposits,
+        tip,
+        state.system.lockUp,
+      ).length,
+    },
+    exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
+    depositCapacity: state.depositCapacity,
+    feeRate,
+  };
 }

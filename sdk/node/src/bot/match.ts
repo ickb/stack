@@ -5,7 +5,12 @@ import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
 import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
 import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
-import { MAX_MATCH_PARTIALS } from "./support.ts";
+
+/**
+ * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
+ * DAO output limit but never a fixed match, so the match keeps room for the rest.
+ */
+const MAX_MATCH_PARTIALS = 58;
 
 /** One turn's match and how it was chosen. */
 export interface TurnMatch extends Match {

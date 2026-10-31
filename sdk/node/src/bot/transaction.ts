@@ -6,8 +6,7 @@ import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
-import { planRebalance, type RebalancePlan } from "./policy.ts";
-import { matchableCkb, matchedOrderOutPoints } from "./support.ts";
+import { planRebalance, spendableCkb, type RebalancePlan } from "./policy.ts";
 import type {
   BotActions,
   BotDecision,
@@ -124,7 +123,7 @@ export async function buildTransaction(
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   const match = matchTurn({
     orders: state.system.orderPool,
-    ckb: matchableCkb(state.ckb),
+    ckb: spendableCkb(state.ckb),
     udt: state.ickb,
     exchangeRatio: state.system.exchangeRatio,
     feeRate: state.system.feeRate,
@@ -237,7 +236,12 @@ function buildDecision({
       udtDelta: match.udtDelta,
       ...(match.partials.length === 0
         ? {}
-        : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
+        : {
+            matchedOrderOutPoints: match.partials.map(({ group }) => ({
+              txHash: group.order.cell.outPoint.txHash,
+              index: String(group.order.cell.outPoint.index),
+            })),
+          }),
       candidates: match.candidates,
       gains: match.gains,
       fee: match.fee,
