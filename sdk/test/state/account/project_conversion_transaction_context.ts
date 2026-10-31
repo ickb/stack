@@ -1,8 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
-import type { SystemState } from "../../../src/conversion/types.ts";
-import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,
@@ -10,27 +8,11 @@ import {
   receiptValue,
   withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import {
-  baseTip,
-  headerLike,
-  ratio,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { headerLike, system } from "../../transaction/base/support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function system(overrides: Partial<SystemState> = {}): SystemState {
-  return {
-    feeRate: 1n,
-    tip: baseTip,
-    exchangeRatio: ratio,
-    orderPool: [],
-    poolDeposits: [],
-    lockUp: WALLET_LOCK_UP,
-    ...overrides,
-  };
-}
 
 describe("projectConversionTransactionContext", () => {
   it("projects conversion context from account state and the orders to collect", () => {
