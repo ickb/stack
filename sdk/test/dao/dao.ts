@@ -115,6 +115,16 @@ describe("DAO cell shapes", () => {
     expect(isDaoDeposit(plain, daoScript)).toBe(false);
     expect(isDaoWithdrawalRequest(request, daoScript)).toBe(true);
     expect(isDaoWithdrawalRequest(deposit, daoScript)).toBe(false);
+    expect(
+      isDaoWithdrawalRequest(
+        ccc.Cell.from({
+          outPoint: request.outPoint,
+          cellOutput: { capacity: 1n, lock: script("99") },
+          outputData: request.outputData,
+        }),
+        daoScript,
+      ),
+    ).toBe(false);
   });
 });
 
