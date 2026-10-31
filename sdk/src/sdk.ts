@@ -164,8 +164,9 @@ export class IckbSdk {
       this.ickbLogic.findDeposits(client, tip),
       this.order.findOrders(client),
       // CCC clamps the sampled median at the cap, the connector's chosen rate too. A given cap
-      // replaces CCC's default ceiling, on purpose: the caller's cap is the ceiling.
-      client.getFeeRate(undefined, maxFeeRate === undefined ? undefined : { maxFeeRate }),
+      // replaces CCC's default ceiling, on purpose: the caller's cap is the ceiling; an absent
+      // one leaves that default.
+      client.getFeeRate(undefined, { maxFeeRate }),
       Promise.all(
         [...unique(locks)].map(async (lock) => this.readLockCells(client, lock, tip)),
       ),
