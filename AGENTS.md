@@ -28,7 +28,7 @@ For a material revision:
 
 ## The gate
 
-Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, once per commit and check its exit code. A green result on that tree makes the commit publishable. Pull requests also run `pnpm fresh`, whose result depends on the date, so run it before opening one.
+Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, and check its exit code. A pull request's head must pass it: a green result on that tree makes the change mergeable. Gating each commit on its own tree is recommended, so that a revert or `git bisect` lands on a working tree, but not required: a rebase that rewrites many commits needs only its head gated. Pull requests also run `pnpm fresh`, whose result depends on the date, so run it before opening one.
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 
