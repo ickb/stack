@@ -143,6 +143,14 @@ describe("waitTransaction option domains", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("accepts the largest timeout a host timer can hold", async () => {
+    const { client } = jsonRpcClient({ status: "committed" });
+
+    await expect(
+      waitTransaction(client, TX_HASH, { timeout: MAX_TIMEOUT_MS }),
+    ).resolves.toBeUndefined();
+  });
+
   it("rejects a malformed transaction hash without opening the wait window", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
