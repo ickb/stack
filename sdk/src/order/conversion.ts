@@ -108,7 +108,8 @@ function quotePreservingRatio(
     inputAmount,
     maxUint64,
   );
-  if (numerator <= 0n || (quotedOutput - 1n) * denominator >= inputAmount * numerator) {
+  // A zero numerator also lands here: the quote of a positive input is at least one.
+  if ((quotedOutput - 1n) * denominator >= inputAmount * numerator) {
     throw new OrderConversionRepresentabilityError();
   }
 
