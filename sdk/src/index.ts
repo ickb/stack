@@ -77,7 +77,6 @@ export { IckbError } from "./sdk.ts";
 export type { IckbErrorCode } from "./sdk.ts";
 export {
   signAndSendTransaction,
-  signerAccountLocks,
   TransactionBroadcastError,
   TransactionExpiredError,
 } from "./send/sign_and_send_transaction.ts";
@@ -85,5 +84,6 @@ export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.t
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export type { SupportedChain } from "./utils/chain.ts";
+export { signerAccountLocks } from "./utils/signer.ts";
 export { clientCache } from "./utils/utils.ts";
 export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

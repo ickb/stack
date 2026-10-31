@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { unique } from "./utils.ts";
 
 /**
  * Combines a list of signers into one: each prepares and signs its own lock groups, and the
@@ -123,4 +124,19 @@ export class SignerCombined extends ccc.Signer {
     }
     return tx;
   }
+}
+
+/**
+ * Returns the primary lock plus all signer address locks, deduplicated by script hash.
+ */
+export async function signerAccountLocks(
+  signer: ccc.Signer,
+  primaryLock: ccc.Script,
+): Promise<ccc.Script[]> {
+  return [
+    ...unique([
+      primaryLock,
+      ...(await signer.getAddressObjs()).map(({ script }) => script),
+    ]),
+  ];
 }

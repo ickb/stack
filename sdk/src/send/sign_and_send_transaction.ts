@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { assertFresh, type BroadcastDeadline } from "../dao.ts";
-import { jsonRpcRequestor, unique } from "../utils/utils.ts";
+import { jsonRpcRequestor } from "../utils/utils.ts";
 import { verifiedClient } from "../utils/verified_client.ts";
 
 /** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
@@ -238,19 +238,4 @@ export function isCommittedIn(
 function economicBody(tx: ccc.TransactionLike): ccc.Hex {
   const { inputs, outputs, outputsData } = ccc.Transaction.from(tx);
   return ccc.Transaction.from({ inputs, outputs, outputsData }).hash();
-}
-
-/**
- * Returns the primary lock plus all signer address locks, deduplicated by script hash.
- */
-export async function signerAccountLocks(
-  signer: ccc.Signer,
-  primaryLock: ccc.Script,
-): Promise<ccc.Script[]> {
-  return [
-    ...unique([
-      primaryLock,
-      ...(await signer.getAddressObjs()).map(({ script }) => script),
-    ]),
-  ];
 }

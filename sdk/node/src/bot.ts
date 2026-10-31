@@ -3,11 +3,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { getConfig } from "../../src/constants.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
-import {
-  signAndSendTransaction,
-  signerAccountLocks,
-} from "../../src/send/sign_and_send_transaction.ts";
-import { SignerCombined } from "../../src/utils/signer.ts";
+import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
+import { SignerCombined, signerAccountLocks } from "../../src/utils/signer.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
