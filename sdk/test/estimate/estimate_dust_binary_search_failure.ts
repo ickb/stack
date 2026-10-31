@@ -30,8 +30,12 @@ describe("IckbSdk.estimate dust fee search", () => {
     });
   });
 
-  it("stops when an intermediate dust fee quote is unrepresentable", async () => {
-    mockUnrepresentableQuote({ fee: 5n, feeBase: 11n });
+  // The search first quotes the highest fee, ten of eleven, then halves toward the lowest.
+  it.each([
+    ["the highest", 10n],
+    ["an intermediate", 5n],
+  ])("stops when %s dust fee quote is unrepresentable", async (_, fee) => {
+    mockUnrepresentableQuote({ fee, feeBase: 11n });
 
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
