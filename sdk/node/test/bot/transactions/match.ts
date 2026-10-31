@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
+import { IckbError } from "../../../../src/sdk.ts";
 
 import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +14,7 @@ import {
   hash,
   marketOrder,
   PLANNED_FEE,
+  testReceipt,
   testWithdrawal,
 } from "../fixtures/bot.ts";
 
@@ -111,6 +113,7 @@ describe("buildTransaction matching", () => {
         core: { kind: "none", attempts: 0 },
       },
     });
+    expect(result.decision.match).not.toHaveProperty("matchedOrderOutPoints");
   });
 
   it("tells a book that gains but the balances cannot pay from one that never gains", async () => {
@@ -228,25 +231,38 @@ describe("buildTransaction matching", () => {
     expect(typeof result.decision.match.seed).toBe("number");
   });
 
-  it("sends collections alone and counts them", async () => {
+  it("sends collections alone and counts them only when built", async () => {
     const runtime = botRuntime();
     const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
+    const state = botState({
+      ckbAvailable: ccc.fixedPointFrom(5000),
+      ickbAvailable: BAND_ICKB_BALANCE,
+      receipts: [testReceipt("37")],
+      readyWithdrawals: [testWithdrawal("33")],
+    });
 
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        ckbAvailable: ccc.fixedPointFrom(5000),
-        ickbAvailable: BAND_ICKB_BALANCE,
-        readyWithdrawals: [testWithdrawal("33")],
-      }),
-    );
+    const result = await buildTransaction(runtime, state);
 
     expect(withdraw).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
-        actions: { matchedOrders: 0, withdrawals: 1 },
+        actions: { matchedOrders: 0, completedDeposits: 1, withdrawals: 1 },
         core: { kind: "none" },
+      },
+    });
+    const unfunded = botRuntime({
+      completeTransaction: async () => {
+        await Promise.resolve();
+        throw new IckbError("no CKB for the fee", { code: "insufficient_capacity" });
+      },
+    });
+    await expect(buildTransaction(unfunded, state)).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "no_fundable_candidate",
+      decision: {
+        actions: { completedDeposits: 0, withdrawals: 0 },
+        core: { kind: "none", attempts: 1 },
       },
     });
   });

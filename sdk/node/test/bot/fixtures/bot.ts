@@ -2,7 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../../src/logic.ts";
+import {
+  encodeReceiptData,
+  type IckbDepositCell,
+  type ReceiptCell,
+} from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
@@ -85,6 +89,24 @@ export function readyDeposit(
     ckbValue: udtValue,
     udtValue,
   };
+}
+
+/** A receipt of one cap-sized deposit at the default primary lock. */
+export function testReceipt(byte: string): ReceiptCell {
+  const cell = ccc.Cell.from({
+    outPoint: { txHash: hash(byte), index: 0n },
+    cellOutput: {
+      capacity: ccc.fixedPointFrom(218),
+      lock: script("11"),
+      type: getConfig("testnet").ickbLogic.script,
+    },
+    outputData: encodeReceiptData({
+      depositQuantity: 1n,
+      depositAmount: ICKB_DEPOSIT_CAP,
+    }),
+  });
+  const { capacity } = cell.cellOutput;
+  return { cell, ckbValue: capacity, udtValue: ICKB_DEPOSIT_CAP, header: BOT_TIP };
 }
 
 /** A partial that pays the matcher `ckbDelta` CKB and `udtDelta` iCKB out of a real order. */
