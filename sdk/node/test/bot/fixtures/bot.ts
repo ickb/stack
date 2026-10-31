@@ -230,7 +230,7 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       ...overrides.sdk,
     }),
     primaryLock,
-    accountLocks: [script("11")],
+    accountLocks: [primaryLock],
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
