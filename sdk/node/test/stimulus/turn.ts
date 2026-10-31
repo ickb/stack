@@ -146,9 +146,11 @@ describe("runStimulusTurn", () => {
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
       skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
-      draw: { kind: "collect-only" },
+      draw: { kind: "order", direction: "ckb-to-ickb" },
+      action: { conversionKind: "collect-only" },
       balance: { CKB: { budget: "5100" }, ICKB: { budget: "50" } },
     });
+    expect(log).not.toHaveProperty("collectSkip");
   });
 
   it("skips when nothing is spendable and nothing is collectable", async () => {
@@ -255,7 +257,7 @@ describe("runStimulusTurn", () => {
 
     expect(log).toMatchObject({
       outcome: "committed",
-      draw: { kind: "collect-only" },
+      draw: { kind: "order", amount: "0" },
       skip: { reason: "unrepresentable-amount" },
       action: { conversionKind: "collect-only" },
     });
@@ -281,7 +283,13 @@ describe("runStimulusTurn", () => {
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);
-    expect(log).toMatchObject({ outcome: "skipped", draw: { kind: "collect-only" } });
+    // The journal keeps the drawn action and its refusal beside the collection's own.
+    expect(log).toMatchObject({
+      outcome: "skipped",
+      draw: { kind: "conversion", direction: "ickb-to-ckb" },
+      skip: { reason: "conversion-not-buildable" },
+      collectSkip: { reason: "unfundable" },
+    });
   });
 
   it("skips amounts the order format cannot represent", async () => {

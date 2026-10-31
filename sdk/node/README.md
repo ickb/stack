@@ -122,7 +122,7 @@ Each knob pins one draw and leaves the rest random: `STIMULUS_KIND=order|convers
 
 Collection uses the [SDK's refused-buy and age rules](../src/order/fill.ts), shared with the interface. A zero-fee sell can become profitable as the DAO ratio grows, so it stays until filled or aged out. Predicting a second profitability rule in the generator would let it disagree with the bot. Dust and low-fee draws are retained because seeing the bot skip them is part of the test.
 
-Each turn writes one JSON line with `type` `stimulus.turn` and `timestamp`. `identity` contains the chain, recommended address, primary lock and endpoint identities, the endpoints journaled as the bot's are ([runtime config](#runtime-config)). Other fields are `balance`, `orders` (live, fulfilled, refused and stale counts), `draw` and `outcome`: `committed`, `unresolved`, `rejected`, `skipped` or `failed`.
+Each turn writes one JSON line with `type` `stimulus.turn` and `timestamp`. `identity` contains the chain, recommended address, primary lock and endpoint identities, the endpoints journaled as the bot's are ([runtime config](#runtime-config)). Other fields are `balance`, `orders` (live, fulfilled, refused and stale counts), `draw` and `outcome`: `committed`, `unresolved`, `rejected`, `skipped` or `failed`. `draw` stays the drawn action and `skip` why it was not built, also when a collection replaces it: that collection is sent with `action.conversionKind` `collect-only`, or names in `collectSkip` why it was not built either.
 
 A sent transaction carries `action` (minted order/master output indices, or conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. Join that hash and output index to the bot's `decision.match.matchedOrderOutPoints`. A nonzero stale count means an order reached the nominal thirty-day age cutoff and deserves a look.
 
@@ -154,7 +154,7 @@ jq -r 'select(.decision) | .decision.match.reason' "$BOT" | sort | uniq -c
 jq -r 'select(.decision) | "\(.decision.core.kind) \(.decision.rebalance.deposit // "-") \(.decision.rebalance.withdrawal.stress // "-")"' "$BOT" | sort | uniq -c
 jq -r 'select(.type == "bot.decision.skipped") | .reason' "$BOT" | sort | uniq -c
 jq -r 'select(.decision.match.reason == "matched") | "\(.decision.match.partialCount) \(.decision.match.candidates)"' "$BOT" | sort | uniq -c
-jq -r '"\(.outcome) \(.draw.kind // "-") \(.draw.direction // "-") \(.skip.reason // "-")"' "$STIMULUS" | sort | uniq -c
+jq -r '"\(.outcome) \(.draw.kind // "-") \(.draw.direction // "-") \(.skip.reason // "-") \(.collectSkip.reason // "-")"' "$STIMULUS" | sort | uniq -c
 ```
 
 | Bot variant                            | Precondition                                                                         | Evidence                                                                     | Owner                                                                        |

@@ -62,9 +62,12 @@ export interface StimulusLog {
     ICKB: { budget: string };
   };
   orders?: StimulusState["orders"];
-  draw?: Draw | { kind: "collect-only" };
+  draw?: Draw;
   outcome?: Outcome;
+  /** Why the drawn action was not built. */
   skip?: Skip;
+  /** Why the collection sent in its place was not built either. */
+  collectSkip?: Skip;
   action?: Action;
   transactionShape?: ReturnType<typeof transactionShape>;
   txFee?: { fee: string; feeRate: ccc.Num };
@@ -122,12 +125,17 @@ async function stimulate(
   }
   // Whatever stopped the drawn action, collecting what the account has keeps it liquid;
   // the SDK's zero-amount conversion is exactly that transaction.
-  if ("skip" in built && hasCollectible(state)) {
-    Object.assign(log, { skip: built.skip, draw: { kind: "collect-only" } });
-    built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
+  if ("skip" in built) {
+    Object.assign(log, { skip: built.skip });
+    if (hasCollectible(state)) {
+      built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
+      if ("skip" in built) {
+        Object.assign(log, { collectSkip: built.skip });
+      }
+    }
   }
   if ("skip" in built) {
-    Object.assign(log, { outcome: "skipped", skip: built.skip });
+    Object.assign(log, { outcome: "skipped" });
     return;
   }
   await send(runtime, state, built, log);
