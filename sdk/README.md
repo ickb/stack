@@ -9,7 +9,7 @@ The top-level script modules are `src/udt.ts` (iCKB), `src/logic.ts` (deposits a
 - `src/order/`: UDT limit orders and matching.
 - `src/conversion/`: state projection, estimates, plans, the withdrawal ring and completion.
 - `src/send/`: signing, broadcast and confirmation.
-- `src/utils/`: shared readers and codecs.
+- `src/utils/`: shared readers and codecs, and the Node actors' signer combinator. That combinator is general CCC code, not iCKB-specific, so it sits here rather than in `sdk/node`; it stays internal, outside the public entry, until an integrator needs it or CCC takes it upstream.
 
 `src/index.ts` is the only barrel. The package has one runtime dependency, `@ckb-ccc/core`, and no Node built-ins. A separate DAO manager layer had one caller per operation and no raw-DAO consumer, so those operations now live with the iCKB script that uses them. Internal barrels and alternate public entry points would recreate boundaries without another consumer.
 

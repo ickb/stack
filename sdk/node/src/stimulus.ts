@@ -2,12 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../src/constants.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signerAccountLocks } from "../../src/send/sign_and_send_transaction.ts";
+import { SignerCombined } from "../../src/utils/signer.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { logExecution } from "./shared/logging.ts";
 import { readStimulusConfig, readStimulusOverride } from "./stimulus/config.ts";
 import { runStimulusTurn } from "./stimulus/turn.ts";
 // One process is one stimulus turn: read config, connect, send at most one transaction, exit.
-const { chain, privateKey, rpcUrls, rpcEndpoints } = await readStimulusConfig(
+const { chain, privateKeys, rpcUrls, rpcEndpoints } = await readStimulusConfig(
   process.env,
 );
 const override = readStimulusOverride(process.env);
@@ -21,7 +22,9 @@ try {
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
   // - FAILURE MODE: passing keys to logs, errors, telemetry, redaction, masking, or test hooks leaks signing authority.
-  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
+  const signer = new SignerCombined(
+    privateKeys.map((key) => new ccc.SignerCkbPrivateKey(client, key)),
+  );
   const address = await signer.getRecommendedAddressObj();
   const primaryLock = address.script;
   const managers = getConfig(chain);

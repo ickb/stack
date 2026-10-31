@@ -18,7 +18,7 @@ The bot reads these environment variables:
 
 - `BOT_CHAIN`: `testnet` or `mainnet`.
 - `BOT_RPC_URL`: one or more HTTP(S) or WebSocket RPC URLs, comma-separated with no spaces, the only endpoints. List the operator's own node and providers such as a free-tier Ankr or GetBlock endpoint, each of which must serve the indexer's `get_cells` and `get_transaction_proof`. Each process shuffles the list. CCC's fallback transport moves to the next URL only when a request fails in transport, and then stays there; a node that answers with an error body or a stale tip does not move it, but it fails the turn, and a restart starts on another node one time in two with two nodes, more often with more. The list is required, even when it holds only public nodes: CCC's own public pool keeps a fixed order the shuffle cannot reach. List one URL per node, as the testnet units do: the WebSocket and HTTPS URLs of `testnet.ckb.dev` reach the same node (same `local_node_info` id), so listing both would only make that node the start two times in three. Userinfo, whitespace, and control characters are rejected. The SDK verifies what it reads: every header is checked against its hash, and a tip whose parent is more than five minutes behind the host clock, the bot policy's slack, fails the turn. The shuffle replaced a fixed order with the operator's node first, after a liveness review found that a node answering badly then failed every restart from the same first URL. Its cost: the operator's node no longer takes most of the load, so providers' quotas are spent in proportion. The journal's `rpcEndpoints` lists the endpoints in the order the process uses.
-- `BOT_PRIVATE_KEY_FILE`: path of a mode `0600` file holding only the signing key as lowercase `0x` plus 64 lowercase hex characters. Surrounding whitespace, such as an editor's final newline, is ignored. The path must be absolute: pnpm runs the script from the package directory, so a relative one would name a different file depending on how the bot was started.
+- `BOT_PRIVATE_KEY_FILE`: path of a mode `0600` file holding only signing keys, one per line, each as lowercase `0x` plus 64 lowercase hex characters. The first line is the primary key: its lock receives change and its CKB pays fees. Every later line is another key the bot signs for, whose cells the turns move to the primary lock ([changing the key](#changing-the-key)). Whitespace around each line and blank lines at either end of the file, such as an editor's final newline, are ignored; a blank line between keys or a repeated key is refused. The path must be absolute: pnpm runs the script from the package directory, so a relative one would name a different file depending on how the bot was started.
 - `BOT_MAX_FEE_RATE` (optional): the most the bot plans to pay per kB, in shannons, at least 1000, the default node admission floor. The state read caps the node's sampled rate at this value, through CCC's own `getFeeRate(…, { maxFeeRate })`. The sampled rate is a node statistic nothing can verify, so the cap bounds what a node can make the bot pay in fees and what it can make the [match gate](docs/policy.md#matching-makes-progress-from-available-inventory) refuse by inflating the fee it subtracts. A mainnet unit sets 1000, since mainnet activity is low; the testnet unit sets none, because the testnet rate moves. The [send](../README.md#signing-and-broadcast) refuses a fee above the planned one, measured from verified inputs, so the cap also bounds what the chain takes. The journal's `bot.state.read` carries the rate planning uses, which equals this value when the cap binds.
 
 The journal names each endpoint by protocol, hostname and port only, never its path, query or fragment, where providers put API keys. Transport errors are logged whole, and may quote a URL; a free-tier provider key there costs at most its quota, which the operator accepts, but a key worth more needs a separate review of that output boundary before use.
@@ -68,13 +68,13 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 `bot.chain.preflight` emits the recommended address, primary lock, and RPC endpoint identities once the node's genesis hash matches the chain's, before signing starts. A process opens with `bot.turn.started` and then this event. A preflight with no `bot.turn.failed` before it follows an exit that logged nothing: the six-hour exit, the unit's runtime limit, a stop or a kill; a configuration failure exits before any event and writes only to stderr. systemd's own journal lines tell them apart. Endpoint identity lists each configured endpoint's protocol, hostname and port ([runtime config](#runtime-config)); it omits the URL's path, query and fragment.
 
-`bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection or fundable rebalance) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
+`bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection, fundable rebalance or liquid cell away from the primary lock) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
 `bot.state.read` groups what the turn read: `chainTip` (the block the read is priced at, the tip's parent), `exchangeRatio`, `depositCapacity` and `feeRate` (capped as above) are the sampled conditions; `balances` holds CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count; `counts` covers orders, receipts, withdrawals and pool deposits. The decision transcript groups what the turn decided:
 
 - `match`: reason, candidate and profitable-whole-fill counts, per-fill mining fee, shuffle seed and matched order outpoints. Reasons are `matched`, `no_market_orders`, `no_gain` or `unfunded_gain`; the last means profitable fills exist but the balances cannot pay them.
 - `rebalance`: deposit reason (`low_ickb` or `ring_coverage`), withdrawal candidates and stress flag, plus the compact ring summary.
-- `core`: the completed choice (`none`, `deposit` or `withdraw`) and its candidate attempts; `actions` counts the withdrawal requests. `actions`, `plannedFee` and `transactionShape` describe the result; the event's `reason` explains a skipped turn.
+- `core`: the completed choice (`none`, `deposit` or `withdraw`) and its candidate attempts; `actions` counts the withdrawal requests. `actions`, `plannedFee` and `transactionShape` describe the result; the event's `reason` explains a skipped turn. A built transaction whose `actions` are all zero moves liquid cells to the primary lock, such as [another key's](#changing-the-key).
 
 ### Transaction outcomes
 
@@ -109,7 +109,7 @@ jq -sc 'group_by(.runId) | sort_by(.[0].timestamp)[] | {runId: .[0].runId, event
 
 ## Stimulus Generator
 
-The generator draws one random action per turn from its own testnet account. It reads `STIMULUS_CHAIN`, `STIMULUS_RPC_URL` and `STIMULUS_PRIVATE_KEY_FILE` like the bot, but refuses a non-testnet chain before constructing a signer. Orders accumulate across turns, so a single action already changes the book the bot sees. Named scenario planners and transaction batches added machinery without being needed for that accumulation; `RestartSec` controls the cadence. Pool maturity and inventory still need their own preconditions, as the [journal cases](#what-the-journals-should-show) explain.
+The generator draws one random action per turn from its own testnet account. It reads `STIMULUS_CHAIN`, `STIMULUS_RPC_URL` and `STIMULUS_PRIVATE_KEY_FILE` like the bot, but refuses a non-testnet chain before constructing a signer. It signs for every key in its file as the bot does, and sweeps the other keys' liquid cells into whatever it sends. Orders accumulate across turns, so a single action already changes the book the bot sees. Named scenario planners and transaction batches added machinery without being needed for that accumulation; `RestartSec` controls the cadence. Pool maturity and inventory still need their own preconditions, as the [journal cases](#what-the-journals-should-show) explain.
 
 Each turn reads the account, then:
 
@@ -219,3 +219,23 @@ systemctl --user show ickb-bot-testnet.service -p ActiveState -p Result -p ExecM
 The unit sets `LimitCORE=0`, so crash diagnosis uses the journal rather than a core file. The journal is the only store: journald owns event and stderr retention through its normal limits, and reading a user's journal history without `sudo` needs persistent split journals.
 
 Funding and indexer configuration are covered by the policy's [operating assumptions](docs/policy.md#operating-assumptions).
+
+### Changing the key
+
+To move the bot to a new key, put the new key on the first line of its key file and keep the old key on a later line, then restart the unit:
+
+```bash
+(umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
+systemctl --user restart ickb-bot-testnet.service
+```
+
+The process signs for every key in the file, and the account read covers every key's locks each turn:
+
+- Each transaction sweeps the other keys' plain CKB and iCKB cells in with the primary key's, and its change goes to the primary lock as always. Receipts and matured withdrawals at another key's lock are collected the same way.
+- A liquid cell at any lock but the primary one is a reason to send on its own, where cells already at the primary lock are not. The next fundable turn moves them, up to the sweep's 1,000 inputs per transaction, and later turns move the rest. The rule covers the primary key's own anyone-can-pay cells too, if it has any.
+- The primary key's CKB pays the fee, so another key holding only iCKB still moves.
+- A withdrawal request still converting at another key's lock stays there until it matures, then its collection moves it.
+
+An emptied key can stay in the file: each of its locks costs one scan per turn that finds nothing, and its explorer page shows when the locks are empty. While another key's lock holds cells, each transaction that spends them carries one more secp256k1 lock group, about 1.65M cycles for some 140 bytes. Once cycles set a transaction's weight, miners and a full pool see a lower fee rate than the one planned, since the node admits it by size alone.
+
+A separate unit per old key, sending everything to the new key through a `BOT_DESTINATION` address, was rejected. It adds a unit and a setting per key, and its destination must own every output, change included. The old key must also pay its own fees, so an old key holding only iCKB, in cells with no capacity to spare, could not move at all.

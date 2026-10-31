@@ -32,7 +32,7 @@ describe("runtime config env", () => {
 
     await expect(readConfig({})).resolves.toEqual({
       chain: "testnet",
-      privateKey: VALID_PRIVATE_KEY,
+      privateKeys: [VALID_PRIVATE_KEY],
       rpcUrls: [RPC_URL],
       rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
     });
@@ -47,7 +47,7 @@ describe("runtime config env", () => {
       readConfig({ BOT_CHAIN: "mainnet", BOT_RPC_URL: urls.join(",") }),
     ).resolves.toEqual({
       chain: "mainnet",
-      privateKey: VALID_PRIVATE_KEY,
+      privateKeys: [VALID_PRIVATE_KEY],
       rpcUrls: urls.toReversed(),
       rpcEndpoints: [
         { protocol: "wss:", hostname: "second.example", port: "" },
@@ -102,9 +102,17 @@ describe("runtime config private key file", () => {
     ]) {
       await writeKeyFile(text);
       await expect(readConfig({})).resolves.toMatchObject({
-        privateKey: VALID_PRIVATE_KEY,
+        privateKeys: [VALID_PRIVATE_KEY],
       });
     }
+  });
+
+  it("reads one key per line, in file order", async () => {
+    const others = [`0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`];
+    await writeKeyFile(`${VALID_PRIVATE_KEY}\r\n${others.join("\n")}\n`);
+    await expect(readConfig({})).resolves.toMatchObject({
+      privateKeys: [VALID_PRIVATE_KEY, ...others],
+    });
   });
 
   it("rejects non-canonical or out-of-range keys without exposing them", async () => {
@@ -118,6 +126,8 @@ describe("runtime config private key file", () => {
       SECP256K1_ORDER,
       "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142",
       `${VALID_PRIVATE_KEY}\n${VALID_PRIVATE_KEY}`,
+      `${VALID_PRIVATE_KEY}\n\n0x${"22".repeat(32)}`,
+      `${VALID_PRIVATE_KEY}\n0x${"22".repeat(31)}`,
     ]) {
       await writeKeyFile(text);
       await expect(readConfig({})).rejects.toThrow(

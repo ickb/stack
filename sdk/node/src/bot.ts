@@ -6,6 +6,7 @@ import {
   signAndSendTransaction,
   signerAccountLocks,
 } from "../../src/send/sign_and_send_transaction.ts";
+import { SignerCombined } from "../../src/utils/signer.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
@@ -22,7 +23,7 @@ const TURN_INTERVAL_MS = 10 * 60_000;
 // purpose: it keeps counting through a host suspend, as cached state ages.
 const PROCESS_MAX_MS = 6 * 60 * 60_000;
 const processStarted = Date.now();
-const { chain, privateKey, rpcUrls, rpcEndpoints } = await readRuntimeConfigEnv(
+const { chain, privateKeys, rpcUrls, rpcEndpoints } = await readRuntimeConfigEnv(
   process.env,
   "BOT",
 );
@@ -39,7 +40,9 @@ try {
   // - OWNER: secret purpose boundary.
   // - INVARIANT: private keys pass only to signer construction and signing.
   // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
-  const signer = new ccc.SignerCkbPrivateKey(client, privateKey);
+  const signer = new SignerCombined(
+    privateKeys.map((key) => new ccc.SignerCkbPrivateKey(client, key)),
+  );
   const address = await signer.getRecommendedAddressObj();
   const primaryLock = address.script;
   events.emit({

@@ -59,7 +59,16 @@ export async function buildTransaction(
     poolDeposits: state.system.poolDeposits,
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
-  const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
+  // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
+  // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
+  // cells already there would only compact.
+  const hasMove = state.cells.some(
+    ({ cellOutput }) => !cellOutput.lock.eq(runtime.primaryLock),
+  );
+  const cores = candidateCores(
+    plan,
+    match.partials.length > 0 || hasCollections || hasMove,
+  );
   const decision = (
     core: Core,
     attempts: number,
@@ -126,8 +135,8 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
 
 /**
  * The cores to try in order: deposit first, then every withdrawal chain (the greedy fit from
- * the oldest candidate, longest prefix first), then `none`, a candidate only when a match or
- * a collection rides on it.
+ * the oldest candidate, longest prefix first), then `none`, a candidate only when a match,
+ * a collection or a move to the primary lock rides on it.
  */
 function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
   const cores: Core[] = [];
