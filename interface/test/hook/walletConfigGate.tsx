@@ -42,8 +42,9 @@ describe("hook-based wallet config gate", () => {
     await settle();
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).toHaveBeenCalledTimes(1);
+    // One read asks twice: for the wallet's address and, first of its account locks, its lock.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(1);
+    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(2);
     expect(elementProps<Parameters<typeof App>[0]>(result.current).walletConfig).toBe(
       walletConfig,
     );
@@ -69,8 +70,9 @@ describe("hook-based wallet config gate", () => {
     });
     await settle();
     expect(result.current.type).toBe(App);
+    // The failed read stopped at its first ask; the retry asked twice.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(2);
+    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(3);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).not.toHaveBeenCalled();
     await unmount();

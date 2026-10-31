@@ -31,6 +31,6 @@ export async function keyAccount(
     signer,
     address: address.toString(),
     primaryLock,
-    accountLocks: await signerAccountLocks(signer, primaryLock),
+    accountLocks: await signerAccountLocks(signer),
   };
 }

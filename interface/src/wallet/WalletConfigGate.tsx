@@ -134,7 +134,7 @@ async function readWalletConfig(
     cccClient: signer.client,
     signer,
     address: recommendedAddressObj.toString(),
-    accountLocks: await signerAccountLocks(signer, primaryLock),
+    accountLocks: await signerAccountLocks(signer),
     primaryLock,
   };
 }

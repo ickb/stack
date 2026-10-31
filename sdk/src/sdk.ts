@@ -30,6 +30,7 @@ import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
 import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
+import { signerAccountLocks } from "./utils/signer.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
 
@@ -560,7 +561,7 @@ function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
 }
 
 async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {
-  return (await signer.getAddressObjs()).some(({ script }) => script.eq(lock));
+  return (await signerAccountLocks(signer)).some((own) => own.eq(lock));
 }
 
 function udtBalance(cell: ccc.Cell): ccc.Num {
