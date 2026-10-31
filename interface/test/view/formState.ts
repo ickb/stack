@@ -122,7 +122,8 @@ describe("formAssets", () => {
         true,
       ),
     ).toMatchObject([
-      { name: "CKB", balance: { status: "converting" } },
+      // The converting figure is the balance less what is in the wallet.
+      { name: "CKB", balance: { locked: 1n, status: "converting" } },
       { name: "iCKB", balance: { status: "converting" } },
     ]);
     expect(
