@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SupportedChain } from "../../../src/constants.ts";
+import { shuffled } from "./shuffle.ts";
 
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
@@ -72,8 +73,9 @@ export async function readRuntimeConfigEnv(
   // Commas only: a space around a URL is refused like any whitespace in it. Each process
   // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
   // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
-  // of every restart from the same first URL.
-  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","));
+  // of every restart from the same first URL. Math.random suffices: nothing needs the order
+  // unpredictable.
+  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","), Math.random);
   const rpcUrls: [string, ...string[]] = [first, ...rest];
   return {
     chain,
@@ -81,17 +83,6 @@ export async function readRuntimeConfigEnv(
     rpcUrls,
     rpcEndpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
   };
-}
-
-/** A uniform random order: each value sorted by its own random key. */
-function shuffled(values: string[]): string[] {
-  return (
-    values
-      // eslint-disable-next-line sonarjs/pseudo-random -- the order only spreads failures across restarts; nothing needs it unpredictable.
-      .map((value) => ({ value, key: Math.random() }))
-      .toSorted((left, right) => left.key - right.key)
-      .map(({ value }) => value)
-  );
 }
 
 interface EnvValue {

@@ -5,6 +5,7 @@ import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
 import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
 import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
+import { shuffled } from "../shared/shuffle.ts";
 
 /**
  * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
@@ -64,7 +65,7 @@ export function matchTurn({
         (isCkb2Udt) => OrderMatcher.from(group, isCkb2Udt, fee) ?? [],
       ),
     ),
-    seed,
+    seededRandom(seed),
   );
   const match: TurnMatch = {
     ckbDelta: 0n,
@@ -128,17 +129,13 @@ export function seedOf(blockHash: ccc.Hex): number {
   return Number(BigInt(blockHash) & 0xff_ff_ff_ffn);
 }
 
-/** A uniform shuffle from a 32-bit seed (mulberry32), so a turn is replayable. */
-function shuffled<T>(items: T[], seed: number): T[] {
+/** Uniform numbers in [0, 1) from a 32-bit seed (mulberry32), so a turn is replayable. */
+function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
-  const next = (): number => {
+  return () => {
     state = (state + 0x6d_2b_79_f5) >>> 0;
     let t = Math.imul(state ^ (state >>> 15), state | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
-  return items
-    .map((item) => ({ item, key: next() }))
-    .toSorted((left, right) => left.key - right.key)
-    .map(({ item }) => item);
 }
