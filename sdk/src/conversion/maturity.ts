@@ -1,12 +1,22 @@
 import type { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
-import type { OrderGroup } from "../order/cells.ts";
+import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../udt.ts";
 import { ceilDiv, compareBigInt, type ValueComponents } from "../utils/utils.ts";
-import type { MaturityOrderInput, SystemState } from "./types.ts";
+import type { SystemState } from "./types.ts";
+
+/**
+ * Input accepted by maturity estimation, either a live order cell or raw order data plus values.
+ */
+export type MaturityOrderInput =
+  | OrderCell
+  | {
+      info: Info;
+      amounts: ValueComponents;
+    };
 
 /**
  * The bot's turn interval: its loop starts turns ten minutes apart, and the estimates assume it.

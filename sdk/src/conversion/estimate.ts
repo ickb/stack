@@ -1,11 +1,29 @@
+import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
 import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../order/conversion.ts";
+import type { Info } from "../order/info.ts";
 import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
-import type { ConversionOrderEstimate, SystemState } from "./types.ts";
+import type { ConversionNotice, SystemState } from "./types.ts";
+
+/**
+ * Quote details for one order-based conversion path.
+ */
+export interface ConversionOrderEstimate {
+  /** Output amount after applying the order ratio and fee. */
+  convertedAmount: ccc.FixedPoint;
+  /** CKB fee component embedded in the order conversion. */
+  ckbFee: ccc.FixedPoint;
+  /** Order info that should be encoded into a created order. */
+  info: Info;
+  /** Estimated maturity timestamp, or `undefined` when it cannot be estimated. */
+  maturity: ccc.Num | undefined;
+  /** A non-fatal notice about the path this estimate took, for the caller to surface. */
+  notice?: ConversionNotice;
+}
 
 /**
  * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of

@@ -7,7 +7,6 @@ import {
 } from "./conversion/plans.ts";
 import type {
   AccountState,
-  CompleteIckbTransactionOptions,
   ConversionTransactionContext,
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
@@ -33,6 +32,37 @@ import type { OwnedOwnerManager } from "./owned_owner.ts";
 import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
+
+/**
+ * Options for completing a partial iCKB transaction before signing and sending.
+ */
+export interface CompleteIckbTransactionOptions {
+  /** Signer that prepares the transaction; its recommended lock owns the change by default. */
+  signer: ccc.Signer;
+
+  /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
+  lock?: ccc.Script;
+
+  /** Fee rate passed to CCC fee completion. */
+  feeRate: ccc.Num;
+
+  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
+  cells: ccc.Cell[];
+
+  /**
+   * The receipts and iCKB deposits the transaction may spend, valued by the state read;
+   * any superset works, since only the spent ones are summed.
+   */
+  protocolCells: readonly ProtocolCell[];
+
+  /**
+   * The header the plan was priced at, the state read's `system.tip`, named as a header
+   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
+   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
+   * transaction.
+   */
+  tip: ccc.ClientBlockHeader;
+}
 
 /**
  * Input count up to which one own transaction sweeps liquid cells.
