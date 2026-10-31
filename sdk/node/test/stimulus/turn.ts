@@ -155,6 +155,25 @@ describe("runStimulusTurn", () => {
     expect(log).not.toHaveProperty("collectSkip");
   });
 
+  it("still converts at the live-order cap", async () => {
+    const fresh = await order("a2", true, undefined, 1_000_000n);
+    const log = await turn(
+      runtime({
+        account: fundedAccount,
+        orders: Array.from({ length: MAX_LIVE_ORDERS }, () => fresh),
+        sdk: {
+          buildConversionTransaction: async () => {
+            await Promise.resolve();
+            return { ok: false, reason: "amount-too-small", minimum: 1n };
+          },
+        },
+      }),
+      { ...orderDraw, kind: "conversion" },
+    );
+
+    expect(log).toMatchObject({ skip: { reason: "conversion-not-buildable" } });
+  });
+
   it("skips when nothing is spendable and nothing is collectable", async () => {
     const log = await turn(
       runtime({
@@ -195,6 +214,7 @@ describe("runStimulusTurn", () => {
     expect(log).toMatchObject({
       type: "stimulus.turn",
       timestamp: new Date(log.timestamp ?? "").toISOString(),
+      identity,
       outcome: "committed",
       orders: { live: 0, fulfilled: 1, refused: 0, stale: 0 },
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },
