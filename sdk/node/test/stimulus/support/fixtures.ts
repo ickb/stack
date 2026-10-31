@@ -10,12 +10,11 @@ import {
 import { getConfig } from "../../../../src/constants.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
-import type { ReceiptCell } from "../../../../src/logic.ts";
+import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
-import { encodeReceiptData } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime } from "../../../src/stimulus/state.ts";
 

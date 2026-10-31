@@ -14,17 +14,14 @@ import {
   DaoOutputLimitError,
 } from "../../src/dao.ts";
 import {
+  decodeReceiptData,
+  encodeReceiptData,
   LogicManager,
   receiptCell,
   receiptPhase2Capacity,
   type ReceiptCell,
 } from "../../src/logic.ts";
-import {
-  decodeReceiptData,
-  encodeReceiptData,
-  IckbUdt,
-  ickbValue,
-} from "../../src/udt.ts";
+import { IckbUdt, ickbValue } from "../../src/udt.ts";
 
 const logic = script("11");
 const dao = { script: script("22"), cellDeps: [] };
