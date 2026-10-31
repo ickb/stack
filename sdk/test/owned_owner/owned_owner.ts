@@ -169,10 +169,16 @@ describe("OwnedOwnerManager cell shapes", () => {
       cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
       outputData: "0xffffffff",
     });
+    const short = ccc.Cell.from({
+      outPoint: undecodable.outPoint,
+      cellOutput: undecodable.cellOutput,
+      outputData: "0x123456",
+    });
     const foreignLock = cellWith(owned.cell, { lock: userLock });
 
     expect(target.isOwner(owner.cell)).toBe(true);
     expect(target.isOwner(undecodable)).toBe(false);
+    expect(target.isOwner(short)).toBe(false);
     expect(target.isOwner(owned.cell)).toBe(false);
     expect(target.isOwned(owned.cell)).toBe(true);
     expect(target.isOwned(foreignLock)).toBe(false);
