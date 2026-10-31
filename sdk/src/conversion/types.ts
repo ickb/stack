@@ -89,6 +89,11 @@ export type ConversionTransactionResult =
       /** Composition of the selected conversion path. */
       conversionKind: ConversionKind;
       /**
+       * CKB the minted order and its master cell occupy, beyond the amount converting: the
+       * wallet holds it in the order until it is collected. Absent when no order is minted.
+       */
+      orderOccupiedCapacity?: bigint;
+      /**
        * True when every liquid cell of the context is an input. False when the input limit
        * left some behind: a move to another lock then needs another transaction.
        */

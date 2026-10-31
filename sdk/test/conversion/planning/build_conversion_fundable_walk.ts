@@ -88,7 +88,11 @@ describe("buildConversionTransaction fundable walk", () => {
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
-    expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
+    expect(result).toMatchObject({
+      ok: true,
+      conversionKind: "direct-plus-order",
+      orderOccupiedCapacity: ORDER_CKB,
+    });
     if (!result.ok) {
       throw new Error(result.reason);
     }
@@ -101,6 +105,34 @@ describe("buildConversionTransaction fundable walk", () => {
     expect(result.plannedFee).toBe(
       result.tx.estimateFee(conversionContext().system.feeRate),
     );
+  });
+
+  it("reports the order cells' occupied capacity apart from the CKB they convert", async () => {
+    const fixture = baseTransactionFixture({ completion: "real" });
+    const lock = fixture.botLock;
+    const amount = ccc.fixedPointFrom(1000);
+    const cells = [
+      plainCapacityCell(
+        amount + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(1),
+        lock,
+        "f3",
+      ),
+    ];
+
+    const result = await fixture.sdk.buildConversionTransaction({
+      direction: "ckb-to-ickb",
+      amount,
+      lock,
+      signer: fundedSigner(cells, [lock]).signer,
+      context: conversionContext({ cells, ckbAvailable: amount }),
+    });
+
+    // The order cell holds the 1,000 CKB as well; only the cell space is reported.
+    expect(result).toMatchObject({
+      ok: true,
+      conversionKind: "order",
+      orderOccupiedCapacity: ORDER_CKB,
+    });
   });
 
   it("throws the last completion failure when no CKB-to-iCKB candidate can be funded", async () => {

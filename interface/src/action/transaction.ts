@@ -68,6 +68,9 @@ export async function buildTransactionPreview(
       fee: result.plannedFee,
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversionKind,
+      ...(result.orderOccupiedCapacity === undefined
+        ? {}
+        : { orderOccupiedCapacity: result.orderOccupiedCapacity }),
       ...(destination.moveTo === undefined
         ? {}
         : { move: { to: destination.moveTo, isComplete: result.isSweepComplete } }),

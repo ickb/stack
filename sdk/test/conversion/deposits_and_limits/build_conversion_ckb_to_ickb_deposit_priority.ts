@@ -59,4 +59,22 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(mint).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["deposit:2", "order"]);
   });
+
+  it("reports no order cell space for whole deposits alone", async () => {
+    const { sdk, logicManager, lock } = testSdk();
+    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) =>
+      ccc.Transaction.from(txLike),
+    );
+
+    const result = await sdk.buildConversionTransaction({
+      direction: CKB_TO_ICKB,
+      amount: ICKB_DEPOSIT_CAP * 2n,
+      lock,
+      signer: stubSigner,
+      context: conversionContext({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
+    });
+
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
+    expect(result).not.toHaveProperty("orderOccupiedCapacity");
+  });
 });

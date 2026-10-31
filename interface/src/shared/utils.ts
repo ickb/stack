@@ -48,6 +48,8 @@ export type SendableTx = Readonly<{
   fee: bigint;
   estimatedMaturity: bigint;
   conversionKind: ConversionKind;
+  /** CKB the minted order's cells occupy, set when the transaction mints an order. */
+  orderOccupiedCapacity?: bigint;
   /**
    * Set when the transaction moves the liquid funds to another lock: the shortened
    * destination, and whether the sweep took every liquid cell or another move is needed.

@@ -326,6 +326,9 @@ export class IckbSdk {
       plannedFee,
       estimatedMaturity: plan.estimatedMaturity,
       conversionKind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
+      ...(plan.order === undefined
+        ? {}
+        : { orderOccupiedCapacity: this.orderOccupiedCapacity(tx) }),
       isSweepComplete: sweepsAll(tx, context.cells),
     };
   }
@@ -378,9 +381,27 @@ export class IckbSdk {
         plan.selectedDeposits.length > 0,
         plan.order !== undefined,
       ),
+      ...(plan.order === undefined
+        ? {}
+        : { orderOccupiedCapacity: this.orderOccupiedCapacity(tx) }),
       isSweepComplete: sweepsAll(tx, context.cells),
       ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
     };
+  }
+
+  /**
+   * The capacity the transaction's order and master outputs occupy. A conversion creates no
+   * order output but the one it mints: collected orders are inputs, never rebuilt.
+   */
+  private orderOccupiedCapacity(tx: ccc.Transaction): bigint {
+    let occupied = 0n;
+    for (const cell of tx.outputCells) {
+      const { lock, type } = cell.cellOutput;
+      if (lock.eq(this.order.script) || type?.eq(this.order.script) === true) {
+        occupied += ccc.fixedPointFrom(cell.occupiedSize);
+      }
+    }
+    return occupied;
   }
 
   private async completeConversion(

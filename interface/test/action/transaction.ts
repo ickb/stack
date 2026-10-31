@@ -33,6 +33,7 @@ describe("buildTransactionPreview", () => {
         tx,
         plannedFee: 42n,
         estimatedMaturity: 123n,
+        orderOccupiedCapacity: 9n,
       }),
     );
     const txContext = context();
@@ -53,6 +54,7 @@ describe("buildTransactionPreview", () => {
       tx,
       fee: 42n,
       estimatedMaturity: 123n,
+      orderOccupiedCapacity: 9n,
     });
   });
 

@@ -33,22 +33,23 @@ describe("IckbSdk.buildConversionTransaction", () => {
         return ccc.Transaction.from(txLike);
       });
 
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: ICKB_DEPOSIT_CAP,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-            poolDeposits: [oversized, fitting],
-          },
-          ckbAvailable: 0n,
-          ickbAvailable: ICKB_DEPOSIT_CAP,
-        }),
+    const result = await sdk.buildConversionTransaction({
+      direction: ICKB_TO_CKB,
+      amount: ICKB_DEPOSIT_CAP,
+      lock,
+      signer: stubSigner,
+      context: conversionContext({
+        system: {
+          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+          poolDeposits: [oversized, fitting],
+        },
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
       }),
-    ).resolves.toMatchObject({ ok: true, conversionKind: "direct" });
+    });
+
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
+    expect(result).not.toHaveProperty("orderOccupiedCapacity");
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
   });

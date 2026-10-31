@@ -28,7 +28,7 @@ Every node read in `getL1AccountState` and `signAndSendTransaction` goes through
 
 ## Transaction completion
 
-`buildConversionTransaction(...)` returns a completed transaction funded from the cells in its state read, with the fee completion planned for it as `plannedFee`, the limit to hand to the [send](#signing-and-broadcast). It never discovers more inputs while trying candidates. The [root user-lock assumption](../README.md#user-locks) applies to both the wallet's lock and a caller-supplied destination.
+`buildConversionTransaction(...)` returns a completed transaction funded from the cells in its state read, with the fee completion planned for it as `plannedFee`, the limit to hand to the [send](#signing-and-broadcast). A transaction that mints an order also returns `orderOccupiedCapacity`, the CKB its order and master cells occupy beyond the amount converting, which collecting the order returns. It never discovers more inputs while trying candidates. The [root user-lock assumption](../README.md#user-locks) applies to both the wallet's lock and a caller-supplied destination.
 
 An amount of zero builds the collection alone; `hasCollectable(context)` says whether the context holds anything for it to collect, the test the interface, the generator and the bot share.
 

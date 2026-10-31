@@ -1,3 +1,4 @@
+import { ccc } from "@ckb-ccc/ccc";
 import { describe, expect, it } from "vitest";
 import {
   actionLabel,
@@ -43,6 +44,18 @@ describe("action status", () => {
       `${noRequestMessage}.`,
     );
     expect(actionMessage(undefined, flags())).toBe(`${noRequestMessage}.`);
+    expect(
+      actionMessage(
+        {
+          ...txInfo,
+          conversionKind: "order",
+          orderOccupiedCapacity: ccc.fixedPointFrom(1295),
+        },
+        { ...flags(), hasCollectable: true },
+      ),
+    ).toBe(
+      "Converts when a bot fills it, estimated below. Includes 1,295 CKB of cell space, returned when collected. Also collects converted funds.",
+    );
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
       "Converts at a fixed time, shown below. Also collects converted funds.",
     );

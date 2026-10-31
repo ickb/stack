@@ -1,3 +1,5 @@
+import { ccc } from "@ckb-ccc/ccc";
+import { groupDigits } from "../shared/figures.ts";
 import type { SendableTx, TxInfo } from "../shared/utils.ts";
 import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 
@@ -79,7 +81,7 @@ function previewMessage(
  * positions stay, and a sweep the input limit cut short asks for another run.
  */
 function transactionIntentMessage(
-  txInfo: Pick<SendableTx, "conversionKind" | "move">,
+  txInfo: Pick<SendableTx, "conversionKind" | "move" | "orderOccupiedCapacity">,
   hasCollectable: boolean,
   hasConverting: boolean,
 ): string {
@@ -101,7 +103,11 @@ function transactionIntentMessage(
       ? "Collects what is ready, the rest keeps converting."
       : "Collects everything that was converting.";
   }
-  return [conversionIntentText(txInfo.conversionKind), collectableNotice(hasCollectable)]
+  return [
+    conversionIntentText(txInfo.conversionKind),
+    cellSpaceText(txInfo.orderOccupiedCapacity),
+    collectableNotice(hasCollectable),
+  ]
     .filter((text) => text !== "")
     .join(" ");
 }
@@ -135,6 +141,16 @@ function failureMessage(failure: string): string {
 
 function isAvailabilityMessage(message: string): boolean {
   return message === noCollectionMessage || message === noRequestMessage;
+}
+
+/**
+ * The balance row counts an order's cells as converting, so a 2,000 CKB order read 2,295 CKB
+ * converting and then 295 CKB collectable; this names that part before signing.
+ */
+function cellSpaceText(occupied: bigint | undefined): string {
+  return occupied === undefined
+    ? ""
+    : `Includes ${groupDigits(ccc.fixedPointToString(occupied))} CKB of cell space, returned when collected.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {

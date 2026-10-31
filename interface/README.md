@@ -52,6 +52,8 @@ Completion deliberately sweeps liquid cells. A large account can exceed its inpu
 
 CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. There is therefore no CKB Max; completion reports a shortfall before signing. iCKB Max uses the SDK's bound, including collectable funds.
 
+An order holds its own cell space beside the amount it converts: a 2,000 CKB order showed 2,295 CKB converting, then 295 CKB collectable, and nothing on screen said why. The status of a preview that mints an order names that capacity, the SDK's `orderOccupiedCapacity`, and says collection returns it. The balance figures still count it, since the wallet holds it.
+
 For iCKB-to-CKB requests below the normal order threshold, the SDK can build a discounted dust order when it finds actionable terms; if none exist, it asks for a larger amount. This can help recover the CKB capacity backing a small iCKB cell. Its order fee is about ten times the fee rate in shannons (0.0001 CKB at the 1,000 floor), above the default fee, so the form's quote overstates its output by that difference. The status no longer names those terms: for the 0.003 iCKB remainder of a 100,000 iCKB withdrawal it spent a sentence on a negligible part, and the preview already shows the transaction fee.
 
 ## Preview, signing and confirmation
