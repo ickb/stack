@@ -7,6 +7,7 @@ import {
   committedTransactionResponse,
   composedClient,
   headerLike,
+  offlineTestnetClient,
   outPoint,
   script,
   StubClient,
@@ -164,6 +165,45 @@ describe("StubClient network boundary", () => {
     await expect(client.findCellsPaged(searchKey, "asc", 1)).rejects.toThrow(
       "Offline test client received get_cells",
     );
+  });
+
+  it("keeps the offline client off the network", async () => {
+    await expect(offlineTestnetClient().getTipHeader()).rejects.toThrow(
+      "Offline test client received get_tip_header",
+    );
+  });
+
+  it("answers only the status poll from transactionStatus, unknown when it has none", async () => {
+    const hash = byte32FromByte("99");
+    const scripted = new StubClient({
+      cells: (): readonly StubCell[] => [],
+      transactionStatus: async (txHash): Promise<{ status: string } | undefined> => {
+        await Promise.resolve();
+        return txHash === hash ? { status: "committed" } : undefined;
+      },
+    });
+    const request = async (
+      client: StubClient,
+      method: string,
+      params: unknown[],
+    ): Promise<unknown> => client.requestor.request(method, params);
+
+    await expect(request(scripted, "get_transaction", [hash])).resolves.toEqual({
+      transaction: null,
+      tx_status: { status: "committed" },
+    });
+    await expect(
+      request(scripted, "get_transaction", [byte32FromByte("88")]),
+    ).resolves.toMatchObject({ tx_status: { status: "unknown" } });
+    for (const [client, method, params] of [
+      [scripted, "get_transaction", []],
+      [scripted, "get_header", [hash]],
+      [new StubClient({}), "get_transaction", [hash]],
+    ] as const) {
+      await expect(request(client, method, [...params])).rejects.toThrow(
+        `Offline test client received ${method}`,
+      );
+    }
   });
 });
 
