@@ -31,13 +31,16 @@ describe("IckbSdk.getL1AccountState", () => {
     expect(getHeaderByNumber).toHaveBeenCalledExactlyOnceWith(1n);
   });
 
-  it("refuses a block that is not the tip's parent", async () => {
+  it.each([
+    ["another block", headerLike(1n)],
+    ["no block", undefined],
+  ])("refuses %s as the tip's parent", async (_, parent) => {
     const tip = headerLike(2n, { timestamp: BigInt(Date.now()) });
     const client = new FeeRateStubClient({
       getTipHeader: vi.fn<ccc.Client["getTipHeader"]>().mockResolvedValue(tip),
       getHeaderByNumber: vi
         .fn<ccc.Client["getHeaderByNumber"]>()
-        .mockResolvedValue(headerLike(1n)),
+        .mockResolvedValue(parent),
       cells: (): ccc.Cell[] => [],
     });
 
