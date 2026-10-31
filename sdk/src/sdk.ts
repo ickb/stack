@@ -233,13 +233,13 @@ export class IckbSdk {
   ): Promise<ConversionTransactionResult> {
     const { amount, context, direction } = options;
     if (amount < 0n) {
-      return conversionFailure("amount-negative", context.estimatedMaturity);
+      return conversionFailure("amount-negative");
     }
     if (direction === "ckb-to-ickb" && amount > context.ckbAvailable) {
-      return conversionFailure("insufficient-ckb", context.estimatedMaturity);
+      return conversionFailure("insufficient-ckb");
     }
     if (direction === "ickb-to-ckb" && amount > context.ickbAvailable) {
-      return conversionFailure("insufficient-ickb", context.estimatedMaturity);
+      return conversionFailure("insufficient-ickb");
     }
 
     const resolved = {
@@ -265,7 +265,7 @@ export class IckbSdk {
       !hasTransactionActivity(tx) &&
       (context.cells.length === 0 || (await isOwnLock(signer, lock)))
     ) {
-      return conversionFailure("nothing-to-do", context.estimatedMaturity);
+      return conversionFailure("nothing-to-do");
     }
     const completed = await this.completeConversion(tx, options);
     return {
@@ -287,7 +287,6 @@ export class IckbSdk {
       return {
         ok: false,
         reason: "amount-too-small",
-        estimatedMaturity: context.estimatedMaturity,
         minimum: minimumOrderAmount(true, context.system),
       };
     }
@@ -338,7 +337,6 @@ export class IckbSdk {
       return {
         ok: false,
         reason: "amount-too-small",
-        estimatedMaturity: context.estimatedMaturity,
         minimum: minimumOrderAmount(false, context.system),
       };
     }
@@ -538,9 +536,8 @@ function isPastPar(group: OrderGroup, exchangeRatio: Ratio): boolean {
 
 function conversionFailure(
   reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-  estimatedMaturity: bigint,
 ): ConversionTransactionResult {
-  return { ok: false, reason, estimatedMaturity };
+  return { ok: false, reason };
 }
 
 /** A plan always carries a deposit or an order, else it would be a collection. */

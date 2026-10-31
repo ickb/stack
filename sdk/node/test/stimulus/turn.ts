@@ -359,12 +359,11 @@ describe("runStimulusTurn", () => {
       runtime({
         account: fundedAccount,
         sdk: {
-          buildConversionTransaction: async (options) => {
+          buildConversionTransaction: async () => {
             await Promise.resolve();
             return {
               ok: false,
               reason: "amount-too-small",
-              estimatedMaturity: options.context.estimatedMaturity,
               minimum: 1n,
             };
           },

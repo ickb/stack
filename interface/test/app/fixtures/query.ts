@@ -32,7 +32,6 @@ export function stateSdk(
   vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
     ok: false,
     reason: "nothing-to-do",
-    estimatedMaturity: state.system.tip.timestamp,
   });
   return sdk;
 }

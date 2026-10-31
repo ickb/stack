@@ -63,9 +63,8 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
 
 export function failedPlan(
   reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-  estimatedMaturity = 0n,
 ): FailedPlan {
-  return { ok: false, reason, estimatedMaturity };
+  return { ok: false, reason };
 }
 
 /** A completed conversion ready to sign, spending one input from `txHashByte`. */

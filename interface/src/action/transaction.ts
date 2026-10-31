@@ -62,7 +62,7 @@ export async function buildTransactionPreview(
     if (!result.ok) {
       return txInfoWithError(
         conversionFailureMessage(result, amount, isCkb2Udt),
-        result.estimatedMaturity,
+        context.estimatedMaturity,
       );
     }
 

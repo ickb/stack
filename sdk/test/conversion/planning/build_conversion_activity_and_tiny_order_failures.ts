@@ -65,7 +65,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toEqual({
       ok: false,
       reason: "nothing-to-do",
-      estimatedMaturity: 0n,
     });
 
     await expect(
@@ -82,7 +81,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
-      estimatedMaturity: 0n,
       // Ten mining fees at fee rate 1, plus one, at the 0.001% order fee.
       minimum: 110_000n,
     });

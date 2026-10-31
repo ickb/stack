@@ -112,15 +112,13 @@ describe("buildTransactionPreview failure messages", () => {
     for (const [reason, message] of cases) {
       const config = walletConfigWith({
         sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(
-            failedPlan(reason, 77n),
-          ),
+          buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason)),
         },
       });
 
       await expect(
         buildTransactionPreview(
-          context({ ckbAvailable: 1n }),
+          context({ ckbAvailable: 1n, estimatedMaturity: 77n }),
           true,
           1n,
           own(config),
@@ -144,7 +142,6 @@ describe("buildTransactionPreview failure messages", () => {
           buildConversionTransaction: buildConversionTransactionMock({
             ok: false,
             reason: "amount-too-small",
-            estimatedMaturity: 77n,
             minimum,
           }),
         },
@@ -170,14 +167,14 @@ describe("buildTransactionPreview failure messages", () => {
       const config = walletConfigWith({
         sdk: {
           buildConversionTransaction: buildConversionTransactionMock(
-            failedPlan("nothing-to-do", 77n),
+            failedPlan("nothing-to-do"),
           ),
         },
       });
 
       await expect(
         buildTransactionPreview(
-          context({ ckbAvailable: 1n }),
+          context({ ckbAvailable: 1n, estimatedMaturity: 77n }),
           true,
           amount,
           own(config),
