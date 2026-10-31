@@ -106,8 +106,20 @@ describe("order entity validation", () => {
       data.getMaster(ccc.OutPoint.from({ txHash: byte32FromByte("44"), index: 1n }))
         .index,
     ).toBe(2n);
+    for (const padding of [
+      new Uint8Array(31),
+      Uint8Array.from({ length: 32 }, (_, i) => (i === 31 ? 1 : 0)),
+    ]) {
+      expect(() => {
+        Relative.from({ padding, distance: 1n }).validate();
+      }).toThrow("Relative master invalid, non standard padding");
+    }
     expect(() => {
-      invalidRelative.validate();
+      OrderData.from({
+        udtValue: 10n,
+        master: { type: "relative", value: invalidRelative },
+        info,
+      }).validate();
     }).toThrow("Relative master invalid");
     expect(() => {
       OrderData.from({
@@ -123,6 +135,13 @@ describe("order entity validation", () => {
     invalidOutPoint.index = -1n;
     expect(() => {
       new OrderData(1n, { type: "absolute", value: invalidOutPoint }, info).validate();
+    }).toThrow("OutPoint invalid");
+    const longOutPoint = ccc.OutPoint.from({
+      txHash: `${byte32FromByte("77")}00`,
+      index: 0n,
+    });
+    expect(() => {
+      new OrderData(1n, { type: "absolute", value: longOutPoint }, info).validate();
     }).toThrow("OutPoint invalid");
   });
 
@@ -216,9 +235,11 @@ describe("order entity wire bounds", () => {
         ratio.toBytes();
       }).toThrow(`struct.${field} - NumLike out of uint64 bounds`);
     }
-    expect(() => {
-      Info.create(true, { ckbScale: maxUint64 + 1n, udtScale: 1n }).validate();
-    }).toThrow("Ratio scale exceeds Uint64");
+    for (const isCkb2Udt of [true, false]) {
+      expect(() => {
+        Info.create(isCkb2Udt, { ckbScale: maxUint64 + 1n, udtScale: 1n }).validate();
+      }).toThrow("Ratio scale exceeds Uint64");
+    }
   });
 
   it("enforces the semantic Info integer range", () => {

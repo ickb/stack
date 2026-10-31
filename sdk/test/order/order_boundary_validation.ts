@@ -18,6 +18,13 @@ describe("order info fallback validation", () => {
         ckbMinMatchLog: 0,
       }).validate();
     }).toThrow("One ratio is invalid, so not Empty and not Populated");
+    expect(() => {
+      Info.from({
+        ckbToUdt: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+        udtToCkb: new UnvalidatedRatio(1n, 0n),
+        ckbMinMatchLog: 0,
+      }).validate();
+    }).toThrow("One ratio is invalid, so not Empty and not Populated");
   });
 });
 
