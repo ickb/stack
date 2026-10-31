@@ -441,8 +441,16 @@ describe("withdrawalRequestCell", () => {
   });
 
   it("marks requests ready once the claim epoch is reached", () => {
-    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
-    const requestHeader = headerLike({ epoch: [180n, 0n, 1n], number: 2n });
+    const depositHeader = headerLike({
+      epoch: [1n, 0n, 1n],
+      number: 1n,
+      dao: { c: 0n, ar: 10000000000000000n, s: 0n, u: 0n },
+    });
+    const requestHeader = headerLike({
+      epoch: [180n, 0n, 1n],
+      number: 2n,
+      dao: { c: 0n, ar: 11000000000000000n, s: 0n, u: 0n },
+    });
     const tip = headerLike({ epoch: [181n, 0n, 1n], number: 3n });
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
@@ -451,9 +459,9 @@ describe("withdrawalRequestCell", () => {
       true,
     );
     expect(cell.isReady).toBe(true);
+    // The accumulated rate grew 10%, so does the free capacity.
     expect(cell.ckbValue).toBe(
-      withdrawalCell.cellOutput.capacity +
-        ccc.calcDaoProfit(withdrawalCell.capacityFree, depositHeader, requestHeader),
+      withdrawalCell.cellOutput.capacity + withdrawalCell.capacityFree / 10n,
     );
   });
 
