@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
+import { capacityCell, script } from "@ickb/testkit";
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
@@ -96,11 +96,7 @@ export function plainCapacityCell(
   lock = script("11"),
   byte = "10",
 ): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity, lock },
-    outputData: "0x",
-  });
+  return capacityCell(capacity, lock, byte);
 }
 
 export function nativeUdtCell(

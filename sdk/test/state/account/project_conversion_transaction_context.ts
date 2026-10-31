@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type { SystemState } from "../../../src/conversion/types.ts";
@@ -7,12 +6,12 @@ import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
   nativeUdtCell,
+  plainCapacityCell,
   receiptValue,
   withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import {
   baseTip,
-  hash,
   headerLike,
   ratio,
 } from "../../transaction/base/support/sdk_core_support.ts";
@@ -20,14 +19,6 @@ import {
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function plainCapacityCell(capacity: bigint, lock = script("11"), byte = "10"): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity, lock },
-    outputData: "0x",
-  });
-}
 
 function system(overrides: Partial<SystemState> = {}): SystemState {
   return {

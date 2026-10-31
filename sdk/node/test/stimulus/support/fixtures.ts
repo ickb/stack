@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  capacityCell,
   committedTransactionResponse,
   FRESH_BLOCK,
   headerLike,
@@ -70,11 +71,7 @@ export function receipt(
 }
 
 export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: `0x${txHashByte.repeat(32)}`, index: 0n },
-    cellOutput: { capacity, lock: PRIMARY_LOCK },
-    outputData: "0x",
-  });
+  return capacityCell(capacity, PRIMARY_LOCK, txHashByte);
 }
 
 /**

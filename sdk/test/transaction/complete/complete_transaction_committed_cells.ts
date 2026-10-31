@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { script, StubClient } from "@ickb/testkit";
+import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { SWEEP_INPUT_LIMIT } from "../../../src/sdk.ts";
@@ -24,7 +24,7 @@ describe("IckbSdk.completeTransaction", () => {
 function registerFundingTests(): void {
   it("funds from the given plain cells and creates exact plain change", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const source = plainCell("81", lock, ccc.fixedPointFrom(200));
+    const source = capacityCell(ccc.fixedPointFrom(200), lock, "81");
     const { client, signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
@@ -54,8 +54,8 @@ function registerFundingTests(): void {
     const recommended = script("11");
     const secondary = script("12");
     const cells = [
-      plainCell("82", recommended, ccc.fixedPointFrom(200)),
-      plainCell("83", secondary, ccc.fixedPointFrom(200)),
+      capacityCell(ccc.fixedPointFrom(200), recommended, "82"),
+      capacityCell(ccc.fixedPointFrom(200), secondary, "83"),
     ];
     const { signer } = fundedSigner(cells, [recommended, secondary]);
     const tx = ccc.Transaction.default();
@@ -88,8 +88,8 @@ function registerFundingTests(): void {
 
   it("does not add a caller-supplied input twice when it reappears in the cells", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const existing = plainCell("87", lock, ccc.fixedPointFrom(200));
-    const additional = plainCell("88", lock, ccc.fixedPointFrom(200));
+    const existing = capacityCell(ccc.fixedPointFrom(200), lock, "87");
+    const additional = capacityCell(ccc.fixedPointFrom(200), lock, "88");
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addInput(existing);
@@ -111,7 +111,7 @@ function registerFundingTests(): void {
 
   it("names an input the builders spent twice", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const existing = plainCell("89", lock, ccc.fixedPointFrom(200));
+    const existing = capacityCell(ccc.fixedPointFrom(200), lock, "89");
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addInput(existing);
@@ -132,8 +132,8 @@ function registerFundingTests(): void {
 function registerSweepTests(): void {
   it("sweeps every given cell largest first while the input limit allows", async () => {
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-    const small = plainCell("90", lock, ccc.fixedPointFrom(70));
-    const large = plainCell("91", lock, ccc.fixedPointFrom(300));
+    const small = capacityCell(ccc.fixedPointFrom(70), lock, "90");
+    const large = capacityCell(ccc.fixedPointFrom(300), lock, "91");
     const udt = udtCell("92", lock, ickbUdt.script, 5n);
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
@@ -186,7 +186,7 @@ function registerSweepTests(): void {
       udtCell(byte, lock, ickbUdt.script, 10n),
     );
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
-    const funding = plainCell("ff", lock, ccc.fixedPointFrom(1000));
+    const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
 
     const result = await sdk.buildConversionTransaction({
       direction: "ckb-to-ickb",
@@ -221,7 +221,7 @@ function registerSweepTests(): void {
     );
     const cells = [
       ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
-      plainCell("e5", lock, ccc.fixedPointFrom(1000)),
+      capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
     ];
 
     const completed = await sdk.completeTransaction(tx, {
@@ -248,7 +248,7 @@ function registerIckbTests(): void {
     const cells = [
       udtCell("93", lock, type, 30n),
       largest,
-      plainCell("95", lock, ccc.fixedPointFrom(500)),
+      capacityCell(ccc.fixedPointFrom(500), lock, "95"),
     ];
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
@@ -295,7 +295,7 @@ function registerIckbTests(): void {
 function registerFailureTests(): void {
   it("fails typed instead of routing sub-minimum change into a protocol output", async () => {
     const { sdk, logicManager, lock } = testSdk({ completion: "real" });
-    const source = plainCell("84", lock, ccc.fixedPointFrom(50));
+    const source = capacityCell(ccc.fixedPointFrom(50), lock, "84");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput(
@@ -321,7 +321,7 @@ function registerFailureTests(): void {
 
   it("does not reinterpret a pre-existing plain output as fee change", async () => {
     const { sdk, lock } = testSdk({ completion: "real" });
-    const source = plainCell("89", lock, ccc.fixedPointFrom(50));
+    const source = capacityCell(ccc.fixedPointFrom(50), lock, "89");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
@@ -341,7 +341,7 @@ function registerFailureTests(): void {
 
   it("rejects DAO output 65 rather than hiding change in an existing output", async () => {
     const { sdk, logicManager, lock } = testSdk({ completion: "real" });
-    const source = plainCell("85", lock, ccc.fixedPointFrom(10_000));
+    const source = capacityCell(ccc.fixedPointFrom(10_000), lock, "85");
     const { signer } = fundedSigner([source], [lock]);
     const tx = transactionWithOutputs(64, lock);
     const first = tx.outputs[0];
@@ -396,15 +396,7 @@ function manyCells(
 }
 
 function plainCells(count: number, lock: ccc.Script, capacity: ccc.Num): ccc.Cell[] {
-  return manyCells(count, "d0", () => plainCell("d0", lock, capacity));
-}
-
-function plainCell(byte: string, lock: ccc.Script, capacity: ccc.Num): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity, lock },
-    outputData: "0x",
-  });
+  return manyCells(count, "d0", () => capacityCell(capacity, lock, "d0"));
 }
 
 function udtCell(
