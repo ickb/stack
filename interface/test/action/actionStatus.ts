@@ -45,6 +45,13 @@ describe("action status", () => {
     );
     expect(actionMessage(undefined, flags())).toBe(`${noRequestMessage}.`);
     expect(
+      actionMessage(failedTxInfo(noRequestMessage), {
+        ...flags(),
+        amount: 0n,
+        unavailableMessage: noCollectionMessage,
+      }),
+    ).toBe(`${noCollectionMessage}.`);
+    expect(
       actionMessage(
         {
           ...txInfo,
@@ -161,6 +168,7 @@ describe("timeUntilMaturity", () => {
     expect(timeUntilMaturity(10n + 90n * minute, 10n)).toBe("in 90 minutes");
     expect(timeUntilMaturity(10n + 90n * minute + 1n, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("in 2 hours");
+    expect(timeUntilMaturity(10n + day, 10n)).toBe("in 24 hours");
     expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("in 2 days");
   });
 });
