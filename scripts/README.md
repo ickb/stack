@@ -23,3 +23,9 @@ The custom ESLint rules sit beside their rationale in [`eslint.config.mts`](../e
 Those thresholds cover the transaction and actor paths. Applying them to test doubles and presentation glue would require tests of the apparatus whenever its shape changes; those workspaces still have tests, without a universal percentage target. The bot fixture uses the real SDK builders so their constraints remain visible: a no-op builder once hid a prefix walk reusing a transaction that earlier candidates had mutated. See the [test kit](../testkit/README.md) for the shared doubles and oracle.
 
 The [SDK API checks](../sdk/README.md#versioning-and-api-checks) validate reachable exports without freezing the unpublished rewrite's surface in a committed report.
+
+### Mutation testing
+
+`pnpm mutate` runs [StrykerJS](https://stryker-mutator.io/) over the source of the four workspaces, as [`stryker.config.json`](../stryker.config.json) sets it up. It makes one small edit to the code at a time and reports every edit no test notices. Full coverage only proves the code ran: a guard could still be deleted without a test failing. A full run takes far longer than the gate, so it runs on demand, outside `pnpm check`; `--mutate <globs>` narrows it. The config names the vitest runner plugin because Stryker looks for plugins beside its own package, where the isolated layout of pnpm puts none. The process entrypoints are left out, because their tests spawn a process the mutant switch does not reach.
+
+A surviving mutant earns the smallest test that kills it, or the deletion of the code it proves dead. An equivalent mutant, one no input can tell apart from the original, stays with its reason recorded. The TypeScript checker was tried and left out: on a sample it found the same survivors, only relabeled as compile errors mutants the tests already killed, and made the run slower.
