@@ -537,6 +537,9 @@ describe("signAndSendTransaction broadcast outcomes", () => {
   it("recognises CCC's duplicate error, or another copy's, by the hash it names", () => {
     expect(isDuplicateOf(duplicatedTransaction(TX_HASH), TX_HASH)).toBe(true);
     expect(isDuplicateOf({ txHash: TX_HASH }, TX_HASH)).toBe(true);
+    // A failure that is not an object carries no hash, even one equal to it.
+    expect(isDuplicateOf(null, TX_HASH)).toBe(false);
+    expect(isDuplicateOf(TX_HASH, TX_HASH)).toBe(false);
   });
 
   it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {

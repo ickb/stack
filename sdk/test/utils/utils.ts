@@ -34,7 +34,12 @@ describe("jsonRpcRequestor", () => {
   });
 
   it("refuses a client without one, or with a requestor that cannot request", () => {
-    for (const shape of [{}, { requestor: {} }]) {
+    for (const shape of [
+      {},
+      { requestor: null },
+      { requestor: {} },
+      { requestor: { request: "get_cells" } },
+    ]) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the requestor field is inspected.
       expect(() => jsonRpcRequestor(shape as unknown as ccc.Client)).toThrow(
         "The SDK needs a JSON-RPC client",

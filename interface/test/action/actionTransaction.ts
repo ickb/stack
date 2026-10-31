@@ -91,6 +91,20 @@ describe("finite-window confirmation", () => {
     );
   });
 
+  it("refuses a timeout look-alike that is not an Error or whose data says more", () => {
+    const timeoutData = '{"timeout":"1"}';
+    for (const error of [
+      null,
+      { data: timeoutData },
+      // An array would stringify to the timeout data, but it is not a string.
+      Object.assign(new Error("x"), { data: [timeoutData] }),
+      Object.assign(new Error("x"), { data: `x${timeoutData}` }),
+      Object.assign(new Error("x"), { data: `${timeoutData}x` }),
+    ]) {
+      expect(isWaitTimeout(error)).toBe(false);
+    }
+  });
+
   it("keeps an unconfirmed hash pending with current-session wording", async () => {
     waitTransaction.mockRejectedValueOnce(
       new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
