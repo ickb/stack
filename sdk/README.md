@@ -6,8 +6,9 @@
 
 The top-level script modules are `src/udt.ts` (iCKB), `src/logic.ts` (deposits and receipts), `src/owned_owner.ts` (requests and withdrawals) and `src/dao.ts` (shared Nervos DAO rules). The other concerns are:
 
+- `src/sdk.ts`: `IckbSdk`, which reads account state, walks the candidate plans and completes them.
 - `src/order/`: UDT limit orders and matching.
-- `src/conversion/`: state projection, estimates, plans, the withdrawal ring and completion.
+- `src/conversion/`: state projection, estimates, plans and the withdrawal ring.
 - `src/send/`: signing, broadcast and confirmation.
 - `src/utils/`: shared readers and codecs, and the signer helpers: the account locks a signer owns, and the Node actors' signer combinator. That combinator is general CCC code, not iCKB-specific, so it sits here rather than in `sdk/node`; it stays internal, outside the public entry, until an integrator needs it or CCC takes it upstream.
 
