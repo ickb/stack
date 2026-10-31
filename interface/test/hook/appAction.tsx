@@ -1,9 +1,17 @@
+import { ccc } from "@ckb-ccc/ccc";
 import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { shortAddress } from "../../src/action/destination.ts";
 import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
-import { elementProps, findElements, firstElement } from "../support/react.ts";
+import {
+  elementProps,
+  findElement,
+  findElements,
+  firstElement,
+  invokeElement,
+} from "../support/react.ts";
 import { inAct, renderHook, settle } from "../support/renderHook.ts";
 import {
   actionProps,
@@ -26,6 +34,7 @@ import {
   Dashboard,
   Form,
   submitPendingTransaction,
+  testnetClient,
   WalletAppView,
   type ActionLayout,
 } from "./fixtures/modules.ts";
@@ -62,6 +71,13 @@ function registerAppStateTests(): void {
     view.actionParams.retryState();
     const refreshedState = await view.actionParams.refreshState();
 
+    // The account query runs from the first render: nothing is frozen yet.
+    expect(queryMock.options).toMatchObject({ enabled: true });
+    expect(view.destinationField).toMatchObject({
+      text: "",
+      isValid: true,
+      isForeign: false,
+    });
     expect(view.isCkb2Udt).toBe(false);
     expect(view.amount).toBe(2n * CKB);
     expect(view.exchangeRatio).toBe(loadedState.system.exchangeRatio);
@@ -100,6 +116,36 @@ function registerAppStateTests(): void {
       ).rejects.toThrow(message);
       await unmount();
     }
+  });
+
+  it("zeroes the amount for a foreign destination once it resolves, keeping the typed text", async () => {
+    queryMock.result = {
+      data: l1State(),
+      error: null,
+      isFetching: false,
+      refetch: vi.fn(),
+    };
+    const props = appProps({ text: "2" });
+    const { result, unmount } = await renderApp(props);
+    const foreign = ccc.Address.fromScript(script("22"), testnetClient);
+    const parse = Promise.withResolvers<ccc.Address>();
+    vi.spyOn(ccc.Address, "fromString").mockReturnValueOnce(parse.promise);
+    const view = (): ViewProps => elementProps<ViewProps>(result.current);
+
+    await inAct(() => {
+      view().destinationField.setText(foreign.toString());
+    });
+    expect(view().destinationField).toMatchObject({ isValid: false, isForeign: false });
+    expect(view().text).toBe("2");
+    parse.resolve(foreign);
+    await settle();
+
+    expect(view().destinationField).toMatchObject({ isValid: true, isForeign: true });
+    expect(view().text).toBe("0");
+    expect(view().actionParams.amount).toBe(0n);
+    expect(props.setText).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+    await unmount();
   });
 }
 
@@ -542,6 +588,78 @@ function registerPendingTransactionRecoveryTests(): void {
 }
 
 function registerWalletViewTests(): void {
+  it("edits the destination in full and shows it shortened at rest, linked in the explorer", async () => {
+    const foreign = "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq";
+    const own = "ckb1qyqrdsefa43s6m882pcj53m4gdnj4k440axqdt9rtd";
+    const setText = vi.fn<(value: string) => void>();
+    const props = (
+      chain: "mainnet" | "testnet",
+      destination: Omit<Parameters<typeof Dashboard>[0]["destination"], "setText">,
+    ): Parameters<typeof Dashboard>[0] => ({
+      walletConfig: { ...walletConfig(), chain, address: own },
+      walletName: "JoyID",
+      openWallet: vi.fn<() => void>(),
+      destination: { ...destination, setText },
+      disabled: false,
+    });
+    const { result, rerender, unmount } = await renderHook(
+      (current: Parameters<typeof Dashboard>[0]) =>
+        invokeElement(
+          findElement(Dashboard(current), (element) =>
+            Object.hasOwn(elementProps<object>(element), "ownAddress"),
+          ),
+        ),
+      props("testnet", { text: foreign, isValid: true, isForeign: true }),
+    );
+    interface Field {
+      value: string;
+      placeholder: string;
+      onFocus: () => void;
+      onBlur: () => void;
+      onChange: (event: { target: { value: string } }) => void;
+      onPaste: (event: { currentTarget: { blur: () => void } }) => void;
+    }
+    const field = (): Field =>
+      elementProps<Field>(findElement(result.current, (node) => node.type === "input"));
+    const href = (): string =>
+      elementProps<{ href: string }>(
+        findElement(result.current, (node) => node.type === "a"),
+      ).href;
+
+    expect(field().value).toBe(`→ ${shortAddress(foreign)}`);
+    expect(href()).toBe(`https://testnet.explorer.nervos.org/address/${foreign}`);
+    await inAct(() => {
+      field().onFocus();
+    });
+    expect(field().value).toBe(foreign);
+    field().onChange({ target: { value: "ckt1" } });
+    expect(setText).toHaveBeenCalledWith("ckt1");
+    // A paste is the whole edit: the field lets go so the address shows shortened.
+    const blur = vi.fn<() => void>();
+    field().onPaste({ currentTarget: { blur } });
+    await settle();
+    expect(blur).toHaveBeenCalledTimes(1);
+    await inAct(() => {
+      field().onBlur();
+    });
+    expect(field().value).toBe(`→ ${shortAddress(foreign)}`);
+
+    await rerender(
+      props("mainnet", { text: ` ${own} `, isValid: true, isForeign: false }),
+    );
+    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
+    await rerender(props("mainnet", { text: own, isValid: true, isForeign: false }));
+    expect(field().value).toBe(shortAddress(own));
+    // Empty or invalid text links the wallet's own address; invalid text stays as typed.
+    await rerender(props("mainnet", { text: "", isValid: true, isForeign: false }));
+    expect(field()).toMatchObject({ value: "", placeholder: shortAddress(own) });
+    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
+    await rerender(props("mainnet", { text: "nope", isValid: false, isForeign: false }));
+    expect(field().value).toBe("nope");
+    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
+    await unmount();
+  });
+
   it("renders WalletAppView with and without loaded balances", () => {
     const baseProps = {
       walletConfig: walletConfig(),
