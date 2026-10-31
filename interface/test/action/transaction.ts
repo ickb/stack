@@ -197,6 +197,8 @@ describe("buildTransactionPreview destination", () => {
     const txInfo = await buildTransactionPreview(context(), false, 1n, OWN, config);
 
     expect(txInfo).toMatchObject({ ok: true, broadcastBefore });
+    // A plan without cell space leaves the field out rather than undefined.
+    expect(txInfo).not.toHaveProperty("orderOccupiedCapacity");
   });
 
   it("refuses a move with an amount before reaching the SDK", async () => {
