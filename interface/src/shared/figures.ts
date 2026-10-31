@@ -21,11 +21,26 @@ function exactDecimal(shannons: bigint): `${number}` {
   return ccc.fixedPointToString(shannons) as `${number}`;
 }
 
-const fullFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 });
+// A balance rounds toward zero, so a figure the user types back never exceeds what is held.
+const balanceFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  roundingMode: "trunc",
+});
 
-/** The figure at full precision with thousands grouped, for a wide screen. */
-export function figureText(shannons: bigint): string {
-  return fullFormat.format(exactDecimal(shannons));
+const compactBalanceFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  roundingMode: "trunc",
+});
+
+/** A balance figure: two decimals, thousands grouped, compact ("123.45K") from `compactFrom` whole units. */
+export function figureText(shannons: bigint, compactFrom?: bigint): string {
+  const decimal = exactDecimal(shannons);
+  return compactFrom !== undefined && shannons / CKB >= compactFrom
+    ? compactBalanceFormat.format(decimal)
+    : balanceFormat.format(decimal);
 }
 
 /**
@@ -53,19 +68,6 @@ export function groupDigits(text: string): string {
 
 function isDigits(text: string): boolean {
   return /^\d*$/u.test(text);
-}
-
-/**
- * The figure a narrow place holds: whole units, "+" for any fraction, and the compact form
- * from `compactFrom` whole units. A phone balance column is about 100px, where "9,999,999+"
- * is 90px and one digit more fills it.
- */
-export function phoneFigureText(shannons: bigint, compactFrom = 10_000_000n): string {
-  const whole = shannons / CKB;
-  if (whole >= compactFrom) {
-    return compactText(shannons, 1);
-  }
-  return `${groupDigits(String(whole))}${shannons % CKB === 0n ? "" : "+"}`;
 }
 
 /** The chart caption's amount, in the ticks' own compact style so the two never disagree. */

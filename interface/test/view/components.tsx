@@ -231,23 +231,25 @@ describe("view components", () => {
       ),
     ).onClick?.();
     expect(setText.mock.lastCall).toEqual(["2"]);
-    expect(
-      renderToStaticMarkup(
-        <Form
-          {...draft}
-          text="1"
-          chain="testnet"
-          projection={projection({
-            ckbNative: 1n,
-            ickbNative: 0n,
-            ckbAvailable: 1n,
-            ickbAvailable: 0n,
-            ckbBalance: 1n,
-            ickbBalance: 0n,
-          })}
-        />,
-      ),
-    ).toContain("0+");
+    // One shannon truncates to 0.00 on screen; the accessible label keeps the exact value.
+    const oneShannon = renderToStaticMarkup(
+      <Form
+        {...draft}
+        text="1"
+        chain="testnet"
+        projection={projection({
+          ckbNative: 1n,
+          ickbNative: 0n,
+          ckbAvailable: 1n,
+          ickbAvailable: 0n,
+          ckbBalance: 1n,
+          ickbBalance: 0n,
+        })}
+      />,
+    );
+    expect(oneShannon).toContain('aria-label="CKB in wallet: 0.00000001"');
+    expect(oneShannon).toContain('aria-label="CKB converting: 0"');
+    expect(oneShannon).toContain(">0.00<");
     // The unit rate beside the switch: both sides at two decimals, "..." without a quote.
     expect(renderToStaticMarkup(element)).toContain("1.00 CKB");
     expect(renderToStaticMarkup(element)).toContain("...");

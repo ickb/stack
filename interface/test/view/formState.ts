@@ -1,6 +1,6 @@
 import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
-import { figureText, groupDigits, phoneFigureText } from "../../src/shared/figures.ts";
+import { figureText, groupDigits } from "../../src/shared/figures.ts";
 import { CKB, parseAmountInput } from "../../src/shared/utils.ts";
 import {
   amountQuoteText,
@@ -142,21 +142,18 @@ describe("formAssets", () => {
 });
 
 describe("balance figures", () => {
-  it("groups thousands and keeps every decimal on a wide screen", () => {
-    expect(figureText(0n)).toBe("0");
-    expect(figureText(1234567n * CKB + 12345678n)).toBe("1,234,567.12345678");
-    expect(figureText(100000000000n * CKB)).toBe("100,000,000,000");
+  it("groups thousands and truncates to two decimals", () => {
+    expect(figureText(0n)).toBe("0.00");
+    expect(figureText(400333n * CKB + 11456155n)).toBe("400,333.11");
+    expect(figureText(CKB - 1n)).toBe("0.99");
+    expect(figureText(100000000000n * CKB)).toBe("100,000,000,000.00");
   });
 
-  it("shows whole units with a plus on a phone, compact from eight digits", () => {
-    expect(phoneFigureText(0n)).toBe("0");
-    expect(phoneFigureText(9999999n * CKB + 1n)).toBe("9,999,999+");
-    expect(phoneFigureText(12345678n * CKB)).toBe("12.3M");
-    expect(phoneFigureText(123456789n * CKB + 1n)).toBe("123M");
-    expect(phoneFigureText(1234567890n * CKB)).toBe("1.23B");
-    // The chart caption compacts a digit earlier.
-    expect(phoneFigureText(999999n * CKB + 1n, 1_000_000n)).toBe("999,999+");
-    expect(phoneFigureText(1234567n * CKB, 1_000_000n)).toBe("1.23M");
+  it("compacts from the given whole units, still with two decimals", () => {
+    expect(figureText(999999n * CKB + 99999999n, 1_000_000n)).toBe("999,999.99");
+    expect(figureText(1_000_000n * CKB, 1_000_000n)).toBe("1.00M");
+    expect(figureText(12345678n * CKB, 1_000_000n)).toBe("12.34M");
+    expect(figureText(1999999999n * CKB, 1_000_000n)).toBe("1.99B");
   });
 });
 
