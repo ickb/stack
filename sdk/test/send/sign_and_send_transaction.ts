@@ -499,6 +499,28 @@ describe("isCommittedIn", () => {
       expect(isCommittedIn(last.txHash, header, variant)).toBe(false);
     }
   });
+
+  it("refuses an index that disagrees with the path's length", () => {
+    const { txHash } = last;
+    const witnessesRoot = hash("05");
+    const lemma = hash("06");
+    // Each root is the one a path of that length reaches, so only the index refuses.
+    for (const [root, lemmas, index, wrong] of [
+      [ccc.hashCkb(txHash, witnessesRoot), [], "0x0", ["0x1"]],
+      [ccc.hashCkb(ccc.hashCkb(lemma, txHash), witnessesRoot), [lemma], "0x2", []],
+    ] as const) {
+      const rooted = cccA.JsonRpcTransformers.blockHeaderTo({
+        ...PROOF_BLOCK,
+        transactions_root: root,
+      });
+      const proof = (indices: readonly ccc.Hex[]): TransactionProof => ({
+        witnesses_root: witnessesRoot,
+        proof: { indices, lemmas },
+      });
+      expect(isCommittedIn(txHash, rooted, proof([index]))).toBe(true);
+      expect(isCommittedIn(txHash, rooted, proof(wrong))).toBe(false);
+    }
+  });
 });
 
 describe("signAndSendTransaction broadcast outcomes", () => {
