@@ -9,7 +9,12 @@ import {
   ratio,
   system,
 } from "../transaction/base/support/sdk_core_support.ts";
-import { fillableBuyer, HALF_PRICE, sittingSeller } from "./support/estimate_support.ts";
+import {
+  DOUBLE_PRICE,
+  fillableBuyer,
+  HALF_PRICE,
+  sittingSeller,
+} from "./support/estimate_support.ts";
 
 const CAP = ICKB_DEPOSIT_CAP;
 const tip = headerLike(1n, { timestamp: 100n });
@@ -45,6 +50,7 @@ describe("maturity of a seller", () => {
       ],
     });
 
+    expect(maturity(seller(CAP), state)).toBe(100n + BOT_TURN_MS);
     expect(maturity(seller(CAP + 1n), state)).toBe(3000n + BOT_TURN_MS);
     expect(maturity(seller(2n * CAP + 1n), state)).toBe(5000n + BOT_TURN_MS);
     expect(maturity(seller(3n * CAP + 1n), state)).toBe(5000n + BOT_TURN_MS);
@@ -67,6 +73,15 @@ describe("maturity of a seller", () => {
     };
     const deposit = projectionReadyDeposit(1n, 3000n);
     expect(maturity(halfFilled, system({ tip, poolDeposits: [deposit] }))).toBe(
+      3000n + BOT_TURN_MS,
+    );
+    // A cap asked at twice the DAO price needs two caps of CKB: the bot's and a claim.
+    const dear: Parameters<typeof maturity>[0] = {
+      info: Info.create(false, DOUBLE_PRICE),
+      amounts: { ckbValue: 0n, udtValue: CAP },
+    };
+    const capDeposit = projectionReadyDeposit(CAP, 3000n);
+    expect(maturity(dear, system({ tip, poolDeposits: [capDeposit] }))).toBe(
       3000n + BOT_TURN_MS,
     );
   });
@@ -135,7 +150,7 @@ describe("maturity of a seller", () => {
 
   it("leaves its own book order out of the queue ahead", () => {
     const own = sittingSeller(1n, HALF_PRICE, CAP);
-    const other = sittingSeller(1n, HALF_PRICE, CAP);
+    const other = sittingSeller(1n, HALF_PRICE, CAP / 2n);
     // Fixture groups share one out point; the other seller needs its own.
     other.order.cell.outPoint = ccc.OutPoint.from({
       txHash: `0x${"78".repeat(32)}`,
@@ -150,9 +165,9 @@ describe("maturity of a seller", () => {
       ],
     });
 
-    // Half a cap of its own plus the other's cap: the bot's cap now and the first claim date.
-    expect(maturity(own.order, state)).toBe(3000n + BOT_TURN_MS);
-    // A fresh order at par queues behind both caps: the bot's cap now and both claim dates.
+    // Half a cap of its own plus the other's half cap: the bot's cap now.
+    expect(maturity(own.order, state)).toBe(100n + BOT_TURN_MS);
+    // A fresh order at par queues behind both: the bot's cap now and both claim dates.
     expect(maturity(seller(CAP), state)).toBe(5000n + BOT_TURN_MS);
   });
 });
@@ -178,6 +193,25 @@ describe("maturity of a buyer", () => {
     expect(maturity(buyer(CAP), system({ tip, orderPool: [supply] }))).toBe(
       100n + BOT_TURN_MS,
     );
+    // At twice the DAO price, an equal buyer is ahead; a fillable one paying less is not.
+    const atDouble: Parameters<typeof maturity>[0] = {
+      info: Info.create(true, DOUBLE_PRICE),
+      amounts: { ckbValue: 1n, udtValue: 0n },
+    };
+    expect(maturity(atDouble, system({ tip, orderPool: [paysMore] }))).toBe(
+      100n + 2n * BOT_TURN_MS,
+    );
+    const paysBetween = fillableBuyer(CAP, { ckbScale: 2n, udtScale: 3n });
+    expect(maturity(atDouble, system({ tip, orderPool: [paysBetween] }))).toBe(
+      100n + BOT_TURN_MS,
+    );
+    // Supply beyond the request leaves the one turn.
+    expect(
+      maturity(
+        buyer(1n),
+        system({ tip, orderPool: [sittingSeller(1n, HALF_PRICE, 2n * CAP)] }),
+      ),
+    ).toBe(100n + BOT_TURN_MS);
     // A buyer too small for the bot to take whole is not ahead of anyone.
     expect(maturity(buyer(1n), system({ tip, orderPool: [fillableBuyer(10n)] }))).toBe(
       100n + BOT_TURN_MS,
