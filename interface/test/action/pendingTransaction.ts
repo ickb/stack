@@ -7,6 +7,7 @@ import {
   type PendingTransactionState,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
+import { recordPending } from "./fixtures/transaction.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 
@@ -125,18 +126,6 @@ describe("pending transaction late settlement", () => {
     expect(store.current).toBeUndefined();
   });
 });
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(
-  store: PendingTransactionStore,
-  hash: ccc.Hex,
-): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(hash);
-    await Promise.resolve();
-    return hash;
-  });
-}
 
 function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
   return store.current?.status === "pending" ? store.current.txHash : undefined;

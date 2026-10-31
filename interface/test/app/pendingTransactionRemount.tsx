@@ -14,9 +14,10 @@ import {
 } from "../../src/action/pendingTransaction.ts";
 import type { L1StateType } from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
+import { activeTxInfo } from "../action/fixtures/transaction.ts";
 import { fakeDom } from "../support/dom.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
+import { l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{

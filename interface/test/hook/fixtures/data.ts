@@ -3,7 +3,7 @@ import { Ratio } from "@ickb/sdk";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
-import { txWithInput } from "../../action/fixtures/transaction.ts";
+import { activeTxInfo } from "../../action/fixtures/transaction.ts";
 import {
   CKB,
   mainnetClient,
@@ -13,7 +13,6 @@ import {
   type L1StateType,
   type QuoteState,
   type RootConfig,
-  type SendableTx,
   type TxInfo,
   type useQuoteState,
   type WalletConfig,
@@ -50,16 +49,6 @@ export function actionProps(): Parameters<typeof Action>[0] {
     isStateFetching: false,
     stateError: null,
     retryState: vi.fn<() => void>(),
-  };
-}
-
-export function activeTxInfo(): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput("11"),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "direct",
   };
 }
 

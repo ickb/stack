@@ -1,18 +1,22 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
-  type ConversionTransactionContext,
-  type ConversionTransactionFailureReason,
-  type ConversionTransactionResult,
   IckbSdk,
   Ratio,
   WALLET_LOCK_UP,
+  type ConversionTransactionContext,
+  type ConversionTransactionFailureReason,
+  type ConversionTransactionResult,
 } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
+import {
+  submitPendingTransaction,
+  type PendingTransactionStore,
+} from "../../../src/action/pendingTransaction.ts";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
-import type { WalletConfig } from "../../../src/shared/utils.ts";
+import type { SendableTx, WalletConfig } from "../../../src/shared/utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
   typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
@@ -67,6 +71,21 @@ export function failedPlan(
   estimatedMaturity = 0n,
 ): FailedPlan {
   return { ok: false, reason, estimatedMaturity };
+}
+
+/** A completed conversion ready to sign, spending one input from `txHashByte`. */
+export function activeTxInfo(
+  txHashByte = "11",
+  overrides: Partial<SendableTx> = {},
+): SendableTx {
+  return {
+    ok: true,
+    tx: txWithInput(txHashByte),
+    fee: 1n,
+    estimatedMaturity: 0n,
+    conversionKind: "direct",
+    ...overrides,
+  };
 }
 
 export function txWithInput(txHashByte: string): ccc.Transaction {
@@ -126,4 +145,16 @@ function testSdk(
       }),
   );
   return sdk;
+}
+
+/** Records `txHash` as the store's pending transaction through a send that succeeds. */
+export async function recordPending(
+  store: PendingTransactionStore,
+  txHash: ccc.Hex,
+): Promise<void> {
+  await submitPendingTransaction(store, async (recordTxHash) => {
+    recordTxHash(txHash);
+    await Promise.resolve();
+    return txHash;
+  });
 }

@@ -2,11 +2,11 @@ import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import { inAct, renderHook, settle } from "../support/renderHook.ts";
 import {
   actionProps,
-  activeTxInfo,
   l1State,
   nothingToSign,
   quoteState,
@@ -28,7 +28,6 @@ import {
   submitPendingTransaction,
   WalletAppView,
   type ActionLayout,
-  type PendingTransactionStore,
 } from "./fixtures/modules.ts";
 
 type ActionProps = Parameters<typeof Action>[0];
@@ -542,16 +541,4 @@ async function freezeBuiltPreview(
   if (txInfo.ok) {
     params.freezePreview({ ...state, txInfo });
   }
-}
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(
-  store: PendingTransactionStore,
-  txHash: `0x${string}`,
-): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
 }
