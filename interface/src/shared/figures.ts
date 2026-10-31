@@ -38,9 +38,11 @@ const compactBalanceFormat = new Intl.NumberFormat("en-US", {
 /** A balance figure: two decimals, thousands grouped, compact ("123.45K") from `compactFrom` whole units. */
 export function figureText(shannons: bigint, compactFrom?: bigint): string {
   const decimal = exactDecimal(shannons);
-  return compactFrom !== undefined && shannons / CKB >= compactFrom
-    ? compactBalanceFormat.format(decimal)
-    : balanceFormat.format(decimal);
+  // Asked as "below the threshold" because a bigint compared with undefined is false: with
+  // the order reversed, the undefined test would change nothing a test can see.
+  return compactFrom === undefined || shannons / CKB < compactFrom
+    ? balanceFormat.format(decimal)
+    : compactBalanceFormat.format(decimal);
 }
 
 /**
