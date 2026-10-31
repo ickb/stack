@@ -96,15 +96,29 @@ export async function signAndSendTransaction(
     await signer.client.sendTransactionNoCache(signed);
   } catch (cause) {
     // A duplicate submission of this exact transaction is already accepted.
-    if (
-      cause instanceof ccc.ErrorClientDuplicatedTransaction &&
-      cause.txHash === txHash
-    ) {
+    if (isDuplicateOf(cause, txHash)) {
       return txHash;
     }
     throw new TransactionBroadcastError(txHash, { cause });
   }
   return txHash;
+}
+
+/**
+ * Whether a send failure is CCC's duplicate answer naming this transaction, by shape: the
+ * signer's client may come from another copy of CCC, whose `ErrorClientDuplicatedTransaction`
+ * `instanceof` against this one misses. Among CCC errors, only that one carries a `txHash`.
+ */
+export function isDuplicateOf(
+  cause: unknown,
+  txHash: ccc.Hex,
+): cause is Pick<ccc.ErrorClientDuplicatedTransaction, "txHash"> {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "txHash" in cause &&
+    cause.txHash === txHash
+  );
 }
 
 // The default lock signs each input as its OutPoint only, never the cell behind it, so

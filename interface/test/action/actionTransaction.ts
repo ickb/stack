@@ -10,6 +10,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
+  isWaitTimeout,
   retryConfirmation,
   transact,
   waitForConfirmation,
@@ -76,6 +77,18 @@ describe("finite-window confirmation", () => {
       timeout: confirmationWindowMs,
       signal: controller.signal,
     });
+  });
+
+  it("recognises CCC's wait timeout, or another copy's, by its data alone", () => {
+    expect(
+      isWaitTimeout(new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs)),
+    ).toBe(true);
+    expect(
+      isWaitTimeout(Object.assign(new Error("x"), { data: '{"timeout":"1"}' })),
+    ).toBe(true);
+    expect(isWaitTimeout(Object.assign(new Error("x"), { data: '{"limit":"1"}' }))).toBe(
+      false,
+    );
   });
 
   it("keeps an unconfirmed hash pending with current-session wording", async () => {

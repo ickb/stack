@@ -1,12 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { composedClient, headerLike, offlineTestnetClient } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
+import {
+  composedClient,
+  headerLike,
+  offlineTestnetClient,
+  offlineTransport,
+} from "@ickb/testkit";
+import { describe, expect, it, vi } from "vitest";
 import {
   clientCache,
   compareBigInt,
   defaultCellPageSize,
   findCells,
+  isJsonRpcRequestor,
   isPlainCapacityCell,
   jsonRpcRequestor,
   unique,
@@ -20,7 +26,14 @@ describe("jsonRpcRequestor", () => {
     expect(jsonRpcRequestor(composedClient(client))).toBe(client.requestor);
   });
 
-  it("refuses a client without one, or with another kind of requestor", () => {
+  it("accepts CCC's requestor, and one from another copy of CCC by its request method", () => {
+    expect(
+      isJsonRpcRequestor(ccc.RequestorJsonRpc.new({ transport: offlineTransport() })),
+    ).toBe(true);
+    expect(isJsonRpcRequestor({ request: vi.fn() })).toBe(true);
+  });
+
+  it("refuses a client without one, or with a requestor that cannot request", () => {
     for (const shape of [{}, { requestor: {} }]) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the requestor field is inspected.
       expect(() => jsonRpcRequestor(shape as unknown as ccc.Client)).toThrow(

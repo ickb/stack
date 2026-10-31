@@ -149,15 +149,31 @@ export function isPlainCapacityCell(cell: ccc.Cell): boolean {
   return cell.cellOutput.type === undefined && cell.outputData === "0x";
 }
 
+/** The part of CCC's JSON-RPC requestor the SDK's raw reads call. */
+export type JsonRpcRequestor = Pick<ccc.RequestorJsonRpc, "request">;
+
+/**
+ * Whether a value is a JSON-RPC requestor, by shape: a client built with another copy of
+ * CCC carries that copy's `RequestorJsonRpc`, which `instanceof` against this one misses.
+ */
+export function isJsonRpcRequestor(value: unknown): value is JsonRpcRequestor {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "request" in value &&
+    typeof value.request === "function"
+  );
+}
+
 /**
  * The client's JSON-RPC requestor, which the SDK's raw reads need: scans with block
  * numbers, status polls and transaction proofs. The connector hands the interface a
  * composition proxy over the public client (`ClientWithFeeRate`, a `ccc.Client` but not a
  * `ccc.ClientJsonRpc`), so `instanceof` misses it; the proxy forwards the property.
  */
-export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc {
+export function jsonRpcRequestor(client: ccc.Client): JsonRpcRequestor {
   const requestor = "requestor" in client ? client.requestor : undefined;
-  if (!(requestor instanceof ccc.RequestorJsonRpc)) {
+  if (!isJsonRpcRequestor(requestor)) {
     throw new TypeError("The SDK needs a JSON-RPC client");
   }
   return requestor;

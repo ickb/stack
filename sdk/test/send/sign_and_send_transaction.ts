@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BroadcastDeadline } from "../../src/dao.ts";
 import {
   isCommittedIn,
+  isDuplicateOf,
   signAndSendTransaction,
   TransactionExpiredError,
   type TransactionProof,
@@ -531,6 +532,11 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     await expect(
       signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
     ).resolves.toBe(TX_HASH);
+  });
+
+  it("recognises CCC's duplicate error, or another copy's, by the hash it names", () => {
+    expect(isDuplicateOf(duplicatedTransaction(TX_HASH), TX_HASH)).toBe(true);
+    expect(isDuplicateOf({ txHash: TX_HASH }, TX_HASH)).toBe(true);
   });
 
   it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {
