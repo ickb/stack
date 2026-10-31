@@ -232,20 +232,40 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it("mints an iCKB-to-CKB order through the real mint when the amount is pinned", async () => {
+  it("mints each direction's amount on its own side through the real mint", async () => {
+    const orderManager = getConfig("testnet").order;
+    const mint = vi.spyOn(orderManager, "mint");
     const log = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
+      runtime({
+        account: fundedAccount,
+        sdk: completing(5500n * CKB),
+        order: orderManager,
+      }),
       {
         ...orderDraw,
         direction: "ickb-to-ckb",
         fee: 0n,
       },
     );
+    lines = [];
+    // The real completer funds the CKB-to-iCKB order from the account's plain CKB.
+    const completed = await turn(
+      runtime({ account: fundedAccount, order: orderManager }),
+      orderDraw,
+    );
 
     expect(log).toMatchObject({
       outcome: "committed",
       draw: { kind: "order", direction: "ickb-to-ckb", fee: "0" },
       action: { order: { outputs: [0, 1] } },
+      transactionShape: { inputs: 1, outputs: 3 },
+    });
+    expect(mint.mock.calls.map(([, , , amounts]) => amounts)).toEqual([
+      { ckbValue: 0n, udtValue: 5n * CKB },
+      { ckbValue: 5n * CKB, udtValue: 0n },
+    ]);
+    expect(completed).toMatchObject({
+      outcome: "committed",
       transactionShape: { inputs: 1, outputs: 3 },
     });
   });
