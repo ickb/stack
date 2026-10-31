@@ -6,6 +6,9 @@
     "configFile": "vitest.config.mts"
   },
   "coverageAnalysis": "perTest",
+  "thresholds": {
+    "break": 100
+  },
   "mutate": [
     "sdk/src/**/*.ts",
     "sdk/node/src/**/*.ts",

@@ -4,8 +4,10 @@ Repository tooling, run from the root by the `package.json` scripts; nothing her
 
 - `test/build/`: the build tests, run by Node's own test runner (`node --test 'scripts/test/**/*.ts'`) after vitest in `pnpm lint:coverage`. `native-source-smoke.ts` proves the workspace runs from TypeScript source (no deprecated `punycode` load, the two Node entrypoints fail fast without config); `rewrite-dts-imports.ts` covers the declaration rewrite below.
 - `test/lint-rules.ts`: lints, for each custom rule in `eslint.config.mts`, a snippet it must leave alone and one it must report once for each branch of its selector and each cell-read method it bans, since a mistyped selector matches nothing and reports nothing.
+- `test/tooling/`: the same runner's tests of the tooling scripts; `mutate-changed.ts` covers how the diff becomes Stryker ranges.
 - `tooling/build/rewrite-dts-imports.ts`: rewrites the relative `.ts` specifiers `tsgo` leaves in the SDK's emitted declarations; the SDK build runs it.
 - `tooling/dead-members.ts`: the dead-member lint knip cannot do, since knip sees exports and not class members; `pnpm lint:knip` runs it. Test-only references do not keep a production member alive. A TypeScript program supplies the references without the heavier language-service machinery.
+- `tooling/mutate-changed.ts`: `pnpm mutate:changed`, the [diff-scoped mutation run](#mutation-testing).
 - `tooling/eslint-plugin-types.d.ts`: the declaration shim for the ESLint plugins that publish no types.
 
 ## What the gate enforces
@@ -28,6 +30,17 @@ The [SDK API checks](../sdk/README.md#versioning-and-api-checks) validate reacha
 
 `pnpm mutate` runs [StrykerJS](https://stryker-mutator.io/) over the source of the four workspaces, as [`stryker.config.json`](../stryker.config.json) sets it up. It makes one small edit to the code at a time and reports every edit no test notices. Full coverage only proves the code ran: a guard could still be deleted without a test failing. A full run takes far longer than the gate, so it runs on demand, outside `pnpm check`; `--mutate <globs>` narrows it. `--incremental` retests only what changed, but after an edit to the tests alone it can keep a stale survivor, such as a module-level constant the new test now pins, so final numbers come from a run without it or with `--force`.
 
+`pnpm mutate:changed [base]` ([`tooling/mutate-changed.ts`](tooling/mutate-changed.ts)) mutates only the lines added since `base`, by default where the branch left `origin/master`. It keeps the changed files the config's `mutate` globs select, exclusions included, since a `--mutate` list replaces the config's, and passes each added hunk as a line range. With nothing left it exits 0 without starting Stryker; otherwise it runs without `--incremental`. The config's `break` threshold of 100 fails the run on any mutant that survives or that no test covers; a full `pnpm mutate` fails the same way while an unmarked survivor remains. Run it before opening or updating a pull request, as the [working agreement](../AGENTS.md#the-gate) asks. An equivalent mutant, one no input can tell apart from the original, is marked where it occurs with `// Stryker disable next-line <Mutator>: <reason>`.
+
+The diff-scoped run has accepted gaps:
+
+- A pull request that changes only tests mutates nothing, though its tests may have stopped killing mutants of unchanged code; a full run catches that.
+- A deleted line produces no mutant, so the run says nothing about code whose guard was removed.
+- Stryker makes a mutant only for code lying wholly inside one range, so a condition or block that also spans an unchanged line is not mutated, even where it joins an added guard to existing code.
+- The sandbox gap below applies to it as to a full run.
+
+A CI step running it on every pull request was rejected. Hosted runner minutes are free for this public repository, but wall time is not: its pull requests are often large, and a run the size of [pull request #67](https://github.com/ickb/stack/pull/67), close to a full one, was estimated at 35 to 50 minutes on a runner with four vCPUs. The accepted cost is that CI does not enforce the local rule; a full `pnpm mutate` can run at any time, for example before a merge.
+
 The config names the vitest runner plugin because Stryker looks for plugins beside its own package, where the isolated layout of pnpm puts none. The process entrypoints are left out, because their tests spawn a process the mutant switch does not reach. In the sandbox the workspace package links still lead to the checkout, so a test importing `@ickb/sdk` or `@ickb/testkit` runs the unmutated package: an SDK mutant meets only the tests that import the SDK by path, its own and the node actors', and a test kit mutant only its own tests. Such a survivor may still be caught elsewhere.
 
-A surviving mutant earns the smallest test that kills it, or the deletion of the code it proves dead. An equivalent mutant, one no input can tell apart from the original, stays with its reason recorded. The TypeScript checker was tried and left out: on a sample it found the same survivors, only relabeled as compile errors mutants the tests already killed, and made the run slower.
+A surviving mutant earns the smallest test that kills it, or the deletion of the code it proves dead. The TypeScript checker was tried and left out: on a sample it found the same survivors, only relabeled as compile errors mutants the tests already killed, and made the run slower.

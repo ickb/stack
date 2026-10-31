@@ -4,6 +4,8 @@
     ".": {
       "entry": [
         "scripts/{tooling/build/rewrite-dts-imports,tooling/pins}.ts!",
+        // Development only: it runs Stryker, a devDependency.
+        "scripts/tooling/mutate-changed.ts",
         "scripts/test/**/*.ts",
       ],
       "includeEntryExports": true,
