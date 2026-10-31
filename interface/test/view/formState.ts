@@ -54,6 +54,10 @@ describe("groupDigits", () => {
     expect(groupDigits("1234.")).toBe("1,234.");
     expect(groupDigits(".5")).toBe(".5");
     expect(groupDigits("1e2")).toBe("1e2");
+    // Grouping an invalid entry would hide what was typed.
+    expect(groupDigits("1234e5")).toBe("1234e5");
+    expect(groupDigits("1234.5e")).toBe("1234.5e");
+    expect(groupDigits("1234.5.6")).toBe("1234.5.6");
   });
 
   it("puts the caret back after the same non-comma characters", () => {
