@@ -82,7 +82,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
-      // Ten mining fees at fee rate 1, plus one, at the 0.001% order fee.
+      // Ten mining fees at fee rate 1, plus one, at the 0.01% order fee.
       minimum: 110_000n,
     });
     await expect(
