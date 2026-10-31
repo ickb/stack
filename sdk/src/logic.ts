@@ -137,8 +137,7 @@ export class LogicManager implements ScriptDeps {
       throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
     }
 
-    const depositCell = ccc.Cell.from({
-      previousOutput: { txHash: `0x${"00".repeat(32)}`, index: 0 },
+    const depositCell = ccc.CellAny.from({
       cellOutput: { capacity: depositCapacity, lock: this.script, type: this.dao.script },
       outputData: DAO_DEPOSIT_DATA,
     });
