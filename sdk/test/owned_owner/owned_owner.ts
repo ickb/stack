@@ -371,6 +371,12 @@ describe("OwnedOwnerManager.withdraw", () => {
     expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
       DaoHeaderIndexError,
     );
+    expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
+      expect.objectContaining({
+        name: "DaoHeaderIndexError",
+        message: "NervosDAO deposit header index 256 is not below 256",
+      }),
+    );
     expect(() =>
       manager().withdraw(ccc.Transaction.default(), groups.slice(1)),
     ).not.toThrow();
