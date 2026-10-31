@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import { projectAccountAvailability } from "../../../src/conversion/projection.ts";
+import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
@@ -48,16 +48,14 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     BOT_LOCK_UP,
     runtime.maxFeeRate,
   );
-  const projection = projectAccountAvailability(account, { available: [], pending: [] });
-
-  return {
+  const { projection, context } = projectConversionTransactionContext(
     system,
-    receipts: account.receipts,
-    readyWithdrawals: projection.readyWithdrawals,
+    account,
+    [],
+  );
+  return {
+    ...context,
     notReadyWithdrawals: projection.pendingWithdrawals,
-    cells: [...account.capacityCells, ...account.nativeUdtCells],
-    ckb: projection.ckbAvailable,
-    ickb: projection.ickbAvailable,
     pendingCkb: projection.ckbPending,
   };
 }
@@ -159,12 +157,14 @@ function summarizeBotState(state: BotState): BotStateSummary {
       },
     },
     balances: {
-      ckb: state.ckb,
-      ickb: state.ickb,
+      ckb: state.ckbAvailable,
+      ickb: state.ickbAvailable,
       pendingCkb: state.pendingCkb,
       totalEquivalentCkb:
-        state.ckb + state.pendingCkb + ckbFromUdt(state.ickb, exchangeRatio),
-      matchableCkb: spendableCkb(state.ckb),
+        state.ckbAvailable +
+        state.pendingCkb +
+        ckbFromUdt(state.ickbAvailable, exchangeRatio),
+      matchableCkb: spendableCkb(state.ckbAvailable),
       cellCount: state.cells.length,
     },
     counts: {

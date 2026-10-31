@@ -275,13 +275,15 @@ export function botState({
 }: Partial<BotState> &
   Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
   return {
-    ckb: 0n,
-    ickb: 0n,
+    ckbAvailable: 0n,
+    ickbAvailable: 0n,
     pendingCkb: 0n,
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
+    availableOrders: [],
     cells: [],
+    estimatedMaturity: 0n,
     ...overrides,
     system: {
       ...botSystem(),

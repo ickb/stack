@@ -27,8 +27,8 @@ describe("buildTransaction deposit", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: RICH_CKB,
-        ickb: 0n,
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: 0n,
         system: { ...botSystem(), depositCapacity: ccc.fixedPointFrom(1100) },
       }),
     );
@@ -75,8 +75,8 @@ describe("buildTransaction deposit", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: RICH_CKB,
-        ickb: ICKB_WITHDRAW_ABOVE + 1n,
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 1n,
         poolDeposits: [surplus, anchor, whale],
       }),
     );

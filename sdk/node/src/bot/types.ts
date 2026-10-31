@@ -1,7 +1,10 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts";
+import type {
+  ConversionTransactionContext,
+  SdkManagers,
+} from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
-import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
+import type { IckbDepositCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
 import type { transactionShape } from "../shared/format.ts";
@@ -42,28 +45,13 @@ export interface Runtime {
   ) => Promise<ccc.Hex>;
 }
 
-/** Snapshot of bot-owned and public state used for one planning attempt. */
-export interface BotState {
-  /** Sampled public L1 state. */
-  system: SystemState;
-
-  /** User receipt cells ready for deposit completion. */
-  receipts: ReceiptCell[];
-
-  /** User withdrawal groups ready for withdrawal completion. */
-  readyWithdrawals: WithdrawalGroup[];
-
+/**
+ * One planning attempt's state: the conversion context of the bot's account, which places
+ * no orders and so collects none, plus the withdrawals still converting.
+ */
+export interface BotState extends ConversionTransactionContext {
   /** User withdrawal groups that are not ready yet. */
   notReadyWithdrawals: WithdrawalGroup[];
-
-  /** The bot's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
-  cells: ccc.Cell[];
-
-  /** CKB available now: plain cells, collectible receipt capacity, ready withdrawals. */
-  ckb: bigint;
-
-  /** iCKB available now: xUDT cells plus receipts. */
-  ickb: bigint;
 
   /** CKB locked in withdrawal requests that are not ready yet. */
   pendingCkb: bigint;

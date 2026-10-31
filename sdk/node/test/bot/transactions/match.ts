@@ -32,7 +32,11 @@ describe("buildTransaction matching", () => {
       ckbMinMatchLog: 44,
     });
     const state = (ckb: bigint): ReturnType<typeof botState> =>
-      botState({ orderPool: [seller], ckb, ickb: BAND_ICKB_BALANCE });
+      botState({
+        orderPool: [seller],
+        ckbAvailable: ckb,
+        ickbAvailable: BAND_ICKB_BALANCE,
+      });
 
     const short = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask - 1n));
     const enough = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask));
@@ -79,8 +83,8 @@ describe("buildTransaction matching", () => {
       runtime,
       botState({
         orderPool: [seller],
-        ckb: plain.cellOutput.capacity,
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: plain.cellOutput.capacity,
+        ickbAvailable: BAND_ICKB_BALANCE,
         cells: [plain],
         system: { ...base.system, feeRate },
       }),
@@ -93,7 +97,10 @@ describe("buildTransaction matching", () => {
   it("skips with no_actions when the book, the collections, and the rebalance are all empty", async () => {
     const result = await buildTransaction(
       botRuntime(),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
+      botState({
+        ckbAvailable: ccc.fixedPointFrom(5000),
+        ickbAvailable: BAND_ICKB_BALANCE,
+      }),
     );
 
     expect(result).toMatchObject({
@@ -119,8 +126,8 @@ describe("buildTransaction matching", () => {
         botRuntime(),
         botState({
           orderPool: [buyer({ ckbScale: 1n, udtScale: 2n })],
-          ckb: CKB_RESERVE,
-          ickb: 0n,
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: 0n,
         }),
       ),
     ).resolves.toMatchObject({
@@ -136,8 +143,8 @@ describe("buildTransaction matching", () => {
         botRuntime(),
         botState({
           orderPool: [buyer({ ckbScale: 1n, udtScale: 1n })],
-          ckb: CKB_RESERVE,
-          ickb: ccc.fixedPointFrom(1000),
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: ccc.fixedPointFrom(1000),
         }),
       ),
     ).resolves.toMatchObject({
@@ -174,7 +181,11 @@ describe("buildTransaction matching", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ orderPool: [buyer], ckb: CKB_RESERVE, ickb: BAND_ICKB_BALANCE }),
+        botState({
+          orderPool: [buyer],
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: BAND_ICKB_BALANCE,
+        }),
       ),
     ).rejects.toThrow("fetch failed");
   });
@@ -192,8 +203,8 @@ describe("buildTransaction matching", () => {
       botRuntime(),
       botState({
         orderPool: [buyer],
-        ckb: ccc.fixedPointFrom(5000),
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: ccc.fixedPointFrom(5000),
+        ickbAvailable: BAND_ICKB_BALANCE,
       }),
     );
 
@@ -224,8 +235,8 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: ccc.fixedPointFrom(5000),
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: ccc.fixedPointFrom(5000),
+        ickbAvailable: BAND_ICKB_BALANCE,
         readyWithdrawals: [testWithdrawal("33")],
       }),
     );

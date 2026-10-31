@@ -473,10 +473,10 @@ describe("readBotState", () => {
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
     expect(state.system.orderPool).toEqual([marketOrder]);
-    expect(state.ckb).toBe(
+    expect(state.ckbAvailable).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );
-    expect(state.ickb).toBe(11n);
+    expect(state.ickbAvailable).toBe(11n);
     expect(state.pendingCkb).toBe(0n);
     expect(state.cells).toEqual([capacityCell, nativeUdtCell]);
     expect(state.system.feeRate).toBe(1n);

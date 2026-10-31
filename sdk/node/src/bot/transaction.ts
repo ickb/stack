@@ -51,8 +51,8 @@ export async function buildTransaction(
   const plan = planRebalance({
     tip: state.system.tip,
     lockUp: state.system.lockUp,
-    ickb: state.ickb + match.udtDelta,
-    ckb: state.ckb + match.ckbDelta,
+    ickb: state.ickbAvailable + match.udtDelta,
+    ckb: state.ckbAvailable + match.ckbDelta,
     pendingCkb: state.pendingCkb,
     depositCost:
       state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
@@ -116,8 +116,8 @@ export async function buildTransaction(
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   const match = matchTurn({
     orders: state.system.orderPool,
-    ckb: spendableCkb(state.ckb),
-    udt: state.ickb,
+    ckb: spendableCkb(state.ckbAvailable),
+    udt: state.ickbAvailable,
     exchangeRatio: state.system.exchangeRatio,
     feeRate: state.system.feeRate,
     seed: seedOf(state.system.tip.hash),
@@ -178,11 +178,7 @@ function buildCore(
 ): ccc.Transaction {
   let tx = runtime.sdk.buildBaseTransaction(
     matched.tx.clone(),
-    {
-      availableOrders: [],
-      receipts: state.receipts,
-      readyWithdrawals: state.readyWithdrawals,
-    },
+    state,
     core.kind === "withdraw"
       ? { deposits: core.deposits, lock: runtime.primaryLock }
       : undefined,

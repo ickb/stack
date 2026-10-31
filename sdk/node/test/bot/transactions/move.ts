@@ -42,8 +42,8 @@ describe("buildTransaction with a second key", () => {
     });
     const state = (cells: ccc.Cell[]): ReturnType<typeof botState> =>
       botState({
-        ckb: plain.cellOutput.capacity + ickb.cellOutput.capacity,
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: plain.cellOutput.capacity + ickb.cellOutput.capacity,
+        ickbAvailable: BAND_ICKB_BALANCE,
         cells,
         system: { ...botState({}).system, feeRate: 1000n },
       });
