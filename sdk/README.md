@@ -30,6 +30,8 @@ Every node read in `getL1AccountState` and `signAndSendTransaction` goes through
 
 `buildConversionTransaction(...)` returns a completed transaction funded from the cells in its state read, with the fee completion planned for it as `plannedFee`, the limit to hand to the [send](#signing-and-broadcast). It never discovers more inputs while trying candidates. The [root user-lock assumption](../README.md#user-locks) applies to both the wallet's lock and a caller-supplied destination.
 
+An amount of zero builds the collection alone; `hasCollectable(context)` says whether the context holds anything for it to collect, the test the interface, the generator and the bot share.
+
 The SDK tries the most direct plan first and returns the first that completes. Completion is the only authority on affordability: markers, remainder orders, change and fees all affect the answer. Removing one withdrawal can introduce a remainder order costing more capacity than the removed marker, so binary search or a policy-side count bound would be wrong. Typed fundability failures advance the walk; transport, scan, signer and malformed-transaction failures propagate. When every candidate fails, the last fundability failure is thrown.
 
 The ready-deposit selection excludes [ring anchors](node/docs/policy.md#rebalancing-and-the-maturity-ring) to preserve the pool's spread of maturities. If every ready deposit is an anchor, only an order plan remains.

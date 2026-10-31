@@ -260,15 +260,15 @@ export class IckbSdk {
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context, lock, signer } = options;
-    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     // An empty collection to a lock of the signer's own would only compact the account;
     // to another lock it moves the liquid cells, which completion builds from the sweep.
     if (
-      !hasTransactionActivity(tx) &&
+      !hasCollectable(context) &&
       (context.cells.length === 0 || (await isOwnLock(signer, lock)))
     ) {
       return conversionFailure("nothing-to-do");
     }
+    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     const completed = await this.completeConversion(tx, options);
     return {
       ok: true,
@@ -515,9 +515,16 @@ export class IckbSdk {
   }
 }
 
-/** Whether the transaction already carries any input or output. */
-function hasTransactionActivity(tx: ccc.Transaction): boolean {
-  return tx.inputs.length > 0 || tx.outputs.length > 0;
+/**
+ * Whether the context holds anything the collect steps take, so that a zero-amount
+ * conversion, `buildBaseTransaction` alone, has something to collect.
+ */
+export function hasCollectable(context: ConversionTransactionContext): boolean {
+  return (
+    context.availableOrders.length > 0 ||
+    context.receipts.length > 0 ||
+    context.readyWithdrawals.length > 0
+  );
 }
 
 /** An order the market can fill at a gain: priced past the DAO ratio on its matchable side. */

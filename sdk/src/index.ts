@@ -74,7 +74,7 @@ export type {
   OwnerCell,
   WithdrawalGroup,
 } from "./owned_owner.ts";
-export { IckbError } from "./sdk.ts";
+export { hasCollectable, IckbError } from "./sdk.ts";
 export type { IckbErrorCode } from "./sdk.ts";
 export {
   signAndSendTransaction,

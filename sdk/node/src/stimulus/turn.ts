@@ -6,7 +6,7 @@ import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../../../src/order/conversion.ts";
-import { isFundabilityFailure } from "../../../src/sdk.ts";
+import { hasCollectable, isFundabilityFailure } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -132,7 +132,7 @@ async function stimulate(
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built) {
     Object.assign(log, { skip: built.skip });
-    if (hasCollectible(state)) {
+    if (hasCollectable(state.context)) {
       built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
       if ("skip" in built) {
         Object.assign(log, { collectSkip: built.skip });
@@ -259,14 +259,6 @@ async function send(
     throw error;
   }
   Object.assign(log, { outcome: "committed" });
-}
-
-function hasCollectible({ context }: StimulusState): boolean {
-  return (
-    context.availableOrders.length > 0 ||
-    context.receipts.length > 0 ||
-    context.readyWithdrawals.length > 0
-  );
 }
 
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {

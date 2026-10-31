@@ -2,7 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { receiptPhase2Capacity } from "../../../src/logic.ts";
-import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts";
+import {
+  completeFirstFundable,
+  hasCollectable,
+  isFundabilityFailure,
+} from "../../../src/sdk.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
@@ -58,7 +62,6 @@ export async function buildTransaction(
       state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
     poolDeposits: state.system.poolDeposits,
   });
-  const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
   // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
   // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
   // cells already there would only compact.
@@ -67,7 +70,7 @@ export async function buildTransaction(
   );
   const cores = candidateCores(
     plan,
-    match.partials.length > 0 || hasCollections || hasMove,
+    match.partials.length > 0 || hasCollectable(state) || hasMove,
   );
   const decision = (
     core: Core,
