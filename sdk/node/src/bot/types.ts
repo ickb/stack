@@ -1,9 +1,11 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { SdkManagers, SystemState } from "../../../src/conversion/types.ts";
+import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
-import type { OrderGroup } from "../../../src/order/cells.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
+import type { ProtocolCell } from "../../../src/udt.ts";
+import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
 
@@ -24,18 +26,23 @@ export interface Runtime {
   /** Account locks derived once during signer initialization. */
   accountLocks: ccc.Script[];
 
+  /** The most the bot plans to pay per kB, in shannons, whatever rate the node reports. */
+  maxFeeRate?: ccc.Num;
+
   /** Completes a transaction through the initialization-owned signer closure. */
   completeTransaction: (
     tx: ccc.TransactionLike,
     feeRate: ccc.Num,
     cells: ccc.Cell[],
+    protocolCells: readonly ProtocolCell[],
+    tip: ccc.ClientBlockHeader,
   ) => Promise<ccc.Transaction>;
 
-  /** Signs and sends through the initialization-owned signer and exposes pre-RPC identity. */
+  /** Signs and sends through the initialization-owned signer. */
   sendTransaction: (
     tx: ccc.TransactionLike,
-    recordTxHash?: (txHash: ccc.Hex) => void,
-    broadcastBefore?: ccc.Epoch,
+    plannedFee: ccc.Num,
+    broadcastBefore?: BroadcastDeadline,
   ) => Promise<ccc.Hex>;
 }
 
@@ -43,9 +50,6 @@ export interface Runtime {
 export interface BotState {
   /** Sampled public L1 state. */
   system: SystemState;
-
-  /** Every order past par on the book, including any owned by the bot. */
-  marketOrders: OrderGroup[];
 
   /** User receipt cells ready for deposit completion. */
   receipts: ReceiptCell[];
@@ -55,9 +59,6 @@ export interface BotState {
 
   /** User withdrawal groups that are not ready yet. */
   notReadyWithdrawals: WithdrawalGroup[];
-
-  /** Full public pool deposit snapshot. */
-  poolDeposits: IckbDepositCell[];
 
   /** The bot's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
   cells: ccc.Cell[];
@@ -104,14 +105,16 @@ export type BuildTransactionResult =
   | {
       kind: "built";
       tx: ccc.Transaction;
+      /** The fee completion planned, which the send refuses to exceed. */
+      plannedFee: bigint;
       decision: BotDecision;
       /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
-      broadcastBefore?: ccc.Epoch;
+      broadcastBefore?: BroadcastDeadline;
     }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 
-/** Structured evidence for one bot planning attempt. */
-export interface BotDecision {
+/** What a turn read, as `bot.state.read` journals it. */
+export interface BotStateSummary {
   chainTip: {
     blockNumber: bigint;
     blockHash: ccc.Hex;
@@ -135,6 +138,14 @@ export interface BotDecision {
     poolDeposits: number;
     readyPoolDeposits: number;
   };
+  exchangeRatio: { ckbScale: bigint; udtScale: bigint };
+  depositCapacity: bigint;
+  /** The rate the turn plans at: the sampled one, or `BOT_MAX_FEE_RATE` when that binds. */
+  feeRate: ccc.Num;
+}
+
+/** What a turn decided, beside the state its `bot.state.read` line journaled. */
+export interface BotDecision {
   match: {
     reason: BotMatchReason;
     partialCount: number;
@@ -156,22 +167,9 @@ export interface BotDecision {
     ring: RingSummary;
   };
   /** The core the walk settled on and how many candidates it built on the way. */
-  core: { kind: Core["kind"]; withdrawalRequests: number; attempts: number };
+  core: { kind: Core["kind"]; attempts: number };
   actions: BotActions;
-  fee: { feeRate: ccc.Num; estimated?: bigint };
-  transactionShape?: {
-    inputs: number;
-    outputs: number;
-    cellDeps: number;
-    headerDeps: number;
-    witnesses: number;
-  };
-  exchangeRatio: { ckbScale: bigint; udtScale: bigint };
-  depositCapacity: bigint;
-  skip?: { reason: BuildTransactionSkipReason };
+  /** The fee completion planned, which the send refuses to exceed; absent without a transaction. */
+  plannedFee?: bigint;
+  transactionShape?: ReturnType<typeof transactionShape>;
 }
-
-export type BotStateSummary = Pick<
-  BotDecision,
-  "chainTip" | "balances" | "counts" | "exchangeRatio" | "depositCapacity" | "fee"
->;

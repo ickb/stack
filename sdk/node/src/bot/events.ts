@@ -1,33 +1,30 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
-import type { ChainPreflightEvidence } from "../shared/chain.ts";
 import { writeJsonLine } from "../shared/logging.ts";
-import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
+import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import type {
   BotDecision,
   BotStateSummary,
   BuildTransactionSkipReason,
 } from "./types.ts";
 
-/** Public identity of one bot process, emitted once with the chain preflight evidence. */
-export interface BotIdentity {
+/** Public identity of one bot process, emitted once its chain preflight passes. */
+interface BotIdentity {
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
-  rpcEndpoint: PublicRpcEndpointIdentity;
+  rpcEndpoints: RpcEndpointIdentity[];
 }
 
 /**
- * The eight bot events, each complete on its own; one turn emits at most six. A turn emits `bot.turn.started`,
- * `bot.chain.preflight`, `bot.state.read`, then either `bot.decision.skipped` or
- * `bot.transaction.built`, `bot.transaction.sent`, and `bot.transaction.committed`;
- * any failure ends the turn with `bot.turn.failed` instead.
+ * The eight bot events, each carrying what is new at its step; one turn emits at most six. A turn emits `bot.turn.started`,
+ * `bot.state.read`, then either `bot.decision.skipped` or `bot.transaction.built`,
+ * `bot.transaction.sent`, and `bot.transaction.committed`; the process's first turn also
+ * emits `bot.chain.preflight` after its start. Any failure ends the turn and the process
+ * with `bot.turn.failed` instead. Every event of one turn carries its `runId`.
  */
 export type BotEvent =
   | { type: "bot.turn.started" }
-  | ({ type: "bot.chain.preflight"; identity: BotIdentity } & Omit<
-      ChainPreflightEvidence,
-      "chain"
-    >)
+  | { type: "bot.chain.preflight"; identity: BotIdentity }
   | ({ type: "bot.state.read" } & BotStateSummary)
   | {
       type: "bot.decision.skipped";
@@ -41,18 +38,12 @@ export type BotEvent =
       /** `broadcast_ambiguous` when the send failed after the hash was known; the wait continues. */
       outcome: "broadcasted" | "broadcast_ambiguous";
       elapsedMs: number;
-      fee: bigint;
-      feeRate: ccc.Num;
-      transactionShape: BotDecision["transactionShape"];
       error?: unknown;
     }
   | {
       type: "bot.transaction.committed";
       txHash: ccc.Hex;
-      status: string;
       elapsedMs: number;
-      timeoutMs: number;
-      intervalMs: number;
     }
   | {
       type: "bot.turn.failed";
@@ -60,24 +51,35 @@ export type BotEvent =
       error: unknown;
     };
 
-/** Emits bot events as JSON lines on stdout. */
+/**
+ * Emits bot events as JSON lines on stdout. Each `bot.turn.started` opens a new `runId`,
+ * the process id followed by the turn's number, so one turn's events share it and its
+ * prefix ties the process's turns together.
+ */
 export class BotEventEmitter {
-  private readonly context: { chain: SupportedChain; runId: string };
+  private readonly chain: SupportedChain;
+  private readonly processId: string;
+  private turn = 0;
 
-  constructor(context: { chain: SupportedChain; runId: string }) {
-    this.context = context;
+  constructor({ chain, processId }: { chain: SupportedChain; processId: string }) {
+    this.chain = chain;
+    this.processId = processId;
   }
 
   public emit(event: BotEvent): void {
+    if (event.type === "bot.turn.started") {
+      this.turn += 1;
+    }
     writeJsonLine({
       ...event,
-      chain: this.context.chain,
-      runId: this.context.runId,
+      chain: this.chain,
+      runId: `${this.processId}-${String(this.turn)}`,
       timestamp: new Date().toISOString(),
     });
   }
 }
 
-export function createRunId(): string {
+/** The process's start time and pid. */
+export function createProcessId(): string {
   return `${new Date().toISOString()}-${process.pid.toString(36)}`;
 }

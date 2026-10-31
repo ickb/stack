@@ -1,5 +1,5 @@
-import type { ccc } from "@ckb-ccc/core";
-import { ceilDiv, minBigInt } from "../utils/utils.ts";
+import { ccc } from "@ckb-ccc/core";
+import { ceilDiv } from "../utils/utils.ts";
 import type { OrderCell, OrderGroup } from "./cells.ts";
 
 /**
@@ -167,7 +167,7 @@ function orderMatcherTerms(
   return {
     ...terms,
     // An order under its own minimum can only be completed.
-    bMinMatch: minBigInt(bMinMatch, bMaxMatch),
+    bMinMatch: ccc.numMin(bMinMatch, bMaxMatch),
     bMaxMatch,
     bMaxOut,
   };

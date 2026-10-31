@@ -11,14 +11,21 @@ WorkingDirectory=/home/user/Projects/ickb/stack
 # The user manager does not see the shell PATH, so name the node binary by absolute path.
 ExecStart=/home/user/Projects/ickb/stack/node_modules/node/bin/node sdk/node/src/bot.ts
 Environment=BOT_CHAIN=testnet
+# The two public testnet nodes, one URL each, so each process shuffles between nodes, not
+# URLs (sdk/node/README.md, Runtime Config).
+Environment=BOT_RPC_URL=https://testnet.ckb.dev/,https://testnet.ckbapp.dev/
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=BOT_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/testnet.key
-# A turn is a slow read plus at most the two-minute wait window; a process still alive at
-# thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
-RuntimeMaxSec=30min
-# Every exit starts the next turn after a minute; a turn never holds.
+# Testnet follows the node's fee rate; a mainnet unit caps it (sdk/node/README.md, Runtime Config).
+# Environment=BOT_MAX_FEE_RATE=1000
+# The bot loops turns ten minutes apart and exits on any failure (1) or after six hours (0);
+# Restart=always, not on-failure, restarts both, and the same ten minutes keeps the
+# cadence. Every CCC request times out on its own; RuntimeMaxSec only backstops a turn
+# that never ends, such as a node paging forever: a healthy process exits within about
+# six hours and a quarter, and the restart reshuffles a configured endpoint list.
 Restart=always
-RestartSec=60s
+RestartSec=10min
+RuntimeMaxSec=7h
 NoNewPrivileges=yes
 # The process holds a private key, so never write a core file.
 LimitCORE=0

@@ -4,12 +4,12 @@ import type { IckbDepositCell } from "../logic.ts";
 import type { OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
-import { convert, ICKB_DEPOSIT_CAP } from "../udt.ts";
-import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../udt.ts";
+import { ceilDiv, compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import type { MaturityOrderInput, SystemState } from "./types.ts";
 
 /**
- * Assumed turn duration, allowing for restart delay, confirmation and slow reads.
+ * Assumed turn duration: the bot's turns start ten minutes apart.
  * This is a modeling interval, not a bound on the runtime; see sdk/docs/pool_maturity_estimates.md.
  */
 export const BOT_TURN_MS = 10n * 60n * 1000n;
@@ -74,8 +74,8 @@ function ckbToIckbOrderMaturity(
     (udt, group) => udt + group.udtValue,
     0n,
   );
-  const demand = amount + buyersAhead - convert(false, sellers, system.exchangeRatio);
-  const capCkb = convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio);
+  const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
+  const capCkb = ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio);
   const turns = demand > 0n ? 1n + demand / capCkb : 1n;
   return system.tip.timestamp + BOT_TURN_MS * turns;
 }
@@ -100,14 +100,14 @@ function ickbToCkbOrderMaturity(
   // The CKB an order has already received belongs to its earlier fills; what it still
   // needs is the remaining iCKB at its price.
   const needed =
-    info.udtToCkb.convert(false, amount, true) +
-    convert(false, sellersAhead, system.exchangeRatio);
+    ceilDiv(amount * info.udtToCkb.udtScale, info.udtToCkb.ckbScale) +
+    ckbFromUdt(sellersAhead, system.exchangeRatio);
   const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
   const steps = [
     {
       ckbValue: sellers.some((group) => sits(group, system))
         ? 0n
-        : convert(false, ICKB_DEPOSIT_CAP, system.exchangeRatio),
+        : ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
       at: system.tip.timestamp,
     },
     // A claim the bot can no longer request in time rolls a cycle: the bot's rule, not the
@@ -148,12 +148,11 @@ function fillableOrders(
 }
 
 /**
- * Whether the order has been on the book for more than a turn, a twenty-fourth of an
- * epoch in blocks: the bot has seen it and left it. An uncommitted origin is fresh.
+ * Whether the order has been on the book for more than an eighth of an epoch in blocks,
+ * about three ten-minute turns: the bot has seen it and left it. A turn alone left no
+ * margin, since an order placed just after a turn waits a turn to be seen, and a failed
+ * turn adds the restart delay.
  */
 function sits(group: OrderGroup, { tip }: SystemState): boolean {
-  return (
-    group.blockNumber !== undefined &&
-    tip.number - group.blockNumber > tip.epoch.denominator / 24n
-  );
+  return tip.number - group.blockNumber > tip.epoch.denominator / 8n;
 }

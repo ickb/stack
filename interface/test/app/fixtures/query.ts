@@ -10,7 +10,7 @@ export function walletConfigForState(
   lock: ccc.Script,
   state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>,
 ): Parameters<typeof getL1State>[0] {
-  const cccClient = testClient();
+  const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",
     cccClient,
@@ -39,18 +39,6 @@ export function stateSdk(
 
 export function testSigner(client: ccc.Client = offlineTestnetClient()): ccc.Signer {
   return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-}
-
-export function testClient(): ccc.Client {
-  return offlineTestnetClient();
-}
-
-export function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
 }
 
 export function cell(capacity: bigint, lock: ccc.Script, outputData = "0x"): ccc.Cell {

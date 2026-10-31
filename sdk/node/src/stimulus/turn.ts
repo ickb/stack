@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
-import type { ConversionMetadata } from "../../../src/conversion/types.ts";
+import type { ConversionKind } from "../../../src/conversion/types.ts";
+import type { BroadcastDeadline } from "../../../src/dao.ts";
 import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../../../src/order/conversion.ts";
-import { IckbError } from "../../../src/sdk.ts";
+import { isFundabilityFailure } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -15,10 +15,10 @@ import {
   TransactionWaitError,
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
-import type { ChainPreflightEvidence } from "../shared/chain.ts";
-import { formatCkb, transactionShape } from "../shared/format.ts";
+import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
-import type { PublicRpcEndpointIdentity } from "../shared/runtime_config.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
+import type { RpcEndpointIdentity } from "../shared/runtime_config.ts";
 import { type Draw, drawTurn, type Override } from "./draw.ts";
 import {
   MAX_LIVE_ORDERS,
@@ -32,14 +32,13 @@ export interface StimulusIdentity {
   chain: "testnet";
   address: string;
   primaryLock: { codeHash: ccc.Hex; hashType: ccc.HashType; args: ccc.Hex };
-  rpcEndpoint: PublicRpcEndpointIdentity;
-  preflight: Omit<ChainPreflightEvidence, "chain">;
+  rpcEndpoints: RpcEndpointIdentity[];
 }
 
 /** Every way a turn ends; `committed` is the only one that proves stimulus reached the chain. */
-export type Outcome = "committed" | "unresolved" | "rejected" | "skipped" | "failed";
+type Outcome = "committed" | "unresolved" | "rejected" | "skipped" | "failed";
 
-export type Skip =
+type Skip =
   | { reason: "nothing-to-spend" }
   | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
@@ -47,8 +46,8 @@ export type Skip =
   | { reason: "conversion-not-buildable"; conversion: string };
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
-export type Action =
-  { order: { outputs: [number, number] } } | { conversion: ConversionMetadata };
+type Action =
+  { order: { outputs: [number, number] } } | { conversionKind: ConversionKind };
 
 /**
  * The one JSON record a turn writes; fields fill in as the turn advances, and the logger
@@ -74,7 +73,8 @@ export interface StimulusLog {
 }
 
 type Built =
-  { tx: ccc.Transaction; action: Action; broadcastBefore?: ccc.Epoch } | { skip: Skip };
+  | { tx: ccc.Transaction; action: Action; broadcastBefore?: BroadcastDeadline }
+  | { skip: Skip };
 
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -154,7 +154,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     throw error;
   }
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    availableOrders: state.collectable,
+    availableOrders: state.context.availableOrders,
     receipts: state.context.receipts,
     readyWithdrawals: state.context.readyWithdrawals,
   });
@@ -167,6 +167,8 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
         signer: runtime.signer,
         feeRate: state.system.feeRate,
         cells: state.context.cells,
+        protocolCells: state.context.receipts,
+        tip: state.system.tip,
       }),
       action: { order: { outputs: [orderOutput, orderOutput + 1] } },
     };
@@ -182,20 +184,17 @@ async function buildConversion(
   amount: bigint,
 ): Promise<Built> {
   try {
-    const result = await runtime.sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      {
-        direction,
-        amount,
-        lock: runtime.primaryLock,
-        signer: runtime.signer,
-        context: state.context,
-      },
-    );
+    const result = await runtime.sdk.buildConversionTransaction({
+      direction,
+      amount,
+      lock: runtime.primaryLock,
+      signer: runtime.signer,
+      context: state.context,
+    });
     return result.ok
       ? {
           tx: result.tx,
-          action: { conversion: result.conversion },
+          action: { conversionKind: result.conversionKind },
           ...(result.broadcastBefore === undefined
             ? {}
             : { broadcastBefore: result.broadcastBefore }),
@@ -206,11 +205,10 @@ async function buildConversion(
   }
 }
 
+// The SDK's own test of what completion steps past, so a draw the account cannot fund or
+// fit in one transaction is a skip, as it would be for the bot.
 function unfundableOrThrow(error: unknown): Built {
-  if (
-    error instanceof IckbError ||
-    error instanceof ccc.ErrorTransactionInsufficientCapacity
-  ) {
+  if (isFundabilityFailure(error)) {
     return { skip: { reason: "unfundable", error } };
   }
   throw error;
@@ -222,22 +220,19 @@ async function send(
   { tx, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
+  const fee = tx.estimateFee(state.system.feeRate);
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: {
-      fee: formatCkb(tx.estimateFee(state.system.feeRate)),
-      feeRate: state.system.feeRate,
-    },
+    txFee: { fee: ccc.fixedPointToString(fee), feeRate: state.system.feeRate },
   });
   let txHash: ccc.Hex;
   try {
     txHash = await signAndSendTransaction(
       runtime.signer,
       tx,
-      (hash) => {
-        Object.assign(log, { txHash: hash });
-      },
+      fee,
+      undefined,
       broadcastBefore,
     );
   } catch (error) {
@@ -247,6 +242,7 @@ async function send(
     // The hash is known, so the node may have the transaction: wait for it.
     txHash = error.txHash;
   }
+  Object.assign(log, { txHash });
   try {
     await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });
   } catch (error) {
@@ -269,10 +265,10 @@ function hasCollectible({ context }: StimulusState): boolean {
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      liquid: formatCkb(state.liquidCkb),
-      budget: formatCkb(state.budgets.ckb),
-      reserve: formatCkb(CKB_RESERVE),
+      liquid: ccc.fixedPointToString(state.liquidCkb),
+      budget: ccc.fixedPointToString(state.budgets.ckb),
+      reserve: ccc.fixedPointToString(CKB_RESERVE),
     },
-    ICKB: { budget: formatCkb(state.budgets.ickb) },
+    ICKB: { budget: ccc.fixedPointToString(state.budgets.ickb) },
   };
 }

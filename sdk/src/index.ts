@@ -21,17 +21,17 @@ import type { SupportedChain } from "./utils/chain.ts";
 export interface IckbSdk {
   /** Builds and completes a conversion, or returns a typed planning failure. */
   buildConversionTransaction: (
-    txLike: ccc.TransactionLike,
     options: ConversionTransactionOptions,
   ) => Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state against one sampled tip, under one timing policy. */
+  /** Reads system, user-order, and account state at the sampled tip's parent, under one timing policy. */
   getL1AccountState: (
     client: ccc.Client,
     locks: ccc.Script[],
     lockUp: LockUpPolicy,
+    maxFeeRate?: ccc.NumLike,
   ) => Promise<{
     system: SystemState;
-    user: { orders: OrderGroup[] };
+    userOrders: OrderGroup[];
     account: AccountState;
   }>;
 }
@@ -46,7 +46,7 @@ export type {
   AccountAvailabilityProjection,
   AccountState,
   ConversionDirection,
-  ConversionMetadata,
+  ConversionKind,
   ConversionNotice,
   ConversionTransactionContext,
   ConversionTransactionContextProjection,
@@ -56,14 +56,13 @@ export type {
   SystemState,
 } from "./conversion/types.ts";
 export { WALLET_LOCK_UP } from "./dao.ts";
-export type { LockUpPolicy } from "./dao.ts";
+export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "./order/conversion.ts";
-export { isRefused, isStale } from "./order/fill.ts";
 export type { Info, InfoLike } from "./order/info.ts";
 export type { Master, MasterLike } from "./order/master.ts";
 export type { OrderData, OrderDataLike } from "./order/order_data.ts";
@@ -74,7 +73,7 @@ export type {
   OwnerCell,
   WithdrawalGroup,
 } from "./owned_owner.ts";
-export { hasTransactionActivity, IckbError } from "./sdk.ts";
+export { IckbError } from "./sdk.ts";
 export type { IckbErrorCode } from "./sdk.ts";
 export {
   signAndSendTransaction,
@@ -86,4 +85,5 @@ export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.t
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export type { SupportedChain } from "./utils/chain.ts";
-export type { ExchangeRatio, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+export { clientCache } from "./utils/utils.ts";
+export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

@@ -1,20 +1,19 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
 import type { SupportedChain } from "../../../src/utils/chain.ts";
 
 const SECP256K1_ORDER =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
-/** Journaled endpoint identity; configured paths must contain no credential (sdk/node/README.md). */
-export type PublicRpcEndpointIdentity =
-  | {
-      mode: "exclusive";
-      protocol: "http:" | "https:" | "ws:" | "wss:";
-      hostname: string;
-      port: string;
-      pathname: string;
-    }
-  | { mode: "default" };
+/**
+ * Journaled endpoint identity: a configured endpoint's protocol, host and port, never its
+ * path or query, where providers put API keys.
+ */
+export interface RpcEndpointIdentity {
+  protocol: "http:" | "https:" | "ws:" | "wss:";
+  hostname: string;
+  port: string;
+}
 
 /** Runtime configuration read from one prefix of environment variables. */
 export interface RuntimeConfig {
@@ -24,21 +23,25 @@ export interface RuntimeConfig {
   /** Secp256k1 private key used only for signing. */
   privateKey: `0x${string}`;
 
-  /** RPC URL of one node, the only endpoint when set; absent means CCC's public pool. */
-  rpcUrl?: string;
+  /**
+   * The configured nodes' RPC URLs in this process's shuffled order, the only endpoints,
+   * tried in that order as CCC falls back on errors.
+   */
+  rpcUrls: [string, ...string[]];
 
-  /** What the journal may say about the endpoint: never the URL, which may carry a token. */
-  rpcEndpoint: PublicRpcEndpointIdentity;
+  /** What the journal may say about the endpoints, in the same order: never a URL, which may carry a token. */
+  rpcEndpoints: RpcEndpointIdentity[];
 }
 
 /**
- * Reads and validates `<prefix>_CHAIN`, the optional `<prefix>_RPC_URL`, and the private key
+ * Reads and validates `<prefix>_CHAIN`, `<prefix>_RPC_URL`, and the private key
  * held in the file named by `<prefix>_PRIVATE_KEY_FILE`.
  *
  * @remarks
  * The key lives in a file rather than a variable so it never sits in a unit file, an
- * inherited environment, or `systemctl show` output. A relative file path resolves against
- * `INIT_CWD` when present, otherwise `process.cwd()`. Errors name only the variable so
+ * inherited environment, or `systemctl show` output. The path must be absolute: pnpm runs the
+ * script from the package directory, so a relative one would name a different file depending
+ * on how the actor was started. Errors name only the variable so
  * config values and signing material are not copied into logs.
  */
 export async function readRuntimeConfigEnv(
@@ -46,13 +49,32 @@ export async function readRuntimeConfigEnv(
   prefix: string,
 ): Promise<RuntimeConfig> {
   const chain = parseSupportedChain(requireEnv(env, `${prefix}_CHAIN`));
-  const rpcUrl = optionalEnv(env, `${prefix}_RPC_URL`);
+  const rpcUrl = requireEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
-  const privateKey = parsePrivateKey(await readFileEnv(env, keyFile));
-  if (rpcUrl === undefined) {
-    return { chain, privateKey, rpcEndpoint: { mode: "default" } };
-  }
-  return { chain, privateKey, rpcUrl: rpcUrl.value, rpcEndpoint: parseRpcUrl(rpcUrl) };
+  const privateKey = parsePrivateKey(await readFileEnv(keyFile));
+  // Commas only: a space around a URL is refused like any whitespace in it. Each process
+  // shuffles them: CCC's fallback moves on only after a transport error and then stays, so
+  // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
+  // of every restart from the same first URL.
+  const [first = "", ...rest] = shuffled(rpcUrl.value.split(","));
+  const rpcUrls: [string, ...string[]] = [first, ...rest];
+  return {
+    chain,
+    privateKey,
+    rpcUrls,
+    rpcEndpoints: rpcUrls.map((value) => parseRpcUrl({ name: rpcUrl.name, value })),
+  };
+}
+
+/** A uniform random order: each value sorted by its own random key. */
+function shuffled(values: string[]): string[] {
+  return (
+    values
+      // eslint-disable-next-line sonarjs/pseudo-random -- the order only spreads failures across restarts; nothing needs it unpredictable.
+      .map((value) => ({ value, key: Math.random() }))
+      .toSorted((left, right) => left.key - right.key)
+      .map(({ value }) => value)
+  );
 }
 
 interface EnvValue {
@@ -60,30 +82,28 @@ interface EnvValue {
   value: string;
 }
 
-function optionalEnv(env: NodeJS.ProcessEnv, name: string): EnvValue | undefined {
+/** The variable's value, or undefined when it is unset or empty: one rule for every optional setting. */
+export function optionalEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const value = env[name];
-  return value === undefined || value === "" ? undefined : { name, value };
+  return value === "" ? undefined : value;
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): EnvValue {
-  const value = env[name];
-  if (value === undefined || value === "") {
+  const value = optionalEnv(env, name);
+  if (value === undefined) {
     throw new Error(`Empty env ${name}`);
   }
   return { name, value };
 }
 
-async function readFileEnv(
-  env: NodeJS.ProcessEnv,
-  { name, value }: EnvValue,
-): Promise<EnvValue> {
-  const secretPath = path.isAbsolute(value)
-    ? value
-    : path.resolve(env["INIT_CWD"] ?? process.cwd(), value);
+async function readFileEnv({ name, value }: EnvValue): Promise<EnvValue> {
+  if (!path.isAbsolute(value)) {
+    throw invalidEnvError(name);
+  }
   let fileSecret: string;
   try {
-    const fileSystem = await import("node:fs/promises");
-    fileSecret = await fileSystem.readFile(secretPath, "utf8");
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- the path is the operator's configured key file.
+    fileSecret = await readFile(value, "utf8");
   } catch (cause) {
     throw new Error(`Invalid file from env ${name}`, { cause });
   }
@@ -109,7 +129,7 @@ function parsePrivateKey({ name, value }: EnvValue): `0x${string}` {
 }
 
 /** The URL string reaches only the client; the journal gets these fields, never the URL. */
-function parseRpcUrl({ name, value }: EnvValue): PublicRpcEndpointIdentity {
+function parseRpcUrl({ name, value }: EnvValue): RpcEndpointIdentity {
   let url: URL;
   try {
     url = new URL(value);
@@ -130,13 +150,7 @@ function parseRpcUrl({ name, value }: EnvValue): PublicRpcEndpointIdentity {
   ) {
     throw invalidEnvError(name);
   }
-  return {
-    mode: "exclusive",
-    protocol,
-    hostname: url.hostname,
-    port: url.port,
-    pathname: url.pathname,
-  };
+  return { protocol, hostname: url.hostname, port: url.port };
 }
 
 function isPrivateKeyHex(value: string): value is `0x${string}` {

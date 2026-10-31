@@ -60,7 +60,7 @@ function* offsetCases(
   }
 }
 
-// Adopted from the fable5 audit: the claim epoch is what the deployed script computes.
+// The claim epoch is what the deployed script computes.
 describe("calcDaoClaimEpoch versus the deployed dao.c model", () => {
   it("matches dao.c minimal since over epoch-length, offset, and fraction combinations", () => {
     let checked = 0;

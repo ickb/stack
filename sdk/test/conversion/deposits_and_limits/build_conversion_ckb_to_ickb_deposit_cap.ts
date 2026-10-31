@@ -2,11 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-  stubSigner,
-  testSdk,
-} from "./support/sdk_fixture_support.ts";
+import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,7 +12,7 @@ const maxDirectDeposits = 63;
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
     const { sdk, logicManager, orderManager, lock } = testSdk();
     const deposit = vi
@@ -29,7 +25,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       ccc.Transaction.from(txLike),
     );
 
-    await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
       lock,

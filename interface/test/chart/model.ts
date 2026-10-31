@@ -6,7 +6,7 @@ import {
   ickbWorthSamples,
   rateChartView,
 } from "../../src/chart/model.ts";
-import { graphAmountText } from "../../src/shared/figures.ts";
+import { compactText } from "../../src/shared/figures.ts";
 
 const sampledMainnetTipDate = new Date("2026-06-07T18:43:08.091Z");
 const sampledMainnetTipDaoRate = 1.19704741;
@@ -108,7 +108,7 @@ describe("rateChartView", () => {
   it("clamps huge amounts and formats them compactly", () => {
     const state = view(10n ** 120n, false);
 
-    expect(state.title).toBe("184G iCKB worth over time:");
+    expect(state.title).toBe("184B iCKB worth over time:");
     expect(state.title).not.toContain("Infinity");
   });
 
@@ -131,12 +131,13 @@ describe("rateChartView", () => {
   });
 });
 
-describe("graphAmountText", () => {
+describe("compactText", () => {
   it("formats large graph labels with compact units", () => {
-    expect(graphAmountText(100000000000000000n, 10)).toBe("10.0G");
-    expect(graphAmountText(1_000_000_000_000_000n, 1)).toBe("10.0M");
-    expect(graphAmountText(1_000_000_000_000n, 1)).toBe("10.0K");
-    expect(graphAmountText(100000000n, Infinity)).toBe("184G");
+    expect(compactText(100000000000000000n, 10)).toBe("10B");
+    expect(compactText(1_000_000_000_000_000n, 1)).toBe("10M");
+    expect(compactText(1_000_000_000_000n, 1)).toBe("10K");
+    expect(compactText(120_000_000_000n, 1)).toBe("1.2K");
+    expect(compactText(999_500_000_000n, 1)).toBe("10K");
   });
 
   it("formats deduplicated grid labels without suffixes", () => {

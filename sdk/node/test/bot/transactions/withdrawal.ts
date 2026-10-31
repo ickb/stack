@@ -88,13 +88,13 @@ describe("buildTransaction withdrawal", () => {
       decision: {
         actions: { withdrawalRequests: 2 },
         rebalance: { withdrawal: { candidateCount: 3, stress: false } },
-        core: { kind: "withdraw", withdrawalRequests: 2, attempts: 2 },
+        core: { kind: "withdraw", attempts: 2 },
       },
     });
     // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
     expect(
       result.kind === "built" &&
-        result.broadcastBefore?.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
+        result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
     ).toBe(true);
   });
 
@@ -119,7 +119,8 @@ describe("buildTransaction withdrawal", () => {
       kind: "built",
       decision: {
         rebalance: { withdrawal: { candidateCount: 2 } },
-        core: { kind: "withdraw", withdrawalRequests: 1, attempts: 1 },
+        core: { kind: "withdraw", attempts: 1 },
+        actions: { withdrawalRequests: 1 },
       },
     });
   });

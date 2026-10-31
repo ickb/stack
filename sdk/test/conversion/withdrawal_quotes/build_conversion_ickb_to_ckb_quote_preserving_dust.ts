@@ -4,7 +4,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -18,7 +17,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("keeps direct withdrawals when an iCKB-to-CKB dust remainder needs quote-preserving Uint64 encoding", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP - 1000000n);
@@ -38,7 +37,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
     });
     const amount = ICKB_DEPOSIT_CAP;
 
-    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    const result = await sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount,
       lock,
@@ -56,7 +55,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
 
     expect(result).toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversionKind: DIRECT_PLUS_ORDER,
       conversionNotice: { inputIckb: 1000000n },
     });
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  FakeCkbSigner,
-  headerLike,
-  script,
-  StubClient,
-  transactionWithHeader,
-} from "@ickb/testkit";
+import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
 import { expect, vi, type MockInstance } from "vitest";
 
 import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
@@ -19,11 +13,6 @@ import {
   conversionContext,
   hash,
 } from "../../../transaction/base/support/sdk_core_support.ts";
-
-export {
-  BUILD_BASE_TRANSACTION_SUITE,
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-} from "../../../transaction/complete/support/sdk_suite_titles.ts";
 
 interface WithdrawalRemainderOrderMocks {
   mint: MockInstance<OrderManager["mint"]>;
@@ -145,8 +134,7 @@ export function fundedSigner(
   locks: readonly ccc.Script[],
 ): { client: StubClient; signer: ccc.Signer; cells: ccc.Cell[] } {
   const client = new StubClient({
-    findCellsPagedNoCache: async (): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-      await Promise.resolve();
+    cells: (): never => {
       throw new Error("Completion must not scan");
     },
     // Fixture deposits are worth their free capacity one to one, so the header they
@@ -164,7 +152,11 @@ export function fundedSigner(
       );
     },
   });
-  return { client, signer: new FakeCkbSigner(client, [...locks]), cells: [...cells] };
+  return {
+    client,
+    signer: new ccc.SignerCkbScriptReadonly(client, [...locks]),
+    cells: [...cells],
+  };
 }
 
 export interface SdkFixture {
@@ -198,7 +190,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
   exchangeRatio: ReturnType<typeof Ratio.from>;
 }): Promise<void> {
   await expect(
-    options.sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    options.sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       lock: options.lock,
@@ -214,7 +206,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
     }),
   ).resolves.toMatchObject({
     ok: true,
-    conversion: { kind: DIRECT_PLUS_ORDER },
+    conversionKind: DIRECT_PLUS_ORDER,
   });
 }
 
@@ -241,9 +233,8 @@ export function mockWithdrawalWithRemainderOrder(
 class TestIckbUdt extends IckbUdt {
   constructor(udt: ccc.Script, logic: ccc.Script, daoScript: ccc.Script) {
     super({
-      code: { txHash: hash("a1"), index: 0n },
       script: udt,
-      logicCode: { txHash: hash("a2"), index: 0n },
+      cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
       logicScript: logic,
       daoScript,
     });

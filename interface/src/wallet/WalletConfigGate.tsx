@@ -2,10 +2,12 @@ import { ccc } from "@ckb-ccc/ccc";
 import { signerAccountLocks } from "@ickb/sdk";
 
 import { useEffect, useState, type JSX } from "react";
+import { ActionLayout } from "../action/ActionLayout.tsx";
 import App from "../app/App.tsx";
 import type { QuoteState } from "../app/queries.ts";
-import type { RootConfig, WalletConfig } from "../shared/utils.ts";
-import { WalletConfigPendingView } from "./WalletConfigPendingView.tsx";
+import { errorMessageOf, type RootConfig, type WalletConfig } from "../shared/utils.ts";
+import { PendingDashboard } from "../view/Dashboard.tsx";
+import { QuotePage } from "../view/QuotePage.tsx";
 
 /** One read of the signer's address and locks, tagged with what it was read for. */
 type WalletConfigRead = Readonly<
@@ -70,32 +72,50 @@ export default function WalletConfigGate({
     };
   }, [rootConfig, signer, attempt]);
 
-  if (
-    read?.rootConfig !== rootConfig ||
-    read.signer !== signer ||
-    read.attempt !== attempt
-  ) {
+  const current =
+    read?.rootConfig === rootConfig && read.signer === signer && read.attempt === attempt
+      ? read
+      : undefined;
+  if (current !== undefined && "config" in current) {
     return (
-      <WalletConfigPendingView
-        {...{ rootConfig, walletName, openWallet, ...draft, quoteState }}
-      />
-    );
-  }
-  if ("error" in read) {
-    return (
-      <WalletConfigPendingView
-        {...{ rootConfig, walletName, openWallet, ...draft, quoteState }}
-        error={read.error}
-        retry={() => {
-          setAttempt((count) => count + 1);
-        }}
+      <App
+        {...{ walletName, openWallet, ...draft, quoteState }}
+        walletConfig={current.config}
       />
     );
   }
   return (
-    <App
-      {...{ walletName, openWallet, ...draft, quoteState }}
-      walletConfig={read.config}
+    <QuotePage
+      {...draft}
+      chain={rootConfig.chain}
+      quoteState={quoteState}
+      header={
+        <PendingDashboard chain={rootConfig.chain} {...{ walletName, openWallet }} />
+      }
+      action={
+        current === undefined ? (
+          <ActionLayout
+            action="Connect wallet"
+            disabled={true}
+            isDone={false}
+            message={`${walletName} may ask you to authorize this connection.`}
+            fee="..."
+            maturity="..."
+          />
+        ) : (
+          <ActionLayout
+            action="Retry wallet data"
+            disabled={false}
+            isDone={true}
+            onAction={() => {
+              setAttempt((count) => count + 1);
+            }}
+            message={`⚠️ Unable to connect to ${walletName}: ${errorMessageOf(current.error)}`}
+            fee="..."
+            maturity="..."
+          />
+        )
+      }
     />
   );
 }

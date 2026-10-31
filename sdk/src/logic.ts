@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   assertDaoOutputLimit,
+  DAO_DEPOSIT_DATA,
   DaoOutputLimitError,
-  depositData,
   depositMaturity,
   isDaoDeposit,
   pushHeaderDep,
@@ -16,11 +16,11 @@ import {
   receiptDataBytes,
   type ReceiptData,
 } from "./udt.ts";
-import { transactionHeaders } from "./utils/transaction_header.ts";
 import {
   findCells,
+  headersByNumber,
+  type ScannedCell,
   type ScriptDeps,
-  type TransactionHeader,
   type ValueComponents,
 } from "./utils/utils.ts";
 
@@ -36,10 +36,8 @@ const phase2TxFeeReserve = ccc.One;
 export interface IckbDepositCell extends ValueComponents {
   /** The DAO deposit cell. */
   cell: ccc.Cell;
-  /** The deposit header and the tip the readiness was judged against. */
-  headers: [TransactionHeader, TransactionHeader];
-  /** The DAO interest accrued between the two headers. */
-  interests: ccc.Num;
+  /** The header of the block that committed the deposit, which values it. */
+  header: ccc.ClientBlockHeader;
   /**
    * The DAO claim epoch as sampled at the tip, not rolled: each reader judges it against
    * its own {@link LockUpPolicy} with `depositMaturity`.
@@ -53,8 +51,8 @@ export interface IckbDepositCell extends ValueComponents {
 export interface ReceiptCell extends ValueComponents {
   /** The cell associated with the receipt. */
   cell: ccc.Cell;
-  /** The header of the transaction that made the deposits. */
-  header: TransactionHeader;
+  /** The header of the block that committed the deposits, which values them. */
+  header: ccc.ClientBlockHeader;
 }
 
 /**
@@ -94,8 +92,8 @@ export class LogicManager implements ScriptDeps {
    * Adds `depositQuantity` DAO deposits of `depositCapacity` locked by the logic script,
    * then the receipt that mints their iCKB in phase 2, locked by `lock`.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction
-   * (e.g., via ickbUdt.addCellDeps(tx)).
+   * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that also
+   * resolves the xUDT script.
    */
   public deposit(
     txLike: ccc.TransactionLike,
@@ -103,13 +101,11 @@ export class LogicManager implements ScriptDeps {
     depositCapacity: ccc.FixedPoint,
     lock: ccc.Script,
   ): ccc.Transaction {
+    // A zero quantity would mint a receipt for no deposits, which iCKB Logic refuses on chain.
+    if (!Number.isSafeInteger(depositQuantity) || depositQuantity <= 0) {
+      throw new TypeError("iCKB deposit quantity must be a positive safe integer");
+    }
     const tx = ccc.Transaction.from(txLike);
-    if (depositQuantity <= 0) {
-      return tx;
-    }
-    if (!Number.isSafeInteger(depositQuantity)) {
-      throw new TypeError("iCKB deposit quantity must be a safe integer");
-    }
     if (depositQuantity > maxDepositQuantity) {
       // The completion walk steps a plan down on this error.
       throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
@@ -118,7 +114,7 @@ export class LogicManager implements ScriptDeps {
     const depositCell = ccc.Cell.from({
       previousOutput: { txHash: `0x${"00".repeat(32)}`, index: 0 },
       cellOutput: { capacity: depositCapacity, lock: this.script, type: this.dao.script },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
     const depositAmount = depositCell.capacityFree;
     if (depositAmount < ccc.fixedPointFrom(1000)) {
@@ -167,15 +163,10 @@ export class LogicManager implements ScriptDeps {
           `Receipt ${outPoint} is not an iCKB receipt for this logic script`,
         );
       }
-      if (receipt.header.txHash !== receipt.cell.outPoint.txHash) {
-        throw new Error(
-          `Receipt ${outPoint} header txHash ${String(receipt.header.txHash)} does not match cell txHash ${receipt.cell.outPoint.txHash}`,
-        );
-      }
     }
     tx.addCellDeps(this.cellDeps);
     for (const receipt of receipts) {
-      pushHeaderDep(tx, receipt.header.header.hash);
+      pushHeaderDep(tx, receipt.header.hash);
       tx.addInput(receipt.cell);
     }
     return tx;
@@ -186,23 +177,22 @@ export class LogicManager implements ScriptDeps {
    */
   public async receiptsFrom(
     client: ccc.Client,
-    cells: readonly ccc.Cell[],
+    cells: readonly ScannedCell[],
   ): Promise<ReceiptCell[]> {
-    const receipts = cells.filter((cell) => this.isReceipt(cell));
-    const headers = await transactionHeaders(
+    const receipts = cells.filter(({ cell }) => this.isReceipt(cell));
+    const headers = await headersByNumber(
       client,
-      receipts.map((cell) => cell.outPoint.txHash),
+      receipts.map(({ blockNumber }) => blockNumber),
     );
-    return receipts.map((cell) => {
-      const { txHash } = cell.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's hash was read above.
-      return receiptCell(cell, { header: headers.get(txHash)!, txHash });
-    });
+    return receipts.map(({ cell, blockNumber }) =>
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's block was read above.
+      receiptCell(cell, headers.get(blockNumber)!),
+    );
   }
 
   /**
    * Every live iCKB deposit, valued at its deposit header, with its claim epoch at the tip;
-   * each deposit transaction's header is read once.
+   * each deposit block's header is read once.
    */
   public async findDeposits(
     client: ccc.Client,
@@ -214,39 +204,37 @@ export class LogicManager implements ScriptDeps {
         scriptType: "lock",
         filter: {
           script: this.dao.script,
-          outputData: depositData(),
+          outputData: DAO_DEPOSIT_DATA,
           outputDataSearchMode: "exact",
         },
         scriptSearchMode: "exact",
         withData: true,
       })
-    ).filter((cell) => this.isDeposit(cell));
-    const headers = await transactionHeaders(
+    ).filter(({ cell }) => this.isDeposit(cell));
+    const headers = await headersByNumber(
       client,
-      cells.map((cell) => cell.outPoint.txHash),
+      cells.map(({ blockNumber }) => blockNumber),
     );
-    return cells.map((cell) => {
-      const { txHash } = cell.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's hash was read above.
-      return ickbDepositCell(cell, { header: headers.get(txHash)!, txHash }, tip);
-    });
+    return cells.map(({ cell, blockNumber }) =>
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's block was read above.
+      ickbDepositCell(cell, headers.get(blockNumber)!, tip),
+    );
   }
 }
 
 /** Values a DAO deposit cell at its deposit header and samples its claim epoch at the tip. */
-export function ickbDepositCell(
+function ickbDepositCell(
   cell: ccc.Cell,
-  depositHeader: TransactionHeader,
+  header: ccc.ClientBlockHeader,
   tip: ccc.ClientBlockHeader,
 ): IckbDepositCell {
-  const interests = ccc.calcDaoProfit(cell.capacityFree, depositHeader.header, tip);
+  const interests = ccc.calcDaoProfit(cell.capacityFree, header, tip);
   return {
     cell,
-    headers: [depositHeader, { header: tip }],
-    interests,
-    claimEpoch: ccc.calcDaoClaimEpoch(depositHeader.header, tip),
+    header,
+    claimEpoch: ccc.calcDaoClaimEpoch(header, tip),
     ckbValue: cell.cellOutput.capacity + interests,
-    udtValue: ickbValue(cell.capacityFree, depositHeader.header),
+    udtValue: ickbValue(cell.capacityFree, header),
   };
 }
 
@@ -262,7 +250,7 @@ export function readyDeposits(
 }
 
 /** Decodes a receipt cell and values it at its deposit header. */
-export function receiptCell(cell: ccc.Cell, header: TransactionHeader): ReceiptCell {
+export function receiptCell(cell: ccc.Cell, header: ccc.ClientBlockHeader): ReceiptCell {
   let receipt: ReceiptData;
   try {
     receipt = decodeReceiptData(cell.outputData);
@@ -276,7 +264,7 @@ export function receiptCell(cell: ccc.Cell, header: TransactionHeader): ReceiptC
     cell,
     header,
     ckbValue: cell.cellOutput.capacity,
-    udtValue: ickbValue(receipt.depositAmount, header.header) * receipt.depositQuantity,
+    udtValue: ickbValue(receipt.depositAmount, header) * receipt.depositQuantity,
   };
 }
 

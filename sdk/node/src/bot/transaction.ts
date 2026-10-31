@@ -7,7 +7,7 @@ import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
 import { planRebalance, type RebalancePlan } from "./policy.ts";
-import { matchableCkb, matchedOrderOutPoints, summarizeBotState } from "./support.ts";
+import { matchableCkb, matchedOrderOutPoints } from "./support.ts";
 import type {
   BotActions,
   BotDecision,
@@ -28,7 +28,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  if (state.marketOrders.length === 0) {
+  if (state.system.orderPool.length === 0) {
     return "no_market_orders";
   }
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
@@ -56,12 +56,15 @@ export async function buildTransaction(
     ckb: state.ckb + match.ckbDelta,
     pendingCkb: state.pendingCkb,
     depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
-    poolDeposits: state.poolDeposits,
+    poolDeposits: state.system.poolDeposits,
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
   const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
-  const decision = (core: Core, attempts: number, tx?: ccc.Transaction): BotDecision =>
-    buildDecision({ state, matched, plan, core, attempts, tx });
+  const decision = (
+    core: Core,
+    attempts: number,
+    built?: { tx: ccc.Transaction; plannedFee: bigint },
+  ): BotDecision => buildDecision({ state, matched, plan, core, attempts, built });
 
   if (cores.length === 0) {
     return skipped("no_actions", decision({ kind: "none" }, 0));
@@ -76,7 +79,14 @@ export async function buildTransaction(
         attempts += 1;
         return buildCore(runtime, state, matched, core);
       },
-      async (tx) => runtime.completeTransaction(tx, state.system.feeRate, state.cells),
+      async (tx) =>
+        runtime.completeTransaction(
+          tx,
+          state.system.feeRate,
+          state.cells,
+          [...state.receipts, ...state.system.poolDeposits],
+          state.system.tip,
+        ),
     );
   } catch (error) {
     if (!isFundabilityFailure(error)) {
@@ -92,17 +102,19 @@ export async function buildTransaction(
           state.system.lockUp,
         )
       : undefined;
+  const plannedFee = tx.estimateFee(state.system.feeRate);
   return {
     kind: "built",
     tx,
-    decision: decision(core, attempts, tx),
+    plannedFee,
+    decision: decision(core, attempts, { tx, plannedFee }),
     ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
   };
 }
 
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   const match = matchTurn({
-    orders: state.marketOrders,
+    orders: state.system.orderPool,
     ckb: matchableCkb(state.ckb),
     udt: state.ickb,
     exchangeRatio: state.system.exchangeRatio,
@@ -191,25 +203,24 @@ function buildDecision({
   plan,
   core,
   attempts,
-  tx,
+  built,
 }: {
   state: BotState;
   matched: MatchOutcome;
   plan: RebalancePlan;
   core: Core;
   attempts: number;
-  tx?: ccc.Transaction;
+  built?: { tx: ccc.Transaction; plannedFee: bigint };
 }): BotDecision {
   const { match } = matched;
   const actions: BotActions = {
     matchedOrders: match.partials.length,
     deposits: core.kind === "deposit" ? 1 : 0,
     withdrawalRequests: core.kind === "withdraw" ? core.deposits.length : 0,
-    completedDeposits: tx === undefined ? 0 : state.receipts.length,
-    withdrawals: tx === undefined ? 0 : state.readyWithdrawals.length,
+    completedDeposits: built === undefined ? 0 : state.receipts.length,
+    withdrawals: built === undefined ? 0 : state.readyWithdrawals.length,
   };
   return {
-    ...summarizeBotState(state),
     match: {
       reason: matchReason(match, state),
       partialCount: match.partials.length,
@@ -235,13 +246,11 @@ function buildDecision({
           }),
       ring: plan.ring,
     },
-    core: { kind: core.kind, withdrawalRequests: actions.withdrawalRequests, attempts },
+    core: { kind: core.kind, attempts },
     actions,
-    fee: {
-      feeRate: state.system.feeRate,
-      ...(tx === undefined ? {} : { estimated: tx.estimateFee(state.system.feeRate) }),
-    },
-    ...(tx === undefined ? {} : { transactionShape: transactionShape(tx) }),
+    ...(built === undefined
+      ? {}
+      : { plannedFee: built.plannedFee, transactionShape: transactionShape(built.tx) }),
   };
 }
 
@@ -249,5 +258,5 @@ function skipped(
   reason: BuildTransactionSkipReason,
   decision: BotDecision,
 ): BuildTransactionResult {
-  return { kind: "skipped", reason, decision: { ...decision, skip: { reason } } };
+  return { kind: "skipped", reason, decision };
 }

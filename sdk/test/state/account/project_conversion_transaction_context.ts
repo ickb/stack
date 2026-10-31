@@ -77,9 +77,10 @@ describe("projectConversionTransactionContext", () => {
     const { projection, context } = projectConversionTransactionContext(
       currentSystem,
       account,
-      { available: [matchable], pending: [] },
+      [matchable],
     );
 
+    // A buy at par fails the bot's whole-fill rule, so it is collected.
     expect(projection.availableOrders).toEqual([matchable]);
     expect(context).toEqual({
       system: currentSystem,
@@ -93,11 +94,13 @@ describe("projectConversionTransactionContext", () => {
     });
   });
 
-  it("includes pending order maturity", () => {
+  it("keeps a live sell pending and includes its maturity", () => {
+    // The fixture's dual-ratio flag builds the iCKB-to-CKB direction alone: a sell, which
+    // waits for the age cutoff rather than being collected.
     const matchable = projectionOrderGroup({
       ckbValue: 31n,
       udtValue: 37n,
-      isDualRatio: false,
+      isDualRatio: true,
       isMatchable: true,
     });
     const { context } = projectConversionTransactionContext(
@@ -108,10 +111,11 @@ describe("projectConversionTransactionContext", () => {
         receipts: [],
         withdrawalGroups: [],
       },
-      { available: [], pending: [matchable] },
+      [matchable],
     );
 
-    // A CKB-to-iCKB order on an empty book: ten minutes from the tip.
+    // Working capital covers it on an empty book: ten minutes from the tip.
+    expect(context.availableOrders).toEqual([]);
     expect(context.estimatedMaturity).toBe(1000n + 600_000n);
   });
 });

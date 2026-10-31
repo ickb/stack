@@ -1,5 +1,5 @@
-import type { ccc } from "@ckb-ccc/core";
-import { DAO_CYCLE_EPOCHS, DAO_OUTPUT_LIMIT } from "../dao.ts";
+import { ccc } from "@ckb-ccc/core";
+import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../udt.ts";
 
@@ -7,9 +7,6 @@ import { ICKB_DEPOSIT_CAP } from "../udt.ts";
  * Ring segment of pool deposits grouped by maturity around the DAO cycle.
  */
 export interface RingSegment {
-  /** Segment index in the ring. */
-  index: number;
-
   /** Deposits assigned to this segment. */
   deposits: IckbDepositCell[];
 
@@ -29,8 +26,7 @@ export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegm
   while (BigInt(segmentCount) * 2n * ICKB_DEPOSIT_CAP < totalUdt) {
     segmentCount *= 2;
   }
-  const segments = Array.from({ length: segmentCount }, (_, index): RingSegment => ({
-    index,
+  const segments = Array.from({ length: segmentCount }, (): RingSegment => ({
     deposits: [],
     udtValue: 0n,
   }));
@@ -53,7 +49,7 @@ export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number
     throw new Error("Epoch denominator must be positive");
   }
   const scaled = epoch.integer * denominator + epoch.numerator;
-  const ring = DAO_CYCLE_EPOCHS * denominator;
+  const ring = ccc.Epoch.OneNervosDaoCycle.integer * denominator;
   const wrapped = ((scaled % ring) + ring) % ring;
   return Number((wrapped * BigInt(segmentCount)) / ring);
 }

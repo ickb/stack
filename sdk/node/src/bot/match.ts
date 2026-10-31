@@ -1,8 +1,8 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import type { OrderGroup } from "../../../src/order/cells.ts";
 import { partialOrderFee } from "../../../src/order/fee.ts";
 import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
-import { minBigInt, type ExchangeRatio } from "../../../src/utils/utils.ts";
+import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
 import { fillCost, netOf, returnsCost } from "../../../src/order/fill.ts";
 import { MAX_MATCH_PARTIALS } from "./support.ts";
@@ -102,7 +102,7 @@ function bestFill(
     const payment =
       allowance >= matcher.bMaxMatch
         ? matcher.bMaxMatch
-        : minBigInt(allowance, matcher.bMaxMatch - matcher.bMinMatch);
+        : ccc.numMin(allowance, matcher.bMaxMatch - matcher.bMinMatch);
     if (payment < matcher.bMinMatch) {
       continue;
     }
@@ -118,9 +118,9 @@ function bestFill(
   return best;
 }
 
-/** The low bits of the tip hash: a seed that changes every block and is logged with the turn. */
-export function seedOf(tipHash: ccc.Hex): number {
-  return Number(BigInt(tipHash) & 0xff_ff_ff_ffn);
+/** The low bits of the read block's hash: a seed that changes every block, logged with the turn. */
+export function seedOf(blockHash: ccc.Hex): number {
+  return Number(BigInt(blockHash) & 0xff_ff_ff_ffn);
 }
 
 /** A uniform shuffle from a 32-bit seed (mulberry32), so a turn is replayable. */

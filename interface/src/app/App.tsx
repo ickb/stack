@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
-import type { RefreshedTransactionState } from "../action/actionTransaction.ts";
-import { useDestination, type Destination } from "../action/destination.ts";
+import { useDestination } from "../action/destination.ts";
 import {
   createPendingTransactionStore,
   type PendingTransactionState,
@@ -55,37 +54,18 @@ export default function App({
     setText("");
   };
   const l1State = l1StateQuery.data;
-  const refreshPreview = async (
-    refreshedIsCkb2Udt: boolean,
-    refreshedAmount: bigint,
-    refreshedDestination: Destination,
-  ): Promise<RefreshedTransactionState> => {
-    let result: Awaited<ReturnType<typeof l1StateQuery.refetch>>;
-    try {
-      result = await l1StateQuery.refetch();
-    } catch (error) {
-      throw new Error(`Unable to refresh wallet data: ${errorMessageOf(error)}`, {
-        cause: error,
-      });
-    }
+  const refreshState = async (): Promise<L1StateType> => {
+    // Without throwOnError the refetch resolves with the query's error instead of throwing.
+    const result = await l1StateQuery.refetch();
     if (result.error !== null) {
       throw new Error(`Unable to refresh wallet data: ${errorMessageOf(result.error)}`, {
         cause: result.error,
       });
     }
-    const freshState = result.data;
-    if (freshState === undefined) {
+    if (result.data === undefined) {
       throw new Error("Fresh wallet data is unavailable");
     }
-
-    return {
-      stateId: freshState.stateId,
-      tipTimestamp: freshState.system.tip.timestamp,
-      hasCollectable: freshState.hasCollectable,
-      hasConverting: freshState.hasConverting,
-      build: async () =>
-        freshState.txBuilder(refreshedIsCkb2Udt, refreshedAmount, refreshedDestination),
-    };
+    return result.data;
   };
 
   return (
@@ -117,7 +97,7 @@ export default function App({
         amountError: amountInput.error,
         destination,
         destinationError,
-        refreshPreview,
+        refreshState,
         freeze,
         formReset,
         walletConfig,

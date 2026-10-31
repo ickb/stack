@@ -1,12 +1,7 @@
-import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
+import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  conversionContext,
-  hash,
-} from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -20,7 +15,7 @@ const WITHDRAWAL_FAILED = "withdrawal failed";
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("fails fast on non-retryable iCKB-to-CKB construction errors", async () => {
     const { sdk, ownedOwnerManager, lock } = testSdk();
     const extra = projectionReadyDeposit(1n, 0n);
@@ -29,17 +24,8 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       throw new Error(WITHDRAWAL_FAILED);
     });
 
-    const tx = ccc.Transaction.default();
-    tx.inputs.push(
-      ccc.CellInput.from({
-        previousOutput: { txHash: hash("90"), index: 0n },
-      }),
-    );
-    tx.outputs.push(ccc.CellOutput.from({ capacity: 1n, lock }));
-    tx.outputsData.push("0x");
-
     await expect(
-      sdk.buildConversionTransaction(tx, {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,

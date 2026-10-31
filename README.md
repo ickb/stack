@@ -47,7 +47,7 @@ pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its loc
 
 ## Releases
 
-A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
+Every package carries the same version, and a release moves all of them together by [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver): a breaking change to the SDK takes the next major, and the release both publishes the SDK and deploys the interface. A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
 
 - A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
 - A change to `interface/package.json` builds the interface again and deploys it to GitHub Pages at `ickb.org`.
@@ -60,7 +60,7 @@ The publish job depends on the npm trusted publisher registered for `@ickb/sdk`:
 
 ## Live testnet validation
 
-Each actor runs one turn and prints JSON to stdout. The operator reads the outcome and decides the next action; systemd supplies continuous cadence when wanted. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
+Each actor prints JSON events to stdout. The generator runs one turn per process and systemd supplies its cadence; the bot loops a turn every ten minutes until one fails or for six hours, and systemd restarts it. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
 
 To exercise matching, run a stimulus turn, then a bot turn. Correlate the generator's committed order outpoints with the bot's matched orders and committed transaction; a generator draw can also be skipped or produce an order the bot cannot profitably fill. The [journal guide](sdk/node/README.md#what-the-journals-should-show) names the preconditions for each observable case.
 

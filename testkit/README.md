@@ -6,7 +6,7 @@ Private workspace test helpers for iCKB packages and apps.
 
 ## Client doubles
 
-`StubClient` supplies scripted responses. `pagedCells` adapts a cell list to the paging shape the SDK reads. Stateful tests own their response maps explicitly; the kit does not simulate a chain, filter a second order book or maintain another transaction lifecycle.
+`StubClient` supplies scripted responses. Its `cells` handler serves the node's raw `get_cells`, which the SDK's scan reads, paging the list the test returns; a cell may name its block, otherwise it sits in block 0. Stateful tests own their response maps explicitly; the kit does not simulate a chain, filter a second order book or maintain another transaction lifecycle.
 
 The composed client also preserves coverage of clients that are not `ClientJsonRpc` instances. CCC's connector wraps its client through composition, so that runtime identity is a real consumer path rather than a convenience invented for tests. Consumers needing real completion use the actual builders with stubbed chain responses, not builders that return their input unchanged.
 

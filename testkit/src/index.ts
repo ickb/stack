@@ -5,19 +5,17 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 
 export {
   AR_0,
   ckbMinMatchFromLog,
   depositToIckb,
-  ICKB_SOFT_CAP,
   validateMatch,
   type OracleInfo,
   type OracleRatio,
-  type OracleVerdict,
   type OrderState,
 } from "./contract_oracle.ts";
-export { FakeCkbSigner } from "./fake_signer.ts";
 
 export type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
@@ -28,12 +26,17 @@ export type ClientMethod<K extends keyof ccc.Client> = Extract<
 export interface StubClientHandlers {
   addressPrefix?: string;
   cache?: ccc.Client["cache"];
-  findCellsPagedNoCache?: ClientMethod<"findCellsPagedNoCache">;
+  /** The cells the node's raw `get_cells` serves for a search key, paged by the stub. */
+  cells?: (key: cccA.JsonRpcIndexerSearchKey) => readonly StubCell[];
   getCell?: ClientMethod<"getCell">;
+  getCellWithHeader?: ClientMethod<"getCellWithHeader">;
   getHeaderByNumber?: ClientMethod<"getHeaderByNumber">;
   getTipHeader?: ClientMethod<"getTipHeader">;
   getTransaction?: ClientMethod<"getTransaction">;
-  getTransactionNoCache?: ClientMethod<"getTransactionNoCache">;
+  /** The node's status for a transaction, as the raw status poll reads it; absent, unknown. */
+  transactionStatus?: (
+    txHash: ccc.Hex,
+  ) => Promise<{ status: string; reason?: string } | undefined>;
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
 }
@@ -57,13 +60,11 @@ export interface TransactionWithHeader {
 }
 
 /**
- * CCC client test double with per-method handler overrides.
- *
- * @remarks
- * Unspecified methods fall back to `ClientPublicTestnet`, whose URL is an
- * invalid host. Tests should override every method expected to cross the RPC
- * boundary.
+ * A block number past any tip: an order group dated by it is as fresh as an order gets,
+ * for tests whose orders' age does not matter.
  */
+export const FRESH_BLOCK = 2n ** 64n;
+
 /** A transport that rejects every request: for clients a test never lets reach the network. */
 export function offlineTransport(): ccc.JsonRpcTransport {
   return {
@@ -75,71 +76,40 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 }
 
 /**
- * Answers the SDK's status-only `get_transaction` from the stub's scripted typed reads, so
- * a test stubs one typed method, not the wire: `getTransactionWithHeader` when scripted
- * (the header is remembered for the follow-up lookup by number), else
- * `getTransactionNoCache` (the body's status, with its block number or reason).
- * Everything else is offline.
+ * Answers the SDK's raw reads from the stub's scripted handlers, so a test stubs one typed
+ * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
+ * from `transactionStatus`. Everything else is offline.
  */
-function stubTransport(
-  raw: { client?: StubClient; scripted?: StubClientHandlers },
-  headers: Map<bigint, ccc.ClientBlockHeader>,
-): ccc.JsonRpcTransport {
+function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      if (payload.method === "get_cells" && scripted.cells !== undefined) {
+        return {
+          id: payload.id,
+          jsonrpc: "2.0",
+          result: cellsPage(scripted.cells, payload.params),
+        };
+      }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
       if (
-        raw.client === undefined ||
         payload.method !== "get_transaction" ||
-        typeof txHash !== "string"
+        typeof txHash !== "string" ||
+        scripted.transactionStatus === undefined
       ) {
         return offlineTransport().request(payload);
       }
-      const status = await rawStatus(raw, headers, txHash);
       return {
         id: payload.id,
         jsonrpc: "2.0",
-        result: { transaction: null, tx_status: status },
+        result: {
+          transaction: null,
+          tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
+            status: "unknown",
+          },
+        },
       };
     },
   };
-}
-
-async function rawStatus(
-  raw: { client?: StubClient; scripted?: StubClientHandlers },
-  headers: Map<bigint, ccc.ClientBlockHeader>,
-  txHash: string,
-): Promise<object> {
-  if (raw.client === undefined) {
-    return { status: "unknown" };
-  }
-  if (raw.scripted?.getTransactionWithHeader !== undefined) {
-    const header = (await raw.client.getTransactionWithHeader(txHash))?.header;
-    if (header === undefined) {
-      return { status: "unknown" };
-    }
-    headers.set(header.number, header);
-    return { status: "committed", block_number: ccc.numToHex(header.number) };
-  }
-  if (raw.scripted?.getTransactionNoCache !== undefined) {
-    const response = await raw.client.getTransactionNoCache(txHash);
-    if (response === undefined) {
-      return { status: "unknown" };
-    }
-    return {
-      status: response.status,
-      ...(response.blockNumber === undefined
-        ? {}
-        : { block_number: ccc.numToHex(response.blockNumber) }),
-      ...(response.reason === undefined ? {} : { reason: response.reason }),
-    };
-  }
-  return offlineTransport().request({
-    id: 0,
-    jsonrpc: "2.0",
-    method: "get_transaction",
-    params: [txHash],
-  });
 }
 
 /** A testnet client on the offline transport. */
@@ -147,39 +117,32 @@ export function offlineTestnetClient(): ccc.ClientPublicTestnet {
   return ccc.ClientPublicTestnet.new({ transport: offlineTransport() });
 }
 
+/**
+ * CCC client test double with per-method handler overrides.
+ *
+ * @remarks
+ * Unspecified methods fall back to `ClientPublicTestnet`, whose URL is an
+ * invalid host. Tests should override every method expected to cross the RPC
+ * boundary.
+ */
 export class StubClient extends ccc.ClientPublicTestnet {
   private readonly prefix: string | undefined;
-  private readonly rememberedHeaders: Map<bigint, ccc.ClientBlockHeader>;
-  private readonly headerByNumber: ClientMethod<"getHeaderByNumber"> | undefined;
 
   /**
    * Creates a stub client using the supplied method overrides. Each handler becomes the
    * instance's own method, ahead of the class's, so an unscripted method still runs CCC's
    * real code down to the offline transport.
    */
-  constructor({
-    addressPrefix,
-    cache,
-    getHeaderByNumber,
-    ...handlers
-  }: StubClientHandlers = {}) {
-    // The SDK reads a transaction's header through two raw calls on a JSON-RPC client; the
-    // stub answers them from its own handlers so a test stubs one method, not the wire.
-    const raw: { client?: StubClient; scripted?: StubClientHandlers } = {};
-    const rememberedHeaders = new Map<bigint, ccc.ClientBlockHeader>();
+  constructor({ addressPrefix, cache, ...handlers }: StubClientHandlers = {}) {
     // A subclass has no factory, so the deprecated constructor is the only super call; the
     // offline transport keeps every unstubbed method off the network.
     // eslint-disable-next-line sonarjs/deprecation, @typescript-eslint/no-deprecated -- No non-deprecated constructor exists for a subclass.
     super({
       requestor: ccc.RequestorJsonRpc.new({
-        transport: stubTransport(raw, rememberedHeaders),
+        transport: stubTransport(handlers),
       }),
     });
-    raw.client = this;
-    raw.scripted = handlers;
-    this.rememberedHeaders = rememberedHeaders;
     this.prefix = addressPrefix;
-    this.headerByNumber = getHeaderByNumber;
     if (cache !== undefined) {
       this.cache = cache;
     }
@@ -190,37 +153,40 @@ export class StubClient extends ccc.ClientPublicTestnet {
   public override get addressPrefix(): string {
     return this.prefix ?? super.addressPrefix;
   }
-
-  /**
-   * Serves the header a stubbed transaction lookup already produced, so the SDK's follow-up
-   * by number lands on that header even when a test stubs the lookup with one fixed answer;
-   * otherwise delegates to the configured handler or the base client.
-   */
-  public override async getHeaderByNumber(
-    ...args: Parameters<ClientMethod<"getHeaderByNumber">>
-  ): ReturnType<ClientMethod<"getHeaderByNumber">> {
-    return (
-      this.rememberedHeaders.get(ccc.numFrom(args[0])) ??
-      (this.headerByNumber ?? super.getHeaderByNumber.bind(this))(...args)
-    );
-  }
 }
 
+/** A scanned cell, in block 0 unless the test names its block. */
+export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
+
 /**
- * A page handler over a cell list, sliced the way the SDK's `findCells` reads it: the
- * cursor is the count served so far and a short page ends the scan. A function picks the
- * list per search key.
+ * One raw `get_cells` page over the scripted list, sliced the way the SDK's `findCells`
+ * reads it: the cursor is the count served so far, so a short page ends the scan.
  */
-export function pagedCells(
-  cells:
-    readonly ccc.Cell[] | ((key: ccc.ClientIndexerSearchKeyLike) => readonly ccc.Cell[]),
-): ClientMethod<"findCellsPagedNoCache"> {
-  return async (key, _order, limit, after) => {
-    await Promise.resolve();
-    const all = typeof cells === "function" ? cells(key) : cells;
-    const offset = after === undefined ? 0 : Number(after);
-    const page = all.slice(offset, offset + Number(ccc.numFrom(limit ?? 10)));
-    return { cells: [...page], lastCursor: String(offset + page.length) };
+function cellsPage(
+  cells: NonNullable<StubClientHandlers["cells"]>,
+  params: unknown,
+): object {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends key, order, limit, cursor.
+  const [key, , limit, after] = params as [
+    cccA.JsonRpcIndexerSearchKey,
+    string,
+    ccc.Hex,
+    ccc.Hex | null | undefined,
+  ];
+  const offset = after === null || after === undefined ? 0 : Number(after);
+  const page = cells(key).slice(offset, offset + Number(limit));
+  return {
+    last_cursor: ccc.numToHex(offset + page.length),
+    objects: page.map((scanned) => {
+      const { cell, blockNumber } =
+        scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
+      return {
+        out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
+        output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
+        output_data: cell.outputData,
+        block_number: ccc.numToHex(blockNumber),
+      };
+    }),
   };
 }
 
@@ -229,8 +195,8 @@ class ComposedClient extends ccc.Proxy.Base(ccc.Client) {}
 
 /**
  * The client the connector hands the interface: a composition proxy over the public
- * client (`ClientWithFeeRate`), an instance of `ccc.Client` but not of `ccc.ClientJsonRpc`,
- * so the SDK takes its typed read paths. Tests reach those paths through this.
+ * client (`ClientWithFeeRate`), an instance of `ccc.Client` but not of `ccc.ClientJsonRpc`
+ * that still forwards the requestor the SDK's raw reads need. Tests check that through this.
  */
 export function composedClient(inner: ccc.Client): ccc.Client {
   return new ComposedClient(inner);

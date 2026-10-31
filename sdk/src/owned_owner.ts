@@ -9,8 +9,12 @@ import {
 import type { IckbDepositCell } from "./logic.ts";
 import { ickbValue } from "./udt.ts";
 import { CheckedInt32LE, CheckedUint64LE } from "./utils/codec.ts";
-import { headersByNumber, transactionHeaders } from "./utils/transaction_header.ts";
-import type { ScriptDeps, TransactionHeader, ValueComponents } from "./utils/utils.ts";
+import {
+  headersByNumber,
+  type ScannedCell,
+  type ScriptDeps,
+  type ValueComponents,
+} from "./utils/utils.ts";
 
 /**
  * A live Nervos DAO withdrawal request cell, valued at the two headers it spans.
@@ -19,9 +23,7 @@ export interface DaoWithdrawalRequestCell {
   /** The DAO withdrawal request cell. */
   cell: ccc.Cell;
   /** The deposit header and the request's own header. */
-  headers: [TransactionHeader, TransactionHeader];
-  /** The DAO interest accrued between the two headers. */
-  interests: ccc.Num;
+  headers: [ccc.ClientBlockHeader, ccc.ClientBlockHeader];
   /** The DAO claim epoch of the request. */
   maturity: ccc.Epoch;
   /** Whether the claim epoch is at or before the tip: the request can be withdrawn. */
@@ -64,21 +66,13 @@ export function decodeOwnerData(outputData: ccc.Hex): OwnerData {
 /**
  * Wraps an owner marker cell that references an owned withdrawal request.
  */
-export class OwnerCell implements ValueComponents {
+export class OwnerCell {
   /** The live owner marker cell whose output data points to the owned request. */
   public cell: ccc.Cell;
-
-  /** Owner marker cells carry no UDT value. */
-  public readonly udtValue = 0n;
 
   /** Creates an owner marker wrapper for a live cell. */
   constructor(cell: ccc.Cell) {
     this.cell = cell;
-  }
-
-  /** Returns the CKB capacity held by the owner marker cell. */
-  public get ckbValue(): ccc.FixedPoint {
-    return this.cell.cellOutput.capacity;
   }
 
   /**
@@ -131,7 +125,7 @@ export class WithdrawalGroup implements ValueComponents {
 
   /** Returns the iCKB amount represented by the owned withdrawal request. */
   public get udtValue(): ccc.FixedPoint {
-    return ickbValue(this.owned.cell.capacityFree, this.owned.headers[0].header);
+    return ickbValue(this.owned.cell.capacityFree, this.owned.headers[0]);
   }
 }
 
@@ -180,8 +174,8 @@ export class OwnedOwnerManager implements ScriptDeps {
    * Spends the deposits into DAO withdrawal requests locked by the Owned Owner script,
    * each followed by an owner marker locked by `lock` that points back at it.
    *
-   * @remarks Caller must ensure UDT cellDeps are added to the transaction, for example
-   * via `ickbUdt.addCellDeps(tx)`.
+   * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that also
+   * resolves the xUDT script.
    */
   public requestWithdrawal(
     txLike: ccc.TransactionLike,
@@ -202,21 +196,15 @@ export class OwnedOwnerManager implements ScriptDeps {
     tx.addCellDeps(this.cellDeps);
     tx.addCellDeps(this.dao.cellDeps);
     const requestStart = tx.outputs.length;
-    for (const { cell, headers } of deposits) {
-      const depositHeader = headers[0];
-      if (depositHeader.txHash !== cell.outPoint.txHash) {
-        throw new Error(
-          `DAO deposit ${cell.outPoint.toHex()} header txHash ${String(depositHeader.txHash)} does not match cell txHash ${cell.outPoint.txHash}`,
-        );
-      }
+    for (const { cell, header } of deposits) {
       if (cell.cellOutput.lock.args.length !== this.script.args.length) {
         throw new Error("Withdrawal request lock args has different size from deposit");
       }
-      pushHeaderDep(tx, depositHeader.header.hash);
+      pushHeaderDep(tx, header.hash);
       tx.addInput(cell);
       tx.addOutput(
         { capacity: cell.cellOutput.capacity, lock: this.script, type: this.dao.script },
-        CheckedUint64LE.encode(depositHeader.header.number),
+        CheckedUint64LE.encode(header.number),
       );
     }
     for (let index = 0; index < deposits.length; index += 1) {
@@ -256,12 +244,6 @@ export class OwnedOwnerManager implements ScriptDeps {
           `Withdrawal owner ${group.owner.cell.outPoint.toHex()} points to ${linkedOutPoint.toHex()} but group owned cell is ${ownedOutPoint.toHex()}`,
         );
       }
-      const { cell, headers } = group.owned;
-      if (headers[1].txHash !== cell.outPoint.txHash) {
-        throw new Error(
-          `DAO withdrawal request ${cell.outPoint.toHex()} header txHash ${String(headers[1].txHash)} does not match cell txHash ${cell.outPoint.txHash}`,
-        );
-      }
     }
     tx.addCellDeps(this.cellDeps);
     tx.addCellDeps(this.dao.cellDeps);
@@ -270,17 +252,17 @@ export class OwnedOwnerManager implements ScriptDeps {
     // pushed: the limit then counts these alone. Safe because nothing else in the stack reads
     // a header by position and every built transaction passes here once.
     const depositHashes = [
-      ...new Set(withdrawalGroups.map(({ owned }) => owned.headers[0].header.hash)),
+      ...new Set(withdrawalGroups.map(({ owned }) => owned.headers[0].hash)),
     ];
     tx.headerDeps = [
       ...depositHashes,
       ...tx.headerDeps.filter((hash) => !depositHashes.includes(hash)),
     ];
     for (const { owned } of withdrawalGroups) {
-      pushHeaderDep(tx, owned.headers[1].header.hash);
+      pushHeaderDep(tx, owned.headers[1].hash);
     }
     for (const { owned } of withdrawalGroups) {
-      const headerIndex = tx.headerDeps.indexOf(owned.headers[0].header.hash);
+      const headerIndex = tx.headerDeps.indexOf(owned.headers[0].hash);
       // The deployed dao.c reads one byte of the u64 index field (RFC 0023 erratum,
       // nervosnetwork/rfcs pull 456), so index 256 would be read as 0.
       if (headerIndex >= DAO_HEADER_INDEX_LIMIT) {
@@ -309,52 +291,45 @@ export class OwnedOwnerManager implements ScriptDeps {
 
   /**
    * The owner markers among `cells` paired with their owned withdrawal requests, which live
-   * in the marker's own transaction at the encoded distance. Markers whose target is not an
-   * owned withdrawal request are skipped. Each header is read once per batch.
+   * in the marker's own transaction at the encoded distance, so the marker's block is the
+   * request's. Markers whose target is not an owned withdrawal request are skipped. Each
+   * header is read once per batch.
    */
   public async withdrawalGroupsFrom(
     client: ccc.Client,
-    cells: readonly ccc.Cell[],
+    cells: readonly ScannedCell[],
     tip: ccc.ClientBlockHeader,
   ): Promise<WithdrawalGroup[]> {
     const owners = cells
-      .filter((cell) => this.isOwner(cell))
-      .map((cell) => new OwnerCell(cell));
+      .filter(({ cell }) => this.isOwner(cell))
+      .map(({ cell, blockNumber }) => ({ owner: new OwnerCell(cell), blockNumber }));
     const ownedCells = await Promise.all(
-      owners.map(async (owner) => client.getCell(owner.getOwned())),
+      owners.map(async ({ owner }) => client.getCell(owner.getOwned())),
     );
-    const pairs = owners.flatMap((owner, index) => {
+    const pairs = owners.flatMap(({ owner, blockNumber }, index) => {
       const owned = ownedCells[index];
       return owned !== undefined && this.isOwned(owned)
-        ? [{ owner, owned, depositBlockNumber: depositBlockNumberOf(owned) }]
+        ? [{ owner, owned, blockNumber, depositBlockNumber: depositBlockNumberOf(owned) }]
         : [];
     });
-    const [depositHeaders, requestHeaders] = await Promise.all([
-      headersByNumber(
-        client,
-        pairs.map((pair) => pair.depositBlockNumber),
-      ),
-      transactionHeaders(
-        client,
-        pairs.map((pair) => pair.owned.outPoint.txHash),
-      ),
-    ]);
-    return pairs.map(({ owner, owned, depositBlockNumber }) => {
-      const { txHash } = owned.outPoint;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
-      const depositHeader = depositHeaders.get(depositBlockNumber)!;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
-      const requestHeader = requestHeaders.get(txHash)!;
-      return new WithdrawalGroup(
-        withdrawalRequestCell(
-          owned,
-          depositHeader,
-          { header: requestHeader, txHash },
-          tip,
+    const headers = await headersByNumber(
+      client,
+      pairs.flatMap((pair) => [pair.depositBlockNumber, pair.blockNumber]),
+    );
+    return pairs.map(
+      ({ owner, owned, blockNumber, depositBlockNumber }) =>
+        new WithdrawalGroup(
+          withdrawalRequestCell(
+            owned,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
+            headers.get(depositBlockNumber)!,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- both headers were read above.
+            headers.get(blockNumber)!,
+            tip,
+          ),
+          owner,
         ),
-        owner,
-      );
-    });
+    );
   }
 }
 
@@ -362,19 +337,14 @@ export class OwnedOwnerManager implements ScriptDeps {
 export function withdrawalRequestCell(
   cell: ccc.Cell,
   depositHeader: ccc.ClientBlockHeader,
-  requestHeader: TransactionHeader,
+  requestHeader: ccc.ClientBlockHeader,
   tip: ccc.ClientBlockHeader,
 ): DaoWithdrawalRequestCell {
-  const interests = ccc.calcDaoProfit(
-    cell.capacityFree,
-    depositHeader,
-    requestHeader.header,
-  );
-  const maturity = ccc.calcDaoClaimEpoch(depositHeader, requestHeader.header);
+  const interests = ccc.calcDaoProfit(cell.capacityFree, depositHeader, requestHeader);
+  const maturity = ccc.calcDaoClaimEpoch(depositHeader, requestHeader);
   return {
     cell,
-    headers: [{ header: depositHeader }, requestHeader],
-    interests,
+    headers: [depositHeader, requestHeader],
     maturity,
     isReady: maturity.compare(tip.epoch) <= 0,
     ckbValue: cell.cellOutput.capacity + interests,

@@ -1,3 +1,4 @@
+import { ccc } from "@ckb-ccc/ccc";
 import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
@@ -6,7 +7,6 @@ import {
   parseAmountInput,
   reasonLabelClass,
   type RootConfig,
-  toText,
   twoDecimals,
 } from "../shared/utils.ts";
 import {
@@ -159,7 +159,7 @@ function availableDisplay({ name, balance }: AssetDisplay): JSX.Element {
   return (
     <span
       className="whitespace-nowrap text-ickb-text"
-      aria-label={`${name} in wallet: ${toText(balance.available)}`}
+      aria-label={`${name} in wallet: ${ccc.fixedPointToString(balance.available)}`}
     >
       {display(balance.available, "in wallet", false)}
     </span>
@@ -208,9 +208,9 @@ function maxButton(
       className={`${underNameClass} disabled:cursor-default disabled:opacity-50`}
       disabled={isLocked}
       onClick={() => {
-        setText(toText(max));
+        setText(ccc.fixedPointToString(max));
       }}
-      aria-label={`Use maximum ${asset.name}: ${toText(max)}`}
+      aria-label={`Use maximum ${asset.name}: ${ccc.fixedPointToString(max)}`}
     >
       max
     </button>

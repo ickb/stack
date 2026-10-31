@@ -1,7 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { isDaoDeposit } from "./dao.ts";
 import { CheckedUint128LE, CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
-import { transactionHeaders } from "./utils/transaction_header.ts";
 import type { ExchangeRatio } from "./utils/utils.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
@@ -57,11 +56,8 @@ export class IckbUdt {
   /** The iCKB xUDT type script. */
   public readonly script: ccc.Script;
 
-  /** Out point of the xUDT code cell used by this iCKB token. */
-  public readonly udtCode: ccc.OutPoint;
-
-  /** Out point of the iCKB Logic code cell required by this token. */
-  public readonly logicCode: ccc.OutPoint;
+  /** The iCKB dep group, which also carries the xUDT and iCKB Logic code cells. */
+  public readonly cellDeps: ccc.CellDep[];
 
   /** Logic script whose hash is embedded in this iCKB xUDT type script. */
   public readonly logicScript: ccc.Script;
@@ -71,21 +67,18 @@ export class IckbUdt {
 
   /** Creates an instance of IckbUdt from its code and script references. */
   constructor({
-    code,
     script,
-    logicCode,
+    cellDeps,
     logicScript,
     daoScript,
   }: {
-    code: ccc.OutPointLike;
     script: ccc.ScriptLike;
-    logicCode: ccc.OutPointLike;
+    cellDeps: ccc.CellDepLike[];
     logicScript: ccc.ScriptLike;
     daoScript: ccc.ScriptLike;
   }) {
     this.script = ccc.Script.from(script);
-    this.udtCode = ccc.OutPoint.from(code);
-    this.logicCode = ccc.OutPoint.from(logicCode);
+    this.cellDeps = cellDeps.map((cellDep) => ccc.CellDep.from(cellDep));
     this.logicScript = ccc.Script.from(logicScript);
     this.daoScript = ccc.Script.from(daoScript);
   }
@@ -132,101 +125,48 @@ export class IckbUdt {
   }
 
   /**
-   * Adds iCKB-specific cell dependencies to a transaction.
-   *
-   * Adds individual code deps (not dep group) for:
-   * - xUDT code cell (this.udtCode)
-   * - iCKB Logic code cell (this.logicCode)
-   *
-   * @param txLike - The transaction to add cell deps to.
-   * @returns The transaction with cell deps added.
+   * iCKB carried by the transaction's inputs: xUDT balances plus receipt value, minus the
+   * first-phase deposits it re-mints. Receipts and deposits take the value the state read
+   * gave them at their deposit headers; a protocol input missing from `protocolCells` is
+   * a builder bug and throws, since iCKB Logic would refuse whatever it was valued at.
    */
-  public addCellDeps(txLike: ccc.TransactionLike): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    addCodeDep(tx, this.udtCode);
-    addCodeDep(tx, this.logicCode);
-    return tx;
-  }
-
-  /**
-   * iCKB carried by the transaction's inputs: xUDT balances plus receipt value,
-   * minus the first-phase deposits it re-mints. Final withdrawal inputs carry none.
-   * The protocol cells are valued at their deposit headers, each read once.
-   */
-  public async inputBalance(tx: ccc.Transaction, client: ccc.Client): Promise<ccc.Num> {
-    const cells = await Promise.all(
-      tx.inputs.map(async (input) => {
-        try {
-          return await input.getCell(client);
-        } catch (error) {
-          throw new Error(`Failed to load input cell ${input.previousOutput.toHex()}`, {
-            cause: error,
-          });
-        }
-      }),
-    );
-    const valued = cells.map((cell) => this.protocolValue(cell));
-    const headers = await transactionHeaders(
-      client,
-      valued.flatMap((value) => (value === undefined ? [] : [value.txHash])),
+  public async inputBalance(
+    tx: ccc.Transaction,
+    client: ccc.Client,
+    protocolCells: readonly ProtocolCell[],
+  ): Promise<ccc.Num> {
+    const values = new Map(
+      protocolCells.map(({ cell, udtValue }) => [cell.outPoint.toHex(), udtValue]),
     );
     let balance = ccc.Zero;
-    for (const [index, cell] of cells.entries()) {
-      const value = valued[index];
+    for (const input of tx.inputs) {
+      const cell = await input.getCell(client);
       if (this.isUdt(cell)) {
-        balance += decodeUdtBalance(cell.outputData);
-      } else if (value !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every protocol cell's hash was read above.
-        const header = headers.get(value.txHash)!;
-        balance += value.sign * ickbValue(value.amount, header) * value.quantity;
+        balance += ccc.udtBalanceFrom(cell.outputData);
+        continue;
       }
+      const sign = this.protocolSign(cell);
+      if (sign === 0n) {
+        continue;
+      }
+      const value = values.get(cell.outPoint.toHex());
+      if (value === undefined) {
+        throw new Error(
+          `iCKB input ${cell.outPoint.toHex()} has no value from the state read`,
+        );
+      }
+      balance += sign * value;
     }
     return balance;
   }
 
-  /** What a protocol input (receipt or first-phase deposit) is worth once its header is known. */
-  private protocolValue(
-    cell: ccc.CellAny,
-  ):
-    | { txHash: ccc.Hex; amount: ccc.FixedPoint; quantity: bigint; sign: bigint }
-    | undefined {
-    if (this.isUdt(cell) || cell.outPoint === undefined) {
-      return undefined;
-    }
+  /** 1 for a receipt, -1 for a first-phase iCKB deposit, 0 for any other cell. */
+  private protocolSign(cell: ccc.Cell): bigint {
     const { type, lock } = cell.cellOutput;
     if (type !== undefined && this.logicScript.eq(type)) {
-      let receipt: ReturnType<typeof decodeReceiptData>;
-      try {
-        receipt = decodeReceiptData(cell.outputData);
-      } catch (error) {
-        throw new Error(
-          `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: ${cell.outputData}`,
-          { cause: error },
-        );
-      }
-      return {
-        txHash: cell.outPoint.txHash,
-        amount: receipt.depositAmount,
-        quantity: receipt.depositQuantity,
-        sign: 1n,
-      };
+      return 1n;
     }
-    if (this.logicScript.eq(lock) && isDaoDeposit(cell, this.daoScript)) {
-      return {
-        txHash: cell.outPoint.txHash,
-        amount: cell.capacityFree,
-        quantity: 1n,
-        sign: -1n,
-      };
-    }
-    return undefined;
-  }
-
-  /** iCKB the transaction's outputs require. */
-  public outputBalance(tx: ccc.Transaction): ccc.Num {
-    return Array.from(tx.outputCells).reduce((required, cell) => {
-      return this.isUdt(cell) ? required + decodeUdtBalance(cell.outputData) : required;
-    }, ccc.Zero);
+    return this.logicScript.eq(lock) && isDaoDeposit(cell, this.daoScript) ? -1n : 0n;
   }
 
   /** Adds the iCKB change output when the surplus is positive; zero needs no output. */
@@ -236,17 +176,6 @@ export class IckbUdt {
     }
     tx.addOutput({ lock, type: this.script }, CheckedUint128LE.encode(balance));
   }
-}
-
-function decodeUdtBalance(data: ccc.BytesLike): ccc.Num {
-  return CheckedUint128LE.decode(ccc.bytesFrom(data).slice(0, udtDataSize));
-}
-
-function addCodeDep(tx: ccc.Transaction, outPoint: ccc.OutPoint): void {
-  if (tx.cellDeps.some((dep) => dep.depType === "code" && dep.outPoint.eq(outPoint))) {
-    return;
-  }
-  tx.addCellDeps({ outPoint, depType: "code" });
 }
 
 /**
@@ -260,7 +189,7 @@ export function ickbValue(
   ckbUnoccupiedCapacity: ccc.FixedPoint,
   header: ccc.ClientBlockHeader,
 ): ccc.FixedPoint {
-  let ickbAmount = convert(true, ckbUnoccupiedCapacity, ickbAccountingRatio(header));
+  let ickbAmount = udtFromCkb(ckbUnoccupiedCapacity, ickbAccountingRatio(header));
   if (ICKB_DEPOSIT_CAP < ickbAmount) {
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
     ickbAmount -= (ickbAmount - ICKB_DEPOSIT_CAP) / 10n;
@@ -269,25 +198,22 @@ export function ickbValue(
   return ickbAmount;
 }
 
-/**
- * Converts between CKB and iCKB based on an explicit ratio.
- *
- * @param isCkb2Udt - A boolean indicating the direction of conversion (CKB to iCKB or vice versa).
- * @param amount - The amount to convert.
- * @param ratio - The CKB and iCKB scales to use.
- * @returns The converted amount in the target unit as a `ccc.FixedPoint`.
- */
-export function convert(
-  isCkb2Udt: boolean,
-  amount: ccc.FixedPoint,
-  ratio: ExchangeRatio,
-): ccc.FixedPoint {
-  if (ratio.ckbScale <= 0n || ratio.udtScale <= 0n) {
+/** The iCKB worth `amount` CKB at `ratio`, rounded down. */
+export function udtFromCkb(amount: ccc.FixedPoint, ratio: ExchangeRatio): ccc.FixedPoint {
+  assertPositive(ratio);
+  return (amount * ratio.ckbScale) / ratio.udtScale;
+}
+
+/** The CKB worth `amount` iCKB at `ratio`, rounded down. */
+export function ckbFromUdt(amount: ccc.FixedPoint, ratio: ExchangeRatio): ccc.FixedPoint {
+  assertPositive(ratio);
+  return (amount * ratio.udtScale) / ratio.ckbScale;
+}
+
+function assertPositive({ ckbScale, udtScale }: ExchangeRatio): void {
+  if (ckbScale <= 0n || udtScale <= 0n) {
     throw new Error("Exchange ratio scales must be positive");
   }
-  return isCkb2Udt
-    ? (amount * ratio.ckbScale) / ratio.udtScale
-    : (amount * ratio.udtScale) / ratio.ckbScale;
 }
 
 /**
@@ -314,4 +240,10 @@ export function ickbExchangeRatio(header: ccc.ClientBlockHeader): ExchangeRatio 
     ckbScale: AR_0,
     udtScale: header.dao.ar + depositCapacityDelta,
   };
+}
+
+/** A receipt or iCKB deposit with the iCKB value the state read gave it. */
+export interface ProtocolCell {
+  cell: ccc.Cell;
+  udtValue: ccc.Num;
 }

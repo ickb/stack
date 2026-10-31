@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import type { StubCell } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   byte32FromByte,
@@ -7,7 +8,6 @@ import {
   composedClient,
   headerLike,
   outPoint,
-  pagedCells,
   script,
   StubClient,
   transactionWithHeader,
@@ -98,13 +98,11 @@ describe("StubClient", () => {
     expect(client.sendTransactionDry).toBe(sendTransactionDry);
   });
 
-  it("delegates scan and transaction handlers", async () => {
-    const cell = capacityCell(1n, script("77"), "88");
+  it("delegates transaction and header handlers", async () => {
     const transaction = committedTransactionResponse(ccc.Transaction.default());
     const withHeader = transactionWithHeader(headerLike({ number: 3n }));
     const header = headerLike({ number: 4n });
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells([cell]),
       getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
         await Promise.resolve();
         return transaction;
@@ -121,16 +119,6 @@ describe("StubClient", () => {
       },
     });
 
-    const searchKey = {
-      script: script("aa"),
-      scriptType: "lock",
-      scriptSearchMode: "exact",
-    } as const;
-
-    await expect(client.findCellsPagedNoCache(searchKey, "asc", 1)).resolves.toEqual({
-      cells: [cell],
-      lastCursor: "1",
-    });
     await expect(client.getTransaction(byte32FromByte("99"))).resolves.toBe(transaction);
     await expect(client.getTransactionWithHeader(byte32FromByte("99"))).resolves.toBe(
       withHeader,
@@ -179,24 +167,37 @@ describe("StubClient network boundary", () => {
   });
 });
 
-describe("pagedCells", () => {
-  it("serves the list in pages, the cursor counting what was served", async () => {
-    const cells = ["11", "22", "33"].map((byte) => capacityCell(1n, script("44"), byte));
-    const page = pagedCells(cells);
-    const key = {
-      script: script("44"),
-      scriptType: "lock",
-      scriptSearchMode: "exact",
-    } as const;
+describe("StubClient cells", () => {
+  it("serves raw get_cells pages, the cursor counting what was served, blocks as named", async () => {
+    const first = capacityCell(1n, script("44"), "11");
+    const second = capacityCell(1n, script("44"), "22");
+    const third = capacityCell(1n, script("44"), "33");
+    const keys: unknown[] = [];
+    const client = new StubClient({
+      cells: (key): readonly StubCell[] => {
+        keys.push(key);
+        return [first, { cell: second, blockNumber: 7n }, third];
+      },
+    });
+    const key = { script: { code_hash: script("44").codeHash } };
 
-    await expect(page(key, "asc", 2)).resolves.toEqual({
-      cells: cells.slice(0, 2),
-      lastCursor: "2",
-    });
-    await expect(page(key, "asc", 2, "2")).resolves.toEqual({
-      cells: cells.slice(2),
-      lastCursor: "3",
-    });
+    interface Page {
+      last_cursor: string;
+      objects: Array<{ block_number: string; out_point: { tx_hash: string } }>;
+    }
+    const read = async (after: string | null): Promise<Page> =>
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the stub's own raw answer.
+      (await client.requestor.request("get_cells", [key, "asc", "0x2", after])) as Page;
+    const page = await read(null);
+    const rest = await read(page.last_cursor);
+
+    expect(keys).toEqual([key, key]);
+    expect(page.last_cursor).toBe("0x2");
+    expect(page.objects.map((cell) => cell.block_number)).toEqual(["0x0", "0x7"]);
+    expect(rest.objects.map((cell) => cell.out_point.tx_hash)).toEqual([
+      third.outPoint.txHash,
+    ]);
+    expect(rest.last_cursor).toBe("0x3");
   });
 });
 

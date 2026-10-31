@@ -1,9 +1,8 @@
-import type { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
+import { ccc } from "@ckb-ccc/core";
 import { readyDeposits } from "../../../src/logic.ts";
 import type { Match } from "../../../src/order/matcher.ts";
-import { convert } from "../../../src/udt.ts";
-import { maxBigInt } from "../../../src/utils/utils.ts";
+import { ckbFromUdt } from "../../../src/udt.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { BotState, BotStateSummary } from "./types.ts";
 
 /**
@@ -12,7 +11,7 @@ import type { BotState, BotStateSummary } from "./types.ts";
  */
 export const MAX_MATCH_PARTIALS = 58;
 
-/** Builds the stable public state summary emitted with bot decisions. */
+/** Builds the state summary a turn journals as `bot.state.read`. */
 export function summarizeBotState(state: BotState): BotStateSummary {
   const { tip, exchangeRatio, feeRate } = state.system;
   return {
@@ -31,28 +30,31 @@ export function summarizeBotState(state: BotState): BotStateSummary {
       ickb: state.ickb,
       pendingCkb: state.pendingCkb,
       totalEquivalentCkb:
-        state.ckb + state.pendingCkb + convert(false, state.ickb, exchangeRatio),
+        state.ckb + state.pendingCkb + ckbFromUdt(state.ickb, exchangeRatio),
       matchableCkb: matchableCkb(state.ckb),
       cellCount: state.cells.length,
     },
     counts: {
-      marketOrders: state.marketOrders.length,
+      marketOrders: state.system.orderPool.length,
       receipts: state.receipts.length,
       readyWithdrawals: state.readyWithdrawals.length,
       pendingWithdrawals: state.notReadyWithdrawals.length,
-      poolDeposits: state.poolDeposits.length,
-      readyPoolDeposits: readyDeposits(state.poolDeposits, tip, state.system.lockUp)
-        .length,
+      poolDeposits: state.system.poolDeposits.length,
+      readyPoolDeposits: readyDeposits(
+        state.system.poolDeposits,
+        tip,
+        state.system.lockUp,
+      ).length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
     depositCapacity: state.depositCapacity,
-    fee: { feeRate },
+    feeRate,
   };
 }
 
 /** CKB a match may spend: what is available above the reserve. */
 export function matchableCkb(ckb: bigint): bigint {
-  return maxBigInt(0n, ckb - CKB_RESERVE);
+  return ccc.numMax(0n, ckb - CKB_RESERVE);
 }
 
 export function matchedOrderOutPoints(

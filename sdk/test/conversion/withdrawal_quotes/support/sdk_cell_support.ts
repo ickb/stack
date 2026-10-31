@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
-import { depositData } from "../../../../src/dao.ts";
+import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
 import {
   encodeOwnerData,
@@ -28,15 +28,11 @@ export function depositCell(
       lock: logic,
       type: dao,
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
-    headers: [
-      { header: depositHeader, txHash: cell.outPoint.txHash },
-      { header: tipHeader },
-    ],
-    interests: 0n,
+    header: depositHeader,
     claimEpoch: claimEpochAt(tipHeader, options?.isReady ?? false),
     ckbValue: cell.cellOutput.capacity,
     udtValue: ccc.fixedPointFrom(100000),
@@ -60,12 +56,11 @@ export function projectionReadyDeposit(
       lock: script("22"),
       type: script("33"),
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
-    headers: [{ header: baseTip, txHash: cell.outPoint.txHash }, { header: baseTip }],
-    interests: 0n,
+    header: baseTip,
     claimEpoch: new TestEpoch(
       claimEpochAt(baseTip, options.isReady ?? true),
       maturityUnix,
@@ -87,7 +82,7 @@ export function receiptValue(
   });
   return {
     cell,
-    header: { header: baseTip, txHash: cell.outPoint.txHash },
+    header: baseTip,
     ckbValue,
     udtValue,
   };
@@ -145,7 +140,7 @@ export function receiptCell(
   });
   return {
     cell,
-    header: { header, txHash: cell.outPoint.txHash },
+    header,
     ckbValue: cell.cellOutput.capacity,
     udtValue: ccc.fixedPointFrom(100000),
   };
@@ -191,11 +186,7 @@ export function readyWithdrawalGroup(options: {
   return new WithdrawalGroup(
     {
       cell: ownedCell,
-      headers: [
-        { header: options.depositHeader },
-        { header: options.withdrawalHeader, txHash: ownedCell.outPoint.txHash },
-      ],
-      interests: 0n,
+      headers: [options.depositHeader, options.withdrawalHeader],
       maturity: ccc.Epoch.from([1n, 0n, 1n]),
       isReady: true,
       ckbValue: ownedCell.cellOutput.capacity,
@@ -224,11 +215,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         },
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
-      headers: [
-        { header: baseTip },
-        { header: baseTip, txHash: hash(options.byte ?? "30") },
-      ],
-      interests: 0n,
+      headers: [baseTip, baseTip],
       maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,
       ckbValue: options.ckbValue,

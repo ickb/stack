@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk } from "@ickb/sdk";
+import { clientCache, IckbSdk } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -19,17 +19,18 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
-// One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), owned here
-// for the app's lifetime: the connector's network list borrows them, and a chain tab lends
-// the chosen one through an Owner the Provider may dispose without effect.
+// One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), kept for
+// the app's lifetime, so its owner is never disposed: the connector's network list borrows
+// them, and a chain tab lends the chosen one through an Owner the Provider may dispose
+// without effect. The SDK verifies what it reads through them.
 const clients = {
-  mainnet: ccc.ClientPublicMainnet.open(),
-  testnet: ccc.ClientPublicTestnet.open(),
+  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
+  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
 };
-export const mainnetClient = clients.mainnet.value;
-export const testnetClient = clients.testnet.value;
+export const mainnetClient = clients.mainnet;
+export const testnetClient = clients.testnet;
 export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
-  return new ccc.OwnerUnique(clients[chain].value, () => {
+  return new ccc.OwnerUnique(clients[chain], () => {
     // Borrowed: the app keeps the client for its lifetime.
   });
 }
@@ -51,7 +52,7 @@ export function createRootConfig(
     resetClient: (): void => {
       // The connector hands out a fee-rate proxy whose writes forward to the wrapped client.
       // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
-      cccClient.cache = new ccc.ClientCacheMemory();
+      cccClient.cache = clientCache();
     },
     sdk: sdks[chain],
   };

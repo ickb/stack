@@ -23,7 +23,7 @@ function emitted(emit: () => void): object {
 }
 
 it("journals a failure with its public fields, cause, and stack", () => {
-  const emitter = new BotEventEmitter({ chain: "testnet", runId: "run-1" });
+  const emitter = new BotEventEmitter({ chain: "testnet", processId: "run" });
   const error = Object.assign(
     new Error(POOL_REJECTED_RBF, { cause: new TypeError("fetch failed") }),
     { code: -1111, data: "RBFRejected(...)", txHash: `0x${"11".repeat(32)}` },
@@ -36,7 +36,7 @@ it("journals a failure with its public fields, cause, and stack", () => {
   expect(event).toMatchObject({
     type: "bot.turn.failed",
     chain: "testnet",
-    runId: "run-1",
+    runId: "run-0",
     error: {
       name: "Error",
       message: POOL_REJECTED_RBF,
@@ -50,7 +50,7 @@ it("journals a failure with its public fields, cause, and stack", () => {
 });
 
 it("journals thrown non-errors as they are", () => {
-  const emitter = new BotEventEmitter({ chain: "testnet", runId: "run-1" });
+  const emitter = new BotEventEmitter({ chain: "testnet", processId: "run" });
 
   expect(
     emitted(() => {

@@ -17,135 +17,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("waitTransaction committed reads", () => {
-  it("raw-polls JSON-RPC status and reads the body without the cache", async () => {
-    const response = committedResponse(10n);
+describe("waitTransaction committed status", () => {
+  it("raw-polls JSON-RPC status and resolves on commitment without reading the body", async () => {
     const { client, request } = jsonRpcClient({ status: "committed" });
-    const noCache = vi.spyOn(client, "getTransactionNoCache").mockResolvedValue(response);
+    const noCache = vi.spyOn(client, "getTransactionNoCache");
     const cached = vi.spyOn(client, "getTransaction");
 
-    await expect(waitTransaction(client, TX_HASH)).resolves.toBe(response);
+    await expect(waitTransaction(client, TX_HASH)).resolves.toBeUndefined();
 
     // CCC 1.23 passes optional request options as a second argument; only the payload matters.
     expect(request.mock.calls[0]?.[0]).toMatchObject({
       method: "get_transaction",
       params: [TX_HASH, "0x1"],
     });
-    expect(noCache).toHaveBeenCalledWith(TX_HASH);
+    expect(noCache).not.toHaveBeenCalled();
     expect(cached).not.toHaveBeenCalled();
-  });
-
-  it("keeps polling while committed transaction details are unavailable or pending", async () => {
-    const pending = new ccc.ClientTransactionResponse(
-      ccc.Transaction.default(),
-      "pending",
-      undefined,
-      hash("92"),
-      10n,
-      undefined,
-      "awaiting proposal",
-    );
-    const response = committedResponse(10n);
-    const { client } = jsonRpcClient({ status: "committed" });
-    const noCache = vi
-      .spyOn(client, "getTransactionNoCache")
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(pending)
-      .mockResolvedValueOnce(response);
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toBe(response);
-
-    expect(noCache).toHaveBeenCalledTimes(3);
-  });
-
-  it("keeps polling while the body reports an unknown transaction with block metadata", async () => {
-    const unknown = new ccc.ClientTransactionResponse(
-      ccc.Transaction.default(),
-      "unknown",
-      undefined,
-      hash("92"),
-      10n,
-    );
-    const response = committedResponse(10n);
-    const { client } = jsonRpcClient({ status: "committed" });
-    const noCache = vi
-      .spyOn(client, "getTransactionNoCache")
-      .mockResolvedValueOnce(unknown)
-      .mockResolvedValueOnce(response);
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toBe(response);
-
-    expect(noCache).toHaveBeenCalledTimes(2);
-  });
-
-  it("reads status and body without the cache for non-JSON clients", async () => {
-    const response = committedResponse(10n);
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValueOnce(undefined).mockResolvedValue(response);
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toBe(response);
-
-    expect(getTransactionNoCache).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("waitTransaction generic client bodies", () => {
-  it("accepts a structurally valid committed body from a generic client", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue({
-      transaction: ccc.Transaction.default(),
-      status: "committed",
-      blockHash: hash("92"),
-      blockNumber: 10n,
-    });
-
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 0 }),
-    ).resolves.toMatchObject({ status: "committed", blockNumber: 10n });
-  });
-
-  it.each([
-    { name: "a missing transaction", body: { status: "committed", blockNumber: 10n } },
-    {
-      name: "invalid transaction data",
-      body: {
-        transaction: { version: "not-a-number" },
-        status: "committed",
-        blockNumber: 10n,
-      },
-    },
-    {
-      name: "an invalid block number",
-      body: {
-        transaction: ccc.Transaction.default(),
-        status: "committed",
-        blockNumber: "not-a-number",
-      },
-    },
-    {
-      name: "an invalid block hash",
-      body: {
-        transaction: ccc.Transaction.default(),
-        status: "committed",
-        blockNumber: 10n,
-        blockHash: "not-a-hash",
-      },
-    },
-  ])("treats a generic committed body with $name as unconfirmed", async ({ body }) => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue(body);
-
-    // The window must outlast one poll so the malformed body is normalized, and
-    // ending at the timeout is the proof that nothing committed was returned.
-    await expect(
-      waitTransaction(client, TX_HASH, { timeout: 100, interval: 1 }),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
   });
 });
 
@@ -191,25 +77,6 @@ describe("waitTransaction terminal rejection", () => {
     );
   });
 
-  it("reports a rejection surfaced only by a non-JSON client response", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue(
-      new ccc.ClientTransactionResponse(
-        ccc.Transaction.default(),
-        "rejected",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "fallback rejection",
-      ),
-    );
-
-    await expect(waitTransaction(client, TX_HASH)).rejects.toBeInstanceOf(
-      TransactionWaitError,
-    );
-  });
-
   it("treats malformed raw status records as unconfirmed", async () => {
     for (const result of [
       "malformed",
@@ -237,18 +104,13 @@ describe("waitTransaction terminal rejection", () => {
 describe("waitTransaction cache ownership", () => {
   it("never mutates the client cache on commitment or rejection", async () => {
     const { client: committed } = jsonRpcClient({ status: "committed" });
-    vi.spyOn(committed, "getTransactionNoCache").mockResolvedValue(
-      committedResponse(10n),
-    );
     const { client: rejected } = jsonRpcClient({ status: "rejected" });
     const cacheSpies = [committed, rejected].flatMap((client) => [
       vi.spyOn(client.cache, "clear"),
       vi.spyOn(client.cache, "markTransactions"),
     ]);
 
-    await expect(waitTransaction(committed, TX_HASH)).resolves.toMatchObject({
-      status: "committed",
-    });
+    await expect(waitTransaction(committed, TX_HASH)).resolves.toBeUndefined();
     await expect(waitTransaction(rejected, TX_HASH)).rejects.toBeInstanceOf(
       TransactionWaitError,
     );
@@ -343,7 +205,6 @@ describe("waitTransaction window closing", () => {
     const controller = new AbortController();
     const txStatus = { status: "pending" };
     const { client, request } = jsonRpcClient(txStatus);
-    vi.spyOn(client, "getTransactionNoCache").mockResolvedValue(committedResponse(10n));
 
     const waiting = waitTransaction(client, TX_HASH, {
       interval: 2_000,
@@ -357,23 +218,27 @@ describe("waitTransaction window closing", () => {
     txStatus.status = "committed";
     await vi.advanceTimersByTimeAsync(2_000);
 
-    await expect(waiting).resolves.toMatchObject({ status: "committed" });
+    await expect(waiting).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
   });
 });
 
 describe("waitTransaction post-operation cancellation", () => {
-  it("does not accept a committed body from an operation that aborted", async () => {
-    const reason = new Error("stopped during the body read");
+  it("does not accept a committed status from an operation that aborted", async () => {
+    const reason = new Error("stopped during the status read");
     const controller = new AbortController();
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockImplementation(async () => {
+    const { client, request } = jsonRpcClient({ status: "committed" });
+    request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
       controller.abort(reason);
       await Promise.resolve();
-      // The body resolves anyway, so nothing but a cancellation recheck stands
+      // The status resolves anyway, so nothing but a cancellation recheck stands
       // between this operation and a successful wait.
-      return committedResponse(10n);
+      return {
+        id: payload.id,
+        jsonrpc: "2.0",
+        result: { transaction: null, tx_status: { status: "committed" } },
+      };
     });
 
     await expect(
@@ -381,20 +246,23 @@ describe("waitTransaction post-operation cancellation", () => {
     ).rejects.toBe(reason);
   });
 
-  it("does not return committed state after an abort that followed the body read", async () => {
-    const reason = new Error("stopped after the body read");
+  it("does not resolve after an abort that followed the status read", async () => {
+    const reason = new Error("stopped after the status read");
     const controller = new AbortController();
-    const response = committedResponse(10n);
-    // Aborts while the delivered body is inspected: after the last client
-    // operation settled and before the wait can return it.
-    Object.defineProperty(response, "blockNumber", {
-      get: (): bigint => {
+    const { client, request } = jsonRpcClient({ status: "committed" });
+    // Aborts while the delivered status is inspected: after the last client operation
+    // settled and before the wait can resolve.
+    const result = {
+      transaction: null,
+      get tx_status(): { status: string } {
         controller.abort(reason);
-        return 10n;
+        return { status: "committed" };
       },
+    };
+    request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
+      await Promise.resolve();
+      return { id: payload.id, jsonrpc: "2.0", result };
     });
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockResolvedValue(response);
 
     await expect(
       waitTransaction(client, TX_HASH, { signal: controller.signal }),
@@ -475,39 +343,9 @@ describe("waitTransaction in-flight operations", () => {
 });
 
 describe("waitTransaction absolute budget", () => {
-  it("spends one absolute budget across raw status and body reads", async () => {
-    vi.useFakeTimers();
-    const rawGate = Promise.withResolvers<boolean>();
-    const body = Promise.withResolvers<ccc.ClientTransactionResponse | undefined>();
-    const { client, request } = jsonRpcClient({ status: "committed" }, rawGate.promise);
-    const noCache = vi
-      .spyOn(client, "getTransactionNoCache")
-      .mockImplementation(async () => body.promise);
-    const startedAt = Date.now();
-    const timedOut = rejectionOf(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 100 }),
-    );
-    await vi.waitFor(() => {
-      expect(request).toHaveBeenCalledTimes(1);
-    });
-    await vi.advanceTimersByTimeAsync(600);
-    rawGate.resolve(true);
-    await vi.waitFor(() => {
-      expect(noCache).toHaveBeenCalledTimes(1);
-    });
-
-    const remaining = 1_000 - (Date.now() - startedAt);
-    expect(remaining).toBeGreaterThan(0);
-    await vi.advanceTimersByTimeAsync(remaining - 1);
-    await vi.advanceTimersByTimeAsync(1);
-
-    await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
   it("rejects an overdue result from an operation that starved the timer", async () => {
-    const { client, getTransactionNoCache } = nonJsonClient();
-    getTransactionNoCache.mockImplementation(async () => {
+    const { client, request } = jsonRpcClient({ status: "committed" });
+    request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
       // Block the event loop past the deadline so the window timer cannot fire.
       const blockUntil = Date.now() + 30;
       while (Date.now() < blockUntil) {
@@ -515,53 +353,20 @@ describe("waitTransaction absolute budget", () => {
       }
       // A microtask still cannot let the starved timer run before this returns.
       await Promise.resolve();
-      return committedResponse(10n);
+      return {
+        id: payload.id,
+        jsonrpc: "2.0",
+        result: { transaction: null, tx_status: { status: "committed" } },
+      };
     });
 
     await expect(
       waitTransaction(client, TX_HASH, { timeout: 5, interval: 0 }),
     ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
 
-    expect(getTransactionNoCache).toHaveBeenCalledTimes(1);
-  });
-
-  it("aborts an unresolved body read with its exact reason", async () => {
-    vi.useFakeTimers();
-    const pending = Promise.withResolvers<ccc.ClientTransactionResponse | undefined>();
-    const reason = new Error("confirmation stopped");
-    const controller = new AbortController();
-    const { client } = jsonRpcClient({ status: "committed" });
-    const getTransactionNoCache = vi
-      .spyOn(client, "getTransactionNoCache")
-      .mockImplementation(async () => pending.promise);
-    const waiting = waitTransaction(client, TX_HASH, {
-      timeout: 1_000,
-      interval: 100,
-      signal: controller.signal,
-    });
-    await vi.waitFor(() => {
-      expect(getTransactionNoCache).toHaveBeenCalledTimes(1);
-    });
-
-    controller.abort(reason);
-
-    await expect(waiting).rejects.toBe(reason);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });
-
-function committedResponse(
-  blockNumber: bigint,
-  blockHashByte = "92",
-): ccc.ClientTransactionResponse {
-  return new ccc.ClientTransactionResponse(
-    ccc.Transaction.default(),
-    "committed",
-    undefined,
-    hash(blockHashByte),
-    blockNumber,
-  );
-}
 
 async function rejectionOf<T>(promise: Promise<T>): Promise<unknown> {
   try {
@@ -570,21 +375,6 @@ async function rejectionOf<T>(promise: Promise<T>): Promise<unknown> {
     return error;
   }
   throw new Error("Expected promise to reject");
-}
-
-function nonJsonClient(): {
-  client: ccc.Client;
-  // A generic client is not bound to CCC's response class, so the fake returns
-  // whatever such an implementation could.
-  getTransactionNoCache: Mock<() => Promise<unknown>>;
-} {
-  const getTransactionNoCache = vi.fn<() => Promise<unknown>>();
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- The fallback intentionally supports non-JSON Client implementations through this public surface.
-  const client = {
-    cache: new ccc.ClientCacheMemory(),
-    getTransactionNoCache,
-  } as unknown as ccc.Client;
-  return { client, getTransactionNoCache };
 }
 
 type JsonRpcRequest = (payload: ccc.JsonRpcPayload) => Promise<ccc.JsonRpcResponse>;

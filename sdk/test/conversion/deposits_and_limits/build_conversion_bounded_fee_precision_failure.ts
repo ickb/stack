@@ -1,12 +1,7 @@
-import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
-  stubSigner,
-  testSdk,
-} from "./support/sdk_fixture_support.ts";
+import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,12 +11,12 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const AMOUNT_TOO_SMALL = "amount-too-small";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("returns a typed failure when bounded iCKB-to-CKB fee precision collapses", async () => {
     const { sdk, lock } = testSdk();
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
         lock,

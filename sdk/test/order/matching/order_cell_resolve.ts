@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { OrderManager } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
-import { ORDER_CELL_RESOLVE_SUITE } from "../fixtures/order_constants.ts";
 import {
   directionalInfo,
   dualInfo,
   makeOrderCell,
 } from "./support/order_order_helpers.ts";
+
+const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
+
 describe("OrderManager.mint", () => {
   it("creates an order output with the requested CKB value plus occupied capacity", () => {
     const lock = script("11");

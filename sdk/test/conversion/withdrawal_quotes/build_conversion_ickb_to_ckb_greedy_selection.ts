@@ -4,7 +4,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  BUILD_CONVERSION_TRANSACTION_SUITE,
   expectIckbToCkbDirectPlusOrder,
   mockWithdrawalWithRemainderOrder,
   stubSigner,
@@ -20,7 +19,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildConversionTransaction", () => {
   it("takes the earliest-maturing ready deposit before a later one with more surplus", async () => {
     const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
@@ -43,7 +42,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       .mockImplementation((txLike) => ccc.Transaction.from(txLike));
 
     await expect(
-      sdk.buildConversionTransaction(ccc.Transaction.default(), {
+      sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
         lock,
@@ -59,7 +58,7 @@ describe(BUILD_CONVERSION_TRANSACTION_SUITE, () => {
       }),
     ).resolves.toMatchObject({
       ok: true,
-      conversion: { kind: DIRECT_PLUS_ORDER },
+      conversionKind: DIRECT_PLUS_ORDER,
     });
 
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);

@@ -8,13 +8,13 @@ import {
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
+  baseTip,
   conversionContext,
   hash,
   transactionWithOutputs,
 } from "../base/support/sdk_core_support.ts";
-import { COMPLETE_TRANSACTION_SUITE } from "./support/sdk_suite_titles.ts";
 
-describe(COMPLETE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.completeTransaction", () => {
   registerFundingTests();
   registerSweepTests();
   registerIckbTests();
@@ -34,6 +34,8 @@ function registerFundingTests(): void {
       signer,
       feeRate,
       cells: [source],
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(1);
@@ -63,12 +65,16 @@ function registerFundingTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
+      tip: baseTip,
     });
     const toSecondary = await sdk.completeTransaction(tx, {
       signer,
       lock: secondary,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(2);
@@ -93,6 +99,8 @@ function registerFundingTests(): void {
       signer,
       feeRate: 1_000n,
       cells: [existing, additional],
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -110,7 +118,13 @@ function registerFundingTests(): void {
     tx.addInput(existing);
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [],
+        protocolCells: [],
+        tip: baseTip,
+      }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
 }
@@ -129,6 +143,8 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells: [small, udt, large],
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
@@ -138,7 +154,7 @@ function registerSweepTests(): void {
     ]);
     // One plain change and one iCKB change carry the whole account.
     expect(completed.outputs).toHaveLength(3);
-    expect(ickbUdt.outputBalance(completed)).toBe(5n);
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(5n);
   });
 
   it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
@@ -153,6 +169,8 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
@@ -170,7 +188,7 @@ function registerSweepTests(): void {
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
     const funding = plainCell("ff", lock, ccc.fixedPointFrom(1000));
 
-    const result = await sdk.buildConversionTransaction(ccc.Transaction.default(), {
+    const result = await sdk.buildConversionTransaction({
       direction: "ckb-to-ickb",
       amount: 0n,
       lock: script("77"),
@@ -210,11 +228,15 @@ function registerSweepTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
+      tip: baseTip,
     });
 
     // Required funding passes the limit; neither sweep adds a cell beyond it.
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
-    expect(ickbUdt.outputBalance(completed)).toBe(BigInt(SWEEP_INPUT_LIMIT + 1));
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(
+      BigInt(SWEEP_INPUT_LIMIT + 1),
+    );
   });
 }
 
@@ -239,11 +261,13 @@ function registerIckbTests(): void {
       signer,
       feeRate: 1_000n,
       cells,
+      protocolCells: [],
+      tip: baseTip,
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
-    expect(ickbUdt.outputBalance(completed)).toBe(110n);
-    expect(completed.cellDeps).toHaveLength(2);
+    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(110n);
+    expect(completed.cellDeps).toEqual(ickbUdt.cellDeps);
   });
 
   it("fails typed when the given iCKB cells cannot cover the outputs", async () => {
@@ -261,6 +285,8 @@ function registerIckbTests(): void {
         signer,
         feeRate: 1_000n,
         cells: [udtCell("96", lock, type, 40n)],
+        protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toMatchObject({ name: "IckbError", code: "insufficient_ickb" });
   });
@@ -279,7 +305,13 @@ function registerFailureTests(): void {
     const original = tx.toHex();
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+        tip: baseTip,
+      }),
     ).rejects.toMatchObject({
       name: "IckbError",
       code: "insufficient_capacity",
@@ -296,7 +328,13 @@ function registerFailureTests(): void {
     const original = tx.toHex();
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+        tip: baseTip,
+      }),
     ).rejects.toMatchObject({ code: "insufficient_capacity" });
     expect(tx.toHex()).toBe(original);
   });
@@ -313,7 +351,13 @@ function registerFailureTests(): void {
     first.type = logicManager.dao.script;
 
     await expect(
-      sdk.completeTransaction(tx, { signer, feeRate: 1_000n, cells: [source] }),
+      sdk.completeTransaction(tx, {
+        signer,
+        feeRate: 1_000n,
+        cells: [source],
+        protocolCells: [],
+        tip: baseTip,
+      }),
     ).rejects.toBeInstanceOf(DaoOutputLimitError);
     expect(tx.outputs).toHaveLength(64);
   });
@@ -328,6 +372,8 @@ function registerFailureTests(): void {
         signer,
         feeRate: 1_000n,
         cells: [],
+        protocolCells: [],
+        tip: baseTip,
       }),
     ).rejects.toBe(failure);
   });

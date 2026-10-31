@@ -1,6 +1,6 @@
+import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import { greatestBoundedFractionAtMost } from "../../src/order/conversion.ts";
-import { minBigInt } from "../../src/utils/utils.ts";
 
 const MAX_UINT64 = (1n << 64n) - 1n;
 
@@ -17,7 +17,7 @@ function oracle(
   let best = { numerator: 0n, denominator: 1n };
   for (let q = 1n; q <= maxTerm; q++) {
     const quotient = (numerator * q) / denominator;
-    const p = minBigInt(quotient, maxTerm);
+    const p = ccc.numMin(quotient, maxTerm);
     if (p * best.denominator > best.numerator * q) {
       best = { numerator: p, denominator: q };
     }

@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
-import {
-  baseTransactionFixture,
-  BUILD_BASE_TRANSACTION_SUITE,
-} from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
   makeOrderGroup,
   resolveOrderGroupFixture,
@@ -15,7 +12,7 @@ import {
   readyWithdrawalGroup,
   receiptCell,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, dep, hash, headerLike } from "./support/sdk_core_support.ts";
+import { baseTip, dep, headerLike } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -73,7 +70,7 @@ function expectRealBaseTransactionEffects(
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
-describe(BUILD_BASE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildBaseTransaction", () => {
   it("combines real manager transaction effects", async () => {
     const { tx, ...effects } = await buildRealBaseTransactionCase();
 
@@ -95,9 +92,9 @@ async function buildRealBaseTransactionCase(): Promise<
       orderDeps: [orderDep],
       ownedOwnerDeps: [ownedDep],
     });
-  const depositHeader = headerLike(10n, { hash: hash("a1") });
-  const receiptHeader = headerLike(11n, { hash: hash("a2") });
-  const withdrawalHeader = headerLike(12n, { hash: hash("a3") });
+  const depositHeader = headerLike(10n);
+  const receiptHeader = headerLike(11n);
+  const withdrawalHeader = headerLike(12n);
   const requestedDeposit = depositCell("70", logic, dao, depositHeader, baseTip, {
     isReady: true,
   });

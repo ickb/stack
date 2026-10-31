@@ -23,8 +23,6 @@ export interface Ratio extends ExchangeRatio {
   clone(): Ratio;
   /** Compares effective CKB-to-UDT prices, returning their numeric ordering. */
   compare(other: Ratio): number;
-  /** Converts an amount in the selected direction, rounding up only when requested. */
-  convert(isCkb2Udt: boolean, amount: ccc.FixedPoint, mustCeil: boolean): ccc.FixedPoint;
   /** Returns whether another value has the same scales. */
   eq(other: ExchangeRatio): boolean;
   /** Returns the CKB hash of the serialized ratio. */
@@ -41,6 +39,9 @@ export interface Ratio extends ExchangeRatio {
   validate(): void;
 }
 
+// An interface, this class expression and a typed const rather than one plain class: a
+// class extending `ccc.Entity.Base<...>()` emits an unexported `*_base` declaration, which
+// API Extractor's ae-forgotten-export rejects (tried 2026-10-30).
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const RatioImplementation = class Ratio extends RatioBase {
   static {
@@ -110,24 +111,6 @@ const RatioImplementation = class Ratio extends RatioBase {
     }
 
     return compareBigInt(this.ckbScale * other.udtScale, other.ckbScale * this.udtScale);
-  }
-
-  /** Converts an amount in the requested direction with optional ceiling. */
-  public convert(
-    isCkb2Udt: boolean,
-    amount: ccc.FixedPoint,
-    mustCeil: boolean,
-  ): ccc.FixedPoint {
-    if (!this.isPopulated()) {
-      throw new Error("Invalid midpoint ExchangeRatio");
-    }
-
-    let { ckbScale: aScale, udtScale: bScale } = this;
-    if (!isCkb2Udt) {
-      [aScale, bScale] = [bScale, aScale];
-    }
-
-    return (amount * aScale + (mustCeil ? bScale - 1n : 0n)) / bScale;
   }
 };
 

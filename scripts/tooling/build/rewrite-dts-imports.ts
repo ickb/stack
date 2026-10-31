@@ -1,68 +1,27 @@
-import type { Dirent, Stats } from "node:fs";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const args = process.argv.slice(2);
-const check = args[0] === "--check";
-const roots = check ? args.slice(1) : args;
+const roots = process.argv.slice(2);
 
 if (roots.length === 0) {
-  throw new Error(
-    "Usage: node scripts/rewrite-dts-imports.ts [--check] <dist-dir> [...]",
-  );
+  throw new Error("Usage: node scripts/rewrite-dts-imports.ts <dist-dir> [...]");
 }
-
-const changed: string[] = [];
 
 for (const root of roots) {
   for (const file of await declarationFiles(root)) {
-    const original = await readText(file);
+    const original = await readFile(file, "utf8");
     const rewritten = rewriteDeclarationImports(original);
-    if (rewritten === original) {
-      continue;
-    }
-    changed.push(file);
-    if (!check) {
-      await writeText(file, rewritten);
+    if (rewritten !== original) {
+      await writeFile(file, rewritten);
     }
   }
 }
 
-if (check && changed.length > 0) {
-  throw new Error(`Declaration imports need rewriting:\n${changed.join("\n")}`);
-}
-
-async function declarationFiles(filePath: string): Promise<string[]> {
-  const stats = await statPath(filePath);
-  if (stats.isFile()) {
-    return filePath.endsWith(".d.ts") ? [filePath] : [];
-  }
-  if (!stats.isDirectory()) {
-    return [];
-  }
-
-  const entries = await readDirectory(filePath);
-  const files: string[] = [];
-  for (const entry of entries) {
-    files.push(...(await declarationFiles(path.join(filePath, entry.name))));
-  }
-  return files;
-}
-
-async function readDirectory(filePath: string): Promise<Dirent[]> {
-  return readdir(filePath, { encoding: "utf8", withFileTypes: true });
-}
-
-async function readText(filePath: string): Promise<string> {
-  return readFile(filePath, "utf8");
-}
-
-async function statPath(filePath: string): Promise<Stats> {
-  return stat(filePath);
-}
-
-async function writeText(filePath: string, data: string): Promise<void> {
-  await writeFile(filePath, data);
+async function declarationFiles(root: string): Promise<string[]> {
+  const names = await readdir(root, { recursive: true });
+  return names
+    .filter((name) => name.endsWith(".d.ts"))
+    .map((name) => path.join(root, name));
 }
 
 function rewriteDeclarationImports(source: string): string {

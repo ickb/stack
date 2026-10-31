@@ -3,9 +3,8 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/{run-node-tests,tooling/build/rewrite-dts-imports,tooling/pins}.ts!",
+        "scripts/{tooling/build/rewrite-dts-imports,tooling/pins}.ts!",
         "scripts/test/**/*.ts",
-        "!scripts/test/**/*support.ts",
       ],
       "includeEntryExports": true,
       "project": ["scripts/**/*.ts", "!scripts/test/**!", "*.config.{ts,mts}"],
@@ -22,7 +21,6 @@
       "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
     "interface": {
-      "ignoreDependencies": ["tailwindcss"],
       "project": ["src/**/*.{ts,tsx,css}!", "test/**/*.{ts,tsx}"],
     },
   },

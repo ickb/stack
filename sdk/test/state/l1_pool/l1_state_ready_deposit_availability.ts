@@ -8,19 +8,16 @@ import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  emptyCellScan,
+  anchoredAt,
   FeeRateStubClient,
   l1SdkWithManagers,
-  tipHeaderHandler,
-  transactionWithHeader,
 } from "../l1_account/support/sdk_l1_support.ts";
-import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("carries the pool deposits, judged against the tip, as the CKB supply", async () => {
     const logic = script("22");
     const dao = script("33");
@@ -38,16 +35,13 @@ describe(L1_STATE_SUITE, () => {
       ownedOwnerManager,
       logicManager,
     });
-    const tip = headerLike(1n, { epoch: ccc.Epoch.from([181n, 0n, 1n]) });
+    const tip = headerLike(1n, {
+      epoch: ccc.Epoch.from([181n, 0n, 1n]),
+      timestamp: BigInt(Date.now()),
+    });
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(tip),
-      findCellsPagedNoCache: emptyCellScan,
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return transactionWithHeader(headerLike(0n));
-      },
+      ...anchoredAt(tip),
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await sdk.getL1AccountState(client, [], WALLET_LOCK_UP);

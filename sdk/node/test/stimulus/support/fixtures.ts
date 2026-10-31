@@ -1,13 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
-  pagedCells,
   script,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/types.ts";
+import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import type { ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
@@ -16,7 +17,7 @@ import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { encodeReceiptData } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
-import type { Runtime, StimulusState } from "../../../src/stimulus/state.ts";
+import type { Runtime } from "../../../src/stimulus/state.ts";
 
 export const CKB = ccc.fixedPointFrom(1);
 export const PRIMARY_LOCK = script("11");
@@ -33,9 +34,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
   };
 }
 
-export function accountState(
-  overrides: Partial<StimulusState["account"]> = {},
-): StimulusState["account"] {
+export function accountState(overrides: Partial<AccountState> = {}): AccountState {
   return {
     capacityCells: [],
     nativeUdtCells: [],
@@ -67,7 +66,7 @@ export function receipt(
     cell,
     ckbValue,
     udtValue,
-    header: { header: headerLike({ number: 1n }), txHash },
+    header: headerLike({ number: 1n }),
   };
 }
 
@@ -91,7 +90,7 @@ export function runtime({
   order = getConfig("testnet").order,
 }: {
   system?: SystemState;
-  account?: StimulusState["account"];
+  account?: AccountState;
   orders?: OrderGroup[];
   sdk?: Partial<Runtime["sdk"]>;
   order?: Runtime["order"];
@@ -104,7 +103,7 @@ export function runtime({
     sdk: Object.assign(sdkOf(getConfig("testnet")), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
-        return { system, user: { orders }, account };
+        return { system, userOrders: orders, account };
       },
       ...sdk,
     }),
@@ -120,7 +119,7 @@ const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };
  * A resolver-produced order group under the testnet order scripts, so the real SDK melts
  * it; matchable orders carry 100 CKB and, by default, a buy price well above par.
  */
-/** An order group as the scan resolves it; `blockNumber` dates its origin, none is uncommitted. */
+/** An order group as the scan resolves it; `blockNumber` dates its master and origin, fresh when omitted. */
 export async function order(
   txHashByte: string,
   isMatchable: boolean,
@@ -168,15 +167,14 @@ export async function order(
   transaction.outputsData.push(orderCell.cell.outputData, master.cell.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? orderCell.cell : master.cell,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock"
+        ? orderCell.cell
+        : { cell: master.cell, blockNumber: blockNumber ?? FRESH_BLOCK },
+    ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
-      return committedTransactionResponse(
-        transaction,
-        blockNumber === undefined ? {} : { blockNumber },
-      );
+      return committedTransactionResponse(transaction);
     },
   });
   const groups = await manager.findOrders(client);

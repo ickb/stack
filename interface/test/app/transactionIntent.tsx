@@ -4,34 +4,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type * as QueryModule from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import type { WalletAppView } from "../../src/view/WalletAppView.tsx";
-
-class TestElement {
-  public readonly nodeType = 1;
-}
-
-class TestIFrameElement extends TestElement {}
-
-interface TestWindow {
-  readonly event: undefined;
-  readonly HTMLElement: typeof TestElement;
-  readonly HTMLIFrameElement: typeof TestIFrameElement;
-}
-
-interface TestDocument {
-  readonly activeElement: null;
-  readonly addEventListener: ReturnType<typeof vi.fn>;
-  readonly defaultView: TestWindow;
-  readonly nodeType: 9;
-}
-
-interface TestContainer {
-  readonly addEventListener: ReturnType<typeof vi.fn>;
-  readonly nodeName: "DIV";
-  readonly nodeType: 1;
-  readonly ownerDocument: TestDocument;
-  readonly removeEventListener: ReturnType<typeof vi.fn>;
-  readonly tagName: "DIV";
-}
+import { fakeDom } from "../support/dom.ts";
 
 const mocks = vi.hoisted<{
   amounts: Array<bigint | undefined>;
@@ -72,26 +45,13 @@ vi.mock(import("../../src/view/WalletAppView.tsx"), () => ({
 }));
 
 const App = (await import("../../src/app/App.tsx")).default;
-const originalDocument = globalThis.document;
-const originalWindow = globalThis.window;
-const testDocument = fakeDocument();
-vi.stubGlobal("document", testDocument);
-vi.stubGlobal("window", testDocument.defaultView);
-const { flushSync } = await import("react-dom");
-const { createRoot } = await import("react-dom/client");
+const { createRoot, flushSync, restoreDom } = await fakeDom();
 
-afterAll(async () => {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
-  vi.stubGlobal("document", originalDocument);
-  vi.stubGlobal("window", originalWindow);
-});
+afterAll(restoreDom);
 
 describe("transaction intent", () => {
   it("replaces the actionable amount in the same committed render", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React DOM owns this structural test container boundary.
-    const root = createRoot(fakeContainer(testDocument) as unknown as Element);
+    const root = createRoot();
 
     flushSync(() => {
       root.render(appElement("1"));
@@ -121,28 +81,4 @@ function appElement(text: string): ReactElement {
     text,
     setText: vi.fn<(value: string) => void>(),
   });
-}
-
-function fakeDocument(): TestDocument {
-  return {
-    activeElement: null,
-    addEventListener: vi.fn(),
-    defaultView: {
-      event: undefined,
-      HTMLElement: TestElement,
-      HTMLIFrameElement: TestIFrameElement,
-    },
-    nodeType: 9,
-  };
-}
-
-function fakeContainer(ownerDocument: TestDocument): TestContainer {
-  return {
-    addEventListener: vi.fn(),
-    nodeName: "DIV",
-    nodeType: 1,
-    ownerDocument,
-    removeEventListener: vi.fn(),
-    tagName: "DIV",
-  };
 }

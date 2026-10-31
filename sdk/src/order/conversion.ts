@@ -1,10 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  ceilDiv,
-  minBigInt,
-  type ExchangeRatio,
-  type ValueComponents,
-} from "../utils/utils.ts";
+import { ckbFromUdt } from "../udt.ts";
+import { ceilDiv, type ExchangeRatio, type ValueComponents } from "../utils/utils.ts";
 import { Info } from "./info.ts";
 import { Ratio } from "./ratio.ts";
 
@@ -35,15 +31,8 @@ export function quoteConversion(
   isCkb2Udt: boolean,
   midpoint: ExchangeRatio,
   amounts: ValueComponents,
-  options?: {
-    fee?: ccc.Num;
-    feeBase?: ccc.Num;
-  },
+  { fee, feeBase }: { fee: ccc.Num; feeBase: ccc.Num },
 ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-  const fee = options?.fee ?? 0n;
-  // Generic denominator for callers that pass a fee without a scale; Stack's
-  // own default pair is owned publicly by the SDK, not by this entity.
-  const feeBase = options?.feeBase ?? 100000n;
   const base = Ratio.from(midpoint);
   const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
@@ -52,8 +41,8 @@ export function quoteConversion(
 
   if (amount > 0n && fee !== 0n) {
     ckbFee = isCkb2Udt
-      ? amount - base.convert(false, convertedAmount, false)
-      : base.convert(false, amount, false) - convertedAmount;
+      ? amount - ckbFromUdt(convertedAmount, base)
+      : ckbFromUdt(amount, base) - convertedAmount;
   }
 
   // Every order this SDK creates carries the default minimum match, the one the bot's
@@ -99,7 +88,7 @@ function feeAdjustedScales(
  * The ratio that reproduces the quote exactly: the greatest Uint64 fraction at most
  * `quotedOutput / inputAmount`, which must still round the input up to the quoted output.
  */
-export function quotePreservingRatio(
+function quotePreservingRatio(
   inputAmount: ccc.FixedPoint,
   quotedOutput: ccc.FixedPoint,
   isCkb2Udt: boolean,
@@ -147,10 +136,10 @@ export function greatestBoundedFractionAtMost(
     const quotient = n / d;
     let term = quotient;
     if (p !== 0n) {
-      term = minBigInt(term, (maxTerm - previousP) / p);
+      term = ccc.numMin(term, (maxTerm - previousP) / p);
     }
     if (q !== 0n) {
-      term = minBigInt(term, (maxTerm - previousQ) / q);
+      term = ccc.numMin(term, (maxTerm - previousQ) / q);
     }
     const candidate = {
       numerator: term * p + previousP,

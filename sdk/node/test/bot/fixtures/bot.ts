@@ -1,13 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
-import { BOT_LOCK_UP, depositData } from "../../../../src/dao.ts";
+import type { SystemState } from "../../../../src/conversion/types.ts";
+import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
-import {
-  attestResolvedOrderGroup,
-  MasterCell,
-  OrderCell,
-  OrderGroup,
-} from "../../../../src/order/cells.ts";
+import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -22,10 +18,11 @@ import { IckbSdk } from "../../../../src/sdk.ts";
 import {
   byte32FromByte,
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
-  pagedCells,
   script,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import type { BotState, Runtime } from "../../../src/bot/types.ts";
 
@@ -76,12 +73,11 @@ export function readyDeposit(
       lock: logic.script,
       type: dao.script,
     },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
-    headers: [{ header: tip, txHash: cell.outPoint.txHash }, { header: tip }],
-    interests: 0n,
+    header: tip,
     claimEpoch: ccc.Epoch.from([minutesOut / 240n, minutesOut % 240n, 240n]),
     ckbValue: udtValue,
     udtValue,
@@ -102,7 +98,7 @@ export async function testMatch(
 }
 
 /**
- * A market order the resolver would attest, from the bot's side: a buyer offers CKB for
+ * A market order the resolver would return, from the bot's side: a buyer offers CKB for
  * iCKB at the ratio, a seller iCKB for CKB, and the minimum match is the exponent.
  */
 export function marketOrder({
@@ -157,7 +153,7 @@ export function marketOrder({
       outputData: "0x",
     }),
   );
-  return attestResolvedOrderGroup(new OrderGroup(master, order, order));
+  return new OrderGroup(master, order, order, FRESH_BLOCK);
 }
 
 /** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */
@@ -185,11 +181,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
   });
   const owned: TestWithdrawalRequestCell = {
     cell,
-    headers: [
-      { header: depositHeader, txHash: depositHash },
-      { header: requestHeader, txHash: cell.outPoint.txHash },
-    ],
-    interests: 0n,
+    headers: [depositHeader, requestHeader],
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
     isReady: true,
     ckbValue: cell.cellOutput.capacity,
@@ -253,9 +245,18 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   };
 }
 
-export function botState(overrides: Partial<BotState>): BotState {
-  const state: BotState = {
-    marketOrders: [],
+/**
+ * A bot state; `orderPool` and `poolDeposits` are shorthand for the system state's own,
+ * which the bot reads.
+ */
+export function botState({
+  orderPool,
+  poolDeposits,
+  system,
+  ...overrides
+}: Partial<BotState> &
+  Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
+  return {
     ckb: 0n,
     ickb: 0n,
     pendingCkb: 0n,
@@ -263,8 +264,8 @@ export function botState(overrides: Partial<BotState>): BotState {
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
-    poolDeposits: [],
     cells: [],
+    ...overrides,
     system: {
       feeRate: 1n,
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
@@ -272,10 +273,11 @@ export function botState(overrides: Partial<BotState>): BotState {
       orderPool: [],
       poolDeposits: [],
       lockUp: BOT_LOCK_UP,
+      ...system,
+      ...(orderPool === undefined ? {} : { orderPool }),
+      ...(poolDeposits === undefined ? {} : { poolDeposits }),
     },
-    ...overrides,
   };
-  return state;
 }
 
 /**
@@ -322,9 +324,9 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   mint.outputsData.push("0x", order.outputData, master.outputData);
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? order : master,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock" ? order : master,
+    ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(mint);
@@ -352,7 +354,7 @@ export function l1AccountState(
       poolDeposits: [],
       lockUp: BOT_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [],
       nativeUdtCells: [],

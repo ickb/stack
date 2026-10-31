@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, script } from "@ickb/testkit";
-import { depositData } from "../../../src/dao.ts";
+import { DAO_DEPOSIT_DATA } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 
 export const TIP = headerLike();
@@ -32,12 +32,11 @@ function deposit(udtValue: bigint, claimEpoch: ccc.Epoch, key: string): IckbDepo
   const cell = ccc.Cell.from({
     outPoint: { txHash: ccc.hashCkb(ccc.bytesFrom(key, "utf8")), index: 0n },
     cellOutput: { capacity: udtValue, lock: logic, type: script("33") },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
   return {
     cell,
-    headers: [{ header: TIP, txHash: cell.outPoint.txHash }, { header: TIP }],
-    interests: 0n,
+    header: TIP,
     claimEpoch,
     ckbValue: udtValue,
     udtValue,

@@ -5,18 +5,18 @@ import {
   script,
   StubClient,
   headerLike as testHeaderLike,
-  transactionWithHeader,
 } from "@ickb/testkit";
 import fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
-import { depositData } from "../../src/dao.ts";
+import { describe, expect, it } from "vitest";
+import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
 import {
-  convert,
+  ckbFromUdt,
   encodeReceiptData,
   ickbAccountingRatio,
   ickbExchangeRatio,
   IckbUdt,
   ickbValue,
+  udtFromCkb,
 } from "../../src/udt.ts";
 
 // This package is browser-safe and loads no node types; declare the one node
@@ -44,9 +44,8 @@ function headerLike(ar: bigint): ccc.ClientBlockHeader {
 
 function udt(): IckbUdt {
   return new IckbUdt({
-    code: { txHash: byte32FromByte("44"), index: 0n },
     script: type,
-    logicCode: { txHash: byte32FromByte("66"), index: 0n },
+    cellDeps: [],
     logicScript: logic,
     daoScript,
   });
@@ -83,18 +82,7 @@ function depositCell(txHashByte = "88", cellLock = logic): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: cellLock, type: daoScript },
-    outputData: depositData(),
-  });
-}
-
-function clientWithHeader(header: ccc.ClientBlockHeader): ccc.Client {
-  return new StubClient({
-    getTransactionWithHeader: async (): ReturnType<
-      ccc.Client["getTransactionWithHeader"]
-    > => {
-      await Promise.resolve();
-      return transactionWithHeader(header);
-    },
+    outputData: DAO_DEPOSIT_DATA,
   });
 }
 
@@ -129,16 +117,6 @@ describe("IckbUdt.typeScriptFrom", () => {
 });
 
 describe("IckbUdt cell deps and shapes", () => {
-  it("adds the xUDT and logic code deps once", () => {
-    const tx = udt().addCellDeps(ccc.Transaction.default());
-
-    expect(tx.cellDeps.map((dep) => dep.outPoint.txHash)).toEqual([
-      byte32FromByte("44"),
-      byte32FromByte("66"),
-    ]);
-    expect(udt().addCellDeps(tx).cellDeps).toHaveLength(2);
-  });
-
   it("identifies only xUDT cells with UDT data", () => {
     expect(udt().isUdt(xudtCell(1n))).toBe(true);
     expect(udt().isUdt(xudtCell(1n, script("77")))).toBe(false);
@@ -147,8 +125,6 @@ describe("IckbUdt cell deps and shapes", () => {
 });
 
 describe("IckbUdt.inputBalance", () => {
-  const header = headerLike(10000000000000000n);
-
   it("values xUDT inputs and ignores unrelated or prefix-matching foreign cells", async () => {
     const foreign = xudtCell(7n, script("77"), "98");
     const plain = ccc.Cell.from({
@@ -161,111 +137,37 @@ describe("IckbUdt.inputBalance", () => {
       udt().inputBalance(
         transactionWithInputs(xudtCell(5n), foreign, plain),
         new StubClient(),
+        [],
       ),
     ).resolves.toBe(5n);
   });
 
-  it("values receipt inputs at their deposit header, ignoring trailing bytes", async () => {
-    const tx = transactionWithInputs(
-      receiptCell(receiptOutputData(3n, ccc.fixedPointFrom(100000))),
-    );
-
-    await expect(udt().inputBalance(tx, clientWithHeader(header))).resolves.toBe(
-      ickbValue(ccc.fixedPointFrom(100000), header) * 3n,
-    );
-  });
-
-  it("values first-phase deposit inputs as negative iCKB, only under the logic lock", async () => {
+  it("adds a receipt and subtracts a logic-locked deposit at the state read's values", async () => {
+    const receipt = receiptCell(receiptOutputData(3n, ccc.fixedPointFrom(100000)));
     const deposit = depositCell();
-    const tx = transactionWithInputs(deposit, depositCell("87", script("21")));
+    const unspent = depositCell("89");
+    // A deposit under another lock is not iCKB, whatever list it is in.
+    const foreign = depositCell("87", script("21"));
+    const tx = transactionWithInputs(receipt, deposit, foreign);
 
-    await expect(udt().inputBalance(tx, clientWithHeader(header))).resolves.toBe(
-      -ickbValue(deposit.capacityFree, header),
-    );
+    await expect(
+      udt().inputBalance(tx, new StubClient(), [
+        { cell: receipt, udtValue: 11n },
+        { cell: deposit, udtValue: 4n },
+        { cell: unspent, udtValue: 100n },
+        { cell: foreign, udtValue: 100n },
+      ]),
+    ).resolves.toBe(7n);
   });
 
-  it("reads the headers of a batch concurrently, each transaction once", async () => {
-    const receipt = receiptCell(receiptOutputData(2n, ccc.fixedPointFrom(100000)));
-    const deposit = depositCell();
-    const twin = depositCell("88");
-    Object.assign(twin.outPoint, { index: 1n });
-    const requests: ccc.Hex[] = [];
-    const { promise: receiptFetch, resolve: resolveReceipt } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
-    const { promise: depositFetch, resolve: resolveDeposit } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
-    const client = new StubClient({
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        const hash = ccc.hexFrom(txHash);
-        requests.push(hash);
-        return hash === receipt.outPoint.txHash ? receiptFetch : depositFetch;
-      },
-    });
-
-    const balancePromise = udt().inputBalance(
-      transactionWithInputs(receipt, deposit, twin),
-      client,
-    );
-    await vi.waitFor(() => {
-      expect(requests).toEqual([receipt.outPoint.txHash, deposit.outPoint.txHash]);
-    });
-    resolveDeposit(transactionWithHeader(header));
-    await Promise.resolve();
-    resolveReceipt(transactionWithHeader(header));
-
-    await expect(balancePromise).resolves.toBe(
-      ickbValue(ccc.fixedPointFrom(100000), header) * 2n -
-        2n * ickbValue(deposit.capacityFree, header),
-    );
-  });
-
-  it("throws when a protocol input header is unavailable", async () => {
+  it("refuses a protocol input the state read did not value", async () => {
     const receipt = receiptCell(receiptOutputData(1n, ccc.fixedPointFrom(100000)));
-    const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        await Promise.resolve();
-        return undefined;
-      },
-    });
 
     await expect(
-      udt().inputBalance(transactionWithInputs(receipt), client),
-    ).rejects.toThrow(`Header not found for txHash ${receipt.outPoint.txHash}`);
-  });
-
-  it("rejects malformed receipt inputs with out point context", async () => {
-    const receipt = receiptCell("0x12");
-
-    await expect(
-      udt().inputBalance(transactionWithInputs(receipt), clientWithHeader(header)),
+      udt().inputBalance(transactionWithInputs(receipt), new StubClient(), []),
     ).rejects.toThrow(
-      `Invalid iCKB receipt payload at ${receipt.outPoint.toHex()}: 0x12`,
+      `iCKB input ${receipt.outPoint.toHex()} has no value from the state read`,
     );
-  });
-
-  it("preserves the input out point when loading an input cell fails", async () => {
-    const tx = ccc.Transaction.default();
-    tx.addInput({ previousOutput: { txHash: byte32FromByte("96"), index: 0n } });
-    const failure = new Error("rpc failed");
-    const client = new StubClient({
-      getCell: async (): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        throw failure;
-      },
-    });
-
-    await expect(udt().inputBalance(tx, client)).rejects.toMatchObject({
-      message: `Failed to load input cell ${tx.inputs[0]?.previousOutput.toHex() ?? ""}`,
-      cause: failure,
-    });
   });
 });
 
@@ -284,13 +186,13 @@ describe("IckbUdt outputs", () => {
       ],
     });
 
-    expect(udt().outputBalance(tx)).toBe(11n);
+    expect(tx.getOutputsUdtBalance(type)).toBe(11n);
 
     udt().addChange(tx, lock, 0n);
     expect(tx.outputs).toHaveLength(3);
     udt().addChange(tx, lock, 4n);
     expect(tx.outputs).toHaveLength(4);
-    expect(udt().outputBalance(tx)).toBe(15n);
+    expect(tx.getOutputsUdtBalance(type)).toBe(15n);
   });
 });
 
@@ -298,8 +200,8 @@ describe("iCKB conversion", () => {
   it("converts from iCKB to CKB using explicit ratios and header ratios", () => {
     const header = headerLike(20000000000000000n);
 
-    expect(convert(true, 100n, { ckbScale: 1n, udtScale: 2n })).toBe(50n);
-    expect(convert(false, 100n, { ckbScale: 1n, udtScale: 2n })).toBe(200n);
+    expect(udtFromCkb(100n, { ckbScale: 1n, udtScale: 2n })).toBe(50n);
+    expect(ckbFromUdt(100n, { ckbScale: 1n, udtScale: 2n })).toBe(200n);
     expect(ickbAccountingRatio(header)).toEqual({
       ckbScale: 10000000000000000n,
       udtScale: 20000000000000000n,
@@ -310,7 +212,7 @@ describe("iCKB conversion", () => {
   });
 
   it("rejects non-positive exchange ratio scales", () => {
-    expect(() => convert(true, 1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
+    expect(() => udtFromCkb(1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
       "Exchange ratio scales must be positive",
     );
   });
@@ -344,8 +246,8 @@ describe("iCKB conversion", () => {
         scaleArb,
         (amount, ckbScale, udtScale) => {
           const ratio = { ckbScale, udtScale };
-          const across = convert(isCkb2Udt, amount, ratio);
-          const back = convert(!isCkb2Udt, across, ratio);
+          const across = (isCkb2Udt ? udtFromCkb : ckbFromUdt)(amount, ratio);
+          const back = (isCkb2Udt ? ckbFromUdt : udtFromCkb)(across, ratio);
           // Forward floors amount*n/m, the return trip floors again, so the total
           // loss is ceil(r/n) for a remainder r < m: at most ceil((m - 1)/n).
           const [n, m] = isCkb2Udt ? [ckbScale, udtScale] : [udtScale, ckbScale];

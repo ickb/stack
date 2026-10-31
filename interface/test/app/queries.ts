@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { Ratio, WALLET_LOCK_UP, type WithdrawalGroup } from "@ickb/sdk";
 
-import { headerLike, StubClient } from "@ickb/testkit";
+import { headerLike, offlineTestnetClient, script, StubClient } from "@ickb/testkit";
 import { QueryClient, skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -13,14 +13,7 @@ import {
 } from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
-import {
-  cell,
-  script,
-  stateSdk,
-  testClient,
-  testSigner,
-  walletConfigForState,
-} from "./fixtures/query.ts";
+import { cell, stateSdk, testSigner, walletConfigForState } from "./fixtures/query.ts";
 
 function itKeysL1StateByAccountLocks(): void {
   it("keys L1 state by the wallet config object, not its shape", () => {
@@ -37,7 +30,7 @@ function itPollsLiveStateUnlessFrozen(): void {
   it("polls live state every minute unless a transaction is frozen", () => {
     const walletConfig = {
       chain: "testnet",
-      cccClient: testClient(),
+      cccClient: offlineTestnetClient(),
       resetClient: vi.fn<() => void>(),
       queryClient: new QueryClient(),
       signer: testSigner(),
@@ -53,7 +46,7 @@ function itPollsLiveStateUnlessFrozen(): void {
           poolDeposits: [],
           lockUp: WALLET_LOCK_UP,
         },
-        user: { orders: [] },
+        userOrders: [],
         account: {
           capacityCells: [],
           nativeUdtCells: [],
@@ -82,7 +75,7 @@ function itRunsL1StateOptionsQuery(): void {
           poolDeposits: [],
           lockUp: WALLET_LOCK_UP,
         },
-        user: { orders: [] },
+        userOrders: [],
         account: {
           capacityCells: [],
           nativeUdtCells: [],
@@ -157,7 +150,7 @@ it("loads display balances from an SDK account snapshot", async () => {
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [capacityCell],
       nativeUdtCells: [nativeUdtCell],
@@ -197,16 +190,13 @@ it("flags a withdrawal that stays after the next collection", async () => {
   const pendingWithdrawal: WithdrawalGroup = {
     owned: {
       cell: request,
-      headers: [{ header: tip }, { header: tip, txHash: request.outPoint.txHash }],
-      interests: 0n,
+      headers: [tip, tip],
       maturity: ccc.Epoch.from([182n, 0n, 1n]),
       isReady: false,
       ckbValue: request.cellOutput.capacity,
     },
     owner: {
       cell: owner,
-      udtValue: 0n,
-      ckbValue: owner.cellOutput.capacity,
       getOwned: () => request.outPoint,
     },
     ckbValue: request.cellOutput.capacity + owner.cellOutput.capacity,
@@ -221,7 +211,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
       nativeUdtCells: [],
@@ -247,7 +237,7 @@ it("gives every fetch its own stateId, so each poll rebuilds the preview", async
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },
-    user: { orders: [] },
+    userOrders: [],
     account: {
       capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
       nativeUdtCells: [],

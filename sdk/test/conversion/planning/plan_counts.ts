@@ -8,7 +8,7 @@ import {
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 
-// Adopted from the sol audit: the planner starts at the deployed DAO output limit and completion
+// The planner starts at the deployed DAO output limit and completion
 // steps the count down; no policy cap sits below the limit.
 describe("deposit plan counts", () => {
   it.each([

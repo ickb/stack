@@ -1,15 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertDaoOutputLimit,
+  assertFresh,
+  BOT_LOCK_UP,
   broadcastDeadline,
+  DAO_DEPOSIT_DATA,
   DAO_OUTPUT_LIMIT,
   DaoOutputLimitError,
-  depositData,
   depositMaturity,
   isDaoDeposit,
   isDaoWithdrawalRequest,
+  tipMaxAgeMs,
   WALLET_LOCK_UP,
 } from "../../src/dao.ts";
 
@@ -68,7 +71,7 @@ describe("assertDaoOutputLimit", () => {
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
         cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
-        outputData: depositData(),
+        outputData: DAO_DEPOSIT_DATA,
       }),
     );
 
@@ -94,7 +97,7 @@ describe("DAO cell shapes", () => {
     const deposit = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("22"), index: 0n },
       cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
     const request = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("23"), index: 0n },
@@ -104,7 +107,7 @@ describe("DAO cell shapes", () => {
     const plain = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("24"), index: 0n },
       cellOutput: { capacity: 1n, lock: script("99") },
-      outputData: depositData(),
+      outputData: DAO_DEPOSIT_DATA,
     });
 
     expect(isDaoDeposit(deposit, daoScript)).toBe(true);
@@ -152,11 +155,37 @@ describe("broadcastDeadline", () => {
     const early = ccc.Epoch.from([181n, 0n, 1n]);
     const late = ccc.Epoch.from([190n, 0n, 1n]);
 
-    expect(
-      broadcastDeadline([late, early], WALLET_LOCK_UP)?.eq(
-        early.sub(WALLET_LOCK_UP.broadcastReserve),
-      ),
-    ).toBe(true);
+    const deadline = broadcastDeadline([late, early], WALLET_LOCK_UP);
+    expect(deadline?.epoch.eq(early.sub(WALLET_LOCK_UP.broadcastReserve))).toBe(true);
+    // The tip read to check it may be as stale as the policy's slack, no more.
+    expect(deadline?.tipMaxAgeMs).toBe(tipMaxAgeMs(WALLET_LOCK_UP));
     expect(broadcastDeadline([], WALLET_LOCK_UP)).toBeUndefined();
+  });
+});
+
+describe("tipMaxAgeMs", () => {
+  it("is the policy's selection margin less its broadcast reserve on the four-hour epoch", () => {
+    expect(tipMaxAgeMs(BOT_LOCK_UP)).toBe(5 * 60_000);
+    expect(tipMaxAgeMs(WALLET_LOCK_UP)).toBe(30 * 60_000);
+  });
+});
+
+describe("assertFresh", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("refuses a block that trails the local clock by more than the bound", () => {
+    const block = headerLike({ number: 1n, timestamp: 1_000_000n });
+    const bound = 300_000;
+
+    vi.useFakeTimers({ now: 1_000_000 + bound });
+    expect(() => {
+      assertFresh(block, bound);
+    }).not.toThrow();
+    vi.useFakeTimers({ now: 1_000_000 + bound + 1 });
+    expect(() => {
+      assertFresh(block, bound);
+    }).toThrow(`Block ${block.hash} is more than ${String(bound)} ms old`);
   });
 });

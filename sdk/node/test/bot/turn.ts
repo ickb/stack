@@ -4,6 +4,7 @@ import { TransactionBroadcastError } from "../../../src/send/sign_and_send_trans
 
 import {
   committedTransactionResponse,
+  FRESH_BLOCK,
   headerLike,
   script,
   StubClient,
@@ -17,7 +18,6 @@ import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
-  BOT_TRANSACTION_WAIT_INTERVAL_MS,
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
   readBotState,
   runBotTurn,
@@ -81,8 +81,6 @@ it("sends explicitly and waits with the finite production policy", async () => {
 
   await runBotTurn(harness.context);
 
-  const recordTxHash = harness.sendTransaction.mock.calls[0]?.[1];
-  expect(typeof recordTxHash).toBe("function");
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
     BOT_TRANSACTION_BUILT,
@@ -95,15 +93,12 @@ it("sends explicitly and waits with the finite production policy", async () => {
   expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
     outcome: "broadcasted",
-    fee: "7",
-    feeRate: "1",
   });
-  expect(harness.events[2]).toHaveProperty("transactionShape.witnesses");
+  // The planned fee the send refuses to exceed is the one the built decision journaled.
+  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(7n);
+  expect(harness.events[1]).toMatchObject({ decision: { plannedFee: "7" } });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
-    status: "committed",
-    timeoutMs: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    intervalMs: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
 });
 
@@ -128,10 +123,9 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike, recordTxHash) => {
+    sendTransaction: async (txLike) => {
       await Promise.resolve();
       const txHash = commitTransaction(responses, txLike);
-      recordTxHash?.(txHash);
       throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
     },
   });
@@ -304,7 +298,7 @@ function turnHarness(
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
   // The default node accepts and commits whatever the bot sends; the confirmation wait
-  // then reads the recorded response through the typed path of a composed client.
+  // then reads its recorded status.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
       (async (txLike): Promise<ccc.Hex> => {
@@ -313,14 +307,20 @@ function turnHarness(
       }),
   );
   // The bot's client is a JSON-RPC one: the stub answers the raw status poll from the
-  // scripted body, as the node would.
+  // recorded responses, as the node would.
   const runtime = botRuntime({
     client: new StubClient({
-      getTransactionNoCache: async (
+      transactionStatus: async (
         txHash,
-      ): ReturnType<ccc.Client["getTransactionNoCache"]> => {
+      ): Promise<{ status: string; reason?: string } | undefined> => {
         await Promise.resolve();
-        return responses.get(ccc.hexFrom(txHash));
+        const response = responses.get(txHash);
+        return response === undefined
+          ? undefined
+          : {
+              status: response.status,
+              ...(response.reason === undefined ? {} : { reason: response.reason }),
+            };
       },
       ...options.client,
     }),
@@ -345,7 +345,7 @@ function turnHarness(
   });
   return {
     context: {
-      events: new BotEventEmitter({ chain: "testnet", runId: "run-1" }),
+      events: new BotEventEmitter({ chain: "testnet", processId: "run" }),
       runtime,
     },
     events,
@@ -421,7 +421,7 @@ describe("readBotState pool snapshot", () => {
         poolDeposits: pool,
         lockUp: BOT_LOCK_UP,
       },
-      user: { orders: [] },
+      userOrders: [],
       account: {
         capacityCells: [],
         nativeUdtCells: [],
@@ -443,7 +443,7 @@ describe("readBotState pool snapshot", () => {
     expect(getL1AccountState).toHaveBeenCalledTimes(1);
     expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
     expect(findDeposits).not.toHaveBeenCalled();
-    expect(state.poolDeposits).toEqual(pool);
+    expect(state.system.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });
 });
@@ -472,7 +472,7 @@ describe("readBotState", () => {
         lockUp: BOT_LOCK_UP,
         poolDeposits: [],
       },
-      user: { orders: [ownOrder] },
+      userOrders: [ownOrder],
       account: {
         capacityCells: [capacityCell],
         nativeUdtCells: [nativeUdtCell],
@@ -484,13 +484,24 @@ describe("readBotState", () => {
     const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
-    expect(state.marketOrders).toEqual([marketOrder]);
+    expect(state.system.orderPool).toEqual([marketOrder]);
     expect(state.ckb).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );
     expect(state.ickb).toBe(11n);
     expect(state.pendingCkb).toBe(0n);
     expect(state.cells).toEqual([capacityCell, nativeUdtCell]);
+    expect(state.system.feeRate).toBe(1n);
+  });
+
+  it("asks the state read to cap the fee rate at the runtime's maximum", async () => {
+    const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
+    getL1AccountState.mockResolvedValue(l1AccountState());
+    const runtime = botRuntime({ sdk: { getL1AccountState } });
+
+    await readBotState({ ...runtime, maxFeeRate: 1000n });
+
+    expect(getL1AccountState.mock.calls[0]?.[3]).toBe(1000n);
   });
 });
 
@@ -507,5 +518,6 @@ async function testOrderGroup(byte: string, ckbValue: bigint): Promise<OrderGrou
     ),
     order,
     order,
+    FRESH_BLOCK,
   );
 }

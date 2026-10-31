@@ -18,11 +18,7 @@ afterEach(async () => {
 });
 
 describe("stimulus process", () => {
-  it("rejects arguments and fails fast without config", () => {
-    const withArgument = run({}, ["--unknown"]);
-    expect(withArgument.status).toBe(1);
-    expect(withArgument.stderr).toContain("Unknown argument: --unknown");
-
+  it("fails fast without config", () => {
     const withoutConfig = run({});
     expect(withoutConfig.status).toBe(1);
     expect(withoutConfig.stdout).toBe("");
@@ -53,8 +49,8 @@ describe("stimulus process", () => {
   }, 30_000);
 });
 
-function run(env: Record<string, string>, args: string[] = []): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [entrypoint, ...args], {
+function run(env: Record<string, string>): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, [entrypoint], {
     encoding: "utf8",
     env: { PATH: process.env["PATH"] ?? "", ...env },
     timeout: 25_000,

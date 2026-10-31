@@ -7,13 +7,12 @@ import {
   plainCapacityCell,
   withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { ACCOUNT_AVAILABILITY_SUITE } from "./support/account_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(ACCOUNT_AVAILABILITY_SUITE, () => {
+describe("projectAccountAvailability", () => {
   it("budgets the available orders whatever their matchability", () => {
     const matchable = projectionOrderGroup({
       ckbValue: 31n,

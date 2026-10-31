@@ -4,30 +4,16 @@ import { createElement, Fragment, StrictMode, useState, type ReactElement } from
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type * as TransactionModule from "../../src/action/actionTransaction.ts";
-import type { RefreshedTransactionState } from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
   submitPendingTransaction,
   type PendingTransactionState,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
-import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import type { L1StateType } from "../../src/app/queries.ts";
+import type { WalletConfig } from "../../src/shared/utils.ts";
+import { fakeDom, stubDom } from "../support/dom.ts";
 import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
-
-class TestElement {
-  public readonly nodeType = 1;
-}
-class TestIFrameElement extends TestElement {}
-interface TestDocument {
-  readonly activeElement: null;
-  readonly addEventListener: ReturnType<typeof vi.fn>;
-  readonly defaultView: {
-    event: undefined;
-    HTMLElement: typeof TestElement;
-    HTMLIFrameElement: typeof TestIFrameElement;
-  };
-  readonly nodeType: 9;
-}
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -58,18 +44,11 @@ vi.mock(import("../../src/action/actionTransaction.ts"), async (importActual) =>
 }));
 
 const actionComponent = (await import("../../src/action/Action.tsx")).default;
-const originalDocument: unknown = Reflect.get(globalThis, "document");
-const originalWindow: unknown = Reflect.get(globalThis, "window");
 const nativeAbortController = AbortController;
-const testDocument = fakeDocument();
-vi.stubGlobal("document", testDocument);
-vi.stubGlobal("window", testDocument.defaultView);
-const { flushSync } = await import("react-dom");
-const { createRoot } = await import("react-dom/client");
+const { createRoot, flushSync, restoreDom } = await fakeDom();
 
 beforeEach(() => {
-  vi.stubGlobal("document", testDocument);
-  vi.stubGlobal("window", testDocument.defaultView);
+  stubDom();
   mocks.layout = undefined;
   mocks.retryConfirmation.mockClear();
   mocks.transact.mockClear();
@@ -80,15 +59,7 @@ afterEach(async () => {
   vi.stubGlobal("AbortController", nativeAbortController);
 });
 
-afterAll(async () => {
-  await new Promise<undefined>((resolve) => {
-    setTimeout(() => {
-      resolve(undefined);
-    }, 0);
-  });
-  vi.stubGlobal("document", originalDocument);
-  vi.stubGlobal("window", originalWindow);
-});
+afterAll(restoreDom);
 
 describe("Action StrictMode ownership", () => {
   it("runs a send click under the surviving mount's controller", () => {
@@ -219,18 +190,13 @@ function strictAction(
     }
   }
   vi.stubGlobal("AbortController", TrackingAbortController);
-  const candidate: unknown = Reflect.apply(createRoot, null, [
-    fakeContainer(testDocument),
-  ]);
-  if (!isReactRoot(candidate)) {
-    throw new Error("React root was not created");
-  }
+  const root = createRoot();
   config.queryClient.setQueryData(
     [config.chain, config.address, "txInfo", "state", true, "1"],
     activeTxInfo(),
   );
   flushSync(() => {
-    candidate.render(
+    root.render(
       createElement(
         StrictMode,
         undefined,
@@ -242,7 +208,7 @@ function strictAction(
       ),
     );
   });
-  return { controllers, root: candidate };
+  return { controllers, root };
 }
 
 /** Owns the pending record the way App does, so the action under test reads live state. */
@@ -270,18 +236,9 @@ function PendingHost({
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    refreshPreview: async (): Promise<RefreshedTransactionState> => {
+    refreshState: async (): Promise<L1StateType> => {
       await Promise.resolve();
-      return {
-        stateId: "state",
-        tipTimestamp: 0n,
-        hasCollectable: false,
-        hasConverting: false,
-        build: async (): Promise<TxInfo> => {
-          await Promise.resolve();
-          return activeTxInfo();
-        },
-      };
+      return l1State();
     },
     freeze,
     formReset: vi.fn<() => void>(),
@@ -332,39 +289,4 @@ function isWalletConfig(value: unknown): value is WalletConfig {
     "queryClient" in value &&
     "signer" in value
   );
-}
-
-function isReactRoot(value: unknown): value is ReturnType<typeof createRoot> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "render" in value &&
-    typeof value.render === "function" &&
-    "unmount" in value &&
-    typeof value.unmount === "function"
-  );
-}
-
-function fakeDocument(): TestDocument {
-  return {
-    activeElement: null,
-    addEventListener: vi.fn(),
-    defaultView: {
-      event: undefined,
-      HTMLElement: TestElement,
-      HTMLIFrameElement: TestIFrameElement,
-    },
-    nodeType: 9,
-  };
-}
-
-function fakeContainer(ownerDocument: TestDocument): object {
-  return {
-    addEventListener: vi.fn(),
-    nodeName: "DIV",
-    nodeType: 1,
-    ownerDocument,
-    removeEventListener: vi.fn(),
-    tagName: "DIV",
-  };
 }

@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { CheckedUint64LE } from "./utils/codec.ts";
 
 /**
  * Maximum outputs accepted by deployed dao.c, not a general CKB consensus cap.
@@ -14,9 +13,6 @@ export const DAO_OUTPUT_LIMIT = 64;
  * nervosnetwork/rfcs pull 456).
  */
 export const DAO_HEADER_INDEX_LIMIT = 256;
-
-/** One DAO cycle, the lock-up a deposit renews by when it is not withdrawn. */
-export const DAO_CYCLE_EPOCHS = 180n;
 
 /**
  * Error thrown when a transaction exceeds the deployed DAO script's output limit.
@@ -76,15 +72,13 @@ export function assertDaoOutputLimit(
   }
 }
 
-/** The canonical DAO deposit data payload. */
-export function depositData(): ccc.Hex {
-  return ccc.hexFrom(CheckedUint64LE.encode(0n));
-}
+/** The canonical DAO deposit data payload: a zero Uint64, eight zero bytes. */
+export const DAO_DEPOSIT_DATA: ccc.Hex = "0x0000000000000000";
 
 /** Whether the cell is a DAO deposit of the given DAO script. */
 export function isDaoDeposit(cell: ccc.CellAny, daoScript: ccc.Script): boolean {
   return (
-    cell.outputData === depositData() && cell.cellOutput.type?.eq(daoScript) === true
+    cell.outputData === DAO_DEPOSIT_DATA && cell.cellOutput.type?.eq(daoScript) === true
   );
 }
 
@@ -97,7 +91,7 @@ export function isDaoWithdrawalRequest(
   daoScript: ccc.Script,
 ): boolean {
   return (
-    cell.outputData !== depositData() && cell.cellOutput.type?.eq(daoScript) === true
+    cell.outputData !== DAO_DEPOSIT_DATA && cell.cellOutput.type?.eq(daoScript) === true
   );
 }
 
@@ -136,6 +130,25 @@ export const WALLET_LOCK_UP: LockUpPolicy = {
   broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 
+/**
+ * How far a tip may trail the local clock under a policy: the selection margin less the
+ * broadcast reserve, the slack a stale tip would eat before a request commits after its
+ * claim. Five minutes for the bot, thirty for a wallet.
+ */
+export function tipMaxAgeMs(policy: LockUpPolicy): number {
+  // The span from the reserve to the margin, on CCC's nominal four-hour epoch.
+  return Number(
+    policy.minLockUp.toUnix({ epoch: policy.broadcastReserve, timestamp: 0n }),
+  );
+}
+
+/** Throws when `header` trails the local clock by more than `maxAgeMs`. */
+export function assertFresh(header: ccc.ClientBlockHeader, maxAgeMs: number): void {
+  if (BigInt(Date.now()) - header.timestamp > BigInt(maxAgeMs)) {
+    throw new Error(`Block ${header.hash} is more than ${String(maxAgeMs)} ms old`);
+  }
+}
+
 /** A deposit's maturity, rolled a cycle when its claim is too close, and whether it is ready. */
 export function depositMaturity(
   claim: ccc.Epoch,
@@ -144,7 +157,7 @@ export function depositMaturity(
 ): { maturity: ccc.Epoch; isReady: boolean } {
   const maturity =
     claim.compare(minLockUp.add(tip.epoch)) <= 0
-      ? claim.add([DAO_CYCLE_EPOCHS, 0n, 1n])
+      ? claim.add(ccc.Epoch.OneNervosDaoCycle)
       : claim;
   return { maturity, isReady: maxLockUp.add(tip.epoch).compare(maturity) > 0 };
 }
@@ -155,13 +168,24 @@ export function depositMaturity(
  */
 export function broadcastDeadline(
   claims: readonly ccc.Epoch[],
-  { broadcastReserve }: LockUpPolicy,
-): ccc.Epoch | undefined {
+  policy: LockUpPolicy,
+): BroadcastDeadline | undefined {
   const earliest = claims.reduce<ccc.Epoch | undefined>(
     (best, claim) => (best === undefined || claim.compare(best) < 0 ? claim : best),
     undefined,
   );
-  return earliest?.sub(broadcastReserve);
+  return earliest === undefined
+    ? undefined
+    : { epoch: earliest.sub(policy.broadcastReserve), tipMaxAgeMs: tipMaxAgeMs(policy) };
+}
+
+/**
+ * The epoch a withdrawal request must be broadcast before, and how far the tip read to
+ * check it may trail the clock, the policy's slack: a stale tip would pass the check late.
+ */
+export interface BroadcastDeadline {
+  epoch: ccc.Epoch;
+  tipMaxAgeMs: number;
 }
 
 /** Adds the header dep once. */

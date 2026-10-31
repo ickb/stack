@@ -8,7 +8,7 @@ import {
   WALLET_LOCK_UP,
 } from "@ickb/sdk";
 
-import { byte32FromByte, headerLike, offlineTestnetClient } from "@ickb/testkit";
+import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
@@ -21,22 +21,9 @@ type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
 type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
 export function walletConfigWith(
-  overrides: WalletConfigTestOverrides,
+  overrides: { sdk?: NonNullable<Parameters<typeof testSdk>[0]> } = {},
 ): Parameters<typeof buildTransactionPreview>[4] {
-  const base = walletConfig();
-  return walletConfig({
-    sdk: testSdk({
-      buildConversionTransaction:
-        overrides.sdk?.buildConversionTransaction ??
-        base.sdk.buildConversionTransaction.bind(base.sdk),
-    }),
-  });
-}
-
-function walletConfig(
-  overrides: Partial<Parameters<typeof buildTransactionPreview>[4]> = {},
-): Parameters<typeof buildTransactionPreview>[4] {
-  const cccClient = testClient();
+  const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",
     cccClient,
@@ -46,8 +33,7 @@ function walletConfig(
     address: "ckt1test",
     accountLocks: [script("11")],
     primaryLock: script("11"),
-    sdk: testSdk(),
-    ...overrides,
+    sdk: testSdk(overrides.sdk),
   };
 }
 
@@ -59,7 +45,7 @@ export function buildConversionTransactionMock(
       ok: true,
       tx: txWithInput("aa"),
       estimatedMaturity: 0n,
-      conversion: { kind: "order" },
+      conversionKind: "order",
       isSweepComplete: true,
     },
   );
@@ -70,14 +56,14 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     ok: true,
     tx: txWithInput("aa"),
     estimatedMaturity: 0n,
-    conversion: { kind: "order" },
+    conversionKind: "order",
     isSweepComplete: true,
     ...overrides,
   };
 }
 
 export function failedPlan(
-  reason: ConversionTransactionFailureReason,
+  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
   estimatedMaturity = 0n,
 ): FailedPlan {
   return { ok: false, reason, estimatedMaturity };
@@ -119,20 +105,8 @@ export function context(
   };
 }
 
-function testClient(): ccc.Client {
-  return offlineTestnetClient();
-}
-
 function testSigner(client: ccc.Client): ccc.Signer {
   return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-}
-
-function script(codeHashByte: string): ccc.Script {
-  return ccc.Script.from({
-    codeHash: byte32FromByte(codeHashByte),
-    hashType: "type",
-    args: "0x",
-  });
 }
 
 function testSdk(
@@ -147,15 +121,9 @@ function testSdk(
         ok: true,
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
-        conversion: { kind: "order" },
+        conversionKind: "order",
         isSweepComplete: true,
       }),
   );
   return sdk;
-}
-
-interface WalletConfigTestOverrides {
-  sdk?: {
-    buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-  };
 }

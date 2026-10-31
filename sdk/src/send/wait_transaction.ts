@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { jsonRpcRequestor, rawTransactionStatus } from "../utils/utils.ts";
+import { jsonRpcRequestor } from "../utils/utils.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -40,15 +40,16 @@ export interface WaitTransactionOptions {
 }
 
 /**
- * Observes one already-broadcast transaction for a single bounded window and returns
- * it once the node reports it committed.
+ * Observes one already-broadcast transaction for a single bounded window and resolves
+ * once the node reports it committed.
  *
  * @remarks Stack waits at depth zero. Actors rebuild next turn; the app can reopen a
  * window on the same hash without signing again. Callers needing deeper confirmation
  * must observe it separately.
- * Clients with a JSON-RPC requestor, the connector's composed client included, poll
- * `get_transaction` verbosity 1 directly because CCC's typed response discards a null
- * transaction body, including its rejection status. Body reads separately bypass the cache.
+ * The status is polled with raw `get_transaction` verbosity 1, since CCC's typed response
+ * discards a null transaction body and its rejection status; the client must be JSON-RPC,
+ * the connector's composed client included. The body is never read: no caller uses it,
+ * and the same node's word on it would verify nothing.
  * Timeout and abort also apply while awaiting client
  * operations, but the in-flight client operation receives no abort signal and may
  * finish after this function rejects. Nothing here mutates the client cache: later attempts rebuild
@@ -58,7 +59,7 @@ export async function waitTransaction(
   client: ccc.Client,
   txHashLike: ccc.HexLike,
   options: WaitTransactionOptions = {},
-): Promise<ccc.ClientTransactionResponse> {
+): Promise<void> {
   const {
     timeout = DEFAULT_TIMEOUT_MS,
     interval = DEFAULT_INTERVAL_MS,
@@ -71,15 +72,13 @@ export async function waitTransaction(
   signal?.throwIfAborted();
 
   const budget = openWaitWindow(timeout, signal);
-  const poll = { client, txHash, budget };
   try {
     for (;;) {
-      const committed = await readCommittedTransaction(poll);
-      if (committed !== undefined) {
+      if (await isCommitted(client, txHash, budget)) {
         // An abort synchronized into the gap between the last read and this
         // return must not resolve the wait successfully.
         budget.throwIfStopped();
-        return committed;
+        return;
       }
       if (Date.now() + interval >= budget.deadline) {
         throw budget.timeoutError;
@@ -97,18 +96,6 @@ interface WaitWindow {
   stopped: Promise<never>;
   throwIfStopped: () => void;
   close: () => void;
-}
-
-interface WaitPoll {
-  client: ccc.Client;
-  txHash: ccc.Hex;
-  budget: WaitWindow;
-}
-
-interface TransactionStatus {
-  status: string | undefined;
-  reason: string | undefined;
-  response?: ccc.ClientTransactionResponse;
 }
 
 function validateWaitOptions(timeout: number, interval: number): void {
@@ -198,74 +185,43 @@ async function pollingSleep(interval: number, budget: WaitWindow): Promise<void>
   }
 }
 
-async function readCommittedTransaction(
-  poll: WaitPoll,
-): Promise<ccc.ClientTransactionResponse | undefined> {
-  const status = await readTransactionStatus(poll);
-  assertNotRejected(poll.txHash, status);
-  if (status.status !== "committed") {
-    return undefined;
-  }
-
-  const response = status.response ?? (await readTransactionBody(poll));
-  if (response === undefined) {
-    return undefined;
-  }
-  assertNotRejected(poll.txHash, {
-    status: response.status,
-    reason: response.reason,
-  });
-  // Only a body that itself reports commitment counts: an uncached read may lag
-  // or disagree with the status poll, and any other status is not commitment.
-  return response.status === "committed" && response.blockNumber !== undefined
-    ? response
-    : undefined;
-}
-
-async function readTransactionStatus(poll: WaitPoll): Promise<TransactionStatus> {
-  const { client, txHash, budget } = poll;
+async function isCommitted(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+  budget: WaitWindow,
+): Promise<boolean> {
   const requestor = jsonRpcRequestor(client);
-  if (requestor !== undefined) {
-    // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed
-    // transaction response discards (its body is null, so CCC returns nothing).
-    return rawTransactionStatus(
-      await within(
-        async () => requestor.request("get_transaction", [txHash, "0x1"]),
-        budget,
-      ),
-    );
-  }
-
-  const response = await readTransactionBody(poll);
-  return response === undefined
-    ? { status: undefined, reason: undefined }
-    : { status: response.status, reason: response.reason, response };
-}
-
-async function readTransactionBody(
-  poll: WaitPoll,
-): Promise<ccc.ClientTransactionResponse | undefined> {
-  const response = await within(
-    async () => poll.client.getTransactionNoCache(poll.txHash),
-    poll.budget,
+  // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed transaction
+  // response discards (its body is null, so CCC returns nothing).
+  const { status, reason } = rawTransactionStatus(
+    await within(
+      async () => requestor.request("get_transaction", [txHash, "0x1"]),
+      budget,
+    ),
   );
-  if (response === undefined) {
-    return undefined;
+  if (status === "rejected") {
+    throw new TransactionWaitError(txHash, { status, reason });
   }
-  try {
-    // A generic client may return an unvalidated shape, and a body that cannot
-    // be normalized is not evidence of commitment: keep the window polling.
-    return ccc.ClientTransactionResponse.from(response);
-  } catch {
-    return undefined;
-  }
+  return status === "committed";
 }
 
-function assertNotRejected(txHash: ccc.Hex, status: TransactionStatus): void {
-  if (status.status === "rejected") {
-    throw new TransactionWaitError(txHash, {
-      status: status.status,
-      reason: status.reason,
-    });
-  }
+/** A node's raw `get_transaction` status record (verbosity 1), the fields read here. */
+function rawTransactionStatus(response: unknown): {
+  status: string | undefined;
+  reason: string | undefined;
+} {
+  const record =
+    typeof response === "object" &&
+    response !== null &&
+    "tx_status" in response &&
+    typeof response.tx_status === "object" &&
+    response.tx_status !== null
+      ? response.tx_status
+      : {};
+  return {
+    status:
+      "status" in record && typeof record.status === "string" ? record.status : undefined,
+    reason:
+      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
+  };
 }

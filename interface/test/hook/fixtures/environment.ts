@@ -2,7 +2,6 @@ import type * as ConnectorModule from "@ckb-ccc/connector-react";
 import { StubClient } from "@ickb/testkit";
 import type * as ReactQueryModule from "@tanstack/react-query";
 import { skipToken, type SkipToken } from "@tanstack/react-query";
-import type * as ReactModule from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 import type {
   retryConfirmation as retryConfirmationType,
@@ -10,13 +9,6 @@ import type {
 } from "../../../src/action/actionTransaction.ts";
 import type { QuoteState } from "../../../src/app/queries.ts";
 import type { TxInfo } from "../../../src/shared/utils.ts";
-
-interface HookState {
-  effects: Array<() => void>;
-  index: number;
-  nextRefCurrent: unknown;
-  states: unknown[];
-}
 
 interface QueryMock {
   options: unknown;
@@ -38,7 +30,6 @@ interface ConnectorMock {
 const mocks = vi.hoisted(
   (): {
     connectorMock: ConnectorMock;
-    hookState: HookState;
     queryMock: QueryMock;
     transactMock: {
       retryConfirmation: ReturnType<typeof vi.fn<typeof retryConfirmationType>>;
@@ -56,12 +47,6 @@ const mocks = vi.hoisted(
       },
       signer: undefined,
     },
-    hookState: {
-      effects: [],
-      index: 0,
-      nextRefCurrent: undefined,
-      states: [],
-    },
     queryMock: {
       options: undefined,
       result: {},
@@ -72,80 +57,24 @@ const mocks = vi.hoisted(
       }),
       transact: vi.fn(async (params) => {
         params.lockIntent();
-        const { build, ...state } = await params.refreshPreview();
-        params.freezePreview({ ...state, txInfo: await build() });
+        const state = await params.refreshState();
+        const txInfo = await state.txBuilder(
+          params.isCkb2Udt,
+          params.amount,
+          params.destination,
+        );
+        if (txInfo.ok) {
+          params.freezePreview({ ...state, txInfo });
+        }
       }),
     },
   }),
 );
 
 export const connectorMock = mocks.connectorMock;
-export const hookState = mocks.hookState;
 export const queryMock = mocks.queryMock;
 export const transactMock = mocks.transactMock;
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers React hook mocks before dynamic component imports.
-vi.mock(import("react"), async (importActual: () => Promise<typeof ReactModule>) => {
-  const actual = await importActual();
-  function mockUseState<S>(
-    initialState: S | (() => S),
-  ): [S, ReactModule.Dispatch<ReactModule.SetStateAction<S>>];
-  function mockUseState<S = undefined>(): [
-    S | undefined,
-    ReactModule.Dispatch<ReactModule.SetStateAction<S | undefined>>,
-  ];
-  function mockUseState<S>(
-    initial?: S | (() => S),
-  ): [S | undefined, ReactModule.Dispatch<ReactModule.SetStateAction<S | undefined>>] {
-    const stateIndex = hookState.index;
-    hookState.index += 1;
-    if (!(stateIndex in hookState.states)) {
-      hookState.states[stateIndex] =
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Mock useState invokes lazy initializers with the caller-provided generic type.
-        typeof initial === "function" ? (initial as () => S)() : initial;
-    }
-    return [
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Mock useState returns the stored value as the caller-provided generic type.
-      hookState.states[stateIndex] as S | undefined,
-      (value: ReactModule.SetStateAction<S | undefined>): void => {
-        hookState.states[stateIndex] =
-          typeof value === "function"
-            ? // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Mock useState invokes functional updates with the stored generic value.
-              (value as (previous: S | undefined) => S | undefined)(
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Mock state slots store generic hook state.
-                hookState.states[stateIndex] as S | undefined,
-              )
-            : value;
-      },
-    ];
-  }
-
-  return {
-    ...actual,
-    useDeferredValue: <T>(value: T): T => value,
-    useEffect: (effect: ReactModule.EffectCallback): void => {
-      const cleanup = effect();
-      if (typeof cleanup === "function") {
-        hookState.effects.push((): void => {
-          cleanup();
-        });
-      }
-    },
-    useMemo: <T>(factory: () => T): T => factory(),
-    useRef: <T>(initial: T): { current: T } => {
-      const current =
-        hookState.nextRefCurrent === undefined
-          ? initial
-          : // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Mock useRef supplies the caller-owned generic fixture value.
-            (hookState.nextRefCurrent as T);
-      hookState.nextRefCurrent = undefined;
-      return { current };
-    },
-    useState: mockUseState,
-  };
-});
-
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers React Query mocks before dynamic component imports.
 vi.mock(
   import("@tanstack/react-query"),
   async (importActual: () => Promise<typeof ReactQueryModule>) => {
@@ -167,7 +96,6 @@ vi.mock(
   },
 );
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture registers CCC connector mocks before dynamic component imports.
 vi.mock(import("@ckb-ccc/connector-react"), async () => {
   const React = await import("react");
   const Provider: typeof ConnectorModule.Provider = ({ children }) =>
@@ -180,12 +108,9 @@ vi.mock(import("@ckb-ccc/connector-react"), async () => {
   return { Provider, useCcc, useSigner };
 });
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture replaces transaction side effects with an observable mock.
 vi.mock(import("../../../src/action/actionTransaction.ts"), () => transactMock);
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture owns shared hook state reset for these tests.
 beforeEach(() => {
-  resetHooks();
   queryMock.options = undefined;
   queryMock.result = {};
   connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
@@ -200,18 +125,10 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", storage());
 });
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- Hook fixture restores global timer and storage state for these tests.
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-
-export function resetHooks(): void {
-  hookState.effects = [];
-  hookState.index = 0;
-  hookState.nextRefCurrent = undefined;
-  hookState.states = [];
-}
 
 export function quoteStateOptions(): {
   queryKey: readonly unknown[];

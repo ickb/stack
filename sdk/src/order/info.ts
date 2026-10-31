@@ -66,6 +66,9 @@ export interface Info {
 // cannot fill it whole. Fee changes and an aging buy can still make a remainder unprofitable.
 export const CKB_MIN_MATCH_LOG_DEFAULT = 36;
 
+// An interface, this class expression and a typed const rather than one plain class: a
+// class extending `ccc.Entity.Base<...>()` emits an unexported `*_base` declaration, which
+// API Extractor's ae-forgotten-export rejects (tried 2026-10-30).
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const InfoImplementation = class Info extends InfoBase {
   static {

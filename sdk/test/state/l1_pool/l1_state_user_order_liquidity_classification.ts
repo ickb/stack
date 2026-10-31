@@ -6,18 +6,16 @@ import { OrderManager } from "../../../src/order/order.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  emptyCellScan,
+  anchoredAt,
   FeeRateStubClient,
   l1SdkWithManagers,
-  tipHeaderHandler,
 } from "../l1_account/support/sdk_l1_support.ts";
-import { L1_STATE_SUITE } from "./support/l1_pool_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
@@ -50,18 +48,18 @@ describe(L1_STATE_SUITE, () => {
     ]);
 
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(headerLike(1n)),
-      findCellsPagedNoCache: emptyCellScan,
+      ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),
+      cells: (): ccc.Cell[] => [],
     });
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([ownerOrder.group]);
+    expect(state.userOrders).toEqual([ownerOrder.group]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 });
 
-describe(`${L1_STATE_SUITE} system order liquidity`, () => {
+describe("IckbSdk.getL1AccountState system order liquidity", () => {
   it("classifies non-user UDT-to-CKB orders as system liquidity", async () => {
     const { client, marketOrder, sdk, userLock } = l1StateWithMarketOrder({
       ratio: { ckbScale: (1n << 64n) - 1n, udtScale: 1n },
@@ -70,7 +68,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([]);
+    expect(state.userOrders).toEqual([]);
     expect(state.system.orderPool).toEqual([marketOrder.group]);
   });
 
@@ -82,7 +80,7 @@ describe(`${L1_STATE_SUITE} system order liquidity`, () => {
 
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-    expect(state.user.orders).toEqual([]);
+    expect(state.userOrders).toEqual([]);
     expect(state.system.orderPool).toEqual([]);
   });
 });
@@ -118,8 +116,8 @@ function l1StateWithMarketOrder({
   vi.spyOn(orderManager, "findOrders").mockResolvedValue([marketOrder.group]);
 
   const client = new FeeRateStubClient({
-    getTipHeader: tipHeaderHandler(headerLike(1n)),
-    findCellsPagedNoCache: emptyCellScan,
+    ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),
+    cells: (): ccc.Cell[] => [],
   });
 
   return { client, marketOrder, sdk, userLock };

@@ -1,9 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  baseTransactionFixture,
-  BUILD_BASE_TRANSACTION_SUITE,
-} from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderOrder } from "../../conversion/planning/support/sdk_order_support.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, hash } from "./support/sdk_core_support.ts";
@@ -12,7 +9,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(BUILD_BASE_TRANSACTION_SUITE, () => {
+describe("IckbSdk.buildBaseTransaction", () => {
   it("accepts withdrawal requests after balanced caller activity", () => {
     const { botLock, dao, logic, orderManager, ownedOwnerManager, sdk } =
       baseTransactionFixture();

@@ -1,3 +1,4 @@
+import { byte32FromByte } from "@ickb/testkit";
 import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,7 +6,6 @@ import {
   toJsonLogRecord,
   writeJsonLine,
 } from "../../src/shared/logging.ts";
-import { byte32FromByte } from "./support/node_utils_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();

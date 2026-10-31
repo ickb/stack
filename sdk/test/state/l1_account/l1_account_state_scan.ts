@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
+import type { cccA } from "@ckb-ccc/core/advanced";
+import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { LogicManager } from "../../../src/logic.ts";
@@ -10,16 +11,11 @@ import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts"
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  FeeRateStubClient,
-  L1_STATE_SUITE,
-  tipHeaderHandler,
-  transactionWithHeader,
-} from "./support/sdk_l1_support.ts";
+import { anchoredAt, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
 
-describe(L1_STATE_SUITE, () => {
+describe("IckbSdk.getL1AccountState", () => {
   it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
     const logic = script("22");
@@ -70,51 +66,58 @@ describe(L1_STATE_SUITE, () => {
       daoScript: dao,
       depositHeaderNumber: 5n,
     });
+    // Each request and its marker come from one real transaction body, which the SDK reads
+    // the request from and checks against the outpoint's hash.
+    const {
+      owned: ownedCell,
+      owner: ownerCell,
+      tx: ownedTx,
+    } = requestTransaction(owned, owner);
+    const {
+      owned: pendingOwnedCell,
+      owner: pendingOwnerCell,
+      tx: pendingTx,
+    } = requestTransaction(pendingOwned, pendingOwner);
+    // The account scan names each cell's block: the receipt's deposit block and each
+    // marker's request block, where its owned withdrawal request was created beside it.
     const cellsByLock = new Map([
       [
         accountLock.hash(),
-        [plain, dataCell, nativeUdt, udtPrefixExtension, receipt, owner, pendingOwner],
+        [
+          plain,
+          dataCell,
+          nativeUdt,
+          udtPrefixExtension,
+          { cell: receipt, blockNumber: 2n },
+          { cell: ownerCell, blockNumber: 2n },
+          { cell: pendingOwnerCell, blockNumber: 6n },
+        ],
       ],
     ]);
     const headersByNumber = new Map([
       [1n, headerLike(1n)],
+      [2n, headerLike(2n, { epoch: ccc.Epoch.from([2n, 0n, 1n]) })],
       [5n, headerLike(5n, { epoch: ccc.Epoch.from([399n, 0n, 1n]) })],
+      [6n, headerLike(6n, { epoch: ccc.Epoch.from([399n, 1n, 2n]) })],
     ]);
-    const withdrawalHeaders = new Map([
-      [hash("86"), headerLike(2n, { epoch: ccc.Epoch.from([2n, 0n, 1n]) })],
-      [hash("88"), headerLike(6n, { epoch: ccc.Epoch.from([399n, 1n, 2n]) })],
-    ]);
-    const scans: ccc.ClientIndexerSearchKey[] = [];
-    const tip = headerLike(1000n, { epoch: ccc.Epoch.from([400n, 0n, 1n]) });
+    const scans: cccA.JsonRpcIndexerSearchKey[] = [];
+    const tip = headerLike(1000n, {
+      epoch: ccc.Epoch.from([400n, 0n, 1n]),
+      timestamp: BigInt(Date.now()),
+    });
     const client = new FeeRateStubClient({
-      getTipHeader: tipHeaderHandler(tip),
-      findCellsPagedNoCache: async (
-        keyLike,
-      ): ReturnType<ccc.Client["findCellsPagedNoCache"]> => {
-        await Promise.resolve();
-        const key = ccc.ClientIndexerSearchKey.from(keyLike);
+      ...anchoredAt(tip, headersByNumber),
+      cells: (key): readonly StubCell[] => {
         scans.push(key);
-        return {
-          cells: cellsByLock.get(ccc.Script.from(key.script).hash()) ?? [],
-          lastCursor: "end",
-        };
-      },
-      getCell: async (outPoint): ReturnType<ccc.Client["getCell"]> => {
-        await Promise.resolve();
-        return ccc.OutPoint.from(outPoint).txHash === hash("86") ? owned : pendingOwned;
-      },
-      getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
-        await Promise.resolve();
-        return headersByNumber.get(ccc.numFrom(number));
-      },
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        await Promise.resolve();
-        // Withdrawal headers are keyed by transaction; the receipt takes the first one.
-        return transactionWithHeader(
-          withdrawalHeaders.get(ccc.hexFrom(txHash)) ?? headerLike(2n),
+        const { code_hash: codeHash, hash_type: hashType, args } = key.script;
+        return (
+          cellsByLock.get(ccc.Script.from({ codeHash, hashType, args }).hash()) ?? []
         );
+      },
+      getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
+        await Promise.resolve();
+        const body = [ownedTx, pendingTx].find((tx) => tx.hash() === ccc.hexFrom(txHash));
+        return body === undefined ? undefined : committedTransactionResponse(body);
       },
     });
 
@@ -125,12 +128,15 @@ describe(L1_STATE_SUITE, () => {
     );
 
     // One scan per distinct lock, exact and unfiltered; the other three are public.
-    const lockScans = scans.filter((key) => key.script.eq(accountLock));
+    const lockScans = scans.filter(
+      ({ script: { code_hash: codeHash, hash_type: hashType, args } }) =>
+        ccc.Script.from({ codeHash, hashType, args }).eq(accountLock),
+    );
     expect(lockScans).toHaveLength(1);
     expect(lockScans[0]).toMatchObject({
-      scriptType: "lock",
-      scriptSearchMode: "exact",
-      withData: true,
+      script_type: "lock",
+      script_search_mode: "exact",
+      with_data: true,
     });
     expect(lockScans[0]?.filter).toBeUndefined();
     expect(scans).toHaveLength(4);
@@ -139,8 +145,12 @@ describe(L1_STATE_SUITE, () => {
     expect(account.nativeUdtCells).toEqual([nativeUdt]);
     expect(account.receipts.map((found) => found.cell)).toEqual([receipt]);
     expect(account.withdrawalGroups.map((group) => group.owner.cell)).toEqual([
-      owner,
-      pendingOwner,
+      ownerCell,
+      pendingOwnerCell,
+    ]);
+    expect(account.withdrawalGroups.map((group) => group.owned.cell)).toEqual([
+      ownedCell,
+      pendingOwnedCell,
     ]);
 
     // Account cells never count as system liquidity: the pool is empty here.
@@ -200,4 +210,18 @@ function ownedWithdrawalCell({
     },
     outputData: ccc.mol.Uint64LE.encode(depositHeaderNumber),
   });
+}
+
+/** A request and its owner marker as outputs 0 and 1 of one real transaction. */
+function requestTransaction(
+  owned: ccc.Cell,
+  owner: ccc.Cell,
+): { owned: ccc.Cell; owner: ccc.Cell; tx: ccc.Transaction } {
+  const tx = ccc.Transaction.from({
+    outputs: [owned.cellOutput, owner.cellOutput],
+    outputsData: [owned.outputData, owner.outputData],
+  });
+  const at = ({ cellOutput, outputData }: ccc.Cell, index: bigint): ccc.Cell =>
+    ccc.Cell.from({ outPoint: { txHash: tx.hash(), index }, cellOutput, outputData });
+  return { owned: at(owned, 0n), owner: at(owner, 1n), tx };
 }

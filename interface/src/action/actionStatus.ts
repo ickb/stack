@@ -1,5 +1,5 @@
-import { hasTransactionActivity } from "@ickb/sdk";
-import { toText, type TxInfo } from "../shared/utils.ts";
+import { ccc } from "@ckb-ccc/ccc";
+import type { SendableTx, TxInfo } from "../shared/utils.ts";
 import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 
 /** What the action section knows beside the preview itself. */
@@ -20,7 +20,7 @@ export interface ActionFlags {
 }
 
 /** Resolves the status message shown beside the conversion action button. */
-export function actionMessage(txInfo: TxInfo, flags: ActionFlags): string {
+export function actionMessage(preview: TxInfo | undefined, flags: ActionFlags): string {
   const { amount, amountError, destinationError, failure, hasDestination } = flags;
   if (failure !== "") {
     return failureMessage(failure);
@@ -50,35 +50,28 @@ export function actionMessage(txInfo: TxInfo, flags: ActionFlags): string {
     return amount > 0n ? "Checking conversion request..." : "Checking converted funds...";
   }
 
-  return previewMessage(txInfo, flags, flags.unavailableMessage);
+  return previewMessage(preview, flags, flags.unavailableMessage);
 }
 
 function previewMessage(
-  txInfo: TxInfo,
+  preview: TxInfo | undefined,
   {
     hasCollectable,
     hasConverting,
   }: Pick<ActionFlags, "hasCollectable" | "hasConverting">,
   unavailableMessage: string,
 ): string {
-  if (txInfo.error !== "") {
-    // The preview lags the typed amount by the settle delay, so an availability error is
-    // worded for the amount on screen, not the one the preview was built for.
-    return isAvailabilityMessage(txInfo.error)
-      ? `${unavailableMessage}.`
-      : failureMessage(txInfo.error);
-  }
-
-  const hasActivity = hasTransactionActivity(txInfo.tx);
-  if (!hasActivity) {
+  if (preview === undefined) {
     return `${unavailableMessage}.`;
   }
-
-  if (!isTxInfoValid(txInfo, hasActivity)) {
-    return "Transaction preview is not ready.";
+  if (!preview.ok) {
+    // The preview lags the typed amount by the settle delay, so an availability error is
+    // worded for the amount on screen, not the one the preview was built for.
+    return isAvailabilityMessage(preview.error)
+      ? `${unavailableMessage}.`
+      : failureMessage(preview.error);
   }
-
-  return transactionIntentMessage(txInfo, hasCollectable, hasConverting);
+  return transactionIntentMessage(preview, hasCollectable, hasConverting);
 }
 
 /**
@@ -86,8 +79,8 @@ function previewMessage(
  * transaction, always at amount zero, so it replaces the collect-only intent; converting
  * positions stay, and a sweep the input limit cut short asks for another run.
  */
-export function transactionIntentMessage(
-  txInfo: Pick<TxInfo, "conversionKind" | "conversionNotice" | "move">,
+function transactionIntentMessage(
+  txInfo: Pick<SendableTx, "conversionKind" | "conversionNotice" | "move">,
   hasCollectable: boolean,
   hasConverting: boolean,
 ): string {
@@ -110,9 +103,7 @@ export function transactionIntentMessage(
       : "Collects everything that was converting.";
   }
   return [
-    txInfo.conversionKind === undefined
-      ? ""
-      : conversionIntentText(txInfo.conversionKind),
+    conversionIntentText(txInfo.conversionKind),
     txInfo.conversionNotice === undefined
       ? ""
       : conversionNoticeText(txInfo.conversionNotice),
@@ -128,7 +119,7 @@ export function transactionIntentMessage(
  */
 export function confirmPreviewMessage(
   preview:
-    { txInfo: TxInfo; hasCollectable: boolean; hasConverting: boolean } | undefined,
+    { txInfo: SendableTx; hasCollectable: boolean; hasConverting: boolean } | undefined,
 ): string {
   if (preview === undefined) {
     return "";
@@ -153,8 +144,10 @@ function isAvailabilityMessage(message: string): boolean {
   return message === noCollectionMessage || message === noRequestMessage;
 }
 
-function conversionNoticeText(notice: NonNullable<TxInfo["conversionNotice"]>): string {
-  return `This small request converts ${toText(notice.inputIckb)} iCKB to about ${toText(notice.outputCkb)} CKB and pays ${toText(notice.incentiveCkb)} CKB for the variable time.`;
+function conversionNoticeText(
+  notice: NonNullable<SendableTx["conversionNotice"]>,
+): string {
+  return `This small request converts ${ccc.fixedPointToString(notice.inputIckb)} iCKB to about ${ccc.fixedPointToString(notice.outputCkb)} CKB and pays ${ccc.fixedPointToString(notice.incentiveCkb)} CKB for the variable time.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {
@@ -166,13 +159,13 @@ function collectableNotice(hasCollectable: boolean): string {
 }
 
 export function conversionIntentText(
-  kind: Exclude<NonNullable<TxInfo["conversionKind"]>, "collect-only">,
+  kind: Exclude<NonNullable<SendableTx["conversionKind"]>, "collect-only">,
 ): string {
   // What the signed transaction does, in the user's terms. "Below" is the "Ready:" line,
   // the SDK's latest-of-everything estimate, pending positions included, so the mixed case
   // points at it for both parts and no sentence calls it one part's date.
   const intent: Record<
-    Exclude<NonNullable<TxInfo["conversionKind"]>, "collect-only">,
+    Exclude<NonNullable<SendableTx["conversionKind"]>, "collect-only">,
     string
   > = {
     direct: "Converts at a fixed time, shown below.",
@@ -182,11 +175,6 @@ export function conversionIntentText(
   };
 
   return intent[kind];
-}
-
-/** Returns true only for a broadcastable preview with real transaction activity. */
-export function isTxInfoValid(txInfo: TxInfo, hasActivity: boolean): boolean {
-  return hasActivity && txInfo.fee > 0n && txInfo.error === "";
 }
 
 export function actionLabel(
@@ -212,6 +200,8 @@ export function unavailableConversionMessage(amount: bigint): string {
   return noCollectionMessage;
 }
 
+const relativeTime = new Intl.RelativeTimeFormat("en-US", { numeric: "always" });
+
 /** Completes the "Ready:" label: "now" or "in 3 days". */
 export function timeUntilMaturity(
   estimatedMaturity: bigint,
@@ -223,17 +213,24 @@ export function timeUntilMaturity(
   }
 
   const minute = 60_000n;
-
   if (remaining <= 90n * minute) {
-    return `in ${String(Number((remaining + minute - 1n) / minute))} minutes`;
+    return inUnits(remaining, minute, "minute");
   }
 
   const hour = 60n * minute;
   const day = 24n * hour;
-
   if (remaining <= day) {
-    return `in ${String(Number((remaining + hour - 1n) / hour))} hours`;
+    return inUnits(remaining, hour, "hour");
   }
 
-  return `in ${String(Number((remaining + day - 1n) / day))} days`;
+  return inUnits(remaining, day, "day");
+}
+
+/** `remaining` milliseconds in whole units of `size`, rounded up. */
+function inUnits(
+  remaining: bigint,
+  size: bigint,
+  unit: Intl.RelativeTimeFormatUnit,
+): string {
+  return relativeTime.format(Number((remaining + size - 1n) / size), unit);
 }

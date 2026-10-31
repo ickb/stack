@@ -9,11 +9,11 @@ import {
   mainnetClient,
   queryClient,
   testnetClient,
-  txInfoPadding,
   type Action,
   type L1StateType,
   type QuoteState,
   type RootConfig,
+  type SendableTx,
   type TxInfo,
   type useQuoteState,
   type WalletConfig,
@@ -30,14 +30,11 @@ export function actionProps(): Parameters<typeof Action>[0] {
     amountError: "",
     destination: { lock: script("11") },
     destinationError: "",
-    refreshPreview: vi.fn(async () => {
+    refreshState: vi.fn(async () => {
       await Promise.resolve();
       return {
-        stateId: "state-id",
-        tipTimestamp: 0n,
-        hasCollectable: false,
-        hasConverting: false,
-        build: async (): Promise<TxInfo> => {
+        ...l1State(),
+        txBuilder: async (): Promise<TxInfo> => {
           await Promise.resolve();
           return activeTxInfo();
         },
@@ -47,7 +44,7 @@ export function actionProps(): Parameters<typeof Action>[0] {
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
     pendingTransaction: undefined,
-    // Built inline: this fixture loads before the React mock, so it must not import the hook module.
+    // No App owns this store, so a change re-renders nothing; a test passes the record down.
     pendingStore: { current: undefined, onChange: (): undefined => undefined },
     l1State: l1State(),
     isStateFetching: false,
@@ -56,14 +53,22 @@ export function actionProps(): Parameters<typeof Action>[0] {
   };
 }
 
-export function activeTxInfo(): TxInfo {
+export function activeTxInfo(): SendableTx {
   return {
+    ok: true,
     tx: txWithInput("11"),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
+    conversionKind: "direct",
   };
 }
+
+/** What the state fixture's builder returns: nothing to sign. */
+export const nothingToSign: TxInfo = Object.freeze({
+  ok: false,
+  error: "Nothing to do",
+  estimatedMaturity: 0n,
+});
 
 export function l1State(): L1StateType {
   return {
@@ -85,7 +90,7 @@ export function l1State(): L1StateType {
     stateId: "state-id",
     txBuilder: vi.fn(async () => {
       await Promise.resolve();
-      return txInfoPadding;
+      return nothingToSign;
     }),
     hasCollectable: false,
     hasConverting: false,

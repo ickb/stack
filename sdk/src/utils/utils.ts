@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 
 /**
  * The default page size used when querying cells from the chain.
@@ -9,52 +10,91 @@ import { ccc } from "@ckb-ccc/core";
 export const defaultCellPageSize = 400;
 
 /**
- * Reads every committed cell matching the key, page by page, without touching
- * CCC's cell cache. The scan ends on the first short page.
- *
- * @remarks A full page must advance the cursor; otherwise the read throws so a faulty
- * endpoint in the app's public node pool cannot keep the scan looping forever.
- * The cursor continues ordering, not a coherent snapshot. There is no aggregate budget:
- * a large book costs a slower read rather than a partial result.
+ * A CCC client cache sized for a whole pool: 4096 headers and 4096 transaction bodies,
+ * where CCC's defaults keep 128 and 256 (SDK README, Account state). An LRU fills only as
+ * far as the book and pool need.
+ */
+export function clientCache(): ccc.ClientCacheMemory {
+  return new ccc.ClientCacheMemory(512, 4096, 4096);
+}
+
+/** A committed cell and the block the node names for its creating transaction. */
+export interface ScannedCell {
+  cell: ccc.Cell;
+  blockNumber: ccc.Num;
+}
+
+/**
+ * Reads every committed cell matching the key with the block the node names for it, page
+ * by page through the raw requestor (CCC's typed scan drops the block), bypassing CCC's
+ * cell cache. A full page whose cursor does not advance throws. Why: SDK README, Account
+ * state.
  */
 export async function findCells(
   client: ccc.Client,
   keyLike: ccc.ClientIndexerSearchKeyLike,
-): Promise<ccc.Cell[]> {
-  const key = ccc.ClientIndexerSearchKey.from(keyLike);
-  const cells: ccc.Cell[] = [];
+): Promise<ScannedCell[]> {
+  const requestor = jsonRpcRequestor(client);
+  const key = cccA.JsonRpcTransformers.indexerSearchKeyFrom(keyLike);
+  const cells: ScannedCell[] = [];
   let after: string | undefined;
   for (;;) {
-    const page = await client.findCellsPagedNoCache(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the node's indexer answer, parsed field by field below as CCC's own transformer does.
+    const page = (await requestor.request("get_cells", [
       key,
       "asc",
-      defaultCellPageSize,
+      ccc.numToHex(defaultCellPageSize),
       after,
-    );
-    cells.push(...page.cells);
-    if (page.cells.length < defaultCellPageSize) {
+    ])) as RawCellsPage;
+    for (const object of page.objects) {
+      cells.push({
+        cell: ccc.Cell.from({
+          outPoint: cccA.JsonRpcTransformers.outPointTo(object.out_point),
+          cellOutput: cccA.JsonRpcTransformers.cellOutputTo(object.output),
+          outputData: object.output_data ?? "0x",
+        }),
+        blockNumber: ccc.numFrom(object.block_number),
+      });
+    }
+    if (page.objects.length < defaultCellPageSize) {
       return cells;
     }
-    if (page.lastCursor === after) {
+    if (page.last_cursor === after) {
       throw new Error("Cell scan cursor did not advance");
     }
-    after = page.lastCursor;
+    after = page.last_cursor;
   }
 }
 
-/**
- * Local transaction inclusion metadata.
- */
-export interface TransactionHeader {
-  /**
-   * The block header used for inclusion-dependent calculations.
-   */
-  header: ccc.ClientBlockHeader;
+/** The headers of a batch of block numbers, each read once; every block must exist. */
+export async function headersByNumber(
+  client: ccc.Client,
+  blockNumbers: Iterable<ccc.Num>,
+): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
+  const distinct = [...new Set(blockNumbers)];
+  const headers = await Promise.all(
+    distinct.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
+  );
+  return new Map(
+    distinct.map((blockNumber, index) => {
+      const header = headers[index];
+      if (header === undefined) {
+        throw new Error(`Header not found for block number ${String(blockNumber)}`);
+      }
+      return [blockNumber, header];
+    }),
+  );
+}
 
-  /**
-   * The transaction hash when the caller has resolved it for the header.
-   */
-  txHash?: ccc.Hex;
+/** The fields of the indexer's `get_cells` answer the scan reads. */
+interface RawCellsPage {
+  last_cursor: string;
+  objects: Array<{
+    out_point: cccA.JsonRpcOutPoint;
+    output: cccA.JsonRpcCellOutput;
+    output_data?: ccc.Hex;
+    block_number: ccc.Hex;
+  }>;
 }
 
 /**
@@ -110,86 +150,17 @@ export function isPlainCapacityCell(cell: ccc.Cell): boolean {
 }
 
 /**
- * Performs asynchronously a binary search to find the smallest index `i` in the range [0, n)
- * such that the function `f(i)` returns true. It is assumed that for the range
- * [0, n), if `f(i)` is true, then `f(i+1)` is also true. This means that there
- * is a prefix of the input range where `f` is false, followed by a suffix where
- * `f` is true. If no such index exists, the function returns `n`.
- *
- * The function `f` is only called for indices in the range [0, n).
- *
- * @param n - The non-negative integer upper bound of the search range (exclusive).
- * @param f - An async function that takes an index `i` and returns a boolean value.
- * @returns The smallest index `i` such that `f(i)` is true, or `n` if no such index exists.
- *
- * @remarks Adapted from Go's standard library search implementation:
- * {@link https://go.dev/src/sort/search.go}
- */
-export async function asyncBinarySearch(
-  n: number,
-  f: (i: number) => Promise<boolean>,
-): Promise<number> {
-  // Define f(-1) == false and f(n) == true.
-  // Invariant: f(i-1) == false, f(j) == true.
-  let [i, j] = [0, n];
-  while (i < j) {
-    const h = Math.trunc((i + j) / 2);
-    // i ≤ h < j
-    if (!(await f(h))) {
-      i = h + 1; // preserves f(i-1) == false
-    } else {
-      j = h; // preserves f(j) == true
-    }
-  }
-  // i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
-  return i;
-}
-
-/**
- * The client's JSON-RPC requestor, when it has one. The connector hands the interface a
+ * The client's JSON-RPC requestor, which the SDK's raw reads need: scans with block
+ * numbers, status polls and transaction proofs. The connector hands the interface a
  * composition proxy over the public client (`ClientWithFeeRate`, a `ccc.Client` but not a
  * `ccc.ClientJsonRpc`), so `instanceof` misses it; the proxy forwards the property.
  */
-export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc | undefined {
-  if (!("requestor" in client)) {
-    return undefined;
+export function jsonRpcRequestor(client: ccc.Client): ccc.RequestorJsonRpc {
+  const requestor = "requestor" in client ? client.requestor : undefined;
+  if (!(requestor instanceof ccc.RequestorJsonRpc)) {
+    throw new TypeError("The SDK needs a JSON-RPC client");
   }
-  const { requestor } = client;
-  return requestor instanceof ccc.RequestorJsonRpc ? requestor : undefined;
-}
-
-/** A node's raw `get_transaction` status record (verbosity 1), the fields the stack reads. */
-export function rawTransactionStatus(response: unknown): {
-  status: string | undefined;
-  reason: string | undefined;
-  blockNumber: ccc.Num | undefined;
-} {
-  const record =
-    typeof response === "object" &&
-    response !== null &&
-    "tx_status" in response &&
-    typeof response.tx_status === "object" &&
-    response.tx_status !== null
-      ? response.tx_status
-      : {};
-  return {
-    status:
-      "status" in record && typeof record.status === "string" ? record.status : undefined,
-    reason:
-      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
-    blockNumber:
-      "block_number" in record && typeof record.block_number === "string"
-        ? ccc.numFrom(record.block_number)
-        : undefined,
-  };
-}
-
-export function minBigInt(left: bigint, right: bigint): bigint {
-  return left < right ? left : right;
-}
-
-export function maxBigInt(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
+  return requestor;
 }
 
 /** `numerator / denominator` rounded up; the denominator is positive. */

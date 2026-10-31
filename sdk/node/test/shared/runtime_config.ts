@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readRuntimeConfigEnv,
   type RuntimeConfig,
@@ -22,6 +22,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(KEY_DIR, { recursive: true, force: true });
 });
 
@@ -32,32 +33,26 @@ describe("runtime config env", () => {
     await expect(readConfig({})).resolves.toEqual({
       chain: "testnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: RPC_URL,
-      rpcEndpoint: {
-        mode: "exclusive",
-        protocol: "https:",
-        hostname: "testnet.example",
-        port: "",
-        pathname: "/",
-      },
+      rpcUrls: [RPC_URL],
+      rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
     });
-    // The URL string reaches only the client; its identity carries no query.
+    // The URLs reach only the client, shuffled per process, and the journaled identities
+    // follow the same order; they carry no path or query, where providers put API keys.
+    const urls = [
+      "https://rpc.example:8443/key-in-path?token=abc#private",
+      "wss://second.example/ws/another-key",
+    ];
+    vi.spyOn(Math, "random").mockReturnValueOnce(0.9).mockReturnValueOnce(0.1);
     await expect(
-      readConfig({
-        BOT_CHAIN: "mainnet",
-        BOT_RPC_URL: "https://rpc.example:8443/path?token=abc#private",
-      }),
+      readConfig({ BOT_CHAIN: "mainnet", BOT_RPC_URL: urls.join(",") }),
     ).resolves.toEqual({
       chain: "mainnet",
       privateKey: VALID_PRIVATE_KEY,
-      rpcUrl: "https://rpc.example:8443/path?token=abc#private",
-      rpcEndpoint: {
-        mode: "exclusive",
-        protocol: "https:",
-        hostname: "rpc.example",
-        port: "8443",
-        pathname: "/path",
-      },
+      rpcUrls: urls.toReversed(),
+      rpcEndpoints: [
+        { protocol: "wss:", hostname: "second.example", port: "" },
+        { protocol: "https:", hostname: "rpc.example", port: "8443" },
+      ],
     });
   });
 
@@ -77,29 +72,24 @@ describe("runtime config env", () => {
     await expect(readConfig({ BOT_CHAIN: undefined })).rejects.toThrow(
       "Empty env BOT_CHAIN",
     );
-    // No RPC URL means CCC's public pool.
-    await expect(readConfig({ BOT_RPC_URL: "" })).resolves.toEqual({
-      chain: "testnet",
-      privateKey: VALID_PRIVATE_KEY,
-      rpcEndpoint: { mode: "default" },
-    });
+    await expect(readConfig({ BOT_RPC_URL: "" })).rejects.toThrow(
+      "Empty env BOT_RPC_URL",
+    );
     await expect(readConfig({ BOT_PRIVATE_KEY_FILE: undefined })).rejects.toThrow(
       "Empty env BOT_PRIVATE_KEY_FILE",
     );
   });
 
-  it("resolves relative key paths against INIT_CWD, then the working directory", async () => {
+  it("refuses a relative key path", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
 
     await expect(
-      readConfig({ BOT_PRIVATE_KEY_FILE: KEY_FILE_NAME, INIT_CWD: KEY_DIR }),
-    ).resolves.toMatchObject({ privateKey: VALID_PRIVATE_KEY });
-    await expect(
       readConfig({ BOT_PRIVATE_KEY_FILE: path.relative(process.cwd(), KEY_FILE_PATH) }),
-    ).resolves.toMatchObject({ privateKey: VALID_PRIVATE_KEY });
-    await expect(readConfig({ BOT_PRIVATE_KEY_FILE: KEY_FILE_NAME })).rejects.toThrow(
-      "Invalid file from env BOT_PRIVATE_KEY_FILE",
-    );
+    ).rejects.toThrow("Invalid env BOT_PRIVATE_KEY_FILE");
+    // Absolute but unreadable: the error names the variable, never the path.
+    await expect(
+      readConfig({ BOT_PRIVATE_KEY_FILE: path.join(KEY_DIR, "missing.key") }),
+    ).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
   });
 });
 
@@ -148,6 +138,8 @@ describe("runtime config RPC URL", () => {
       "https://user@rpc.example/",
       "https://rpc.example/\t",
       " https://rpc.example/",
+      "https://rpc.example/, https://second.example/",
+      "https://rpc.example/,",
     ]) {
       let error: unknown;
       try {

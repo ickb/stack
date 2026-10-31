@@ -3,28 +3,22 @@ import {
   IckbError,
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
+  type ConversionTransactionResult,
   type IckbErrorCode,
 } from "@ickb/sdk";
-import {
-  errorMessageOf,
-  toText,
-  txInfoPadding,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import type { Destination } from "./destination.ts";
 
 export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
 
 const conversionFailureMessages: Record<
-  Exclude<ConversionTransactionFailureReason, "nothing-to-do">,
+  Exclude<ConversionTransactionFailureReason, "nothing-to-do" | "amount-too-small">,
   string
 > = {
   "amount-negative": "Amount cannot be negative",
   "insufficient-ckb": "More CKB than you have",
   "insufficient-ickb": "More iCKB than you have",
-  "amount-too-small": "Enter a larger amount",
 };
 
 // Completion fails past the SDK's pre-check when the change cells, an order's master cell or
@@ -39,7 +33,8 @@ const completionFailureMessages: Record<IckbErrorCode, string> = {
 /**
  * Builds a non-broadcast transaction preview for one conversion request.
  *
- * @returns A frozen TxInfo with an empty error on success, or a non-empty error when the SDK cannot produce a broadcastable transaction.
+ * @returns A frozen TxInfo: the transaction to sign, or the error to show when the SDK
+ * cannot produce one.
  */
 export async function buildTransactionPreview(
   context: ConversionTransactionContext,
@@ -57,16 +52,13 @@ export async function buildTransactionPreview(
     );
   }
   try {
-    const result = await walletConfig.sdk.buildConversionTransaction(
-      ccc.Transaction.default(),
-      {
-        direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-        amount,
-        lock: destination.lock,
-        signer: walletConfig.signer,
-        context,
-      },
-    );
+    const result = await walletConfig.sdk.buildConversionTransaction({
+      direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+      amount,
+      lock: destination.lock,
+      signer: walletConfig.signer,
+      context,
+    });
     if (!result.ok) {
       return txInfoWithError(
         conversionFailureMessage(result, amount, isCkb2Udt),
@@ -76,11 +68,12 @@ export async function buildTransactionPreview(
 
     // The SDK returns the transaction completed and funded; only signing remains.
     return Object.freeze({
+      ok: true,
       tx: result.tx,
-      error: "",
-      fee: await result.tx.getFee(walletConfig.signer.client),
+      // The fee completion priced, which the send refuses to exceed.
+      fee: result.tx.estimateFee(context.system.feeRate),
       estimatedMaturity: result.estimatedMaturity,
-      conversionKind: result.conversion.kind,
+      conversionKind: result.conversionKind,
       ...(destination.moveTo === undefined
         ? {}
         : { move: { to: destination.moveTo, isComplete: result.isSweepComplete } }),
@@ -102,26 +95,22 @@ export async function buildTransactionPreview(
 }
 
 function txInfoWithError(error: string, estimatedMaturity: bigint): TxInfo {
-  return Object.freeze({
-    ...txInfoPadding,
-    error,
-    estimatedMaturity,
-  });
+  return Object.freeze({ ok: false, error, estimatedMaturity });
 }
 
 function conversionFailureMessage(
-  { reason, minimum }: { reason: ConversionTransactionFailureReason; minimum?: bigint },
+  failure: Extract<ConversionTransactionResult, { ok: false }>,
   amount: bigint,
   isCkb2Udt: boolean,
 ): string {
-  if (reason === "nothing-to-do") {
+  if (failure.reason === "nothing-to-do") {
     return amount === 0n ? noCollectionMessage : noRequestMessage;
   }
-  if (reason === "amount-too-small" && minimum !== undefined) {
-    return `Enter at least ${toText(roundUpToTwoDigits(minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
+  if (failure.reason === "amount-too-small") {
+    return `Enter at least ${ccc.fixedPointToString(roundUpToTwoDigits(failure.minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
   }
 
-  return conversionFailureMessages[reason];
+  return conversionFailureMessages[failure.reason];
 }
 
 /** Rounds up to two significant digits, so a minimum reads as a round figure and still holds. */

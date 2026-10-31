@@ -9,13 +9,12 @@ import {
   receiptValue,
   withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { ACCOUNT_AVAILABILITY_SUITE } from "./support/account_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe(ACCOUNT_AVAILABILITY_SUITE, () => {
+describe("projectAccountAvailability", () => {
   it("splits actionable and pending account value", () => {
     const nativeCkb = ccc.fixedPointFrom(50);
     const readyWithdrawal = withdrawalValue({

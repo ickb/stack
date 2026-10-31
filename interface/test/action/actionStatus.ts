@@ -3,13 +3,12 @@ import {
   actionLabel,
   actionMessage,
   conversionIntentText,
-  isTxInfoValid,
   timeUntilMaturity,
   unavailableConversionMessage,
   type ActionFlags,
 } from "../../src/action/actionStatus.ts";
 import { noCollectionMessage, noRequestMessage } from "../../src/action/transaction.ts";
-import { txInfoPadding, type TxInfo } from "../../src/shared/utils.ts";
+import type { SendableTx } from "../../src/shared/utils.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 
 const walletRejected = "wallet rejected";
@@ -39,21 +38,17 @@ describe("action status", () => {
     expect(
       actionMessage(txInfo, { ...flags(), amount: 0n, isTxPreviewFetching: true }),
     ).toBe("Checking converted funds...");
-    expect(actionMessage({ ...txInfo, error: "bad preview" }, flags())).toBe(
-      "⚠️ bad preview",
-    );
+    expect(actionMessage(failedTxInfo("bad preview"), flags())).toBe("⚠️ bad preview");
     // The preview lags the typed amount, so an availability error is worded for the screen.
-    expect(actionMessage({ ...txInfo, error: noCollectionMessage }, flags())).toBe(
+    expect(actionMessage(failedTxInfo(noCollectionMessage), flags())).toBe(
       `${noRequestMessage}.`,
     );
-    expect(actionMessage(txInfoPadding, flags())).toBe(`${noRequestMessage}.`);
-    expect(actionMessage({ ...txInfo, fee: 0n }, flags())).toBe(
-      "Transaction preview is not ready.",
-    );
+    expect(actionMessage(undefined, flags())).toBe(`${noRequestMessage}.`);
     expect(
       actionMessage(
         {
           ...txInfo,
+          conversionKind: "order",
           conversionNotice: {
             inputIckb: 1n * 100000000n,
             outputCkb: 2n * 100000000n,
@@ -63,11 +58,10 @@ describe("action status", () => {
         flags(),
       ),
     ).toBe(
-      "This small request converts 1 iCKB to about 2 CKB and pays 0.25 CKB for the variable time.",
+      "Converts when a bot fills it, estimated below. This small request converts 1 iCKB to about 2 CKB and pays 0.25 CKB for the variable time.",
     );
-    expect(actionMessage(txInfo, { ...flags(), amount: 0n })).toBe("");
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
-      "Also collects converted funds.",
+      "Converts at a fixed time, shown below. Also collects converted funds.",
     );
     const collectOnly = { ...txInfo, conversionKind: "collect-only" as const };
     expect(
@@ -119,15 +113,6 @@ describe("action status", () => {
     expect(conversionIntentText(kind)).toBe(expected);
   });
 
-  it("derives validity from the preview", () => {
-    const txInfo = activeTxInfo();
-
-    expect(isTxInfoValid(txInfo, true)).toBe(true);
-    expect(isTxInfoValid({ ...txInfo, fee: 0n }, true)).toBe(false);
-    expect(isTxInfoValid({ ...txInfo, error: "bad" }, true)).toBe(false);
-    expect(isTxInfoValid(txInfo, false)).toBe(false);
-  });
-
   it("waits for the destination and names an invalid one", () => {
     expect(actionMessage(activeTxInfo(), { ...flags(), hasDestination: false })).toBe(
       "Checking the destination address...",
@@ -175,7 +160,10 @@ describe("timeUntilMaturity", () => {
 
     expect(timeUntilMaturity(9n, 10n)).toBe("now");
     expect(timeUntilMaturity(10n, 10n)).toBe("now");
+    expect(timeUntilMaturity(10n + minute, 10n)).toBe("in 1 minute");
     expect(timeUntilMaturity(10n + minute + 1n, 10n)).toBe("in 2 minutes");
+    expect(timeUntilMaturity(10n + 90n * minute, 10n)).toBe("in 90 minutes");
+    expect(timeUntilMaturity(10n + 90n * minute + 1n, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("in 2 days");
   });
@@ -199,11 +187,16 @@ function flags(): ActionFlags {
   };
 }
 
-function activeTxInfo(): TxInfo {
+function activeTxInfo(): SendableTx {
   return {
+    ok: true,
     tx: txWithInput("11"),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
+    conversionKind: "direct",
   };
+}
+
+function failedTxInfo(error: string): Parameters<typeof actionMessage>[0] {
+  return { ok: false, error, estimatedMaturity: 0n };
 }

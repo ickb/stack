@@ -1,14 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
 import {
   byte32FromByte,
   headerLike,
-  pagedCells,
   script,
   StubClient,
-  transactionWithHeader,
+  type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import { DAO_OUTPUT_LIMIT, DaoOutputLimitError, depositData } from "../../src/dao.ts";
+import {
+  DAO_DEPOSIT_DATA,
+  DAO_OUTPUT_LIMIT,
+  DaoOutputLimitError,
+} from "../../src/dao.ts";
 import {
   LogicManager,
   receiptCell,
@@ -53,7 +57,7 @@ function depositCellOf(txHashByte: string, lock = logic, index = 0n): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: dao.script },
-    outputData: depositData(),
+    outputData: DAO_DEPOSIT_DATA,
   });
 }
 
@@ -65,7 +69,7 @@ function receiptFor(
   const cell = receiptCellOf(txHashByte, receiptData(1n), type);
   return {
     cell,
-    header: { header, txHash: cell.outPoint.txHash },
+    header,
     ckbValue: cell.cellOutput.capacity,
     udtValue: 0n,
   };
@@ -106,7 +110,7 @@ describe("LogicManager.deposit", () => {
     expect(tx.outputs).toHaveLength(3);
     expect(tx.outputs[0]?.type?.eq(dao.script)).toBe(true);
     expect(tx.outputs[0]?.lock.eq(logic)).toBe(true);
-    expect(tx.outputsData.slice(0, 2)).toEqual([depositData(), depositData()]);
+    expect(tx.outputsData.slice(0, 2)).toEqual([DAO_DEPOSIT_DATA, DAO_DEPOSIT_DATA]);
     expect(tx.outputs[2]?.capacity).toBe(receiptPhase2Capacity(lock));
     expect(tx.outputs[2]?.type?.eq(logic)).toBe(true);
     expect(decodeReceiptData(tx.outputsData[2] ?? "0x")).toEqual({
@@ -115,10 +119,17 @@ describe("LogicManager.deposit", () => {
     });
   });
 
-  it("leaves the transaction unchanged for non-positive deposit quantities", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().deposit(tx, 0, ccc.fixedPointFrom(100082), script("44"))).toBe(tx);
+  it("refuses a non-positive deposit quantity", () => {
+    for (const quantity of [0, -1]) {
+      expect(() =>
+        manager().deposit(
+          ccc.Transaction.default(),
+          quantity,
+          ccc.fixedPointFrom(100082),
+          script("44"),
+        ),
+      ).toThrow("iCKB deposit quantity must be a positive safe integer");
+    }
   });
 
   it("sizes receipt capacity from the actual user lock", () => {
@@ -163,7 +174,7 @@ describe("LogicManager.deposit", () => {
         ccc.fixedPointFrom(100082),
         script("44"),
       ),
-    ).toThrow("iCKB deposit quantity must be a safe integer");
+    ).toThrow("iCKB deposit quantity must be a positive safe integer");
   });
 
   it("rejects deposit quantities that cannot fit in one DAO transaction", () => {
@@ -227,20 +238,15 @@ describe("LogicManager.completeDeposit", () => {
     expect(manager().completeDeposit(tx, [])).toEqual(tx);
   });
 
-  it("rejects structural receipts for another logic script or tx hash", () => {
+  it("rejects a receipt for another logic script", () => {
     const header = headerLike({ hash: byte32FromByte("44") });
     const wrongType = receiptFor("66", header, script("77"));
-    const wrongTxHash = receiptFor("88", header);
-    wrongTxHash.header = { ...wrongTxHash.header, txHash: byte32FromByte("99") };
 
     expect(() =>
       manager().completeDeposit(ccc.Transaction.default(), [wrongType]),
     ).toThrow(
       `Receipt ${wrongType.cell.outPoint.toHex()} is not an iCKB receipt for this logic script`,
     );
-    expect(() =>
-      manager().completeDeposit(ccc.Transaction.default(), [wrongTxHash]),
-    ).toThrow("header txHash");
   });
 });
 
@@ -261,58 +267,53 @@ describe("LogicManager.receiptsFrom", () => {
     );
     const other = depositCellOf("12");
     const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+      getHeaderByNumber: async (): Promise<ccc.ClientBlockHeader> => {
         await Promise.resolve();
-        return transactionWithHeader(header);
+        return header;
       },
     });
 
-    const receipts = await manager().receiptsFrom(client, [other, receipt]);
+    const receipts = await manager().receiptsFrom(client, [
+      { cell: other, blockNumber: 1n },
+      { cell: receipt, blockNumber: 1n },
+    ]);
 
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
       ckbValue: ccc.fixedPointFrom(100082),
       udtValue: ccc.fixedPointFrom(200000),
-      header: { header, txHash: receipt.outPoint.txHash },
+      header,
     });
   });
 
-  it("reads each transaction header once, concurrently, and keeps batch order", async () => {
+  it("reads each block header once, concurrently, and keeps batch order", async () => {
     const first = receiptCellOf("11", receiptData(1n));
     const second = receiptCellOf("22", receiptData(1n));
-    const twin = ccc.Cell.from({
-      outPoint: { txHash: first.outPoint.txHash, index: 1n },
-      cellOutput: first.cellOutput,
-      outputData: first.outputData,
-    });
-    const requests: ccc.Hex[] = [];
+    const twin = receiptCellOf("33", receiptData(1n));
+    const requests: ccc.Num[] = [];
     const { promise: firstFetch, resolve: resolveFirst } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
+      Promise.withResolvers<ccc.ClientBlockHeader>();
     const { promise: secondFetch, resolve: resolveSecond } =
-      Promise.withResolvers<
-        Awaited<ReturnType<ccc.Client["getTransactionWithHeader"]>>
-      >();
+      Promise.withResolvers<ccc.ClientBlockHeader>();
     const client = new StubClient({
-      getTransactionWithHeader: async (
-        txHash,
-      ): ReturnType<ccc.Client["getTransactionWithHeader"]> => {
-        const hash = ccc.hexFrom(txHash);
-        requests.push(hash);
-        return hash === first.outPoint.txHash ? firstFetch : secondFetch;
+      getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader> => {
+        const asked = ccc.numFrom(number);
+        requests.push(asked);
+        return asked === 1n ? firstFetch : secondFetch;
       },
     });
 
-    const receiptsPromise = manager().receiptsFrom(client, [first, second, twin]);
+    const receiptsPromise = manager().receiptsFrom(client, [
+      { cell: first, blockNumber: 1n },
+      { cell: second, blockNumber: 2n },
+      { cell: twin, blockNumber: 1n },
+    ]);
     await vi.waitFor(() => {
-      expect(requests).toEqual([first.outPoint.txHash, second.outPoint.txHash]);
+      expect(requests).toEqual([1n, 2n]);
     });
-    resolveSecond(transactionWithHeader(header));
+    resolveSecond(header);
     await Promise.resolve();
-    resolveFirst(transactionWithHeader(header));
+    resolveFirst(header);
 
     const receipts = await receiptsPromise;
 
@@ -324,25 +325,23 @@ describe("LogicManager.receiptsFrom", () => {
   it("rejects a malformed receipt payload with out point context", () => {
     const cell = receiptCellOf("11", "0x12");
 
-    expect(() => receiptCell(cell, { header, txHash: cell.outPoint.txHash })).toThrow(
+    expect(() => receiptCell(cell, header)).toThrow(
       `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
     );
   });
 
-  it("rejects a missing transaction header", async () => {
+  it("rejects a missing block header", async () => {
     const receipt = receiptCellOf("11", receiptData(1n));
     const client = new StubClient({
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+      getHeaderByNumber: async (): Promise<undefined> => {
         await Promise.resolve();
         return undefined;
       },
     });
 
-    await expect(manager().receiptsFrom(client, [receipt])).rejects.toThrow(
-      `Header not found for txHash ${receipt.outPoint.txHash}`,
-    );
+    await expect(
+      manager().receiptsFrom(client, [{ cell: receipt, blockNumber: 7n }]),
+    ).rejects.toThrow("Header not found for block number 7");
   });
 });
 
@@ -357,60 +356,56 @@ describe("LogicManager.findDeposits", () => {
   it("scans the logic lock for DAO deposits and values them at their deposit header", async () => {
     const deposit = depositCellOf("44");
     const wrongLock = depositCellOf("55", script("77"));
-    const queries: ccc.ClientIndexerSearchKeyLike[] = [];
+    const queries: cccA.JsonRpcIndexerSearchKey[] = [];
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells((query) => {
+      cells: (query): readonly StubCell[] => {
         queries.push(query);
-        return [deposit, wrongLock];
-      }),
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
+        return [deposit, wrongLock].map((cell) => ({ cell, blockNumber: 1n }));
+      },
+      getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader | undefined> => {
         await Promise.resolve();
-        return transactionWithHeader(depositHeader);
+        return ccc.numFrom(number) === 1n ? depositHeader : undefined;
       },
     });
 
     const deposits = await manager().findDeposits(client, tip);
 
     expect(queries).toHaveLength(1);
-    expect(ccc.Script.from(queries[0]?.script ?? logic).eq(logic)).toBe(true);
+    expect(queries[0]?.script).toEqual(cccA.JsonRpcTransformers.scriptFrom(logic));
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
       cell: deposit,
-      headers: [
-        { header: depositHeader, txHash: deposit.outPoint.txHash },
-        { header: tip },
-      ],
-      interests: ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
+      header: depositHeader,
       udtValue: ickbValue(deposit.capacityFree, depositHeader),
     });
     expect(deposits[0]?.ckbValue).toBe(
-      deposit.cellOutput.capacity + (deposits[0]?.interests ?? 0n),
+      deposit.cellOutput.capacity +
+        ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
     );
     expect(deposits[0]?.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, tip))).toBe(
       true,
     );
   });
 
-  it("reads one header per deposit transaction", async () => {
+  it("reads one header per deposit block", async () => {
     const first = depositCellOf("44", logic, 0n);
-    const second = depositCellOf("44", logic, 1n);
-    let transactionCalls = 0;
+    const second = depositCellOf("45", logic, 0n);
+    let headerCalls = 0;
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells([first, second]),
-      getTransactionWithHeader: async (): ReturnType<
-        ccc.Client["getTransactionWithHeader"]
-      > => {
-        transactionCalls += 1;
+      cells: (): readonly StubCell[] => [first, second],
+      getHeaderByNumber: async (): Promise<ccc.ClientBlockHeader> => {
+        headerCalls += 1;
         await Promise.resolve();
-        return transactionWithHeader(depositHeader);
+        return depositHeader;
       },
     });
 
     const deposits = await manager().findDeposits(client, tip);
 
-    expect(transactionCalls).toBe(1);
-    expect(deposits.map((deposit) => deposit.cell.outPoint.index)).toEqual([0n, 1n]);
+    expect(headerCalls).toBe(1);
+    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
+      first.outPoint.txHash,
+      second.outPoint.txHash,
+    ]);
   });
 });

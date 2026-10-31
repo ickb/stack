@@ -1,20 +1,13 @@
-import { hasTransactionActivity } from "@ickb/sdk";
+import { ccc } from "@ckb-ccc/ccc";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { L1StateType } from "../app/queries.ts";
-import {
-  errorMessageOf,
-  toText,
-  txInfoPadding,
-  type TxInfo,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import { ActionLayout } from "./ActionLayout.tsx";
 import {
   actionLabel,
   actionMessage,
   confirmPreviewMessage,
-  isTxInfoValid,
   timeUntilMaturity,
   unavailableConversionMessage,
 } from "./actionStatus.ts";
@@ -22,7 +15,6 @@ import {
   retryConfirmation,
   transact,
   type RefreshedTransactionPreview,
-  type RefreshedTransactionState,
   type TransactionCallbacks,
 } from "./actionTransaction.ts";
 import type { Destination } from "./destination.ts";
@@ -39,11 +31,8 @@ type ActionProps = Readonly<{
   amountError: string;
   destination: Destination | undefined;
   destinationError: string;
-  refreshPreview: (
-    isCkb2Udt: boolean,
-    amount: bigint,
-    destination: Destination,
-  ) => Promise<RefreshedTransactionState>;
+  /** Refetches the wallet's state for a send, throwing when it cannot. */
+  refreshState: () => Promise<L1StateType>;
   freeze: (value: boolean) => void;
   formReset: () => void;
   walletConfig: WalletConfig;
@@ -61,7 +50,7 @@ export default function Action({
   amountError,
   destination,
   destinationError,
-  refreshPreview,
+  refreshState,
   freeze,
   formReset,
   walletConfig,
@@ -121,24 +110,26 @@ export default function Action({
     return missingStateActionLayout(stateError, isStateFetching, retryState);
   }
 
-  const txInfo = frozenPreview?.txInfo ?? txPreviewQuery.data ?? txInfoPadding;
+  const preview = frozenPreview?.txInfo ?? txPreviewQuery.data;
   const isFetching = isStateFetching || txPreviewQuery.isFetching;
-  const isValid = isTxInfoValid(txInfo, hasTransactionActivity(txInfo.tx));
-  // A move leaves the converting positions here, so their dates do not apply to it.
-  const maturity =
-    txInfo.move === undefined
-      ? timeUntilMaturity(
-          txInfo.estimatedMaturity,
-          frozenPreview?.tipTimestamp ?? l1State.system.tip.timestamp,
-        )
-      : "now";
-  const { hasCollectable, hasConverting } = sampled ?? l1State;
+  const isValid = preview?.ok === true;
+  const { hasCollectable, hasConverting, system } = sampled ?? l1State;
+  // The date also covers what is converting, which a preview with nothing to sign still
+  // carries, so it shows whenever something is. A move leaves the converting positions
+  // here, so their dates do not apply to it.
+  let maturity = "...";
+  if (preview !== undefined && (isValid || hasConverting)) {
+    maturity =
+      preview.ok && preview.move !== undefined
+        ? "now"
+        : timeUntilMaturity(preview.estimatedMaturity, system.tip.timestamp);
+  }
   const actionText =
     transactionHash === undefined
       ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
       : confirmationLabel(isConfirming);
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
-  const messageText = actionMessage(txInfo, {
+  const messageText = actionMessage(preview, {
     amount,
     amountError,
     destinationError,
@@ -178,9 +169,8 @@ export default function Action({
           isCkb2Udt,
           amount,
           destination,
-          refreshPreview,
+          refreshState,
           freeze,
-          unavailableMessage,
           callbacks: {
             freezePreview,
             setMessage,
@@ -194,10 +184,8 @@ export default function Action({
         });
       }}
       message={messageText}
-      // The fee describes a transaction; the date also covers what is converting, which a
-      // preview with nothing to sign still carries, so it shows whenever something is.
-      fee={isValid ? `${toText(txInfo.fee)} CKB` : "..."}
-      maturity={txInfo !== txInfoPadding && (isValid || hasConverting) ? maturity : "..."}
+      fee={isValid ? `${ccc.fixedPointToString(preview.fee)} CKB` : "..."}
+      maturity={maturity}
     />
   );
 }
@@ -233,18 +221,16 @@ function startAttempt({
   isCkb2Udt,
   amount,
   destination,
-  refreshPreview,
+  refreshState,
   freeze,
-  unavailableMessage,
   callbacks,
 }: Readonly<{
   runAttempt: RunAttempt;
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   destination: Destination | undefined;
-  refreshPreview: ActionProps["refreshPreview"];
+  refreshState: ActionProps["refreshState"];
   freeze: (value: boolean) => void;
-  unavailableMessage: string;
   callbacks: TransactionCallbacks;
 }>): void {
   const current = callbacks.pendingStore.current;
@@ -263,10 +249,11 @@ function startAttempt({
         lockIntent: () => {
           freeze(true);
         },
-        refreshPreview: async (): Promise<RefreshedTransactionState> =>
-          refreshPreview(isCkb2Udt, amount, destination),
+        refreshState,
+        isCkb2Udt,
+        amount,
+        destination,
         signal,
-        unavailableMessage,
       }),
     );
   }

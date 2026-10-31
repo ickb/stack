@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_ORDER_FEE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
-import { convert } from "../../../src/udt.ts";
+import { ckbFromUdt } from "../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
 export type Kind = "order" | "conversion";
@@ -26,8 +26,7 @@ export interface Budgets {
   ratio: ExchangeRatio;
 }
 
-export const RANDOM_BITS = 52n;
-const CKB = ccc.fixedPointFrom(1);
+const RANDOM_BITS = 52n;
 // Three kinds of order per conversion: orders are what the bot matches, conversions are
 // what it competes with.
 const ORDER_WEIGHT = 3;
@@ -95,7 +94,7 @@ function drawConversionDirection(
   random: () => number,
 ): ConversionDirection | undefined {
   const ckbWeight = budgets.ckb;
-  const ickbWeight = convert(false, budgets.ickb, budgets.ratio);
+  const ickbWeight = ckbFromUdt(budgets.ickb, budgets.ratio);
   const total = ckbWeight + ickbWeight;
   if (total <= 0n) {
     return undefined;
@@ -104,7 +103,7 @@ function drawConversionDirection(
 }
 
 function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigint {
-  if (isMax || budget <= CKB) {
+  if (isMax || budget <= ccc.One) {
     return budget;
   }
   const bucket = pickWeighted(
@@ -121,7 +120,7 @@ function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigin
   if (bucket === "max") {
     return budget;
   }
-  return logUniform(CKB, budget, random);
+  return logUniform(ccc.One, budget, random);
 }
 
 /** Uniform over bit lengths, then uniform within the chosen length, clamped to the range. */

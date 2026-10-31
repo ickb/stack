@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   OrderConversionRepresentabilityError,
@@ -7,7 +8,6 @@ import {
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { ORDER_MATCHER_SUITE } from "../fixtures/order_constants.ts";
 import {
   exactAdjustedConversion,
   fullMatchOutput,
@@ -15,7 +15,10 @@ import {
   resolvedOrderGroup,
   resolvedOrderGroups,
 } from "./support/order_match_helpers.ts";
-import { byte32FromByte, makeOrderCell } from "./support/order_order_helpers.ts";
+import { makeOrderCell } from "./support/order_order_helpers.ts";
+
+const ORDER_MATCHER_SUITE = "OrderMatcher";
+
 describe(ORDER_MATCHER_SUITE, () => {
   it("drops unmatchable orders before returning sorted matchers", () => {
     const validA = makeOrderCell({
@@ -117,7 +120,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         { ckbValue: 0n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -128,7 +131,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
         { ckbValue: 2n ** 80n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -139,7 +142,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 96n }),
         { ckbValue: 1n << 96n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });
@@ -152,7 +155,7 @@ describe(ORDER_MATCHER_SUITE, () => {
         true,
         Ratio.from({ ckbScale: maxUint64 * 2n + 1n, udtScale: 2n }),
         { ckbValue: 2n, udtValue: 0n },
-        { fee: 0n },
+        { fee: 0n, feeBase: 100000n },
       ),
     ).toThrow(OrderConversionRepresentabilityError);
   });

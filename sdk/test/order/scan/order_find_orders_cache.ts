@@ -2,18 +2,15 @@ import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
   committedTransactionResponse,
-  pagedCells,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
 import { OrderData } from "../../../src/order/order_data.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { Relative } from "../../../src/order/relative.ts";
-import {
-  ORDER_MANAGER_FIND_ORDERS_SUITE,
-  type GetTransactionReturn,
-} from "../fixtures/order_constants.ts";
+import type { GetTransactionReturn } from "../fixtures/order_constants.ts";
 import {
   directionalInfo,
   makeOrderCell,
@@ -25,6 +22,8 @@ import {
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
+
+const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin skips parseable non-mint origins in the master transaction", async () => {
@@ -146,9 +145,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     let fetched = false;
     const client = new StubClient({
       cache: new TransactionResponseCache(originMaster.txHash, cachedResponse),
-      findCellsPagedNoCache: pagedCells((query) => [
-        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
-      ]),
+      cells: (query): readonly StubCell[] => [
+        query.script_type === "lock" ? liveOrder.cell : liveMaster,
+      ],
       getTransaction: async (): GetTransactionReturn => {
         fetched = true;
         await Promise.resolve();
@@ -160,33 +159,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(groups).toHaveLength(1);
     expect(fetched).toBe(false);
-  });
-
-  it("re-reads an origin the cache holds without a block", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
-    const originMaster = { txHash: byte32FromByte("69"), index: 1n };
-    const { origin, liveOrder } = linkedOriginAndOrder({
-      originMaster,
-      orderScript,
-      liveOrderByte: "70",
-    });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
-    const tx = transactionWithOutputs([origin.cell, liveMaster]);
-    const client = new StubClient({
-      cache: new TransactionResponseCache(
-        originMaster.txHash,
-        ccc.ClientTransactionResponse.from({ transaction: tx, status: "pending" }),
-      ),
-      findCellsPagedNoCache: pagedCells((query) => [
-        query.scriptType === "lock" ? liveOrder.cell : liveMaster,
-      ]),
-      getTransaction: async (): GetTransactionReturn => {
-        await Promise.resolve();
-        return committedTransactionResponse(tx, { blockNumber: 77n });
-      },
-    });
-
-    expect((await manager.findOrders(client))[0]?.blockNumber).toBe(77n);
   });
 });
 
@@ -315,9 +287,8 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [firstOrder.cell, secondOrder.cell] : [liveMaster],
-      ),
+      cells: (query): readonly StubCell[] =>
+        query.script_type === "lock" ? [firstOrder.cell, secondOrder.cell] : [liveMaster],
       getTransaction: async (): GetTransactionReturn => {
         await Promise.resolve();
         return transactionResponse(tx);

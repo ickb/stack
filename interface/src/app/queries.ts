@@ -1,7 +1,5 @@
 import {
   ickbExchangeRatio,
-  isRefused,
-  isStale,
   projectConversionTransactionContext,
   Ratio,
   WALLET_LOCK_UP,
@@ -108,15 +106,12 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     walletConfig.accountLocks,
     WALLET_LOCK_UP,
   );
-  const { system, user, account } = sdkState;
-  // Collect fulfilled orders, buys refused by today's matcher and orders past the age
-  // cutoff. Other live orders stay: DAO growth can make a waiting sell profitable later.
-  const collectable = (group: (typeof user.orders)[number]): boolean =>
-    group.order.isFulfilled() || isRefused(group, system) || isStale(group, system.tip);
-  const { projection, context } = projectConversionTransactionContext(system, account, {
-    available: user.orders.filter(collectable),
-    pending: user.orders.filter((group) => !collectable(group)),
-  });
+  const { system, userOrders, account } = sdkState;
+  const { projection, context } = projectConversionTransactionContext(
+    system,
+    account,
+    userOrders,
+  );
 
   return {
     projection,

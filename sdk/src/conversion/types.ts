@@ -1,12 +1,12 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { LockUpPolicy } from "../dao.ts";
+import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import type { Info } from "../order/info.ts";
 import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
-import type { IckbUdt } from "../udt.ts";
+import type { IckbUdt, ProtocolCell } from "../udt.ts";
 import type { ValueComponents } from "../utils/utils.ts";
 
 /**
@@ -88,13 +88,8 @@ export interface ConversionNotice {
   incentiveCkb: bigint;
 }
 
-/**
- * High-level conversion composition used by a built transaction.
- */
-export interface ConversionMetadata {
-  /** Composition category selected for the built conversion. */
-  kind: "direct" | "order" | "direct-plus-order" | "collect-only";
-}
+/** Composition category selected for a built conversion. */
+export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";
 
 /**
  * Result of attempting to build a conversion transaction.
@@ -107,7 +102,7 @@ export type ConversionTransactionResult =
       /** Estimated maturity timestamp for the conversion result. */
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */
-      conversion: ConversionMetadata;
+      conversionKind: ConversionKind;
       /** Optional notice about the selected path. */
       conversionNotice?: ConversionNotice;
       /**
@@ -119,19 +114,25 @@ export type ConversionTransactionResult =
        * The epoch the transaction must be broadcast before for its withdrawal requests to
        * claim at their sampled dates (`system.lockUp`); absent when it requests none.
        */
-      broadcastBefore?: ccc.Epoch;
+      broadcastBefore?: BroadcastDeadline;
+    }
+  | {
+      ok: false;
+      reason: "amount-too-small";
+      /** Best available maturity estimate from the input context. */
+      estimatedMaturity: bigint;
+      /**
+       * The smallest amount this direction accepts at the current fee rate, in the
+       * request's unit (CKB shannons or iCKB), so a caller can name it.
+       */
+      minimum: bigint;
     }
   | {
       ok: false;
       /** Machine-readable failure reason. */
-      reason: ConversionTransactionFailureReason;
+      reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">;
       /** Best available maturity estimate from the input context. */
       estimatedMaturity: bigint;
-      /**
-       * For `amount-too-small`: the smallest amount this direction accepts at the current fee
-       * rate, in the request's unit (CKB shannons or iCKB), so a caller can name it.
-       */
-      minimum?: bigint;
     };
 
 /**
@@ -149,6 +150,20 @@ export interface CompleteIckbTransactionOptions {
 
   /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
   cells: ccc.Cell[];
+
+  /**
+   * The receipts and iCKB deposits the transaction may spend, valued by the state read;
+   * any superset works, since only the spent ones are summed.
+   */
+  protocolCells: readonly ProtocolCell[];
+
+  /**
+   * The header the plan was priced at, the state read's `system.tip`, named as a header
+   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
+   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
+   * transaction.
+   */
+  tip: ccc.ClientBlockHeader;
 }
 
 /**
@@ -244,7 +259,7 @@ export interface ConversionTransactionContextProjection {
 export interface SystemState {
   /** The fee rate for transactions. */
   feeRate: ccc.Num;
-  /** Sampled tip used for this L1 scan. It may be stale after scans complete. */
+  /** The sampled tip's parent, this L1 scan's anchor. It may be stale after scans complete. */
   tip: ccc.ClientBlockHeader;
   /** The exchange ratio between CKB and UDT. */
   exchangeRatio: Ratio;

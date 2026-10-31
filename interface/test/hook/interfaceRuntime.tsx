@@ -4,6 +4,7 @@ import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { childElements, elementProps, firstElement } from "../support/react.ts";
+import { renderHook } from "../support/renderHook.ts";
 import {
   quoteStateQuery,
   rootConfig,
@@ -22,6 +23,7 @@ import {
   testnetClient,
   useQuoteState,
   walletLabel,
+  type RootConfig,
 } from "./fixtures/modules.ts";
 
 describe("hook-based interface runtime", () => {
@@ -76,20 +78,26 @@ describe("hook-based interface runtime", () => {
     expect(walletLabel(undefined, undefined)).toBe("Wallet");
   });
 
-  it("loads quote state only for supported root configs", () => {
+  it("loads quote state only for supported root configs", async () => {
     queryMock.result = { isError: true };
-    expect(useQuoteState(undefined)).toBe(queryMock.result);
+    const { result, rerender, unmount } = await renderHook(
+      (config: RootConfig | undefined) => useQuoteState(config),
+      undefined,
+    );
+    expect(result.current).toBe(queryMock.result);
     expect(quoteStateOptions().queryFn).toBe(skipToken);
     expect(liveQuoteStatus(quoteStateQuery(queryMock.result))).toBe(
       "Unable to load live exchange rate.",
     );
 
     queryMock.result = { isError: false };
-    expect(useQuoteState(rootConfig("testnet"))).toBe(queryMock.result);
+    await rerender(rootConfig("testnet"));
+    expect(result.current).toBe(queryMock.result);
     expect(quoteStateOptions().queryFn).not.toBe(skipToken);
     expect(liveQuoteStatus(quoteStateQuery(queryMock.result))).toBe(
       "Loading live exchange rate...",
     );
+    await unmount();
   });
 });
 

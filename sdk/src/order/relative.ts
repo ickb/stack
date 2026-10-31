@@ -43,6 +43,9 @@ export interface Relative {
   validate(): void;
 }
 
+// An interface, this class expression and a typed const rather than one plain class: a
+// class extending `ccc.Entity.Base<...>()` emits an unexported `*_base` declaration, which
+// API Extractor's ae-forgotten-export rejects (tried 2026-10-30).
 // eslint-disable-next-line @typescript-eslint/no-shadow -- Preserve the runtime constructor name.
 const RelativeImplementation = class Relative extends RelativeBase {
   static {

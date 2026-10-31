@@ -3,12 +3,12 @@ import {
   TransactionBroadcastError,
   TransactionExpiredError,
   TransactionWaitError,
-  hasTransactionActivity,
   signAndSendTransaction,
   waitTransaction,
 } from "@ickb/sdk";
-import { l1StateQueryKey } from "../app/queries.ts";
-import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
+import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
+import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
+import type { Destination } from "./destination.ts";
 import {
   clearPendingTransaction,
   submitPendingTransaction,
@@ -17,20 +17,8 @@ import {
 
 export const confirmationWindowMs = 60_000;
 
-interface RefreshedTransactionStateMetadata {
-  readonly stateId: string;
-  readonly tipTimestamp: bigint;
-  readonly hasCollectable: boolean;
-  readonly hasConverting: boolean;
-}
-
-export interface RefreshedTransactionState extends RefreshedTransactionStateMetadata {
-  readonly build: () => Promise<TxInfo>;
-}
-
-export interface RefreshedTransactionPreview extends RefreshedTransactionStateMetadata {
-  readonly txInfo: TxInfo;
-}
+/** The fresh state a send was built from, with the transaction it built. */
+export type RefreshedTransactionPreview = L1StateType & { readonly txInfo: SendableTx };
 
 export interface TransactionCallbacks {
   readonly freezePreview: (preview: RefreshedTransactionPreview | undefined) => void;
@@ -45,8 +33,10 @@ export interface TransactionCallbacks {
 
 interface TransactParams extends TransactionCallbacks {
   readonly lockIntent: () => void;
-  readonly refreshPreview: () => Promise<RefreshedTransactionState>;
-  readonly unavailableMessage: string;
+  readonly refreshState: () => Promise<L1StateType>;
+  readonly isCkb2Udt: boolean;
+  readonly amount: bigint;
+  readonly destination: Destination;
   readonly signal: AbortSignal;
   readonly yieldForPreview?: () => Promise<void>;
 }
@@ -56,18 +46,13 @@ interface RetryConfirmationParams extends TransactionCallbacks {
   readonly signal: AbortSignal;
 }
 
-class AttemptAbortedError extends Error {
-  constructor() {
-    super("Transaction attempt owner unmounted");
-    this.name = "AttemptAbortedError";
-  }
-}
-
 /** Sends a valid preview once, then observes it for one finite confirmation window. */
 export async function transact({
   lockIntent,
-  refreshPreview,
-  unavailableMessage,
+  refreshState,
+  isCkb2Udt,
+  amount,
+  destination,
   signal,
   yieldForPreview = yieldForPreviewRender,
   ...callbacks
@@ -75,19 +60,24 @@ export async function transact({
   let txHash: ccc.Hex | undefined;
 
   try {
-    assertCurrent(signal);
+    signal.throwIfAborted();
     lockIntent();
     callbacks.setFailure("");
     callbacks.setIsPreparing(true);
     callbacks.setMessage("Refreshing transaction preview...");
-    const { build, ...previewState } = await abortable(refreshPreview(), signal);
-    assertCurrent(signal);
-    const txInfo = await abortable(build(), signal);
-    assertCurrent(signal);
-    callbacks.freezePreview({ txInfo, ...previewState });
-    assertBroadcastable(txInfo, unavailableMessage);
+    const state = await abortable(refreshState(), signal);
+    signal.throwIfAborted();
+    const txInfo = await abortable(
+      state.txBuilder(isCkb2Udt, amount, destination),
+      signal,
+    );
+    signal.throwIfAborted();
+    if (!txInfo.ok) {
+      throw new Error(txInfo.error);
+    }
+    callbacks.freezePreview({ ...state, txInfo });
     await abortable(yieldForPreview(), signal);
-    assertCurrent(signal);
+    signal.throwIfAborted();
     callbacks.setIsPreparing(false);
     callbacks.setIsConfirming(true);
     let lostResponse = false;
@@ -106,17 +96,17 @@ export async function transact({
       txHash = error.txHash;
       lostResponse = true;
     }
-    assertCurrent(signal);
+    signal.throwIfAborted();
     callbacks.setMessage(
       lostResponse
         ? `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`
         : `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    assertCurrent(signal);
+    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
-    if (signal.aborted || error instanceof AttemptAbortedError) {
+    if (signal.aborted) {
       return;
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash));
@@ -141,7 +131,7 @@ export async function transact({
 function sendAndStoreTransaction(
   pendingStore: PendingTransactionStore,
   walletConfig: WalletConfig,
-  txInfo: TxInfo,
+  txInfo: SendableTx,
 ): Promise<ccc.Hex> {
   return submitPendingTransaction(
     pendingStore,
@@ -150,6 +140,7 @@ function sendAndStoreTransaction(
       signAndSendTransaction(
         walletConfig.signer,
         txInfo.tx,
+        txInfo.fee,
         recordTxHash,
         txInfo.broadcastBefore,
       ),
@@ -169,17 +160,17 @@ export async function retryConfirmation({
   ...callbacks
 }: RetryConfirmationParams): Promise<void> {
   try {
-    assertCurrent(signal);
+    signal.throwIfAborted();
     callbacks.setFailure("");
     callbacks.setIsConfirming(true);
     callbacks.setMessage(
       `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    assertCurrent(signal);
+    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
-    if (signal.aborted || error instanceof AttemptAbortedError) {
+    if (signal.aborted) {
       return;
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash));
@@ -203,19 +194,7 @@ export async function waitForConfirmation(
   signal: AbortSignal,
 ): Promise<void> {
   await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
-  assertCurrent(signal);
-}
-
-function assertBroadcastable(txInfo: TxInfo, unavailableMessage: string): void {
-  if (txInfo.error !== "") {
-    throw new Error(txInfo.error);
-  }
-  if (!hasTransactionActivity(txInfo.tx)) {
-    throw new Error(unavailableMessage);
-  }
-  if (txInfo.fee <= 0n) {
-    throw new Error("Transaction fee is missing or invalid");
-  }
+  signal.throwIfAborted();
 }
 
 function releaseTransaction({ freezePreview }: TransactionCallbacks): void {
@@ -232,7 +211,7 @@ async function completeConfirmedTransaction(
   }: TransactionCallbacks,
   signal: AbortSignal,
 ): Promise<void> {
-  assertCurrent(signal);
+  signal.throwIfAborted();
   setMessage("Transaction confirmed.");
   await abortable(
     walletConfig.queryClient.invalidateQueries({
@@ -241,24 +220,18 @@ async function completeConfirmedTransaction(
     }),
     signal,
   );
-  assertCurrent(signal);
+  signal.throwIfAborted();
   formReset();
   clearPendingTransaction(pendingStore);
   freezePreview(undefined);
   setMessage("");
 }
 
-function assertCurrent(signal: AbortSignal): void {
-  if (signal.aborted) {
-    throw new AttemptAbortedError();
-  }
-}
-
 async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  assertCurrent(signal);
+  signal.throwIfAborted();
   const aborted = Promise.withResolvers<T>();
   const onAbort = (): void => {
-    aborted.reject(new AttemptAbortedError());
+    aborted.reject(signal.reason);
   };
   signal.addEventListener("abort", onAbort, { once: true });
   let result: T;

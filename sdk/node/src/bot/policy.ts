@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { CKB_RESERVE } from "../../../src/constants.ts";
 import {
   ringSegmentIndex,
   ringSegments,
@@ -9,6 +8,7 @@ import {
 import type { LockUpPolicy } from "../../../src/dao.ts";
 import { readyDeposits, type IckbDepositCell } from "../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { CKB_RESERVE } from "../shared/reserve.ts";
 
 // The inventory band the pre-rewrite bot ran for a year: refill under 2,000 iCKB,
 // withdraw above 120,000 keeping 20,000, so a refill lands far below the withdrawal
@@ -102,7 +102,7 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
  * Whether the ring segment containing the tip lacks coverage: under half its equal share
  * of the pool's iCKB. The full public pool shapes the ring, not only ready deposits.
  */
-export function ringCoverage(
+function ringCoverage(
   poolDeposits: readonly IckbDepositCell[],
   tip: ccc.ClientBlockHeader,
 ): { needsSeed: boolean; summary: RingSummary } {

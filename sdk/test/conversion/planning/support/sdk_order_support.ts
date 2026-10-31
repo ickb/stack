@@ -1,9 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   committedTransactionResponse,
-  pagedCells,
+  FRESH_BLOCK,
   script,
   StubClient,
+  type StubCell,
 } from "@ickb/testkit";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
@@ -73,7 +74,7 @@ class ProjectionOrderGroup extends OrderGroup {
       ),
       order,
       order,
-      projection.blockNumber,
+      projection.blockNumber ?? FRESH_BLOCK,
     );
     this.projection = projection;
   }
@@ -148,7 +149,7 @@ export function makeOrderGroup(options: {
   const origin = OrderCell.mustFrom(originCell);
 
   return {
-    group: new OrderGroup(new MasterCell(masterCell), order, origin),
+    group: new OrderGroup(new MasterCell(masterCell), order, origin, FRESH_BLOCK),
     orderCell,
     masterCell,
     originCell,
@@ -165,9 +166,9 @@ export async function resolveOrderGroupFixture(
     originTransaction.outputsData.push(cell.outputData);
   }
   const client = new StubClient({
-    findCellsPagedNoCache: pagedCells((query) => [
-      query.scriptType === "lock" ? cells.orderCell : cells.masterCell,
-    ]),
+    cells: (query): readonly StubCell[] => [
+      query.script_type === "lock" ? cells.orderCell : cells.masterCell,
+    ],
     getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return txHash === cells.masterCell.outPoint.txHash

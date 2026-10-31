@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, pagedCells, StubClient } from "@ickb/testkit";
+import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   directionalInfo,
@@ -19,9 +19,8 @@ describe("OrderManager.findOrders missing master", () => {
       outPoint: { txHash: byte32FromByte("55"), index: 0n },
     });
     const client = new StubClient({
-      findCellsPagedNoCache: pagedCells((query) =>
-        query.scriptType === "lock" ? [order.cell] : [],
-      ),
+      cells: (query): readonly StubCell[] =>
+        query.script_type === "lock" ? [order.cell] : [],
       getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
         await Promise.resolve();
         return transactionResponse(ccc.Transaction.default());

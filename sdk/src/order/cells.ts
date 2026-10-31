@@ -2,10 +2,6 @@ import type { ccc } from "@ckb-ccc/core";
 import type { ValueComponents } from "../utils/utils.ts";
 import { OrderData } from "./order_data.ts";
 
-// The resolver's own group, keyed by its order cell: matching and transactions use this
-// parse, so a caller's own wrapper is only ever a key into it.
-const resolvedOrderGroups = new WeakMap<ccc.Cell, OrderGroup>();
-
 /**
  * Represents a parsed order cell on the blockchain.
  *
@@ -114,15 +110,13 @@ export class OrderCell implements ValueComponents {
       : 0n;
 
     const absTotal = absoluteOrderTotal(ckb2UdtValue, udt2CkbValue, data.info);
-    const absProgress = absoluteOrderProgress({
-      absTotal,
-      ckbUnoccupied,
-      isCkb2Udt,
-      isDualRatio,
-      udtScale: ckbToUdt.udtScale,
-      udtValue,
-      udtToCkbCkbScale: udtToCkb.ckbScale,
-    });
+    // What the order already holds of its output side; a dual-ratio order is complete.
+    let absProgress = ckbUnoccupied * udtToCkb.ckbScale;
+    if (isDualRatio) {
+      absProgress = absTotal;
+    } else if (isCkb2Udt) {
+      absProgress = udtValue * ckbToUdt.udtScale;
+    }
 
     return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress });
   }
@@ -168,56 +162,25 @@ export class OrderCell implements ValueComponents {
   }
 
   /**
-   * Validates a descendant order against this origin order.
+   * Whether `descendant` can be this origin order's live continuation.
    *
    * @remarks
    * This confusion-attack guard requires the same order script, UDT type,
    * master, and info, while forbidding lower total value or lower progress.
    * See {@link https://github.com/ickb/whitepaper/issues/19}.
    */
-  public validate(descendant: OrderCell): void {
-    if (!this.data.isMint()) {
-      throw new Error("Origin is not a mint order");
-    }
-
-    if (!this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock)) {
-      throw new Error("Order script different");
-    }
-
-    const udt = this.cell.cellOutput.type;
-    if (udt === undefined || descendant.cell.cellOutput.type?.eq(udt) !== true) {
-      throw new Error("UDT type is different");
-    }
-
-    if (!descendant.getMaster().eq(this.getMaster())) {
-      throw new Error("Master is different");
-    }
-
-    if (!this.data.info.eq(descendant.data.info)) {
-      throw new Error("Info is different");
-    }
-
-    if (this.absTotal > descendant.absTotal) {
-      throw new Error("Total value is lower than the original one");
-    }
-
-    if (this.absProgress > descendant.absProgress) {
-      throw new Error("Progress is lower than the original one");
-    }
-  }
-
-  /**
-   * Checks if the descendant order is valid against this order.
-   * @param descendant - The descendant order to validate.
-   * @returns True if the descendant is valid, otherwise false.
-   */
   public isValid(descendant: OrderCell): boolean {
-    try {
-      this.validate(descendant);
-      return true;
-    } catch {
-      return false;
-    }
+    const udt = this.cell.cellOutput.type;
+    return (
+      this.data.isMint() &&
+      this.cell.cellOutput.lock.eq(descendant.cell.cellOutput.lock) &&
+      udt !== undefined &&
+      descendant.cell.cellOutput.type?.eq(udt) === true &&
+      descendant.getMaster().eq(this.getMaster()) &&
+      this.data.info.eq(descendant.data.info) &&
+      this.absTotal <= descendant.absTotal &&
+      this.absProgress <= descendant.absProgress
+    );
   }
 
   /**
@@ -272,24 +235,6 @@ function absoluteOrderTotal(
   );
 }
 
-function absoluteOrderProgress(options: {
-  absTotal: bigint;
-  ckbUnoccupied: bigint;
-  isCkb2Udt: boolean;
-  isDualRatio: boolean;
-  udtScale: bigint;
-  udtToCkbCkbScale: bigint;
-  udtValue: bigint;
-}): bigint {
-  if (options.isDualRatio) {
-    return options.absTotal;
-  }
-  if (options.isCkb2Udt) {
-    return options.udtValue * options.udtScale;
-  }
-  return options.ckbUnoccupied * options.udtToCkbCkbScale;
-}
-
 function betterOrderResolution(
   current: OrderResolution | undefined,
   candidate: OrderCell,
@@ -325,18 +270,9 @@ function compareOrderScore(left: OrderCell, right: OrderCell): number {
 /**
  * Represents a master cell
  */
-export class MasterCell implements ValueComponents {
+export class MasterCell {
   /** Raw live master cell that anchors an order group. */
   public readonly cell: ccc.Cell;
-
-  /**
-   * Gets the UDT value of the cell.
-   *
-   * For a Master Cell, the UDT amount is always zero.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint` (0n).
-   */
-  public readonly udtValue = 0n;
 
   /**
    * Creates an instance of MasterCell.
@@ -346,28 +282,12 @@ export class MasterCell implements ValueComponents {
     this.cell = cell;
   }
 
-  /**
-   * Gets the CKB value of the cell.
-   *
-   * @returns The total CKB amount as a `ccc.FixedPoint`.
-   */
-  public get ckbValue(): ccc.FixedPoint {
-    return this.cell.cellOutput.capacity;
-  }
-
-  /**
-   * Validates the MasterCell against an OrderCell.
-   * @param order - The OrderCell to validate against.
-   * @throws Error if the order script is different or if the master is different.
-   */
-  public validate(order: OrderCell): void {
-    if (this.cell.cellOutput.type?.eq(order.cell.cellOutput.lock) !== true) {
-      throw new Error("Order script different");
-    }
-
-    if (!order.getMaster().eq(this.cell.outPoint)) {
-      throw new Error("Master is different");
-    }
+  /** Whether this master anchors `order`: its type is the order script and the order names it. */
+  public anchors(order: OrderCell): boolean {
+    return (
+      this.cell.cellOutput.type?.eq(order.cell.cellOutput.lock) === true &&
+      order.getMaster().eq(this.cell.outPoint)
+    );
   }
 }
 
@@ -381,21 +301,21 @@ export class OrderGroup implements ValueComponents {
   public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
   public readonly origin: OrderCell;
-  /** The block that committed the origin, when known: how long the order has been on the book. */
-  public readonly blockNumber: ccc.Num | undefined;
+  /** The block that committed the origin and its master: how long the order has been on the book. */
+  public readonly blockNumber: ccc.Num;
 
   /**
    * Creates an instance of OrderGroup.
    * @param master - The master cell associated with the order group.
    * @param order - The order within the group.
    * @param origin - The original order associated with the group.
-   * @param blockNumber - The block that committed the origin, if committed.
+   * @param blockNumber - The block that committed the origin and its master.
    */
   constructor(
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
-    blockNumber?: ccc.Num,
+    blockNumber: ccc.Num,
   ) {
     this.master = master;
     this.order = order;
@@ -432,7 +352,7 @@ export class OrderGroup implements ValueComponents {
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
-    blockNumber?: ccc.Num,
+    blockNumber: ccc.Num,
   ): OrderGroup | undefined {
     const og = new OrderGroup(master, order, origin, blockNumber);
     if (og.isValid()) {
@@ -441,27 +361,13 @@ export class OrderGroup implements ValueComponents {
     return undefined;
   }
 
-  /**
-   * Validates the order group against its master and origin orders.
-   * @throws Will throw an error if validation fails.
-   */
-  public validate(): void {
-    this.master.validate(this.origin);
-    this.master.validate(this.order);
-    this.origin.validate(this.order);
-  }
-
-  /**
-   * Checks if the order group is valid.
-   * @returns True if the order group is valid, otherwise false.
-   */
+  /** Whether the master anchors both orders and the order continues its origin. */
   public isValid(): boolean {
-    try {
-      this.validate();
-      return true;
-    } catch {
-      return false;
-    }
+    return (
+      this.master.anchors(this.origin) &&
+      this.master.anchors(this.order) &&
+      this.origin.isValid(this.order)
+    );
   }
 
   /**
@@ -474,47 +380,4 @@ export class OrderGroup implements ValueComponents {
     const lock = this.master.cell.cellOutput.lock;
     return locks.some((l) => lock.eq(l));
   }
-}
-
-/**
- * Records canonical resolver output without exposing forgeable provenance data. The
- * group and its parsed parts are frozen, since matching and transactions build on them.
- */
-export function attestResolvedOrderGroup(group: OrderGroup): OrderGroup {
-  group.validate();
-  for (const order of [group.order, group.origin]) {
-    const { info } = order.data;
-    for (const part of [
-      order,
-      order.data,
-      order.data.master,
-      info,
-      info.ckbToUdt,
-      info.udtToCkb,
-    ]) {
-      Object.freeze(part);
-    }
-  }
-  Object.freeze(group.master);
-  resolvedOrderGroups.set(group.order.cell, Object.freeze(group));
-  return group;
-}
-
-/** Returns the resolver's group at a matching or transaction boundary. */
-export function validatedOrderGroup(group: OrderGroup): OrderGroup {
-  if (!(group instanceof OrderGroup)) {
-    throw new TypeError("Matching requires resolved OrderGroups from findOrders()");
-  }
-
-  const attested = resolvedOrderGroups.get(group.order.cell);
-  if (attested === undefined) {
-    throw new TypeError("OrderGroup was not produced by the order resolver");
-  }
-  if (
-    group.master.cell !== attested.master.cell ||
-    group.origin.cell !== attested.origin.cell
-  ) {
-    throw new TypeError("OrderGroup does not match its resolver attestation");
-  }
-  return attested;
 }

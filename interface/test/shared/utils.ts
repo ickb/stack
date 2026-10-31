@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  errorMessageOf,
-  maxShannons,
-  parseAmountInput,
-  toText,
-} from "../../src/shared/utils.ts";
+import { errorMessageOf, maxShannons, parseAmountInput } from "../../src/shared/utils.ts";
 
 describe("amount utilities", () => {
-  it("trims fixed-point decimal text", () => {
-    expect(toText(123450000n)).toBe("1.2345");
-    expect(toText(100000000n)).toBe("1");
-  });
-
   it.each([
     ["", 0n],
     ["0", 0n],

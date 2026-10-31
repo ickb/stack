@@ -1,39 +1,19 @@
 // @ts-check
 
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslint from "@eslint/js";
-import type { ESLint, Linter, Rule } from "eslint";
+import vitest from "@vitest/eslint-plugin";
+import type { ESLint, Rule } from "eslint";
+import promise from "eslint-plugin-promise";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import regexp from "eslint-plugin-regexp";
+import security from "eslint-plugin-security";
+import sonarjs from "eslint-plugin-sonarjs";
+import tsdoc from "eslint-plugin-tsdoc";
+import unicorn from "eslint-plugin-unicorn";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
-import {
-  eslintComments,
-  promise,
-  reactHooks,
-  reactRefresh,
-  regexp,
-  security,
-  sonarjs,
-  tsdoc,
-  unicorn,
-  vitest,
-} from "./scripts/tooling/eslint/plugins.ts";
-
-type RuleSeverity = Linter.RuleSeverity;
-type RuleEntry = RuleSeverity | [RuleSeverity, ...unknown[]];
-interface ConfigObject extends Omit<Linter.Config, "rules"> {
-  rules?: Record<string, RuleEntry>;
-}
-type ConfigInput = ConfigObject | ConfigInput[];
-interface PluginWithConfigs {
-  configs: Record<string, ConfigInput>;
-}
-
-function pluginConfig(plugin: PluginWithConfigs, name: string): ConfigInput {
-  const config = plugin.configs[name];
-  if (config === undefined) {
-    throw new Error(`Missing ESLint plugin config ${name}`);
-  }
-  return config;
-}
 
 const guardedVitestRuleErrors = {
   "vitest/max-nested-describe": "error",
@@ -114,23 +94,13 @@ const productionRestrictedSyntax = [
     message:
       "A parameter defaulting to a real implementation or a process global is a mock seam. Read the real value where it is used.",
   },
-  // Cell reads go through the SDK's one uncached paging loop:
-  // CCC's cached iterators are never used for financial state.
+  // Cell reads go through the SDK's one uncached raw get_cells loop (findCells): CCC's
+  // cached iterators and paged scans are never used for financial state.
   {
     selector:
-      "CallExpression[callee.property.name='findCellsOnChain'], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
+      "CallExpression[callee.property.name=/^(?:findCellsOnChain|findCellsPaged(?:NoCache)?)$/u], CallExpression[callee.property.name='findCells']:not([callee.object.property.name='cache'])",
     message:
-      "Read cells through the SDK's findCells helper, never CCC's cached iterators.",
-  },
-  {
-    selector:
-      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u]:not(FunctionDeclaration[id.name='findCells'] CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u])",
-    message: "Page through the client only inside the SDK's findCells helper.",
-  },
-  {
-    selector:
-      "CallExpression[callee.property.name=/^findCellsPaged(?:NoCache)?$/u][arguments.length<4]",
-    message: "Pass the page size and the cursor to every paged cell scan.",
+      "Read cells through the SDK's findCells helper, never CCC's cached iterators or paged scans.",
   },
 ];
 
@@ -167,8 +137,8 @@ export default defineConfig(
   sonarjs.configs.recommended,
   unicorn.configs.unopinionated,
   regexp.configs["flat/recommended"],
-  pluginConfig(security, "recommended"),
-  pluginConfig(promise, "flat/recommended"),
+  security.configs.recommended,
+  promise.configs["flat/recommended"],
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
   {
@@ -362,10 +332,6 @@ export default defineConfig(
       "interface/src/**/*.tsx",
       "interface/test/**/*.ts",
       "interface/test/**/*.tsx",
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "test/**/*.ts",
-      "test/**/*.tsx",
     ],
     plugins: {
       ...reactHooks.configs.flat["recommended-latest"].plugins,
@@ -384,7 +350,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+    files: ["{sdk,sdk/node,testkit,interface}/test/**/*.{ts,tsx}"],
     plugins: {
       vitest,
     },

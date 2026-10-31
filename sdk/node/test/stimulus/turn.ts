@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, committedTransactionResponse } from "@ickb/testkit";
+import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../../../src/constants.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
@@ -14,7 +14,6 @@ import {
   waitTransaction,
 } from "../../../src/send/wait_transaction.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { chainIdentities } from "../../../src/utils/chain.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -47,27 +46,12 @@ vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) 
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
 const TX_HASH = byte32FromByte("46");
-const DEADLINE = ccc.Epoch.from([5n, 0n, 1n]);
+const DEADLINE = { epoch: ccc.Epoch.from([5n, 0n, 1n]), tipMaxAgeMs: 1_800_000 };
 const identity: StimulusIdentity = {
   chain: "testnet",
   address: "ckt1stimulus",
   primaryLock: { codeHash: PRIMARY_LOCK.codeHash, hashType: "type", args: "0x" },
-  rpcEndpoint: {
-    mode: "exclusive",
-    protocol: "https:",
-    hostname: "testnet.example",
-    port: "",
-    pathname: "/",
-  },
-  preflight: {
-    expected: chainIdentities.testnet,
-    observed: {
-      genesisHash: chainIdentities.testnet.genesisHash,
-      addressPrefix: "ckt",
-      tip: { hash: byte32FromByte("02"), number: 1n, timestamp: 0n },
-    },
-    matches: { genesisHash: true, addressPrefix: true },
-  },
+  rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
 };
 const FUNDED_CKB = 6000n * CKB;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
@@ -86,13 +70,12 @@ beforeEach(() => {
     return true;
   });
   sendMock.mockReset();
-  sendMock.mockImplementation(async (_signer, _tx, recordTxHash) => {
+  sendMock.mockImplementation(async () => {
     await Promise.resolve();
-    recordTxHash?.(TX_HASH);
     return TX_HASH;
   });
   waitMock.mockReset();
-  waitMock.mockResolvedValue(committedTransactionResponse(ccc.Transaction.default()));
+  waitMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -131,14 +114,14 @@ describe("runStimulusTurn", () => {
     const mint = vi.spyOn(orderManager, "mint");
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
-    >(async (_txLike, options) => {
+    >(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({ amount: 0n, context: { receipts: [{}] } });
       return {
         ok: true,
         tx: ccc.Transaction.default(),
         estimatedMaturity: 0n,
-        conversion: { kind: "collect-only" },
+        conversionKind: "collect-only",
         isSweepComplete: true,
         broadcastBefore: DEADLINE,
       };
@@ -158,7 +141,7 @@ describe("runStimulusTurn", () => {
 
     expect(mint).not.toHaveBeenCalled();
     // The SDK's broadcast deadline reaches the sender.
-    expect(sendMock.mock.calls[0]?.[3]).toBe(DEADLINE);
+    expect(sendMock.mock.calls[0]?.[4]).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
@@ -244,7 +227,7 @@ describe("runStimulusTurn", () => {
     const stale = await order("a3", true, undefined, 1n);
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
-    >(async (_txLike, options) => {
+    >(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({
         amount: 0n,
@@ -257,7 +240,7 @@ describe("runStimulusTurn", () => {
         ok: true,
         tx,
         estimatedMaturity: 0n,
-        conversion: { kind: "collect-only" },
+        conversionKind: "collect-only",
         isSweepComplete: true,
       };
     });
@@ -274,12 +257,12 @@ describe("runStimulusTurn", () => {
       outcome: "committed",
       draw: { kind: "collect-only" },
       skip: { reason: "unrepresentable-amount" },
-      action: { conversion: { kind: "collect-only" } },
+      action: { conversionKind: "collect-only" },
     });
   });
 
   it("collects the receipts alone when the drawn conversion is refused", async () => {
-    // Adopted from the astra audit: the fallback fires on receipts, not only on orders.
+    // The fallback fires on receipts, not only on orders.
     const target = runtime({
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
@@ -294,7 +277,7 @@ describe("runStimulusTurn", () => {
       amount: ICKB_DEPOSIT_CAP + 1n,
     });
 
-    expect(build.mock.calls.map(([, options]) => options.amount)).toEqual([
+    expect(build.mock.calls.map(([options]) => options.amount)).toEqual([
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);
@@ -362,12 +345,13 @@ describe("runStimulusTurn", () => {
       runtime({
         account: fundedAccount,
         sdk: {
-          buildConversionTransaction: async (_txLike, options) => {
+          buildConversionTransaction: async (options) => {
             await Promise.resolve();
             return {
               ok: false,
               reason: "amount-too-small",
               estimatedMaturity: options.context.estimatedMaturity,
+              minimum: 1n,
             };
           },
         },
@@ -435,7 +419,8 @@ describe("runStimulusTurn", () => {
       outcome: "rejected",
       error: { name: "TransactionWaitError" },
     });
-    expect(rejected).not.toHaveProperty("txHash");
+    // The ambiguous send's hash is the one the wait watched, so the line names it.
+    expect(rejected).toMatchObject({ txHash: TX_HASH });
     expect(waitMock).toHaveBeenCalledWith(expect.anything(), TX_HASH, {
       timeout: 600_000,
     });

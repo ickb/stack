@@ -3,14 +3,14 @@ import process from "node:process";
 const CIRCULAR_LOG_VALUE = "[Circular]";
 
 /** JSON-line-safe value after log normalization. */
-export type JsonLogValue =
+type JsonLogValue =
   string | number | boolean | null | undefined | JsonLogValue[] | JsonLogRecord;
 
 export interface JsonLogRecord {
   [key: string]: JsonLogValue;
 }
 
-/** Writes one turn as one JSON line, `type` and `timestamp` first like the bot's events. */
+/** Writes one turn as one JSON line, `type` first like the bot's events. */
 export function logExecution(type: string, executionLog: object, startTime: Date): void {
   writeJsonLine({
     type,

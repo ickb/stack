@@ -1,5 +1,5 @@
 import type { QuoteState } from "../app/queries.ts";
-import { chartAmountText, compactText, graphAmountText } from "../shared/figures.ts";
+import { chartAmountText, compactText } from "../shared/figures.ts";
 import { CKB, clampShannons, type RootConfig } from "../shared/utils.ts";
 
 export const chartWidth = 640;
@@ -28,7 +28,7 @@ export function scaleY(value: number, min: number, max: number): number {
   );
 }
 
-export interface IckbWorthSample {
+interface IckbWorthSample {
   readonly date: Date;
   readonly value: number;
 }
@@ -151,23 +151,16 @@ function accumulatedDaoRate(elapsedYears: number): number {
   return accumulatedRate;
 }
 
-export function valueGridMarks(
+function valueGridMarks(
   minY: number,
   maxY: number,
   unit: string,
   amount: bigint,
 ): Array<{ readonly value: number; readonly label: string }> {
-  const marks = [minY, (minY + maxY) / 2, maxY]
-    .filter(
-      (value, index, values) =>
-        value >= minY &&
-        value <= maxY &&
-        values.findIndex((other) => Math.abs(other - value) < 0.005) === index,
-    )
-    .map((value) => ({
-      value,
-      label: `${compactText(amount, value)} ${unit}`,
-    }));
+  const marks = [minY, (minY + maxY) / 2, maxY].map((value) => ({
+    value,
+    label: `${compactText(amount, value)} ${unit}`,
+  }));
 
   return marks.filter(
     ({ label }, index) => marks.findIndex((mark) => mark.label === label) === index,
@@ -219,7 +212,7 @@ export function rateChartView({
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   const first = samples[0];
-  const tip = samples.reduce((_, sample) => sample);
+  const tip = samples.at(-1) ?? first;
 
   return {
     sourceSymbol,
@@ -228,7 +221,7 @@ export function rateChartView({
     caption: isCkb2Udt
       ? "iCKB earns NervosDAO compensation, so 1 CKB buys a little less iCKB every day."
       : "iCKB earns NervosDAO compensation, so 1 iCKB is worth a little more CKB every day.",
-    description: `Protocol-derived ${chainLabel[chain]} curve from ${String(first.date.getUTCFullYear())} to ${String(tip.date.getUTCFullYear())}, showing ${amountText} ${sourceSymbol} changing from ${graphAmountText(chartAmount, first.value)} ${targetSymbol} to ${graphAmountText(chartAmount, tip.value)} ${targetSymbol}.`,
+    description: `Protocol-derived ${chainLabel[chain]} curve from ${String(first.date.getUTCFullYear())} to ${String(tip.date.getUTCFullYear())}, showing ${amountText} ${sourceSymbol} changing from ${compactText(chartAmount, first.value)} ${targetSymbol} to ${compactText(chartAmount, tip.value)} ${targetSymbol}.`,
     tip,
     minX,
     maxX,

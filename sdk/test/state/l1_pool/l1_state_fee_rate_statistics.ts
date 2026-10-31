@@ -1,13 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
+import { cccA } from "@ckb-ccc/core/advanced";
+import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  defaultL1Sdk,
-  emptyCellScan,
-  FeeRateStubClient,
-  tipHeaderHandler,
-} from "../l1_account/support/sdk_l1_support.ts";
+import { headerHash } from "../../../src/utils/verified_client.ts";
+import { defaultL1Sdk } from "../l1_account/support/sdk_l1_support.ts";
 
 describe("IckbSdk.getL1State fee rate statistics", () => {
   it("uses CCC minimum fee rate when CKB returns null fee statistics", async () => {
@@ -18,6 +15,44 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
 
     expect(feeRateStatistics).toHaveBeenCalledTimes(1);
     expect(state.system.feeRate).toBe(1000n);
+  });
+
+  it("caps the sampled fee rate at the caller's maximum through CCC", async () => {
+    const client = clientWithFeeRateStatistics(() => ({
+      mean: "0x7a120",
+      median: "0x7a120",
+    }));
+
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+    ).resolves.toMatchObject({ system: { feeRate: 500_000n } });
+    await expect(
+      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, 2000n),
+    ).resolves.toMatchObject({ system: { feeRate: 2000n } });
+  });
+
+  it("lets a cap replace CCC's default ceiling", async () => {
+    const median = ccc.numToHex(cccA.DEFAULT_MAX_FEE_RATE * 5n);
+    const client = clientWithFeeRateStatistics(() => ({ mean: median, median }));
+
+    await expect(
+      defaultL1Sdk().getL1AccountState(
+        client,
+        [],
+        WALLET_LOCK_UP,
+        cccA.DEFAULT_MAX_FEE_RATE * 5n,
+      ),
+    ).resolves.toMatchObject({ system: { feeRate: cccA.DEFAULT_MAX_FEE_RATE * 5n } });
+  });
+
+  it("refuses a cap of zero or less", async () => {
+    const client = clientWithFeeRateStatistics(() => null);
+
+    for (const cap of [0n, -5n]) {
+      await expect(
+        defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, cap),
+      ).rejects.toThrow("maxFeeRate must be positive");
+    }
   });
 
   it("propagates unrelated fee rate failures", async () => {
@@ -32,21 +67,10 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
       defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
     ).rejects.toBe(feeRateError);
   });
-
-  it("rejects a negative fee rate returned by a custom client", async () => {
-    const client = new FeeRateStubClient(
-      {
-        findCellsPagedNoCache: emptyCellScan,
-        getTipHeader: tipHeaderHandler(headerLike(3n)),
-      },
-      -1n,
-    );
-
-    await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
-    ).rejects.toThrow("Client fee rate must be non-negative");
-  });
 });
+
+// Built once: the tip names this exact header, timestamp included, as its parent.
+const PARENT = jsonHeader(2n, byte32FromByte("cc"));
 
 function clientWithFeeRateStatistics(feeRateStatistics: () => unknown): ccc.Client {
   return ccc.ClientPublicTestnet.new({
@@ -70,20 +94,10 @@ async function responseFor(method: string): Promise<unknown> {
   await Promise.resolve();
   switch (method) {
     case "get_tip_header": {
-      return {
-        compact_target: "0x0",
-        dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
-        epoch: "0x1",
-        extra_hash: byte32("aa"),
-        hash: byte32("bb"),
-        nonce: "0x0",
-        number: "0x3",
-        parent_hash: byte32("cc"),
-        proposals_hash: byte32("dd"),
-        timestamp: "0x0",
-        transactions_root: byte32("ee"),
-        version: "0x0",
-      };
+      return jsonHeader(3n, PARENT.hash);
+    }
+    case "get_header_by_number": {
+      return PARENT;
     }
     case "get_cells": {
       return { last_cursor: "0x", objects: [] };
@@ -94,6 +108,23 @@ async function responseFor(method: string): Promise<unknown> {
   }
 }
 
-function byte32(byte: string): string {
-  return `0x${byte.repeat(32)}`;
+/** A real, fresh header: the SDK checks its hash against its fields and the tip's age. */
+function jsonHeader(number: bigint, parentHash: ccc.Hex): { hash: ccc.Hex } {
+  const fields = {
+    compact_target: "0x0",
+    dao: "0x0000000000000000e80300000000000000000000000000000000000000000000",
+    epoch: "0x1",
+    extra_hash: byte32FromByte("aa"),
+    nonce: "0x0",
+    number: ccc.numToHex(number),
+    parent_hash: parentHash,
+    proposals_hash: byte32FromByte("dd"),
+    timestamp: ccc.numToHex(Date.now()),
+    transactions_root: byte32FromByte("ee"),
+    version: "0x0",
+  } as const;
+  const hash = headerHash(
+    cccA.JsonRpcTransformers.blockHeaderTo({ ...fields, hash: byte32FromByte("bb") }),
+  );
+  return { ...fields, hash };
 }

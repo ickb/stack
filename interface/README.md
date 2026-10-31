@@ -21,7 +21,7 @@ Both commands use the workspace SDK source directly; no SDK `dist/` build is nee
 
 ## Wallet session and client
 
-The app creates one client per chain using CCC's public endpoints. The connector owns the selected client: both the landing tabs and the wallet modal switch it through `setClient`, and the gate derives the chain from that client. A separate draft chain would undo the user's network choice when the connector drops its signer during a switch.
+The app creates one client per chain using CCC's public endpoints. The SDK verifies what it reads through them and bounds the tip's parent, where it prices, by the wallet policy's thirty minutes ([account state](../sdk/README.md#account-state)), so a browser clock more than thirty minutes fast fails the account state, and with it every transaction, until corrected. The quote shown before a wallet connects reads the tip directly, unverified: it is display only, and every transaction is priced from the verified state read. The connector owns the selected client: both the landing tabs and the wallet modal switch it through `setClient`, and the gate derives the chain from that client. A separate draft chain would undo the user's network choice when the connector drops its signer during a switch.
 
 `WalletConfigGate` reads the recommended address and account locks once per signer/root configuration, with an explicit retry after failure. It ignores results that arrive after that configuration changes. This is component state rather than a refetching query: tab-focus refetches used to replace script objects and remount the action view during signing. Account changes rely on the connector replacing the signer; a wallet that does not report its change needs a reload.
 
@@ -35,10 +35,10 @@ Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [defa
 
 Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. The intent line of a collection says whether a withdrawal or order stays converting after it: the button reads the same either way, and the balance row's "converting" word alone went unnoticed when a receipt was collected while its sibling order was still open. Live orders join that collection when:
 
-- a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`);
+- a CKB-to-iCKB buy fails the bot's current whole-fill profitability rule (`isRefused`), judged at the fee rate the wallet's picker chose: Auto is the node's sampled rate, Economy the 1000 floor, Custom whatever the user typed. A bot that caps its rate lower than the chosen one may still fill a buy this rule collects; the user gets the funds back less the fee, so the app does not guess at any bot's cap;
 - either direction reaches the block-age cutoff, nominally thirty days (`isStale`).
 
-DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The shared rules live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
+DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The SDK applies these rules when it projects the conversion context, so the app and the generator cannot disagree; they live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
 
 ### Sending to another wallet
 

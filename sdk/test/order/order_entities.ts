@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { byte32FromByte, FRESH_BLOCK, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
@@ -10,7 +11,7 @@ import { resolvedOrderGroup } from "./matching/support/order_match_helpers.ts";
 const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
 const OWNER_LOCK = script("33");
-const ORDER_OUT_POINT_HEX = `${byte32("55")}00000000`;
+const ORDER_OUT_POINT_HEX = `${byte32FromByte("55")}00000000`;
 const MINT_ORDER_DATA_HEX =
   "0x09000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fbffffff020000000000000003000000000000000000000000000000000000000000000000";
 const MATCH_ORDER_DATA_HEX =
@@ -52,7 +53,7 @@ describe("order data golden vectors", () => {
       udtValue: 13n,
       master: {
         type: "absolute",
-        value: { txHash: byte32("07"), index: 11n },
+        value: { txHash: byte32FromByte("07"), index: 11n },
       },
       info: Info.from({
         ckbToUdt: Ratio.from({ ckbScale: 5n, udtScale: 8n }),
@@ -70,7 +71,7 @@ describe("order data golden vectors", () => {
     if (decoded.master.type !== "absolute") {
       throw new Error("Expected absolute master");
     }
-    expect(decoded.master.value.txHash).toBe(byte32("07"));
+    expect(decoded.master.value.txHash).toBe(byte32FromByte("07"));
     expect(decoded.master.value.index).toBe(11n);
     expect(decoded.info.ckbToUdt.ckbScale).toBe(5n);
     expect(decoded.info.ckbToUdt.udtScale).toBe(8n);
@@ -101,7 +102,8 @@ describe("order entity validation", () => {
     }).not.toThrow();
     expect(data.isMint()).toBe(true);
     expect(
-      data.getMaster(ccc.OutPoint.from({ txHash: byte32("44"), index: 1n })).index,
+      data.getMaster(ccc.OutPoint.from({ txHash: byte32FromByte("44"), index: 1n }))
+        .index,
     ).toBe(2n);
     expect(() => {
       invalidRelative.validate();
@@ -113,7 +115,10 @@ describe("order entity validation", () => {
         info,
       }).validate();
     }).toThrow("udtValue invalid, negative");
-    const invalidOutPoint = ccc.OutPoint.from({ txHash: byte32("77"), index: 0n });
+    const invalidOutPoint = ccc.OutPoint.from({
+      txHash: byte32FromByte("77"),
+      index: 0n,
+    });
     invalidOutPoint.index = -1n;
     expect(() => {
       new OrderData(1n, { type: "absolute", value: invalidOutPoint }, info).validate();
@@ -309,7 +314,6 @@ describe("order cells", () => {
     expect(order.isFulfilled()).toBe(false);
     expect(fulfilled.isMatchable()).toBe(false);
     expect(fulfilled.isFulfilled()).toBe(true);
-    expect(master.ckbValue).toBe(master.cell.cellOutput.capacity);
     expect(group.ckbValue).toBe(
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,
     );
@@ -335,7 +339,7 @@ describe("order cells", () => {
         udtValue: 10n,
         master: {
           type: "absolute",
-          value: { txHash: byte32("66"), index: 1n },
+          value: { txHash: byte32FromByte("66"), index: 1n },
         },
         info: Info.from({
           ckbToUdt: Ratio.empty(),
@@ -388,19 +392,10 @@ describe("order descendant identity", () => {
       outPointIndex: 1n,
     });
 
-    expect(() => {
-      origin.validate(same);
-    }).not.toThrow();
-    expect(() => {
-      origin.validate(wrongLock);
-    }).toThrow("Order script different");
-    expect(() => {
-      origin.validate(wrongType);
-    }).toThrow("UDT type is different");
-    expect(() => {
-      origin.validate(wrongMaster);
-    }).toThrow("Master is different");
+    expect(origin.isValid(same)).toBe(true);
     expect(origin.isValid(wrongLock)).toBe(false);
+    expect(origin.isValid(wrongType)).toBe(false);
+    expect(origin.isValid(wrongMaster)).toBe(false);
     expect(origin.resolve([wrongLock])).toBeUndefined();
   });
 });
@@ -439,18 +434,11 @@ describe("order descendant values", () => {
       outPointIndex: 4n,
     });
 
-    expect(() => {
-      origin.validate(wrongInfo);
-    }).toThrow("Info is different");
-    expect(() => {
-      origin.validate(lowerTotal);
-    }).toThrow("Total value is lower");
-    expect(() => {
-      udtOrigin.validate(lowerProgress);
-    }).toThrow("Progress is lower");
-    expect(() => {
-      wrongInfo.validate(origin);
-    }).toThrow("Origin is not a mint order");
+    expect(origin.isValid(wrongInfo)).toBe(false);
+    expect(origin.isValid(lowerTotal)).toBe(false);
+    expect(udtOrigin.isValid(lowerProgress)).toBe(false);
+    // Only a mint order can be an origin.
+    expect(wrongInfo.isValid(origin)).toBe(false);
   });
 });
 
@@ -487,22 +475,19 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(() => {
-      OrderGroup.tryFrom(master, origin, origin)?.validate();
-    }).not.toThrow();
+    expect(OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.order).toBe(origin);
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
         origin,
         origin,
+        FRESH_BLOCK,
       ),
     ).toBeUndefined();
-    expect(() => {
-      new MasterCell(masterCell({ type: script("99") })).validate(origin);
-    }).toThrow("Order script different");
-    expect(() => {
-      new MasterCell(masterCell({ index: 2n })).validate(origin);
-    }).toThrow("Master is different");
+    expect(new MasterCell(masterCell({ type: script("99") })).anchors(origin)).toBe(
+      false,
+    );
+    expect(new MasterCell(masterCell({ index: 2n })).anchors(origin)).toBe(false);
   });
 });
 
@@ -520,7 +505,7 @@ function orderCell(options: {
   const index = options.outPointIndex ?? 0n;
   const masterIndex = options.masterIndex ?? 1n;
   const cell = ccc.Cell.from({
-    outPoint: { txHash: byte32(options.mint === true ? "66" : "55"), index },
+    outPoint: { txHash: byte32FromByte(options.mint === true ? "66" : "55"), index },
     cellOutput: {
       capacity: options.ckbValue,
       lock: options.lock ?? ORDER_SCRIPT,
@@ -533,7 +518,7 @@ function orderCell(options: {
           ? { type: "relative", value: Relative.create(masterIndex - index) }
           : {
               type: "absolute",
-              value: { txHash: byte32("66"), index: masterIndex },
+              value: { txHash: byte32FromByte("66"), index: masterIndex },
             },
       info,
     }).toBytes(),
@@ -543,18 +528,10 @@ function orderCell(options: {
 
 function masterCell(options?: { index?: bigint; type?: ccc.Script }): ccc.Cell {
   return ccc.Cell.from({
-    outPoint: { txHash: byte32("66"), index: options?.index ?? 1n },
+    outPoint: { txHash: byte32FromByte("66"), index: options?.index ?? 1n },
     cellOutput: { capacity: 61n, lock: OWNER_LOCK, type: options?.type ?? ORDER_SCRIPT },
     outputData: "0x",
   });
-}
-
-function script(byte: string): ccc.Script {
-  return ccc.Script.from({ codeHash: byte32(byte), hashType: "type", args: "0x" });
-}
-
-function byte32(byte: string): `0x${string}` {
-  return `0x${byte.repeat(32)}`;
 }
 
 function catchError(callback: () => unknown): Error {

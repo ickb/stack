@@ -6,6 +6,7 @@ import {
   type signAndSendTransaction as sdkSignAndSendTransaction,
   type waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
+import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
@@ -13,19 +14,18 @@ import {
   transact,
   waitForConfirmation,
   type RefreshedTransactionPreview,
-  type RefreshedTransactionState,
 } from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
   submitPendingTransaction,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
-import { l1StateQueryKey } from "../../src/app/queries.ts";
-import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import { l1StateQueryKey, type L1StateType } from "../../src/app/queries.ts";
+import type { SendableTx, TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import { l1State } from "../app/fixtures/l1State.ts";
 import { waitCallOptions } from "../support/wait.ts";
 import { txWithInput } from "./fixtures/transaction.ts";
 
-const nothingToDo = "Nothing to do";
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
@@ -50,11 +50,13 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   signAndSendTransaction.mockReset();
-  signAndSendTransaction.mockImplementation(async (_signer, _tx, recordTxHash) => {
-    recordTxHash?.(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
+  signAndSendTransaction.mockImplementation(
+    async (_signer, _tx, _plannedFee, recordTxHash) => {
+      recordTxHash?.(txHash);
+      await Promise.resolve();
+      return txHash;
+    },
+  );
   waitTransaction.mockReset();
   vi.unstubAllGlobals();
 });
@@ -96,27 +98,28 @@ describe("finite-window confirmation", () => {
 describe("transact fresh preview boundary", () => {
   it("freezes and sends only the freshly rebuilt transaction", async () => {
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const cachedTx = activeTxInfo("11").tx;
     const freshTxInfo = activeTxInfo("22", {
       fee: 9n,
       estimatedMaturity: 123n,
       conversionKind: "direct-plus-order",
     });
-    const preview = refreshedPreview({ txInfo: freshTxInfo, stateId: freshStateId });
     const build = vi.fn(async () => {
       await Promise.resolve();
       return freshTxInfo;
     });
-    const calls = transactionCalls(preview, build);
+    const preview = refreshedPreview({ txInfo: freshTxInfo, txBuilder: build });
+    const calls = transactionCalls(preview);
     const promise = transact(calls);
 
     await vi.runAllTimersAsync();
     await promise;
 
     expect(calls.lockIntent).toHaveBeenCalledTimes(1);
-    expect(calls.refreshPreview).toHaveBeenCalledTimes(1);
+    expect(calls.refreshState).toHaveBeenCalledTimes(1);
     expect(build).toHaveBeenCalledTimes(1);
+    expect(build).toHaveBeenCalledWith(true, 1n, { lock: script("11") });
     expect(calls.freezePreview).toHaveBeenCalledWith(preview);
     expect(vi.mocked(calls.freezePreview).mock.invocationCallOrder[0]).toBeLessThan(
       signAndSendTransaction.mock.invocationCallOrder[0] ?? 0,
@@ -125,7 +128,8 @@ describe("transact fresh preview boundary", () => {
     expect(signAndSendTransaction.mock.calls[0]?.[0]).toBe(calls.walletConfig.signer);
     expect(signAndSendTransaction.mock.calls[0]?.[1]).toBe(freshTxInfo.tx);
     expect(signAndSendTransaction.mock.calls[0]?.[1]).not.toBe(cachedTx);
-    expect(typeof signAndSendTransaction.mock.calls[0]?.[2]).toBe("function");
+    expect(signAndSendTransaction.mock.calls[0]?.[2]).toBe(freshTxInfo.fee);
+    expect(typeof signAndSendTransaction.mock.calls[0]?.[3]).toBe("function");
     expect(calls.formReset).toHaveBeenCalledTimes(1);
     expect(walletQueryClient(calls.walletConfig).invalidateQueries).toHaveBeenCalledWith({
       queryKey: l1StateQueryKey(calls.walletConfig),
@@ -137,7 +141,7 @@ describe("transact fresh preview boundary", () => {
 
   it("surfaces refresh failure and unlocks without sending", async () => {
     const calls = transactionCalls();
-    calls.refreshPreview.mockRejectedValueOnce(new Error("refresh failed"));
+    calls.refreshState.mockRejectedValueOnce(new Error("refresh failed"));
 
     await transact(calls);
 
@@ -148,22 +152,20 @@ describe("transact fresh preview boundary", () => {
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
-  it.each([
-    [{ error: "fresh preview failed" }, "fresh preview failed"],
-    [{ tx: ccc.Transaction.default() }, nothingToDo],
-    [{ fee: 0n }, "Transaction fee is missing or invalid"],
-  ] as const)("rejects invalid refreshed preview %#", async (overrides, failure) => {
-    const preview = refreshedPreview({
-      txInfo: activeTxInfo("22", overrides),
-      stateId: freshStateId,
-    });
-    const calls = transactionCalls(preview);
+  it("refuses a refreshed preview that failed, without freezing it", async () => {
+    const calls = transactionCalls(
+      refreshedPreview({
+        txBuilder: async () => {
+          await Promise.resolve();
+          return { ok: false, error: "fresh preview failed", estimatedMaturity: 0n };
+        },
+      }),
+    );
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith(failure);
-    expect(calls.freezePreview).toHaveBeenNthCalledWith(1, preview);
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(calls.setFailure).toHaveBeenCalledWith("fresh preview failed");
+    expect(vi.mocked(calls.freezePreview).mock.calls).toEqual([[undefined]]);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
   });
 });
@@ -181,7 +183,7 @@ describe("transact post-broadcast outcomes", () => {
     });
 
     await recordPending(calls.pendingStore);
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     releasePreview.resolve(undefined);
     await attempt;
 
@@ -203,7 +205,7 @@ describe("transact post-broadcast outcomes", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const retry = retryConfirmation({ ...calls, txHash });
     await vi.runAllTimersAsync();
     await retry;
@@ -216,7 +218,7 @@ describe("transact post-broadcast outcomes", () => {
 describe("transact broadcast identity and rejection", () => {
   it("watches the hash of an ambiguous send and completes when it commits", async () => {
     ambiguousSend();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -279,7 +281,7 @@ describe("transact broadcast identity and rejection", () => {
         });
       });
     });
-    const calls = transactionCalls(refreshedPreview(), undefined, controller);
+    const calls = transactionCalls(refreshedPreview(), controller);
     const attempt = transact(calls);
     await vi.waitFor(() => {
       expect(waitTransaction).toHaveBeenCalledTimes(1);
@@ -333,7 +335,7 @@ describe("transact broadcast identity and rejection", () => {
   });
 
   it("keeps the client after a committed transaction", async () => {
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -346,7 +348,7 @@ describe("transact broadcast identity and rejection", () => {
 describe("retryConfirmation", () => {
   it("silently ignores retry after its owner has already unmounted", async () => {
     const controller = new AbortController();
-    const calls = transactionCalls(refreshedPreview(), undefined, controller);
+    const calls = transactionCalls(refreshedPreview(), controller);
     await recordPending(calls.pendingStore);
     controller.abort();
 
@@ -407,17 +409,17 @@ describe("retryConfirmation", () => {
 describe("attempt ownership during refresh", () => {
   it("suppresses callbacks when refresh resolves as ownership aborts", async () => {
     const controller = new AbortController();
-    const deferred = Promise.withResolvers<RefreshedTransactionState>();
+    const deferred = Promise.withResolvers<L1StateType>();
     const preview = refreshedPreview();
-    const calls = transactionCalls(preview, undefined, controller);
-    calls.refreshPreview.mockReturnValueOnce(deferred.promise);
+    const calls = transactionCalls(preview, controller);
+    calls.refreshState.mockReturnValueOnce(deferred.promise);
     const attempt = transact(calls);
     await vi.waitFor(() => {
-      expect(calls.refreshPreview).toHaveBeenCalledTimes(1);
+      expect(calls.refreshState).toHaveBeenCalledTimes(1);
     });
     const callbackCounts = attemptCallbackCounts(calls);
 
-    deferred.resolve(refreshedState(preview));
+    deferred.resolve(preview);
     controller.abort();
     await attempt;
     await Promise.resolve();
@@ -435,7 +437,7 @@ describe("attempt ownership during fresh build", () => {
     const controller = new AbortController();
     const built = Promise.withResolvers<TxInfo>();
     const build = vi.fn(async () => built.promise);
-    const calls = transactionCalls(refreshedPreview(), build, controller);
+    const calls = transactionCalls(refreshedPreview({ txBuilder: build }), controller);
     const attempt = transact(calls);
     await vi.waitFor(() => {
       expect(build).toHaveBeenCalledTimes(1);
@@ -455,7 +457,7 @@ describe("attempt ownership during preview render yield", () => {
     const controller = new AbortController();
     const rendered = Promise.withResolvers<undefined>();
     const calls = {
-      ...transactionCalls(refreshedPreview(), undefined, controller),
+      ...transactionCalls(refreshedPreview(), controller),
       yieldForPreview: vi.fn(async () => rendered.promise),
     };
     const attempt = transact(calls);
@@ -477,12 +479,14 @@ describe("attempt ownership during send", () => {
   it("persists a late sent hash without owner callbacks", async () => {
     const controller = new AbortController();
     const sent = Promise.withResolvers<ccc.Hex>();
-    const calls = transactionCalls(refreshedPreview(), undefined, controller);
-    signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-      const hash = await sent.promise;
-      recordTxHash?.(hash);
-      return hash;
-    });
+    const calls = transactionCalls(refreshedPreview(), controller);
+    signAndSendTransaction.mockImplementationOnce(
+      async (_signer, _tx, _plannedFee, recordTxHash) => {
+        const hash = await sent.promise;
+        recordTxHash?.(hash);
+        return hash;
+      },
+    );
     const attempt = transact(calls);
     await vi.waitFor(() => {
       expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
@@ -521,7 +525,7 @@ describe("attempt ownership after broadcast", () => {
         );
       });
     });
-    const calls = transactionCalls(refreshedPreview(), undefined, controller);
+    const calls = transactionCalls(refreshedPreview(), controller);
     const attempt = transact(calls);
     await vi.waitFor(() => {
       expect(waitTransaction).toHaveBeenCalledTimes(1);
@@ -543,7 +547,7 @@ describe("attempt ownership after broadcast", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     const retryController = new AbortController();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
+    waitTransaction.mockResolvedValueOnce(undefined);
     await retryConfirmation({
       ...calls,
       signal: retryController.signal,
@@ -561,13 +565,15 @@ describe("attempt ownership after broadcast", () => {
 
 /** The next send records the hash, then loses the node's answer. */
 function ambiguousSend(): void {
-  signAndSendTransaction.mockImplementationOnce(async (_signer, _tx, recordTxHash) => {
-    await Promise.resolve();
-    recordTxHash?.(txHash);
-    throw new TransactionBroadcastError(txHash, {
-      cause: new TypeError(rpcUnavailable),
-    });
-  });
+  signAndSendTransaction.mockImplementationOnce(
+    async (_signer, _tx, _plannedFee, recordTxHash) => {
+      await Promise.resolve();
+      recordTxHash?.(txHash);
+      throw new TransactionBroadcastError(txHash, {
+        cause: new TypeError(rpcUnavailable),
+      });
+    },
+  );
 }
 
 /** Establishes pending state exactly as a completed submission does. */
@@ -581,16 +587,6 @@ async function recordPending(store: PendingTransactionStore): Promise<void> {
 
 function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
   return store.current?.status === "pending" ? store.current.txHash : undefined;
-}
-
-function committedResponse(): ccc.ClientTransactionResponse {
-  return new ccc.ClientTransactionResponse(
-    ccc.Transaction.default(),
-    "committed",
-    undefined,
-    `0x${"cd".repeat(32)}`,
-    10n,
-  );
 }
 
 function attemptCallbackCounts(calls: Parameters<typeof transact>[0]): number[] {
@@ -608,8 +604,8 @@ describe("attempt ownership during completion", () => {
   it("does not reset or clear the hash when unmounted during invalidation", async () => {
     const controller = new AbortController();
     const invalidation = Promise.withResolvers<undefined>();
-    waitTransaction.mockResolvedValueOnce(committedResponse());
-    const calls = transactionCalls(refreshedPreview(), undefined, controller);
+    waitTransaction.mockResolvedValueOnce(undefined);
+    const calls = transactionCalls(refreshedPreview(), controller);
     walletQueryClient(calls.walletConfig).invalidateQueries.mockReturnValueOnce(
       invalidation.promise,
     );
@@ -633,29 +629,19 @@ describe("attempt ownership during completion", () => {
 
 function transactionCalls(
   preview = refreshedPreview(),
-  build?: () => Promise<TxInfo>,
   controller = new AbortController(),
 ): Parameters<typeof transact>[0] & {
-  refreshPreview: ReturnType<typeof vi.fn<() => Promise<RefreshedTransactionState>>>;
+  refreshState: ReturnType<typeof vi.fn<() => Promise<L1StateType>>>;
 } {
-  const buildPreview =
-    build ??
-    vi.fn(async () => {
-      await Promise.resolve();
-      return preview.txInfo;
-    });
-  const state = {
-    stateId: preview.stateId,
-    tipTimestamp: preview.tipTimestamp,
-    hasCollectable: preview.hasCollectable,
-    hasConverting: preview.hasConverting,
-  };
   return {
     lockIntent: vi.fn<() => void>(),
-    refreshPreview: vi.fn(async () => {
+    refreshState: vi.fn(async () => {
       await Promise.resolve();
-      return { ...state, build: buildPreview };
+      return preview;
     }),
+    isCkb2Udt: true,
+    amount: 1n,
+    destination: { lock: script("11") },
     freezePreview: vi.fn<(value: RefreshedTransactionPreview | undefined) => void>(),
     setMessage: vi.fn<(message: string) => void>(),
     setFailure: vi.fn<(failure: string) => void>(),
@@ -664,34 +650,25 @@ function transactionCalls(
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
     pendingStore: createPendingTransactionStore(ignoreChange),
-    unavailableMessage: nothingToDo,
     signal: controller.signal,
   };
 }
 
+/** A fresh state whose builder returns the preview's transaction. */
 function refreshedPreview(
   overrides: Partial<RefreshedTransactionPreview> = {},
 ): RefreshedTransactionPreview {
+  const txInfo = overrides.txInfo ?? activeTxInfo("22");
   return {
-    txInfo: activeTxInfo("22"),
+    ...l1State(),
     stateId: freshStateId,
-    tipTimestamp: 10n,
     hasCollectable: true,
-    hasConverting: false,
-    ...overrides,
-  };
-}
-
-function refreshedState(preview: RefreshedTransactionPreview): RefreshedTransactionState {
-  return {
-    stateId: preview.stateId,
-    tipTimestamp: preview.tipTimestamp,
-    hasCollectable: preview.hasCollectable,
-    hasConverting: preview.hasConverting,
-    build: async (): Promise<TxInfo> => {
+    txInfo,
+    txBuilder: async (): Promise<TxInfo> => {
       await Promise.resolve();
-      return preview.txInfo;
+      return txInfo;
     },
+    ...overrides,
   };
 }
 
@@ -728,10 +705,10 @@ function walletQueryClient(config?: WalletConfig): {
   };
 }
 
-function activeTxInfo(byte: string, overrides: Partial<TxInfo> = {}): TxInfo {
+function activeTxInfo(byte: string, overrides: Partial<SendableTx> = {}): SendableTx {
   return {
+    ok: true,
     tx: txWithInput(byte),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",

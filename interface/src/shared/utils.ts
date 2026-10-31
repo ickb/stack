@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ConversionMetadata, ConversionNotice, IckbSdk } from "@ickb/sdk";
+import type {
+  BroadcastDeadline,
+  ConversionKind,
+  ConversionNotice,
+  IckbSdk,
+} from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
@@ -39,17 +44,13 @@ export interface WalletConfig extends RootConfig {
   primaryLock: ccc.Script;
 }
 
-/**
- * Describes a transaction preview or a non-throwing preview error.
- *
- * @remarks A non-empty error means callers must treat the transaction as non-broadcastable even though padding fields are still present.
- */
-export type TxInfo = Readonly<{
+/** A completed, funded transaction: only signing remains. */
+export type SendableTx = Readonly<{
+  ok: true;
   tx: ccc.Transaction;
-  error: string;
   fee: bigint;
   estimatedMaturity: bigint;
-  conversionKind?: ConversionMetadata["kind"];
+  conversionKind: ConversionKind;
   /**
    * Set when the transaction moves the liquid funds to another lock: the shortened
    * destination, and whether the sweep took every liquid cell or another move is needed.
@@ -57,15 +58,15 @@ export type TxInfo = Readonly<{
   move?: { to: string; isComplete: boolean };
   conversionNotice?: ConversionNotice;
   /** The epoch the transaction must be sent before, when it requests withdrawals. */
-  broadcastBefore?: ccc.Epoch;
+  broadcastBefore?: BroadcastDeadline;
 }>;
 
-export const txInfoPadding: TxInfo = Object.freeze({
-  tx: ccc.Transaction.default(),
-  error: "",
-  fee: 0n,
-  estimatedMaturity: 0n,
-});
+/**
+ * A transaction preview, or why there is none. Both carry the maturity estimate, which
+ * also dates what is already converting.
+ */
+export type TxInfo =
+  SendableTx | Readonly<{ ok: false; error: string; estimatedMaturity: bigint }>;
 
 /** The small line under a value the user cannot edit, saying why, centred beneath it. */
 export const reasonLabelClass =
@@ -101,7 +102,7 @@ export function walletLabel(
   return "Wallet";
 }
 
-export const CKB = ccc.fixedPointFrom(1);
+export const CKB = ccc.One;
 export const maxShannons = (1n << 64n) - 1n;
 
 export type AmountInput =
@@ -119,8 +120,7 @@ export function parseAmountInput(text: string): AmountInput {
   }
   // ASCII digits only: `\d` never matches other scripts' digits, with or without `u`.
   // eslint-disable-next-line security/detect-unsafe-regex -- The optional group starts with a literal dot, so no input backtracks.
-  const parts = /^(\d*)(?:\.(\d{0,8}))?$/u.exec(text);
-  if (parts === null) {
+  if (!/^\d*(?:\.\d{0,8})?$/u.test(text)) {
     return {
       status: "invalid",
       amount: undefined,
@@ -128,8 +128,8 @@ export function parseAmountInput(text: string): AmountInput {
     };
   }
 
-  const [, whole = "", fraction = ""] = parts;
-  const amount = BigInt(`0${whole}`) * CKB + BigInt(fraction.padEnd(8, "0"));
+  // CCC would drop a ninth decimal and take a sign; the grammar above refuses both first.
+  const amount = ccc.fixedPointFrom(text);
   if (amount > maxShannons) {
     return {
       status: "invalid",
@@ -141,15 +141,24 @@ export function parseAmountInput(text: string): AmountInput {
   return { status: "valid", amount, error: "" };
 }
 
-export function toText(amount: bigint): string {
-  const text = ccc.fixedPointToString(amount);
-  return text.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0*$/u, "");
-}
+const twoDecimalFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+});
 
 /** Two decimals, rounded half up: the estimate's precision on screen. */
 export function twoDecimals(shannons: bigint): string {
-  const cents = (shannons + CKB / 200n) / (CKB / 100n);
-  return `${String(cents / 100n)}.${String(cents % 100n).padStart(2, "0")}`;
+  return twoDecimalFormat.format(exactDecimal(shannons));
+}
+
+/**
+ * CCC's exact decimal string, typed for Intl, which formats a numeric string as written
+ * rather than through a double that cannot hold eight decimals of a large amount.
+ */
+export function exactDecimal(shannons: bigint): `${number}` {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- fixedPointToString returns a plain decimal numeral.
+  return ccc.fixedPointToString(shannons) as `${number}`;
 }
 
 export function clampShannons(amount: bigint): bigint {

@@ -1,6 +1,6 @@
 # Bot Policy
 
-One process reads committed state, builds at most one transaction, signs, sends, waits, and exits. [`policy.ts`](../src/bot/policy.ts) chooses rebalances, [`match.ts`](../src/bot/match.ts) chooses fills, [`transaction.ts`](../src/bot/transaction.ts) builds candidates, and [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
+Each turn reads committed state, builds at most one transaction, signs, sends and waits; the process then runs the next turn ten minutes after this one started, as the [loop](../README.md#runtime-config) explains. [`policy.ts`](../src/bot/policy.ts) chooses rebalances, [`match.ts`](../src/bot/match.ts) chooses fills, [`transaction.ts`](../src/bot/transaction.ts) builds candidates, and [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
 
 ## One turn
 
@@ -9,11 +9,11 @@ One process reads committed state, builds at most one transaction, signs, sends,
 3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the sampled liquid cells, sweeping spare cells along.
 4. Send only if a match, deposit, withdrawal request or collection remains. Compaction alone never sends.
 
-A skip or commit exits `0`; any failure exits `1`. The next process reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
+A skip, commit or failure ends the turn, and the next one, in the same process or after the [restart](../README.md#runtime-config), reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
 
 ## Matching makes progress from available inventory
 
-The bot places no orders. Its book is every order past par, regardless of owner. It shuffles once using a logged seed from the tip hash, then repeatedly:
+The bot places no orders. Its book is every order past par, regardless of owner. It shuffles once using a logged seed from the hash of the block the state was read at, then repeatedly:
 
 - sizes each order's largest fill payable from the remaining balances;
 - probes the exact matcher and subtracts ten mining fees from the fill's exchange value;
@@ -68,7 +68,7 @@ The reserve is not a loss limiter. A builder defect that gave capacity away woul
 
 The bot uses [`BOT_LOCK_UP`](../../src/dao.ts). Its selection window and broadcast reserve use epochs; the minutes in that source comment assume a nominal four-hour epoch. A fresh tip read after signing refuses an expired request before broadcast, because committing after the claim can lock the deposit for another cycle. CKB has no transaction expiry that can enforce this after broadcast.
 
-The bot waits up to two minutes so its journal can join a send to a commit. It rebuilds next turn whether that wait succeeds or not. A long wait on a stuck request consumes time that could be used to rebuild before the claim; rebuilding can repair a dropped or replaceable request, not accelerate one still pending. The timeout and interval live in [`turn.ts`](../src/bot/turn.ts).
+The bot waits up to two minutes so its journal can join a send to a commit. It rebuilds next turn whether that wait succeeds or not; rebuilding can repair a dropped or replaceable request, not accelerate one still pending. A failed send exits, and the ten-minute restart dominates the time to rebuild: a request selected with its claim less than about 31 minutes out (`BOT_LOCK_UP` selects 20 to 60 minutes and sends while 15 remain) can no longer be re-requested after a failure, where the one-minute restart left room down to about 23. That deposit waits a cycle, the accepted cost of the restart cadence. The timeout and interval live in [`turn.ts`](../src/bot/turn.ts).
 
 ## Operating assumptions
 

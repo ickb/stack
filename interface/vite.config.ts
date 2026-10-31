@@ -2,16 +2,8 @@ import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type AliasOptions } from "vite";
+import { defineConfig } from "vite";
 
-const workspacePackageSources = fileURLToPath(
-  new URL("../{sdk,testkit}/src/**", import.meta.url),
-);
-const workspacePackageSource = (name: string): string =>
-  fileURLToPath(new URL(`../${name}/src/index.ts`, import.meta.url));
-const workspaceAliases: AliasOptions = [
-  { find: "@ickb/sdk", replacement: workspacePackageSource("sdk") },
-];
 const testnetWalletMode = "testnet-wallet";
 const testnetWalletGate = fileURLToPath(
   new URL("test/browser/LiveTestnetWalletHarness.tsx", import.meta.url),
@@ -27,12 +19,9 @@ export default defineConfig(({ command, mode }) => {
   }
   return {
     resolve: {
-      alias: [
-        ...workspaceAliases,
-        ...(isTestnetWallet
-          ? [{ find: "../wallet/WalletGate.tsx", replacement: testnetWalletGate }]
-          : []),
-      ],
+      alias: isTestnetWallet
+        ? [{ find: "../wallet/WalletGate.tsx", replacement: testnetWalletGate }]
+        : [],
     },
     // Relative asset URLs: the bundle works at any mount point, the domain root or a
     // project path such as ickb.github.io/stack/. The app has no client-side routes.
@@ -46,11 +35,6 @@ export default defineConfig(({ command, mode }) => {
     ],
     optimizeDeps: {
       exclude: ["@ickb/sdk"],
-    },
-    build: {
-      commonjsOptions: {
-        include: [/node_modules/u, workspacePackageSources],
-      },
     },
   };
 });

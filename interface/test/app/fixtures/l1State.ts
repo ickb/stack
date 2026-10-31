@@ -1,11 +1,11 @@
 import type { L1StateType } from "../../../src/app/queries.ts";
-import type { TxInfo } from "../../../src/shared/utils.ts";
+import type { SendableTx } from "../../../src/shared/utils.ts";
 import { txWithInput } from "../../action/fixtures/transaction.ts";
 
-export function activeTxInfo(): TxInfo {
+export function activeTxInfo(): SendableTx {
   return {
+    ok: true,
     tx: txWithInput("11"),
-    error: "",
     fee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",

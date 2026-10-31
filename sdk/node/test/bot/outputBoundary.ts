@@ -27,26 +27,22 @@ describe("bot private key output boundary", () => {
       );
       const emitter = new BotEventEmitter({
         chain: config.chain,
-        runId: "run-canary-test",
+        processId: "run-canary-test",
       });
 
       emitter.emit({ type: "bot.turn.started" });
       emitter.emit({ type: "bot.turn.failed", error: new TypeError("fetch failed") });
 
       expect(config.privateKey).toBe(privateKey);
-      expect(config.rpcEndpoint).toEqual({
-        mode: "exclusive",
-        protocol: "https:",
-        hostname: "testnet.example",
-        port: "",
-        pathname: "/",
-      });
+      expect(config.rpcEndpoints).toEqual([
+        { protocol: "https:", hostname: "testnet.example", port: "" },
+      ]);
       expect(output.join("")).not.toContain(privateKey);
       expect(output.join("")).not.toContain("token=canary");
       for (const line of output) {
         expect(JSON.parse(line)).toMatchObject({
           chain: "testnet",
-          runId: "run-canary-test",
+          runId: "run-canary-test-1",
         });
       }
     } finally {

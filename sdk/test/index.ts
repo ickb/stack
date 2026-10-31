@@ -7,7 +7,6 @@ describe("sdk package barrel", () => {
       "DEFAULT_ORDER_FEE",
       "DEFAULT_ORDER_FEE_BASE",
       "IckbError",
-      "hasTransactionActivity",
       "IckbSdk",
       "OrderConversionRepresentabilityError",
       "Ratio",
