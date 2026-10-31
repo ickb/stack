@@ -6,8 +6,8 @@ import {
   type AccountAvailabilityProjection,
   type Ratio,
 } from "@ickb/sdk";
-import { groupDigits } from "../shared/figures.ts";
-import { twoDecimals, type AmountInput } from "../shared/utils.ts";
+import { groupDigits, twoDecimals } from "../shared/figures.ts";
+import type { AmountInput } from "../shared/utils.ts";
 
 export interface AssetDisplay {
   name: "CKB" | "iCKB";
