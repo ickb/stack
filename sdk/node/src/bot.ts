@@ -1,16 +1,16 @@
-import { ccc } from "@ckb-ccc/core";
+import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getConfig } from "../../src/constants.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
-import { SignerCombined, signerAccountLocks } from "../../src/utils/signer.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
 import type { Runtime } from "./bot/types.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { readRuntimeConfigEnv } from "./shared/runtime_config.ts";
+import { keyAccount } from "./shared/signer.ts";
 
 // One process runs turns for six hours or until one fails: read config and connect once, then
 // act at most once per turn, a turn starting BOT_TURN_MS after the previous one started.
@@ -34,22 +34,13 @@ try {
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
   const managers = getConfig(chain);
-  // BEFORE EDITING, STOP AND PROVE, LOCAL SAFETY IS NOT ENOUGH:
-  // - OWNER: secret purpose boundary.
-  // - INVARIANT: private keys pass only to signer construction and signing.
-  // - FAILURE MODE: passing keys to logs, events, telemetry, redaction, masking, or test hooks leaks signing authority.
-  const signer = new SignerCombined(
-    privateKeys.map((key) => new ccc.SignerCkbPrivateKey(client, key)),
+  const { signer, address, primaryLock, accountLocks } = await keyAccount(
+    client,
+    privateKeys,
   );
-  const address = await signer.getRecommendedAddressObj();
-  const primaryLock = address.script;
   events.emit({
     type: "bot.chain.preflight",
-    identity: {
-      address: address.toString(),
-      primaryLock,
-      rpcEndpoints,
-    },
+    identity: { address, primaryLock, rpcEndpoints },
   });
   const sdk = new IckbSdk(managers);
   const runtime: Runtime = {
@@ -57,7 +48,7 @@ try {
     sdk,
     managers,
     primaryLock,
-    accountLocks: await signerAccountLocks(signer, primaryLock),
+    accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, feeRate, cells, protocolCells, tip) =>
       sdk.completeTransaction(tx, { signer, feeRate, cells, protocolCells, tip }),
