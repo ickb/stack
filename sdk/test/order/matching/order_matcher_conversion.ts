@@ -177,7 +177,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     expect(matcher.bMaxMatch).toBeGreaterThan(0n);
   });
 
-  it("rejects orders whose fee leaves no spendable input", () => {
+  it("rejects orders whose fee takes all their spendable input", () => {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1),
       udtValue: 0n,
@@ -200,7 +200,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     });
 
     expect(
-      OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(2)),
+      OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(1)),
     ).toBeUndefined();
   });
 });
