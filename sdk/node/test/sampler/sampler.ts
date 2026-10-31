@@ -10,10 +10,17 @@ const SAMPLE_TIP_ISO = "2024-09-13T00:00:00.000Z";
 const APPROXIMATE_SAMPLE = "Approximate timestamp sample";
 
 describe(SAMPLER_MODULE_SUITE, () => {
-  it("samples each covered UTC year", () => {
+  it("samples each covered UTC year, both range ends inclusive", () => {
     expect(samples(0n, 1n, 1).map((date) => date.toISOString())).toEqual([
       "1970-01-01T00:00:00.000Z",
     ]);
+    expect(samples(0n, 0n, 1).map((date) => date.toISOString())).toEqual([
+      "1970-01-01T00:00:00.000Z",
+    ]);
+    // A year's samples stop before the next year's start, which that year samples once.
+    expect(
+      samples(0n, BigInt(Date.UTC(1971, 0, 1)), 1).map((date) => date.toISOString()),
+    ).toEqual(["1970-01-01T00:00:00.000Z", "1971-01-01T00:00:00.000Z"]);
   });
 
   it("rejects reversed sample ranges", () => {
@@ -56,6 +63,7 @@ describe(SAMPLER_MODULE_SUITE, () => {
       ),
     );
 
+    expect(lines[0]).toBe("BlockNumber, Date, CkbPerIckb, Note");
     expect(lines.map((line) => line.split(", ").slice(0, 2))).toEqual([
       ["BlockNumber", "Date"],
       ["0", SAMPLE_GENESIS_ISO],
@@ -132,23 +140,35 @@ describe(SAMPLER_MODULE_SUITE, () => {
 });
 
 describe(SAMPLER_MODULE_SUITE, () => {
-  it("does not sample iCKB launch after the current tip", async () => {
-    const genesis = sampleHeader(0n, "2024-09-11T00:00:00.000Z");
-    const tip = sampleHeader(1n, "2024-09-12T00:00:00.000Z");
+  it.each([
+    [
+      "after the current tip",
+      "2024-09-11T00:00:00.000Z",
+      "2024-09-12T00:00:00.000Z",
+      false,
+    ],
+    ["before genesis", "2024-09-13T00:00:00.000Z", "2024-09-14T00:00:00.000Z", false],
+    ["at both range ends", SAMPLE_LAUNCH_ISO, SAMPLE_LAUNCH_ISO, true],
+  ])(
+    "samples the iCKB launch only inside the range: %s",
+    async (_label, from, to, included) => {
+      const genesis = sampleHeader(0n, from);
+      const tip = sampleHeader(1n, to);
 
-    const lines = await rows(
-      sampleClient(
-        new Map([
-          [0, genesis],
-          [1, tip],
-        ]),
-        tip,
-      ),
-    );
+      const lines = await rows(
+        sampleClient(
+          new Map([
+            [0, genesis],
+            [1, tip],
+          ]),
+          tip,
+        ),
+      );
 
-    expect(lines.join("\n")).not.toContain("iCKB Launch");
-    expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
-  });
+      expect(lines.join("\n").includes("iCKB Launch")).toBe(included);
+      expect(lines.at(-1)?.endsWith(", Tip")).toBe(true);
+    },
+  );
 });
 
 describe(SAMPLER_MODULE_SUITE, () => {
