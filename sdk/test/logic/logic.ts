@@ -24,6 +24,8 @@ import {
 import { IckbUdt, ickbValue } from "../../src/udt.ts";
 
 const logic = script("11");
+// Typed unknown so the matcher's `any` stays out of the asserted object.
+const anyError: unknown = expect.any(Error);
 const daoDep = ccc.CellDep.from({
   outPoint: { txHash: byte32FromByte("dd"), index: 0n },
   depType: "code",
@@ -345,7 +347,10 @@ describe("LogicManager.receiptsFrom", () => {
     const cell = receiptCellOf("11", "0x12");
 
     expect(() => receiptCell(cell, header)).toThrow(
-      `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 

@@ -28,6 +28,8 @@ const daoDep = ccc.CellDep.from({
 });
 const dao = { script: script("33"), cellDeps: [daoDep] };
 const userLock = script("44");
+// Typed unknown so the matcher's `any` stays out of the asserted object.
+const anyError: unknown = expect.any(Error);
 
 function manager(cellDeps: ccc.CellDep[] = []): OwnedOwnerManager {
   return new OwnedOwnerManager(ownedOwner, cellDeps, dao);
@@ -141,7 +143,10 @@ describe("owner data", () => {
     );
 
     expect(() => owner.getOwned()).toThrow(
-      `Invalid owner marker payload at ${owner.cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid owner marker payload at ${owner.cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 
@@ -607,7 +612,10 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     await expect(
       manager().withdrawalGroupsFrom(client, [scanned(ownerOf(owned))], tip),
     ).rejects.toThrow(
-      `Invalid DAO withdrawal request payload at ${owned.cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid DAO withdrawal request payload at ${owned.cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 
