@@ -16,7 +16,7 @@ Design rationale lives with the feature it explains: a reason comment for a bran
 
 ## Workspace boundaries
 
-`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and depends at runtime only on `@ckb-ccc/core`. It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
+`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and one dependency, `@ckb-ccc/core`, which it takes as a [peer](sdk/README.md#layout). It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
 
 `sdk/node/`, `interface/` and `testkit/` are private workspaces. The three Node entrypoints share preflight, configuration and logging under `sdk/node/src/shared/`; they never import each other. Development, tests and bot deployments run from TypeScript source. The SDK's build emits `dist/` for publishing, not for local workspace execution.
 
@@ -35,7 +35,7 @@ pnpm install --frozen-lockfile
 CI=true pnpm check
 ```
 
-CCC is an ordinary dependency resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
+CCC is an ordinary package resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
 
 The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
 

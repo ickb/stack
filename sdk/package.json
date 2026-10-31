@@ -56,10 +56,11 @@
       }
     }
   },
-  "dependencies": {
+  "peerDependencies": {
     "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
+    "@ckb-ccc/core": "catalog:",
     "@ickb/testkit": "workspace:*",
     "@typescript/native-preview": "catalog:"
   }
