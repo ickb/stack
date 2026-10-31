@@ -12,7 +12,7 @@
   "mutate": [
     "sdk/src/**/*.ts",
     "sdk/node/src/**/*.ts",
-    "!sdk/node/src/{bot,sampler,stimulus}.ts",
+    "!sdk/node/src/{bot,stimulus}.ts",
     "interface/src/**/*.{ts,tsx}",
     "testkit/src/**/*.ts"
   ],
