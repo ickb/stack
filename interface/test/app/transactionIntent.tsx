@@ -45,10 +45,6 @@ vi.mock(import("../../src/view/WalletAppView.tsx"), () => ({
 }));
 
 const App = (await import("../../src/app/App.tsx")).default;
-// Inside act, React queues each commit's passive-effect flush, which reads `window.event`,
-// on act's queue rather than the Scheduler's; act drains it before returning, so the DOM
-// can be restored at once. Out of act, that flush could outlive restoreDom's macrotask wait.
-Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const { createRoot, restoreNow } = await fakeDom();
 
 afterAll(restoreNow);

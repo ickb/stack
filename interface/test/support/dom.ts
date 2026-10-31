@@ -1,4 +1,3 @@
-import type { flushSync } from "react-dom";
 import type { Root } from "react-dom/client";
 import { vi } from "vitest";
 
@@ -28,15 +27,17 @@ export function stubDom(): void {
 /**
  * Stubs the fake document, then loads React DOM under it.
  *
- * `restoreDom` waits a macrotask first, so React's scheduled work still finds the fake;
- * `restoreNow` is for a caller whose work `act` has already flushed.
+ * Callers render inside `act`: out of it, React runs each commit's passive-effect flush,
+ * which reads `window.event`, as a Scheduler task that can outlive the test and find the
+ * DOM restored. `act` queues that flush on its own queue and drains it before returning,
+ * so `restoreNow` may restore the DOM as soon as the last `act` has returned.
  */
 export async function fakeDom(): Promise<{
   createRoot: () => Root;
-  flushSync: typeof flushSync;
-  restoreDom: () => Promise<void>;
   restoreNow: () => void;
 }> {
+  // React warns about every act call unless the environment declares itself a test.
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   const originalDocument: unknown = Reflect.get(globalThis, "document");
   const originalWindow: unknown = Reflect.get(globalThis, "window");
   const restoreNow = (): void => {
@@ -44,19 +45,11 @@ export async function fakeDom(): Promise<{
     vi.stubGlobal("window", originalWindow);
   };
   stubDom();
-  const reactDom = await import("react-dom");
   const reactDomClient = await import("react-dom/client");
   return {
     createRoot: (): Root =>
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- React DOM owns this structural test container boundary.
       reactDomClient.createRoot(fakeContainer() as unknown as Element),
-    flushSync: reactDom.flushSync,
-    restoreDom: async (): Promise<void> => {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
-      restoreNow();
-    },
     restoreNow,
   };
 }

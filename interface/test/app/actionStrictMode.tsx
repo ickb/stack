@@ -1,6 +1,13 @@
 import { script } from "@ickb/testkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, Fragment, StrictMode, useState, type ReactElement } from "react";
+import {
+  act,
+  createElement,
+  Fragment,
+  StrictMode,
+  useState,
+  type ReactElement,
+} from "react";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import type * as TransactionModule from "../../src/action/actionTransaction.ts";
@@ -12,6 +19,7 @@ import type { L1StateType } from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
 import { fakeDom, stubDom } from "../support/dom.ts";
+import { inAct } from "../support/renderHook.ts";
 import { l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
@@ -44,7 +52,7 @@ vi.mock(import("../../src/action/actionTransaction.ts"), async (importActual) =>
 
 const actionComponent = (await import("../../src/action/Action.tsx")).default;
 const nativeAbortController = AbortController;
-const { createRoot, flushSync, restoreDom } = await fakeDom();
+const { createRoot, restoreNow } = await fakeDom();
 
 beforeEach(() => {
   stubDom();
@@ -58,7 +66,7 @@ afterEach(async () => {
   vi.stubGlobal("AbortController", nativeAbortController);
 });
 
-afterAll(restoreDom);
+afterAll(restoreNow);
 
 describe("Action StrictMode ownership", () => {
   it("runs a send click under the surviving mount's controller", () => {
@@ -67,13 +75,15 @@ describe("Action StrictMode ownership", () => {
     const { controllers, root } = strictAction(fixture.config, freeze);
 
     const onAction = currentLayout().onAction;
-    onAction?.();
+    act(() => {
+      onAction?.();
+    });
 
     // StrictMode mounts twice; the attempt runs under the surviving mount's controller.
     expect(mocks.transact).toHaveBeenCalledTimes(1);
     expect(mocks.transact.mock.calls[0]?.[0].signal).toBe(controllers.at(-1)?.signal);
     expect(controllers.at(-1)?.signal.aborted).toBe(false);
-    flushSync(() => {
+    act(() => {
       root.unmount();
     });
     onAction?.();
@@ -91,7 +101,9 @@ describe("Action StrictMode ownership", () => {
     );
 
     expect(currentLayout().action).toBe("retry confirmation");
-    currentLayout().onAction?.();
+    act(() => {
+      currentLayout().onAction?.();
+    });
 
     expect(mocks.retryConfirmation).toHaveBeenCalledTimes(1);
     expect(mocks.retryConfirmation.mock.calls[0]?.[0].signal).toBe(
@@ -99,7 +111,7 @@ describe("Action StrictMode ownership", () => {
     );
     expect(controllers.at(-1)?.signal.aborted).toBe(false);
     expect(fixture.sendTransaction).not.toHaveBeenCalled();
-    flushSync(() => {
+    act(() => {
       root.unmount();
     });
   });
@@ -121,28 +133,25 @@ async function waitThenRetry(): Promise<void> {
     params.setIsConfirming(false);
   });
 
-  flushSync(() => {
+  // The shared submission publishes the hash asynchronously; awaiting it inside act
+  // commits the render it schedules.
+  await inAct(async () => {
     currentLayout().onAction?.();
+    await submitted;
   });
   const firstSignal = mocks.transact.mock.calls[0]?.[0].signal;
-  // The shared submission publishes the hash asynchronously, so the layout only
-  // shows the watch once the render it schedules is flushed.
-  await submitted;
-  await vi.waitFor(() => {
-    flushSync(flushScheduledRender);
-    expect(currentLayout().action).toBe("confirming...");
-  });
+  expect(currentLayout().action).toBe("confirming...");
   expect(currentLayout().disabled).toBe(true);
 
-  windowClosed.resolve(undefined);
-  await vi.waitFor(() => {
-    flushSync(flushScheduledRender);
-    expect(currentLayout().action).toBe("retry confirmation");
+  await inAct(async () => {
+    windowClosed.resolve(undefined);
+    await mocks.transact.mock.results[0]?.value;
   });
+  expect(currentLayout().action).toBe("retry confirmation");
   expect(firstSignal?.aborted).toBe(false);
   expect(currentLayout().disabled).toBe(false);
 
-  flushSync(() => {
+  act(() => {
     currentLayout().onAction?.();
   });
   const retrySignal = mocks.retryConfirmation.mock.calls[0]?.[0].signal;
@@ -154,14 +163,10 @@ async function waitThenRetry(): Promise<void> {
   expect(mocks.retryConfirmation).toHaveBeenCalledTimes(1);
   expect(fixture.sendTransaction).not.toHaveBeenCalled();
 
-  flushSync(() => {
+  act(() => {
     root.unmount();
   });
   expect(retrySignal.aborted).toBe(true);
-}
-
-function flushScheduledRender(): void {
-  // Deliberately empty: flushSync itself renders the already-scheduled update.
 }
 
 function strictAction(
@@ -185,7 +190,7 @@ function strictAction(
     [config.chain, config.address, "txInfo", "state", true, "1"],
     activeTxInfo(),
   );
-  flushSync(() => {
+  act(() => {
     root.render(
       createElement(
         StrictMode,

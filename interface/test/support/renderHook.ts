@@ -19,8 +19,6 @@ export async function renderHook<P, R>(
   rerender: (props: P) => Promise<void>;
   unmount: () => Promise<void>;
 }> {
-  // React warns about every act call unless the environment declares itself a test.
-  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   const { createRoot, restoreNow } = await fakeDom();
   const root = createRoot();
   let rendered: { value: R } | undefined;
