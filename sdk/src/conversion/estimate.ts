@@ -7,7 +7,7 @@ import {
 import type { Info } from "../order/info.ts";
 import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
-import type { ConversionNotice, SystemState } from "./types.ts";
+import type { SystemState } from "./types.ts";
 
 /**
  * Quote details for one order-based conversion path.
@@ -21,8 +21,6 @@ export interface ConversionOrderEstimate {
   info: Info;
   /** Estimated maturity timestamp, or `undefined` when it cannot be estimated. */
   maturity: ccc.Num | undefined;
-  /** A non-fatal notice about the path this estimate took, for the caller to surface. */
-  notice?: ConversionNotice;
 }
 
 /**
@@ -86,7 +84,7 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 
 /**
  * The order leg of an iCKB-to-CKB conversion: at the default fee when that fee clears the
- * maturity threshold, else the smallest fee that does (a dust order, noticed). Either way
+ * maturity threshold, else the smallest fee that does (a dust order). Either way
  * it is dated: a sell order at par is always covered by the pool (see `maturity`).
  */
 export function estimateIckbToCkbOrder(
@@ -112,11 +110,6 @@ export function estimateIckbToCkbOrder(
   return {
     ...dust,
     maturity: maturity({ info: dust.info, amounts }, system, takenDeposits),
-    notice: {
-      inputIckb: amounts.udtValue,
-      outputCkb: dust.convertedAmount,
-      incentiveCkb: positiveFee(dust.ckbFee),
-    },
   };
 }
 
@@ -166,8 +159,4 @@ function lowestFeeEstimateAtThreshold(
     }
   }
   return estimateWithFee(low);
-}
-
-function positiveFee(fee: bigint): bigint {
-  return fee > 0n ? fee : 0n;
 }

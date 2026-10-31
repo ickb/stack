@@ -140,7 +140,6 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
     expect(result).toMatchObject({
       maturity: 600000n,
-      notice: { incentiveCkb: 0n },
     });
   });
 
@@ -154,7 +153,6 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
     expect(result).toMatchObject({
       maturity: 600000n,
     });
-    expect(result?.notice).toBeUndefined();
   });
 
   it("returns no iCKB-to-CKB estimate when the base quote converts to zero", () => {
@@ -182,8 +180,9 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
     expect(result).toMatchObject({
       maturity: 601234n,
-      notice: { inputIckb: 100000n },
     });
+    // The default fee pays 10; only the dust search reaches the threshold of 20.
+    expect(result?.ckbFee).toBe(20n);
   });
 
   it("returns no dust estimate when no fee reaches the maturity threshold", () => {
@@ -250,7 +249,6 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
       throw new Error("Expected dust iCKB-to-CKB order estimate");
     }
     expect(result.maturity).toBe(601234n);
-    expect(result.notice).toMatchObject({ inputIckb: 1000000n });
     expect(result.ckbFee).toBeGreaterThanOrEqual(332220n);
     expect(result.convertedAmount).toBeGreaterThan(0n);
     expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual(maxUint64);

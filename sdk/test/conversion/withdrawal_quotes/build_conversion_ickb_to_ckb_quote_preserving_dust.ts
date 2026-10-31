@@ -56,7 +56,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(result).toMatchObject({
       ok: true,
       conversionKind: DIRECT_PLUS_ORDER,
-      conversionNotice: { inputIckb: 1000000n },
     });
     expect(requestWithdrawal).toHaveBeenCalledTimes(1);
     expect(mint).toHaveBeenCalledTimes(1);

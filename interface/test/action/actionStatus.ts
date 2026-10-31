@@ -43,22 +43,6 @@ describe("action status", () => {
       `${noRequestMessage}.`,
     );
     expect(actionMessage(undefined, flags())).toBe(`${noRequestMessage}.`);
-    expect(
-      actionMessage(
-        {
-          ...txInfo,
-          conversionKind: "order",
-          conversionNotice: {
-            inputIckb: 1n * 100000000n,
-            outputCkb: 2n * 100000000n,
-            incentiveCkb: 25_000_000n,
-          },
-        },
-        flags(),
-      ),
-    ).toBe(
-      "Converts when a bot fills it, estimated below. This small request converts 1 iCKB to about 2 CKB and pays 0.25 CKB for the variable time.",
-    );
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
       "Converts at a fixed time, shown below. Also collects converted funds.",
     );

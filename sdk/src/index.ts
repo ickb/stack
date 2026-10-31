@@ -48,7 +48,6 @@ export type {
   AccountState,
   ConversionDirection,
   ConversionKind,
-  ConversionNotice,
   ConversionTransactionContext,
   ConversionTransactionContextProjection,
   ConversionTransactionFailureReason,

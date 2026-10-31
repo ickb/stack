@@ -71,21 +71,6 @@ export type ConversionTransactionFailureReason =
   | "amount-too-small"
   | "nothing-to-do";
 
-/**
- * A dust iCKB-to-CKB order: too small for the default fee to clear the estimate threshold,
- * so it pays the smallest fee that does. For callers to surface in UI or logs.
- */
-export interface ConversionNotice {
-  /** iCKB input amount that triggered the notice. */
-  inputIckb: bigint;
-
-  /** CKB output estimate for the noticed path. */
-  outputCkb: bigint;
-
-  /** CKB incentive associated with the noticed path. */
-  incentiveCkb: bigint;
-}
-
 /** Composition category selected for a built conversion. */
 export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";
 
@@ -103,8 +88,6 @@ export type ConversionTransactionResult =
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */
       conversionKind: ConversionKind;
-      /** Optional notice about the selected path. */
-      conversionNotice?: ConversionNotice;
       /**
        * True when every liquid cell of the context is an input. False when the input limit
        * left some behind: a move to another lock then needs another transaction.

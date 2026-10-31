@@ -48,11 +48,11 @@ For a foreign destination, the amount becomes zero and the direction switch and 
 
 Completion deliberately sweeps liquid cells. A large account can exceed its input limit, so the status asks the user to run the send again until everything has been sent. iCKB cells are swept before plain CKB, with plain cells available for fee completion. The [SDK funding rules](../sdk/README.md#funding-and-compaction) own that order and its limits.
 
-### Balances and small amounts
+### Balances
 
 CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. There is therefore no CKB Max; completion reports a shortfall before signing. iCKB Max uses the SDK's bound, including collectable funds.
 
-For iCKB-to-CKB requests below the normal order threshold, the SDK can build a discounted dust order when it finds actionable terms. The status shows the small input, approximate output and conversion cost before signing. If no such terms exist, it asks for a larger amount. This can help recover the CKB capacity backing a small iCKB cell.
+For iCKB-to-CKB requests below the normal order threshold, the SDK can build a discounted dust order when it finds actionable terms; if none exist, it asks for a larger amount. This can help recover the CKB capacity backing a small iCKB cell. Its order fee is about ten times the fee rate in shannons (0.0001 CKB at the 1,000 floor), above the default fee, so the form's quote overstates its output by that difference. The status no longer names those terms: for the 0.003 iCKB remainder of a 100,000 iCKB withdrawal it spent a sentence on a negligible part, and the preview already shows the transaction fee.
 
 ## Preview, signing and confirmation
 

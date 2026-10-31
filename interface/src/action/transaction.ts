@@ -71,9 +71,6 @@ export async function buildTransactionPreview(
       ...(destination.moveTo === undefined
         ? {}
         : { move: { to: destination.moveTo, isComplete: result.isSweepComplete } }),
-      ...(result.conversionNotice === undefined
-        ? {}
-        : { conversionNotice: result.conversionNotice }),
       ...(result.broadcastBefore === undefined
         ? {}
         : { broadcastBefore: result.broadcastBefore }),

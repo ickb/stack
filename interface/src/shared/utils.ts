@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/ccc";
 import type {
   BroadcastDeadline,
   ConversionKind,
-  ConversionNotice,
   IckbSdk,
   SupportedChain,
 } from "@ickb/sdk";
@@ -54,7 +53,6 @@ export type SendableTx = Readonly<{
    * destination, and whether the sweep took every liquid cell or another move is needed.
    */
   move?: { to: string; isComplete: boolean };
-  conversionNotice?: ConversionNotice;
   /** The epoch the transaction must be sent before, when it requests withdrawals. */
   broadcastBefore?: BroadcastDeadline;
 }>;

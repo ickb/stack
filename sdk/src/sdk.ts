@@ -365,7 +365,6 @@ export class IckbSdk {
       },
       async (partial) => this.completeConversion(partial, options),
     );
-    const notice = plan.order?.estimate.notice;
     const broadcastBefore = broadcastDeadline(
       plan.selectedDeposits.map((deposit) => deposit.claimEpoch),
       context.system.lockUp,
@@ -379,7 +378,6 @@ export class IckbSdk {
         plan.selectedDeposits.length > 0,
         plan.order !== undefined,
       ),
-      ...(notice === undefined ? {} : { conversionNotice: notice }),
       isSweepComplete: sweepsAll(tx, context.cells),
       ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
     };

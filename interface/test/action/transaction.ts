@@ -28,13 +28,11 @@ afterEach(() => {
 describe("buildTransactionPreview", () => {
   it("delegates planning and completion to the SDK and reports the planned fee", async () => {
     const tx = txWithInput("99");
-    const notice = { inputIckb: 1n, outputCkb: 1n, incentiveCkb: 0n };
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({
         tx,
         plannedFee: 42n,
         estimatedMaturity: 123n,
-        conversionNotice: notice,
       }),
     );
     const txContext = context();
@@ -55,7 +53,6 @@ describe("buildTransactionPreview", () => {
       tx,
       fee: 42n,
       estimatedMaturity: 123n,
-      conversionNotice: notice,
     });
   });
 

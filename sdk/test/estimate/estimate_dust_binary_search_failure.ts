@@ -27,7 +27,6 @@ describe("IckbSdk.estimate dust fee search", () => {
       ),
     ).toMatchObject({
       maturity: 600000n,
-      notice: { incentiveCkb: 0n },
     });
   });
 

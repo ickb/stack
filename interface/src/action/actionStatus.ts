@@ -1,4 +1,3 @@
-import { ccc } from "@ckb-ccc/ccc";
 import type { SendableTx, TxInfo } from "../shared/utils.ts";
 import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 
@@ -80,7 +79,7 @@ function previewMessage(
  * positions stay, and a sweep the input limit cut short asks for another run.
  */
 function transactionIntentMessage(
-  txInfo: Pick<SendableTx, "conversionKind" | "conversionNotice" | "move">,
+  txInfo: Pick<SendableTx, "conversionKind" | "move">,
   hasCollectable: boolean,
   hasConverting: boolean,
 ): string {
@@ -102,13 +101,7 @@ function transactionIntentMessage(
       ? "Collects what is ready, the rest keeps converting."
       : "Collects everything that was converting.";
   }
-  return [
-    conversionIntentText(txInfo.conversionKind),
-    txInfo.conversionNotice === undefined
-      ? ""
-      : conversionNoticeText(txInfo.conversionNotice),
-    collectableNotice(hasCollectable),
-  ]
+  return [conversionIntentText(txInfo.conversionKind), collectableNotice(hasCollectable)]
     .filter((text) => text !== "")
     .join(" ");
 }
@@ -142,12 +135,6 @@ function failureMessage(failure: string): string {
 
 function isAvailabilityMessage(message: string): boolean {
   return message === noCollectionMessage || message === noRequestMessage;
-}
-
-function conversionNoticeText(
-  notice: NonNullable<SendableTx["conversionNotice"]>,
-): string {
-  return `This small request converts ${ccc.fixedPointToString(notice.inputIckb)} iCKB to about ${ccc.fixedPointToString(notice.outputCkb)} CKB and pays ${ccc.fixedPointToString(notice.incentiveCkb)} CKB for the variable time.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {
