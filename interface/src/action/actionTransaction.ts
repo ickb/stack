@@ -243,13 +243,6 @@ async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T
   return result;
 }
 
-function isWaitWindowTimeout(error: unknown): boolean {
-  return (
-    error instanceof ccc.ErrorClientWaitTransactionTimeout ||
-    (error instanceof Error && error.name === "ErrorClientWaitTransactionTimeout")
-  );
-}
-
 function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
   // Nothing was sent: the preview is released below and rebuilds from a fresh state read.
   if (error instanceof TransactionExpiredError) {
@@ -259,7 +252,7 @@ function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined):
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;
   }
-  if (isWaitWindowTimeout(error) && txHash !== undefined) {
+  if (error instanceof ccc.ErrorClientWaitTransactionTimeout && txHash !== undefined) {
     const seconds = String(confirmationWindowMs / 1000);
     return `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`;
   }
