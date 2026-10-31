@@ -54,7 +54,7 @@ describe("ickbWorthSamples", () => {
 
     expect(tip?.date).toEqual(new Date(liveTipDateIso));
     // The live ratio is gross of the deposit's occupied capacity; the curve is not.
-    expect(tip?.value).toBeCloseTo(1.25);
+    expect(tip?.value).toBeCloseTo(1.25, 10);
   });
 
   it("ignores invalid live tip values", () => {
@@ -124,7 +124,15 @@ describe("rateChartView", () => {
   it("builds stable chart geometry", () => {
     const state = view(100000000n, false);
 
-    expect(state.points.split(" ")).toHaveLength(36);
+    const points = state.points.split(" ");
+    expect(points).toHaveLength(36);
+    // The curve spans the plot: genesis at the bottom left, the tip at the top right.
+    expect([points[0], points.at(-1)]).toEqual(["10,98", "606,18"]);
+    expect(state.gridMarks.map(({ label }) => label)).toEqual([
+      "1 CKB",
+      "1.1 CKB",
+      "1.2 CKB",
+    ]);
     expect(state.tip.date).toEqual(sampledMainnetTipDate);
     expect(state.maxX).toBeGreaterThan(state.minX);
     expect(state.maxY).toBeGreaterThan(state.minY);
