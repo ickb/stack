@@ -109,7 +109,8 @@ function itLoadsQuoteStateFromTip(): void {
     expect(state.exchangeRatio.ckbScale).toBe(10000000000000000n);
     expect(state.tipTimestamp).toBe(25n);
     expect(state.exchangeRatio.udtScale).toBe(10008200000000000n);
-    expect(options.queryKey.at(-1)).toBe("quoteState");
+    // Each chain and client quotes under its own key.
+    expect(options.queryKey).toEqual([...rootConfigQueryKey(rootConfig), "quoteState"]);
     expect(options.refetchInterval).toBe(60_000);
     expect(tipReads).toBe(1);
     // An unsupported chain parks the query under a key that tolerates the missing config.
