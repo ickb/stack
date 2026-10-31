@@ -142,6 +142,25 @@ describe("view components", () => {
     elementProps<{ onClick: () => void }>(buttons[1] ?? firstElement(buttons)).onClick();
     expect(selectChain.mock.calls).toEqual([["mainnet"], ["testnet"]]);
     expect(markup).toContain('aria-pressed="true"');
+    expect(
+      buttons.map(
+        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
+      ),
+    ).toEqual([true, false]);
+    const testnetTabs = invokeElement(
+      firstElement(
+        childElements(
+          firstElement(
+            childElements(DisconnectedDashboard({ chain: "testnet", selectChain })),
+          ),
+        ),
+      ),
+    );
+    expect(
+      findElements(testnetTabs, (element) => element.type === "button").map(
+        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
+      ),
+    ).toEqual([false, true]);
     expect(markup).toContain("Mainnet");
     expect(markup).toContain("Testnet");
   });
@@ -334,7 +353,10 @@ describe("view components", () => {
       text: "1",
       setText: vi.fn<(value: string) => void>(),
     };
-    vi.stubGlobal("document", { getElementById: () => ({}) });
+    // The header goes to the title block's mount, found by its id.
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => (id === "wallet-header" ? {} : null),
+    });
 
     const page = <WalletPage header="Header" form="Form" action="Act" chart="Chart" />;
     expect(renderToStaticMarkup(page)).toContain("Header");
@@ -350,6 +372,8 @@ describe("view components", () => {
     expect(quote).toContain("Pending header");
     expect(quote).toContain("Connect");
     expect(quote).toContain('value="1"');
+    // Before the wallet's data is read the draft stays editable.
+    expect(quote).not.toContain('disabled=""');
   });
 
   it("keeps an invalid quote amount out of chart calculations", () => {

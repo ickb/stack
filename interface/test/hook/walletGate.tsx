@@ -34,7 +34,13 @@ describe("hook-based wallet gate", () => {
   it("selects wallet gate branches from connector and signer state", async () => {
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckt" });
     const { result, rerender, unmount } = await renderHook(() => WalletGate(), undefined);
-    expect(firstElement(childElements(result.current)).type).toBe(LandingPage);
+    const landing = firstElement(childElements(result.current));
+    expect(landing.type).toBe(LandingPage);
+    // The draft starts empty, converting CKB to iCKB.
+    expect(elementProps<LandingProps>(landing)).toMatchObject({
+      isCkb2Udt: true,
+      text: "",
+    });
     // The chain follows the connector's client and is saved, and a client change closes
     // the connector's modal.
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
@@ -58,6 +64,8 @@ describe("hook-based wallet gate", () => {
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb-dev" });
     await rerender(undefined);
     expect(result.current.type).toBe(UnsupportedNetwork);
+    // An unsupported network keeps the last supported choice for the next visit.
+    expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("mainnet");
 
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckt");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
@@ -71,7 +79,12 @@ describe("hook-based wallet gate", () => {
     expect(result.current.type).toBe(WalletConfigGate);
     expect(
       elementProps<Parameters<typeof WalletConfigGate>[0]>(result.current),
-    ).toMatchObject({ walletName: "JoyID CKB", signer: connectorMock.signer });
+    ).toMatchObject({
+      walletName: "JoyID CKB",
+      signer: connectorMock.signer,
+      isCkb2Udt: true,
+      text: "",
+    });
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
     await unmount();
   });
@@ -82,6 +95,11 @@ describe("hook-based wallet gate", () => {
 
     expect(landingView(result.current)).toMatchObject({ action: "Connect wallet" });
     expect(landingView(result.current).message).toMatch(/^This is an estimate\./u);
+    expect(elementProps<LandingProps>(result.current)).toMatchObject({
+      chain: "mainnet",
+      isCkb2Udt: true,
+      text: "1",
+    });
     await inAct(() => {
       landingView(result.current).open();
     });

@@ -701,6 +701,18 @@ function registerWalletViewTests(): void {
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
     });
+    // The form and the header run on the page's own draft and wallet.
+    expect(elementProps<object>(firstElement(formElements))).toMatchObject({
+      isCkb2Udt: true,
+      text: "1",
+      setText: baseProps.setText,
+      isMove: false,
+    });
+    expect(
+      elementProps<object>(
+        firstElement(findElements(withBalances, (element) => element.type === Dashboard)),
+      ),
+    ).toMatchObject({ walletName: "JoyID", openWallet: baseProps.openWallet });
     const frozenDashboard = firstElement(
       findElements(frozen, (element) => element.type === Dashboard),
     );
