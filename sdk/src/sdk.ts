@@ -29,7 +29,13 @@ import type { OrderGroup } from "./order/cells.ts";
 import type { OrderManager } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
-import { ickbExchangeRatio, type IckbUdt, type ProtocolCell } from "./udt.ts";
+import {
+  ckbFromUdt,
+  ICKB_DEPOSIT_CAP,
+  ickbExchangeRatio,
+  type IckbUdt,
+  type ProtocolCell,
+} from "./udt.ts";
 import { signerAccountLocks } from "./utils/signer.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
@@ -174,6 +180,7 @@ export class IckbSdk {
         feeRate,
         tip,
         exchangeRatio,
+        depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
         // One book, two filters: the market side is every order
         // past par, the wallet's own included, since the bot fills by price, not by owner.
         orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),

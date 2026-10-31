@@ -54,7 +54,8 @@ export async function buildTransaction(
     ickb: state.ickb + match.udtDelta,
     ckb: state.ckb + match.ckbDelta,
     pendingCkb: state.pendingCkb,
-    depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
+    depositCost:
+      state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
     poolDeposits: state.system.poolDeposits,
   });
   const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
@@ -197,7 +198,7 @@ function buildCore(
     tx = runtime.managers.ickbLogic.deposit(
       tx,
       1,
-      state.depositCapacity,
+      state.system.depositCapacity,
       runtime.primaryLock,
     );
   }

@@ -14,6 +14,7 @@ import {
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
 import { IckbSdk, type CompletedTransaction } from "../../../../src/sdk.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import {
   byte32FromByte,
@@ -248,6 +249,20 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   };
 }
 
+/** The bot tests' system state: an empty pool and book at a one-to-one rate. */
+export function botSystem(): SystemState {
+  const exchangeRatio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
+  return {
+    feeRate: 1n,
+    exchangeRatio,
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
+    tip: BOT_TIP,
+    orderPool: [],
+    poolDeposits: [],
+    lockUp: BOT_LOCK_UP,
+  };
+}
+
 /**
  * A bot state; `orderPool` and `poolDeposits` are shorthand for the system state's own,
  * which the bot reads.
@@ -263,19 +278,13 @@ export function botState({
     ckb: 0n,
     ickb: 0n,
     pendingCkb: 0n,
-    depositCapacity: ccc.fixedPointFrom(100_000),
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
     cells: [],
     ...overrides,
     system: {
-      feeRate: 1n,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      tip: BOT_TIP,
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: BOT_LOCK_UP,
+      ...botSystem(),
       ...system,
       ...(orderPool === undefined ? {} : { orderPool }),
       ...(poolDeposits === undefined ? {} : { poolDeposits }),
@@ -349,14 +358,7 @@ export function l1AccountState(
   account: Partial<L1AccountState["account"]> = {},
 ): L1AccountState {
   return {
-    system: {
-      tip: BOT_TIP,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      orderPool: [],
-      feeRate: 1n,
-      poolDeposits: [],
-      lockUp: BOT_LOCK_UP,
-    },
+    system: botSystem(),
     userOrders: [],
     account: {
       capacityCells: [],

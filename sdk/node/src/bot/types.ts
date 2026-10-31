@@ -71,9 +71,6 @@ export interface BotState {
 
   /** CKB locked in withdrawal requests that are not ready yet. */
   pendingCkb: bigint;
-
-  /** Capacity of one cap-sized deposit output at the sampled exchange ratio. */
-  depositCapacity: bigint;
 }
 
 /** Counts of actions a transaction carries. */

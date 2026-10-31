@@ -5,7 +5,13 @@ import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
-import { botRuntime, botState, PLANNED_FEE, readyDeposit } from "../fixtures/bot.ts";
+import {
+  botRuntime,
+  botState,
+  botSystem,
+  PLANNED_FEE,
+  readyDeposit,
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,7 +26,11 @@ describe("buildTransaction deposit", () => {
 
     const result = await buildTransaction(
       runtime,
-      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
+      botState({
+        ckb: RICH_CKB,
+        ickb: 0n,
+        system: { ...botSystem(), depositCapacity: ccc.fixedPointFrom(1100) },
+      }),
     );
 
     expect(deposit).toHaveBeenCalledWith(

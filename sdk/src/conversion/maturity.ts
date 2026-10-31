@@ -4,7 +4,7 @@ import type { IckbDepositCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
-import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../udt.ts";
+import { ckbFromUdt } from "../udt.ts";
 import { ceilDiv, compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import type { SystemState } from "./types.ts";
 
@@ -85,8 +85,7 @@ function ckbToIckbOrderMaturity(
     0n,
   );
   const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
-  const capCkb = ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio);
-  const turns = demand > 0n ? 1n + demand / capCkb : 1n;
+  const turns = demand > 0n ? 1n + demand / system.depositCapacity : 1n;
   return system.tip.timestamp + BOT_TURN_MS * turns;
 }
 
@@ -117,7 +116,7 @@ function ickbToCkbOrderMaturity(
     {
       ckbValue: sellers.some((group) => sits(group, system))
         ? 0n
-        : ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
+        : system.depositCapacity,
       at: system.tip.timestamp,
     },
     // A claim the bot can no longer request in time rolls a cycle: the bot's rule, not the

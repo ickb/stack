@@ -16,6 +16,7 @@ import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/ce
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime } from "../../../src/stimulus/state.ts";
 
@@ -23,10 +24,13 @@ export const CKB = ccc.fixedPointFrom(1);
 export const PRIMARY_LOCK = script("11");
 
 export function systemState(overrides: Partial<SystemState> = {}): SystemState {
+  const exchangeRatio =
+    overrides.exchangeRatio ?? Ratio.from({ ckbScale: 1n, udtScale: 1n });
   return {
     feeRate: 42n,
     tip: headerLike({ number: 1_000_000n }),
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    exchangeRatio,
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     orderPool: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,

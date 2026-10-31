@@ -14,7 +14,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
-import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
@@ -27,6 +26,7 @@ import type { Runtime } from "../../src/bot/types.ts";
 import {
   BAND_ICKB_BALANCE,
   botRuntime,
+  botSystem,
   hash,
   l1AccountState,
   NO_DEPOSITS,
@@ -415,14 +415,7 @@ describe("readBotState pool snapshot", () => {
     const pool = [readyDeposit("33", 1n), readyDeposit("34", 2n, 15n)];
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
-      system: {
-        tip,
-        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        orderPool: [],
-        feeRate: 1n,
-        poolDeposits: pool,
-        lockUp: BOT_LOCK_UP,
-      },
+      system: { ...botSystem(), tip, poolDeposits: pool },
       userOrders: [],
       account: {
         capacityCells: [],
@@ -466,14 +459,7 @@ describe("readBotState", () => {
     });
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
-      system: {
-        tip: headerLike(),
-        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        orderPool: [marketOrder],
-        feeRate: 1n,
-        lockUp: BOT_LOCK_UP,
-        poolDeposits: [],
-      },
+      system: { ...botSystem(), tip: headerLike(), orderPool: [marketOrder] },
       userOrders: [ownOrder],
       account: {
         capacityCells: [capacityCell],

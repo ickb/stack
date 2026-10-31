@@ -4,7 +4,7 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
-import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { ckbFromUdt } from "../../../src/udt.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
@@ -59,7 +59,6 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     ckb: projection.ckbAvailable,
     ickb: projection.ickbAvailable,
     pendingCkb: projection.ckbPending,
-    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, system.exchangeRatio),
   };
 }
 
@@ -181,7 +180,7 @@ function summarizeBotState(state: BotState): BotStateSummary {
       ).length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
-    depositCapacity: state.depositCapacity,
+    depositCapacity: state.system.depositCapacity,
     feeRate,
   };
 }
