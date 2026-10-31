@@ -88,10 +88,12 @@ describe("buildConversionTransaction fundable walk", () => {
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
+    // Both liquid cells fit under the input limit, so the sweep spends them all.
     expect(result).toMatchObject({
       ok: true,
       conversionKind: "direct-plus-order",
       orderOccupiedCapacity: ORDER_CKB,
+      isSweepComplete: true,
     });
     if (!result.ok) {
       throw new Error(result.reason);
