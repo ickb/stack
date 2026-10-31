@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
+import { clientCache, IckbSdk } from "@ickb/sdk";
 import { offlineTestnetClient } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
@@ -42,6 +43,17 @@ describe("hook-based interface runtime", () => {
     expect(
       elementProps<{ signerFilter?: unknown }>(mainnetProvider).signerFilter,
     ).toBeUndefined();
+    // The wallet modal's network switch lists both chains.
+    expect(
+      elementProps<{ clientOptions: unknown }>(mainnetProvider).clientOptions,
+    ).toEqual([
+      { name: "Mainnet", client: mainnetClient },
+      { name: "Testnet", client: testnetClient },
+    ]);
+    // Both clients hold the SDK's pool-sized cache, not CCC's smaller default.
+    for (const client of [mainnetClient, testnetClient]) {
+      expect(client.cache).toEqual(clientCache());
+    }
   });
 
   it("renders with mainnet defaults when localStorage acquisition throws", () => {
@@ -60,6 +72,8 @@ describe("hook-based interface runtime", () => {
     const root = createRootConfig("testnet", client);
 
     expect(root).toMatchObject({ chain: "testnet", cccClient: client, queryClient });
+    expect(root.sdk).toBeInstanceOf(IckbSdk);
+    expect(createRootConfig("mainnet", client).sdk).not.toBe(root.sdk);
     // A reset swaps the cache on the same client: no new client, so nothing keyed on it remounts.
     root.resetClient();
     expect(root.cccClient).toBe(client);
