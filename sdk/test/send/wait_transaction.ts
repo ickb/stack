@@ -215,6 +215,8 @@ describe("waitTransaction window closing", () => {
   it("cancels the polling sleep and continues after it elapses", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
+    const added = vi.spyOn(controller.signal, "addEventListener");
+    const removed = vi.spyOn(controller.signal, "removeEventListener");
     const txStatus = { status: "pending" };
     const { client, request } = jsonRpcClient(txStatus);
 
@@ -232,6 +234,25 @@ describe("waitTransaction window closing", () => {
 
     await expect(waiting).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    // A long-lived signal keeps no listener from a closed window.
+    expect(removed).toHaveBeenCalledWith("abort", added.mock.calls[0]?.[1]);
+  });
+
+  it("clears the polling sleep when aborted during it", async () => {
+    vi.useFakeTimers();
+    const reason = new Error("stopped while sleeping");
+    const controller = new AbortController();
+    const { client, request } = jsonRpcClient({ status: "pending" });
+
+    const waiting = waitTransaction(client, TX_HASH, { signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(2);
+    });
+    controller.abort(reason);
+
+    await expect(waiting).rejects.toBe(reason);
     expect(vi.getTimerCount()).toBe(0);
   });
 });
