@@ -161,6 +161,31 @@ describe("hook-based wallet gate", () => {
     await unmount();
   });
 
+  it("ends a restore left on another chain when connecting without a saved connection", async () => {
+    vi.useFakeTimers();
+    saveConnection();
+    const mainnet = landingProps("mainnet", { data: quoteState() });
+    const { result, rerender, unmount } = await renderHook(LandingPage, mainnet);
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    // The wallet modal, not the tabs, switches the chain; the connection is then forgotten.
+    await rerender({ ...mainnet, rootConfig: rootConfig("testnet") });
+    globalThis.localStorage.setItem(connectionInfoKey, "");
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    expect(mainnet.open).toHaveBeenCalledTimes(1);
+
+    await rerender(mainnet);
+    expect(landingView(result.current).action).toBe("Connect wallet");
+    await inAct(() => {
+      vi.runAllTimers();
+    });
+    expect(mainnet.open).toHaveBeenCalledTimes(1);
+    await unmount();
+  });
+
   it("connects and selects a chain when localStorage acquisition throws", async () => {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
