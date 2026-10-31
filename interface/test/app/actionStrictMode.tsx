@@ -263,7 +263,6 @@ function walletFixture(): {
     resetClient: vi.fn<() => void>(),
     signer: { sendTransaction },
     accountLocks: [],
-    primaryLock: {},
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {

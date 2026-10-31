@@ -99,7 +99,6 @@ export function walletConfig(): WalletConfig {
     signer: signerInfo(ccc.SignerType.CKB, "ckt"),
     address: "ckt1test",
     accountLocks: [script("11")],
-    primaryLock: script("11"),
   };
 }
 

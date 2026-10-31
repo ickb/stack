@@ -63,7 +63,7 @@ describe("useDestination", () => {
     );
 
     expect(result.current).toEqual({
-      destination: { lock: config.primaryLock },
+      destination: {},
       error: "",
     });
     expect(fromString).not.toHaveBeenCalled();
@@ -116,6 +116,5 @@ function walletConfig(): WalletConfig {
     chain: "testnet",
     cccClient: testnetClient,
     accountLocks: [script("11")],
-    primaryLock: script("11"),
   } as unknown as WalletConfig;
 }

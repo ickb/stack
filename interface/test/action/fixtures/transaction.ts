@@ -36,7 +36,6 @@ export function walletConfigWith(
     signer: testSigner(cccClient),
     address: "ckt1test",
     accountLocks: [script("11")],
-    primaryLock: script("11"),
     sdk: testSdk(overrides.sdk),
   };
 }

@@ -304,7 +304,10 @@ function amountIdentity(amount: bigint | undefined, amountError: string): string
 }
 
 function destinationIdentity(destination: Destination | undefined): string {
-  return destination?.lock.hash() ?? "invalid";
+  if (destination === undefined) {
+    return "invalid";
+  }
+  return destination.lock?.hash() ?? "own";
 }
 
 function missingStateActionLayout(

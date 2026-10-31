@@ -673,7 +673,6 @@ function walletConfig(): WalletConfig {
     resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     accountLocks: [{ toHex: () => "0x22" }],
-    primaryLock: { toHex: () => "0x11" },
     queryClient,
     sdk: {},
   } as unknown as WalletConfig;

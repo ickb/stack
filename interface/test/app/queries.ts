@@ -41,7 +41,6 @@ function itPollsLiveStateUnlessFrozen(): void {
       queryClient: new QueryClient(),
       signer: testSigner(),
       address: "ckt1same",
-      primaryLock: script("11"),
       accountLocks: [script("22")],
       sdk: stateSdk({
         system: sampledSystem(headerLike({ timestamp: 0n })),

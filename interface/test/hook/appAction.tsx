@@ -286,7 +286,7 @@ function registerActionAttemptTests(): void {
     await rerender({ ...props, l1State: stateB });
     const recovered = layout(result.current);
 
-    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, { lock: script("11") });
+    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, {});
     expect(recovered.message).toBe("⚠️ fresh build failed");
     expect(recovered.disabled).toBe(false);
     expect(props.freeze).toHaveBeenLastCalledWith(false);

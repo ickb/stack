@@ -40,9 +40,6 @@ export interface WalletConfig extends RootConfig {
 
   /** Unique account locks scanned as wallet-owned state. */
   accountLocks: ccc.Script[];
-
-  /** Primary lock used for new conversion requests. */
-  primaryLock: ccc.Script;
 }
 
 /** A completed, funded transaction: only signing remains. */

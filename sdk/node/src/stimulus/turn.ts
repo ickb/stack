@@ -166,11 +166,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     }
     throw error;
   }
-  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), {
-    availableOrders: state.context.availableOrders,
-    receipts: state.context.receipts,
-    readyWithdrawals: state.context.readyWithdrawals,
-  });
+  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
   const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
@@ -199,7 +195,6 @@ async function buildConversion(
     const result = await runtime.sdk.buildConversionTransaction({
       direction,
       amount,
-      lock: runtime.primaryLock,
       signer: runtime.signer,
       context: state.context,
     });

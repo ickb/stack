@@ -33,7 +33,6 @@ export function walletConfigForState(
     signer: testSigner(cccClient),
     address: "ckt1test",
     accountLocks: [lock],
-    primaryLock: lock,
     sdk: stateSdk(state),
   };
 }

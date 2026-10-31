@@ -215,7 +215,6 @@ function walletConfig(
     resetClient: vi.fn<() => void>(),
     signer: { client, sendTransaction },
     accountLocks: [],
-    primaryLock: {},
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {
