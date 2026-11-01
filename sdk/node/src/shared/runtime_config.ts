@@ -57,9 +57,10 @@ export async function readRuntimeConfigEnv(
   const rpcUrl = requireEnv(env, `${prefix}_RPC_URL`);
   const keyFile = requireEnv(env, `${prefix}_PRIVATE_KEY_FILE`);
   const keyText = await readFileEnv(keyFile);
-  // One key per line, the primary first; split never returns an empty list. Keys are
-  // canonical lowercase hex, so equal strings are the only equal keys: a repeated one would
-  // sign its group twice, the second signature over the first, and every send would fail.
+  // One key per line, the primary first. Keys are canonical lowercase hex, so equal strings
+  // are the only equal keys: a repeated one would sign its group twice, the second signature
+  // over the first, and every send would fail.
+  // Stryker disable next-line StringLiteral: split never returns an empty list.
   const [firstLine = "", ...otherLines] = keyText.value.split("\n");
   const parse = (line: string): `0x${string}` =>
     parsePrivateKey({ name: keyText.name, value: line.trim() });
@@ -75,6 +76,7 @@ export async function readRuntimeConfigEnv(
   // a node that answers badly (an error body, a lagging tip) would otherwise fail every turn
   // of every restart from the same first URL. Math.random suffices: nothing needs the order
   // unpredictable.
+  // Stryker disable next-line StringLiteral: split never returns an empty list.
   const [first = "", ...rest] = shuffled(rpcUrl.value.split(","), Math.random);
   const rpcUrls: [string, ...string[]] = [first, ...rest];
   return {
