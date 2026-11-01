@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          # The release rule below reads the previous commit.
+          # The mutation step and the release rule below read the previous commit.
           fetch-depth: 2
       # The image's npm installs the pnpm version package.json pins, verified by the
       # registry's integrity field (npm ignores the hash in packageManager); pnpm then
@@ -36,6 +36,11 @@ jobs:
       # after the review; the next pull request catches it.
       - if: github.event_name == 'pull_request'
         run: pnpm fresh
+      # Mutates the lines the pull request adds. GitHub builds the merge commit, so HEAD^1
+      # is the base tip; the cap fails a run that hangs instead of holding the check open.
+      - if: github.event_name == 'pull_request'
+        timeout-minutes: 30
+        run: pnpm mutate:changed HEAD^1
 
       # A release is a push to master (the only push trigger) whose commit changes a
       # package's version field. The ruleset admits only merge commits of pull requests,
