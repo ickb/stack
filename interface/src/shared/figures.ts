@@ -4,7 +4,6 @@ import { CKB } from "./utils.ts";
 const twoDecimalFormat = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
-  useGrouping: false,
 });
 
 /** Two decimals, rounded half up: the estimate's precision on screen. */
