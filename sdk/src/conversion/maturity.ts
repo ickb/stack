@@ -1,4 +1,4 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
 import type { IckbDepositCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
@@ -85,7 +85,7 @@ function ckbToIckbOrderMaturity(
     0n,
   );
   const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
-  const turns = demand > 0n ? 1n + demand / system.depositCapacity : 1n;
+  const turns = 1n + ccc.numMax(demand, 0n) / system.depositCapacity;
   return system.tip.timestamp + BOT_TURN_MS * turns;
 }
 
