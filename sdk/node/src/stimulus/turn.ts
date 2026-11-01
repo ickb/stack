@@ -132,16 +132,17 @@ async function stimulate(
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built) {
     Object.assign(log, { skip: built.skip });
-    if (hasCollectable(state.context)) {
-      built = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
-      if ("skip" in built) {
-        Object.assign(log, { collectSkip: built.skip });
-      }
+    if (!hasCollectable(state.context)) {
+      Object.assign(log, { outcome: "skipped" });
+      return;
     }
-  }
-  if ("skip" in built) {
-    Object.assign(log, { outcome: "skipped" });
-    return;
+    // Stryker disable next-line StringLiteral: a zero amount builds the collection alone, which ignores the direction.
+    const collection = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
+    if ("skip" in collection) {
+      Object.assign(log, { collectSkip: collection.skip, outcome: "skipped" });
+      return;
+    }
+    built = collection;
   }
   await send(runtime, state, built, log);
 }
