@@ -115,6 +115,65 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
 });
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
+  it("scans exactly with data and reads only the origins of masters with orders", async () => {
+    const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
+    const master = ccc.OutPoint.from({ txHash: byte32FromByte("3a"), index: 1n });
+    const origin = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "relative", value: Relative.create(1n) },
+      lock: orderScript,
+      outPoint: { txHash: master.txHash, index: 0n },
+    });
+    const order = absoluteOrderCell({
+      master,
+      outPointByte: "3b",
+      info: directionalInfo(),
+    });
+    const liveMaster = masterCell(master, orderScript, ownerLock);
+    const orphanMaster = masterCell(
+      { txHash: byte32FromByte("3c"), index: 0n },
+      orderScript,
+      ownerLock,
+    );
+    // Locked and typed like an order, without order data: not an origin, and no failure.
+    const unparsable = dummyCell("3d", orderScript, udtScript);
+    const tx = transactionWithOutputs([origin.cell, liveMaster, unparsable]);
+    const queries: unknown[] = [];
+    const reads: ccc.Hex[] = [];
+    const client = new StubClient({
+      cache: new ccc.ClientCacheMemory(),
+      cells: (query): readonly StubCell[] => {
+        queries.push(query);
+        return query.script_type === "lock" ? [order.cell] : [liveMaster, orphanMaster];
+      },
+      getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
+        await Promise.resolve();
+        reads.push(ccc.hexFrom(txHash));
+        return txHash === master.txHash ? transactionResponse(tx) : undefined;
+      },
+    });
+
+    await expect(manager.findOrders(client)).resolves.toHaveLength(1);
+    const scriptJson = (s: ccc.Script): object => ({
+      code_hash: s.codeHash,
+      hash_type: s.hashType,
+      args: s.args,
+    });
+    const scan = { script: scriptJson(orderScript), script_search_mode: "exact" };
+    expect(queries).toEqual([
+      {
+        ...scan,
+        script_type: "lock",
+        filter: { script: scriptJson(udtScript) },
+        with_data: true,
+      },
+      { ...scan, script_type: "type", with_data: true },
+    ]);
+    expect(reads).toEqual([master.txHash]);
+  });
+
   it("accepts exact page-size order and master scans", async () => {
     const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
     const master = ccc.OutPoint.from({

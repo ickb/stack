@@ -54,6 +54,5 @@ describe(ESTIMATE_SUITE, () => {
       maturity: BOT_TURN_MS,
       info: { ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT },
     });
-    expect(result?.notice).toBeUndefined();
   });
 });

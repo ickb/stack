@@ -1,11 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
-import { composedClient, offlineTestnetClient } from "@ickb/testkit";
-import { describe, expect, it } from "vitest";
 import {
+  composedClient,
+  headerLike,
+  offlineTestnetClient,
+  offlineTransport,
+} from "@ickb/testkit";
+import { describe, expect, it, vi } from "vitest";
+import {
+  clientCache,
   compareBigInt,
   defaultCellPageSize,
   findCells,
+  isJsonRpcRequestor,
   isPlainCapacityCell,
   jsonRpcRequestor,
   unique,
@@ -19,13 +26,37 @@ describe("jsonRpcRequestor", () => {
     expect(jsonRpcRequestor(composedClient(client))).toBe(client.requestor);
   });
 
-  it("refuses a client without one, or with another kind of requestor", () => {
-    for (const shape of [{}, { requestor: {} }]) {
+  it("accepts CCC's requestor, and one from another copy of CCC by its request method", () => {
+    expect(
+      isJsonRpcRequestor(ccc.RequestorJsonRpc.new({ transport: offlineTransport() })),
+    ).toBe(true);
+    expect(isJsonRpcRequestor({ request: vi.fn() })).toBe(true);
+  });
+
+  it("refuses a client without one, or with a requestor that cannot request", () => {
+    for (const shape of [
+      {},
+      { requestor: null },
+      { requestor: {} },
+      { requestor: { request: "get_cells" } },
+    ]) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Only the requestor field is inspected.
       expect(() => jsonRpcRequestor(shape as unknown as ccc.Client)).toThrow(
         "The SDK needs a JSON-RPC client",
       );
     }
+  });
+});
+
+describe("clientCache", () => {
+  it("keeps 4096 headers, where CCC's default cache keeps 128", async () => {
+    const cache = clientCache();
+    const headers = Array.from({ length: 4096 }, (_, number) =>
+      headerLike({ number, hash: ccc.hexFrom(ccc.numBeToBytes(number + 1, 32)) }),
+    );
+    await cache.recordHeaders(headers);
+
+    expect((await cache.getHeaderByNumber(0n))?.hash).toBe(headers[0]?.hash);
   });
 });
 

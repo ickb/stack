@@ -14,8 +14,8 @@ import type { Budgets } from "./draw.ts";
 /** Runtime dependencies of one stimulus turn. */
 export interface Runtime {
   client: ccc.Client;
-  /** Private-key signer; signing is its only secret-bearing purpose. */
-  signer: ccc.SignerCkbPrivateKey;
+  /** Signer over the key file's keys; signing is its only secret-bearing purpose. */
+  signer: ccc.Signer;
   sdk: IckbSdk;
   /** The order manager, for the mint the SDK's conversion workflow does not expose. */
   order: OrderManager;

@@ -8,9 +8,11 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
+  dummyCell,
   findOrdersFixture,
   masterCell,
   originLookupClient,
+  transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
 
 describe("OrderManager.findOrders provenance", () => {
@@ -50,6 +52,31 @@ describe("OrderManager.findOrders provenance", () => {
       throw new Error("Expected a resolved group");
     }
     expect(group.order.cell.outPoint.toHex()).toBe(liveOrder.cell.outPoint.toHex());
+  });
+
+  it("never takes the master's own output for its origin", async () => {
+    // A master scan answer naming an order's outpoint, the order pointing at itself.
+    const { manager, orderScript, ownerLock } = findOrdersFixture();
+    const originMaster = { txHash: byte32FromByte("6c"), index: 1n };
+    const selfPointing = makeOrderCell({
+      ckbUnoccupied: ccc.fixedPointFrom(100),
+      udtValue: 0n,
+      info: directionalInfo(),
+      master: { type: "relative", value: Relative.create(0n) },
+      lock: orderScript,
+      outPoint: originMaster,
+    });
+    const client = originLookupClient({
+      liveOrder: selfPointing.cell,
+      liveMaster: masterCell(originMaster, orderScript, ownerLock),
+      originMasterTxHash: originMaster.txHash,
+      originTransaction: transactionWithOutputs([
+        dummyCell("6d", ownerLock, orderScript),
+        selfPointing.cell,
+      ]),
+    });
+
+    await expect(manager.findOrders(client)).resolves.toEqual([]);
   });
 
   it("skips a group whose master carries another order script", async () => {

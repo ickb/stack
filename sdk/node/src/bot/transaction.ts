@@ -2,12 +2,15 @@ import { ccc } from "@ckb-ccc/core";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { receiptPhase2Capacity } from "../../../src/logic.ts";
-import { completeFirstFundable, isFundabilityFailure } from "../../../src/sdk.ts";
+import {
+  completeFirstFundable,
+  hasCollectable,
+  isFundabilityFailure,
+} from "../../../src/sdk.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
-import { planRebalance, type RebalancePlan } from "./policy.ts";
-import { matchableCkb, matchedOrderOutPoints } from "./support.ts";
+import { planRebalance, spendableCkb, type RebalancePlan } from "./policy.ts";
 import type {
   BotActions,
   BotDecision,
@@ -52,14 +55,23 @@ export async function buildTransaction(
   const plan = planRebalance({
     tip: state.system.tip,
     lockUp: state.system.lockUp,
-    ickb: state.ickb + match.udtDelta,
-    ckb: state.ckb + match.ckbDelta,
+    ickb: state.ickbAvailable + match.udtDelta,
+    ckb: state.ckbAvailable + match.ckbDelta,
     pendingCkb: state.pendingCkb,
-    depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
+    depositCost:
+      state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
     poolDeposits: state.system.poolDeposits,
   });
-  const hasCollections = state.receipts.length > 0 || state.readyWithdrawals.length > 0;
-  const cores = candidateCores(plan, match.partials.length > 0 || hasCollections);
+  // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
+  // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
+  // cells already there would only compact.
+  const hasMove = state.cells.some(
+    ({ cellOutput }) => !cellOutput.lock.eq(runtime.primaryLock),
+  );
+  const cores = candidateCores(
+    plan,
+    match.partials.length > 0 || hasCollectable(state) || hasMove,
+  );
   const decision = (
     core: Core,
     attempts: number,
@@ -79,14 +91,7 @@ export async function buildTransaction(
         attempts += 1;
         return buildCore(runtime, state, matched, core);
       },
-      async (tx) =>
-        runtime.completeTransaction(
-          tx,
-          state.system.feeRate,
-          state.cells,
-          [...state.receipts, ...state.system.poolDeposits],
-          state.system.tip,
-        ),
+      async (tx) => runtime.completeTransaction(tx, state),
     );
   } catch (error) {
     if (!isFundabilityFailure(error)) {
@@ -94,7 +99,7 @@ export async function buildTransaction(
     }
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
-  const { candidate: core, tx } = completion;
+  const { candidate: core, tx, plannedFee } = completion;
   const broadcastBefore =
     core.kind === "withdraw"
       ? broadcastDeadline(
@@ -102,7 +107,6 @@ export async function buildTransaction(
           state.system.lockUp,
         )
       : undefined;
-  const plannedFee = tx.estimateFee(state.system.feeRate);
   return {
     kind: "built",
     tx,
@@ -115,8 +119,8 @@ export async function buildTransaction(
 function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
   const match = matchTurn({
     orders: state.system.orderPool,
-    ckb: matchableCkb(state.ckb),
-    udt: state.ickb,
+    ckb: spendableCkb(state.ckbAvailable),
+    udt: state.ickbAvailable,
     exchangeRatio: state.system.exchangeRatio,
     feeRate: state.system.feeRate,
     seed: seedOf(state.system.tip.hash),
@@ -126,8 +130,8 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
 
 /**
  * The cores to try in order: deposit first, then every withdrawal chain (the greedy fit from
- * the oldest candidate, longest prefix first), then `none`, a candidate only when a match or
- * a collection rides on it.
+ * the oldest candidate, longest prefix first), then `none`, a candidate only when a match,
+ * a collection or a move to the primary lock rides on it.
  */
 function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
   const cores: Core[] = [];
@@ -177,11 +181,7 @@ function buildCore(
 ): ccc.Transaction {
   let tx = runtime.sdk.buildBaseTransaction(
     matched.tx.clone(),
-    {
-      availableOrders: [],
-      receipts: state.receipts,
-      readyWithdrawals: state.readyWithdrawals,
-    },
+    state,
     core.kind === "withdraw"
       ? { deposits: core.deposits, lock: runtime.primaryLock }
       : undefined,
@@ -190,7 +190,7 @@ function buildCore(
     tx = runtime.managers.ickbLogic.deposit(
       tx,
       1,
-      state.depositCapacity,
+      state.system.depositCapacity,
       runtime.primaryLock,
     );
   }
@@ -228,7 +228,12 @@ function buildDecision({
       udtDelta: match.udtDelta,
       ...(match.partials.length === 0
         ? {}
-        : { matchedOrderOutPoints: matchedOrderOutPoints(match.partials) }),
+        : {
+            matchedOrderOutPoints: match.partials.map(({ group }) => ({
+              txHash: group.order.cell.outPoint.txHash,
+              index: String(group.order.cell.outPoint.index),
+            })),
+          }),
       candidates: match.candidates,
       gains: match.gains,
       fee: match.fee,

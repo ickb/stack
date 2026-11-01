@@ -5,7 +5,6 @@ import { savedSelectedChain } from "../wallet/cccConnection.ts";
 import { WalletGate } from "../wallet/WalletGate.tsx";
 import {
   appName,
-  ckbSignerOnly,
   connectorStyle,
   mainnetClient,
   queryClient,
@@ -31,7 +30,6 @@ export default function Interface(): JSX.Element {
           connectorProps={{
             style: connectorStyle,
           }}
-          signerFilter={ckbSignerOnly}
         >
           <WalletGate />
         </CccProvider>

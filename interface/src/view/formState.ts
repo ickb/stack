@@ -6,8 +6,8 @@ import {
   type AccountAvailabilityProjection,
   type Ratio,
 } from "@ickb/sdk";
-import { groupDigits } from "../shared/figures.ts";
-import { twoDecimals, type AmountInput } from "../shared/utils.ts";
+import { twoDecimals } from "../shared/figures.ts";
+import type { AmountInput } from "../shared/utils.ts";
 
 export interface AssetDisplay {
   name: "CKB" | "iCKB";
@@ -64,7 +64,7 @@ export function amountQuoteText(
       ? undefined
       : conversionQuote(isCkb2Udt, amount, exchangeRatio);
   // The quote is an estimate: two decimals on screen, the exact figure beside it.
-  return quoted === undefined ? "..." : groupDigits(twoDecimals(quoted));
+  return quoted === undefined ? "..." : twoDecimals(quoted);
 }
 
 /**

@@ -2,7 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { getConfig } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../../src/logic.ts";
+import {
+  encodeReceiptData,
+  type IckbDepositCell,
+  type ReceiptCell,
+} from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
@@ -13,7 +17,8 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
+import { IckbSdk, type CompletedTransaction } from "../../../../src/sdk.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import {
   byte32FromByte,
@@ -45,6 +50,8 @@ export interface BotRuntimeOptions {
 export const hash = byte32FromByte;
 /** Plain change the default test completion returns: comfortably above the reserve. */
 export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
+/** The fee every test completion reports as planned. */
+export const PLANNED_FEE = 1000n;
 /** An iCKB balance inside the band: above the refill line, below the withdrawal line. */
 export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
 export const NO_DEPOSITS: IckbDepositCell[] = [];
@@ -82,6 +89,24 @@ export function readyDeposit(
     ckbValue: udtValue,
     udtValue,
   };
+}
+
+/** A receipt of one cap-sized deposit at the default primary lock. */
+export function testReceipt(byte: string): ReceiptCell {
+  const cell = ccc.Cell.from({
+    outPoint: { txHash: hash(byte), index: 0n },
+    cellOutput: {
+      capacity: ccc.fixedPointFrom(218),
+      lock: script("11"),
+      type: getConfig("testnet").ickbLogic.script,
+    },
+    outputData: encodeReceiptData({
+      depositQuantity: 1n,
+      depositAmount: ICKB_DEPOSIT_CAP,
+    }),
+  });
+  const { capacity } = cell.cellOutput;
+  return { cell, ckbValue: capacity, udtValue: ICKB_DEPOSIT_CAP, header: BOT_TIP };
 }
 
 /** A partial that pays the matcher `ckbDelta` CKB and `udtDelta` iCKB out of a real order. */
@@ -156,8 +181,12 @@ export function marketOrder({
   return new OrderGroup(master, order, order, FRESH_BLOCK);
 }
 
-/** A ready withdrawal request under the owned-owner lock with its owner marker one output later. */
-export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup {
+/** A withdrawal request under the owned-owner lock with its owner marker one output later. */
+export function testWithdrawal(
+  byte: string,
+  distinct?: number,
+  isReady = true,
+): WithdrawalGroup {
   const { ownedOwner } = getConfig("testnet");
   const { dao } = ownedOwner;
   // `distinct` numbers the request and its deposit header past what one byte can, so a
@@ -183,7 +212,7 @@ export function testWithdrawal(byte: string, distinct?: number): WithdrawalGroup
     cell,
     headers: [depositHeader, requestHeader],
     maturity: new TestEpoch(0n, 0n, 1n, 0n),
-    isReady: true,
+    isReady,
     ckbValue: cell.cellOutput.capacity,
   };
   const owner = new OwnerCell(
@@ -218,7 +247,8 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
       ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
     },
-    sdk: Object.assign(sdkOf(config), {
+    // The SDK over the same manager instances, so spies on those managers see the bot's calls.
+    sdk: Object.assign(new IckbSdk(config), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
         await Promise.resolve();
         return l1AccountState();
@@ -226,15 +256,15 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       ...overrides.sdk,
     }),
     primaryLock,
-    accountLocks: [script("11")],
+    accountLocks: [primaryLock],
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
-      (async (tx): Promise<ccc.Transaction> => {
+      (async (tx): Promise<CompletedTransaction> => {
         await Promise.resolve();
         const completed = ccc.Transaction.from(tx).clone();
         completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
-        return completed;
+        return { tx: completed, plannedFee: PLANNED_FEE };
       }),
     sendTransaction:
       overrides.sendTransaction ??
@@ -242,6 +272,20 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
         await Promise.resolve();
         return hash("ff");
       }),
+  };
+}
+
+/** The bot tests' system state: an empty pool and book at a one-to-one rate. */
+export function botSystem(): SystemState {
+  const exchangeRatio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
+  return {
+    feeRate: 1n,
+    exchangeRatio,
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
+    tip: BOT_TIP,
+    orderPool: [],
+    poolDeposits: [],
+    lockUp: BOT_LOCK_UP,
   };
 }
 
@@ -257,22 +301,18 @@ export function botState({
 }: Partial<BotState> &
   Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
   return {
-    ckb: 0n,
-    ickb: 0n,
+    ckbAvailable: 0n,
+    ickbAvailable: 0n,
     pendingCkb: 0n,
-    depositCapacity: ccc.fixedPointFrom(100_000),
     receipts: [],
     readyWithdrawals: [],
     notReadyWithdrawals: [],
+    availableOrders: [],
     cells: [],
+    estimatedMaturity: 0n,
     ...overrides,
     system: {
-      feeRate: 1n,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      tip: BOT_TIP,
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: BOT_LOCK_UP,
+      ...botSystem(),
       ...system,
       ...(orderPool === undefined ? {} : { orderPool }),
       ...(poolDeposits === undefined ? {} : { poolDeposits }),
@@ -346,14 +386,7 @@ export function l1AccountState(
   account: Partial<L1AccountState["account"]> = {},
 ): L1AccountState {
   return {
-    system: {
-      tip: BOT_TIP,
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      orderPool: [],
-      feeRate: 1n,
-      poolDeposits: [],
-      lockUp: BOT_LOCK_UP,
-    },
+    system: botSystem(),
     userOrders: [],
     account: {
       capacityCells: [],
@@ -386,9 +419,4 @@ class TestEpoch extends ccc.Epoch {
   public override toUnix(): bigint {
     return this.unix;
   }
-}
-
-/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
-function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  return new IckbSdk(config);
 }

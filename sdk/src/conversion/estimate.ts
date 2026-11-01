@@ -1,11 +1,27 @@
+import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
 import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../order/conversion.ts";
+import type { Info } from "../order/info.ts";
 import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
-import type { ConversionOrderEstimate, SystemState } from "./types.ts";
+import type { SystemState } from "./types.ts";
+
+/**
+ * Quote details for one order-based conversion path.
+ */
+export interface ConversionOrderEstimate {
+  /** Output amount after applying the order ratio and fee. */
+  convertedAmount: ccc.FixedPoint;
+  /** CKB fee component embedded in the order conversion. */
+  ckbFee: ccc.FixedPoint;
+  /** Order info that should be encoded into a created order. */
+  info: Info;
+  /** Estimated maturity timestamp, or `undefined` when it cannot be estimated. */
+  maturity: ccc.Num | undefined;
+}
 
 /**
  * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
@@ -68,7 +84,7 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 
 /**
  * The order leg of an iCKB-to-CKB conversion: at the default fee when that fee clears the
- * maturity threshold, else the smallest fee that does (a dust order, noticed). Either way
+ * maturity threshold, else the smallest fee that does (a dust order). Either way
  * it is dated: a sell order at par is always covered by the pool (see `maturity`).
  */
 export function estimateIckbToCkbOrder(
@@ -94,11 +110,6 @@ export function estimateIckbToCkbOrder(
   return {
     ...dust,
     maturity: maturity({ info: dust.info, amounts }, system, takenDeposits),
-    notice: {
-      inputIckb: amounts.udtValue,
-      outputCkb: dust.convertedAmount,
-      incentiveCkb: positiveFee(dust.ckbFee),
-    },
   };
 }
 
@@ -114,10 +125,11 @@ function estimateDustIckbToCkbOrder(
     return undefined;
   }
   const targetFee = estimateMaturityFeeThreshold(system);
-  const feeBase = baseEstimate.convertedAmount + 1n;
-  if (targetFee <= 0n || feeBase <= 1n) {
+  if (targetFee <= 0n) {
     return baseEstimate;
   }
+  // A quote's converted amount is positive, so the fee base is at least two.
+  const feeBase = baseEstimate.convertedAmount + 1n;
   const estimateWithFee = (fee: bigint): ConversionOrderEstimate | undefined =>
     estimateConversionOrder(false, amounts, system, { fee, feeBase });
   return lowestFeeEstimateAtThreshold(estimateWithFee, feeBase - 1n, targetFee);
@@ -148,8 +160,4 @@ function lowestFeeEstimateAtThreshold(
     }
   }
   return estimateWithFee(low);
-}
-
-function positiveFee(fee: bigint): bigint {
-  return fee > 0n ? fee : 0n;
 }

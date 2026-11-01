@@ -60,12 +60,16 @@ describe("planRebalance deposit", () => {
 
     expect(plan.deposit).toEqual({ reason: "low_ickb" });
     expect(plan.withdrawal).toBeUndefined();
+    expect(planRebalance(input({ ickb: ICKB_REFILL_BELOW })).deposit).toBeUndefined();
   });
 
   it("does not deposit when the reserve would not survive it", () => {
     const plan = planRebalance(input({ ickb: 0n, ckb: DEPOSIT_COST + CKB_RESERVE - 1n }));
 
     expect(plan.deposit).toBeUndefined();
+    expect(
+      planRebalance(input({ ickb: 0n, ckb: DEPOSIT_COST + CKB_RESERVE })).deposit,
+    ).toEqual({ reason: "low_ickb" });
   });
 
   it("seeds the ring only when a deposit's worth of CKB survives it, unlike a refill", () => {
@@ -114,6 +118,20 @@ describe("planRebalance deposit", () => {
     const plan = planRebalance(input());
 
     expect(plan).toEqual({ ring: plan.ring });
+    // Four caps make two segments; one cap at the tip is exactly half its share.
+    const half = planRebalance(
+      input({
+        poolDeposits: [
+          readyDeposit("f1", ICKB_DEPOSIT_CAP),
+          readyDeposit("f2", 3n * ICKB_DEPOSIT_CAP, 100n * EPOCH_MINUTES),
+        ],
+      }),
+    );
+    expect(half).toEqual({ ring: half.ring });
+    expect(half.ring).toMatchObject({
+      segmentCount: 2,
+      targetUdtValue: ICKB_DEPOSIT_CAP,
+    });
   });
 });
 
@@ -205,12 +223,32 @@ describe("planRebalance withdrawal", () => {
     );
     expect(none.withdrawal).toBeUndefined();
   });
+
+  it("withdraws only above the withdrawal line", () => {
+    const poolDeposits = [
+      readyDeposit("e5", ICKB_DEPOSIT_CAP),
+      readyDeposit("e6", ICKB_DEPOSIT_CAP + 1n),
+    ];
+
+    expect(
+      planRebalance(input({ ickb: ICKB_WITHDRAW_ABOVE, poolDeposits })).withdrawal,
+    ).toBeUndefined();
+    expect(
+      planRebalance(input({ ickb: ICKB_WITHDRAW_ABOVE + 1n, poolDeposits })).withdrawal,
+    ).toMatchObject({ candidates: [poolDeposits[0]] });
+  });
 });
 
 const CKB = ccc.fixedPointFrom(1);
 
 // The facts the thresholds rest on.
 describe("policy arithmetic", () => {
+  it("holds the band of node/docs/policy.md: refill under 2,000, withdraw above 120,000 keeping 20,000", () => {
+    expect([ICKB_REFILL_BELOW, ICKB_WITHDRAW_ABOVE, ICKB_RETAIN]).toEqual(
+      [2000, 120_000, 20_000].map((amount) => ccc.fixedPointFrom(amount)),
+    );
+  });
+
   it("prices a cap-sized deposit and a secp256k1 receipt at the tip", () => {
     const secpLock = ccc.Script.from({
       codeHash: `0x${"9b".repeat(32)}`,

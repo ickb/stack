@@ -6,6 +6,7 @@ import type {
 } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import { headerHash } from "../../../../src/utils/verified_client.ts";
 
 export const hash = byte32FromByte;
@@ -62,10 +63,12 @@ export function conversionContext(
 }
 
 export function system(overrides: Partial<SystemState> = {}): SystemState {
+  const exchangeRatio = overrides.exchangeRatio ?? ratio;
   return {
     feeRate: 1n,
     tip: baseTip,
-    exchangeRatio: ratio,
+    exchangeRatio,
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     orderPool: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,

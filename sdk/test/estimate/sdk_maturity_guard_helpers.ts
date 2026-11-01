@@ -5,6 +5,7 @@ import { maturity } from "../../src/conversion/maturity.ts";
 import { ringSegmentIndex } from "../../src/conversion/withdrawal_ring.ts";
 import { WALLET_LOCK_UP } from "../../src/dao.ts";
 import { Info } from "../../src/order/info.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../src/udt.ts";
 import { projectionOrderGroup } from "../conversion/planning/support/sdk_order_support.ts";
 import { headerLike, ratio } from "../transaction/base/support/sdk_core_support.ts";
 
@@ -14,6 +15,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       feeRate: 1n,
       tip: headerLike(0n, { timestamp: 100n }),
       exchangeRatio: ratio,
+      depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, ratio),
       orderPool: [
         projectionOrderGroup({
           ckbValue: 10n,

@@ -1,4 +1,4 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import {
   ringSegmentIndex,
   ringSegments,
@@ -63,6 +63,11 @@ export interface RebalancePlan {
   ring: RingSummary;
 }
 
+/** CKB a match or a deposit may spend: what is available above the reserve. */
+export function spendableCkb(ckb: bigint): bigint {
+  return ccc.numMax(0n, ckb - CKB_RESERVE);
+}
+
 /**
  * Refill under 2,000 iCKB keeping the reserve; seed the ring keeping one deposit more, the
  * line stress restores, measured on total CKB. Withdraw ready surplus while over 120,000 iCKB, keeping 20,000;
@@ -73,7 +78,7 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
   const ring = ringCoverage(poolDeposits, tip);
   const plan: RebalancePlan = { ring: ring.summary };
 
-  const spendable = ckb - CKB_RESERVE;
+  const spendable = spendableCkb(ckb);
   if (ickb < ICKB_REFILL_BELOW && spendable >= depositCost) {
     plan.deposit = { reason: "low_ickb" };
   } else if (ring.needsSeed && spendable >= 2n * depositCost) {

@@ -1,4 +1,4 @@
-import { ccc } from "@ckb-ccc/ccc";
+import type { ccc } from "@ckb-ccc/ccc";
 import {
   TransactionBroadcastError,
   TransactionExpiredError,
@@ -103,7 +103,6 @@ export async function transact({
         : `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
     if (signal.aborted) {
@@ -167,7 +166,6 @@ export async function retryConfirmation({
       `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    signal.throwIfAborted();
     await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
     if (signal.aborted) {
@@ -194,7 +192,6 @@ export async function waitForConfirmation(
   signal: AbortSignal,
 ): Promise<void> {
   await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
-  signal.throwIfAborted();
 }
 
 function releaseTransaction({ freezePreview }: TransactionCallbacks): void {
@@ -243,10 +240,19 @@ async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T
   return result;
 }
 
-function isWaitWindowTimeout(error: unknown): boolean {
+/**
+ * Whether an error is CCC's `ErrorClientWaitTransactionTimeout`, by shape: the SDK throws it
+ * from its own copy of CCC, which need not be the one `@ckb-ccc/ccc` re-exports here, so
+ * `instanceof` could miss it. CCC sets its `data` to the timeout alone.
+ */
+export function isWaitTimeout(
+  error: unknown,
+): error is ccc.ErrorClientWaitTransactionTimeout {
   return (
-    error instanceof ccc.ErrorClientWaitTransactionTimeout ||
-    (error instanceof Error && error.name === "ErrorClientWaitTransactionTimeout")
+    error instanceof Error &&
+    "data" in error &&
+    typeof error.data === "string" &&
+    /^\{"timeout":"\d+"\}$/.test(error.data)
   );
 }
 
@@ -259,7 +265,7 @@ function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined):
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;
   }
-  if (isWaitWindowTimeout(error) && txHash !== undefined) {
+  if (isWaitTimeout(error) && txHash !== undefined) {
     const seconds = String(confirmationWindowMs / 1000);
     return `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`;
   }

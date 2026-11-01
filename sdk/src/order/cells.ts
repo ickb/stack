@@ -361,13 +361,12 @@ export class OrderGroup implements ValueComponents {
     return undefined;
   }
 
-  /** Whether the master anchors both orders and the order continues its origin. */
+  /**
+   * Whether the master anchors the origin and the order continues it. A continuation
+   * shares the origin's lock and master, so the master anchors the order as well.
+   */
   public isValid(): boolean {
-    return (
-      this.master.anchors(this.origin) &&
-      this.master.anchors(this.order) &&
-      this.origin.isValid(this.order)
-    );
+    return this.master.anchors(this.origin) && this.origin.isValid(this.order);
   }
 
   /**

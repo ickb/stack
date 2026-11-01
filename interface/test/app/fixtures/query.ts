@@ -1,10 +1,24 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk } from "@ickb/sdk";
+import { IckbSdk, Ratio, WALLET_LOCK_UP, type SystemState } from "@ickb/sdk";
 import { byte32FromByte, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type { getL1State } from "../../../src/app/queries.ts";
 import type { WalletConfig } from "../../../src/shared/utils.ts";
+
+/** An empty pool and book at a one-to-one rate, under the wallet's timing rules. */
+export function sampledSystem(tip: ccc.ClientBlockHeader): SystemState {
+  return {
+    feeRate: 1n,
+    tip,
+    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    // A cap's 100,000 iCKB at one to one.
+    depositCapacity: ccc.fixedPointFrom(100_000),
+    orderPool: [],
+    poolDeposits: [],
+    lockUp: WALLET_LOCK_UP,
+  };
+}
 
 export function walletConfigForState(
   lock: ccc.Script,
@@ -19,7 +33,6 @@ export function walletConfigForState(
     signer: testSigner(cccClient),
     address: "ckt1test",
     accountLocks: [lock],
-    primaryLock: lock,
     sdk: stateSdk(state),
   };
 }
@@ -32,7 +45,6 @@ export function stateSdk(
   vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
     ok: false,
     reason: "nothing-to-do",
-    estimatedMaturity: state.system.tip.timestamp,
   });
   return sdk;
 }

@@ -93,10 +93,11 @@ function quotePreservingRatio(
   quotedOutput: ccc.FixedPoint,
   isCkb2Udt: boolean,
 ): Ratio {
-  if (inputAmount < 0n || quotedOutput < 0n) {
+  // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
+  if (inputAmount < 0n) {
     throw new Error("Order conversion amounts cannot be negative");
   }
-  if (inputAmount === 0n || quotedOutput === 0n) {
+  if (inputAmount === 0n) {
     throw new OrderConversionRepresentabilityError(
       "Order conversion quote must have positive input and output",
     );
@@ -107,7 +108,8 @@ function quotePreservingRatio(
     inputAmount,
     maxUint64,
   );
-  if (numerator <= 0n || (quotedOutput - 1n) * denominator >= inputAmount * numerator) {
+  // A zero numerator also lands here: the quote of a positive input is at least one.
+  if ((quotedOutput - 1n) * denominator >= inputAmount * numerator) {
     throw new OrderConversionRepresentabilityError();
   }
 

@@ -15,6 +15,7 @@ The deployed contracts and CKB consensus constrain every implementation choice. 
 
 - Reopen a settled decision for a contradiction, infeasibility or previously unweighed risk, not merely because a test passes.
 - A finding earns new code for an observed or reproduced failure. Otherwise delete, narrow or leave it. Prefer deletion and inlining to abstractions without an evidenced shared reason to change.
+- A fix for a bug a test can observe lands with the fewest tests that fail on its base commit for the bug's own reason, at the lowest layer that fails; its commit message names that failing run.
 - Follow the [workspace boundaries](README.md#workspace-boundaries) and [dependency policy](README.md#dependencies-and-checks). Do not change a dependency or runtime pin just to make something resolve.
 - Treat every node answer as untrusted; [account state](sdk/README.md#account-state) and [signing and broadcast](sdk/README.md#signing-and-broadcast) list what a lie can still cost. The bot recovers from any error by exiting for systemd to restart it; the [runtime config](sdk/node/README.md#runtime-config) bounds the stalls it accepts.
 - Before writing a helper, use what CCC or the platform already provides when it behaves the same on every input the code passes; keep an own version only with its reason stated at the code.
@@ -28,7 +29,7 @@ For a material revision:
 
 ## The gate
 
-Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, once per commit and check its exit code. A green result on that tree makes the commit publishable. Pull requests also run `pnpm fresh`, whose result depends on the date, so run it before opening one.
+Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, and check its exit code. A pull request's head must pass it: a green result on that tree makes the change mergeable. Gating each commit on its own tree is recommended, so that a revert or `git bisect` lands on a working tree, but not required: a rebase that rewrites many commits needs only its head gated. Pull requests also run `pnpm fresh`, whose result depends on the date, and `pnpm mutate:changed`, which fails on any mutant lying within the added lines that no test kills ([mutation testing](scripts/README.md#mutation-testing)); run both before opening or updating one.
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 

@@ -3,6 +3,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { OrderManager } from "../../../src/order/order.ts";
+import { ickbExchangeRatio } from "../../../src/udt.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -83,14 +84,32 @@ describe("IckbSdk.getL1AccountState system order liquidity", () => {
     expect(state.userOrders).toEqual([]);
     expect(state.system.orderPool).toEqual([]);
   });
+
+  // The bot gains nothing filling an order at the DAO ratio.
+  it.each([true, false])(
+    "leaves an order at par outside liquidity, buying: %s",
+    async (isCkb2Udt) => {
+      const { client, sdk, userLock } = l1StateWithMarketOrder({
+        ratio: ickbExchangeRatio(headerLike(1n)),
+        txHashByte: "d1",
+        isCkb2Udt,
+      });
+
+      const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
+
+      expect(state.system.orderPool).toEqual([]);
+    },
+  );
 });
 
 function l1StateWithMarketOrder({
   ratio,
   txHashByte,
+  isCkb2Udt = false,
 }: {
   ratio: { ckbScale: bigint; udtScale: bigint };
   txHashByte: string;
+  isCkb2Udt?: boolean;
 }): {
   client: FeeRateStubClient;
   marketOrder: ReturnType<typeof makeOrderGroup>;
@@ -109,7 +128,7 @@ function l1StateWithMarketOrder({
     ownerLock: nonUserLock,
     txHashByte,
     ratio,
-    isCkb2Udt: false,
+    isCkb2Udt,
     orderCapacity: ccc.fixedPointFrom(300),
     udtValue: 1n,
   });

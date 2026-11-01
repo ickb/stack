@@ -1,3 +1,4 @@
+import { ccc } from "@ckb-ccc/ccc";
 import { describe, expect, it } from "vitest";
 import {
   actionLabel,
@@ -8,8 +9,7 @@ import {
   type ActionFlags,
 } from "../../src/action/actionStatus.ts";
 import { noCollectionMessage, noRequestMessage } from "../../src/action/transaction.ts";
-import type { SendableTx } from "../../src/shared/utils.ts";
-import { txWithInput } from "./fixtures/transaction.ts";
+import { activeTxInfo } from "./fixtures/transaction.ts";
 
 const walletRejected = "wallet rejected";
 const requestConversion = "request conversion";
@@ -45,20 +45,23 @@ describe("action status", () => {
     );
     expect(actionMessage(undefined, flags())).toBe(`${noRequestMessage}.`);
     expect(
+      actionMessage(failedTxInfo(noRequestMessage), {
+        ...flags(),
+        amount: 0n,
+        unavailableMessage: noCollectionMessage,
+      }),
+    ).toBe(`${noCollectionMessage}.`);
+    expect(
       actionMessage(
         {
           ...txInfo,
           conversionKind: "order",
-          conversionNotice: {
-            inputIckb: 1n * 100000000n,
-            outputCkb: 2n * 100000000n,
-            incentiveCkb: 25_000_000n,
-          },
+          orderOccupiedCapacity: ccc.fixedPointFrom(1295),
         },
-        flags(),
+        { ...flags(), hasCollectable: true },
       ),
     ).toBe(
-      "Converts when a bot fills it, estimated below. This small request converts 1 iCKB to about 2 CKB and pays 0.25 CKB for the variable time.",
+      "Converts when a bot fills it, estimated below. Includes 1,295 CKB of cell space, returned when collected. Also collects converted funds.",
     );
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
       "Converts at a fixed time, shown below. Also collects converted funds.",
@@ -165,6 +168,7 @@ describe("timeUntilMaturity", () => {
     expect(timeUntilMaturity(10n + 90n * minute, 10n)).toBe("in 90 minutes");
     expect(timeUntilMaturity(10n + 90n * minute + 1n, 10n)).toBe("in 2 hours");
     expect(timeUntilMaturity(10n + 2n * hour, 10n)).toBe("in 2 hours");
+    expect(timeUntilMaturity(10n + day, 10n)).toBe("in 24 hours");
     expect(timeUntilMaturity(10n + day + 1n, 10n)).toBe("in 2 days");
   });
 });
@@ -187,16 +191,6 @@ function flags(): ActionFlags {
   };
 }
 
-function activeTxInfo(): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput("11"),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "direct",
-  };
-}
-
 function failedTxInfo(error: string): Parameters<typeof actionMessage>[0] {
-  return { ok: false, error, estimatedMaturity: 0n };
+  return { ok: false, error };
 }

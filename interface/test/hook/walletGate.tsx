@@ -16,7 +16,6 @@ import {
 import { connectorMock } from "./fixtures/environment.ts";
 import {
   chainFromClient,
-  CkbSignerRequired,
   LandingPage,
   mainnetClient,
   SwitchingWalletNetwork,
@@ -35,7 +34,13 @@ describe("hook-based wallet gate", () => {
   it("selects wallet gate branches from connector and signer state", async () => {
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckt" });
     const { result, rerender, unmount } = await renderHook(() => WalletGate(), undefined);
-    expect(firstElement(childElements(result.current)).type).toBe(LandingPage);
+    const landing = firstElement(childElements(result.current));
+    expect(landing.type).toBe(LandingPage);
+    // The draft starts empty, converting CKB to iCKB.
+    expect(elementProps<LandingProps>(landing)).toMatchObject({
+      isCkb2Udt: true,
+      text: "",
+    });
     // The chain follows the connector's client and is saved, and a client change closes
     // the connector's modal.
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
@@ -48,16 +53,19 @@ describe("hook-based wallet gate", () => {
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("mainnet");
     expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
-    // A signer change on the same client neither saves nor closes again.
+    // A signer change on the same client neither saves nor closes again. A BTC signer, like
+    // any CCC signer, opens the wallet: it signs through its CKB lock.
     connectorMock.signer = signerInfo(ccc.SignerType.BTC, "ckb");
     await rerender(undefined);
-    expect(result.current.type).toBe(CkbSignerRequired);
+    expect(result.current.type).toBe(WalletConfigGate);
     expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckb-dev");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb-dev" });
     await rerender(undefined);
     expect(result.current.type).toBe(UnsupportedNetwork);
+    // An unsupported network keeps the last supported choice for the next visit.
+    expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("mainnet");
 
     connectorMock.signer = signerInfo(ccc.SignerType.CKB, "ckt");
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
@@ -71,7 +79,12 @@ describe("hook-based wallet gate", () => {
     expect(result.current.type).toBe(WalletConfigGate);
     expect(
       elementProps<Parameters<typeof WalletConfigGate>[0]>(result.current),
-    ).toMatchObject({ walletName: "JoyID CKB", signer: connectorMock.signer });
+    ).toMatchObject({
+      walletName: "JoyID CKB",
+      signer: connectorMock.signer,
+      isCkb2Udt: true,
+      text: "",
+    });
     expect(globalThis.localStorage.getItem(selectedChainKey)).toBe("testnet");
     await unmount();
   });
@@ -82,6 +95,11 @@ describe("hook-based wallet gate", () => {
 
     expect(landingView(result.current)).toMatchObject({ action: "Connect wallet" });
     expect(landingView(result.current).message).toMatch(/^This is an estimate\./u);
+    expect(elementProps<LandingProps>(result.current)).toMatchObject({
+      chain: "mainnet",
+      isCkb2Udt: true,
+      text: "1",
+    });
     await inAct(() => {
       landingView(result.current).open();
     });
@@ -140,6 +158,31 @@ describe("hook-based wallet gate", () => {
     });
     expect(props.open).not.toHaveBeenCalled();
     expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
+    await unmount();
+  });
+
+  it("ends a restore left on another chain when connecting without a saved connection", async () => {
+    vi.useFakeTimers();
+    saveConnection();
+    const mainnet = landingProps("mainnet", { data: quoteState() });
+    const { result, rerender, unmount } = await renderHook(LandingPage, mainnet);
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    // The wallet modal, not the tabs, switches the chain; the connection is then forgotten.
+    await rerender({ ...mainnet, rootConfig: rootConfig("testnet") });
+    globalThis.localStorage.setItem(connectionInfoKey, "");
+    await inAct(() => {
+      landingView(result.current).open();
+    });
+    expect(mainnet.open).toHaveBeenCalledTimes(1);
+
+    await rerender(mainnet);
+    expect(landingView(result.current).action).toBe("Connect wallet");
+    await inAct(() => {
+      vi.runAllTimers();
+    });
+    expect(mainnet.open).toHaveBeenCalledTimes(1);
     await unmount();
   });
 

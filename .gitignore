@@ -5,6 +5,8 @@
 **/coverage/
 **/dist/
 **/*.tsbuildinfo
+/reports/
+/.stryker-tmp/
 
 # Local scratch files
 /private/

@@ -1,14 +1,17 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
+import { capacityCell, script } from "@ickb/testkit";
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
-import type { IckbDepositCell, ReceiptCell } from "../../../../src/logic.ts";
+import {
+  encodeReceiptData,
+  type IckbDepositCell,
+  type ReceiptCell,
+} from "../../../../src/logic.ts";
 import {
   encodeOwnerData,
   OwnerCell,
   WithdrawalGroup,
   type DaoWithdrawalRequestCell,
 } from "../../../../src/owned_owner.ts";
-import { encodeReceiptData } from "../../../../src/udt.ts";
 import { baseTip, hash } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function depositCell(
@@ -93,11 +96,7 @@ export function plainCapacityCell(
   lock = script("11"),
   byte = "10",
 ): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity, lock },
-    outputData: "0x",
-  });
+  return capacityCell(capacity, lock, byte);
 }
 
 export function nativeUdtCell(

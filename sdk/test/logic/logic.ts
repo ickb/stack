@@ -14,20 +14,23 @@ import {
   DaoOutputLimitError,
 } from "../../src/dao.ts";
 import {
+  decodeReceiptData,
+  encodeReceiptData,
   LogicManager,
   receiptCell,
   receiptPhase2Capacity,
   type ReceiptCell,
 } from "../../src/logic.ts";
-import {
-  decodeReceiptData,
-  encodeReceiptData,
-  IckbUdt,
-  ickbValue,
-} from "../../src/udt.ts";
+import { IckbUdt, ickbValue } from "../../src/udt.ts";
 
 const logic = script("11");
-const dao = { script: script("22"), cellDeps: [] };
+// Typed unknown so the matcher's `any` stays out of the asserted object.
+const anyError: unknown = expect.any(Error);
+const daoDep = ccc.CellDep.from({
+  outPoint: { txHash: byte32FromByte("dd"), index: 0n },
+  depType: "code",
+});
+const dao = { script: script("22"), cellDeps: [daoDep] };
 
 function manager(cellDeps: ccc.CellDep[] = []): LogicManager {
   return new LogicManager(logic, cellDeps, dao);
@@ -106,7 +109,7 @@ describe("LogicManager.deposit", () => {
       lock,
     );
 
-    expect(tx.cellDeps).toEqual([dep]);
+    expect(tx.cellDeps).toEqual([dep, daoDep]);
     expect(tx.outputs).toHaveLength(3);
     expect(tx.outputs[0]?.type?.eq(dao.script)).toBe(true);
     expect(tx.outputs[0]?.lock.eq(logic)).toBe(true);
@@ -148,6 +151,16 @@ describe("LogicManager.deposit", () => {
   });
 
   it("keeps the protocol minimum and maximum on unoccupied capacity", () => {
+    for (const capacity of [1082, 1000082]) {
+      expect(() =>
+        manager().deposit(
+          ccc.Transaction.default(),
+          1,
+          ccc.fixedPointFrom(capacity),
+          script("44"),
+        ),
+      ).not.toThrow();
+    }
     expect(() =>
       manager().deposit(
         ccc.Transaction.default(),
@@ -178,14 +191,20 @@ describe("LogicManager.deposit", () => {
   });
 
   it("rejects deposit quantities that cannot fit in one DAO transaction", () => {
-    expect(() =>
+    const depositMany = (quantity: number): ccc.Transaction =>
       manager().deposit(
         ccc.Transaction.default(),
-        64,
+        quantity,
         ccc.fixedPointFrom(100082),
         script("44"),
-      ),
-    ).toThrow(DaoOutputLimitError);
+      );
+
+    expect(depositMany(63).outputs).toHaveLength(DAO_OUTPUT_LIMIT);
+    expect(() => depositMany(64)).toThrow(new DaoOutputLimitError(DAO_OUTPUT_LIMIT + 1));
+    // Refused before building: a loop over this quantity would never finish.
+    expect(() => depositMany(Number.MAX_SAFE_INTEGER)).toThrow(
+      new DaoOutputLimitError(Number.MAX_SAFE_INTEGER + 1),
+    );
   });
 
   it("rejects output 65 after appending the receipt", () => {
@@ -235,7 +254,9 @@ describe("LogicManager.completeDeposit", () => {
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       receipts.map((receipt) => receipt.cell.outPoint.toHex()),
     );
-    expect(manager().completeDeposit(tx, [])).toEqual(tx);
+    expect(manager([dep]).completeDeposit(ccc.Transaction.default(), [])).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("rejects a receipt for another logic script", () => {
@@ -326,7 +347,10 @@ describe("LogicManager.receiptsFrom", () => {
     const cell = receiptCellOf("11", "0x12");
 
     expect(() => receiptCell(cell, header)).toThrow(
-      `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid iCKB receipt payload at ${cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 
@@ -370,8 +394,19 @@ describe("LogicManager.findDeposits", () => {
 
     const deposits = await manager().findDeposits(client, tip);
 
-    expect(queries).toHaveLength(1);
-    expect(queries[0]?.script).toEqual(cccA.JsonRpcTransformers.scriptFrom(logic));
+    expect(queries).toEqual([
+      {
+        script: cccA.JsonRpcTransformers.scriptFrom(logic),
+        script_type: "lock",
+        script_search_mode: "exact",
+        filter: {
+          script: cccA.JsonRpcTransformers.scriptFrom(dao.script),
+          output_data: DAO_DEPOSIT_DATA,
+          output_data_filter_mode: "exact",
+        },
+        with_data: true,
+      },
+    ]);
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
       cell: deposit,

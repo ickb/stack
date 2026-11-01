@@ -7,6 +7,7 @@ import {
   type PendingTransactionState,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
+import { recordPending } from "./fixtures/transaction.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 
@@ -97,6 +98,25 @@ describe("pending transaction late settlement", () => {
     expect(pendingHash(store)).toBe(newerHash);
   });
 
+  it("does not let a late rejection clear a newer submission or a cleared record", async () => {
+    const store = createPendingTransactionStore(ignoreChange);
+    const rejected = Promise.withResolvers<typeof txHash>();
+    const attempt = submitPendingTransaction(store, async () => rejected.promise);
+    await Promise.resolve();
+    clearPendingTransaction(store);
+    const newer = Promise.withResolvers<typeof txHash>();
+    const newerAttempt = submitPendingTransaction(store, async () => newer.promise);
+
+    rejected.reject(new Error(walletRejected));
+    await expect(attempt).rejects.toThrow(walletRejected);
+    expect(store.current).toEqual({ status: "submitting", result: newerAttempt });
+
+    clearPendingTransaction(store);
+    newer.reject(new Error(walletRejected));
+    await expect(newerAttempt).rejects.toThrow(walletRejected);
+    expect(store.current).toBeUndefined();
+  });
+
   it("does not let a late hash replace a newer pending transaction", async () => {
     const store = createPendingTransactionStore(ignoreChange);
     const sent = Promise.withResolvers<typeof txHash>();
@@ -125,18 +145,6 @@ describe("pending transaction late settlement", () => {
     expect(store.current).toBeUndefined();
   });
 });
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(
-  store: PendingTransactionStore,
-  hash: ccc.Hex,
-): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(hash);
-    await Promise.resolve();
-    return hash;
-  });
-}
 
 function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
   return store.current?.status === "pending" ? store.current.txHash : undefined;

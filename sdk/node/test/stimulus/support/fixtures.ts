@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import {
+  capacityCell,
   committedTransactionResponse,
   FRESH_BLOCK,
   headerLike,
@@ -10,12 +11,12 @@ import {
 import { getConfig } from "../../../../src/constants.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
-import type { ReceiptCell } from "../../../../src/logic.ts";
+import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
-import { encodeReceiptData } from "../../../../src/udt.ts";
+import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime } from "../../../src/stimulus/state.ts";
 
@@ -23,10 +24,13 @@ export const CKB = ccc.fixedPointFrom(1);
 export const PRIMARY_LOCK = script("11");
 
 export function systemState(overrides: Partial<SystemState> = {}): SystemState {
+  const exchangeRatio =
+    overrides.exchangeRatio ?? Ratio.from({ ckbScale: 1n, udtScale: 1n });
   return {
     feeRate: 42n,
     tip: headerLike({ number: 1_000_000n }),
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    exchangeRatio,
+    depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     orderPool: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
@@ -71,11 +75,7 @@ export function receipt(
 }
 
 export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
-  return ccc.Cell.from({
-    outPoint: { txHash: `0x${txHashByte.repeat(32)}`, index: 0n },
-    cellOutput: { capacity, lock: PRIMARY_LOCK },
-    outputData: "0x",
-  });
+  return capacityCell(capacity, PRIMARY_LOCK, txHashByte);
 }
 
 /**
@@ -100,7 +100,7 @@ export function runtime({
   return {
     client,
     signer,
-    sdk: Object.assign(sdkOf(getConfig("testnet")), {
+    sdk: Object.assign(new IckbSdk(getConfig("testnet")), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
         return { system, userOrders: orders, account };
@@ -183,9 +183,4 @@ export async function order(
     throw new Error("Expected one resolver-produced order fixture");
   }
   return group;
-}
-
-/** The SDK over one config's manager instances, so spies on those managers see the actor's calls. */
-function sdkOf(config: ReturnType<typeof getConfig>): IckbSdk {
-  return new IckbSdk(config);
 }

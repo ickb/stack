@@ -3,8 +3,7 @@ import type { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { LogicManager } from "../../../src/logic.ts";
-import { encodeReceiptData } from "../../../src/udt.ts";
+import { encodeReceiptData, LogicManager } from "../../../src/logic.ts";
 
 import { OrderManager } from "../../../src/order/order.ts";
 import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts";

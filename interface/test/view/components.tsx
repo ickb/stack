@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { groupDigits } from "../../src/shared/figures.ts";
 import {
   childElements,
   elementProps,
@@ -14,7 +15,6 @@ import {
 import {
   ActionLayout,
   CKB,
-  CkbSignerRequired,
   Dashboard,
   DisconnectedDashboard,
   Form,
@@ -142,6 +142,25 @@ describe("view components", () => {
     elementProps<{ onClick: () => void }>(buttons[1] ?? firstElement(buttons)).onClick();
     expect(selectChain.mock.calls).toEqual([["mainnet"], ["testnet"]]);
     expect(markup).toContain('aria-pressed="true"');
+    expect(
+      buttons.map(
+        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
+      ),
+    ).toEqual([true, false]);
+    const testnetTabs = invokeElement(
+      firstElement(
+        childElements(
+          firstElement(
+            childElements(DisconnectedDashboard({ chain: "testnet", selectChain })),
+          ),
+        ),
+      ),
+    );
+    expect(
+      findElements(testnetTabs, (element) => element.type === "button").map(
+        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
+      ),
+    ).toEqual([false, true]);
     expect(markup).toContain("Mainnet");
     expect(markup).toContain("Testnet");
   });
@@ -189,6 +208,8 @@ describe("view components", () => {
       ),
     ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
+    // Neither frozen nor moving, every control stays editable.
+    expect(renderToStaticMarkup(element)).not.toContain('disabled=""');
     const invalidMarkup = renderToStaticMarkup(
       <Form {...draft} text="1e2" chain="testnet" />,
     );
@@ -231,23 +252,25 @@ describe("view components", () => {
       ),
     ).onClick?.();
     expect(setText.mock.lastCall).toEqual(["2"]);
-    expect(
-      renderToStaticMarkup(
-        <Form
-          {...draft}
-          text="1"
-          chain="testnet"
-          projection={projection({
-            ckbNative: 1n,
-            ickbNative: 0n,
-            ckbAvailable: 1n,
-            ickbAvailable: 0n,
-            ckbBalance: 1n,
-            ickbBalance: 0n,
-          })}
-        />,
-      ),
-    ).toContain("0+");
+    // One shannon truncates to 0.00 on screen; the accessible label keeps the exact value.
+    const oneShannon = renderToStaticMarkup(
+      <Form
+        {...draft}
+        text="1"
+        chain="testnet"
+        projection={projection({
+          ckbNative: 1n,
+          ickbNative: 0n,
+          ckbAvailable: 1n,
+          ickbAvailable: 0n,
+          ckbBalance: 1n,
+          ickbBalance: 0n,
+        })}
+      />,
+    );
+    expect(oneShannon).toContain('aria-label="CKB in wallet: 0.00000001"');
+    expect(oneShannon).toContain('aria-label="CKB converting: 0"');
+    expect(oneShannon).toContain(">0.00<");
     // The unit rate beside the switch: both sides at two decimals, "..." without a quote.
     expect(renderToStaticMarkup(element)).toContain("1.00 CKB");
     expect(renderToStaticMarkup(element)).toContain("...");
@@ -281,6 +304,35 @@ describe("view components", () => {
     expect(move.match(/disabled=""/gu)).toHaveLength(3);
   });
 
+  it("puts the caret back after the digits it followed once commas regroup", async () => {
+    // Typing "9" after the "1,2" of "1,234": the box regroups to "12,934".
+    const target = {
+      value: "1,2934",
+      selectionStart: 4,
+      setSelectionRange: vi.fn<(start: number, end: number) => void>(),
+    };
+    const element = Form({
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1234",
+      setText: (raw: string) => {
+        target.value = groupDigits(raw);
+      },
+      isFrozen: false,
+      chain: "mainnet",
+    });
+    const input = findElement(element, (node) => node.type === "input");
+
+    elementProps<{ onChange: (event: { target: typeof target }) => void }>(
+      input,
+    ).onChange({
+      target,
+    });
+    await Promise.resolve();
+
+    expect(target.setSelectionRange).toHaveBeenCalledWith(4, 4);
+  });
+
   it("renders chart layout elements", () => {
     const chart = renderToStaticMarkup(
       <RateChart chain="mainnet" isCkb2Udt={true} amount={CKB} />,
@@ -301,7 +353,10 @@ describe("view components", () => {
       text: "1",
       setText: vi.fn<(value: string) => void>(),
     };
-    vi.stubGlobal("document", { getElementById: () => ({}) });
+    // The header goes to the title block's mount, found by its id.
+    vi.stubGlobal("document", {
+      getElementById: (id: string) => (id === "wallet-header" ? {} : null),
+    });
 
     const page = <WalletPage header="Header" form="Form" action="Act" chart="Chart" />;
     expect(renderToStaticMarkup(page)).toContain("Header");
@@ -317,6 +372,8 @@ describe("view components", () => {
     expect(quote).toContain("Pending header");
     expect(quote).toContain("Connect");
     expect(quote).toContain('value="1"');
+    // Before the wallet's data is read the draft stays editable.
+    expect(quote).not.toContain('disabled=""');
   });
 
   it("keeps an invalid quote amount out of chart calculations", () => {
@@ -340,7 +397,6 @@ describe("view components", () => {
   it("renders wallet gate support actions", () => {
     const open = vi.fn<() => void>();
     for (const element of [
-      CkbSignerRequired({ open }),
       UnsupportedNetwork({ addressPrefix: "ckb-dev", open }),
       SwitchingWalletNetwork({ open }),
     ]) {
@@ -349,7 +405,7 @@ describe("view components", () => {
       ).onClick();
     }
 
-    expect(open).toHaveBeenCalledTimes(3);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(
       renderToStaticMarkup(<UnsupportedNetwork addressPrefix="ckb-dev" open={open} />),
     ).toContain("Unsupported CKB address prefix: ckb-dev");

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, FRESH_BLOCK, script } from "@ickb/testkit";
+import { byte32FromByte, capacityCell, FRESH_BLOCK, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
@@ -7,6 +7,7 @@ import { OrderData } from "../../src/order/order_data.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { Relative } from "../../src/order/relative.ts";
 import { resolvedOrderGroup } from "./matching/support/order_match_helpers.ts";
+import { makeOrderCell } from "./matching/support/order_order_helpers.ts";
 
 const ORDER_SCRIPT = script("11");
 const UDT_SCRIPT = script("22");
@@ -105,8 +106,20 @@ describe("order entity validation", () => {
       data.getMaster(ccc.OutPoint.from({ txHash: byte32FromByte("44"), index: 1n }))
         .index,
     ).toBe(2n);
+    for (const padding of [
+      new Uint8Array(31),
+      Uint8Array.from({ length: 32 }, (_, i) => (i === 31 ? 1 : 0)),
+    ]) {
+      expect(() => {
+        Relative.from({ padding, distance: 1n }).validate();
+      }).toThrow("Relative master invalid, non standard padding");
+    }
     expect(() => {
-      invalidRelative.validate();
+      OrderData.from({
+        udtValue: 10n,
+        master: { type: "relative", value: invalidRelative },
+        info,
+      }).validate();
     }).toThrow("Relative master invalid");
     expect(() => {
       OrderData.from({
@@ -122,6 +135,13 @@ describe("order entity validation", () => {
     invalidOutPoint.index = -1n;
     expect(() => {
       new OrderData(1n, { type: "absolute", value: invalidOutPoint }, info).validate();
+    }).toThrow("OutPoint invalid");
+    const longOutPoint = ccc.OutPoint.from({
+      txHash: `${byte32FromByte("77")}00`,
+      index: 0n,
+    });
+    expect(() => {
+      new OrderData(1n, { type: "absolute", value: longOutPoint }, info).validate();
     }).toThrow("OutPoint invalid");
   });
 
@@ -215,9 +235,11 @@ describe("order entity wire bounds", () => {
         ratio.toBytes();
       }).toThrow(`struct.${field} - NumLike out of uint64 bounds`);
     }
-    expect(() => {
-      Info.create(true, { ckbScale: maxUint64 + 1n, udtScale: 1n }).validate();
-    }).toThrow("Ratio scale exceeds Uint64");
+    for (const isCkb2Udt of [true, false]) {
+      expect(() => {
+        Info.create(isCkb2Udt, { ckbScale: maxUint64 + 1n, udtScale: 1n }).validate();
+      }).toThrow("Ratio scale exceeds Uint64");
+    }
   });
 
   it("enforces the semantic Info integer range", () => {
@@ -299,10 +321,16 @@ describe("order cells", () => {
       udtValue: 10n,
       info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
     });
-    const fulfilled = orderCell({
+    // A filled buy holds only UDT; a filled sell holds only CKB.
+    const bought = orderCell({
       ckbValue: 0n,
-      udtValue: 0n,
+      udtValue: 10n,
       info: Info.create(true, { ckbScale: 1n, udtScale: 1n }),
+    });
+    const sold = orderCell({
+      ckbValue: ccc.fixedPointFrom(1000),
+      udtValue: 0n,
+      info: Info.create(false, { ckbScale: 1n, udtScale: 1n }),
     });
     const master = new MasterCell(masterCell());
     const group = resolvedOrderGroup(order);
@@ -312,14 +340,41 @@ describe("order cells", () => {
     expect(order.data.info.isDualRatio()).toBe(false);
     expect(order.isMatchable()).toBe(true);
     expect(order.isFulfilled()).toBe(false);
-    expect(fulfilled.isMatchable()).toBe(false);
-    expect(fulfilled.isFulfilled()).toBe(true);
+    for (const fulfilled of [bought, sold]) {
+      expect(fulfilled.isMatchable()).toBe(false);
+      expect(fulfilled.isFulfilled()).toBe(true);
+    }
     expect(group.ckbValue).toBe(
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,
     );
     expect(group.udtValue).toBe(order.data.udtValue);
     expect(group.isOwner(group.master.cell.cellOutput.lock)).toBe(true);
     expect(group.isOwner(script("99"))).toBe(false);
+    expect(group.isOwner(script("99"), group.master.cell.cellOutput.lock)).toBe(true);
+  });
+
+  it("values each direction at its own ratio, a dual-ratio order as complete", () => {
+    const valued = (info: Info): [bigint, bigint] => {
+      const order = makeOrderCell({
+        ckbUnoccupied: 5n,
+        udtValue: 7n,
+        info,
+        master: { type: "absolute", value: { txHash: byte32FromByte("66"), index: 1n } },
+        outPoint: { txHash: byte32FromByte("55"), index: 0n },
+      });
+      return [order.absTotal, order.absProgress];
+    };
+    const buy = { ckbScale: 5n, udtScale: 2n };
+    const sell = { ckbScale: 3n, udtScale: 2n };
+
+    // 5 * 5 + 7 * 2, of which the UDT already bought is 7 * 2.
+    expect(valued(Info.create(true, buy))).toEqual([39n, 14n]);
+    // 5 * 3 + 7 * 2, of which the CKB already sold is 5 * 3.
+    expect(valued(Info.create(false, sell))).toEqual([29n, 15n]);
+    // (39 * 3 * 2 + 29 * 5 * 2) / 2.
+    expect(
+      valued(Info.from({ ckbToUdt: buy, udtToCkb: sell, ckbMinMatchLog: 0 })),
+    ).toEqual([262n, 262n]);
   });
 
   it("reports malformed order data with its outpoint and codec cause", () => {
@@ -488,6 +543,9 @@ describe("order groups", () => {
       false,
     );
     expect(new MasterCell(masterCell({ index: 2n })).anchors(origin)).toBe(false);
+    expect(new MasterCell(capacityCell(61n, OWNER_LOCK, "66")).anchors(origin)).toBe(
+      false,
+    );
   });
 });
 

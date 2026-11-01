@@ -2,7 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
+import {
+  mockPassthroughMint,
+  stubSigner,
+  testSdk,
+} from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -58,5 +62,44 @@ describe("IckbSdk.buildConversionTransaction", () => {
     expect(deposit).toHaveBeenCalledTimes(1);
     expect(mint).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["deposit:2", "order"]);
+  });
+
+  it("reports no order cell space for whole deposits alone", async () => {
+    const { sdk, logicManager, lock } = testSdk();
+    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) =>
+      ccc.Transaction.from(txLike),
+    );
+
+    const result = await sdk.buildConversionTransaction({
+      direction: CKB_TO_ICKB,
+      amount: ICKB_DEPOSIT_CAP * 2n,
+      lock,
+      signer: stubSigner,
+      context: conversionContext({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
+    });
+
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
+    expect(result).not.toHaveProperty("orderOccupiedCapacity");
+  });
+
+  it.each([
+    [conversionContext().system.depositCapacity, "direct"],
+    [ccc.fixedPointFrom(10000), "order"],
+  ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
+    const { sdk, logicManager, orderManager, lock } = testSdk();
+    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) =>
+      ccc.Transaction.from(txLike),
+    );
+    mockPassthroughMint(orderManager);
+
+    await expect(
+      sdk.buildConversionTransaction({
+        direction: CKB_TO_ICKB,
+        amount,
+        lock,
+        signer: stubSigner,
+        context: conversionContext({ ckbAvailable: amount }),
+      }),
+    ).resolves.toMatchObject({ ok: true, conversionKind: kind });
   });
 });

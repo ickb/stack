@@ -69,6 +69,19 @@ describe(ORDER_MATCHER_SUITE, () => {
       45n,
     );
   });
+
+  it("reports no fee for a fee-free quote, whatever its rounding", () => {
+    // One shannon buys a third of a UDT unit, quoted up to one.
+    const result = quoteConversion(
+      true,
+      Ratio.from({ ckbScale: 1n, udtScale: 3n }),
+      { ckbValue: 1n, udtValue: 0n },
+      { fee: 0n, feeBase: 10n },
+    );
+
+    expect(result.convertedAmount).toBe(1n);
+    expect(result.ckbFee).toBe(0n);
+  });
 });
 
 describe(ORDER_MATCHER_SUITE, () => {
@@ -136,6 +149,30 @@ describe(ORDER_MATCHER_SUITE, () => {
     ).toThrow(OrderConversionRepresentabilityError);
   });
 
+  it("rejects a quote whose only preserving ratio has a term just past Uint64", () => {
+    expect(() =>
+      quoteConversion(
+        true,
+        Ratio.from({ ckbScale: 1n << 64n, udtScale: 1n }),
+        { ckbValue: 1n, udtValue: 0n },
+        { fee: 0n, feeBase: 100000n },
+      ),
+    ).toThrow(OrderConversionRepresentabilityError);
+  });
+
+  it("rejects a bounded fraction that would round the input below its quote", () => {
+    // The quote is 2^65 - 1; the closest Uint64 fraction under it, (2^64 - 2) / (2^64 - 1),
+    // rounds 2^65 up to only 2^65 - 2.
+    expect(() =>
+      quoteConversion(
+        true,
+        Ratio.from({ ckbScale: (1n << 65n) - 1n, udtScale: 1n << 65n }),
+        { ckbValue: 1n << 65n, udtValue: 0n },
+        { fee: 0n, feeBase: 100000n },
+      ),
+    ).toThrow(OrderConversionRepresentabilityError);
+  });
+
   it("rejects preserving fractions whose terms cannot advance", () => {
     expect(() =>
       quoteConversion(
@@ -177,7 +214,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     expect(matcher.bMaxMatch).toBeGreaterThan(0n);
   });
 
-  it("rejects orders whose fee leaves no spendable input", () => {
+  it("rejects orders whose fee takes all their spendable input", () => {
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1),
       udtValue: 0n,
@@ -200,7 +237,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     });
 
     expect(
-      OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(2)),
+      OrderMatcher.from(resolvedOrderGroup(order), true, ccc.fixedPointFrom(1)),
     ).toBeUndefined();
   });
 });

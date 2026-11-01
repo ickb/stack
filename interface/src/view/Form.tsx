@@ -1,13 +1,12 @@
 import { ccc } from "@ckb-ccc/ccc";
 import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
 import type { JSX } from "react";
-import { figureText, groupDigits, phoneFigureText } from "../shared/figures.ts";
+import { figureText, groupDigits, twoDecimals } from "../shared/figures.ts";
 import {
   CKB,
   parseAmountInput,
   reasonLabelClass,
   type RootConfig,
-  twoDecimals,
 } from "../shared/utils.ts";
 import {
   amountQuoteText,
@@ -18,6 +17,14 @@ import {
 } from "./formState.ts";
 
 const amountErrorId = "conversion-amount-error";
+
+/**
+ * Phone balance columns are a third of the card: 87px on a 360px screen, whose high-DPI
+ * root font is 18px (index.css). In bold Noto Sans at that size, "99,999.99" is 82px once
+ * the figure drops the form's wide tracking, while "999,999.99" is 93px, so phones compact
+ * from a hundred thousand. A 320px screen still overflows by 3px.
+ */
+const PHONE_COMPACT_FROM = 100_000n;
 
 export default function Form({
   isCkb2Udt,
@@ -217,13 +224,16 @@ function maxButton(
   );
 }
 
-function lockedBalanceDisplay({ balance }: AssetDisplay): JSX.Element {
+function lockedBalanceDisplay({ name, balance }: AssetDisplay): JSX.Element {
   if (balance === undefined) {
     return <span aria-hidden="true" />;
   }
 
   return (
-    <span className="whitespace-nowrap text-ickb-muted">
+    <span
+      className="whitespace-nowrap text-ickb-muted"
+      aria-label={`${name} ${balance.status}: ${ccc.fixedPointToString(balance.locked)}`}
+    >
       {display(
         balance.locked,
         balance.status,
@@ -235,7 +245,7 @@ function lockedBalanceDisplay({ balance }: AssetDisplay): JSX.Element {
 
 /**
  * A figure and the word that says what it is; a converting figure pulses. On a phone the
- * word sits under the figure, since a 100px column cannot hold both side by side.
+ * word sits under the figure, since a phone column cannot hold both side by side.
  */
 function display(shannons: bigint, label: string, isConverting: boolean): JSX.Element {
   return (
@@ -243,7 +253,9 @@ function display(shannons: bigint, label: string, isConverting: boolean): JSX.El
       className={`flex flex-col items-center leading-none sm:flex-row sm:items-baseline sm:gap-x-1 sm:leading-relaxed ${isConverting ? "cursor-wait" : ""}`}
     >
       <span className={isConverting ? "animate-pulse motion-reduce:animate-none" : ""}>
-        <span className="sm:hidden">{phoneFigureText(shannons)}</span>
+        <span className="tracking-normal sm:hidden">
+          {figureText(shannons, PHONE_COMPACT_FROM)}
+        </span>
         <span className="hidden sm:block">{figureText(shannons)}</span>
       </span>
       <span className="text-[10px] font-medium tracking-normal normal-case opacity-80 sm:text-xs">

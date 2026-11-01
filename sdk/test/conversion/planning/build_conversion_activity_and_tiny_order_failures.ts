@@ -3,6 +3,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
+  fundedSigner,
   mockPassthroughMint,
   stubSigner,
   testSdk,
@@ -65,7 +66,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toEqual({
       ok: false,
       reason: "nothing-to-do",
-      estimatedMaturity: 0n,
     });
 
     await expect(
@@ -82,9 +82,22 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
-      estimatedMaturity: 0n,
-      // Ten mining fees at fee rate 1, plus one, at the 0.001% order fee.
+      // Ten mining fees at fee rate 1, plus one, at the 0.01% order fee.
       minimum: 110_000n,
+    });
+    await expect(
+      sdk.buildConversionTransaction({
+        direction: ICKB_TO_CKB,
+        amount: 1n,
+        lock,
+        signer: stubSigner,
+        context: conversionContext({ ickbAvailable: 1n }),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      reason: AMOUNT_TOO_SMALL,
+      // A sell can pay its whole value as fee: ten mining fees plus one, at par.
+      minimum: 11n,
     });
   });
 
@@ -125,6 +138,17 @@ describe("IckbSdk.buildConversionTransaction", () => {
         context: conversionContext({ cells: [cell] }),
       }),
     ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
+    // To any lock of the signer's own, an empty collection would only compact the account.
+    const second = script("12");
+    await expect(
+      sdk.buildConversionTransaction({
+        direction: CKB_TO_ICKB,
+        amount: 0n,
+        lock: second,
+        signer: fundedSigner([], [script("11"), second]).signer,
+        context: conversionContext({ cells: [cell] }),
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "nothing-to-do" });
     // Nothing liquid to move is nothing to do, whatever the lock.
     await expect(
       sdk.buildConversionTransaction({

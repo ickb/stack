@@ -75,7 +75,7 @@ function withCompletion(
   if (completion === "passthrough") {
     vi.spyOn(sdk, "completeTransaction").mockImplementation(async (txLike) => {
       await Promise.resolve();
-      return ccc.Transaction.from(txLike);
+      return { tx: ccc.Transaction.from(txLike), plannedFee: 0n };
     });
   }
   return sdk;

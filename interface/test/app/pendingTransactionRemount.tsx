@@ -5,7 +5,7 @@ import type {
 } from "@ickb/sdk";
 import { script } from "@ickb/testkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, Fragment, useState, type ReactElement } from "react";
+import { act, createElement, Fragment, useState, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionLayout } from "../../src/action/ActionLayout.tsx";
 import {
@@ -14,9 +14,11 @@ import {
 } from "../../src/action/pendingTransaction.ts";
 import type { L1StateType } from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
+import { activeTxInfo } from "../action/fixtures/transaction.ts";
 import { fakeDom } from "../support/dom.ts";
+import { inAct } from "../support/renderHook.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { activeTxInfo, l1State } from "./fixtures/l1State.ts";
+import { l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -43,7 +45,7 @@ vi.mock(import("@ickb/sdk"), async (importActual) => ({
 }));
 
 const Action = (await import("../../src/action/Action.tsx")).default;
-const { createRoot, flushSync, restoreDom } = await fakeDom();
+const { createRoot, restoreNow } = await fakeDom();
 
 beforeEach(() => {
   mocks.layout = undefined;
@@ -58,8 +60,8 @@ beforeEach(() => {
   mocks.waitTransaction.mockImplementation(waitUntilStopped);
 });
 
-afterAll(async () => {
-  await restoreDom();
+afterAll(() => {
+  restoreNow();
   vi.unstubAllGlobals();
 });
 
@@ -76,7 +78,9 @@ describe("pending transaction remount ownership", () => {
     expect(currentLayout().action).toBe("retry confirmation");
     expect(currentLayout().disabled).toBe(false);
 
-    currentLayout().onAction?.();
+    act(() => {
+      currentLayout().onAction?.();
+    });
 
     expect(firstSend).toHaveBeenCalledTimes(1);
     expect(replacementSend).not.toHaveBeenCalled();
@@ -87,14 +91,14 @@ describe("pending transaction remount ownership", () => {
     expect(waitOptions.timeout).toBeGreaterThan(0);
     expect(waitOptions.signal).toBeInstanceOf(AbortSignal);
     sent.resolve(txHash);
-    flushSync(() => {
+    act(() => {
       root.unmount();
     });
   });
 
   it("offers no recorded hash to a replacement wallet session", async () => {
     const { freshAction, sent, root: firstRoot } = await submittedAction();
-    flushSync(() => {
+    act(() => {
       firstRoot.unmount();
     });
 
@@ -107,7 +111,7 @@ describe("pending transaction remount ownership", () => {
     expect(currentLayout().action).toBe(freshAction);
     expect(mocks.waitTransaction).not.toHaveBeenCalled();
     sent.resolve(txHash);
-    flushSync(() => {
+    act(() => {
       replacementRoot.unmount();
     });
   });
@@ -126,9 +130,11 @@ async function submittedAction(): Promise<{
   const freshAction = currentLayout().action;
   expect(freshAction).not.toBe("retry confirmation");
 
-  currentLayout().onAction?.();
-  await vi.waitFor(() => {
-    expect(send).toHaveBeenCalledTimes(1);
+  await inAct(async () => {
+    currentLayout().onAction?.();
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(1);
+    });
   });
   return { freshAction, root, send, sent };
 }
@@ -143,7 +149,7 @@ function renderHost(
     [walletConfig.chain, walletConfig.address, "txInfo", "state", true, "1"],
     activeTxInfo(),
   );
-  flushSync(() => {
+  act(() => {
     root.render(
       createElement(
         QueryClientProvider,
@@ -214,7 +220,6 @@ function walletConfig(
     resetClient: vi.fn<() => void>(),
     signer: { client, sendTransaction },
     accountLocks: [],
-    primaryLock: {},
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {

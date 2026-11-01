@@ -1,6 +1,6 @@
 {
   "name": "@ickb/sdk",
-  "version": "9001.0.0",
+  "version": "9002.0.0",
   "description": "iCKB SDK built on top of CCC",
   "keywords": [
     "ickb",
@@ -56,10 +56,11 @@
       }
     }
   },
-  "dependencies": {
+  "peerDependencies": {
     "@ckb-ccc/core": "catalog:"
   },
   "devDependencies": {
+    "@ckb-ccc/core": "catalog:",
     "@ickb/testkit": "workspace:*",
     "@typescript/native-preview": "catalog:"
   }

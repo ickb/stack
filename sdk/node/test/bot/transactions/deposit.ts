@@ -1,12 +1,20 @@
 import { ccc } from "@ckb-ccc/core";
+import { receiptPhase2Capacity } from "../../../../src/logic.ts";
 import { IckbError } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
+import { ICKB_REFILL_BELOW, ICKB_WITHDRAW_ABOVE } from "../../../src/bot/policy.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
-import type { Runtime } from "../../../src/bot/types.ts";
-import { botRuntime, botState, readyDeposit } from "../fixtures/bot.ts";
+import { CKB_RESERVE } from "../../../src/shared/reserve.ts";
+import {
+  botRuntime,
+  botState,
+  botSystem,
+  marketOrder,
+  PLANNED_FEE,
+  readyDeposit,
+} from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,26 +22,18 @@ afterEach(() => {
 
 const RICH_CKB = ccc.fixedPointFrom(500_000);
 
-/** Completion that leaves `change` plain CKB with the bot. */
-function completing(change: bigint): Runtime["completeTransaction"] {
-  return async (txLike): Promise<ccc.Transaction> => {
-    await Promise.resolve();
-    const tx = ccc.Transaction.from(txLike).clone();
-    tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
-    return tx;
-  };
-}
-
 describe("buildTransaction deposit", () => {
   it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
-    const runtime = botRuntime({
-      completeTransaction: completing(ccc.fixedPointFrom(2000)),
-    });
+    const runtime = botRuntime();
     const deposit = vi.spyOn(runtime.managers.ickbLogic, "deposit");
 
     const result = await buildTransaction(
       runtime,
-      botState({ ckb: RICH_CKB, ickb: 0n, depositCapacity: ccc.fixedPointFrom(1100) }),
+      botState({
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: 0n,
+        system: { ...botSystem(), depositCapacity: ccc.fixedPointFrom(1100) },
+      }),
     );
 
     expect(deposit).toHaveBeenCalledWith(
@@ -50,6 +50,35 @@ describe("buildTransaction deposit", () => {
         core: { kind: "deposit", attempts: 1 },
       },
     });
+  });
+
+  it("plans the refill on the balances the match leaves, the receipt in its cost", async () => {
+    // The buyer takes 100 iCKB for 200 CKB: the refill line is crossed only after the match,
+    // and the deposit with its receipt is affordable only with the CKB the match brings.
+    const runtime = botRuntime();
+    const depositCapacity = ccc.fixedPointFrom(1100);
+    const cost = depositCapacity + receiptPhase2Capacity(runtime.primaryLock);
+    const buyer = marketOrder({
+      byte: "74",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+    const deposit = async (ckbAfterMatch: bigint): Promise<unknown> =>
+      (
+        await buildTransaction(
+          runtime,
+          botState({
+            orderPool: [buyer],
+            ckbAvailable: ckbAfterMatch - ccc.fixedPointFrom(200),
+            ickbAvailable: ICKB_REFILL_BELOW + ccc.fixedPointFrom(50),
+            system: { ...botSystem(), depositCapacity },
+          }),
+        )
+      ).decision.rebalance.deposit;
+
+    await expect(deposit(CKB_RESERVE + cost)).resolves.toBe("low_ickb");
+    await expect(deposit(CKB_RESERVE + cost - 1n)).resolves.toBeUndefined();
   });
 
   it("falls through to the withdrawal when the seed deposit cannot complete", async () => {
@@ -71,15 +100,15 @@ describe("buildTransaction deposit", () => {
         throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
       }
       tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
-      return tx;
+      return { tx, plannedFee: PLANNED_FEE };
     });
     const runtime = botRuntime({ completeTransaction });
 
     const result = await buildTransaction(
       runtime,
       botState({
-        ckb: RICH_CKB,
-        ickb: ICKB_WITHDRAW_ABOVE + 1n,
+        ckbAvailable: RICH_CKB,
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 1n,
         poolDeposits: [surplus, anchor, whale],
       }),
     );

@@ -1,6 +1,6 @@
-import { ccc, mol } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { isDaoDeposit } from "./dao.ts";
-import { CheckedUint128LE, CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
+import { CheckedUint128LE, CheckedUint32LE } from "./utils/codec.ts";
 import type { ExchangeRatio } from "./utils/utils.ts";
 
 const ickbXudtTypeOccupiedSize = 69;
@@ -9,38 +9,6 @@ const AR_0: ccc.Num = 10000000000000000n; // Base scale for CKB
 const depositUsedCapacity = ccc.fixedPointFrom(82); // 82n CKB
 const depositCapacityDelta = (depositUsedCapacity * AR_0) / ccc.fixedPointFrom(100000);
 const xudtOwnerMode = 0x80000000n;
-
-// A receipt's fixed prefix: 4 bytes of deposit quantity and 8 of deposit amount.
-export const receiptDataBytes = 12;
-
-/** The receipt payload for one or more identical iCKB deposits. */
-export interface ReceiptData {
-  /** Number of identical deposits represented by this receipt. */
-  depositQuantity: ccc.Num;
-  /** Free CKB capacity of each represented deposit before iCKB conversion. */
-  depositAmount: ccc.FixedPoint;
-}
-
-const ReceiptDataCodec = mol.struct({
-  depositQuantity: CheckedUint32LE,
-  depositAmount: CheckedUint64LE,
-});
-
-/** Encodes a receipt payload. */
-export function encodeReceiptData(data: ReceiptData): ccc.Bytes {
-  return ReceiptDataCodec.encode(data);
-}
-
-/**
- * Decodes the fixed receipt-data prefix and ignores trailing cell payload bytes.
- *
- * @remarks The receipt data prefix is 12 bytes after the `0x` marker: 4 bytes for deposit
- * quantity and 8 bytes for deposit amount. Later payload bytes belong to other protocol
- * data and are intentionally tolerated here.
- */
-export function decodeReceiptData(outputData: ccc.Hex): ReceiptData {
-  return ReceiptDataCodec.decode(outputData.slice(0, 2 + 2 * receiptDataBytes));
-}
 
 /**
  * Soft per-deposit iCKB value cap used before applying the excess discount.

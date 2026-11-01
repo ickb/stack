@@ -57,6 +57,13 @@ describe("readStimulusOverride", () => {
       fee: 0n,
     });
     expect(readStimulusOverride({ STIMULUS_AMOUNT: "max" })).toEqual({ amount: "max" });
+    // The other direction, a whole amount, and the eight decimals a shannon allows.
+    expect(
+      readStimulusOverride({ STIMULUS_DIRECTION: "ckb-to-ickb", STIMULUS_AMOUNT: "5" }),
+    ).toEqual({ direction: "ckb-to-ickb", amount: 500_000_000n });
+    expect(readStimulusOverride({ STIMULUS_AMOUNT: "0.00000001" })).toEqual({
+      amount: 1n,
+    });
   });
 
   it("rejects values outside each knob's domain", () => {

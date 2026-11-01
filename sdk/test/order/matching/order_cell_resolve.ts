@@ -16,13 +16,18 @@ describe("OrderManager.mint", () => {
   it("creates an order output with the requested CKB value plus occupied capacity", () => {
     const lock = script("11");
     const udt = script("22");
-    const manager = new OrderManager(script("33"), [], udt);
+    const cellDep = ccc.CellDep.from({
+      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
+      depType: "code",
+    });
+    const manager = new OrderManager(script("33"), [cellDep], udt);
 
     const tx = manager.mint(ccc.Transaction.default(), lock, dualInfo(), {
       ckbValue: ccc.fixedPointFrom(123),
       udtValue: ccc.fixedPointFrom(456),
     });
 
+    expect(tx.cellDeps).toEqual([cellDep]);
     expect(tx.outputs).toHaveLength(2);
     const output = tx.getOutput(0);
     if (output === undefined) {

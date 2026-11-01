@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, script } from "@ickb/testkit";
+import { byte32FromByte, capacityCell, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
@@ -66,7 +66,16 @@ function registerOrderMatcherMinimumTests(): void {
 
 describe("OrderManager no-op transaction helpers", () => {
   it("recognizes master cells and handles no-op matches and melts", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+    const manager = new OrderManager(
+      ORDER_SCRIPT,
+      [
+        ccc.CellDep.from({
+          outPoint: { txHash: byte32FromByte("aa"), index: 0n },
+          depType: "code",
+        }),
+      ],
+      UDT_SCRIPT,
+    );
     const master = masterCell();
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
@@ -78,14 +87,19 @@ describe("OrderManager no-op transaction helpers", () => {
 
     expect(manager.isOrder(order.cell)).toBe(true);
     expect(manager.isOrder(master)).toBe(false);
+    expect(manager.isOrder(capacityCell(61n, ORDER_SCRIPT, "57"))).toBe(false);
+    // Nothing to match or melt needs no order script dep either.
+    const empty = ccc.Transaction.default().toBytes();
     expect(
-      manager.addMatch(ccc.Transaction.default(), {
-        ckbDelta: 0n,
-        udtDelta: 0n,
-        partials: [],
-      }).inputs,
-    ).toEqual([]);
-    expect(manager.melt(ccc.Transaction.default(), []).inputs).toEqual([]);
+      manager
+        .addMatch(ccc.Transaction.default(), {
+          ckbDelta: 0n,
+          udtDelta: 0n,
+          partials: [],
+        })
+        .toBytes(),
+    ).toEqual(empty);
+    expect(manager.melt(ccc.Transaction.default(), []).toBytes()).toEqual(empty);
   });
 });
 
@@ -193,19 +207,24 @@ function registerMatchAccountingValidationTests(): void {
     const tx = ccc.Transaction.default();
     const before = tx.toBytes();
 
-    expect(() =>
-      manager.addMatch(tx, {
-        ckbDelta: 1n,
-        udtDelta: 0n,
-        partials: [
-          {
-            group: resolvedOrderGroup(order),
-            ckbOut: order.ckbValue,
-            udtOut: order.udtValue,
-          },
-        ],
-      }),
-    ).toThrow("Match deltas do not match partial order accounting");
+    for (const [ckbDelta, udtDelta] of [
+      [1n, 0n],
+      [0n, 1n],
+    ] as const) {
+      expect(() =>
+        manager.addMatch(tx, {
+          ckbDelta,
+          udtDelta,
+          partials: [
+            {
+              group: resolvedOrderGroup(order),
+              ckbOut: order.ckbValue,
+              udtOut: order.udtValue,
+            },
+          ],
+        }),
+      ).toThrow("Match deltas do not match partial order accounting");
+    }
     expect(tx.toBytes()).toEqual(before);
   });
 }
@@ -247,6 +266,14 @@ function registerMatchPartialValidationTests(): void {
         partials: [{ group, ckbOut: -1n, udtOut: order.udtValue }],
       }),
     ).toThrow("negative CKB output");
+    // Only a negative amount is malformed here; the chain judges the capacity.
+    expect(() =>
+      manager.addMatch(ccc.Transaction.default(), {
+        ckbDelta: order.ckbValue,
+        udtDelta: 0n,
+        partials: [{ group, ckbOut: 0n, udtOut: order.udtValue }],
+      }),
+    ).not.toThrow();
     expect(() =>
       manager.addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,

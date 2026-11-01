@@ -7,7 +7,7 @@ Each turn reads committed state, builds at most one transaction, signs, sends an
 1. Match profitable orders using the current inventory.
 2. On the resulting balances, try a deposit, then a withdrawal chain, then the match or collections alone. A transaction never carries both a deposit and a withdrawal request.
 3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the sampled liquid cells, sweeping spare cells along.
-4. Send only if a match, deposit, withdrawal request or collection remains. Compaction alone never sends.
+4. Send only if a match, deposit, withdrawal request, collection or liquid cell away from the primary lock remains, such as [another key's](../README.md#changing-the-key). Compaction of cells already at the primary lock never sends.
 
 A skip, commit or failure ends the turn, and the next one, in the same process or after the [restart](../README.md#runtime-config), reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
 

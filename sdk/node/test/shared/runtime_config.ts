@@ -32,7 +32,7 @@ describe("runtime config env", () => {
 
     await expect(readConfig({})).resolves.toEqual({
       chain: "testnet",
-      privateKey: VALID_PRIVATE_KEY,
+      privateKeys: [VALID_PRIVATE_KEY],
       rpcUrls: [RPC_URL],
       rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
     });
@@ -47,7 +47,7 @@ describe("runtime config env", () => {
       readConfig({ BOT_CHAIN: "mainnet", BOT_RPC_URL: urls.join(",") }),
     ).resolves.toEqual({
       chain: "mainnet",
-      privateKey: VALID_PRIVATE_KEY,
+      privateKeys: [VALID_PRIVATE_KEY],
       rpcUrls: urls.toReversed(),
       rpcEndpoints: [
         { protocol: "wss:", hostname: "second.example", port: "" },
@@ -89,7 +89,11 @@ describe("runtime config env", () => {
     // Absolute but unreadable: the error names the variable, never the path.
     await expect(
       readConfig({ BOT_PRIVATE_KEY_FILE: path.join(KEY_DIR, "missing.key") }),
-    ).rejects.toThrow("Invalid file from env BOT_PRIVATE_KEY_FILE");
+    ).rejects.toMatchObject({
+      message: "Invalid file from env BOT_PRIVATE_KEY_FILE",
+      // The read error stays attached, so the operator sees why the file failed.
+      cause: { code: "ENOENT" },
+    });
   });
 });
 
@@ -102,9 +106,17 @@ describe("runtime config private key file", () => {
     ]) {
       await writeKeyFile(text);
       await expect(readConfig({})).resolves.toMatchObject({
-        privateKey: VALID_PRIVATE_KEY,
+        privateKeys: [VALID_PRIVATE_KEY],
       });
     }
+  });
+
+  it("reads one key per line, in file order", async () => {
+    const others = [`0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`];
+    await writeKeyFile(`${VALID_PRIVATE_KEY}\r\n${others.join("\n")}\n`);
+    await expect(readConfig({})).resolves.toMatchObject({
+      privateKeys: [VALID_PRIVATE_KEY, ...others],
+    });
   });
 
   it("rejects non-canonical or out-of-range keys without exposing them", async () => {
@@ -118,6 +130,11 @@ describe("runtime config private key file", () => {
       SECP256K1_ORDER,
       "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142",
       `${VALID_PRIVATE_KEY}\n${VALID_PRIVATE_KEY}`,
+      `${VALID_PRIVATE_KEY}\n\n0x${"22".repeat(32)}`,
+      `${VALID_PRIVATE_KEY}\n0x${"22".repeat(31)}`,
+      // Text around a key: refused here, never handed to BigInt, whose error quotes it.
+      `x${VALID_PRIVATE_KEY}`,
+      `${VALID_PRIVATE_KEY}x`,
     ]) {
       await writeKeyFile(text);
       await expect(readConfig({})).rejects.toThrow(
@@ -128,6 +145,18 @@ describe("runtime config private key file", () => {
 });
 
 describe("runtime config RPC URL", () => {
+  it("accepts plain HTTP and WebSocket URLs, as a local node serves them", async () => {
+    await writeKeyFile(VALID_PRIVATE_KEY);
+    for (const [rpcUrl, protocol] of [
+      ["http://127.0.0.1:8114/", "http:"],
+      ["ws://127.0.0.1:28114/", "ws:"],
+    ]) {
+      await expect(readConfig({ BOT_RPC_URL: rpcUrl })).resolves.toMatchObject({
+        rpcEndpoints: [{ protocol }],
+      });
+    }
+  });
+
   it("rejects malformed, non-HTTP, credentialed and whitespace URLs without exposing them", async () => {
     await writeKeyFile(VALID_PRIVATE_KEY);
     for (const rpcUrl of [
@@ -136,6 +165,7 @@ describe("runtime config RPC URL", () => {
       "not a url",
       "https://user:password@rpc.example/",
       "https://user@rpc.example/",
+      "https://:password@rpc.example/",
       "https://rpc.example/\t",
       " https://rpc.example/",
       "https://rpc.example/, https://second.example/",

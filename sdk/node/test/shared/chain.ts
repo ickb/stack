@@ -1,9 +1,8 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { headerLike, StubClient } from "@ickb/testkit";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { jsonRpcRequestor } from "../../../src/utils/utils.ts";
 import { createPublicClient, verifyChainPreflight } from "../../src/shared/chain.ts";
 
 const TESTNET_GENESIS_HASH =
@@ -92,8 +91,10 @@ describe("public client preflight identity", () => {
 });
 
 function endpointPoolUrls(client: ccc.Client): string[] {
-  const requestor = jsonRpcRequestor(client);
-  const { transport } = requestor;
+  if (!(client instanceof ccc.ClientJsonRpc)) {
+    throw new TypeError("expected a CCC JSON-RPC client");
+  }
+  const { transport } = client.requestor;
   if (!("transports" in transport) || !Array.isArray(transport.transports)) {
     throw new Error("expected CCC TransportFallback endpoint pool");
   }

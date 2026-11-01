@@ -96,6 +96,8 @@ describe("JSON line logging", () => {
         missing: undefined,
         values: [null, undefined, 1n],
         callback: (): string => "dropped",
+        // Only an error's hidden fields are kept; elsewhere they are dropped.
+        hidden: Object.defineProperty({}, "message", { value: "hidden" }),
       });
     });
 
@@ -105,6 +107,7 @@ describe("JSON line logging", () => {
       invalidAt: null,
       nullable: null,
       values: [null, null, "1"],
+      hidden: {},
     });
   });
 });

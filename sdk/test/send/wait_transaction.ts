@@ -65,16 +65,18 @@ describe("waitTransaction terminal rejection", () => {
     });
   });
 
-  it("preserves a status-only rejection without a reason", async () => {
-    const { client } = jsonRpcClient({ status: "rejected" });
+  it("preserves a status-only rejection without a string reason", async () => {
+    for (const txStatus of [{ status: "rejected" }, { status: "rejected", reason: 1 }]) {
+      const { client } = jsonRpcClient(txStatus);
 
-    await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
-      expect.objectContaining({
-        message: `Transaction ${TX_HASH} ended with status rejected`,
-        status: "rejected",
-        reason: undefined,
-      }),
-    );
+      await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
+        expect.objectContaining({
+          message: `Transaction ${TX_HASH} ended with status rejected`,
+          status: "rejected",
+          reason: undefined,
+        }),
+      );
+    }
   });
 
   it("treats malformed raw status records as unconfirmed", async () => {
@@ -141,6 +143,14 @@ describe("waitTransaction option domains", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("accepts the largest timeout a host timer can hold", async () => {
+    const { client } = jsonRpcClient({ status: "committed" });
+
+    await expect(
+      waitTransaction(client, TX_HASH, { timeout: MAX_TIMEOUT_MS }),
+    ).resolves.toBeUndefined();
+  });
+
   it("rejects a malformed transaction hash without opening the wait window", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
@@ -159,6 +169,8 @@ describe("waitTransaction option domains", () => {
 
 describe("waitTransaction window closing", () => {
   it("times out before starting work when the budget is already spent", async () => {
+    // A frozen clock keeps the first poll at the deadline itself rather than past it.
+    vi.useFakeTimers();
     const { client, request } = jsonRpcClient({ status: "pending" });
 
     await expect(waitTransaction(client, TX_HASH, { timeout: 0 })).rejects.toBeInstanceOf(
@@ -203,6 +215,8 @@ describe("waitTransaction window closing", () => {
   it("cancels the polling sleep and continues after it elapses", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
+    const added = vi.spyOn(controller.signal, "addEventListener");
+    const removed = vi.spyOn(controller.signal, "removeEventListener");
     const txStatus = { status: "pending" };
     const { client, request } = jsonRpcClient(txStatus);
 
@@ -220,6 +234,25 @@ describe("waitTransaction window closing", () => {
 
     await expect(waiting).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    // A long-lived signal keeps no listener from a closed window.
+    expect(removed).toHaveBeenCalledWith("abort", added.mock.calls[0]?.[1]);
+  });
+
+  it("clears the polling sleep when aborted during it", async () => {
+    vi.useFakeTimers();
+    const reason = new Error("stopped while sleeping");
+    const controller = new AbortController();
+    const { client, request } = jsonRpcClient({ status: "pending" });
+
+    const waiting = waitTransaction(client, TX_HASH, { signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(2);
+    });
+    controller.abort(reason);
+
+    await expect(waiting).rejects.toBe(reason);
     expect(vi.getTimerCount()).toBe(0);
   });
 });
@@ -343,15 +376,13 @@ describe("waitTransaction in-flight operations", () => {
 });
 
 describe("waitTransaction absolute budget", () => {
-  it("rejects an overdue result from an operation that starved the timer", async () => {
+  it("rejects a result that arrives at the deadline before the window timer fires", async () => {
+    vi.useFakeTimers();
     const { client, request } = jsonRpcClient({ status: "committed" });
     request.mockImplementation(async (payload): Promise<ccc.JsonRpcResponse> => {
-      // Block the event loop past the deadline so the window timer cannot fire.
-      const blockUntil = Date.now() + 30;
-      while (Date.now() < blockUntil) {
-        // Deliberately empty: a synchronous client operation holds the loop.
-      }
-      // A microtask still cannot let the starved timer run before this returns.
+      // The clock reaches the deadline without running the window timer, as when an
+      // operation blocks the event loop.
+      vi.setSystemTime(Date.now() + 5);
       await Promise.resolve();
       return {
         id: payload.id,
@@ -365,6 +396,27 @@ describe("waitTransaction absolute budget", () => {
     ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
 
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out as soon as the next poll could not start inside the window", async () => {
+    vi.useFakeTimers();
+    const { client, request } = jsonRpcClient({ status: "pending" });
+    const start = Date.now();
+    let rejectedAt = NaN;
+    const timedOut = (async (): Promise<unknown> => {
+      const error = await rejectionOf(
+        waitTransaction(client, TX_HASH, { timeout: 2_000, interval: 1_000 }),
+      );
+      rejectedAt = Date.now();
+      return error;
+    })();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+    // The second poll at 1 s leaves no room for a third, so the wait ends there.
+    expect(rejectedAt - start).toBe(1_000);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
 

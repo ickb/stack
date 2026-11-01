@@ -1,6 +1,6 @@
 import { useCcc, useSigner } from "@ckb-ccc/connector-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
-import { createRootConfig, isCkbSigner } from "../app/interfaceConfig.ts";
+import { createRootConfig } from "../app/interfaceConfig.ts";
 import { useQuoteState } from "../app/queries.ts";
 import { buttonClass, chainFromClient, walletLabel } from "../shared/utils.ts";
 import { saveSelectedChain } from "./cccConnection.ts";
@@ -49,10 +49,6 @@ export function WalletGate(): JSX.Element {
     );
   }
 
-  if (!isCkbSigner(signer)) {
-    return <CkbSignerRequired open={open} />;
-  }
-
   if (chainFromClient(signer.client) !== chain) {
     return <SwitchingWalletNetwork open={open} />;
   }
@@ -64,24 +60,6 @@ export function WalletGate(): JSX.Element {
       openWallet={open}
       quoteState={quoteStateQuery.data}
     />
-  );
-}
-
-export function CkbSignerRequired({
-  open,
-}: Readonly<{ open: () => unknown }>): JSX.Element {
-  return (
-    <div className="flex flex-col space-y-4">
-      <p>iCKB requires a CKB signer.</p>
-      <button
-        className={buttonClass}
-        onClick={() => {
-          open();
-        }}
-      >
-        Choose CKB signer
-      </button>
-    </div>
   );
 }
 

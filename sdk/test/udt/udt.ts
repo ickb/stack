@@ -9,9 +9,9 @@ import {
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
+import { encodeReceiptData } from "../../src/logic.ts";
 import {
   ckbFromUdt,
-  encodeReceiptData,
   ickbAccountingRatio,
   ickbExchangeRatio,
   IckbUdt,
@@ -213,6 +213,9 @@ describe("iCKB conversion", () => {
 
   it("rejects non-positive exchange ratio scales", () => {
     expect(() => udtFromCkb(1n, { ckbScale: 0n, udtScale: 1n })).toThrow(
+      "Exchange ratio scales must be positive",
+    );
+    expect(() => ckbFromUdt(1n, { ckbScale: 1n, udtScale: 0n })).toThrow(
       "Exchange ratio scales must be positive",
     );
   });

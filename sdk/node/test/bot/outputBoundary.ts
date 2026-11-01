@@ -33,7 +33,7 @@ describe("bot private key output boundary", () => {
       emitter.emit({ type: "bot.turn.started" });
       emitter.emit({ type: "bot.turn.failed", error: new TypeError("fetch failed") });
 
-      expect(config.privateKey).toBe(privateKey);
+      expect(config.privateKeys).toEqual([privateKey]);
       expect(config.rpcEndpoints).toEqual([
         { protocol: "https:", hostname: "testnet.example", port: "" },
       ]);

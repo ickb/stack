@@ -1,11 +1,47 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CKB, exactDecimal } from "./utils.ts";
+import { CKB } from "./utils.ts";
 
-const fullFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 });
+const twoDecimalFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-/** The figure at full precision with thousands grouped, for a wide screen. */
-export function figureText(shannons: bigint): string {
-  return fullFormat.format(exactDecimal(shannons));
+/** Two decimals, rounded half up: the estimate's precision on screen. */
+export function twoDecimals(shannons: bigint): string {
+  return twoDecimalFormat.format(exactDecimal(shannons));
+}
+
+/**
+ * CCC's exact decimal string, typed for Intl, which formats a numeric string as written
+ * rather than through a double that cannot hold eight decimals of a large amount.
+ */
+function exactDecimal(shannons: bigint): `${number}` {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- fixedPointToString returns a plain decimal numeral.
+  return ccc.fixedPointToString(shannons) as `${number}`;
+}
+
+// A balance rounds toward zero, so a figure the user types back never exceeds what is held.
+const balanceFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  roundingMode: "trunc",
+});
+
+const compactBalanceFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  roundingMode: "trunc",
+});
+
+/** A balance figure: two decimals, thousands grouped, compact ("123.45K") from `compactFrom` whole units. */
+export function figureText(shannons: bigint, compactFrom?: bigint): string {
+  const decimal = exactDecimal(shannons);
+  // Asked as "below the threshold" because a bigint compared with undefined is false: with
+  // the order reversed, the undefined test would change nothing a test can see.
+  return compactFrom === undefined || shannons / CKB < compactFrom
+    ? balanceFormat.format(decimal)
+    : compactBalanceFormat.format(decimal);
 }
 
 /**
@@ -33,19 +69,6 @@ export function groupDigits(text: string): string {
 
 function isDigits(text: string): boolean {
   return /^\d*$/u.test(text);
-}
-
-/**
- * The figure a narrow place holds: whole units, "+" for any fraction, and the compact form
- * from `compactFrom` whole units. A phone balance column is about 100px, where "9,999,999+"
- * is 90px and one digit more fills it.
- */
-export function phoneFigureText(shannons: bigint, compactFrom = 10_000_000n): string {
-  const whole = shannons / CKB;
-  if (whole >= compactFrom) {
-    return compactText(shannons, 1);
-  }
-  return `${groupDigits(String(whole))}${shannons % CKB === 0n ? "" : "+"}`;
 }
 
 /** The chart caption's amount, in the ticks' own compact style so the two never disagree. */

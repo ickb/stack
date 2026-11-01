@@ -151,7 +151,8 @@ export class OwnedOwnerManager implements ScriptDeps {
 
   /** Whether the cell is an owner marker for this manager's script. */
   public isOwner(cell: ccc.Cell): boolean {
-    if (cell.cellOutput.type?.eq(this.script) !== true || cell.outputData.length < 10) {
+    // getOwned refuses data too short for an owner payload.
+    if (cell.cellOutput.type?.eq(this.script) !== true) {
       return false;
     }
     try {

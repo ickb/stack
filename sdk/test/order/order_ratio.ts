@@ -46,14 +46,18 @@ describe("Ratio", () => {
 
   it("validates populated and invalid ratios", () => {
     const populated = Ratio.from({ ckbScale: 1n, udtScale: 2n });
-    const invalid = Ratio.from({ ckbScale: 1n, udtScale: 0n });
 
     expect(() => {
       populated.validate();
     }).not.toThrow();
-    expect(() => {
-      invalid.validate();
-    }).toThrow("Ratio invalid");
+    for (const invalid of [
+      Ratio.from({ ckbScale: 1n, udtScale: 0n }),
+      Ratio.from({ ckbScale: 0n, udtScale: 1n }),
+    ]) {
+      expect(() => {
+        invalid.validate();
+      }).toThrow("Ratio invalid");
+    }
   });
 
   it("compares matching CKB scales", () => {

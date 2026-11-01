@@ -100,6 +100,11 @@ describe("matchTurn", () => {
 
     expect(outPoints(match)).toEqual([hash("05"), hash("04")]);
     expect(match).toMatchObject({ ckbDelta: 1500n * CKB, udtDelta: 0n });
+    // With iCKB only, the buyer comes first; its CKB then pays the seller.
+    expect(outPoints(turn(orders, { ckb: 0n, udt: 1000n * CKB }))).toEqual([
+      hash("04"),
+      hash("05"),
+    ]);
   });
 
   it("serves a buyer with no CKB to spare, since the fill brings the fee in", () => {
@@ -147,6 +152,25 @@ describe("matchTurn", () => {
     const match = turn(orders, { ckb: CKB, udt: 1000n * CKB });
 
     expect(outPoints(match)[0]).toBe(hash("09"));
+  });
+
+  it("ranks fills across directions by return per unit of value paid, whatever the seed", () => {
+    // At 3:2 a CKB is worth 3 and an iCKB 2: the seller giving six iCKB per CKB returns 3
+    // per unit paid, the buyer paying two CKB per iCKB 2, the seller giving three 1.
+    const orders = [
+      seller("0d", 300n * CKB, 100n * CKB),
+      buyer("0e", 200n * CKB, 100n * CKB),
+      seller("0f", 600n * CKB, 100n * CKB),
+    ];
+    for (let seed = 0; seed < 8; seed += 1) {
+      const match = turn(
+        orders,
+        { ckb: 1000n * CKB, udt: 1000n * CKB },
+        { seed, exchangeRatio: { ckbScale: 3n, udtScale: 2n } },
+      );
+
+      expect(outPoints(match)).toEqual([hash("0f"), hash("0e"), hash("0d")]);
+    }
   });
 
   it("breaks ties by the seed, the same way for the same seed", () => {

@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
 import { OrderManager } from "../../../../src/order/order.ts";
+import { IckbError } from "../../../../src/sdk.ts";
 
 import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,26 +13,14 @@ import {
   botState,
   hash,
   marketOrder,
+  PLANNED_FEE,
+  testReceipt,
   testWithdrawal,
 } from "../fixtures/bot.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-const RESERVE_CHANGE = ccc.fixedPointFrom(1500);
-
-/** A completion that returns the reserve as plain change to the bot. */
-function completing(change = RESERVE_CHANGE): Parameters<typeof botRuntime>[0] {
-  return {
-    completeTransaction: async (txLike): Promise<ccc.Transaction> => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      tx.addOutput({ capacity: change, lock: botRuntime().primaryLock }, "0x");
-      return tx;
-    },
-  };
-}
 
 describe("buildTransaction matching", () => {
   it("offers the CKB above the reserve to a seller", async () => {
@@ -45,16 +34,14 @@ describe("buildTransaction matching", () => {
       ckbMinMatchLog: 44,
     });
     const state = (ckb: bigint): ReturnType<typeof botState> =>
-      botState({ orderPool: [seller], ckb, ickb: BAND_ICKB_BALANCE });
+      botState({
+        orderPool: [seller],
+        ckbAvailable: ckb,
+        ickbAvailable: BAND_ICKB_BALANCE,
+      });
 
-    const short = await buildTransaction(
-      botRuntime(completing()),
-      state(CKB_RESERVE + ask - 1n),
-    );
-    const enough = await buildTransaction(
-      botRuntime(completing()),
-      state(CKB_RESERVE + ask),
-    );
+    const short = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask - 1n));
+    const enough = await buildTransaction(botRuntime(), state(CKB_RESERVE + ask));
 
     expect(short.decision.match).toMatchObject({
       reason: "unfunded_gain",
@@ -89,14 +76,8 @@ describe("buildTransaction matching", () => {
     const runtime = botRuntime({
       client,
       primaryLock,
-      completeTransaction: async (tx, rate, cells, protocolCells, tip) =>
-        runtime.sdk.completeTransaction(tx, {
-          signer,
-          feeRate: rate,
-          cells,
-          protocolCells,
-          tip,
-        }),
+      completeTransaction: async (tx, state) =>
+        runtime.sdk.completeTransaction(tx, { ...state, signer }),
     });
     const base = botState({});
 
@@ -104,8 +85,8 @@ describe("buildTransaction matching", () => {
       runtime,
       botState({
         orderPool: [seller],
-        ckb: plain.cellOutput.capacity,
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: plain.cellOutput.capacity,
+        ickbAvailable: BAND_ICKB_BALANCE,
         cells: [plain],
         system: { ...base.system, feeRate },
       }),
@@ -118,7 +99,10 @@ describe("buildTransaction matching", () => {
   it("skips with no_actions when the book, the collections, and the rebalance are all empty", async () => {
     const result = await buildTransaction(
       botRuntime(),
-      botState({ ckb: ccc.fixedPointFrom(5000), ickb: BAND_ICKB_BALANCE }),
+      botState({
+        ckbAvailable: ccc.fixedPointFrom(5000),
+        ickbAvailable: BAND_ICKB_BALANCE,
+      }),
     );
 
     expect(result).toMatchObject({
@@ -129,6 +113,7 @@ describe("buildTransaction matching", () => {
         core: { kind: "none", attempts: 0 },
       },
     });
+    expect(result.decision.match).not.toHaveProperty("matchedOrderOutPoints");
   });
 
   it("tells a book that gains but the balances cannot pay from one that never gains", async () => {
@@ -144,8 +129,8 @@ describe("buildTransaction matching", () => {
         botRuntime(),
         botState({
           orderPool: [buyer({ ckbScale: 1n, udtScale: 2n })],
-          ckb: CKB_RESERVE,
-          ickb: 0n,
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: 0n,
         }),
       ),
     ).resolves.toMatchObject({
@@ -161,8 +146,8 @@ describe("buildTransaction matching", () => {
         botRuntime(),
         botState({
           orderPool: [buyer({ ckbScale: 1n, udtScale: 1n })],
-          ckb: CKB_RESERVE,
-          ickb: ccc.fixedPointFrom(1000),
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: ccc.fixedPointFrom(1000),
         }),
       ),
     ).resolves.toMatchObject({
@@ -199,7 +184,11 @@ describe("buildTransaction matching", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ orderPool: [buyer], ckb: CKB_RESERVE, ickb: BAND_ICKB_BALANCE }),
+        botState({
+          orderPool: [buyer],
+          ckbAvailable: CKB_RESERVE,
+          ickbAvailable: BAND_ICKB_BALANCE,
+        }),
       ),
     ).rejects.toThrow("fetch failed");
   });
@@ -212,14 +201,13 @@ describe("buildTransaction matching", () => {
       udt: 0n,
       ratio: { ckbScale: 1n, udtScale: 2n },
     });
-    vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(1000n);
 
     const result = await buildTransaction(
-      botRuntime(completing()),
+      botRuntime(),
       botState({
         orderPool: [buyer],
-        ckb: ccc.fixedPointFrom(5000),
-        ickb: BAND_ICKB_BALANCE,
+        ckbAvailable: ccc.fixedPointFrom(5000),
+        ickbAvailable: BAND_ICKB_BALANCE,
       }),
     );
 
@@ -237,31 +225,44 @@ describe("buildTransaction matching", () => {
           fee: partialOrderFee([buyer], 1n),
         },
         core: { kind: "none", attempts: 1 },
-        plannedFee: 1000n,
+        plannedFee: PLANNED_FEE,
       },
     });
     expect(typeof result.decision.match.seed).toBe("number");
   });
 
-  it("sends collections alone and counts them", async () => {
-    const runtime = botRuntime(completing());
+  it("sends collections alone and counts them only when built", async () => {
+    const runtime = botRuntime();
     const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
+    const state = botState({
+      ckbAvailable: ccc.fixedPointFrom(5000),
+      ickbAvailable: BAND_ICKB_BALANCE,
+      receipts: [testReceipt("37")],
+      readyWithdrawals: [testWithdrawal("33")],
+    });
 
-    const result = await buildTransaction(
-      runtime,
-      botState({
-        ckb: ccc.fixedPointFrom(5000),
-        ickb: BAND_ICKB_BALANCE,
-        readyWithdrawals: [testWithdrawal("33")],
-      }),
-    );
+    const result = await buildTransaction(runtime, state);
 
     expect(withdraw).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
-        actions: { matchedOrders: 0, withdrawals: 1 },
+        actions: { matchedOrders: 0, completedDeposits: 1, withdrawals: 1 },
         core: { kind: "none" },
+      },
+    });
+    const unfunded = botRuntime({
+      completeTransaction: async () => {
+        await Promise.resolve();
+        throw new IckbError("no CKB for the fee", { code: "insufficient_capacity" });
+      },
+    });
+    await expect(buildTransaction(unfunded, state)).resolves.toMatchObject({
+      kind: "skipped",
+      reason: "no_fundable_candidate",
+      decision: {
+        actions: { completedDeposits: 0, withdrawals: 0 },
+        core: { kind: "none", attempts: 1 },
       },
     });
   });

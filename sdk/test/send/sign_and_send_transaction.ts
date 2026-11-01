@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BroadcastDeadline } from "../../src/dao.ts";
 import {
   isCommittedIn,
+  isDuplicateOf,
   signAndSendTransaction,
   TransactionExpiredError,
   type TransactionProof,
@@ -499,6 +500,28 @@ describe("isCommittedIn", () => {
       expect(isCommittedIn(last.txHash, header, variant)).toBe(false);
     }
   });
+
+  it("refuses an index that disagrees with the path's length", () => {
+    const { txHash } = last;
+    const witnessesRoot = hash("05");
+    const lemma = hash("06");
+    // Each root is the one a path of that length reaches, so only the index refuses.
+    for (const [root, lemmas, index, wrong] of [
+      [ccc.hashCkb(txHash, witnessesRoot), [], "0x0", ["0x1"]],
+      [ccc.hashCkb(ccc.hashCkb(lemma, txHash), witnessesRoot), [lemma], "0x2", []],
+    ] as const) {
+      const rooted = cccA.JsonRpcTransformers.blockHeaderTo({
+        ...PROOF_BLOCK,
+        transactions_root: root,
+      });
+      const proof = (indices: readonly ccc.Hex[]): TransactionProof => ({
+        witnesses_root: witnessesRoot,
+        proof: { indices, lemmas },
+      });
+      expect(isCommittedIn(txHash, rooted, proof([index]))).toBe(true);
+      expect(isCommittedIn(txHash, rooted, proof(wrong))).toBe(false);
+    }
+  });
 });
 
 describe("signAndSendTransaction broadcast outcomes", () => {
@@ -509,6 +532,14 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     await expect(
       signAndSendTransaction(signer, ccc.Transaction.default(), PLANNED_FEE),
     ).resolves.toBe(TX_HASH);
+  });
+
+  it("recognises CCC's duplicate error, or another copy's, by the hash it names", () => {
+    expect(isDuplicateOf(duplicatedTransaction(TX_HASH), TX_HASH)).toBe(true);
+    expect(isDuplicateOf({ txHash: TX_HASH }, TX_HASH)).toBe(true);
+    // A failure that is not an object carries no hash, even one equal to it.
+    expect(isDuplicateOf(null, TX_HASH)).toBe(false);
+    expect(isDuplicateOf(TX_HASH, TX_HASH)).toBe(false);
   });
 
   it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {
@@ -564,15 +595,21 @@ describe("signAndSendTransaction broadcast deadline", () => {
     const { signer, send, getTipHeader } = signerFixture(bodyTransaction());
     const recordTxHash = vi.fn<(txHash: ccc.Hex) => void>();
 
-    await expect(
-      signAndSendTransaction(
-        signer,
-        bodyTransaction(),
-        PLANNED_FEE,
-        recordTxHash,
-        deadline(TIP_EPOCH),
-      ),
-    ).rejects.toBeInstanceOf(TransactionExpiredError);
+    const refused = signAndSendTransaction(
+      signer,
+      bodyTransaction(),
+      PLANNED_FEE,
+      recordTxHash,
+      deadline(TIP_EPOCH),
+    );
+
+    await expect(refused).rejects.toBeInstanceOf(TransactionExpiredError);
+    await expect(refused).rejects.toEqual(
+      expect.objectContaining({
+        name: "TransactionExpiredError",
+        epochs: { broadcastBefore: TIP_EPOCH, tip: TIP_EPOCH },
+      }),
+    );
 
     expect(getTipHeader).toHaveBeenCalledTimes(1);
     expect(recordTxHash).not.toHaveBeenCalled();

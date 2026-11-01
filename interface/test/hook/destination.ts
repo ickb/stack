@@ -21,6 +21,14 @@ describe("parseDestination", () => {
       moveTo: shortAddress(foreign),
     });
     await expect(parseDestination(own, config)).resolves.toEqual({ lock: script("11") });
+    // Any of the wallet's locks is its own, not only the first.
+    const secondary = ccc.Address.fromScript(script("33"), testnetClient).toString();
+    await expect(
+      parseDestination(secondary, {
+        ...config,
+        accountLocks: [script("11"), script("33")],
+      }),
+    ).resolves.toEqual({ lock: script("33") });
   });
 
   it("rejects text that is not an address on the wallet's chain", async () => {
@@ -46,6 +54,8 @@ describe("parseDestination", () => {
       "ckt1qxy2kg...xqd5v3my",
     );
     expect(shortAddress("ckt1short")).toBe("ckt1short");
+    // At 21 characters the elided form is no shorter.
+    expect(shortAddress("ckt1qxy2kgdygjrsqtzq2")).toBe("ckt1qxy2kgdygjrsqtzq2");
   });
 });
 
@@ -63,7 +73,7 @@ describe("useDestination", () => {
     );
 
     expect(result.current).toEqual({
-      destination: { lock: config.primaryLock },
+      destination: {},
       error: "",
     });
     expect(fromString).not.toHaveBeenCalled();
@@ -116,6 +126,5 @@ function walletConfig(): WalletConfig {
     chain: "testnet",
     cccClient: testnetClient,
     accountLocks: [script("11")],
-    primaryLock: script("11"),
   } as unknown as WalletConfig;
 }

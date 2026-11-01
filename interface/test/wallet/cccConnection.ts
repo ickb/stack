@@ -21,6 +21,9 @@ describe("hasSavedCccConnection", () => {
     { walletName: "JoyID" },
     { signerName: "CKB" },
     { walletName: "", signerName: "CKB" },
+    { walletName: "JoyID", signerName: "" },
+    { walletName: ["JoyID"], signerName: "CKB" },
+    { walletName: "JoyID", signerName: ["CKB"] },
     [],
   ])("requires both wallet and signer names: %j", (saved) => {
     stubStorage({ "ccc-connection-info": JSON.stringify(saved) });

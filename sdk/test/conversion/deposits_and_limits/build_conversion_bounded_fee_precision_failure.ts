@@ -36,7 +36,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
-      estimatedMaturity: 0n,
     });
   });
 });

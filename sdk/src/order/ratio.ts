@@ -102,14 +102,6 @@ const RatioImplementation = class Ratio extends RatioBase {
 
   /** Compares two populated ratios by effective CKB-to-UDT price. */
   public compare(other: Ratio): number {
-    if (this.udtScale === other.udtScale) {
-      return compareBigInt(this.ckbScale, other.ckbScale);
-    }
-
-    if (this.ckbScale === other.ckbScale) {
-      return compareBigInt(other.udtScale, this.udtScale);
-    }
-
     return compareBigInt(this.ckbScale * other.udtScale, other.ckbScale * this.udtScale);
   }
 };

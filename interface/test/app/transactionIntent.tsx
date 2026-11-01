@@ -1,5 +1,5 @@
 import type * as ReactQueryModule from "@tanstack/react-query";
-import { createElement, Fragment, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type * as QueryModule from "../../src/app/queries.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
@@ -45,26 +45,26 @@ vi.mock(import("../../src/view/WalletAppView.tsx"), () => ({
 }));
 
 const App = (await import("../../src/app/App.tsx")).default;
-const { createRoot, flushSync, restoreDom } = await fakeDom();
+const { createRoot, restoreNow } = await fakeDom();
 
-afterAll(restoreDom);
+afterAll(restoreNow);
 
 describe("transaction intent", () => {
   it("replaces the actionable amount in the same committed render", () => {
     const root = createRoot();
 
-    flushSync(() => {
+    act(() => {
       root.render(appElement("1"));
     });
-    flushSync(() => {
+    act(() => {
       root.render(appElement("2"));
     });
-    flushSync(() => {
+    act(() => {
       root.render(appElement("1e2"));
     });
 
     expect(mocks.amounts).toEqual([100_000_000n, 200_000_000n, undefined]);
-    flushSync(() => {
+    act(() => {
       root.unmount();
     });
   });

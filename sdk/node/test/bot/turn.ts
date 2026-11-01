@@ -14,7 +14,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
-import { Ratio } from "../../../src/order/ratio.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
@@ -24,12 +23,16 @@ import {
   type BotTurnContext,
 } from "../../src/bot/turn.ts";
 import type { Runtime } from "../../src/bot/types.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import {
   BAND_ICKB_BALANCE,
+  BOT_TIP,
   botRuntime,
+  botSystem,
   hash,
   l1AccountState,
   NO_DEPOSITS,
+  PLANNED_FEE,
   readyDeposit,
   testMatch,
   testWithdrawal,
@@ -62,6 +65,56 @@ it("records a skipped decision with its evidence and no ring segment list", asyn
   expect(harness.sendTransaction).not.toHaveBeenCalled();
 });
 
+it("journals what the turn read: the tip, the projected balances, and the counts", async () => {
+  const account = fundedAccount();
+  const pending = testWithdrawal("63", undefined, false);
+  account.account.withdrawalGroups.push(pending);
+  account.system.poolDeposits = [readyDeposit("64", 1n), readyDeposit("65", 1n, 15n)];
+  const harness = turnHarness({ account });
+
+  await runBotTurn(harness.context);
+
+  const ckb = [
+    ...account.account.capacityCells,
+    ...account.account.nativeUdtCells,
+  ].reduce((sum, cell) => sum + cell.cellOutput.capacity, 0n);
+  const pendingCkb = pending.ckbValue;
+  const { epoch } = BOT_TIP;
+  expect(harness.events[0]).toMatchObject({
+    type: BOT_STATE_READ,
+    chainTip: {
+      blockNumber: String(BOT_TIP.number),
+      blockHash: BOT_TIP.hash,
+      timestamp: String(BOT_TIP.timestamp),
+      epoch: {
+        integer: String(epoch.integer),
+        numerator: String(epoch.numerator),
+        denominator: String(epoch.denominator),
+      },
+    },
+    balances: {
+      ckb: String(ckb),
+      ickb: String(BAND_ICKB_BALANCE),
+      pendingCkb: String(pendingCkb),
+      // At the one-to-one test rate an iCKB counts as one CKB.
+      totalEquivalentCkb: String(ckb + pendingCkb + BAND_ICKB_BALANCE),
+      matchableCkb: String(ckb - CKB_RESERVE),
+      cellCount: 2,
+    },
+    counts: {
+      marketOrders: 0,
+      receipts: 0,
+      readyWithdrawals: 0,
+      pendingWithdrawals: 1,
+      poolDeposits: 2,
+      readyPoolDeposits: 1,
+    },
+    exchangeRatio: { ckbScale: "1", udtScale: "1" },
+    depositCapacity: String(account.system.depositCapacity),
+    feeRate: "1",
+  });
+});
+
 it("keeps turning below the recommended funding instead of holding", async () => {
   const harness = turnHarness({ account: l1AccountState() });
 
@@ -74,7 +127,6 @@ it("keeps turning below the recommended funding instead of holding", async () =>
 
 it("sends explicitly and waits with the finite production policy", async () => {
   // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
-  vi.spyOn(ccc.Transaction.prototype, "estimateFee").mockReturnValue(7n);
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
   });
@@ -95,11 +147,14 @@ it("sends explicitly and waits with the finite production policy", async () => {
     outcome: "broadcasted",
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
-  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(7n);
-  expect(harness.events[1]).toMatchObject({ decision: { plannedFee: "7" } });
+  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(PLANNED_FEE);
+  expect(harness.events[1]).toMatchObject({
+    decision: { plannedFee: String(PLANNED_FEE) },
+  });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
   });
+  expectElapsed(harness.events.slice(2));
 });
 
 it("ends the turn with the broadcast error when the send fails without a hash", async () => {
@@ -145,6 +200,7 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
     error: { name: "TransactionBroadcastError", cause: { message: FETCH_FAILED } },
   });
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
+  expectElapsed(harness.events.slice(2, 3));
 });
 
 it("falls back to the broadcast error hash when no hash was recorded", async () => {
@@ -403,6 +459,16 @@ function hashScript(byte: string): ccc.Script {
   return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
 }
 
+/** Elapsed time since the send began: the test's turn takes well under a minute. */
+function expectElapsed(events: object[]): void {
+  for (const event of events) {
+    expect(event).toHaveProperty("elapsedMs", expect.any(Number));
+    const elapsedMs = Number(Reflect.get(event, "elapsedMs"));
+    expect(elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(elapsedMs).toBeLessThan(60_000);
+  }
+}
+
 function eventTypes(events: object[]): string[] {
   return events.map((event) => ("type" in event ? String(event.type) : ""));
 }
@@ -413,14 +479,7 @@ describe("readBotState pool snapshot", () => {
     const pool = [readyDeposit("33", 1n), readyDeposit("34", 2n, 15n)];
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
-      system: {
-        tip,
-        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        orderPool: [],
-        feeRate: 1n,
-        poolDeposits: pool,
-        lockUp: BOT_LOCK_UP,
-      },
+      system: { ...botSystem(), tip, poolDeposits: pool },
       userOrders: [],
       account: {
         capacityCells: [],
@@ -464,14 +523,7 @@ describe("readBotState", () => {
     });
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
-      system: {
-        tip: headerLike(),
-        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        orderPool: [marketOrder],
-        feeRate: 1n,
-        lockUp: BOT_LOCK_UP,
-        poolDeposits: [],
-      },
+      system: { ...botSystem(), tip: headerLike(), orderPool: [marketOrder] },
       userOrders: [ownOrder],
       account: {
         capacityCells: [capacityCell],
@@ -485,10 +537,10 @@ describe("readBotState", () => {
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
     expect(state.system.orderPool).toEqual([marketOrder]);
-    expect(state.ckb).toBe(
+    expect(state.ckbAvailable).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );
-    expect(state.ickb).toBe(11n);
+    expect(state.ickbAvailable).toBe(11n);
     expect(state.pendingCkb).toBe(0n);
     expect(state.cells).toEqual([capacityCell, nativeUdtCell]);
     expect(state.system.feeRate).toBe(1n);

@@ -10,6 +10,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
+  isWaitTimeout,
   retryConfirmation,
   transact,
   waitForConfirmation,
@@ -17,14 +18,13 @@ import {
 } from "../../src/action/actionTransaction.ts";
 import {
   createPendingTransactionStore,
-  submitPendingTransaction,
   type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
 import { l1StateQueryKey, type L1StateType } from "../../src/app/queries.ts";
-import type { SendableTx, TxInfo, WalletConfig } from "../../src/shared/utils.ts";
+import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { l1State } from "../app/fixtures/l1State.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { txWithInput } from "./fixtures/transaction.ts";
+import { activeTxInfo, recordPending } from "./fixtures/transaction.ts";
 
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
@@ -77,6 +77,32 @@ describe("finite-window confirmation", () => {
       timeout: confirmationWindowMs,
       signal: controller.signal,
     });
+  });
+
+  it("recognises CCC's wait timeout, or another copy's, by its data alone", () => {
+    expect(
+      isWaitTimeout(new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs)),
+    ).toBe(true);
+    expect(
+      isWaitTimeout(Object.assign(new Error("x"), { data: '{"timeout":"1"}' })),
+    ).toBe(true);
+    expect(isWaitTimeout(Object.assign(new Error("x"), { data: '{"limit":"1"}' }))).toBe(
+      false,
+    );
+  });
+
+  it("refuses a timeout look-alike that is not an Error or whose data says more", () => {
+    const timeoutData = '{"timeout":"1"}';
+    for (const error of [
+      null,
+      { data: timeoutData },
+      // An array would stringify to the timeout data, but it is not a string.
+      Object.assign(new Error("x"), { data: [timeoutData] }),
+      Object.assign(new Error("x"), { data: `x${timeoutData}` }),
+      Object.assign(new Error("x"), { data: `${timeoutData}x` }),
+    ]) {
+      expect(isWaitTimeout(error)).toBe(false);
+    }
   });
 
   it("keeps an unconfirmed hash pending with current-session wording", async () => {
@@ -157,7 +183,7 @@ describe("transact fresh preview boundary", () => {
       refreshedPreview({
         txBuilder: async () => {
           await Promise.resolve();
-          return { ok: false, error: "fresh preview failed", estimatedMaturity: 0n };
+          return { ok: false, error: "fresh preview failed" };
         },
       }),
     );
@@ -182,7 +208,7 @@ describe("transact post-broadcast outcomes", () => {
       expect(calls.freezePreview).toHaveBeenCalledTimes(1);
     });
 
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
     waitTransaction.mockResolvedValueOnce(undefined);
     releasePreview.resolve(undefined);
     await attempt;
@@ -349,7 +375,7 @@ describe("retryConfirmation", () => {
   it("silently ignores retry after its owner has already unmounted", async () => {
     const controller = new AbortController();
     const calls = transactionCalls(refreshedPreview(), controller);
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
     controller.abort();
 
     await retryConfirmation({ ...calls, txHash });
@@ -368,7 +394,7 @@ describe("retryConfirmation", () => {
       }),
     );
     const calls = transactionCalls();
-    await recordPending(calls.pendingStore);
+    await recordPending(calls.pendingStore, txHash);
 
     await retryConfirmation({ ...calls, txHash });
 
@@ -429,6 +455,23 @@ describe("attempt ownership during refresh", () => {
     expect(calls.setFailure).toHaveBeenCalledTimes(1);
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
+  });
+});
+
+describe("attempt ownership during a step that never settles", () => {
+  it("ends the attempt when ownership aborts, without waiting for the step", async () => {
+    const controller = new AbortController();
+    const calls = transactionCalls(refreshedPreview(), controller);
+    calls.refreshState.mockReturnValueOnce(Promise.withResolvers<L1StateType>().promise);
+    const attempt = transact(calls);
+    await vi.waitFor(() => {
+      expect(calls.refreshState).toHaveBeenCalledTimes(1);
+    });
+
+    controller.abort();
+
+    await expect(attempt).resolves.toBeUndefined();
+    expect(calls.freezePreview).not.toHaveBeenCalled();
   });
 });
 
@@ -561,6 +604,25 @@ describe("attempt ownership after broadcast", () => {
     expect(retryController.signal).not.toBe(controller.signal);
     expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
   });
+
+  it("reports nothing when the wait resolves as ownership aborts", async () => {
+    const controller = new AbortController();
+    const committed = Promise.withResolvers<undefined>();
+    waitTransaction.mockReturnValueOnce(committed.promise);
+    const calls = transactionCalls(refreshedPreview(), controller);
+    const attempt = transact(calls);
+    await vi.waitFor(() => {
+      expect(waitTransaction).toHaveBeenCalledTimes(1);
+    });
+    const callbackCounts = attemptCallbackCounts(calls);
+
+    committed.resolve(undefined);
+    controller.abort();
+    await attempt;
+
+    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
+    expect(pendingHash(calls.pendingStore)).toBe(txHash);
+  });
 });
 
 /** The next send records the hash, then loses the node's answer. */
@@ -574,15 +636,6 @@ function ambiguousSend(): void {
       });
     },
   );
-}
-
-/** Establishes pending state exactly as a completed submission does. */
-async function recordPending(store: PendingTransactionStore): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
 }
 
 function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
@@ -683,7 +736,6 @@ function walletConfig(): WalletConfig {
     resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     accountLocks: [{ toHex: () => "0x22" }],
-    primaryLock: { toHex: () => "0x11" },
     queryClient,
     sdk: {},
   } as unknown as WalletConfig;
@@ -702,16 +754,5 @@ function walletQueryClient(config?: WalletConfig): {
     invalidateQueries: vi.fn(async () => {
       await Promise.resolve();
     }),
-  };
-}
-
-function activeTxInfo(byte: string, overrides: Partial<SendableTx> = {}): SendableTx {
-  return {
-    ok: true,
-    tx: txWithInput(byte),
-    fee: 1n,
-    estimatedMaturity: 0n,
-    conversionKind: "order",
-    ...overrides,
   };
 }

@@ -22,8 +22,14 @@ import { ickbValue } from "../../src/udt.ts";
 
 const ownedOwner = script("11", "0x1234");
 const logic = script("22", "0x5678");
-const dao = { script: script("33"), cellDeps: [] };
+const daoDep = ccc.CellDep.from({
+  outPoint: { txHash: byte32FromByte("dd"), index: 0n },
+  depType: "code",
+});
+const dao = { script: script("33"), cellDeps: [daoDep] };
 const userLock = script("44");
+// Typed unknown so the matcher's `any` stays out of the asserted object.
+const anyError: unknown = expect.any(Error);
 
 function manager(cellDeps: ccc.CellDep[] = []): OwnedOwnerManager {
   return new OwnedOwnerManager(ownedOwner, cellDeps, dao);
@@ -137,7 +143,10 @@ describe("owner data", () => {
     );
 
     expect(() => owner.getOwned()).toThrow(
-      `Invalid owner marker payload at ${owner.cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid owner marker payload at ${owner.cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 
@@ -165,10 +174,16 @@ describe("OwnedOwnerManager cell shapes", () => {
       cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
       outputData: "0xffffffff",
     });
+    const short = ccc.Cell.from({
+      outPoint: undecodable.outPoint,
+      cellOutput: undecodable.cellOutput,
+      outputData: "0x123456",
+    });
     const foreignLock = cellWith(owned.cell, { lock: userLock });
 
     expect(target.isOwner(owner.cell)).toBe(true);
     expect(target.isOwner(undecodable)).toBe(false);
+    expect(target.isOwner(short)).toBe(false);
     expect(target.isOwner(owned.cell)).toBe(false);
     expect(target.isOwned(owned.cell)).toBe(true);
     expect(target.isOwned(foreignLock)).toBe(false);
@@ -177,9 +192,10 @@ describe("OwnedOwnerManager cell shapes", () => {
 
 describe("OwnedOwnerManager.requestWithdrawal", () => {
   it("leaves the transaction unchanged when no deposits are given", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().requestWithdrawal(tx, [], userLock)).toEqual(tx);
+    // Transaction.from returns the instance it is given, so compare with a fresh one.
+    expect(manager().requestWithdrawal(ccc.Transaction.default(), [], userLock)).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("spends each deposit into a request and an owner marker pointing back at it", () => {
@@ -198,7 +214,7 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
       userLock,
     );
 
-    expect(tx.cellDeps).toEqual([dep]);
+    expect(tx.cellDeps).toEqual([dep, daoDep]);
     expect(tx.headerDeps).toEqual(deposits.map((deposit) => deposit.header.hash));
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       deposits.map((deposit) => deposit.cell.outPoint.toHex()),
@@ -230,6 +246,11 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     expect(() => manager().requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
       "Transaction has different inputs and outputs lengths",
     );
+    const strayData = ccc.Transaction.default();
+    strayData.outputsData.push("0xab");
+    expect(() =>
+      manager().requestWithdrawal(strayData, [depositOf("66")], userLock),
+    ).toThrow("Transaction has different inputs and outputs lengths");
   });
 
   it("rejects a deposit whose lock args differ in size from the request lock", () => {
@@ -261,19 +282,24 @@ describe("OwnedOwnerManager.withdraw", () => {
   const requestHeader = headerLike({ number: 2n, hash: byte32FromByte("b1") });
 
   it("leaves the transaction unchanged when no groups are given", () => {
-    const tx = ccc.Transaction.default();
-
-    expect(manager().withdraw(tx, [])).toEqual(tx);
+    expect(manager().withdraw(ccc.Transaction.default(), [])).toEqual(
+      ccc.Transaction.default(),
+    );
   });
 
   it("writes since, header deps, witness input types, then the owner inputs", () => {
     const owned = requestOf(depositHeader, requestHeader);
     const owner = ownerOf(owned);
+    const dep = ccc.CellDep.from({
+      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
+      depType: "code",
+    });
 
-    const tx = manager().withdraw(ccc.Transaction.default(), [
+    const tx = manager([dep]).withdraw(ccc.Transaction.default(), [
       new WithdrawalGroup(owned, owner),
     ]);
 
+    expect(tx.cellDeps).toEqual([dep, daoDep]);
     expect(tx.headerDeps).toEqual([depositHeader.hash, requestHeader.hash]);
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual([
       owned.cell.outPoint.toHex(),
@@ -356,6 +382,12 @@ describe("OwnedOwnerManager.withdraw", () => {
     expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
       DaoHeaderIndexError,
     );
+    expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
+      expect.objectContaining({
+        name: "DaoHeaderIndexError",
+        message: "NervosDAO deposit header index 256 is not below 256",
+      }),
+    );
     expect(() =>
       manager().withdraw(ccc.Transaction.default(), groups.slice(1)),
     ).not.toThrow();
@@ -426,8 +458,16 @@ describe("withdrawalRequestCell", () => {
   });
 
   it("marks requests ready once the claim epoch is reached", () => {
-    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
-    const requestHeader = headerLike({ epoch: [180n, 0n, 1n], number: 2n });
+    const depositHeader = headerLike({
+      epoch: [1n, 0n, 1n],
+      number: 1n,
+      dao: { c: 0n, ar: 10000000000000000n, s: 0n, u: 0n },
+    });
+    const requestHeader = headerLike({
+      epoch: [180n, 0n, 1n],
+      number: 2n,
+      dao: { c: 0n, ar: 11000000000000000n, s: 0n, u: 0n },
+    });
     const tip = headerLike({ epoch: [181n, 0n, 1n], number: 3n });
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
@@ -436,9 +476,9 @@ describe("withdrawalRequestCell", () => {
       true,
     );
     expect(cell.isReady).toBe(true);
+    // The accumulated rate grew 10%, so does the free capacity.
     expect(cell.ckbValue).toBe(
-      withdrawalCell.cellOutput.capacity +
-        ccc.calcDaoProfit(withdrawalCell.capacityFree, depositHeader, requestHeader),
+      withdrawalCell.cellOutput.capacity + withdrawalCell.capacityFree / 10n,
     );
   });
 
@@ -572,7 +612,10 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     await expect(
       manager().withdrawalGroupsFrom(client, [scanned(ownerOf(owned))], tip),
     ).rejects.toThrow(
-      `Invalid DAO withdrawal request payload at ${owned.cell.outPoint.toHex()}: 0x12`,
+      expect.objectContaining({
+        message: `Invalid DAO withdrawal request payload at ${owned.cell.outPoint.toHex()}: 0x12`,
+        cause: anyError,
+      }),
     );
   });
 

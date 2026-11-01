@@ -13,7 +13,6 @@ export default defineConfig({
       exclude: [
         // Process entrypoints are exercised by spawning them, which V8 coverage cannot see.
         "sdk/node/src/bot.ts",
-        "sdk/node/src/sampler.ts",
         "sdk/node/src/stimulus.ts",
       ],
       thresholds: {
