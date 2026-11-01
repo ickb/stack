@@ -44,7 +44,10 @@ export interface ConversionTransactionOptions {
   /** Conversion direction to build. */
   direction: ConversionDirection;
 
-  /** Requested input amount in the source asset. */
+  /**
+   * Requested input amount in the source asset; zero builds the collection alone, which
+   * ignores `direction`.
+   */
   amount: bigint;
 
   /**
