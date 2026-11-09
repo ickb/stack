@@ -17,7 +17,6 @@ import {
   type RefreshedTransactionPreview,
   type TransactionCallbacks,
 } from "./actionTransaction.ts";
-import type { Destination } from "./destination.ts";
 import type {
   PendingTransactionState,
   PendingTransactionStore,
@@ -29,8 +28,6 @@ type ActionProps = Readonly<{
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   amountError: string;
-  destination: Destination | undefined;
-  destinationError: string;
   /** Refetches the wallet's state for a send, throwing when it cannot. */
   refreshState: () => Promise<L1StateType>;
   freeze: (value: boolean) => void;
@@ -48,8 +45,6 @@ export default function Action({
   isCkb2Udt,
   amount,
   amountError,
-  destination,
-  destinationError,
   refreshState,
   freeze,
   formReset,
@@ -65,7 +60,7 @@ export default function Action({
   // The last attempt's result, kept until the next attempt or an edit of the draft: React's
   // pattern for state that depends on a prop, so a stale "enter a larger amount" never
   // advises on a draft the user has already changed.
-  const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
+  const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}`;
   const [failure, setFailureFor] = useState({ draft, message: "" });
   if (failure.message !== "" && failure.draft !== draft) {
     setFailureFor({ draft, message: "" });
@@ -100,9 +95,8 @@ export default function Action({
       sampled?.stateId ?? "missing",
       isCkb2Udt,
       amountIdentity(settledAmount, amountError),
-      destinationIdentity(destination),
     ],
-    queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount, destination) ?? skipToken,
+    queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount) ?? skipToken,
     enabled: !isLocked,
     retry: false,
   });
@@ -118,17 +112,15 @@ export default function Action({
   const maturity = maturityLabel(preview, state);
   const actionText =
     transactionHash === undefined
-      ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
+      ? actionLabel(amount, hasCollectable)
       : confirmationLabel(isConfirming);
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
   const messageText = actionMessage(preview, {
     amount,
     amountError,
-    destinationError,
     failure: failure.message,
     hasCollectable,
     hasConverting,
-    hasDestination: destination !== undefined,
     isFrozen,
     isPreparing,
     isStateFetching,
@@ -142,7 +134,6 @@ export default function Action({
     isConfirming ||
     (transactionHash === undefined &&
       (amount === undefined ||
-        destination === undefined ||
         isPreparing ||
         isSubmitting ||
         isFetching ||
@@ -160,7 +151,6 @@ export default function Action({
           runAttempt,
           isCkb2Udt,
           amount,
-          destination,
           refreshState,
           freeze,
           callbacks: {
@@ -212,7 +202,6 @@ function startAttempt({
   runAttempt,
   isCkb2Udt,
   amount,
-  destination,
   refreshState,
   freeze,
   callbacks,
@@ -220,7 +209,6 @@ function startAttempt({
   runAttempt: RunAttempt;
   isCkb2Udt: boolean;
   amount: bigint | undefined;
-  destination: Destination | undefined;
   refreshState: ActionProps["refreshState"];
   freeze: (value: boolean) => void;
   callbacks: TransactionCallbacks;
@@ -234,7 +222,7 @@ function startAttempt({
       freeze(true);
       await retryConfirmation({ ...callbacks, signal, txHash: current.txHash });
     });
-  } else if (amount !== undefined && destination !== undefined) {
+  } else if (amount !== undefined) {
     runAttempt(async (signal): Promise<void> =>
       transact({
         ...callbacks,
@@ -244,7 +232,6 @@ function startAttempt({
         refreshState,
         isCkb2Udt,
         amount,
-        destination,
         signal,
       }),
     );
@@ -258,10 +245,7 @@ function startAttempt({
 function maturityLabel(preview: TxInfo | undefined, state: L1StateType): string {
   const tip = state.system.tip.timestamp;
   if (preview?.ok === true) {
-    // A move leaves the converting positions here, so their dates do not apply to it.
-    return preview.move === undefined
-      ? timeUntilMaturity(preview.estimatedMaturity, tip)
-      : "now";
+    return timeUntilMaturity(preview.estimatedMaturity, tip);
   }
   return preview !== undefined && state.hasConverting
     ? timeUntilMaturity(state.estimatedMaturity, tip)
@@ -273,12 +257,11 @@ function previewBuilder(
   l1State: L1StateType | undefined,
   isCkb2Udt: boolean,
   amount: bigint | undefined,
-  destination: Destination | undefined,
 ): (() => Promise<TxInfo>) | undefined {
-  if (l1State === undefined || amount === undefined || destination === undefined) {
+  if (l1State === undefined || amount === undefined) {
     return undefined;
   }
-  return async () => l1State.txBuilder(isCkb2Udt, amount, destination);
+  return async () => l1State.txBuilder(isCkb2Udt, amount);
 }
 
 function confirmationLabel(isConfirming: boolean): string {
@@ -301,13 +284,6 @@ function useSettled<T>(value: T, delayMs: number): T {
 
 function amountIdentity(amount: bigint | undefined, amountError: string): string {
   return amount?.toString() ?? `invalid:${amountError}`;
-}
-
-function destinationIdentity(destination: Destination | undefined): string {
-  if (destination === undefined) {
-    return "invalid";
-  }
-  return destination.lock?.hash() ?? "own";
 }
 
 function missingStateActionLayout(

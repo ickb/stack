@@ -4,9 +4,7 @@ import {
   type ConversionKind,
   type ConversionTransactionFailureReason,
 } from "@ickb/sdk";
-import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Destination } from "../../src/action/destination.ts";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
 import {
@@ -17,9 +15,6 @@ import {
   txWithInput,
   walletConfigWith,
 } from "./fixtures/transaction.ts";
-
-/** The wallet's own address: no lock, so the SDK uses the signer's recommended one. */
-const OWN: Destination = {};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,13 +34,12 @@ describe("buildTransactionPreview", () => {
     const txContext = context();
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-    const txInfo = await buildTransactionPreview(txContext, true, 7n, OWN, config);
+    const txInfo = await buildTransactionPreview(txContext, true, 7n, config);
 
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
     expect(buildConversionTransaction.mock.calls[0]?.[0]).toEqual({
       direction: "ckb-to-ickb",
       amount: 7n,
-      lock: undefined,
       signer: config.signer,
       context: txContext,
     });
@@ -56,15 +50,13 @@ describe("buildTransactionPreview", () => {
       estimatedMaturity: 123n,
       orderOccupiedCapacity: 9n,
     });
-    // Only a foreign destination makes the preview a move.
-    expect(txInfo).not.toHaveProperty("move");
   });
 
   it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-    await buildTransactionPreview(context({ ickbAvailable: 5n }), false, 5n, OWN, config);
+    await buildTransactionPreview(context({ ickbAvailable: 5n }), false, 5n, config);
 
     expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({
       direction: "ickb-to-ckb",
@@ -84,7 +76,7 @@ describe("buildTransactionPreview", () => {
       });
 
       await expect(
-        buildTransactionPreview(context(), true, 0n, OWN, config),
+        buildTransactionPreview(context(), true, 0n, config),
       ).resolves.toMatchObject({
         conversionKind: kind,
       });
@@ -110,7 +102,7 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config),
+        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
       ).resolves.toEqual({ ok: false, error: message });
     }
   });
@@ -135,13 +127,7 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(
-          context({ ckbAvailable: 1n }),
-          isCkb2Udt,
-          1n,
-          OWN,
-          config,
-        ),
+        buildTransactionPreview(context({ ckbAvailable: 1n }), isCkb2Udt, 1n, config),
       ).resolves.toMatchObject({ error: message });
     }
   });
@@ -160,30 +146,13 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, amount, OWN, config),
+        buildTransactionPreview(context({ ckbAvailable: 1n }), true, amount, config),
       ).resolves.toEqual({ ok: false, error: message });
     }
   });
 });
 
-describe("buildTransactionPreview destination", () => {
-  it("hands the destination lock to the SDK and names a move in the preview", async () => {
-    const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-    const lock = script("22");
-
-    const txInfo = await buildTransactionPreview(
-      context(),
-      true,
-      0n,
-      { lock, moveTo: "ckt1qzda…abcdef" },
-      config,
-    );
-
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({ lock });
-    expect(txInfo).toMatchObject({ move: { to: "ckt1qzda…abcdef", isComplete: true } });
-  });
-
+describe("buildTransactionPreview deadline", () => {
   it("carries the SDK's broadcast deadline into the preview", async () => {
     const broadcastBefore = {
       epoch: ccc.Epoch.from([7n, 0n, 1n]),
@@ -194,30 +163,11 @@ describe("buildTransactionPreview destination", () => {
     );
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-    const txInfo = await buildTransactionPreview(context(), false, 1n, OWN, config);
+    const txInfo = await buildTransactionPreview(context(), false, 1n, config);
 
     expect(txInfo).toMatchObject({ ok: true, broadcastBefore });
     // A plan without cell space leaves the field out rather than undefined.
     expect(txInfo).not.toHaveProperty("orderOccupiedCapacity");
-  });
-
-  it("refuses a move with an amount before reaching the SDK", async () => {
-    const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-
-    const txInfo = await buildTransactionPreview(
-      context(),
-      true,
-      1n,
-      { lock: script("22"), moveTo: "ckt1qzda…abcdef" },
-      config,
-    );
-
-    expect(txInfo).toMatchObject({
-      ok: false,
-      error: "A move to another address takes no amount",
-    });
-    expect(buildConversionTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -228,7 +178,7 @@ describe("buildTransactionPreview completion", () => {
       .mockResolvedValue([0, false]);
 
     const config = walletConfigWith({});
-    await buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config);
+    await buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config);
 
     expect(completeFeeBy).not.toHaveBeenCalled();
   });
@@ -244,13 +194,7 @@ describe("buildTransactionPreview thrown failures", () => {
       },
     });
     await expect(
-      buildTransactionPreview(
-        context({ ckbAvailable: 1n }),
-        true,
-        1n,
-        OWN,
-        plannerFailure,
-      ),
+      buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, plannerFailure),
     ).resolves.toMatchObject({ error: "planner failed" });
   });
 
@@ -267,7 +211,7 @@ describe("buildTransactionPreview thrown failures", () => {
         },
       });
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config),
+        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
       ).resolves.toMatchObject({ error: message });
     }
   });

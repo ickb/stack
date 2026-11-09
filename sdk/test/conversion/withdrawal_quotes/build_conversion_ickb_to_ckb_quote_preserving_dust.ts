@@ -19,7 +19,7 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("keeps direct withdrawals when an iCKB-to-CKB dust remainder needs quote-preserving Uint64 encoding", async () => {
-    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const { sdk, ownedOwnerManager, orderManager } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP - 1000000n);
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 1n);
     const requestWithdrawal = vi
@@ -40,7 +40,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     const result = await sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount,
-      lock,
       signer: stubSigner,
       context: conversionContext({
         system: {

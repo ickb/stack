@@ -11,7 +11,7 @@ const RPC_FAILED = "RPC failed";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("fails fast on non-retryable CKB-to-iCKB construction errors", async () => {
-    const { sdk, logicManager, lock } = testSdk();
+    const { sdk, logicManager } = testSdk();
     const deposit = vi.spyOn(logicManager, "deposit").mockImplementation(() => {
       throw new Error(RPC_FAILED);
     });
@@ -20,7 +20,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
       sdk.buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: ICKB_DEPOSIT_CAP * 2n,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           ckbAvailable: ICKB_DEPOSIT_CAP * 2n,

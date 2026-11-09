@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import {
   ckbToIckbConversionPlans,
@@ -13,11 +12,9 @@ import { projectionReadyDeposit } from "../withdrawal_quotes/support/sdk_cell_su
 
 describe("sdk conversion planning helpers", () => {
   it("plans greedy prefixes and drops unrepresentable ones", () => {
-    const lock = script("11");
     const zeroCapacityPlans = ckbToIckbConversionPlans({
       direction: "ckb-to-ickb",
       amount: 1n,
-      lock,
       signer: stubSigner,
       context: conversionContext({
         system: {
@@ -37,7 +34,6 @@ describe("sdk conversion planning helpers", () => {
       {
         direction: "ickb-to-ckb",
         amount: 2n,
-        lock,
         signer: stubSigner,
         context: conversionContext({ ickbAvailable: 2n }),
       },
@@ -55,7 +51,6 @@ describe("sdk conversion planning helpers", () => {
   });
 
   it("plans every prefix of the greedy selection, longest first", () => {
-    const lock = script("11");
     const unit = ccc.fixedPointFrom(1000);
     // The largest deposit is the segment anchor; the other four are surplus.
     const anchor = projectionReadyDeposit(5n * unit, 0n, { id: "64" });
@@ -66,7 +61,6 @@ describe("sdk conversion planning helpers", () => {
       {
         direction: "ickb-to-ckb",
         amount: 4n * unit,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           ickbAvailable: 4n * unit,
@@ -80,13 +74,11 @@ describe("sdk conversion planning helpers", () => {
   });
 
   it("derives ready pool deposits from the concrete pool sample", () => {
-    const lock = script("11");
     expect(
       ickbToCkbConversionPlans(
         {
           direction: "ickb-to-ckb",
           amount: 2n,
-          lock,
           signer: stubSigner,
           context: conversionContext({ ickbAvailable: 2n }),
         },

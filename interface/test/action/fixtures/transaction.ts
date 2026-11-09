@@ -26,7 +26,7 @@ type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
 export function walletConfigWith(
   overrides: { sdk?: NonNullable<Parameters<typeof testSdk>[0]> } = {},
-): Parameters<typeof buildTransactionPreview>[4] {
+): Parameters<typeof buildTransactionPreview>[3] {
   const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",

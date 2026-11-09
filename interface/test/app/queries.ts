@@ -162,7 +162,7 @@ it("loads display balances from an SDK account snapshot", async () => {
     hasConverting: false,
     estimatedMaturity: 10n,
   });
-  await expect(state.txBuilder(true, 1n, { lock: script("11") })).resolves.toMatchObject({
+  await expect(state.txBuilder(true, 1n)).resolves.toMatchObject({
     error: "No conversion request available for this amount",
   });
 });

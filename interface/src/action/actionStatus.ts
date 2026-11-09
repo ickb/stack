@@ -7,11 +7,9 @@ import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 export interface ActionFlags {
   readonly amount: bigint | undefined;
   readonly amountError: string;
-  readonly destinationError: string;
   readonly failure: string;
   readonly hasCollectable: boolean;
   readonly hasConverting: boolean;
-  readonly hasDestination: boolean;
   readonly isFrozen: boolean;
   readonly isPreparing: boolean;
   readonly isStateFetching: boolean;
@@ -22,7 +20,7 @@ export interface ActionFlags {
 
 /** Resolves the status message shown beside the conversion action button. */
 export function actionMessage(preview: TxInfo | undefined, flags: ActionFlags): string {
-  const { amount, amountError, destinationError, failure, hasDestination } = flags;
+  const { amount, amountError, failure } = flags;
   if (failure !== "") {
     return failureMessage(failure);
   }
@@ -35,12 +33,6 @@ export function actionMessage(preview: TxInfo | undefined, flags: ActionFlags): 
     return amountError === ""
       ? "Finish entering the amount."
       : failureMessage(amountError);
-  }
-
-  if (!hasDestination) {
-    return destinationError === ""
-      ? "Checking the destination address..."
-      : failureMessage(destinationError);
   }
 
   if (flags.isStateFetching) {
@@ -75,27 +67,11 @@ function previewMessage(
   return transactionIntentMessage(preview, hasCollectable, hasConverting);
 }
 
-/**
- * Another address as the destination means leaving this wallet: the sweep is the
- * transaction, always at amount zero, so it replaces the collect-only intent; converting
- * positions stay, and a sweep the input limit cut short asks for another run.
- */
 function transactionIntentMessage(
-  txInfo: Pick<SendableTx, "conversionKind" | "move" | "orderOccupiedCapacity">,
+  txInfo: Pick<SendableTx, "conversionKind" | "orderOccupiedCapacity">,
   hasCollectable: boolean,
   hasConverting: boolean,
 ): string {
-  const { move } = txInfo;
-  if (move !== undefined) {
-    return [
-      `Sends all CKB and iCKB in this wallet to ${move.to}, without converting.`,
-      collectableNotice(hasCollectable),
-      "Funds still converting stay here: collect them from this wallet later.",
-      move.isComplete ? "" : "Run it again until everything has been sent.",
-    ]
-      .filter((text) => text !== "")
-      .join(" ");
-  }
   // The button reads the same whether a position stays or not, and the balance row alone was
   // missed, so the collect-only line names which case this is.
   if (txInfo.conversionKind === "collect-only") {
@@ -180,14 +156,7 @@ export function conversionIntentText(
   return intent[kind];
 }
 
-export function actionLabel(
-  amount: bigint | undefined,
-  hasCollectable: boolean,
-  isMove: boolean,
-): string {
-  if (isMove) {
-    return "send all CKB and iCKB";
-  }
+export function actionLabel(amount: bigint | undefined, hasCollectable: boolean): string {
   if (amount === 0n && hasCollectable) {
     return "collect converted funds";
   }

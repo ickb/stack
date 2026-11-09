@@ -6,7 +6,6 @@ import {
   type signAndSendTransaction as sdkSignAndSendTransaction,
   type waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
-import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
@@ -145,7 +144,7 @@ describe("transact fresh preview boundary", () => {
     expect(calls.lockIntent).toHaveBeenCalledTimes(1);
     expect(calls.refreshState).toHaveBeenCalledTimes(1);
     expect(build).toHaveBeenCalledTimes(1);
-    expect(build).toHaveBeenCalledWith(true, 1n, { lock: script("11") });
+    expect(build).toHaveBeenCalledWith(true, 1n);
     expect(calls.freezePreview).toHaveBeenCalledWith(preview);
     expect(vi.mocked(calls.freezePreview).mock.invocationCallOrder[0]).toBeLessThan(
       signAndSendTransaction.mock.invocationCallOrder[0] ?? 0,
@@ -694,7 +693,6 @@ function transactionCalls(
     }),
     isCkb2Udt: true,
     amount: 1n,
-    destination: { lock: script("11") },
     freezePreview: vi.fn<(value: RefreshedTransactionPreview | undefined) => void>(),
     setMessage: vi.fn<(message: string) => void>(),
     setFailure: vi.fn<(failure: string) => void>(),

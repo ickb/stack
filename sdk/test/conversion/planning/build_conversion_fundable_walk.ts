@@ -66,7 +66,6 @@ function conversion(
   return {
     direction: ICKB_TO_CKB,
     amount,
-    lock,
     signer: fundedSigner(cells, [lock]).signer,
     context: conversionContext({
       system: {
@@ -124,7 +123,6 @@ describe("buildConversionTransaction fundable walk", () => {
     const result = await fixture.sdk.buildConversionTransaction({
       direction: "ckb-to-ickb",
       amount,
-      lock,
       signer: fundedSigner(cells, [lock]).signer,
       context: conversionContext({ cells, ckbAvailable: amount }),
     });
@@ -146,7 +144,6 @@ describe("buildConversionTransaction fundable walk", () => {
       fixture.sdk.buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: DEPOSIT,
-        lock,
         signer: fundedSigner(cells, [lock]).signer,
         context: conversionContext({
           cells,

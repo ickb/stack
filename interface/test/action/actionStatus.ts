@@ -116,40 +116,10 @@ describe("action status", () => {
     expect(conversionIntentText(kind)).toBe(expected);
   });
 
-  it("waits for the destination and names an invalid one", () => {
-    expect(actionMessage(activeTxInfo(), { ...flags(), hasDestination: false })).toBe(
-      "Checking the destination address...",
-    );
-    expect(
-      actionMessage(activeTxInfo(), {
-        ...flags(),
-        hasDestination: false,
-        destinationError: "Enter a valid Testnet address",
-      }),
-    ).toBe("⚠️ Enter a valid Testnet address");
-  });
-
-  it("says a send to another address replaces the collection and may need another run", () => {
-    const move = { to: "ckt1qzda…abcdef", isComplete: true };
-    const txInfo = { ...activeTxInfo(), conversionKind: "collect-only" as const };
-    expect(actionMessage({ ...txInfo, move }, flags())).toBe(
-      "Sends all CKB and iCKB in this wallet to ckt1qzda…abcdef, without converting. Funds still converting stay here: collect them from this wallet later.",
-    );
-    expect(
-      actionMessage(
-        { ...txInfo, move: { ...move, isComplete: false } },
-        { ...flags(), hasCollectable: true },
-      ),
-    ).toBe(
-      "Sends all CKB and iCKB in this wallet to ckt1qzda…abcdef, without converting. Also collects converted funds. Funds still converting stay here: collect them from this wallet later. Run it again until everything has been sent.",
-    );
-  });
-
   it("labels action availability", () => {
-    expect(actionLabel(0n, true, false)).toBe("collect converted funds");
-    expect(actionLabel(0n, false, false)).toBe("request conversion");
-    expect(actionLabel(1n, true, false)).toBe(requestConversion);
-    expect(actionLabel(0n, false, true)).toBe("send all CKB and iCKB");
+    expect(actionLabel(0n, true)).toBe("collect converted funds");
+    expect(actionLabel(0n, false)).toBe("request conversion");
+    expect(actionLabel(1n, true)).toBe(requestConversion);
     expect(unavailableConversionMessage(1n)).toBe(noRequestMessage);
     expect(unavailableConversionMessage(0n)).toBe(noCollectionMessage);
   });
@@ -177,11 +147,9 @@ function flags(): ActionFlags {
   return {
     amount: 100000000n,
     amountError: "",
-    destinationError: "",
     failure: "",
     hasCollectable: false,
     hasConverting: false,
-    hasDestination: true,
     isFrozen: false,
     isPreparing: false,
     isStateFetching: false,

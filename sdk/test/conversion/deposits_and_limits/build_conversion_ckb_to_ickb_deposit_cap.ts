@@ -14,7 +14,7 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
-    const { sdk, logicManager, orderManager, lock } = testSdk();
+    const { sdk, logicManager, orderManager } = testSdk();
     const deposit = vi
       .spyOn(logicManager, "deposit")
       .mockImplementation((txLike, quantity) => {
@@ -28,7 +28,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
-      lock,
       signer: stubSigner,
       context: conversionContext({
         ckbAvailable: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),

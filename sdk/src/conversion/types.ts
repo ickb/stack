@@ -51,13 +51,9 @@ export interface ConversionTransactionOptions {
   amount: bigint;
 
   /**
-   * Lock that owns every cell the transaction creates for the user, the conversion outputs
-   * and the change; the signer's recommended lock by default. Completion sweeps the liquid
-   * cells along within its input limit, so a foreign lock redirects those funds too.
+   * Signer whose committed cells fund the completed transaction; its recommended lock owns
+   * every cell the transaction creates for the user.
    */
-  lock?: ccc.Script;
-
-  /** Signer whose committed cells fund the completed transaction. */
   signer: ccc.Signer;
 
   /** Sampled state used to plan this conversion. */

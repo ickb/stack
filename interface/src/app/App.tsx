@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
-import { useDestination } from "../action/destination.ts";
 import {
   createPendingTransactionStore,
   type PendingTransactionState,
@@ -29,13 +28,6 @@ export default function App({
   quoteState?: QuoteState;
 }>): JSX.Element {
   const [isFrozen, freeze] = useState(false);
-  // The destination of the next transaction, the wallet's own address while empty; it
-  // lives with this App, so a reload or a wallet switch resets it.
-  const [destinationText, setDestinationText] = useState("");
-  const { destination, error: destinationError } = useDestination(
-    destinationText,
-    walletConfig,
-  );
   // The pending transaction lives with the wallet session: it survives the action
   // remounting on a preview change and ends with this App.
   const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
@@ -45,11 +37,7 @@ export default function App({
   const l1StateQuery = useQuery<L1StateType>({
     ...l1StateOptions(walletConfig, isFrozen),
   });
-  // A move carries only native CKB and iCKB and converts nothing, so its amount is zero;
-  // the typed text stays, and clearing the address brings it back.
-  const isMove = destination?.moveTo !== undefined;
-  const draft = isMove ? "0" : text;
-  const amountInput = parseAmountInput(draft);
+  const amountInput = parseAmountInput(text);
   const formReset = (): void => {
     setText("");
   };
@@ -76,7 +64,7 @@ export default function App({
         openWallet,
         isCkb2Udt,
         setIsCkb2Udt,
-        text: draft,
+        text,
         setText,
         quoteState,
         // The wallet's own sampled ratio quotes the form once the account state is in.
@@ -85,18 +73,10 @@ export default function App({
         amount: amountInput.amount ?? 0n,
         l1State,
       }}
-      destinationField={{
-        text: destinationText,
-        setText: setDestinationText,
-        isValid: destination !== undefined,
-        isForeign: isMove,
-      }}
       actionParams={{
         isCkb2Udt,
         amount: amountInput.amount,
         amountError: amountInput.error,
-        destination,
-        destinationError,
         refreshState,
         freeze,
         formReset,

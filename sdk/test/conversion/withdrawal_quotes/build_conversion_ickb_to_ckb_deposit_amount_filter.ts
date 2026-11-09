@@ -17,7 +17,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("skips iCKB-to-CKB deposits above the requested amount even with high surplus", async () => {
-    const { sdk, ownedOwnerManager, lock } = testSdk();
+    const { sdk, ownedOwnerManager } = testSdk();
     const oversized = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 0n, {
       ckbValue: ICKB_DEPOSIT_CAP * 2n,
       id: "c1",
@@ -36,7 +36,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     const result = await sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
-      lock,
       signer: stubSigner,
       context: conversionContext({
         system: {

@@ -17,7 +17,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("fails fast on non-retryable iCKB-to-CKB construction errors", async () => {
-    const { sdk, ownedOwnerManager, lock } = testSdk();
+    const { sdk, ownedOwnerManager } = testSdk();
     const extra = projectionReadyDeposit(1n, 0n);
     const protectedAnchor = projectionReadyDeposit(2n, 1n);
     vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(() => {
@@ -28,7 +28,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
       sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           system: {

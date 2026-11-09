@@ -42,14 +42,6 @@ Every transaction also collects fulfilled orders, receipts and matured withdrawa
 
 DAO growth makes a refused buy less attractive, whereas it can make a sell profitable later. Sells therefore wait for the age cutoff even if the bot would not fill them today. The SDK applies these rules when it projects the conversion context, so the app and the generator cannot disagree; they live in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
 
-### Sending to another wallet
-
-The address field defaults to the connected wallet and stays in React state only. Its lock owns the user outputs of the next transaction, including change. This gives key-only wallets without an xUDT transfer screen a way to send their CKB and iCKB to a Nervos-native wallet. The destination never signs, so a second connection or tandem signer is unnecessary.
-
-For a foreign destination, the amount becomes zero and the direction switch and Max are disabled. The transaction sends native CKB and iCKB, including funds collected in that transaction; it leaves still-converting positions with the source wallet because the destination wallet may not understand them. Clearing the destination restores the typed amount. The address is fixed while a transaction is prepared, signed or awaited.
-
-Completion deliberately sweeps liquid cells. A large account can exceed its input limit, so the status asks the user to run the send again until everything has been sent. iCKB cells are swept before plain CKB, with plain cells available for fee completion. The [SDK funding rules](../sdk/README.md#funding-and-compaction) own that order and its limits.
-
 ### Balances
 
 CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. There is therefore no CKB Max; completion reports a shortfall before signing. iCKB Max uses the SDK's bound, including collectable funds.

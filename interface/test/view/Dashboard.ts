@@ -11,6 +11,9 @@ describe("shortenAddress", () => {
 
   it("leaves short addresses intact", () => {
     expect(renderDashboardAddress("ckt1short")).toContain("ckt1short");
+    expect(renderDashboardAddress("ckt1qxy2kgdygjrsqtzq2")).toContain(
+      ">ckt1qxy2kgdygjrsqtzq2 ",
+    );
   });
 });
 
@@ -20,12 +23,6 @@ function renderDashboardAddress(address: string): string {
       walletConfig: dashboardWalletConfig(address),
       walletName: "JoyID",
       openWallet: (): undefined => undefined,
-      destination: {
-        text: "",
-        setText: (): undefined => undefined,
-        isValid: true,
-        isForeign: false,
-      },
     }),
   );
 }

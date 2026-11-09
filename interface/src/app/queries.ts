@@ -13,7 +13,6 @@ import {
   type SkipToken,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import type { Destination } from "../action/destination.ts";
 import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 
@@ -21,11 +20,7 @@ export interface L1StateType {
   projection: AccountAvailabilityProjection;
   system: SystemState;
   stateId: string;
-  txBuilder: (
-    isCkb2Udt: boolean,
-    amount: bigint,
-    destination: Destination,
-  ) => Promise<TxInfo>;
+  txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
   hasCollectable: boolean;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
   hasConverting: boolean;
@@ -120,8 +115,8 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     projection,
     system,
     stateId: String(objectIdentityKey(sdkState)),
-    txBuilder: async (isCkb2Udt, amount, destination) =>
-      buildTransactionPreview(context, isCkb2Udt, amount, destination, walletConfig),
+    txBuilder: async (isCkb2Udt, amount) =>
+      buildTransactionPreview(context, isCkb2Udt, amount, walletConfig),
     hasCollectable: hasCollectable(context),
     // Every pending position holds capacity, so the CKB row's own pending sum decides.
     hasConverting: projection.ckbPending > 0n,

@@ -1,111 +1,51 @@
-import { useState, type JSX } from "react";
-import { shortAddress, type DestinationField } from "../action/destination.ts";
-import {
-  buttonClass,
-  reasonLabelClass,
-  type RootConfig,
-  type WalletConfig,
-} from "../shared/utils.ts";
+import type { JSX } from "react";
+import { buttonClass, type RootConfig, type WalletConfig } from "../shared/utils.ts";
 
 export function Dashboard({
   walletConfig,
   walletName,
   openWallet,
-  destination,
   disabled = false,
 }: Readonly<{
   walletConfig: WalletConfig;
   walletName: string;
   openWallet: () => unknown;
-  destination: DestinationField;
   disabled?: boolean;
 }>): JSX.Element {
   const { chain, address } = walletConfig;
   return (
     <HeaderGrid>
       <WalletButton {...{ walletName, chain, openWallet, disabled }} />
-      <AddressField {...{ destination, chain, disabled }} ownAddress={address} />
+      <AddressLink {...{ address, chain }} />
     </HeaderGrid>
   );
 }
 
-/**
- * The wallet's address, doubling as the destination of the next transaction: the own
- * address as the placeholder of the empty field, a pasted one shortened at rest and in
- * full while editing, marked with an arrow once it points elsewhere. While a transaction
- * is under way the field reads as plain text with the reason under it. The link opens the
- * shown address in the explorer.
- */
-function AddressField({
-  destination,
-  ownAddress,
+/** The wallet's address, shortened, linking to it in the explorer. */
+function AddressLink({
+  address,
   chain,
-  disabled,
-}: Readonly<{
-  destination: DestinationField;
-  ownAddress: string;
-  chain: RootConfig["chain"];
-  disabled: boolean;
-}>): JSX.Element {
-  const [isEditing, setIsEditing] = useState(false);
-  const { text, setText, isValid, isForeign } = destination;
-  const marker = isForeign ? "→ " : "";
-  const atRest = text === "" ? "" : `${marker}${shortAddress(text)}`;
-  const shown = isEditing || !isValid ? text : atRest;
-  const explorerAddress = isValid && text !== "" ? text.trim() : ownAddress;
-  const href = `https://${chain !== "mainnet" ? "testnet." : ""}explorer.nervos.org/address/${explorerAddress}`;
-  // The input sizes to its text, so the explorer link sits right after the address at
-  // every width instead of at the far edge of a full-width box.
+}: Readonly<{ address: string; chain: RootConfig["chain"] }>): JSX.Element {
+  const href = `https://${chain !== "mainnet" ? "testnet." : ""}explorer.nervos.org/address/${address}`;
   return (
-    <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-1 text-center">
-      {/* "to" and the underline say this is the destination and that it is editable; the
-          tooltip alone never shows on a phone. */}
-      <span className="text-ickb-muted">to</span>
-      <span className="relative max-w-full min-w-0">
-        <input
-          value={shown}
-          placeholder={shortAddress(ownAddress)}
-          disabled={disabled}
-          onFocus={() => {
-            setIsEditing(true);
-          }}
-          onBlur={() => {
-            setIsEditing(false);
-          }}
-          onChange={(event) => {
-            setText(event.target.value);
-          }}
-          // A paste is the whole edit: leaving the field shows the address shortened at once.
-          onPaste={(event) => {
-            const element = event.currentTarget;
-            setTimeout(() => {
-              element.blur();
-            }, 0);
-          }}
-          autoComplete="off"
-          spellCheck={false}
-          type="text"
-          aria-invalid={!isValid}
-          aria-label="Destination address"
-          title="Every cell the next transaction creates for you belongs to this address"
-          className={`field-sizing-content max-w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent text-center text-ellipsis whitespace-nowrap outline-none focus-visible:outline-none ${disabled ? "cursor-default text-ickb-text placeholder:text-ickb-text" : "border-b border-ickb-border/70 text-ickb-action placeholder:text-ickb-action/70 hover:border-ickb-action/60 focus:border-ickb-action"}`}
-        />
-        {disabled ? (
-          <span className={reasonLabelClass}>cannot change during the transaction</span>
-        ) : undefined}
-      </span>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="rounded text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
-        aria-label="Open the address in the explorer"
-        title={explorerAddress}
-      >
-        ↗
-      </a>
-    </span>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="max-w-full min-w-0 overflow-hidden rounded text-center text-ellipsis whitespace-nowrap text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action"
+      title={address}
+    >
+      {shortAddress(address)} ↗
+    </a>
   );
+}
+
+/** Both ends of an address with the middle elided; a short one stays intact. */
+function shortAddress(address: string): string {
+  if (address.length <= 21) {
+    return address;
+  }
+  return `${address.slice(0, 10)}...${address.slice(-8)}`;
 }
 
 export function DisconnectedDashboard({

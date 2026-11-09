@@ -1,4 +1,3 @@
-import { script } from "@ickb/testkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -229,8 +228,6 @@ function PendingHost({
     isCkb2Udt: true,
     amount: 1n,
     amountError: "",
-    destination: { lock: script("11") },
-    destinationError: "",
     refreshState: async (): Promise<L1StateType> => {
       await Promise.resolve();
       return l1State();

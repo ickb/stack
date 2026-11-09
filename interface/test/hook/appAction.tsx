@@ -1,17 +1,8 @@
-import { ccc } from "@ckb-ccc/ccc";
-import { script } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { shortAddress } from "../../src/action/destination.ts";
 import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
-import {
-  elementProps,
-  findElement,
-  findElements,
-  firstElement,
-  invokeElement,
-} from "../support/react.ts";
+import { elementProps, findElements, firstElement } from "../support/react.ts";
 import { inAct, renderHook, settle } from "../support/renderHook.ts";
 import {
   actionProps,
@@ -34,7 +25,6 @@ import {
   Dashboard,
   Form,
   submitPendingTransaction,
-  testnetClient,
   WalletAppView,
   type ActionLayout,
 } from "./fixtures/modules.ts";
@@ -73,11 +63,6 @@ function registerAppStateTests(): void {
 
     // The account query runs from the first render: nothing is frozen yet.
     expect(queryMock.options).toMatchObject({ enabled: true });
-    expect(view.destinationField).toMatchObject({
-      text: "",
-      isValid: true,
-      isForeign: false,
-    });
     expect(view.isCkb2Udt).toBe(false);
     expect(view.amount).toBe(2n * CKB);
     expect(view.exchangeRatio).toBe(loadedState.system.exchangeRatio);
@@ -116,36 +101,6 @@ function registerAppStateTests(): void {
       ).rejects.toThrow(message);
       await unmount();
     }
-  });
-
-  it("zeroes the amount for a foreign destination once it resolves, keeping the typed text", async () => {
-    queryMock.result = {
-      data: l1State(),
-      error: null,
-      isFetching: false,
-      refetch: vi.fn(),
-    };
-    const props = appProps({ text: "2" });
-    const { result, unmount } = await renderApp(props);
-    const foreign = ccc.Address.fromScript(script("22"), testnetClient);
-    const parse = Promise.withResolvers<ccc.Address>();
-    vi.spyOn(ccc.Address, "fromString").mockReturnValueOnce(parse.promise);
-    const view = (): ViewProps => elementProps<ViewProps>(result.current);
-
-    await inAct(() => {
-      view().destinationField.setText(foreign.toString());
-    });
-    expect(view().destinationField).toMatchObject({ isValid: false, isForeign: false });
-    expect(view().text).toBe("2");
-    parse.resolve(foreign);
-    await settle();
-
-    expect(view().destinationField).toMatchObject({ isValid: true, isForeign: true });
-    expect(view().text).toBe("0");
-    expect(view().actionParams.amount).toBe(0n);
-    expect(props.setText).not.toHaveBeenCalled();
-    vi.restoreAllMocks();
-    await unmount();
   });
 }
 
@@ -201,7 +156,6 @@ function registerActionPreviewTests(): void {
     expect(transactParams).toMatchObject({
       isCkb2Udt: true,
       amount: CKB,
-      destination: { lock: script("11") },
     });
     expect(freeze).toHaveBeenCalledWith(true);
     await ready.unmount();
@@ -234,9 +188,7 @@ function registerActionPreviewTests(): void {
       });
     };
 
-    expect(key()).toEqual(
-      expect.arrayContaining(["state-id", String(CKB), script("11").hash()]),
-    );
+    expect(key()).toEqual(expect.arrayContaining(["state-id", String(CKB)]));
     await rerender({ ...props, amount: 2n * CKB });
     await wait(200);
     await rerender({ ...props, amount: 3n * CKB });
@@ -245,48 +197,7 @@ function registerActionPreviewTests(): void {
     expect(key()).toContain(String(CKB));
     await wait(100);
     expect(key()).toContain(String(3n * CKB));
-    await rerender({ ...props, amount: 3n * CKB, destination: {} });
-    expect(key()).toContain("own");
     await unmount();
-  });
-
-  it("parks the preview and refuses the action while the destination is unresolved", async () => {
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    const { result, unmount } = await renderAction({
-      ...actionProps(),
-      destination: undefined,
-      l1State: l1State(),
-    });
-    const unresolved = layout(result.current);
-    await click(unresolved);
-
-    expect(unresolved).toMatchObject({
-      disabled: true,
-      message: "Checking the destination address...",
-    });
-    expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
-    expect(txPreviewQueryOptions().queryKey).toContain("invalid");
-    expect(transactMock.transact).not.toHaveBeenCalled();
-    await unmount();
-  });
-
-  it("labels a move and dates it now, since converting funds stay behind", async () => {
-    const moveTo = "ckt1qzda...abcdef";
-    queryMock.result = {
-      data: activeTxInfo("11", {
-        move: { to: moveTo, isComplete: true },
-        estimatedMaturity: 600_000n,
-      }),
-      isFetching: false,
-    };
-    const move = await actionLayout({
-      ...actionProps(),
-      amount: 0n,
-      destination: { lock: script("22"), moveTo },
-      l1State: l1State(),
-    });
-
-    expect(move).toMatchObject({ action: "send all CKB and iCKB", maturity: "now" });
   });
 }
 
@@ -429,7 +340,7 @@ function registerActionAttemptTests(): void {
       params.lockIntent();
       const freshState = await params.refreshState();
       try {
-        await freshState.txBuilder(params.isCkb2Udt, params.amount, params.destination);
+        await freshState.txBuilder(params.isCkb2Udt, params.amount);
       } catch (error) {
         params.setFailure(
           error instanceof Error ? error.message : "Fresh preview failed",
@@ -449,7 +360,7 @@ function registerActionAttemptTests(): void {
     await rerender({ ...props, l1State: stateB });
     const recovered = layout(result.current);
 
-    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB, {});
+    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB);
     // The click froze the form before any preview existed to freeze it.
     expect(props.freeze).toHaveBeenCalledWith(true);
     expect(recovered.message).toBe("⚠️ fresh build failed");
@@ -588,78 +499,6 @@ function registerPendingTransactionRecoveryTests(): void {
 }
 
 function registerWalletViewTests(): void {
-  it("edits the destination in full and shows it shortened at rest, linked in the explorer", async () => {
-    const foreign = "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq";
-    const own = "ckb1qyqrdsefa43s6m882pcj53m4gdnj4k440axqdt9rtd";
-    const setText = vi.fn<(value: string) => void>();
-    const props = (
-      chain: "mainnet" | "testnet",
-      destination: Omit<Parameters<typeof Dashboard>[0]["destination"], "setText">,
-    ): Parameters<typeof Dashboard>[0] => ({
-      walletConfig: { ...walletConfig(), chain, address: own },
-      walletName: "JoyID",
-      openWallet: vi.fn<() => void>(),
-      destination: { ...destination, setText },
-      disabled: false,
-    });
-    const { result, rerender, unmount } = await renderHook(
-      (current: Parameters<typeof Dashboard>[0]) =>
-        invokeElement(
-          findElement(Dashboard(current), (element) =>
-            Object.hasOwn(elementProps<object>(element), "ownAddress"),
-          ),
-        ),
-      props("testnet", { text: foreign, isValid: true, isForeign: true }),
-    );
-    interface Field {
-      value: string;
-      placeholder: string;
-      onFocus: () => void;
-      onBlur: () => void;
-      onChange: (event: { target: { value: string } }) => void;
-      onPaste: (event: { currentTarget: { blur: () => void } }) => void;
-    }
-    const field = (): Field =>
-      elementProps<Field>(findElement(result.current, (node) => node.type === "input"));
-    const href = (): string =>
-      elementProps<{ href: string }>(
-        findElement(result.current, (node) => node.type === "a"),
-      ).href;
-
-    expect(field().value).toBe(`→ ${shortAddress(foreign)}`);
-    expect(href()).toBe(`https://testnet.explorer.nervos.org/address/${foreign}`);
-    await inAct(() => {
-      field().onFocus();
-    });
-    expect(field().value).toBe(foreign);
-    field().onChange({ target: { value: "ckt1" } });
-    expect(setText).toHaveBeenCalledWith("ckt1");
-    // A paste is the whole edit: the field lets go so the address shows shortened.
-    const blur = vi.fn<() => void>();
-    field().onPaste({ currentTarget: { blur } });
-    await settle();
-    expect(blur).toHaveBeenCalledTimes(1);
-    await inAct(() => {
-      field().onBlur();
-    });
-    expect(field().value).toBe(`→ ${shortAddress(foreign)}`);
-
-    await rerender(
-      props("mainnet", { text: ` ${own} `, isValid: true, isForeign: false }),
-    );
-    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
-    await rerender(props("mainnet", { text: own, isValid: true, isForeign: false }));
-    expect(field().value).toBe(shortAddress(own));
-    // Empty or invalid text links the wallet's own address; invalid text stays as typed.
-    await rerender(props("mainnet", { text: "", isValid: true, isForeign: false }));
-    expect(field()).toMatchObject({ value: "", placeholder: shortAddress(own) });
-    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
-    await rerender(props("mainnet", { text: "nope", isValid: false, isForeign: false }));
-    expect(field().value).toBe("nope");
-    expect(href()).toBe(`https://explorer.nervos.org/address/${own}`);
-    await unmount();
-  });
-
   it("renders WalletAppView with and without loaded balances", () => {
     const baseProps = {
       walletConfig: walletConfig(),
@@ -672,12 +511,6 @@ function registerWalletViewTests(): void {
       quoteState: quoteState(),
       exchangeRatio: quoteState().exchangeRatio,
       isFrozen: false,
-      destinationField: {
-        text: "",
-        setText: vi.fn<(value: string) => void>(),
-        isValid: true,
-        isForeign: false,
-      },
       actionParams: actionProps(),
       amount: CKB,
     } satisfies Omit<ViewProps, "l1State">;
@@ -706,7 +539,6 @@ function registerWalletViewTests(): void {
       isCkb2Udt: true,
       text: "1",
       setText: baseProps.setText,
-      isMove: false,
     });
     expect(
       elementProps<object>(
@@ -781,11 +613,7 @@ async function freezeBuiltPreview(
 ): Promise<void> {
   params.lockIntent();
   const state = await params.refreshState();
-  const txInfo = await state.txBuilder(
-    params.isCkb2Udt,
-    params.amount,
-    params.destination,
-  );
+  const txInfo = await state.txBuilder(params.isCkb2Udt, params.amount);
   if (txInfo.ok) {
     params.freezePreview({ ...state, txInfo });
   }

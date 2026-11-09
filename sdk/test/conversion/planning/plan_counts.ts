@@ -3,10 +3,7 @@ import { ckbToIckbConversionPlans } from "../../../src/conversion/plans.ts";
 import { DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  stubSigner,
-  testSdk,
-} from "../deposits_and_limits/support/sdk_fixture_support.ts";
+import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 
 // The planner starts at the deployed DAO output limit and completion
 // steps the count down; no policy cap sits below the limit.
@@ -19,7 +16,6 @@ describe("deposit plan counts", () => {
     const plans = ckbToIckbConversionPlans({
       direction: "ckb-to-ickb",
       amount,
-      lock: testSdk().lock,
       signer: stubSigner,
       context: conversionContext({
         ckbAvailable: amount,

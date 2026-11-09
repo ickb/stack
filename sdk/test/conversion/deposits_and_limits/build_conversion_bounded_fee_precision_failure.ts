@@ -13,13 +13,12 @@ const AMOUNT_TOO_SMALL = "amount-too-small";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("returns a typed failure when bounded iCKB-to-CKB fee precision collapses", async () => {
-    const { sdk, lock } = testSdk();
+    const { sdk } = testSdk();
 
     await expect(
       sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           system: {

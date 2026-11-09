@@ -193,7 +193,6 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
     options.sdk.buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
-      lock: options.lock,
       signer: stubSigner,
       context: conversionContext({
         system: {

@@ -27,8 +27,6 @@ export function actionProps(): Parameters<typeof Action>[0] {
     isCkb2Udt: true,
     amount: CKB,
     amountError: "",
-    destination: { lock: script("11") },
-    destinationError: "",
     refreshState: vi.fn(async () => {
       await Promise.resolve();
       return {

@@ -78,7 +78,6 @@ describe("view components", () => {
       ),
       walletName: "Neuron",
       openWallet,
-      destination: ownDestination(),
     });
     const walletButton = findElement(
       walletButtonOf(dashboard),
@@ -97,21 +96,22 @@ describe("view components", () => {
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
-          destination={ownDestination()}
         />,
       ),
-    ).not.toContain("faucet");
+    ).toContain('href="https://explorer.nervos.org/address/ckb1short"');
+    expect(renderToStaticMarkup(dashboard)).toContain(
+      'href="https://testnet.explorer.nervos.org/address/ckt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhxqd5v3my"',
+    );
     expect(
       renderToStaticMarkup(
         <Dashboard
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
-          destination={ownDestination()}
           disabled={true}
         />,
       ),
-    ).toContain("cannot change during the transaction");
+    ).toContain('disabled=""');
 
     const pending = PendingDashboard({
       chain: "mainnet",
@@ -289,19 +289,18 @@ describe("view components", () => {
         <Form {...draft} isCkb2Udt={false} text="" chain="testnet" isFrozen={true} />,
       ),
     ).toContain('disabled=""');
-    // Another address: the amount, max and direction cannot change, and the zero says why.
-    const move = renderToStaticMarkup(
+    // Frozen: the amount, max and direction cannot change.
+    const frozen = renderToStaticMarkup(
       <Form
         {...draft}
         isCkb2Udt={false}
         text="0"
         chain="testnet"
         projection={balances}
-        isMove={true}
+        isFrozen={true}
       />,
     );
-    expect(move).toContain("all CKB and iCKB go to the address above");
-    expect(move.match(/disabled=""/gu)).toHaveLength(3);
+    expect(frozen.match(/disabled=""/gu)).toHaveLength(3);
   });
 
   it("puts the caret back after the digits it followed once commas regroup", async () => {
@@ -425,13 +424,4 @@ function dashboardWalletConfig(
 ): Parameters<typeof Dashboard>[0]["walletConfig"] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Dashboard only reads chain and address from the wallet config.
   return { chain, address } as Parameters<typeof Dashboard>[0]["walletConfig"];
-}
-
-function ownDestination(): Parameters<typeof Dashboard>[0]["destination"] {
-  return {
-    text: "",
-    setText: vi.fn<(value: string) => void>(),
-    isValid: true,
-    isForeign: false,
-  };
 }

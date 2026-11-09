@@ -36,7 +36,6 @@ import {
   type IckbUdt,
   type ProtocolCell,
 } from "./udt.ts";
-import { signerAccountLocks } from "./utils/signer.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
 
@@ -44,11 +43,8 @@ import { verifiedClient } from "./utils/verified_client.ts";
  * Options for completing a partial iCKB transaction before signing and sending.
  */
 export interface CompleteIckbTransactionOptions {
-  /** Signer that prepares the transaction; its recommended lock owns the change by default. */
+  /** Signer that prepares the transaction; its recommended lock owns the change. */
   signer: ccc.Signer;
-
-  /** Lock that owns the change, iCKB and plain, when not the signer's recommended lock. */
-  lock?: ccc.Script;
 
   /**
    * The state read the plan was priced at. Its fee rate prices the fee; its pool deposits,
@@ -88,7 +84,7 @@ export interface CompletedTransaction {
  */
 export const SWEEP_INPUT_LIMIT = 1000;
 
-/** The options with the lock resolved to the signer's recommended one when absent. */
+/** The options with the signer's recommended lock, which owns every output for the user. */
 type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
 
 /** What every own transaction collects along: the context's collectable positions. */
@@ -246,7 +242,7 @@ export class IckbSdk {
 
     const resolved = {
       ...options,
-      lock: options.lock ?? (await options.signer.getRecommendedAddressObj()).script,
+      lock: (await options.signer.getRecommendedAddressObj()).script,
     };
     if (amount === 0n) {
       return this.buildCollectOnlyConversion(resolved);
@@ -259,13 +255,10 @@ export class IckbSdk {
   private async buildCollectOnlyConversion(
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { context, lock, signer } = options;
-    // An empty collection to a lock of the signer's own would only compact the account;
-    // to another lock it moves the liquid cells, which completion builds from the sweep.
-    if (
-      !hasCollectable(context) &&
-      (context.cells.length === 0 || (await isOwnLock(signer, lock)))
-    ) {
+    const { context } = options;
+    // Nothing to collect is nothing to do: a transaction that would only compact the
+    // account is not worth its fee.
+    if (!hasCollectable(context)) {
       return conversionFailure("nothing-to-do");
     }
     const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
@@ -408,9 +401,9 @@ export class IckbSdk {
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<CompletedTransaction> {
-    const { signer, lock, context } = options;
+    const { signer, context } = options;
     const { system, receipts, cells } = context;
-    return this.completeTransaction(tx, { signer, lock, system, receipts, cells });
+    return this.completeTransaction(tx, { signer, system, receipts, cells });
   }
 
   // ---- Transaction building ----------------------------------------------------------
@@ -461,7 +454,7 @@ export class IckbSdk {
     const { feeRate } = system;
     const tx = ccc.Transaction.from(txLike).clone();
     tx.addCellDeps(this.ickbUdt.cellDeps);
-    const changeLock = options.lock ?? (await signer.getRecommendedAddressObj()).script;
+    const changeLock = (await signer.getRecommendedAddressObj()).script;
     // Inputs come from one state read, each cell once, and each action spends its own
     // cell kind, so a repeated out point is a builder bug: this is the one place that
     // names it, the node would refuse the transaction anyway.
@@ -571,10 +564,6 @@ function conversionKind(
 function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
   const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
   return cells.every((cell) => spent.has(cell.outPoint.toHex()));
-}
-
-async function isOwnLock(signer: ccc.Signer, lock: ccc.Script): Promise<boolean> {
-  return (await signerAccountLocks(signer)).some((own) => own.eq(lock));
 }
 
 function udtBalance(cell: ccc.Cell): ccc.Num {

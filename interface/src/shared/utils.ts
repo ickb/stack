@@ -50,11 +50,6 @@ export type SendableTx = Readonly<{
   conversionKind: ConversionKind;
   /** CKB the minted order's cells occupy, set when the transaction mints an order. */
   orderOccupiedCapacity?: bigint;
-  /**
-   * Set when the transaction moves the liquid funds to another lock: the shortened
-   * destination, and whether the sweep took every liquid cell or another move is needed.
-   */
-  move?: { to: string; isComplete: boolean };
   /** The epoch the transaction must be sent before, when it requests withdrawals. */
   broadcastBefore?: BroadcastDeadline;
 }>;
@@ -64,10 +59,6 @@ export type SendableTx = Readonly<{
  * already converting is dated by the state it was built from.
  */
 export type TxInfo = SendableTx | Readonly<{ ok: false; error: string }>;
-
-/** The small line under a value the user cannot edit, saying why, centred beneath it. */
-export const reasonLabelClass =
-  "absolute top-full left-1/2 -translate-x-1/2 -translate-y-1.5 text-xs leading-none font-medium tracking-normal whitespace-nowrap text-ickb-muted normal-case";
 
 /** The main button's look, shared by every button that reads as an action. */
 export const buttonClass =

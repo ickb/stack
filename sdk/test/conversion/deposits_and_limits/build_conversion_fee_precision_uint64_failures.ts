@@ -15,13 +15,12 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("returns a typed failure when default iCKB-to-CKB fee precision exceeds Uint64", async () => {
-    const { sdk, lock } = testSdk();
+    const { sdk } = testSdk();
 
     await expect(
       sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           system: {
@@ -42,13 +41,12 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns a typed failure when default CKB-to-iCKB fee precision exceeds Uint64", async () => {
-    const { sdk, lock } = testSdk();
+    const { sdk } = testSdk();
 
     await expect(
       sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 1n,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           system: {

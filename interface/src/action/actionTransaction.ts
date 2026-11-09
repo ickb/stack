@@ -8,7 +8,6 @@ import {
 } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
-import type { Destination } from "./destination.ts";
 import {
   clearPendingTransaction,
   submitPendingTransaction,
@@ -36,7 +35,6 @@ interface TransactParams extends TransactionCallbacks {
   readonly refreshState: () => Promise<L1StateType>;
   readonly isCkb2Udt: boolean;
   readonly amount: bigint;
-  readonly destination: Destination;
   readonly signal: AbortSignal;
   readonly yieldForPreview?: () => Promise<void>;
 }
@@ -52,7 +50,6 @@ export async function transact({
   refreshState,
   isCkb2Udt,
   amount,
-  destination,
   signal,
   yieldForPreview = yieldForPreviewRender,
   ...callbacks
@@ -67,10 +64,7 @@ export async function transact({
     callbacks.setMessage("Refreshing transaction preview...");
     const state = await abortable(refreshState(), signal);
     signal.throwIfAborted();
-    const txInfo = await abortable(
-      state.txBuilder(isCkb2Udt, amount, destination),
-      signal,
-    );
+    const txInfo = await abortable(state.txBuilder(isCkb2Udt, amount), signal);
     signal.throwIfAborted();
     if (!txInfo.ok) {
       throw new Error(txInfo.error);

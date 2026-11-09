@@ -21,7 +21,7 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("takes the earliest-maturing ready deposit before a later one with more surplus", async () => {
-    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
+    const { sdk, ownedOwnerManager, orderManager } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const earlier = projectionReadyDeposit(8n * unit, 30n * 60n * 1000n, {
       ckbValue: 8n * unit,
@@ -45,7 +45,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
       sdk.buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: ICKB_DEPOSIT_CAP,
-        lock,
         signer: stubSigner,
         context: conversionContext({
           system: {

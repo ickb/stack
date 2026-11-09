@@ -8,7 +8,6 @@ import {
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
-  conversionContext,
   hash,
   system,
   transactionWithOutputs,
@@ -49,7 +48,7 @@ function registerFundingTests(): void {
     expect(tx.inputs).toHaveLength(0);
   });
 
-  it("changes to the given lock, else the recommended one, whatever lock the cells carry", async () => {
+  it("changes to the recommended lock, whatever lock the cells carry", async () => {
     const { sdk } = testSdk({ completion: "real" });
     const recommended = script("11");
     const secondary = script("12");
@@ -67,20 +66,10 @@ function registerFundingTests(): void {
       receipts: [],
       cells,
     });
-    const { tx: toSecondary } = await sdk.completeTransaction(tx, {
-      signer,
-      lock: secondary,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells,
-    });
 
     expect(completed.inputs).toHaveLength(2);
     expect(
       Array.from(completed.outputCells).at(-1)?.cellOutput.lock.eq(recommended),
-    ).toBe(true);
-    expect(
-      Array.from(toSecondary.outputCells).at(-1)?.cellOutput.lock.eq(secondary),
     ).toBe(true);
   });
 
@@ -170,10 +159,9 @@ function registerSweepTests(): void {
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
   });
 
-  it("moves iCKB cells first, plain cells last, and reports a sweep the limit cut short", async () => {
-    // A move is amount zero to another lock, so the sweep is the transaction. The limit
-    // may cut it, so the iCKB cells go first and the plain cells left behind can still fund
-    // the next move's fee.
+  it("sweeps iCKB cells first and plain cells last, up to the input limit", async () => {
+    // The limit may cut the sweep, so the iCKB cells go first and the plain cells left
+    // behind can still fund a later transaction's fee.
     const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
     const { signer } = fundedSigner([], [lock]);
     const ickb = ["a1", "a2", "a3"].map((byte) =>
@@ -182,26 +170,18 @@ function registerSweepTests(): void {
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
     const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
 
-    const result = await sdk.buildConversionTransaction({
-      direction: "ckb-to-ickb",
-      amount: 0n,
-      lock: script("77"),
+    const { tx } = await sdk.completeTransaction(ccc.Transaction.default(), {
       signer,
-      context: conversionContext({
-        system: { feeRate: 1_000n },
-        cells: [...dust, funding, ...ickb],
-      }),
+      system: system({ feeRate: 1_000n }),
+      receipts: [],
+      cells: [...dust, funding, ...ickb],
     });
 
-    if (!result.ok) {
-      throw new Error("Expected a completed move");
-    }
-    const inputs = result.tx.inputs.map((input) => input.previousOutput.toHex());
+    const inputs = tx.inputs.map((input) => input.previousOutput.toHex());
     expect(inputs.slice(0, 4)).toEqual(
       [...ickb, funding].map((cell) => cell.outPoint.toHex()),
     );
     expect(inputs).toHaveLength(SWEEP_INPUT_LIMIT);
-    expect(result.isSweepComplete).toBe(false);
   });
 
   // One iCKB unit per cell, so the funding alone takes as many inputs as units.
