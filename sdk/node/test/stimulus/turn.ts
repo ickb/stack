@@ -124,7 +124,6 @@ describe("runStimulusTurn", () => {
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
-        isSweepComplete: true,
         broadcastBefore: DEADLINE,
       };
     });
@@ -289,7 +288,6 @@ describe("runStimulusTurn", () => {
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
-        isSweepComplete: true,
       };
     });
     const log = await turn(

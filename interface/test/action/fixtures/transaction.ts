@@ -55,7 +55,6 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",
-    isSweepComplete: true,
     ...overrides,
   };
 }

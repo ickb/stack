@@ -93,11 +93,6 @@ export type ConversionTransactionResult =
        */
       orderOccupiedCapacity?: bigint;
       /**
-       * True when every liquid cell of the context is an input. False when the input limit
-       * left some behind: a move to another lock then needs another transaction.
-       */
-      isSweepComplete: boolean;
-      /**
        * The epoch the transaction must be broadcast before for its withdrawal requests to
        * claim at their sampled dates (`system.lockUp`); absent when it requests none.
        */

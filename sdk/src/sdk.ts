@@ -268,7 +268,6 @@ export class IckbSdk {
       ...completed,
       estimatedMaturity: context.estimatedMaturity,
       conversionKind: "collect-only",
-      isSweepComplete: sweepsAll(completed.tx, context.cells),
     };
   }
 
@@ -322,7 +321,6 @@ export class IckbSdk {
       ...(plan.order === undefined
         ? {}
         : { orderOccupiedCapacity: this.orderOccupiedCapacity(tx) }),
-      isSweepComplete: sweepsAll(tx, context.cells),
     };
   }
 
@@ -377,7 +375,6 @@ export class IckbSdk {
       ...(plan.order === undefined
         ? {}
         : { orderOccupiedCapacity: this.orderOccupiedCapacity(tx) }),
-      isSweepComplete: sweepsAll(tx, context.cells),
       ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
     };
   }
@@ -558,12 +555,6 @@ function conversionKind(
     return "direct-plus-order";
   }
   return hasDirect ? "direct" : "order";
-}
-
-/** Whether every liquid cell became an input; false when the input limit cut the sweep. */
-function sweepsAll(tx: ccc.Transaction, cells: readonly ccc.Cell[]): boolean {
-  const spent = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  return cells.every((cell) => spent.has(cell.outPoint.toHex()));
 }
 
 function udtBalance(cell: ccc.Cell): ccc.Num {

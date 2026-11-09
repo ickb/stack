@@ -92,7 +92,6 @@ describe("buildConversionTransaction fundable walk", () => {
       ok: true,
       conversionKind: "direct-plus-order",
       orderOccupiedCapacity: ORDER_CKB,
-      isSweepComplete: true,
     });
     if (!result.ok) {
       throw new Error(result.reason);
