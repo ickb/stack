@@ -32,7 +32,7 @@ export function formAssets(
           ),
           max: projection.ckbConvertible,
         };
-  const ickb: AssetDisplay =
+  const ickbAsset: AssetDisplay =
     projection === undefined
       ? { name: "iCKB" }
       : {
@@ -44,7 +44,7 @@ export function formAssets(
           ),
           max: projection.ickbAvailable,
         };
-  return isCkb2Udt ? [ckb, ickb] : [ickb, ckb];
+  return isCkb2Udt ? [ckb, ickbAsset] : [ickbAsset, ckb];
 }
 
 export function amountQuoteText(
