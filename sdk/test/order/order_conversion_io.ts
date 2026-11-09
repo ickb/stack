@@ -7,28 +7,22 @@ import {
 describe("order conversion and I/O", () => {
   it("rejects unrepresentable quotes", () => {
     expect(() => {
-      quoteConversion(
-        true,
-        { ckbScale: 1n, udtScale: 1n },
-        { ckbValue: -1n, udtValue: 0n },
-        { fee: 0n, feeBase: 100000n },
-      );
+      quoteConversion("ckb-to-ickb", { ckbScale: 1n, udtScale: 1n }, -1n, {
+        fee: 0n,
+        feeBase: 100000n,
+      });
     }).toThrow("Order conversion amounts cannot be negative");
     expect(() => {
-      quoteConversion(
-        true,
-        { ckbScale: 1n, udtScale: 1n },
-        { ckbValue: 0n, udtValue: 0n },
-        { fee: 0n, feeBase: 100000n },
-      );
+      quoteConversion("ckb-to-ickb", { ckbScale: 1n, udtScale: 1n }, 0n, {
+        fee: 0n,
+        feeBase: 100000n,
+      });
     }).toThrow(OrderConversionRepresentabilityError);
     expect(() => {
-      quoteConversion(
-        true,
-        { ckbScale: 1n << 80n, udtScale: 1n },
-        { ckbValue: 1n, udtValue: 0n },
-        { fee: 0n, feeBase: 100000n },
-      );
+      quoteConversion("ckb-to-ickb", { ckbScale: 1n << 80n, udtScale: 1n }, 1n, {
+        fee: 0n,
+        feeBase: 100000n,
+      });
     }).toThrow(OrderConversionRepresentabilityError);
   });
 });

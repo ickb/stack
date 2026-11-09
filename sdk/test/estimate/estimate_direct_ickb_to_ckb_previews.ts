@@ -21,7 +21,7 @@ describe(ESTIMATE_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
 
     expect(
-      quoteConversion(false, exchangeRatio, amounts, {
+      quoteConversion("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
         fee: 1n,
         feeBase: 100000n,
       }).convertedAmount,

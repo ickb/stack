@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import type { ConversionDirection } from "../conversion/types.ts";
 import { ckbFromUdt } from "../udt.ts";
-import { ceilDiv, type ExchangeRatio, type ValueComponents } from "../utils/utils.ts";
+import { ceilDiv, type ExchangeRatio } from "../utils/utils.ts";
 import { Info } from "./info.ts";
 import { Ratio } from "./ratio.ts";
 
@@ -21,20 +22,34 @@ export class OrderConversionRepresentabilityError extends Error {
 }
 
 /**
- * Quotes a new order: the output-side amount, the CKB fee, and the order info.
+ * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
+ * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
+ * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
+ */
+export const DEFAULT_ORDER_FEE = 10n;
+
+/** Default order-fee denominator used by Stack conversion quotes and plans. */
+export const DEFAULT_ORDER_FEE_BASE = 100000n;
+
+/**
+ * Quotes a new order for `amount` of the input side (CKB or iCKB, in shannons): the
+ * output-side amount, the CKB fee, and the order info. Fee and fee base default to the SDK's.
  *
  * @remarks
  * The returned `Info` preserves the quoted amount after fee adjustment so the
  * minted order records the executable limit price.
  */
 export function quoteConversion(
-  isCkb2Udt: boolean,
+  direction: ConversionDirection,
   midpoint: ExchangeRatio,
-  amounts: ValueComponents,
-  { fee, feeBase }: { fee: ccc.Num; feeBase: ccc.Num },
+  amount: ccc.FixedPoint,
+  {
+    fee = DEFAULT_ORDER_FEE,
+    feeBase = DEFAULT_ORDER_FEE_BASE,
+  }: { fee?: ccc.Num; feeBase?: ccc.Num } = {},
 ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
+  const isCkb2Udt = direction === "ckb-to-ickb";
   const base = Ratio.from(midpoint);
-  const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
   const convertedAmount = ceilDiv(amount * aScale, bScale);
   let ckbFee = 0n;

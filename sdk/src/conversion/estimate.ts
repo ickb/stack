@@ -1,6 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { IckbDepositCell } from "../logic.ts";
 import {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../order/conversion.ts";
@@ -23,16 +25,6 @@ export interface ConversionOrderEstimate {
   maturity: ccc.Num | undefined;
 }
 
-/**
- * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
- * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
- * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
- */
-export const DEFAULT_ORDER_FEE = 10n;
-
-/** Default order-fee denominator used by Stack conversion quotes and plans. */
-export const DEFAULT_ORDER_FEE_BASE = 100000n;
-
 /** The quote and its maturity estimate, or `undefined` when no order ratio represents it. */
 export function estimateConversionOrder(
   isCkb2Udt: boolean,
@@ -43,7 +35,12 @@ export function estimateConversionOrder(
 ): ConversionOrderEstimate | undefined {
   let quote: ReturnType<typeof quoteConversion>;
   try {
-    quote = quoteConversion(isCkb2Udt, system.exchangeRatio, amounts, { fee, feeBase });
+    quote = quoteConversion(
+      isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+      system.exchangeRatio,
+      isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
+      { fee, feeBase },
+    );
   } catch (error) {
     if (error instanceof OrderConversionRepresentabilityError) {
       return undefined;

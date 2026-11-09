@@ -36,7 +36,6 @@ export interface IckbSdk {
 export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
 
 export type { SupportedChain } from "./constants.ts";
-export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/estimate.ts";
 export { projectConversionTransactionContext, readyAt } from "./conversion/projection.ts";
 export type {
   AccountAvailabilityProjection,
@@ -55,6 +54,8 @@ export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "./order/conversion.ts";

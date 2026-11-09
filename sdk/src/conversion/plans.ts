@@ -1,10 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import { readyDeposits, type IckbDepositCell } from "../logic.ts";
+import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../order/conversion.ts";
 import type { ValueComponents } from "../utils/utils.ts";
 import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
   estimateConversionOrder,
   estimateIckbToCkbOrder,
   type ConversionOrderEstimate,

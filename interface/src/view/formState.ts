@@ -1,6 +1,4 @@
 import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
   OrderConversionRepresentabilityError,
   quoteConversion,
   type AccountAvailabilityProjection,
@@ -108,10 +106,9 @@ export function conversionQuote(
 ): bigint | undefined {
   try {
     return quoteConversion(
-      isCkb2Udt,
+      isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
       exchangeRatio,
-      { ckbValue: isCkb2Udt ? amount : 0n, udtValue: isCkb2Udt ? 0n : amount },
-      { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
+      amount,
     ).convertedAmount;
   } catch (error) {
     if (error instanceof OrderConversionRepresentabilityError) {

@@ -12,6 +12,7 @@ What changed in `@ickb/sdk` and what to do about it. Versions follow [Epoch Sema
 - **`projectConversionTransactionContext` takes a fourth argument, `changeLock`.** Pass `(await signer.getRecommendedAddressObj()).script`.
 - **`OrderGroup.blockNumber` is gone.** Read `group.origin.blockNumber` for the same block, the master's. `group.order.blockNumber` is the order cell's own: its last fill, or its mint.
 - **`clientCache()` is gone; `CACHE_SIZES` replaces it.** Write `new ccc.ClientCacheMemory(...ickb.CACHE_SIZES)`, and add your app's own needs on top if it shares the client for other reads.
+- **`quoteConversion(direction, exchangeRatio, amount, fee?)`.** It names the direction like the rest of the API and takes the input amount alone, and the fee defaults to the SDK's. Before: `quoteConversion(true, ratio, { ckbValue: amount, udtValue: 0n }, { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE })`. After: `quoteConversion("ckb-to-ickb", ratio, amount)`.
 - **`OrderCell.isFulfilled()` is gone.** Use `!order.isMatchable()`.
 - **A built conversion's `estimatedMaturity` covers that conversion only.** The account-wide date stays on the context. To show one date for both, take the later of the two.
 

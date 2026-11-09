@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-} from "../../src/conversion/estimate.ts";
 import type * as ConversionModule from "../../src/order/conversion.ts";
+import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../../src/order/conversion.ts";
 import { Info } from "../../src/order/info.ts";
 import { system } from "../transaction/base/support/sdk_core_support.ts";
 
@@ -56,13 +53,13 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
     return {
       ...actual,
       quoteConversion: (
-        isCkb2Udt: boolean,
+        direction: string,
         _midpoint: unknown,
-        _amounts: unknown,
+        _amount: unknown,
         options?: { fee?: bigint; feeBase?: bigint },
       ): ReturnType<typeof actual.quoteConversion> => {
         if (
-          !isCkb2Udt &&
+          direction === "ickb-to-ckb" &&
           options?.fee === blocked.fee &&
           options.feeBase === blocked.feeBase
         ) {

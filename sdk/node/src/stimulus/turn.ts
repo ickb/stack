@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import {
@@ -151,15 +150,14 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   if (draw.kind === "conversion") {
     return buildConversion(runtime, state, draw.direction, draw.amount);
   }
-  const isCkb2Udt = draw.direction === "ckb-to-ickb";
-  const amounts = isCkb2Udt
-    ? { ckbValue: draw.amount, udtValue: 0n }
-    : { ckbValue: 0n, udtValue: draw.amount };
+  const amounts =
+    draw.direction === "ckb-to-ickb"
+      ? { ckbValue: draw.amount, udtValue: 0n }
+      : { ckbValue: 0n, udtValue: draw.amount };
   let info: ReturnType<typeof quoteConversion>["info"];
   try {
-    info = quoteConversion(isCkb2Udt, state.system.exchangeRatio, amounts, {
+    info = quoteConversion(draw.direction, state.system.exchangeRatio, draw.amount, {
       fee: draw.fee,
-      feeBase: DEFAULT_ORDER_FEE_BASE,
     }).info;
   } catch (error) {
     if (error instanceof OrderConversionRepresentabilityError) {
