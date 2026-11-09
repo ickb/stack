@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import type { SupportedChain } from "../../../src/constants.ts";
-import { clientCache } from "../../../src/utils/utils.ts";
+import { CACHE_SIZES } from "../../../src/utils/utils.ts";
 
 /** Each chain's genesis block hash, as CKB's mainnet.toml and testnet.toml specs give it. */
 const GENESIS_HASHES = {
@@ -39,7 +39,7 @@ export function createPublicClient(
   rpcUrls: readonly [string, ...string[]],
 ): ccc.Owner<ccc.Client> {
   return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open({
-    cache: clientCache(),
+    cache: new ccc.ClientCacheMemory(...CACHE_SIZES),
     urls: rpcUrls,
   });
 }

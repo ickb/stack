@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { clientCache, IckbSdk } from "@ickb/sdk";
+import { CACHE_SIZES, IckbSdk } from "@ickb/sdk";
 import { offlineTestnetClient } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
@@ -52,7 +52,7 @@ describe("hook-based interface runtime", () => {
     ]);
     // Both clients hold the SDK's pool-sized cache, not CCC's smaller default.
     for (const client of [mainnetClient, testnetClient]) {
-      expect(client.cache).toEqual(clientCache());
+      expect(client.cache).toEqual(new ccc.ClientCacheMemory(...CACHE_SIZES));
     }
   });
 

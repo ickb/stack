@@ -18,7 +18,9 @@ import {
 // README: Setup
 export function setup(): { client: ccc.Client; sdk: ickb.IckbSdk } {
   // A bigger cache than the CCC default: a pool and a book span more blocks than it holds.
-  const client = ccc.ClientPublicTestnet.open({ cache: ickb.clientCache() }).value;
+  const client = ccc.ClientPublicTestnet.open({
+    cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
+  }).value;
   const sdk = ickb.IckbSdk.fromChain("testnet");
   return { client, sdk };
 }

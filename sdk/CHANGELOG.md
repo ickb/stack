@@ -11,6 +11,7 @@ What changed in `@ickb/sdk` and what to do about it. Versions follow [Epoch Sema
 - **`signAndSendTransaction(signer, { tx, plannedFee, broadcastBefore? })`.** It takes the build result whole, so pass it on as returned. The hash callback is gone: read the hash from the returned value, or from `TransactionBroadcastError.txHash` when the send never answers.
 - **`projectConversionTransactionContext` takes a fourth argument, `changeLock`.** Pass `(await signer.getRecommendedAddressObj()).script`.
 - **`OrderGroup.blockNumber` is gone.** Read `group.origin.blockNumber` for the same block, the master's. `group.order.blockNumber` is the order cell's own: its last fill, or its mint.
+- **`clientCache()` is gone; `CACHE_SIZES` replaces it.** Write `new ccc.ClientCacheMemory(...ickb.CACHE_SIZES)`, and add your app's own needs on top if it shares the client for other reads.
 - **`OrderCell.isFulfilled()` is gone.** Use `!order.isMatchable()`.
 - **A built conversion's `estimatedMaturity` covers that conversion only.** The account-wide date stays on the context. To show one date for both, take the later of the two.
 

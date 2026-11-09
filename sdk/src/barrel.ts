@@ -79,5 +79,5 @@ export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.t
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export { signerAccountLocks } from "./utils/signer.ts";
-export { clientCache } from "./utils/utils.ts";
+export { CACHE_SIZES } from "./utils/utils.ts";
 export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

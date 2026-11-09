@@ -10,13 +10,12 @@ import { cccA } from "@ckb-ccc/core/advanced";
 export const defaultCellPageSize = 400;
 
 /**
- * A CCC client cache sized for a whole pool: 4096 headers and 4096 transaction bodies,
- * where CCC's defaults keep 128 and 256 (sdk/docs/node_trust.md). An LRU fills only as
- * far as the book and pool need.
+ * `ccc.ClientCacheMemory` sizes for iCKB reads, in its argument order: cells (CCC's own
+ * default), transaction bodies and headers. A pool and a book span more than CCC's default
+ * 256 bodies and 128 headers (sdk/docs/node_trust.md). Plain numbers, so an app sizing a
+ * cache it shares adds its own needs on top. Frozen: every importer shares this array.
  */
-export function clientCache(): ccc.ClientCacheMemory {
-  return new ccc.ClientCacheMemory(512, 4096, 4096);
-}
+export const CACHE_SIZES = Object.freeze([512, 4096, 4096] as const);
 
 /** A committed cell and the block the node names for its creating transaction. */
 export interface ScannedCell {

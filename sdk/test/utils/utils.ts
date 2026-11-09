@@ -8,7 +8,7 @@ import {
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
-  clientCache,
+  CACHE_SIZES,
   compareBigInt,
   defaultCellPageSize,
   findCells,
@@ -48,9 +48,13 @@ describe("jsonRpcRequestor", () => {
   });
 });
 
-describe("clientCache", () => {
+describe("CACHE_SIZES", () => {
+  it("is frozen, since every importer shares it", () => {
+    expect(Object.isFrozen(CACHE_SIZES)).toBe(true);
+  });
+
   it("keeps 4096 headers, where CCC's default cache keeps 128", async () => {
-    const cache = clientCache();
+    const cache = new ccc.ClientCacheMemory(...CACHE_SIZES);
     const headers = Array.from({ length: 4096 }, (_, number) =>
       headerLike({ number, hash: ccc.hexFrom(ccc.numBeToBytes(number + 1, 32)) }),
     );

@@ -34,9 +34,13 @@ import { ccc } from "@ckb-ccc/core";
 import { ickb } from "@ickb/sdk";
 
 // A bigger cache than the CCC default: a pool and a book span more blocks than it holds.
-const client = ccc.ClientPublicTestnet.open({ cache: ickb.clientCache() }).value;
+const client = ccc.ClientPublicTestnet.open({
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
+}).value;
 const sdk = ickb.IckbSdk.fromChain("testnet");
 ```
+
+`CACHE_SIZES` is just numbers in the constructor's order: cells, transactions, blocks. If the app reads other things through the same client, add its own needs on top.
 
 Read the account, then project it into what a wallet shows and what a conversion plans with:
 

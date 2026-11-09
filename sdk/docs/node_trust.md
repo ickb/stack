@@ -39,4 +39,6 @@ Why the parent and not the tip: a tip can still lose a one-block race. A transac
 
 ## The cache
 
-The bot, the generator and the interface open their clients with `clientCache()`. The CCC default cache keeps 128 blocks and 256 transaction bodies, fewer than a pool spans in deposits or a large book in order origins, so every read fetched most of them again. The larger cache holds 4,096 of each and fills only as far as needed. A cached header or body is still checked.
+The bot, the generator and the interface size their client caches with `CACHE_SIZES`. The CCC default cache keeps 128 blocks and 256 transaction bodies, fewer than a pool spans in deposits or a large book in order origins, so every read fetched most of them again. The larger cache holds 4,096 of each and fills only as far as needed. A cached header or body is still checked.
+
+The SDK exports the numbers rather than a ready cache, because the cache belongs to the whole app: one that shares the client for other reads adds its own needs on top, or picks smaller sizes where memory matters. A helper returning the cache was replaced for that, and so was a helper taking the app's minimums: needs that share a cache add up, so a maximum of two sizes undercounts. The array is frozen, since every importer shares it.

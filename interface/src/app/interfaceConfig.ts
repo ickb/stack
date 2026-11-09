@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { clientCache, IckbSdk } from "@ickb/sdk";
+import { CACHE_SIZES, IckbSdk } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -23,9 +23,12 @@ export const queryClient = new QueryClient();
 // the app's lifetime, so its owner is never disposed: the connector's network list borrows
 // them, and a chain tab lends the chosen one through an Owner the Provider may dispose
 // without effect. The SDK verifies what it reads through them.
+function newClientCache(): ccc.ClientCacheMemory {
+  return new ccc.ClientCacheMemory(...CACHE_SIZES);
+}
 const clients = {
-  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
-  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
+  mainnet: ccc.ClientPublicMainnet.open({ cache: newClientCache() }).value,
+  testnet: ccc.ClientPublicTestnet.open({ cache: newClientCache() }).value,
 };
 export const mainnetClient = clients.mainnet;
 export const testnetClient = clients.testnet;
@@ -52,7 +55,7 @@ export function createRootConfig(
     resetClient: (): void => {
       // The connector hands out a fee-rate proxy whose writes forward to the wrapped client.
       // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
-      cccClient.cache = clientCache();
+      cccClient.cache = newClientCache();
     },
     sdk: sdks[chain],
   };
