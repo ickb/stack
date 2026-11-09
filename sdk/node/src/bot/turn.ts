@@ -92,11 +92,7 @@ async function sendBuiltTransaction({
   const startedAt = Date.now();
   let txHash: ccc.Hex;
   try {
-    txHash = await context.runtime.sendTransaction(
-      result.tx,
-      result.plannedFee,
-      result.broadcastBefore,
-    );
+    txHash = await context.runtime.sendTransaction(result);
     context.events.emit({
       type: "bot.transaction.sent",
       txHash,

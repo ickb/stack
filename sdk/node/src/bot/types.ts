@@ -7,6 +7,7 @@ import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
+import type { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
@@ -37,11 +38,9 @@ export interface Runtime {
     state: Pick<BotState, "system" | "receipts" | "cells">,
   ) => Promise<CompletedTransaction>;
 
-  /** Signs and sends through the initialization-owned signer. */
+  /** Signs and sends a build result through the initialization-owned signer. */
   sendTransaction: (
-    tx: ccc.TransactionLike,
-    plannedFee: ccc.Num,
-    broadcastBefore?: BroadcastDeadline,
+    built: Parameters<typeof signAndSendTransaction>[1],
   ) => Promise<ccc.Hex>;
 }
 

@@ -146,7 +146,7 @@ it("sends explicitly and waits with the finite production policy", async () => {
     outcome: "broadcasted",
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
-  expect(harness.sendTransaction.mock.calls[0]?.[1]).toBe(PLANNED_FEE);
+  expect(harness.sendTransaction.mock.calls[0]?.[0].plannedFee).toBe(PLANNED_FEE);
   expect(harness.events[1]).toMatchObject({
     decision: { plannedFee: String(PLANNED_FEE) },
   });
@@ -177,7 +177,7 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike) => {
+    sendTransaction: async ({ tx: txLike }) => {
       await Promise.resolve();
       const txHash = commitTransaction(responses, txLike);
       throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
@@ -207,7 +207,7 @@ it("falls back to the broadcast error hash when no hash was recorded", async () 
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike) => {
+    sendTransaction: async ({ tx: txLike }) => {
       await Promise.resolve();
       throw new TransactionBroadcastError(commitTransaction(responses, txLike), {
         cause: new TypeError(FETCH_FAILED),
@@ -238,7 +238,7 @@ it("ends the attempt after one confirmation window without resending or rebuildi
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike) => {
+    sendTransaction: async ({ tx: txLike }) => {
       await Promise.resolve();
       const transaction = ccc.Transaction.from(txLike);
       responses.set(
@@ -277,7 +277,7 @@ it("ends the turn with the SDK wait error when the node rejects the transaction"
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     responses,
-    sendTransaction: async (txLike) => {
+    sendTransaction: async ({ tx: txLike }) => {
       await Promise.resolve();
       const transaction = ccc.Transaction.from(txLike);
       responses.set(
@@ -356,7 +356,7 @@ function turnHarness(
   // then reads its recorded status.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
-      (async (txLike): Promise<ccc.Hex> => {
+      (async ({ tx: txLike }): Promise<ccc.Hex> => {
         await Promise.resolve();
         return commitTransaction(responses, txLike);
       }),
@@ -406,7 +406,7 @@ function turnHarness(
     events,
     sendTransaction,
     sentHash: (): ccc.Hex => {
-      const txLike = sendTransaction.mock.calls[0]?.[0];
+      const txLike = sendTransaction.mock.calls[0]?.[0].tx;
       if (txLike === undefined) {
         throw new Error("Nothing was sent");
       }

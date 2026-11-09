@@ -73,7 +73,7 @@ export function activeTxInfo(
   return {
     ok: true,
     tx: txWithInput(txHashByte),
-    fee: 1n,
+    plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "direct",
     ...overrides,
@@ -142,8 +142,7 @@ export async function recordPending(
   store: PendingTransactionStore,
   txHash: ccc.Hex,
 ): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
+  await submitPendingTransaction(store, async () => {
     await Promise.resolve();
     return txHash;
   });

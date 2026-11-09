@@ -166,7 +166,7 @@ export default function Action({
         });
       }}
       message={messageText}
-      fee={isValid ? `${ccc.fixedPointToString(preview.fee)} CKB` : "..."}
+      fee={isValid ? `${ccc.fixedPointToString(preview.plannedFee)} CKB` : "..."}
       maturity={maturity}
     />
   );

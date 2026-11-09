@@ -33,28 +33,33 @@ export class TransactionExpiredError extends Error {
 }
 
 /**
- * Verifies the inputs against the chain, signs locally, records chain identity before
- * RPC, then broadcasts without CCC's cache wrapper.
+ * Verifies the inputs against the chain, signs locally, then broadcasts without CCC's
+ * cache wrapper.
  *
  * @remarks Nothing is signed unless every cell attached to an input equals the output
  * its creating transaction made, a bare `OutPoint` being valued from that output, and the
  * signer kept the ordered inputs, outputs and outputs data.
  * Nothing is sent when the chain would take more fee than `plannedFee`, the fee completion
- * priced, which a built conversion returns. That fee is measured from verified values,
- * a phase-2 DAO input proven in its request block with `get_transaction_proof`, so the
- * client must be JSON-RPC. When `broadcastBefore` is given, the send is refused with
- * `TransactionExpiredError` once a fresh tip reaches it.
- * `recordTxHash` runs before the send RPC, for a caller that must record the hash before a
- * send that may never answer; every later failure carries it as `TransactionBroadcastError`. A node already holding this exact transaction
- * is an acceptance; any other send failure throws `TransactionBroadcastError`. Why each
- * check exists: SDK README, Signing and broadcast.
+ * priced. That fee is measured from verified values, a phase-2 DAO input proven in its
+ * request block with `get_transaction_proof`, so the client must be JSON-RPC. When
+ * `broadcastBefore` is given, the send is refused with `TransactionExpiredError` once a
+ * fresh tip reaches it. Passing the whole build result keeps that deadline: a built
+ * conversion returns all three fields. A node already holding this exact transaction is an
+ * acceptance; any other send failure throws `TransactionBroadcastError`, which carries the
+ * hash for a send that may never answer. Why each check exists: SDK README, Signing and
+ * broadcast.
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,
-  tx: ccc.TransactionLike,
-  plannedFee: ccc.Num,
-  recordTxHash?: (txHash: ccc.Hex) => void,
-  broadcastBefore?: BroadcastDeadline,
+  {
+    tx,
+    plannedFee,
+    broadcastBefore,
+  }: {
+    tx: ccc.TransactionLike;
+    plannedFee: ccc.Num;
+    broadcastBefore?: BroadcastDeadline;
+  },
 ): Promise<ccc.Hex> {
   // Transaction.from reuses Transaction instances, which a signer may mutate in place.
   const requested = ccc.Transaction.from(tx).clone();
@@ -68,9 +73,8 @@ export async function signAndSendTransaction(
   }
   const txHash = signed.hash();
   const fee = await verifiedFee(client, signed, inputs);
-  // A plain JavaScript caller of the earlier signature passes undefined or its recordTxHash
-  // here: numFrom throws on undefined, and on a function either throws or reads 0n. A bare
-  // comparison of a bigint with either is false and would skip the check.
+  // A plain JavaScript caller can leave the fee out: numFrom throws on undefined, where a
+  // bare comparison of a bigint with it is false and would skip the check.
   const planned = ccc.numFrom(plannedFee);
   if (fee > planned) {
     throw new Error(
@@ -88,7 +92,6 @@ export async function signAndSendTransaction(
       });
     }
   }
-  recordTxHash?.(txHash);
 
   // The signature binds the bytes, so the node can only have accepted this exact
   // transaction; its returned hash adds nothing and the local one stays the identity.

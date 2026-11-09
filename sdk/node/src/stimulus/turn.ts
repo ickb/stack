@@ -226,9 +226,10 @@ function unfundableOrThrow(error: unknown): Built {
 async function send(
   runtime: Runtime,
   state: StimulusState,
-  { tx, plannedFee, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
+  built: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
+  const { tx, plannedFee, action } = built;
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
@@ -236,13 +237,7 @@ async function send(
   });
   let txHash: ccc.Hex;
   try {
-    txHash = await signAndSendTransaction(
-      runtime.signer,
-      tx,
-      plannedFee,
-      undefined,
-      broadcastBefore,
-    );
+    txHash = await signAndSendTransaction(runtime.signer, built);
   } catch (error) {
     if (!(error instanceof TransactionBroadcastError)) {
       throw error;

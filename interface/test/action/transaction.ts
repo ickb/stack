@@ -46,7 +46,7 @@ describe("buildTransactionPreview", () => {
     expect(txInfo).toMatchObject({
       ok: true,
       tx,
-      fee: 42n,
+      plannedFee: 42n,
       estimatedMaturity: 123n,
       orderOccupiedCapacity: 9n,
     });

@@ -49,11 +49,8 @@ const { createRoot, restoreNow } = await fakeDom();
 beforeEach(() => {
   mocks.layout = undefined;
   mocks.signAndSendTransaction.mockReset();
-  mocks.signAndSendTransaction.mockImplementation(
-    async (signer, tx, _plannedFee, recordTxHash) => {
-      recordTxHash?.(txHash);
-      return fakeSend(signer)(tx);
-    },
+  mocks.signAndSendTransaction.mockImplementation(async (signer, { tx }) =>
+    fakeSend(signer)(tx),
   );
   mocks.waitTransaction.mockReset();
   mocks.waitTransaction.mockImplementation(waitUntilStopped);
@@ -65,7 +62,7 @@ afterAll(() => {
 });
 
 describe("pending transaction remount ownership", () => {
-  it("retries the recorded hash after the action remounts within the same wallet session", async () => {
+  it("holds a remounted action while the send is in flight, then retries its hash", async () => {
     const { sent, root, send: firstSend } = await submittedAction();
 
     const replacementSend = vi.fn(async () => {
@@ -74,6 +71,12 @@ describe("pending transaction remount ownership", () => {
     });
     const replacementConfig = walletConfig(new QueryClient(), replacementSend);
     renderHost(root, replacementConfig, 1);
+    // The hash is known only once the send answers, so nothing can be retried yet.
+    expect(currentLayout().disabled).toBe(true);
+    await inAct(async () => {
+      sent.resolve(txHash);
+      await sent.promise;
+    });
     expect(currentLayout().action).toBe("retry confirmation");
     expect(currentLayout().disabled).toBe(false);
 
@@ -89,7 +92,6 @@ describe("pending transaction remount ownership", () => {
     const waitOptions = waitCallOptions(waitCall);
     expect(waitOptions.timeout).toBeGreaterThan(0);
     expect(waitOptions.signal).toBeInstanceOf(AbortSignal);
-    sent.resolve(txHash);
     act(() => {
       root.unmount();
     });
@@ -116,7 +118,7 @@ describe("pending transaction remount ownership", () => {
   });
 });
 
-/** Renders an action, submits it, and leaves the broadcast unresolved with its hash recorded. */
+/** Renders an action, submits it, and leaves the broadcast unresolved. */
 async function submittedAction(): Promise<{
   freshAction: string;
   root: ReturnType<typeof createRoot>;

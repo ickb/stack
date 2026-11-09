@@ -45,7 +45,8 @@ export interface WalletConfig extends RootConfig {
 export type SendableTx = Readonly<{
   ok: true;
   tx: ccc.Transaction;
-  fee: bigint;
+  /** The fee completion priced, which the send refuses to exceed. */
+  plannedFee: bigint;
   estimatedMaturity: bigint;
   conversionKind: ConversionKind;
   /** CKB the minted order's cells occupy, set when the transaction mints an order. */

@@ -56,8 +56,7 @@ export async function buildTransactionPreview(
     return Object.freeze({
       ok: true,
       tx: result.tx,
-      // The fee completion priced, which the send refuses to exceed.
-      fee: result.plannedFee,
+      plannedFee: result.plannedFee,
       estimatedMaturity: result.estimatedMaturity,
       conversionKind: result.conversionKind,
       ...(result.orderOccupiedCapacity === undefined

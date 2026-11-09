@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
+import { TransactionBroadcastError } from "@ickb/sdk";
 
 /**
  * The one transaction the wallet session may have in flight: being submitted, or sent and
@@ -28,7 +29,7 @@ export function createPendingTransactionStore(
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- Every non-owner must receive the exact shared submission promise.
 export function submitPendingTransaction(
   store: PendingTransactionStore,
-  submit: (recordTxHash: (txHash: ccc.Hex) => void) => Promise<ccc.Hex>,
+  submit: () => Promise<ccc.Hex>,
 ): Promise<ccc.Hex> {
   const current = store.current;
   if (current?.status === "pending") {
@@ -49,7 +50,7 @@ export function submitPendingTransaction(
 
   void Promise.resolve()
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Adopt synchronous throws without wrapping the submission result again.
-    .then(() => submit(storeHash))
+    .then(() => submit())
     .then(
       (txHash) => {
         storeHash(txHash);
@@ -57,7 +58,14 @@ export function submitPendingTransaction(
         return null;
       },
       (error: unknown) => {
-        if (store.current?.status === "submitting" && store.current.result === result) {
+        // A send whose answer was lost may still have reached the node, so its hash stays
+        // pending to be watched; any other failure sent nothing.
+        if (error instanceof TransactionBroadcastError) {
+          storeHash(error.txHash);
+        } else if (
+          store.current?.status === "submitting" &&
+          store.current.result === result
+        ) {
           write(store, undefined);
         }
         completion.reject(error);

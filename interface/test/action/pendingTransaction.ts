@@ -1,4 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
+import { TransactionBroadcastError } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransaction,
@@ -76,6 +77,18 @@ describe("pending transaction submission ownership", () => {
     rejected.reject(new Error(walletRejected));
     await expect(attempt).rejects.toThrow(walletRejected);
     expect(store.current).toBeUndefined();
+  });
+
+  it("keeps a send whose answer was lost pending under its hash", async () => {
+    const store = createPendingTransactionStore(ignoreChange);
+    const lost = new TransactionBroadcastError(txHash, { cause: new TypeError("fetch") });
+    const attempt = submitPendingTransaction(store, async () => {
+      await Promise.resolve();
+      throw lost;
+    });
+
+    await expect(attempt).rejects.toBe(lost);
+    expect(pendingHash(store)).toBe(txHash);
   });
 });
 

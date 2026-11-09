@@ -396,7 +396,7 @@ function registerActionAttemptTests(): void {
             await Promise.resolve();
             return {
               ...activeTxInfo(),
-              fee: 9n,
+              plannedFee: 9n,
               estimatedMaturity: 120_001n,
               conversionKind: "direct-plus-order" as const,
             };

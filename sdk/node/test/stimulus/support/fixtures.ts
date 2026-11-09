@@ -170,9 +170,10 @@ export async function order(
     cache: new ccc.ClientCacheMemory(),
     cells: (query): readonly StubCell[] => [
       // The order and its master share the mint's block.
-      query.script_type === "lock"
-        ? { cell: orderCell.cell, blockNumber: blockNumber ?? FRESH_BLOCK }
-        : { cell: master.cell, blockNumber: blockNumber ?? FRESH_BLOCK },
+      {
+        cell: query.script_type === "lock" ? orderCell.cell : master.cell,
+        blockNumber: blockNumber ?? FRESH_BLOCK,
+      },
     ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();

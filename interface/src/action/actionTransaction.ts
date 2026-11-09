@@ -129,14 +129,7 @@ function sendAndStoreTransaction(
   return submitPendingTransaction(
     pendingStore,
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
-    (recordTxHash) =>
-      signAndSendTransaction(
-        walletConfig.signer,
-        txInfo.tx,
-        txInfo.fee,
-        recordTxHash,
-        txInfo.broadcastBefore,
-      ),
+    () => signAndSendTransaction(walletConfig.signer, txInfo),
   );
 }
 

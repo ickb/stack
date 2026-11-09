@@ -143,7 +143,7 @@ describe("runStimulusTurn", () => {
 
     expect(mint).not.toHaveBeenCalled();
     // The SDK's broadcast deadline reaches the sender.
-    expect(sendMock.mock.calls[0]?.[4]).toBe(DEADLINE);
+    expect(sendMock.mock.calls[0]?.[1].broadcastBefore).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0 },
@@ -224,7 +224,7 @@ describe("runStimulusTurn", () => {
       txHash: TX_HASH,
     });
     // The send refuses a fee above the one completion planned, the one journaled.
-    expect(sendMock.mock.calls[0]?.[2]).toBe(PLANNED_FEE);
+    expect(sendMock.mock.calls[0]?.[1].plannedFee).toBe(PLANNED_FEE);
     expect(log).not.toHaveProperty("skip");
     // The base carries the fulfilled order's two melt inputs before the mint.
     expect(mint.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
