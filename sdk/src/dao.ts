@@ -155,11 +155,14 @@ export function depositMaturity(
   tip: ccc.ClientBlockHeader,
   { minLockUp, maxLockUp }: LockUpPolicy,
 ): { maturity: ccc.Epoch; isReady: boolean } {
+  const cycle = ccc.Epoch.OneNervosDaoCycle;
   const maturity =
-    claim.compare(minLockUp.add(tip.epoch)) <= 0
-      ? claim.add(ccc.Epoch.OneNervosDaoCycle)
-      : claim;
-  return { maturity, isReady: maxLockUp.add(tip.epoch).compare(maturity) > 0 };
+    claim.compare(minLockUp.add(tip.epoch)) <= 0 ? claim.add(cycle) : claim;
+  // Every claim lies within a cycle of the tip (CCC's calcDaoClaimEpoch), so a window past
+  // one cycle adds nothing but a rolled claim, whose deadline, the unrolled claim less the
+  // reserve, has already passed: the send would refuse every plan that selected it.
+  const max = maxLockUp.compare(cycle) > 0 ? cycle : maxLockUp;
+  return { maturity, isReady: max.add(tip.epoch).compare(maturity) > 0 };
 }
 
 /**

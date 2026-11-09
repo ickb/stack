@@ -142,6 +142,17 @@ describe("depositMaturity", () => {
     expect(maturity.eq(claim.add([180n, 0n, 1n]))).toBe(true);
   });
 
+  it("never reads a rolled claim as ready, even under a window past one cycle", () => {
+    // Requesting it would commit after the claim, and the send refuses a deadline before
+    // the tip, which is what the unrolled claim gives.
+    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
+    const tip = headerLike({ epoch: [180n, 1n, 2n], number: 2n });
+    const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
+    const policy = { ...WALLET_LOCK_UP, maxLockUp: ccc.Epoch.from([360n, 0n, 1n]) };
+
+    expect(depositMaturity(claim, tip, policy).isReady).toBe(false);
+  });
+
   it("keeps a claim at the exact max boundary out of the ready window", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
     const tip = headerLike({ epoch: [163n, 0n, 1n], number: 2n });
