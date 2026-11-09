@@ -121,12 +121,16 @@ export const BOT_LOCK_UP: LockUpPolicy = {
 };
 
 /**
- * A wallet's rules on the nominal four-hour epoch: claims two hours to three days out,
+ * A wallet's rules on the nominal four-hour epoch: claims two hours to seven days out,
  * sent while ninety minutes remain. A user may leave the request in a wallet popup.
+ *
+ * @remarks Seven days, raised from three: of 896 mainnet DAO withdrawals in the 158 days
+ * to 2026-11-04, 49% were requested within 3 days of their claim, 67% within 7 and 78%
+ * within 14 (https://talk.nervos.org/t/11125, post 1, version 3).
  */
 export const WALLET_LOCK_UP: LockUpPolicy = {
   minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
-  maxLockUp: ccc.Epoch.from([18n, 0n, 1n]),
+  maxLockUp: ccc.Epoch.from([42n, 0n, 1n]),
   broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 

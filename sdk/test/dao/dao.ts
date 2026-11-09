@@ -155,7 +155,8 @@ describe("depositMaturity", () => {
 
   it("keeps a claim at the exact max boundary out of the ready window", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
-    const tip = headerLike({ epoch: [163n, 0n, 1n], number: 2n });
+    // The claim, epoch 181, is exactly the wallet maximum, 42 epochs, past the tip.
+    const tip = headerLike({ epoch: [139n, 0n, 1n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
 
     const { maturity, isReady } = depositMaturity(claim, tip, WALLET_LOCK_UP);
