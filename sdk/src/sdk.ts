@@ -141,6 +141,20 @@ export class IckbSdk {
     if (maxFeeRate !== undefined && ccc.numFrom(maxFeeRate) <= ccc.Zero) {
       throw new RangeError("maxFeeRate must be positive");
     }
+    // A reserve of zero would send up to the claim itself, a reserve at or past the margin
+    // leaves no fresh tip, a maximum at or below the margin selects nothing, and so does a
+    // margin of a cycle, since every claim lies within one.
+    const { minLockUp, maxLockUp, broadcastReserve } = lockUp;
+    if (
+      broadcastReserve.compare(ccc.Epoch.Genesis) <= 0 ||
+      minLockUp.compare(broadcastReserve) <= 0 ||
+      maxLockUp.compare(minLockUp) <= 0 ||
+      minLockUp.compare(ccc.Epoch.OneNervosDaoCycle) >= 0
+    ) {
+      throw new RangeError(
+        "lockUp must satisfy 0 < broadcastReserve < minLockUp < maxLockUp, with minLockUp under one DAO cycle",
+      );
+    }
     const client = verifiedClient(plainClient);
     const live = await client.getTipHeader();
     // The live tip can still lose a one-block race, and a transaction naming it as a header

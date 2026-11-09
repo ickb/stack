@@ -55,6 +55,26 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     }
   });
 
+  it("refuses a lock-up policy that could never send a fresh, ready request", async () => {
+    const client = clientWithFeeRateStatistics(() => null);
+    const epoch = (numerator: bigint, denominator: bigint): ccc.Epoch =>
+      ccc.Epoch.from([0n, numerator, denominator]);
+    for (const policy of [
+      { ...WALLET_LOCK_UP, broadcastReserve: epoch(0n, 1n) },
+      { ...WALLET_LOCK_UP, broadcastReserve: WALLET_LOCK_UP.minLockUp },
+      { ...WALLET_LOCK_UP, maxLockUp: WALLET_LOCK_UP.minLockUp },
+      {
+        ...WALLET_LOCK_UP,
+        minLockUp: ccc.Epoch.OneNervosDaoCycle,
+        maxLockUp: ccc.Epoch.OneNervosDaoCycle.add(epoch(1n, 2n)),
+      },
+    ]) {
+      await expect(defaultL1Sdk().getL1AccountState(client, [], policy)).rejects.toThrow(
+        RangeError,
+      );
+    }
+  });
+
   it("propagates unrelated fee rate failures", async () => {
     const feeRateError = new TypeError(
       "Cannot destructure property 'mean' while parsing object null metadata",
