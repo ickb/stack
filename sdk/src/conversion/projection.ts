@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_HEADER_INDEX_LIMIT } from "../dao.ts";
-import type { OrderGroup } from "../order/cells.ts";
+import type { ReceiptCell } from "../logic.ts";
+import { OrderGroup } from "../order/cells.ts";
 import { isCollectable } from "../order/fill.ts";
-import type { WithdrawalGroup } from "../owned_owner.ts";
+import { WithdrawalGroup } from "../owned_owner.ts";
 import { maturity } from "./maturity.ts";
 import type {
   AccountAvailabilityProjection,
@@ -22,17 +23,17 @@ export function projectConversionTransactionContext(
   account: AccountState,
   orders: readonly OrderGroup[],
 ): ConversionTransactionContextProjection {
-  const collectable = (group: OrderGroup): boolean => isCollectable(group, system);
+  const tip = system.tip.timestamp;
+  const isReady = (group: OrderGroup): boolean => readyAt(group, system) <= tip;
   const projection = projectAccountAvailability(account, {
-    available: orders.filter(collectable),
-    pending: orders.filter((group) => !collectable(group)),
+    available: orders.filter(isReady),
+    pending: orders.filter((group) => !isReady(group)),
   });
   const estimatedMaturity = ccc.numMax(
-    system.tip.timestamp,
-    ...projection.pendingWithdrawals.map((group) =>
-      group.owned.maturity.toUnix(system.tip),
+    tip,
+    ...[...projection.pendingWithdrawals, ...projection.pendingOrders].map((position) =>
+      readyAt(position, system),
     ),
-    ...projection.pendingOrders.map((group) => maturity(group.order, system)),
   );
 
   return {
@@ -48,6 +49,26 @@ export function projectConversionTransactionContext(
       estimatedMaturity,
     },
   };
+}
+
+/**
+ * When a position the account holds is collectable, in unix milliseconds: `0n` or a time
+ * at or before the tip means now. An order is ready when the bot would take it whole in
+ * neither direction ({@link isCollectable}), since the next transaction collects it, else
+ * at its fill estimate, always past the tip; a withdrawal group at its claim, which is at
+ * or before the tip exactly when it has matured; a receipt at once.
+ */
+export function readyAt(
+  position: OrderGroup | WithdrawalGroup | ReceiptCell,
+  system: SystemState,
+): bigint {
+  if (position instanceof OrderGroup) {
+    return isCollectable(position, system) ? 0n : maturity(position.order, system);
+  }
+  if (position instanceof WithdrawalGroup) {
+    return position.owned.maturity.toUnix(system.tip);
+  }
+  return 0n;
 }
 
 /**
@@ -99,7 +120,8 @@ export function projectAccountAvailability(
 /**
  * `ready` is the batch one transaction can complete: the deployed DAO script addresses a
  * withdrawal's deposit header only below `DAO_HEADER_INDEX_LIMIT`, and the builder puts
- * those headers first, so matured withdrawals past that count wait a turn.
+ * those headers first, so matured withdrawals past that count wait a turn. A group past
+ * the cap keeps its past `readyAt` and completes with the next transaction.
  */
 function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
   readyWithdrawals: WithdrawalGroup[];

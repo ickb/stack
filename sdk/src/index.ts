@@ -42,7 +42,7 @@ export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSd
 
 export type { SupportedChain } from "./constants.ts";
 export { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "./conversion/estimate.ts";
-export { projectConversionTransactionContext } from "./conversion/projection.ts";
+export { projectConversionTransactionContext, readyAt } from "./conversion/projection.ts";
 export type {
   AccountAvailabilityProjection,
   AccountState,
