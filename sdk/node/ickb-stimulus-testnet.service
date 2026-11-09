@@ -20,9 +20,12 @@ Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testn
 # A turn is a slow read plus at most the ten-minute wait window; a process still alive at
 # thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
 RuntimeMaxSec=30min
-# Every exit starts the next turn after a minute; a turn never holds.
+# Every exit starts the next turn an hour later; a turn never holds. The bot's longest
+# normal gap is about twenty minutes, so it sees every order, and a zero-fee sell gets an
+# hour of DAO growth to cover the bot's fill cost before the next turn collects it as
+# refused (sdk/node/README.md, Generator).
 Restart=always
-RestartSec=60s
+RestartSec=1h
 NoNewPrivileges=yes
 # The process holds a private key, so never write a core file.
 LimitCORE=0

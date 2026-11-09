@@ -34,7 +34,9 @@ const ORDER_WEIGHT = 3;
 // generous; no fixed set lands on both sides of the bot's fee check for every transaction
 // size, so `STIMULUS_FEE` is the lever when a reason never shows.
 // A buy at zero fee is never taken, since the DAO ratio only grows past it, so buys draw
-// from the positive fees.
+// from the positive fees. A zero-fee sell is taken once DAO growth covers the bot's fill
+// cost, which the unit's hour between turns gives large sells; the rest show the bot's
+// `no_gain` skip and are collected as refused.
 const POSITIVE_FEE_CHOICES: Choices<bigint> = [
   { value: DEFAULT_ORDER_FEE, weight: 2 },
   { value: 10n * DEFAULT_ORDER_FEE, weight: 1 },
