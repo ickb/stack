@@ -100,7 +100,8 @@ function ckbToIckbConversionPlan(
 ): CkbToIckbConversionPlan | undefined {
   const { amount, context } = options;
   const remainder = amount - depositCapacity * BigInt(depositCount);
-  let estimatedMaturity = context.estimatedMaturity;
+  // The conversion's own date: what the wallet already has converting is the context's.
+  let estimatedMaturity = context.system.tip.timestamp;
   let order: ConversionOrder | undefined;
 
   if (remainder > 0n) {
@@ -129,7 +130,7 @@ function ickbToCkbConversionPlan(
   selectedDeposits: IckbDepositCell[],
 ): IckbToCkbConversionPlan | undefined {
   const { amount, context } = options;
-  let estimatedMaturity = context.estimatedMaturity;
+  let estimatedMaturity = context.system.tip.timestamp;
   // Selected deposits are ready, so their sampled claim is their date.
   for (const deposit of selectedDeposits) {
     estimatedMaturity = ccc.numMax(

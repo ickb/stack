@@ -35,7 +35,7 @@ The buyer model assumes the bot can mint one cap-sized deposit per turn once its
 
 ## The date on screen
 
-`ConversionTransactionContext.estimatedMaturity` is the latest date at which everything the wallet has converting, plus this request, is collectable: pending withdrawals at their claim dates, pending orders at their estimates, and the request's own direct deposits and order leg. An amount of zero is the collection itself. Users track their conversions on the interface, so the one date is the feature.
+Each built conversion carries its own `estimatedMaturity`, counted from the tip: its direct claims and its order leg's estimate, or the tip for a collection, which takes only what is ready. `ConversionTransactionContext.estimatedMaturity` dates what the wallet already has converting: pending withdrawals at their claim dates and pending orders at their estimates. A consumer that tracks conversions apart, as NervDAO's active panel does, shows each date on its own; the stack's interface shows one "Ready:" date, the later of the two.
 
 The [SDK's direct-first completion walk](../README.md#transaction-completion) chooses the plan. The estimate describes that choice; it never ranks plans.
 

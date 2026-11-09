@@ -280,7 +280,8 @@ export class IckbSdk {
     return {
       ok: true,
       ...completed,
-      estimatedMaturity: context.estimatedMaturity,
+      // A collection takes only what is ready: it is done at the tip.
+      estimatedMaturity: context.system.tip.timestamp,
       conversionKind: "collect-only",
     };
   }

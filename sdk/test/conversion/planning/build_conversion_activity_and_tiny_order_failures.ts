@@ -1,7 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import {
+  baseTip,
+  conversionContext,
+} from "../../transaction/base/support/sdk_core_support.ts";
 import {
   mockPassthroughMint,
   stubSigner,
@@ -107,9 +110,17 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
-        context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
+        context: conversionContext({
+          readyWithdrawals: [placeholderWithdrawal],
+          // A collection takes only what is ready, so it is done at the tip.
+          estimatedMaturity: 99n,
+        }),
       }),
-    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
+    ).resolves.toMatchObject({
+      ok: true,
+      conversionKind: "collect-only",
+      estimatedMaturity: baseTip.timestamp,
+    });
   });
 
   it("finds nothing to do at amount zero without anything to collect", async () => {

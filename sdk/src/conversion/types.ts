@@ -30,10 +30,7 @@ export interface ConversionTransactionContext {
   ckbAvailable: bigint;
   /** Projected iCKB available to the wallet after pending state is considered. */
   ickbAvailable: bigint;
-  /**
-   * The latest date at which everything the wallet has converting, plus this request, is
-   * collectable; an amount of zero is the collection itself.
-   */
+  /** The latest date at which everything the wallet already has converting is collectable. */
   estimatedMaturity: bigint;
 }
 
@@ -83,7 +80,11 @@ export type ConversionTransactionResult =
       tx: ccc.Transaction;
       /** The fee completion planned: the `plannedFee` to pass to `signAndSendTransaction`. */
       plannedFee: bigint;
-      /** Estimated maturity timestamp for the conversion result. */
+      /**
+       * When this conversion alone is collectable, from the tip: its direct claims and its
+       * order's estimate; the tip for a collection. Positions already converting are dated
+       * by the context's `estimatedMaturity`.
+       */
       estimatedMaturity: bigint;
       /** Composition of the selected conversion path. */
       conversionKind: ConversionKind;

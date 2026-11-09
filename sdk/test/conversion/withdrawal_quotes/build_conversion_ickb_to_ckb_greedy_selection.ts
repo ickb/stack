@@ -53,6 +53,8 @@ describe("IckbSdk.buildConversionTransaction", () => {
           },
           ckbAvailable: 0n,
           ickbAvailable: ICKB_DEPOSIT_CAP,
+          // What is already converting, a day out, does not date this conversion.
+          estimatedMaturity: 24n * 60n * 60n * 1000n,
         }),
       }),
     ).resolves.toMatchObject({

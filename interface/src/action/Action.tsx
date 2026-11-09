@@ -239,13 +239,17 @@ function startAttempt({
 }
 
 /**
- * The "Ready:" value. The date also covers what is converting, which the state dates when
- * the preview has nothing to sign, so it shows whenever something is.
+ * The "Ready:" value: when everything is collectable, the previewed conversion and what is
+ * already converting alike, so the latest of the two dates. The state dates what is
+ * converting when the preview has nothing to sign, so it shows whenever something is.
  */
 function maturityLabel(preview: TxInfo | undefined, state: L1StateType): string {
   const tip = state.system.tip.timestamp;
   if (preview?.ok === true) {
-    return timeUntilMaturity(preview.estimatedMaturity, tip);
+    return timeUntilMaturity(
+      ccc.numMax(preview.estimatedMaturity, state.estimatedMaturity),
+      tip,
+    );
   }
   return preview !== undefined && state.hasConverting
     ? timeUntilMaturity(state.estimatedMaturity, tip)

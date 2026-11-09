@@ -226,6 +226,17 @@ function registerActionAlternativeTests(): void {
     expect(converting.disabled).toBe(true);
     expect(converting.maturity).toBe("in 3 minutes");
     expect(converting.fee).toBe("...");
+    // A conversion due sooner than what is converting shows the later date: everything.
+    queryMock.result = {
+      data: activeTxInfo("11", { estimatedMaturity: 60_000n }),
+      isFetching: false,
+    };
+    const sooner = await actionLayout({
+      ...actionProps(),
+      l1State: { ...l1State(), hasConverting: true, estimatedMaturity: 180_000n },
+    });
+    expect(sooner.maturity).toBe("in 3 minutes");
+    queryMock.result = { data: nothingToSign, isFetching: false };
     const idle = await actionLayout({ ...actionProps(), amount: 0n, l1State: l1State() });
     expect(idle.maturity).toBe("...");
     queryMock.result = { data: undefined, isFetching: true };

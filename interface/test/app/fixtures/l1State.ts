@@ -12,6 +12,7 @@ export function l1State(): L1StateType {
     },
     hasCollectable: false,
     hasConverting: false,
+    estimatedMaturity: 0n,
   };
   if (!isL1State(candidate)) {
     throw new Error("L1 state fixture is invalid");
