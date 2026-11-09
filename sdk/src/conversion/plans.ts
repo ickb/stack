@@ -131,7 +131,8 @@ function ickbToCkbConversionPlan(
 ): IckbToCkbConversionPlan | undefined {
   const { amount, context } = options;
   let estimatedMaturity = context.system.tip.timestamp;
-  // Selected deposits are ready, so their sampled claim is their date.
+  // Selected deposits are ready, so their sampled claim is their date: depositMaturity
+  // never reads a rolled claim as ready, whatever the policy window.
   for (const deposit of selectedDeposits) {
     estimatedMaturity = ccc.numMax(
       estimatedMaturity,
