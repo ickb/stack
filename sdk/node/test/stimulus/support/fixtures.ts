@@ -161,6 +161,7 @@ export async function order(
       },
       outputData,
     }),
+    FRESH_BLOCK,
   );
   const transaction = ccc.Transaction.default();
   transaction.outputs.push(orderCell.cell.cellOutput, master.cell.cellOutput);
@@ -168,8 +169,9 @@ export async function order(
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
     cells: (query): readonly StubCell[] => [
+      // The order and its master share the mint's block.
       query.script_type === "lock"
-        ? orderCell.cell
+        ? { cell: orderCell.cell, blockNumber: blockNumber ?? FRESH_BLOCK }
         : { cell: master.cell, blockNumber: blockNumber ?? FRESH_BLOCK },
     ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {

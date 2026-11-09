@@ -379,10 +379,10 @@ describe("order cells", () => {
     const cell = orderCell({ ckbValue: 1000n, udtValue: 10n }).cell;
     cell.outputData = "0x";
 
-    const error = catchError(() => OrderCell.mustFrom(cell));
+    const error = catchError(() => OrderCell.mustFrom(cell, FRESH_BLOCK));
     expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
     expect(error.cause).toBeInstanceOf(Error);
-    expect(OrderCell.tryFrom(cell)).toBeUndefined();
+    expect(OrderCell.tryFrom(cell, FRESH_BLOCK)).toBeUndefined();
   });
 
   it("reports order validation failures with their outpoint and cause", () => {
@@ -402,7 +402,7 @@ describe("order cells", () => {
       }).toBytes(),
     );
 
-    const error = catchError(() => OrderCell.mustFrom(cell));
+    const error = catchError(() => OrderCell.mustFrom(cell, FRESH_BLOCK));
     expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
     expect(error.cause).toBeInstanceOf(Error);
     const { cause } = error;
@@ -528,13 +528,12 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.order).toBe(origin);
+    expect(OrderGroup.tryFrom(master, origin, origin)?.order).toBe(origin);
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
         origin,
         origin,
-        FRESH_BLOCK,
       ),
     ).toBeUndefined();
     expect(new MasterCell(masterCell({ type: script("99") })).anchors(origin)).toBe(
@@ -579,7 +578,7 @@ function orderCell(options: {
       info,
     }).toBytes(),
   });
-  return OrderCell.mustFrom(cell);
+  return OrderCell.mustFrom(cell, FRESH_BLOCK);
 }
 
 function masterCell(options?: { index?: bigint; type?: ccc.Script }): ccc.Cell {

@@ -170,6 +170,16 @@ describe("maturity of a seller", () => {
     // A fresh order at par queues behind both: the bot's cap now and both claim dates.
     expect(maturity(seller(CAP), state)).toBe(5000n + BOT_TURN_MS);
   });
+
+  it("gives the bot no CKB while its own order has sat, alone on the book", () => {
+    const own = sittingSeller(0n, HALF_PRICE, CAP / 2n);
+    const deposit = projectionReadyDeposit(CAP, 3000n);
+
+    // Not ahead of itself, but a seller the bot keeps leaving shows the shortage too.
+    expect(
+      maturity(own.order, system({ tip, orderPool: [own], poolDeposits: [deposit] })),
+    ).toBe(3000n + BOT_TURN_MS);
+  });
 });
 
 describe("maturity of a buyer", () => {

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte } from "@ickb/testkit";
+import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
 import { OrderCell } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -101,5 +101,6 @@ export function makeOrderCell(options: {
       },
       outputData,
     }),
+    FRESH_BLOCK,
   );
 }

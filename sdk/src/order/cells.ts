@@ -19,6 +19,11 @@ export class OrderCell implements ValueComponents {
   public readonly absTotal: ccc.Num;
   /** Absolute matched progress in the order's comparison units. */
   public readonly absProgress: ccc.Num;
+  /**
+   * The block that committed this cell, as the scan reported it. A fill replaces the order
+   * cell, so this is the last fill's block, or the mint's when unfilled.
+   */
+  public readonly blockNumber: ccc.Num;
 
   constructor({
     cell,
@@ -26,18 +31,21 @@ export class OrderCell implements ValueComponents {
     ckbUnoccupied,
     absTotal,
     absProgress,
+    blockNumber,
   }: {
     cell: ccc.Cell;
     data: OrderData;
     ckbUnoccupied: ccc.FixedPoint;
     absTotal: ccc.Num;
     absProgress: ccc.Num;
+    blockNumber: ccc.Num;
   }) {
     this.cell = cell;
     this.data = data;
     this.ckbUnoccupied = ckbUnoccupied;
     this.absTotal = absTotal;
     this.absProgress = absProgress;
+    this.blockNumber = blockNumber;
   }
 
   /**
@@ -64,11 +72,12 @@ export class OrderCell implements ValueComponents {
    * Returns `undefined` if parsing or validation fails.
    *
    * @param cell - The raw chain cell to convert.
+   * @param blockNumber - The block that committed the cell.
    * @returns An `OrderCell` instance or `undefined`.
    */
-  public static tryFrom(cell: ccc.Cell): OrderCell | undefined {
+  public static tryFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell | undefined {
     try {
-      return OrderCell.mustFrom(cell);
+      return OrderCell.mustFrom(cell, blockNumber);
     } catch {
       return undefined;
     }
@@ -80,10 +89,11 @@ export class OrderCell implements ValueComponents {
    * Throws if the cell is invalid or data validation fails.
    *
    * @param cell - The raw chain cell to convert.
+   * @param blockNumber - The block that committed the cell.
    * @returns A new `OrderCell` instance.
    * @throws When decoding or validation fails.
    */
-  public static mustFrom(cell: ccc.Cell): OrderCell {
+  public static mustFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell {
     let data: OrderData;
     try {
       data = OrderData.decode(cell.outputData);
@@ -118,7 +128,14 @@ export class OrderCell implements ValueComponents {
       absProgress = udtValue * ckbToUdt.udtScale;
     }
 
-    return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress });
+    return new OrderCell({
+      cell,
+      data,
+      ckbUnoccupied,
+      absTotal,
+      absProgress,
+      blockNumber,
+    });
   }
 
   /**
@@ -292,26 +309,17 @@ export class OrderGroup implements ValueComponents {
   public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
   public readonly origin: OrderCell;
-  /** The block that committed the origin and its master: how long the order has been on the book. */
-  public readonly blockNumber: ccc.Num;
 
   /**
    * Creates an instance of OrderGroup.
    * @param master - The master cell associated with the order group.
    * @param order - The order within the group.
    * @param origin - The original order associated with the group.
-   * @param blockNumber - The block that committed the origin and its master.
    */
-  constructor(
-    master: MasterCell,
-    order: OrderCell,
-    origin: OrderCell,
-    blockNumber: ccc.Num,
-  ) {
+  constructor(master: MasterCell, order: OrderCell, origin: OrderCell) {
     this.master = master;
     this.order = order;
     this.origin = origin;
-    this.blockNumber = blockNumber;
   }
 
   /**
@@ -343,9 +351,8 @@ export class OrderGroup implements ValueComponents {
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
-    blockNumber: ccc.Num,
   ): OrderGroup | undefined {
-    const og = new OrderGroup(master, order, origin, blockNumber);
+    const og = new OrderGroup(master, order, origin);
     if (og.isValid()) {
       return og;
     }

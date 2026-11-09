@@ -173,16 +173,15 @@ export class OrderManager implements ScriptDeps {
       scriptSearchMode: "exact",
       withData: true,
     });
-    return cells.flatMap(({ cell }) => {
-      const order = OrderCell.tryFrom(cell);
+    return cells.flatMap(({ cell, blockNumber }) => {
+      const order = OrderCell.tryFrom(cell, blockNumber);
       return order !== undefined && this.isOrder(cell) ? [order] : [];
     });
   }
 
   /**
    * Every master with the block that committed it, which is its mint order's block too:
-   * a master is created beside its mint order and never changes until melted, so this
-   * dates how long the order has been on the book.
+   * a master is created beside its mint order and never changes until melted.
    */
   private async findAllMasters(
     client: ccc.Client,
@@ -207,12 +206,12 @@ export class OrderManager implements ScriptDeps {
     blockNumber: ccc.Num,
     orders: OrderCell[],
   ): Promise<OrderGroup | undefined> {
-    const origin = await this.findOrigin(client, master.cell.outPoint);
+    const origin = await this.findOrigin(client, master.cell.outPoint, blockNumber);
     const order = origin?.resolve(orders);
     if (origin === undefined || order === undefined) {
       return undefined;
     }
-    const group = OrderGroup.tryFrom(master, order, origin, blockNumber);
+    const group = OrderGroup.tryFrom(master, order, origin);
     // A dual-ratio order, valid on chain but placed by nothing in the stack, is left to
     // whoever placed it: neither matched, estimated, shown nor melted here.
     if (group === undefined || group.order.data.info.isDualRatio()) {
@@ -228,6 +227,7 @@ export class OrderManager implements ScriptDeps {
   private async findOrigin(
     client: ccc.Client,
     master: ccc.OutPoint,
+    blockNumber: ccc.Num,
   ): Promise<OrderCell | undefined> {
     const { txHash, index: masterIndex } = master;
     // A cached body is trusted like the scan that found the master: an order is a node's
@@ -250,7 +250,8 @@ export class OrderManager implements ScriptDeps {
         outputData: output.outputData,
         outPoint: { txHash, index },
       });
-      const order = OrderCell.tryFrom(cell);
+      // The mint shares the master's transaction, so the master's block dates it.
+      const order = OrderCell.tryFrom(cell, blockNumber);
       if (
         order === undefined ||
         !this.isOrder(cell) ||

@@ -166,6 +166,7 @@ export function marketOrder({
       },
       outputData,
     }),
+    FRESH_BLOCK,
   );
   const master = new MasterCell(
     ccc.Cell.from({
@@ -178,7 +179,7 @@ export function marketOrder({
       outputData: "0x",
     }),
   );
-  return new OrderGroup(master, order, order, FRESH_BLOCK);
+  return new OrderGroup(master, order, order);
 }
 
 /** A withdrawal request under the owned-owner lock with its owner marker one output later. */

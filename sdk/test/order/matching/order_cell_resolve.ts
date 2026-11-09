@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, script } from "@ickb/testkit";
+import { byte32FromByte, FRESH_BLOCK, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { OrderManager } from "../../../src/order/order.ts";
@@ -40,6 +40,7 @@ describe("OrderManager.mint", () => {
           cellOutput: output.cellOutput,
           outputData: output.outputData,
         }),
+        FRESH_BLOCK,
       ).ckbUnoccupied,
     ).toBe(ccc.fixedPointFrom(123));
     expect(tx.outputs[0]?.capacity).toBeGreaterThan(ccc.fixedPointFrom(123));

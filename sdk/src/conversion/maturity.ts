@@ -77,13 +77,13 @@ function ckbToIckbOrderMaturity(
   self: ccc.OutPoint | undefined,
 ): bigint {
   // An equal price counts as ahead: the bot fills ties in an order of its own choosing.
-  const buyersAhead = fillableOrders(system, true, self)
+  const buyersAhead = fillableOrders(system, true)
+    .filter(isOther(self))
     .filter((group) => group.order.data.info.ckbToUdt.compare(info.ckbToUdt) <= 0)
     .reduce((ckb, group) => ckb + group.order.ckbUnoccupied, 0n);
-  const sellers = fillableOrders(system, false, self).reduce(
-    (udt, group) => udt + group.udtValue,
-    0n,
-  );
+  const sellers = fillableOrders(system, false)
+    .filter(isOther(self))
+    .reduce((udt, group) => udt + group.udtValue, 0n);
   const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
   const turns = 1n + ccc.numMax(demand, 0n) / system.depositCapacity;
   return system.tip.timestamp + BOT_TURN_MS * turns;
@@ -91,7 +91,7 @@ function ckbToIckbOrderMaturity(
 
 /**
  * A seller waits for CKB: one deposit's worth of assumed working capital, zeroed when
- * another fillable seller has sat beyond the threshold, plus dated pool supply. Return
+ * a fillable seller, this one included, has sat beyond the threshold, plus dated pool supply. Return
  * the first date covering demand, plus a turn. Insufficient supply falls back to the last
  * date; this can understate an above-par ask's wait for further DAO growth.
  */
@@ -102,8 +102,9 @@ function ickbToCkbOrderMaturity(
   takenDeposits: readonly IckbDepositCell[],
   self: ccc.OutPoint | undefined,
 ): bigint {
-  const sellers = fillableOrders(system, false, self);
-  const sellersAhead = sellers
+  const fillableSellers = fillableOrders(system, false);
+  const sellersAhead = fillableSellers
+    .filter(isOther(self))
     .filter((group) => info.udtToCkb.compare(group.order.data.info.udtToCkb) <= 0)
     .reduce((udt, group) => udt + group.udtValue, 0n);
   // The CKB an order has already received belongs to its earlier fills; what it still
@@ -114,7 +115,8 @@ function ickbToCkbOrderMaturity(
   const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
   const steps = [
     {
-      ckbValue: sellers.some((group) => sits(group, system))
+      // This order counts too: a seller the bot keeps leaving shows the shortage as well.
+      ckbValue: fillableSellers.some((group) => sits(group, system))
         ? 0n
         : system.depositCapacity,
       at: system.tip.timestamp,
@@ -143,25 +145,25 @@ function ickbToCkbOrderMaturity(
   return at + BOT_TURN_MS;
 }
 
-/** The book orders the bot would take whole in the given direction, this one aside. */
-function fillableOrders(
-  system: SystemState,
-  isCkb2Udt: boolean,
-  self: ccc.OutPoint | undefined,
-): OrderGroup[] {
-  return system.orderPool.filter(
-    (group) =>
-      (self === undefined || !group.order.cell.outPoint.eq(self)) &&
-      fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
+/** The book orders the bot would take whole in the given direction. */
+function fillableOrders(system: SystemState, isCkb2Udt: boolean): OrderGroup[] {
+  return system.orderPool.filter((group) =>
+    fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
   );
 }
 
+/** Leaves out the order being dated, when it is already on the book. */
+function isOther(self: ccc.OutPoint | undefined): (group: OrderGroup) => boolean {
+  return (group) => self === undefined || !group.order.cell.outPoint.eq(self);
+}
+
 /**
- * Whether the order has been on the book for more than an eighth of an epoch in blocks,
- * about three ten-minute turns: the bot has seen it and left it. A turn alone left no
- * margin, since an order placed just after a turn waits a turn to be seen, and a failed
- * turn adds the restart delay.
+ * Whether the order has gone unfilled for more than an eighth of an epoch in blocks, about
+ * three ten-minute turns, since it was placed or last filled: the bot has seen it and left
+ * it. A turn alone left no margin, since an order placed just after a turn waits a turn to
+ * be seen, and a failed turn adds the restart delay. Counting from the last fill keeps an
+ * order the bot fills a little every turn from reading as a shortage.
  */
 function sits(group: OrderGroup, { tip }: SystemState): boolean {
-  return tip.number - group.blockNumber > tip.epoch.denominator / 8n;
+  return tip.number - group.order.blockNumber > tip.epoch.denominator / 8n;
 }

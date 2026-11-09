@@ -160,6 +160,36 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     expect(groups).toHaveLength(1);
     expect(fetched).toBe(false);
   });
+
+  it("dates the order by its own cell's block and the origin by its master's", async () => {
+    const { manager, orderScript, ownerLock } = findOrdersFixture();
+    const originMaster = { txHash: byte32FromByte("71"), index: 1n };
+    const { origin, liveOrder } = linkedOriginAndOrder({
+      originMaster,
+      orderScript,
+      liveOrderByte: "72",
+    });
+    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const client = new StubClient({
+      cells: (query): readonly StubCell[] => [
+        query.script_type === "lock"
+          ? { cell: liveOrder.cell, blockNumber: 9n }
+          : { cell: liveMaster, blockNumber: 3n },
+      ],
+      getTransaction: async (): GetTransactionReturn => {
+        await Promise.resolve();
+        return committedTransactionResponse(
+          transactionWithOutputs([origin.cell, liveMaster]),
+        );
+      },
+    });
+
+    const [group] = await manager.findOrders(client);
+
+    // A fill replaces the order cell, so its block is the last fill's.
+    expect(group?.order.blockNumber).toBe(9n);
+    expect(group?.origin.blockNumber).toBe(3n);
+  });
 });
 
 class TransactionResponseCache extends ccc.ClientCacheMemory {

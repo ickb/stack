@@ -63,6 +63,7 @@ class ProjectionOrderGroup extends OrderGroup {
       absProgress: projection.isMatchable
         ? 0n
         : projection.ckbValue + projection.udtValue,
+      blockNumber: projection.blockNumber ?? FRESH_BLOCK,
     });
     super(
       new MasterCell(
@@ -74,7 +75,6 @@ class ProjectionOrderGroup extends OrderGroup {
       ),
       order,
       order,
-      projection.blockNumber ?? FRESH_BLOCK,
     );
     this.projection = projection;
   }
@@ -133,7 +133,7 @@ export function makeOrderGroup(options: {
     },
     outputData: "0x",
   });
-  const order = OrderCell.mustFrom(orderCell);
+  const order = OrderCell.mustFrom(orderCell, FRESH_BLOCK);
   const originCell = ccc.Cell.from({
     outPoint: { txHash: masterOutPoint.txHash, index: 0n },
     cellOutput: orderCell.cellOutput,
@@ -146,10 +146,10 @@ export function makeOrderGroup(options: {
       info: order.data.info,
     }).toBytes(),
   });
-  const origin = OrderCell.mustFrom(originCell);
+  const origin = OrderCell.mustFrom(originCell, FRESH_BLOCK);
 
   return {
-    group: new OrderGroup(new MasterCell(masterCell), order, origin, FRESH_BLOCK),
+    group: new OrderGroup(new MasterCell(masterCell), order, origin),
     orderCell,
     masterCell,
     originCell,

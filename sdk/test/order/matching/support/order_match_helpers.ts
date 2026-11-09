@@ -100,6 +100,7 @@ export function makeUdtToCkbOrder(options?: {
         }),
       }).toBytes(),
     }),
+    FRESH_BLOCK,
   );
 }
 export function resolvedOrderGroups(orders: OrderCell[]): OrderGroup[] {
@@ -137,5 +138,5 @@ export function resolvedOrderGroup(order: OrderCell): OrderGroup {
       outputData: "0x",
     }),
   );
-  return new OrderGroup(master, order, origin, FRESH_BLOCK);
+  return new OrderGroup(master, order, origin);
 }
