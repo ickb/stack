@@ -84,8 +84,7 @@ export interface CompletedTransaction {
  * past it. Counted rather than measured in bytes because a same-lock input costs a fixed
  * 44 bytes (52 with an extra witness slot), so 1,000 inputs stay near 50 KB, far under the
  * node's 512,000-byte limit, and near the one measured point (1,000 inputs: 44 KB, about
- * 180 ms of local completion). A miner paying the bot adds about forty cellbase cells per
- * turn, which this outpaces; a larger backlog takes several transactions.
+ * 180 ms of local completion). A larger backlog takes several transactions.
  */
 export const SWEEP_INPUT_LIMIT = 1000;
 
