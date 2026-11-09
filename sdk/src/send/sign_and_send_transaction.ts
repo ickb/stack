@@ -46,8 +46,7 @@ export class TransactionExpiredError extends Error {
  * fresh tip reaches it. Passing the whole build result keeps that deadline: a built
  * conversion returns all three fields. A node already holding this exact transaction is an
  * acceptance; any other send failure throws `TransactionBroadcastError`, which carries the
- * hash for a send that may never answer. Why each check exists: SDK README, Signing and
- * broadcast.
+ * hash for a send that may never answer. Why each check exists: sdk/docs/signing_and_broadcast.md.
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,

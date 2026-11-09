@@ -1,48 +1,36 @@
 # Pool Maturity Estimates
 
-How the SDK dates an order-based conversion for the interface's "Ready:" line. The estimate models the [bot](../node/docs/policy.md); it is neither a protocol deadline nor a promise that a bot has the inventory to fill the order.
+How the SDK dates an order. The estimate models the [bot](../node/docs/policy.md). It's not a protocol deadline, nor a promise that a bot has what it takes to fill the order. Where the date shows up and what the model leaves out are in [estimate limits](estimate_limits.md).
 
 ## Inputs
 
-`getL1AccountState` samples one tip and reads:
+`getL1AccountState` reads, at the parent of the sampled tip:
 
-- `system.orderPool`: every order past par on the book, the wallet's own included; the bot fills by price, not by owner. A dual-ratio order (both directions priced) is dropped at the scan: nothing in the stack places one, so it is neither matched, estimated, shown nor melted here.
-- `system.poolDeposits`: every iCKB pool deposit with its sampled claim epoch, read here as its real claim date: rolled a cycle when the bot can no longer request it in time (under the bot's twenty-minute floor, `BOT_LOCK_UP`; the bot makes the requests, so its rule dates the supply whatever the caller's own policy). No readiness collapse: a deposit counts on its date, a week out or thirty.
-- Each order cell's `blockNumber`, the block the scan reports for it. A fill replaces the order cell, so it is the last fill's block, or the mint's while unfilled.
+- **`system.orderPool`:** every order past par on the book, the wallet own included, since the bot fills by price, not by owner. The scan drops dual-ratio orders: nothing in the stack places one, so they aren't matched, estimated, shown or melted here.
+- **`system.poolDeposits`:** every iCKB pool deposit, with its sampled claim epoch, read as its real claim date. A claim the bot can no longer request in time rolls a cycle, by the twenty-minute floor of `BOT_LOCK_UP`: the bot makes the requests, so its rule dates the supply, whatever the caller policy is. A deposit counts on its date, a week out or thirty.
+- **`blockNumber` of each order cell:** the block the scan reports for it. A fill replaces the order cell, so it's the last fill, or the mint while unfilled.
 
-The bot's own working capital is not read. Naming one operator's wallet in a published library would turn a key rotation into an SDK release. Moving that address into interface configuration would only relocate the maintenance, so the model below stands in for it.
+The bot working capital isn't read. Naming one operator wallet in a published library would turn a key rotation into an SDK release. Moving that address into interface config would only move the upkeep. So the model below stands in for it.
 
-## The one duration
+## Turns
 
-`BOT_TURN_MS` is ten minutes, the interval at which the bot's loop starts turns, read by the loop from here so the two cannot drift apart; a failed turn adds a ten-minute restart, which the model does not count. It is a modeling interval, not a runtime bound. The sitting-seller threshold below is its own heuristic, unrelated to the bot's twenty-minute lock-up floor (`BOT_LOCK_UP`).
+`BOT_TURN_MS` is ten minutes, the interval at which the bot loop starts turns. The loop reads it from here, so the two can't drift apart. A failed turn adds a ten-minute restart, which the model doesn't count. It's a modeling interval, not a runtime bound.
 
-An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores does not queue ahead of anyone and does not supply anyone.
+An order counts on the book only when the bot would take it whole (`fillsWhole`: past par, over the ten-fee floor). Dust the bot ignores doesn't queue ahead of anyone, nor supply anyone.
 
 ## A seller (iCKB to CKB)
 
-The seller waits for CKB. Supply, in time order:
+A seller waits for CKB. The supply, in time order:
 
-1. Now: one deposit's worth of CKB (the cap at the DAO ratio) as assumed working capital. When a fillable seller, this order included, has gone unfilled for more than an eighth of an epoch of blocks since it was placed or last filled, about three turns, the model treats that as a shortage signal and zeros this term; a single turn left no margin for an order placed just after a turn or for a failed turn's restart, and counting from the last fill keeps an order the bot fills a little every turn from reading as a shortage. It does not measure the bot's balance.
-2. Each pool deposit at its real claim date, earliest first, less the deposits the same plan withdraws directly (they cannot fill its order leg too).
+1. **Now:** one deposit worth of CKB, the cap at the DAO ratio, as assumed working capital. The model zeros it as a shortage signal when a fillable seller, this order included, has gone unfilled for over an eighth of an epoch of blocks since it was placed or last filled, about three turns. One turn left no margin for an order placed just after a turn, or for the restart after a failed one. Counting from the last fill keeps an order the bot fills a little every turn from reading as a shortage. It doesn't measure the bot balance.
+2. **Later:** each pool deposit at its real claim date, earliest first. The deposits the same plan withdraws directly are left out, since they can't fill its order leg too.
 
-Demand is the CKB this order pays out, plus the CKB of every fillable seller priced at or better than it (asking at most its CKB per iCKB; a tie is filled in an order of the bot's choosing, so it counts as ahead), valued at the DAO ratio. When the order is already on the book it is left out of its own queue.
+The demand is the CKB this order pays out, plus the CKB of every fillable seller priced at least as well, valued at the DAO ratio. A tie counts as ahead, since the bot fills ties in an order of its own choosing. An order already on the book is left out of its own queue.
 
-The estimate is the first date whose cumulative supply covers the demand, plus one turn. When sampled supply is insufficient, it uses the last supply date plus one turn. That fallback waits on no DAO growth: the pool always covers an ask at or below par, and an ask above par is never fillable whole, so it is collected rather than dated.
+The date is the first one whose total supply covers the demand, plus one turn. When the sampled supply falls short, it's the last supply date plus one turn. That fallback waits on no DAO growth: the pool always covers an ask at or below par. An ask above par is never fillable whole, so it's collected rather than dated.
 
 ## A buyer (CKB to iCKB)
 
-The buyer model assumes the bot can mint one cap-sized deposit per turn once its unknown inventory is spent. Net CKB demand is this request plus fillable buyers priced at least as well, less the iCKB brought by fillable sellers valued at the DAO ratio. The wait is one turn plus the whole number of deposit caps in positive net demand. This deliberately coarse throughput model does not check the bot's funds or availability.
+A buyer waits for the bot to mint. The model assumes the bot can mint one cap-sized deposit per turn once its unknown inventory is spent.
 
-## The date on screen
-
-Each built conversion carries its own `estimatedMaturity`, counted from the tip: its direct claims and its order leg's estimate, or the tip for a collection, which takes only what is ready. `ConversionTransactionContext.estimatedMaturity` dates what the wallet already has converting: pending withdrawals at their claim dates and pending orders at their estimates. A consumer that tracks conversions apart, as NervDAO's active panel does, shows each date on its own; the stack's interface shows one "Ready:" date, the later of the two.
-
-The [SDK's direct-first completion walk](../README.md#transaction-completion) chooses the plan. The estimate describes that choice; it never ranks plans.
-
-## Accepted limits
-
-- In a thin pool with a sitting seller, removing assumed working capital can move the date to the next claim even if a bot could fill within a turn. This accepts a conservative date rather than maintaining a list of operator balances.
-- A buyer-side distress signal (a fillable buyer sitting for over a turn) is not modelled; add it only when a journal shows buyers sitting.
-- In-flight withdrawal requests are not read as a dated supply grade; the simpler policy was preferred.
-- Under sustained selling the seller's date runs optimistic in three ways, none modelled: wallet plans request surplus deposits up to seven days ahead (`WALLET_LOCK_UP`) while the bot looks one hour ahead, so those deposits never reach the order book; a deposit whose window passes while the bot is down rolls a cycle and the date jumps on the next refresh; and the bot withdraws at most its iCKB beyond the retained 20,000 per claim cluster, so a cluster larger than its float waits a cycle. A model change waits for a mainnet journal showing the gap.
-- The pool is read by direct scans, whose cost grows with the pool. A bot-written snapshot would need an explicit format identity, a writer, a reader, freshness and fallback rules; none exists yet.
+The net CKB demand is this request, plus fillable buyers priced at least as well, less the iCKB fillable sellers bring in, valued at the DAO ratio. The wait is one turn, plus one per whole deposit cap of positive net demand. On purpose, this coarse model doesn't check the bot funds or whether it's running.

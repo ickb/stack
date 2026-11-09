@@ -24,7 +24,7 @@ The custom ESLint rules sit beside their rationale in [`eslint.config.mts`](../e
 
 Those thresholds cover the transaction and actor paths. Applying them to test doubles and presentation glue would require tests of the apparatus whenever its shape changes; those workspaces still have tests, without a universal percentage target. The bot fixture uses the real SDK builders so their constraints remain visible: a no-op builder once hid a prefix walk reusing a transaction that earlier candidates had mutated. See the [test kit](../testkit/README.md) for the shared doubles and oracle.
 
-The [SDK API checks](../sdk/README.md#versioning-and-api-checks) validate reachable exports without freezing the unpublished rewrite's surface in a committed report.
+The [SDK API checks](../sdk/docs/package.md#versioning) validate reachable exports without freezing the unpublished rewrite's surface in a committed report.
 
 ### Mutation testing
 

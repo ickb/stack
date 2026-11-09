@@ -1,5 +1,15 @@
 # SDK Docs
 
-Contracts the SDK's public behaviour follows, beside the package README.
+The details behind the [SDK README](../README.md), one topic per page:
 
-- [Pool maturity estimates](pool_maturity_estimates.md): how the SDK dates an order-based conversion for the interface's "Ready:" line, the model of the bot it rests on, and its accepted limits.
+- [Package shape](package.md): layout, the `ickb` namespace, CCC as a peer, the runtime floor and versioning.
+- [Reading the state](state_read.md): what `getL1AccountState` reads and how it scans.
+- [Node trust](node_trust.md): what the SDK checks in every node answer and what a lie can still cost.
+- [The projection](projection.md): ready or converting, `readyAt`, the collect rule and `ckbConvertible`.
+- [Building a conversion](transaction_completion.md): the plan walk, direct first, ring anchors and DAO limits.
+- [Funding and compaction](funding_and_compaction.md): the sweep, change and header deps.
+- [Signing and broadcast](signing_and_broadcast.md): the checks before a send, the deadline and the hash.
+- [Request header proof](request_header_proof.md): why each withdrawal request is proven in its block.
+- [Confirmation](confirmation.md): `waitTransaction` and what follows a closed window.
+- [Pool maturity estimates](pool_maturity_estimates.md): how an order is dated and the bot model behind it.
+- [Estimate limits](estimate_limits.md): where the dates show up, what the order fee buys and what the model leaves out.

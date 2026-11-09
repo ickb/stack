@@ -9,7 +9,7 @@ import { ccc } from "@ckb-ccc/core";
  *
  * @remarks It wraps the client, not the SDK's readers, because CCC's own DAO valuation
  * (`Cell.getNervosDaoInfo`, in the send) reads headers through the client it is given.
- * Why each check exists: SDK README, Account state.
+ * Why each check exists: sdk/docs/node_trust.md.
  */
 export function verifiedClient(inner: ccc.Client): ccc.Client {
   return new VerifiedClient(inner);

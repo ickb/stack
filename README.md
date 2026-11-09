@@ -16,11 +16,11 @@ Design rationale lives with the feature it explains: a reason comment for a bran
 
 ## Workspace boundaries
 
-`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and one dependency, `@ckb-ccc/core`, which it takes as a [peer](sdk/README.md#layout). It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
+`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and one dependency, `@ckb-ccc/core`, which it takes as a [peer](sdk/docs/package.md#ccc-as-a-peer). It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
 
 `sdk/node/`, `interface/` and `testkit/` are private workspaces. The three Node entrypoints share preflight, configuration and logging under `sdk/node/src/shared/`; they never import each other. Development, tests and bot deployments run from TypeScript source. The SDK's build emits `dist/` for publishing, not for local workspace execution.
 
-The former library boundaries separated concepts rather than independent consumer contracts. One package removes the cost of maintaining several entry points and releases; its internal layering is a convention rather than a second dependency graph. There are no `advanced` or `internal` public entry points. The [SDK layout](sdk/README.md#layout) follows the on-chain scripts and the conversion workflow.
+The former library boundaries separated concepts rather than independent consumer contracts. One package removes the cost of maintaining several entry points and releases; its internal layering is a convention rather than a second dependency graph. There are no `advanced` or `internal` public entry points. The [SDK layout](sdk/docs/package.md#layout) follows the on-chain scripts and the conversion workflow.
 
 ### User locks
 

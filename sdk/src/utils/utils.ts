@@ -11,7 +11,7 @@ export const defaultCellPageSize = 400;
 
 /**
  * A CCC client cache sized for a whole pool: 4096 headers and 4096 transaction bodies,
- * where CCC's defaults keep 128 and 256 (SDK README, Account state). An LRU fills only as
+ * where CCC's defaults keep 128 and 256 (sdk/docs/node_trust.md). An LRU fills only as
  * far as the book and pool need.
  */
 export function clientCache(): ccc.ClientCacheMemory {
@@ -27,8 +27,7 @@ export interface ScannedCell {
 /**
  * Reads every committed cell matching the key with the block the node names for it, page
  * by page through the raw requestor (CCC's typed scan drops the block), bypassing CCC's
- * cell cache. A full page whose cursor does not advance throws. Why: SDK README, Account
- * state.
+ * cell cache. A full page whose cursor does not advance throws. Why: sdk/docs/state_read.md.
  */
 export async function findCells(
   client: ccc.Client,
