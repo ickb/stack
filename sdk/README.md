@@ -85,7 +85,7 @@ CCC caches sufficiently old headers even across `ClientCacheMemory.clear()`. A c
 
 The repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). The [release policy](../README.md#releases) explains this rewrite's starting version.
 
-While the rewritten API has no outside consumers, its shape follows the stack's own rather than a committed API report, and a breaking change takes the next major version. API Extractor still rejects forgotten exports, so every type reachable from the entry point is importable. A frozen report and release tags would add maintenance without a compatibility promise yet; revisit the report when the new surface has published consumers.
+A breaking change takes the next major version, and consumers such as NervDAO pin a version, so a major bump is their signal to check. No API report is committed: API Extractor already rejects forgotten exports, so every type reachable from the entry point is importable, and a generated report would be one more file to regenerate on every surface change without adding a signal the version does not already give.
 
 ## Licensing
 
