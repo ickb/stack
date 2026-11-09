@@ -56,6 +56,7 @@ describe("projectConversionTransactionContext", () => {
       currentSystem,
       account,
       [matchable],
+      script("11"),
     );
 
     // A buy at par fails the bot's whole-fill rule, so it is collected.
@@ -98,6 +99,7 @@ describe("projectConversionTransactionContext", () => {
         withdrawalGroups: [],
       },
       [matchable, refused],
+      script("11"),
     );
 
     // Working capital covers it on an empty book: ten minutes from the tip.

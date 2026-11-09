@@ -52,6 +52,7 @@ export async function readBotState(runtime: Runtime): Promise<BotState> {
     system,
     account,
     [],
+    runtime.primaryLock,
   );
   return {
     ...context,

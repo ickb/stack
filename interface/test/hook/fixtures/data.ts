@@ -64,6 +64,7 @@ export function l1State(): L1StateType {
       ckbBalance: 4n * CKB,
       ickbBalance: 3n * CKB,
       ckbAvailable: 3n * CKB,
+      ckbConvertible: 2n * CKB,
       ickbAvailable: 2n * CKB,
       ckbPending: CKB,
       ickbPending: CKB,
@@ -96,6 +97,7 @@ export function walletConfig(): WalletConfig {
     ...rootConfig("testnet"),
     signer: signerInfo(ccc.SignerType.CKB, "ckt"),
     address: "ckt1test",
+    changeLock: script("11"),
     accountLocks: [script("11")],
   };
 }

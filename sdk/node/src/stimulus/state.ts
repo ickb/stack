@@ -48,6 +48,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     system,
     account,
     userOrders,
+    runtime.primaryLock,
   );
   const ckbBudget = context.ckbAvailable - CKB_RESERVE;
   return {

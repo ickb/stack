@@ -2,8 +2,16 @@ import { ccc } from "@ckb-ccc/core";
 import { DAO_HEADER_INDEX_LIMIT } from "../dao.ts";
 import type { ReceiptCell } from "../logic.ts";
 import { OrderGroup } from "../order/cells.ts";
+import {
+  CELL_INPUT_SERIALIZED_SIZE,
+  CELL_OUTPUT_SERIALIZATION_OVERHEAD,
+  EMPTY_WITNESS_SERIALIZATION_SIZE,
+  OUTPUT_DATA_SERIALIZATION_OVERHEAD,
+} from "../order/fee.ts";
 import { isCollectable } from "../order/fill.ts";
 import { WithdrawalGroup } from "../owned_owner.ts";
+import { IckbUdt } from "../udt.ts";
+import { ceilDiv } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
 import type {
   AccountAvailabilityProjection,
@@ -16,19 +24,25 @@ import type {
  * Builds the conversion planner context from account state and the caller's own orders,
  * split by what it will melt: orders the bot would take whole in neither direction
  * ({@link isCollectable}) are collected and budgeted as account value; the rest stay on
- * the book.
+ * the book. `changeLock`, the signer's recommended lock, owns the outputs a conversion
+ * creates, which `ckbConvertible` sets aside.
  */
 export function projectConversionTransactionContext(
   system: SystemState,
   account: AccountState,
   orders: readonly OrderGroup[],
+  changeLock: ccc.Script,
 ): ConversionTransactionContextProjection {
   const tip = system.tip.timestamp;
   const isReady = (group: OrderGroup): boolean => readyAt(group, system) <= tip;
-  const projection = projectAccountAvailability(account, {
+  const availability = projectAccountAvailability(account, {
     available: orders.filter(isReady),
     pending: orders.filter((group) => !isReady(group)),
   });
+  const projection = {
+    ...availability,
+    ckbConvertible: convertibleCkb(account, availability, changeLock, system),
+  };
   const estimatedMaturity = ccc.numMax(
     tip,
     ...[...projection.pendingWithdrawals, ...projection.pendingOrders].map((position) =>
@@ -49,6 +63,69 @@ export function projectConversionTransactionContext(
       estimatedMaturity,
     },
   };
+}
+
+// An order cell: capacity, the order lock (code hash and hash type, no args), the iCKB
+// xUDT type and the mint's order data. Both deployments size these scripts alike.
+const ORDER_CELL_SIZE = 8 + 33 + 69 + 89;
+// A master's type is the order script.
+const ORDER_SCRIPT_SIZE = 33;
+// The largest witness a supported wallet signs with: JoyID's, under a thousand bytes.
+const LARGEST_WITNESS_SIZE = 1000;
+// The transaction's own fields and every cell dep the SDK or a signer adds, generously.
+const TRANSACTION_FIXED_SIZE = 1000;
+// What the size bound may still miss, at any fee rate a wallet plans at.
+const FEE_MARGIN = ccc.One;
+
+/**
+ * The CKB a CKB-to-iCKB conversion can always spend: the available CKB less the outputs
+ * of the order-only shape, the one with the fewest cells to fund (the order cell, its
+ * master, a plain and an iCKB change, the last always set aside for simplicity), and a fee
+ * bound for that shape over every input the account offers, with the largest supported
+ * witness. Never negative.
+ *
+ * @remarks The order-only shape, not a deposit: an order brings the bot the CKB it is
+ * usually short of, and its 0.01% fee is earned back by DAO interest in under two days
+ * (mainnet's rate was 2.0% a year in November 2026). A deposit shape would need a receipt reserve and a round-down for remainders an
+ * order cannot represent.
+ */
+function convertibleCkb(
+  account: AccountState,
+  {
+    ckbAvailable,
+    availableOrders,
+    readyWithdrawals,
+  }: Omit<AccountAvailabilityProjection, "ckbConvertible">,
+  changeLock: ccc.Script,
+  { feeRate }: SystemState,
+): bigint {
+  const lockSize = changeLock.occupiedSize;
+  const outputSizes = [
+    ORDER_CELL_SIZE,
+    8 + lockSize + ORDER_SCRIPT_SIZE,
+    8 + lockSize,
+    Number(IckbUdt.minimumXudtCellCapacity(changeLock) / ccc.One),
+  ];
+  const occupied = outputSizes.reduce((sum, size) => sum + size, 0);
+  const inputs =
+    account.capacityCells.length +
+    account.nativeUdtCells.length +
+    account.receipts.length +
+    2 * availableOrders.length +
+    2 * readyWithdrawals.length;
+  // Each receipt names its deposit header, each withdrawal its two, the plan its tip.
+  const headerDeps = account.receipts.length + 2 * readyWithdrawals.length + 1;
+  const size =
+    TRANSACTION_FIXED_SIZE +
+    LARGEST_WITNESS_SIZE +
+    inputs * (CELL_INPUT_SERIALIZED_SIZE + EMPTY_WITNESS_SERIALIZATION_SIZE) +
+    occupied +
+    outputSizes.length *
+      (CELL_OUTPUT_SERIALIZATION_OVERHEAD + OUTPUT_DATA_SERIALIZATION_OVERHEAD) +
+    headerDeps * 32;
+  const fee = ceilDiv(BigInt(size) * feeRate, 1000n) + FEE_MARGIN;
+  const convertible = ckbAvailable - BigInt(occupied) * ccc.One - fee;
+  return convertible > 0n ? convertible : 0n;
 }
 
 /**
@@ -80,7 +157,7 @@ export function projectAccountAvailability(
     available: availableOrders,
     pending: pendingOrders,
   }: { available: OrderGroup[]; pending: OrderGroup[] },
-): AccountAvailabilityProjection {
+): Omit<AccountAvailabilityProjection, "ckbConvertible"> {
   const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
     account.withdrawalGroups,
   );

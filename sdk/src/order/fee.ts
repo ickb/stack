@@ -2,13 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import { ceilDiv } from "../utils/utils.ts";
 import type { OrderGroup } from "./cells.ts";
 
-const CELL_INPUT_SERIALIZED_SIZE = 44;
+export const CELL_INPUT_SERIALIZED_SIZE = 44;
 // CellOutput table/script wrappers plus DynVec offset; output data Bytes plus offset.
-const CELL_OUTPUT_SERIALIZATION_OVERHEAD = 60;
-const OUTPUT_DATA_SERIALIZATION_OVERHEAD = 8;
+export const CELL_OUTPUT_SERIALIZATION_OVERHEAD = 60;
+export const OUTPUT_DATA_SERIALIZATION_OVERHEAD = 8;
 // The supported SDK completion prepares a later signer witness, inserting one
 // empty witness-vector entry for each preceding order input.
-const EMPTY_WITNESS_SERIALIZATION_SIZE = 8;
+export const EMPTY_WITNESS_SERIALIZATION_SIZE = 8;
 const PREPARED_PARTIAL_SERIALIZATION_OVERHEAD =
   CELL_INPUT_SERIALIZED_SIZE +
   CELL_OUTPUT_SERIALIZATION_OVERHEAD +

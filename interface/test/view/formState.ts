@@ -82,14 +82,14 @@ describe("formAssets", () => {
       false,
     );
 
-    // Max sets the SDK's bound, collectable orders included; CKB has no Max.
+    // Max sets the SDK's bound, collectable orders included; for CKB, ckbConvertible.
     expect(source).toMatchObject({
       name: "iCKB",
       balance: { available: 0n, locked: 350n * CKB },
       max: 350n * CKB,
     });
     expect(target).toMatchObject({ name: "CKB", balance: { available: 1000n * CKB } });
-    expect(target.max).toBeUndefined();
+    expect(target.max).toBe(1000n * CKB);
   });
 
   it("keeps native iCKB selectable because spending it releases cell capacity", () => {

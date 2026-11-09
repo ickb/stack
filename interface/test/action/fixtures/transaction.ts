@@ -35,6 +35,7 @@ export function walletConfigWith(
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
+    changeLock: script("11"),
     accountLocks: [script("11")],
     sdk: testSdk(overrides.sdk),
   };

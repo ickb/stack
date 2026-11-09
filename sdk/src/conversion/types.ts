@@ -142,6 +142,12 @@ export interface AccountAvailabilityProjection {
   ickbNative: bigint;
   /** `ckbNative` plus the CKB the receipts, ready withdrawals and collectable orders return. */
   ckbAvailable: bigint;
+  /**
+   * The most CKB a CKB-to-iCKB conversion can always take: `ckbAvailable` less the cells
+   * and fee of an order-only conversion, the shape with the fewest cells to fund. A Max
+   * button's amount; never negative.
+   */
+  ckbConvertible: bigint;
   /** `ickbNative` plus the iCKB the receipts and collectable orders return. */
   ickbAvailable: bigint;
   /** CKB pending in withdrawals or orders. */

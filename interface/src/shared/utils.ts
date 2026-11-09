@@ -37,6 +37,9 @@ export interface WalletConfig extends RootConfig {
   /** Recommended address displayed as the wallet identity. */
   address: string;
 
+  /** The recommended address's lock, which owns every output a conversion creates. */
+  changeLock: ccc.Script;
+
   /** Unique account locks scanned as wallet-owned state. */
   accountLocks: ccc.Script[];
 }

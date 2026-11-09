@@ -109,6 +109,7 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     system,
     account,
     userOrders,
+    walletConfig.changeLock,
   );
 
   return {

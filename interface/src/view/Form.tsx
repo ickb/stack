@@ -61,11 +61,13 @@ export default function Form({
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
       {availableDisplay(a)}
-      {/* The name stays centred in its column; its control, "max" under the source iCKB
-          or "faucet" under CKB on testnet, sits just under it. */}
+      {/* The name stays centred in its column; its control, "max", or "faucet" under CKB
+          on testnet while there is no CKB to convert, sits just under it. */}
       <span className="relative text-2xl text-ickb-text normal-case">
         {a.name}
-        {a.name === "iCKB" ? maxButton(a, setText, isFrozen) : faucetLink(chain)}
+        {a.name === "CKB" && (a.max ?? 0n) === 0n
+          ? faucetLink(chain)
+          : maxButton(a, setText, isFrozen)}
       </span>
       {lockedBalanceDisplay(a)}
       <input
@@ -180,7 +182,7 @@ function faucetLink(chain: RootConfig["chain"]): JSX.Element | undefined {
 
 /**
  * The Max control beside the source asset's name: sets the SDK's own bound for it, native
- * plus collectable. Only the source has one, so it appears while converting from iCKB.
+ * plus collectable, and for CKB less the cells and fee of an order-only conversion.
  */
 function maxButton(
   asset: AssetDisplay,

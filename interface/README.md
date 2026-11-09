@@ -39,7 +39,7 @@ Every transaction also collects fulfilled orders, receipts and matured withdrawa
 
 ### Balances
 
-CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. There is therefore no CKB Max; completion reports a shortfall before signing. iCKB Max uses the SDK's bound, including collectable funds.
+CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. CKB Max therefore uses the SDK's `ckbConvertible`, which sets those aside, and iCKB Max uses `ickbAvailable`; both include collectable funds. While there is no CKB to convert, testnet shows the faucet in CKB Max's place.
 
 Balances show two decimals, truncated so a figure never exceeds what the wallet holds; the accessible label keeps the exact value. Full precision made wide screens read like "400,333.11456155 in wallet". Phones compact from 100,000 ("123.45K") to fit a third of the card; the constant `PHONE_COMPACT_FROM` in `src/view/Form.tsx` records the measurement.
 

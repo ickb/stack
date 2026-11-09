@@ -12,7 +12,7 @@ import type { AmountInput } from "../shared/utils.ts";
 export interface AssetDisplay {
   name: "CKB" | "iCKB";
   balance?: { available: bigint; locked: bigint; status: string };
-  /** What the Max control sets: the SDK's own bound, native plus collectable. iCKB only. */
+  /** What the Max control sets: the SDK's own bound for the asset. */
   max?: bigint;
 }
 
@@ -30,7 +30,7 @@ export function formAssets(
             projection.ckbAvailable,
             projection.ckbBalance,
           ),
-          // No CKB Max: change and fees still need capacity beyond the requested amount.
+          max: projection.ckbConvertible,
         };
   const ickb: AssetDisplay =
     projection === undefined

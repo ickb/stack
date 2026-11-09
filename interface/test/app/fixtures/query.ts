@@ -32,6 +32,7 @@ export function walletConfigForState(
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
+    changeLock: lock,
     accountLocks: [lock],
     sdk: stateSdk(state),
   };

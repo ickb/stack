@@ -198,9 +198,9 @@ describe("view components", () => {
       elementProps<{ onClick?: () => void }>(button).onClick?.();
     }
 
-    // Commas in the box never reach the text.
+    // Commas in the box never reach the text; CKB Max set the SDK's convertible CKB.
     elementProps<{ onChange: Change }>(input).onChange(typed("1,234,5", 7));
-    expect(setText.mock.calls).toEqual([[".25abc"], ["12345"]]);
+    expect(setText.mock.calls).toEqual([[".25abc"], ["4"], ["12345"]]);
     expect(setIsCkb2Udt.mock.calls).toEqual([[false]]);
     expect(
       renderToStaticMarkup(
@@ -226,8 +226,9 @@ describe("view components", () => {
     expect(invalidMarkup).not.toContain("text-ellipsis whitespace-nowrap text-base");
     expect(renderToStaticMarkup(element)).toContain("CKB in wallet: 3");
     expect(renderToStaticMarkup(element)).toContain("motion-reduce:animate-none");
-    // Max exists only while converting from iCKB: no CKB Max, none on the target.
-    expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
+    // Max sits under the source alone: the SDK's convertible CKB here, none on the target.
+    expect(renderToStaticMarkup(element)).toContain("Use maximum CKB: 4");
+    expect(renderToStaticMarkup(element)).not.toContain("Use maximum iCKB");
     const fromIckb = Form({
       ...draft,
       isCkb2Udt: false,
@@ -235,9 +236,17 @@ describe("view components", () => {
       chain: "testnet",
     });
     expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
-    // The faucet sits under "CKB" on testnet, wherever CKB is, and nowhere on mainnet.
-    expect(renderToStaticMarkup(element)).toContain("faucet.nervos.org");
+    // The faucet sits under "CKB" on testnet while CKB is the target or has nothing to
+    // convert, and nowhere on mainnet.
+    expect(renderToStaticMarkup(element)).not.toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(fromIckb)).toContain("faucet.nervos.org");
+    const empty = Form({
+      ...draft,
+      projection: { ...balances, ckbConvertible: 0n },
+      chain: "testnet",
+    });
+    expect(renderToStaticMarkup(empty)).toContain("faucet.nervos.org");
+    expect(renderToStaticMarkup(empty)).not.toContain("Use maximum");
     expect(
       renderToStaticMarkup(Form({ ...draft, projection: balances, chain: "mainnet" })),
     ).not.toContain("faucet");

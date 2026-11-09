@@ -14,6 +14,7 @@ export function projection(
 ): AccountAvailabilityProjection {
   return {
     ...amounts,
+    ckbConvertible: amounts.ckbAvailable,
     ckbPending: amounts.ckbBalance - amounts.ckbNative,
     ickbPending: amounts.ickbBalance - amounts.ickbNative,
     readyWithdrawals: [],
