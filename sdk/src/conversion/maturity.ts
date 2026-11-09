@@ -93,7 +93,8 @@ function ckbToIckbOrderMaturity(
  * A seller waits for CKB: one deposit's worth of assumed working capital, zeroed when
  * a fillable seller, this one included, has sat beyond the threshold, plus dated pool supply. Return
  * the first date covering demand, plus a turn. Insufficient supply falls back to the last
- * date; this can understate an above-par ask's wait for further DAO growth.
+ * date, which waits on no DAO growth: the pool always covers an ask at or below par, and
+ * an ask above par is never fillable whole, so it is collected rather than dated.
  */
 function ickbToCkbOrderMaturity(
   info: Info,

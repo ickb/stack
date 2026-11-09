@@ -27,7 +27,7 @@ The seller waits for CKB. Supply, in time order:
 
 Demand is the CKB this order pays out, plus the CKB of every fillable seller priced at or better than it (asking at most its CKB per iCKB; a tie is filled in an order of the bot's choosing, so it counts as ahead), valued at the DAO ratio. When the order is already on the book it is left out of its own queue.
 
-The estimate is the first date whose cumulative supply covers the demand, plus one turn. When sampled supply is insufficient, it uses the last supply date plus one turn. That fallback can understate the wait: an above-par ask can need further DAO growth beyond the modeled claim dates. The function does not forecast when that price becomes profitable.
+The estimate is the first date whose cumulative supply covers the demand, plus one turn. When sampled supply is insufficient, it uses the last supply date plus one turn. That fallback waits on no DAO growth: the pool always covers an ask at or below par, and an ask above par is never fillable whole, so it is collected rather than dated.
 
 ## A buyer (CKB to iCKB)
 
