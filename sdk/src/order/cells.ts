@@ -145,15 +145,6 @@ export class OrderCell implements ValueComponents {
   }
 
   /**
-   * Checks if the order is fulfilled.
-   *
-   * @returns True if the order is fulfilled (not matchable), otherwise false.
-   */
-  public isFulfilled(): boolean {
-    return !this.isMatchable();
-  }
-
-  /**
    * Retrieves the master out point of the order.
    * @returns The master out point associated with the order.
    */

@@ -339,10 +339,8 @@ describe("order cells", () => {
     expect(order.udtValue).toBe(10n);
     expect(order.data.info.isDualRatio()).toBe(false);
     expect(order.isMatchable()).toBe(true);
-    expect(order.isFulfilled()).toBe(false);
     for (const fulfilled of [bought, sold]) {
       expect(fulfilled.isMatchable()).toBe(false);
-      expect(fulfilled.isFulfilled()).toBe(true);
     }
     expect(group.ckbValue).toBe(
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,

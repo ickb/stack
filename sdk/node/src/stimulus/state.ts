@@ -5,7 +5,7 @@ import type {
   SystemState,
 } from "../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { isRefused, isStale } from "../../../src/order/fill.ts";
+import { isCollectable } from "../../../src/order/fill.ts";
 import type { OrderManager } from "../../../src/order/order.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -28,8 +28,8 @@ export interface StimulusState {
   system: SystemState;
   /** Conversion context; its `availableOrders`, the SDK's collectable orders, are melted this turn. */
   context: ConversionTransactionContext;
-  /** Counts on the book before the melt; `stale` should stay zero while the bot runs. */
-  orders: { live: number; fulfilled: number; refused: number; stale: number };
+  /** Counts on the book before the melt: `refused` are live orders this turn collects. */
+  orders: { live: number; fulfilled: number; refused: number };
   budgets: Budgets;
   liquidCkb: bigint;
 }
@@ -44,9 +44,6 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     WALLET_LOCK_UP,
   );
   const live = userOrders.filter((group) => group.order.isMatchable());
-  // The log tells a refused buy from a stale order: a stale one warrants inspection, but
-  // can reflect inventory or price priority rather than a stopped bot.
-  const refused = live.filter((group) => isRefused(group, system));
   const { context, projection } = projectConversionTransactionContext(
     system,
     account,
@@ -59,10 +56,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     orders: {
       live: live.length,
       fulfilled: userOrders.length - live.length,
-      refused: refused.length,
-      stale: live.filter(
-        (group) => !refused.includes(group) && isStale(group, system.tip),
-      ).length,
+      refused: live.filter((group) => isCollectable(group, system)).length,
     },
     budgets: {
       ckb: ckbBudget > 0n ? ckbBudget : 0n,

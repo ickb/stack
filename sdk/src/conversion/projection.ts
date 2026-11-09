@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_HEADER_INDEX_LIMIT } from "../dao.ts";
 import type { OrderGroup } from "../order/cells.ts";
-import { isRefused, isStale } from "../order/fill.ts";
+import { isCollectable } from "../order/fill.ts";
 import type { WithdrawalGroup } from "../owned_owner.ts";
 import { maturity } from "./maturity.ts";
 import type {
@@ -13,18 +13,16 @@ import type {
 
 /**
  * Builds the conversion planner context from account state and the caller's own orders,
- * split by what it will melt: fulfilled orders, buys the bot's whole-fill rule refuses,
- * and orders past the age cutoff are collected and budgeted as account value; the rest
- * stay on the book. DAO growth can make a waiting sell profitable later, so a sell waits
- * for the age cutoff even when the bot would not fill it today.
+ * split by what it will melt: orders the bot would take whole in neither direction
+ * ({@link isCollectable}) are collected and budgeted as account value; the rest stay on
+ * the book.
  */
 export function projectConversionTransactionContext(
   system: SystemState,
   account: AccountState,
   orders: readonly OrderGroup[],
 ): ConversionTransactionContextProjection {
-  const collectable = (group: OrderGroup): boolean =>
-    group.order.isFulfilled() || isRefused(group, system) || isStale(group, system.tip);
+  const collectable = (group: OrderGroup): boolean => isCollectable(group, system);
   const projection = projectAccountAvailability(account, {
     available: orders.filter(collectable),
     pending: orders.filter((group) => !collectable(group)),

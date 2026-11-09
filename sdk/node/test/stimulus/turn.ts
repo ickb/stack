@@ -29,6 +29,7 @@ import {
   PRIMARY_LOCK,
   receipt,
   runtime,
+  systemState,
 } from "./support/fixtures.ts";
 
 vi.mock(
@@ -145,7 +146,7 @@ describe("runStimulusTurn", () => {
     expect(sendMock.mock.calls[0]?.[4]).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
-      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
+      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0 },
       skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
       draw: { kind: "order", direction: "ckb-to-ickb" },
       action: { conversionKind: "collect-only" },
@@ -215,7 +216,7 @@ describe("runStimulusTurn", () => {
       timestamp: new Date(log.timestamp ?? "").toISOString(),
       identity,
       outcome: "committed",
-      orders: { live: 0, fulfilled: 1, refused: 0, stale: 0 },
+      orders: { live: 0, fulfilled: 1, refused: 0 },
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 3, outputs: 3 },
@@ -270,17 +271,18 @@ describe("runStimulusTurn", () => {
   });
 
   it("falls back to collecting when the drawn action is refused", async () => {
-    const stale = await order("a3", true, undefined, 1n);
+    // A buy at par: the bot gains nothing on it, so it is collectable.
+    const refused = await order("a3", true, systemState().exchangeRatio);
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
     >(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({
         amount: 0n,
-        context: { availableOrders: [stale] },
+        context: { availableOrders: [refused] },
       });
       const tx = ccc.Transaction.default();
-      tx.addInput(stale.order.cell);
+      tx.addInput(refused.order.cell);
       tx.addOutput({ capacity: 2050n * CKB, lock: PRIMARY_LOCK });
       return {
         ok: true,
@@ -293,7 +295,7 @@ describe("runStimulusTurn", () => {
     const log = await turn(
       runtime({
         account: fundedAccount,
-        orders: [stale],
+        orders: [refused],
         sdk: { ...completing(500n * CKB), buildConversionTransaction },
       }),
       { ...orderDraw, amount: 0n },
