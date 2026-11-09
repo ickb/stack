@@ -33,7 +33,9 @@ Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, a
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 
-Every package keeps the same version. A release sets every workspace package's `version` to the new one in one commit, sized by the [release policy](README.md#releases).
+Keep the [SDK changelog](sdk/CHANGELOG.md) current: a commit that changes what an `@ickb/sdk` integrator sees adds its line under Unreleased, with the migration when it breaks something.
+
+Every package keeps the same version. A release sets every workspace package's `version` to the new one in one commit, sized by the [release policy](README.md#releases), and renames the changelog's Unreleased heading to that version.
 
 ## Running units
 
