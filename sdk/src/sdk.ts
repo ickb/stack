@@ -390,7 +390,7 @@ export class IckbSdk {
       ...(plan.order === undefined
         ? {}
         : { orderOccupiedCapacity: this.orderOccupiedCapacity(tx) }),
-      ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
+      broadcastBefore,
     };
   }
 
