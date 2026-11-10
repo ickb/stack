@@ -14,6 +14,8 @@ The date is in unix ms. `0n`, or a time at or before the tip, means now. A consu
 
 One transaction completes at most 256 matured withdrawals (the DAO script indexes deposit headers below that). A matured group past the cap stays pending with its past date. It goes with the next transaction.
 
+One transaction collects at most 128 ready orders, in scan order; the rest stay pending with their past date and go with the next transaction. The deployed order script keeps one B-tree entry per order and runs out of its heap at 330 orders in the worst master out-point order we could construct (383 in sorted order), so 128 keeps a 2.6× margin; each melt also costs about 80k of the 70M cycles a node verifies per transaction (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose master carries a user's lock, so without a cap every rebuild would melt the same over-limit set and the node would refuse it for good. Orders past the cap count as pending, not as available CKB or iCKB.
+
 `context.estimatedMaturity` dates what's already converting, the latest of the pending dates.
 
 ## When an order is collected

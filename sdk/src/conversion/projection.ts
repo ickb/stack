@@ -23,8 +23,9 @@ import type {
 /**
  * Builds the conversion planner context from account state and the caller's own orders,
  * split by what it will melt: orders the bot would take whole in neither direction
- * ({@link isCollectable}) are collected and budgeted as account value; the rest stay on
- * the book. `changeLock`, the signer's recommended lock, owns the outputs a conversion
+ * ({@link isCollectable}) are collected and budgeted as account value, up to
+ * {@link MAX_COLLECTED_ORDERS} a transaction, past which they wait for the next; the rest
+ * stay on the book. `changeLock`, the signer's recommended lock, owns the outputs a conversion
  * creates, which `ckbConvertible` sets aside.
  */
 export function projectConversionTransactionContext(
@@ -34,11 +35,10 @@ export function projectConversionTransactionContext(
   changeLock: ccc.Script,
 ): ConversionTransactionContextProjection {
   const tip = system.tip.timestamp;
-  const isReady = (group: OrderGroup): boolean => readyAt(group, system) <= tip;
-  const availability = projectAccountAvailability(account, {
-    available: orders.filter(isReady),
-    pending: orders.filter((group) => !isReady(group)),
-  });
+  const availability = projectAccountAvailability(
+    account,
+    splitOrders(orders, (group) => readyAt(group, system) <= tip),
+  );
   const projection = {
     ...availability,
     ckbConvertible: convertibleCkb(account, availability, changeLock, system),
@@ -192,6 +192,38 @@ export function projectAccountAvailability(
     availableOrders,
     pendingOrders,
   };
+}
+
+/**
+ * The most orders one transaction collects. The deployed limit_order script keeps one
+ * B-tree entry per order and runs out of heap at 330 orders in the worst master out-point
+ * order we could construct (383 in sorted order; 316 is the B-tree's floor), so 128 keeps
+ * a 2.6x margin; each melt also costs about 80k of the 70M cycles a node verifies per
+ * transaction (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose
+ * master carries a user's lock, so without a cap every rebuild would melt the same
+ * over-limit set and the node would refuse it for good.
+ */
+const MAX_COLLECTED_ORDERS = 128;
+
+/**
+ * `available` is the orders the next transaction collects: the ready ones, in scan order,
+ * up to {@link MAX_COLLECTED_ORDERS}. A ready order past the cap keeps its past `readyAt`
+ * and is collected by the transaction after, as a matured withdrawal past its cap is.
+ */
+function splitOrders(
+  orders: readonly OrderGroup[],
+  isReady: (group: OrderGroup) => boolean,
+): { available: OrderGroup[]; pending: OrderGroup[] } {
+  const available: OrderGroup[] = [];
+  const pending: OrderGroup[] = [];
+  for (const group of orders) {
+    if (isReady(group) && available.length < MAX_COLLECTED_ORDERS) {
+      available.push(group);
+    } else {
+      pending.push(group);
+    }
+  }
+  return { available, pending };
 }
 
 /**

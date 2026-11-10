@@ -3,6 +3,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
+import { IckbSdk } from "../../../src/sdk.ts";
 import {
   makeOrderGroup,
   projectionOrderGroup,
@@ -20,6 +21,45 @@ afterEach(() => {
 });
 
 describe("projectConversionTransactionContext", () => {
+  it("collects at most 128 orders in one transaction, the rest the next", () => {
+    // 383 orders exhaust the deployed order script's heap in one transaction; anyone can
+    // mint groups whose master carries the user's lock, so an uncapped set would stall.
+    const orders = Array.from({ length: 383 }, () =>
+      projectionOrderGroup({
+        ckbValue: 11n,
+        udtValue: 13n,
+        isDualRatio: false,
+        isMatchable: false,
+      }),
+    );
+    const account = {
+      capacityCells: [],
+      nativeUdtCells: [],
+      receipts: [],
+      withdrawalGroups: [],
+    };
+
+    const { projection, context } = projectConversionTransactionContext(
+      system(),
+      account,
+      orders,
+      script("11"),
+    );
+
+    expect(context.availableOrders).toHaveLength(128);
+    expect(projection.pendingOrders).toHaveLength(255);
+    // The scan order stays: the first 128 are collected now.
+    expect(context.availableOrders).toEqual(orders.slice(0, 128));
+    expect(projection.pendingOrders).toEqual(orders.slice(128));
+    // Orders past the cap are pending value, not spendable now.
+    expect(context.ckbAvailable).toBe(11n * 128n);
+    expect(context.ickbAvailable).toBe(13n * 128n);
+    expect(projection.ckbPending).toBe(11n * 255n);
+    // Each melted order spends its order cell and its master.
+    const tx = new IckbSdk().buildBaseTransaction(ccc.Transaction.default(), context);
+    expect(tx.inputs).toHaveLength(2 * 128);
+  });
+
   it("projects conversion context from account state and the orders to collect", () => {
     const nativeCkb = ccc.fixedPointFrom(50);
     const readyWithdrawal = withdrawalValue({

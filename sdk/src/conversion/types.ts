@@ -172,9 +172,12 @@ export interface AccountAvailabilityProjection {
   readyWithdrawals: WithdrawalGroup[];
   /** Withdrawal groups still waiting for DAO maturity or for a header slot in a later turn. */
   pendingWithdrawals: WithdrawalGroup[];
-  /** Order groups available for collection or budgeting as account value. */
+  /**
+   * Order groups the next transaction collects, budgeted as account value: at most the 128
+   * one transaction melts.
+   */
   availableOrders: OrderGroup[];
-  /** Order groups that are owned but unavailable or unresolved. */
+  /** Order groups still on the book, or ready but past the cap and collected in a later turn. */
   pendingOrders: OrderGroup[];
 }
 
