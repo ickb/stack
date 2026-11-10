@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { CompletedTransaction } from "../../../../src/complete.ts";
+import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import {
   DAO,
   ICKB_LOGIC,
@@ -249,11 +249,11 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
-      (async (tx): Promise<CompletedTransaction> => {
+      (async (tx): Promise<CompleteTransactionResult> => {
         await Promise.resolve();
         const completed = ccc.Transaction.from(tx).clone();
         completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
-        return { tx: completed, plannedFee: PLANNED_FEE };
+        return { ok: true, tx: completed, plannedFee: PLANNED_FEE };
       }),
     sendTransaction:
       overrides.sendTransaction ??

@@ -8,6 +8,10 @@ import {
 } from "@ickb/testkit";
 import { expect } from "vitest";
 
+import type {
+  CompletedTransaction,
+  CompleteTransactionResult,
+} from "../../../../src/complete.ts";
 import { DAO, ICKB_LOGIC, ORDER } from "../../../../src/constants.ts";
 import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
@@ -103,6 +107,14 @@ export function fundedSigner(
     signer: new ccc.SignerCkbScriptReadonly(client, [...locks]),
     cells: [...cells],
   };
+}
+
+/** The completed transaction of a completion the test expects to succeed. */
+export function mustComplete(result: CompleteTransactionResult): CompletedTransaction {
+  if (!result.ok) {
+    throw new Error(`Expected a completed transaction, got ${result.reason}`);
+  }
+  return result;
 }
 
 export interface SdkFixture {

@@ -1,9 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  IckbError,
-  type ConversionKind,
-  type ConversionTransactionFailureReason,
-} from "@ickb/sdk";
+import type { ConversionKind } from "@ickb/sdk";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
@@ -87,9 +83,7 @@ describe("buildTransactionPreview", () => {
 
 describe("buildTransactionPreview failure messages", () => {
   it("maps SDK planner failures to interface copy", async () => {
-    const cases: Array<
-      [Exclude<ConversionTransactionFailureReason, "amount-too-small">, string]
-    > = [
+    const cases: Array<["insufficient-ckb" | "insufficient-ickb", string]> = [
       ["insufficient-ckb", "More CKB than you have"],
       ["insufficient-ickb", "More iCKB than you have"],
     ];
@@ -212,21 +206,22 @@ describe("buildTransactionPreview thrown failures", () => {
     ).resolves.toMatchObject({ error: "planner failed" });
   });
 
-  it("names what ran out when completion fails past the planner's checks", async () => {
-    for (const [code, message] of [
-      ["insufficient_capacity", "Not enough spare CKB for the cells and the fee"],
-      ["insufficient_ickb", "More iCKB than you have"],
-    ] as const) {
-      const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: vi
-            .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-            .mockRejectedValue(new IckbError("Insufficient CKB, need 61 more", { code })),
-        },
-      });
-      await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
-      ).resolves.toMatchObject({ error: message });
-    }
+  it("names what ran out when completion falls short past the planner's checks", async () => {
+    const config = walletConfigWith({
+      sdk: {
+        buildConversionTransaction: buildConversionTransactionMock({
+          ok: false,
+          reason: "insufficient-capacity",
+          cause: new ccc.ErrorTransactionInsufficientCapacity(61n),
+        }),
+      },
+    });
+
+    await expect(
+      buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Not enough spare CKB for the cells and the fee",
+    });
   });
 });

@@ -20,13 +20,13 @@ A destination lock chosen by the caller was removed. The change and up to 1,000 
 
 ## Amount zero
 
-An amount of zero builds the collection alone. `hasCollectable(context)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb` and `amount-too-small` with its `minimum`.
+An amount of zero builds the collection alone. `hasCollectable(context)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb`, `amount-too-small` with its `minimum`, and from completion `insufficient-capacity` with CCC's capacity error as its `cause`.
 
 ## The plan walk
 
 The SDK tries the most direct plan first and returns the first one that completes. Only completion knows if a plan is affordable: markers, remainder orders, change and fees all count. Dropping one withdrawal can add a remainder order that costs more than the marker it saved, so a binary search or a count bound in policy would be wrong.
 
-Typed fundability failures move the walk on. Transport, scan, signer and malformed-transaction failures stop it. When every candidate fails, the last fundability failure is thrown.
+Completion returns its failures as values: too few iCKB, too little CKB for the cells and the fee, or more outputs than the DAO script accepts. Each moves the walk on; whatever throws (transport, scan, signer, a malformed transaction) stops it. When every candidate fails, the build returns the last failure, a shortfall the caller shows. A last failure at the DAO output limit throws instead: the walk's last plans have at most four outputs, so reaching it is a defect.
 
 ## Direct first
 

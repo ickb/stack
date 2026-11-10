@@ -59,7 +59,7 @@ export interface ConversionTransactionOptions {
  * Reason a conversion transaction could not be built without throwing.
  */
 export type ConversionTransactionFailureReason =
-  "insufficient-ckb" | "insufficient-ickb" | "amount-too-small";
+  "insufficient-ckb" | "insufficient-ickb" | "insufficient-capacity" | "amount-too-small";
 
 /** Composition category selected for a built conversion. */
 export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";
@@ -104,8 +104,21 @@ export type ConversionTransactionResult =
     }
   | {
       ok: false;
-      /** Machine-readable failure reason. */
-      reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">;
+      /**
+       * Completion could not fund the cells and the fee from the given liquid cells, for the
+       * last and smallest plan too.
+       */
+      reason: "insufficient-capacity";
+      /** CCC's capacity error from the fee completion. */
+      cause: unknown;
+    }
+  | {
+      ok: false;
+      /**
+       * The amount exceeds the balance, or, for `insufficient-ickb`, completion found the
+       * given iCKB cells short of what the outputs need.
+       */
+      reason: "insufficient-ckb" | "insufficient-ickb";
     };
 
 /**

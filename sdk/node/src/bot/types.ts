@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { CompletedTransaction } from "../../../src/complete.ts";
+import type { CompleteTransactionResult } from "../../../src/complete.ts";
 import type { ConversionTransactionContext } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
@@ -31,7 +31,7 @@ export interface Runtime {
   completeTransaction: (
     tx: ccc.TransactionLike,
     state: Pick<BotState, "system" | "receipts" | "cells">,
-  ) => Promise<CompletedTransaction>;
+  ) => Promise<CompleteTransactionResult>;
 
   /** Signs and sends a build result through the initialization-owned signer. */
   sendTransaction: (

@@ -1,15 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DAO } from "../../src/constants.ts";
 import {
-  assertDaoOutputLimit,
   assertFresh,
   BOT_LOCK_UP,
   broadcastDeadline,
   DAO_DEPOSIT_DATA,
   DAO_OUTPUT_LIMIT,
-  DaoOutputLimitError,
   depositMaturity,
+  exceedsDaoOutputLimit,
   isDaoDeposit,
   isDaoWithdrawalRequest,
   tipMaxAgeMs,
@@ -24,10 +24,8 @@ function transactionWithPlainOutputs(count: number): ccc.Transaction {
   return tx;
 }
 
-describe("assertDaoOutputLimit", () => {
-  const daoScript = script("11");
-
-  it("accepts oversized transactions with fully resolved non-DAO inputs", () => {
+describe("exceedsDaoOutputLimit", () => {
+  it("allows oversized transactions with fully resolved non-DAO inputs", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
     tx.addInput(
       ccc.Cell.from({
@@ -37,32 +35,24 @@ describe("assertDaoOutputLimit", () => {
       }),
     );
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
   });
 
-  it("accepts transactions at the limit even when inputs are unresolved", () => {
+  it("allows transactions at the limit even when inputs are unresolved", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT);
     tx.addInput({ previousOutput: { txHash: byte32FromByte("22"), index: 0n } });
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
   });
 
-  it("throws a typed output-limit error past the limit for a DAO output", () => {
+  it("flags one output past the limit for a DAO output", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT - 1);
-    tx.addOutput({ capacity: 1n, lock: script("99"), type: daoScript }, "0x");
+    tx.addOutput({ capacity: 1n, lock: script("99"), type: DAO }, "0x");
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
 
     tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow(DaoOutputLimitError);
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 
   it("checks resolved DAO inputs without a client lookup", () => {
@@ -70,23 +60,19 @@ describe("assertDaoOutputLimit", () => {
     tx.addInput(
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
-        cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
+        cellOutput: { capacity: 1n, lock: script("99"), type: DAO },
         outputData: DAO_DEPOSIT_DATA,
       }),
     );
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow(DaoOutputLimitError);
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 
-  it("refuses an oversized transaction whose input it cannot resolve", () => {
+  it("flags an oversized transaction whose input it cannot resolve", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
     tx.addInput({ previousOutput: { txHash: byte32FromByte("24"), index: 0n } });
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow("NervosDAO transaction has 65 output cells, exceeding the limit of 64");
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 });
 

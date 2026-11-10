@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { completeTransaction, isFundabilityFailure } from "../../../src/complete.ts";
+import { completeTransaction, type CompletionFailure } from "../../../src/complete.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
@@ -40,7 +40,7 @@ type Skip =
   | { reason: "nothing-to-spend" }
   | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
-  | { reason: "unfundable"; error: unknown }
+  | { reason: "unfundable"; failure: CompletionFailure }
   | { reason: "conversion-not-buildable"; conversion: string };
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
@@ -163,19 +163,21 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
   const tx = mint(base, runtime.primaryLock, info, amounts);
-  try {
-    return {
-      ...(await completeTransaction(tx, {
-        signer: runtime.signer,
-        system: state.system,
-        receipts: state.context.receipts,
-        cells: state.context.cells,
-      })),
-      action: { order: { outputs: [orderOutput, orderOutput + 1] } },
-    };
-  } catch (error) {
-    return unfundableOrThrow(error);
+  const done = await completeTransaction(tx, {
+    signer: runtime.signer,
+    system: state.system,
+    receipts: state.context.receipts,
+    cells: state.context.cells,
+  });
+  // A draw the account cannot fund or fit in one transaction is a skip, as it is for the bot.
+  if (!done.ok) {
+    return { skip: { reason: "unfundable", failure: done } };
   }
+  return {
+    tx: done.tx,
+    plannedFee: done.plannedFee,
+    action: { order: { outputs: [orderOutput, orderOutput + 1] } },
+  };
 }
 
 async function buildConversion(
@@ -184,35 +186,22 @@ async function buildConversion(
   direction: Draw["direction"],
   amount: bigint,
 ): Promise<Built> {
-  try {
-    const result = await runtime.sdk.buildConversionTransaction({
-      direction,
-      amount,
-      signer: runtime.signer,
-      context: state.context,
-    });
-    return result.ok
-      ? {
-          tx: result.tx,
-          plannedFee: result.plannedFee,
-          action: { conversionKind: result.conversionKind },
-          ...(result.broadcastBefore === undefined
-            ? {}
-            : { broadcastBefore: result.broadcastBefore }),
-        }
-      : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
-  } catch (error) {
-    return unfundableOrThrow(error);
-  }
-}
-
-// The SDK's own test of what completion steps past, so a draw the account cannot fund or
-// fit in one transaction is a skip, as it would be for the bot.
-function unfundableOrThrow(error: unknown): Built {
-  if (isFundabilityFailure(error)) {
-    return { skip: { reason: "unfundable", error } };
-  }
-  throw error;
+  const result = await runtime.sdk.buildConversionTransaction({
+    direction,
+    amount,
+    signer: runtime.signer,
+    context: state.context,
+  });
+  return result.ok
+    ? {
+        tx: result.tx,
+        plannedFee: result.plannedFee,
+        action: { conversionKind: result.conversionKind },
+        ...(result.broadcastBefore === undefined
+          ? {}
+          : { broadcastBefore: result.broadcastBefore }),
+      }
+    : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
 }
 
 async function send(

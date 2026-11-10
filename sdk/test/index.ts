@@ -6,7 +6,6 @@ describe("sdk package barrel", () => {
     for (const name of [
       "DEFAULT_ORDER_FEE",
       "DEFAULT_ORDER_FEE_BASE",
-      "IckbError",
       "hasCollectable",
       "IckbSdk",
       "Ratio",
@@ -25,6 +24,7 @@ describe("sdk package barrel", () => {
       "findOrders",
       "completeFirstFundable",
       "quoteOrder",
+      "IckbError",
       "OrderConversionRepresentabilityError",
       "estimateConversionOrder",
     ]) {

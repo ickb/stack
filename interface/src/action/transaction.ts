@@ -1,11 +1,9 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   hasCollectable,
-  IckbError,
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
-  type IckbErrorCode,
 } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 
@@ -18,15 +16,11 @@ const conversionFailureMessages: Record<
 > = {
   "insufficient-ckb": "More CKB than you have",
   "insufficient-ickb": "More iCKB than you have",
-};
-
-// Completion fails past the SDK's pre-check when the change cells, an order's master cell or
-// the fee do not fit: the amount was within the balance, so the message names what ran out.
-// It never says to lower the amount: at the displayed minimum there is nothing to lower, an
-// iCKB-to-CKB order's cells cost the same at any amount.
-const completionFailureMessages: Record<IckbErrorCode, string> = {
-  insufficient_capacity: "Not enough spare CKB for the cells and the fee",
-  insufficient_ickb: conversionFailureMessages["insufficient-ickb"],
+  // Completion fails past the SDK's pre-check when the change cells, an order's master cell
+  // or the fee do not fit: the amount was within the balance, so the message names what ran
+  // out. It never says to lower the amount: at the displayed minimum there is nothing to
+  // lower, an iCKB-to-CKB order's cells cost the same at any amount.
+  "insufficient-capacity": "Not enough spare CKB for the cells and the fee",
 };
 
 /**
@@ -71,11 +65,7 @@ export async function buildTransactionPreview(
         : { broadcastBefore: result.broadcastBefore }),
     });
   } catch (error) {
-    return txInfoWithError(
-      error instanceof IckbError
-        ? completionFailureMessages[error.code]
-        : errorMessageOf(error),
-    );
+    return txInfoWithError(errorMessageOf(error));
   }
 }
 

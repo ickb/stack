@@ -12,7 +12,7 @@ export function passthroughCompletion(actual: typeof Complete): typeof Complete 
     ...actual,
     completeTransaction: vi.fn<typeof actual.completeTransaction>(async (txLike) => {
       await Promise.resolve();
-      return { tx: ccc.Transaction.from(txLike), plannedFee: 0n };
+      return { ok: true, tx: ccc.Transaction.from(txLike), plannedFee: 0n };
     }),
   };
 }

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbError } from "../../../../src/complete.ts";
+import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import { DAO, ICKB_LOGIC } from "../../../../src/constants.ts";
 import { receiptPhase2Capacity } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
@@ -94,17 +94,24 @@ describe("buildTransaction deposit", () => {
     // Sixty epochs out: another ring segment.
     const whale = readyDeposit("73", 31n * ICKB_DEPOSIT_CAP, 60n * 240n);
     const primaryLock = botRuntime().primaryLock;
-    const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      const isDeposit = (output: ccc.CellOutput): boolean =>
-        output.type?.eq(DAO) === true && output.capacity === ccc.fixedPointFrom(100_000);
-      if (tx.outputs.some(isDeposit)) {
-        throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
-      }
-      tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
-      return { tx, plannedFee: PLANNED_FEE };
-    });
+    const completeTransaction = vi.fn(
+      async (txLike: ccc.TransactionLike): Promise<CompleteTransactionResult> => {
+        await Promise.resolve();
+        const tx = ccc.Transaction.from(txLike).clone();
+        const isDeposit = (output: ccc.CellOutput): boolean =>
+          output.type?.eq(DAO) === true &&
+          output.capacity === ccc.fixedPointFrom(100_000);
+        if (tx.outputs.some(isDeposit)) {
+          return {
+            ok: false,
+            reason: "insufficient-capacity",
+            cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+          };
+        }
+        tx.addOutput({ capacity: ccc.fixedPointFrom(2000), lock: primaryLock }, "0x");
+        return { ok: true, tx, plannedFee: PLANNED_FEE };
+      },
+    );
     const runtime = botRuntime({ completeTransaction });
 
     const result = await buildTransaction(

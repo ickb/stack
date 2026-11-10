@@ -3,8 +3,7 @@ import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   completeTransaction,
-  IckbError,
-  type CompletedTransaction,
+  type CompleteTransactionResult,
 } from "../../../src/complete.ts";
 import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
@@ -56,6 +55,11 @@ vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
 const completeMock = vi.mocked(completeTransaction);
+const SHORTFALL = {
+  ok: false,
+  reason: "insufficient-capacity",
+  cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+} as const;
 const TX_HASH = byte32FromByte("46");
 const DEADLINE = { epoch: ccc.Epoch.from([5n, 0n, 1n]), tipMaxAgeMs: 1_800_000 };
 const identity: StimulusIdentity = {
@@ -123,12 +127,12 @@ function sentOrder(call = 0): OrderCell {
 
 /** Completion from here on spends the funded cell and returns `change` CKB to the account. */
 function completing(change: bigint): void {
-  completeMock.mockImplementation(async (txLike): Promise<CompletedTransaction> => {
+  completeMock.mockImplementation(async (txLike): Promise<CompleteTransactionResult> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();
     tx.addInput(plainCell(FUNDED_CKB, "b1"));
     tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
-    return { tx, plannedFee: PLANNED_FEE };
+    return { ok: true, tx, plannedFee: PLANNED_FEE };
   });
 }
 
@@ -338,9 +342,7 @@ describe("runStimulusTurn", () => {
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
     const build = vi.spyOn(target.sdk, "buildConversionTransaction");
-    completeMock.mockRejectedValue(
-      new IckbError("no cells", { code: "insufficient_capacity" }),
-    );
+    completeMock.mockResolvedValue(SHORTFALL);
 
     const log = await turn(target, {
       kind: "conversion",
@@ -357,7 +359,10 @@ describe("runStimulusTurn", () => {
       outcome: "skipped",
       draw: { kind: "conversion", direction: "ickb-to-ckb" },
       skip: { reason: "conversion-not-buildable" },
-      collectSkip: { reason: "unfundable" },
+      collectSkip: {
+        reason: "conversion-not-buildable",
+        conversion: "insufficient-capacity",
+      },
     });
   });
 
@@ -374,9 +379,7 @@ describe("runStimulusTurn", () => {
   });
 
   it("skips what the completer cannot fund, from either builder", async () => {
-    completeMock.mockRejectedValue(
-      new IckbError("short", { code: "insufficient_capacity" }),
-    );
+    completeMock.mockResolvedValue(SHORTFALL);
     const orderLog = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     const conversionLog = await turn(
@@ -385,7 +388,7 @@ describe("runStimulusTurn", () => {
         sdk: {
           buildConversionTransaction: async () => {
             await Promise.resolve();
-            throw new ccc.ErrorTransactionInsufficientCapacity(1n);
+            return SHORTFALL;
           },
         },
       }),
@@ -396,15 +399,13 @@ describe("runStimulusTurn", () => {
       outcome: "skipped",
       skip: {
         reason: "unfundable",
-        error: { name: "IckbError", code: "insufficient_capacity" },
+        failure: { ok: false, reason: "insufficient-capacity", cause: { amount: "1" } },
       },
     });
+    // The SDK's build returns the shortfall as its value, a conversion it cannot build.
     expect(conversionLog).toMatchObject({
       outcome: "skipped",
-      skip: {
-        reason: "unfundable",
-        error: { amount: "1", isForChange: false },
-      },
+      skip: { reason: "conversion-not-buildable", conversion: "insufficient-capacity" },
     });
   });
 

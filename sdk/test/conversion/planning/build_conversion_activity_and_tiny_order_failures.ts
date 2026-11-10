@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { completeTransaction } from "../../../src/complete.ts";
 import {
   baseTip,
   conversionContext,
@@ -136,6 +137,25 @@ describe("IckbSdk.buildConversionTransaction", () => {
       placeholderWithdrawal.owned.cell.outPoint.toHex(),
       placeholderWithdrawal.owner.cell.outPoint.toHex(),
     ]);
+  });
+
+  it("returns a collection's shortfall as the build's value", async () => {
+    const { sdk } = testSdk();
+    const cause = new ccc.ErrorTransactionInsufficientCapacity(1n);
+    vi.mocked(completeTransaction).mockResolvedValueOnce({
+      ok: false,
+      reason: "insufficient-capacity",
+      cause,
+    });
+
+    await expect(
+      sdk.buildConversionTransaction({
+        direction: CKB_TO_ICKB,
+        amount: 0n,
+        signer: stubSigner,
+        context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
+      }),
+    ).resolves.toEqual({ ok: false, reason: "insufficient-capacity", cause });
   });
 
   it("refuses amount zero without anything to collect", async () => {

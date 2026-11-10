@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { completeFirstFundable, isFundabilityFailure } from "../../../src/complete.ts";
+import { completeFirstFundable } from "../../../src/complete.ts";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
@@ -81,20 +81,15 @@ export async function buildTransaction(
   }
 
   let attempts = 0;
-  let completion: Awaited<ReturnType<typeof completeFirstFundable<Core>>>;
-  try {
-    completion = await completeFirstFundable(
-      cores,
-      (core) => {
-        attempts += 1;
-        return buildCore(runtime, state, matched, core);
-      },
-      async (tx) => runtime.completeTransaction(tx, state),
-    );
-  } catch (error) {
-    if (!isFundabilityFailure(error)) {
-      throw error;
-    }
+  const completion = await completeFirstFundable(
+    cores,
+    (core) => {
+      attempts += 1;
+      return buildCore(runtime, state, matched, core);
+    },
+    async (tx) => runtime.completeTransaction(tx, state),
+  );
+  if (!completion.ok) {
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx, plannedFee } = completion;

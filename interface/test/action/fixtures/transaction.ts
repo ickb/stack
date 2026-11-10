@@ -4,7 +4,6 @@ import {
   Ratio,
   WALLET_LOCK_UP,
   type ConversionTransactionContext,
-  type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
 } from "@ickb/sdk";
 
@@ -60,9 +59,7 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
   };
 }
 
-export function failedPlan(
-  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-): FailedPlan {
+export function failedPlan(reason: "insufficient-ckb" | "insufficient-ickb"): FailedPlan {
   return { ok: false, reason };
 }
 

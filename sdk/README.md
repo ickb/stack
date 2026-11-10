@@ -149,7 +149,7 @@ try {
 }
 ```
 
-An `ickb.IckbError` from the build means the account can't fund it: its `code` is `insufficient_capacity` or `insufficient_ickb`.
+A build the account can't fund is a value too: `insufficient-capacity`, with CCC's capacity error as `cause`, when the CKB for the cells and the fee runs out, and `insufficient-ickb` when the iCKB cells fall short.
 
 These examples live in [`test/readme_examples.ts`](test/readme_examples.ts), which the gate typechecks and runs.
 

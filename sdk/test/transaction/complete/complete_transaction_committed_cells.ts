@@ -3,9 +3,9 @@ import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { completeTransaction, SWEEP_INPUT_LIMIT } from "../../../src/complete.ts";
 import { CHAINS, DAO, ICKB_LOGIC, ICKB_UDT } from "../../../src/constants.ts";
-import { DaoOutputLimitError } from "../../../src/dao.ts";
 import {
   fundedSigner,
+  mustComplete,
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
@@ -30,12 +30,14 @@ function registerFundingTests(): void {
     tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock }, "0x");
     const feeRate = 1_000n;
 
-    const { tx: completed, plannedFee } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate }),
-      receipts: [],
-      cells: [source],
-    });
+    const { tx: completed, plannedFee } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate }),
+        receipts: [],
+        cells: [source],
+      }),
+    );
 
     expect(completed.inputs).toHaveLength(1);
     expect(completed.inputs[0]?.previousOutput.eq(source.outPoint)).toBe(true);
@@ -60,12 +62,14 @@ function registerFundingTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock: recommended }, "0x");
 
-    const { tx: completed } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells,
-    });
+    const { tx: completed } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells,
+      }),
+    );
 
     expect(completed.inputs).toHaveLength(2);
     expect(
@@ -82,12 +86,14 @@ function registerFundingTests(): void {
     tx.addInput(existing);
     tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock }, "0x");
 
-    const { tx: completed } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells: [existing, additional],
-    });
+    const { tx: completed } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells: [existing, additional],
+      }),
+    );
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
       existing.outPoint.toHex(),
@@ -124,12 +130,14 @@ function registerSweepTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
 
-    const { tx: completed } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells: [small, udt, large],
-    });
+    const { tx: completed } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells: [small, udt, large],
+      }),
+    );
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
       udt.outPoint.toHex(),
@@ -149,12 +157,14 @@ function registerSweepTests(): void {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(100 * SWEEP_INPUT_LIMIT), lock }, "0x");
 
-    const { tx: completed } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells,
-    });
+    const { tx: completed } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells,
+      }),
+    );
 
     expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
   });
@@ -168,12 +178,14 @@ function registerSweepTests(): void {
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
     const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
 
-    const { tx } = await completeTransaction(ccc.Transaction.default(), {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells: [...dust, funding, ...ickb],
-    });
+    const { tx } = mustComplete(
+      await completeTransaction(ccc.Transaction.default(), {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells: [...dust, funding, ...ickb],
+      }),
+    );
 
     const inputs = tx.inputs.map((input) => input.previousOutput.toHex());
     expect(inputs.slice(0, 4)).toEqual(
@@ -199,12 +211,14 @@ function registerSweepTests(): void {
         capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
       ];
 
-      const { tx: completed } = await completeTransaction(tx, {
-        signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells,
-      });
+      const { tx: completed } = mustComplete(
+        await completeTransaction(tx, {
+          signer,
+          system: system({ feeRate: 1_000n }),
+          receipts: [],
+          cells,
+        }),
+      );
 
       // Funding at or past the limit; neither sweep adds a cell beyond it.
       expect(completed.inputs).toHaveLength(required);
@@ -230,12 +244,14 @@ function registerIckbTests(): void {
       ccc.numLeToBytes(100n, 16),
     );
 
-    const { tx: completed } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate: 1_000n }),
-      receipts: [],
-      cells,
-    });
+    const { tx: completed } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate: 1_000n }),
+        receipts: [],
+        cells,
+      }),
+    );
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
     expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(110n);
@@ -262,16 +278,12 @@ function registerIckbTests(): void {
         receipts: [],
         cells: [udtCell("96", lock, type, 40n)],
       }),
-    ).rejects.toMatchObject({
-      name: "IckbError",
-      code: "insufficient_ickb",
-      message: "Insufficient iCKB, need 60 more",
-    });
+    ).resolves.toEqual({ ok: false, reason: "insufficient-ickb" });
   });
 }
 
 function registerFailureTests(): void {
-  it("fails typed instead of routing sub-minimum change into a protocol output", async () => {
+  it("returns a shortfall instead of routing sub-minimum change into a protocol output", async () => {
     const { lock } = testSdk();
     const source = capacityCell(ccc.fixedPointFrom(50), lock, "84");
     const { signer } = fundedSigner([source], [lock]);
@@ -286,10 +298,7 @@ function registerFailureTests(): void {
         receipts: [],
         cells: [source],
       }),
-    ).rejects.toMatchObject({
-      name: "IckbError",
-      code: "insufficient_capacity",
-    });
+    ).resolves.toMatchObject({ ok: false, reason: "insufficient-capacity" });
     expect(tx.toHex()).toBe(original);
   });
 
@@ -308,11 +317,11 @@ function registerFailureTests(): void {
         receipts: [],
         cells: [source],
       }),
-    ).rejects.toMatchObject({ code: "insufficient_capacity" });
+    ).resolves.toMatchObject({ ok: false, reason: "insufficient-capacity" });
     expect(tx.toHex()).toBe(original);
   });
 
-  it("rejects DAO output 65 rather than hiding change in an existing output", async () => {
+  it("reports DAO output 65 rather than hiding change in an existing output", async () => {
     const { lock } = testSdk();
     const source = capacityCell(ccc.fixedPointFrom(10_000), lock, "85");
     const { signer } = fundedSigner([source], [lock]);
@@ -330,7 +339,7 @@ function registerFailureTests(): void {
         receipts: [],
         cells: [source],
       }),
-    ).rejects.toBeInstanceOf(DaoOutputLimitError);
+    ).resolves.toEqual({ ok: false, reason: "dao-output-limit" });
     expect(tx.outputs).toHaveLength(64);
   });
 

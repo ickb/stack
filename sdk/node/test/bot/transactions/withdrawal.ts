@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbError, type CompletedTransaction } from "../../../../src/complete.ts";
+import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import { DAO } from "../../../../src/constants.ts";
 import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
 import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
@@ -26,17 +26,21 @@ afterEach(() => {
 
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
-  return async (txLike): Promise<CompletedTransaction> => {
+  return async (txLike): Promise<CompleteTransactionResult> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();
     const requests = tx.outputs.filter((output) => output.type?.eq(DAO) === true);
     if (requests.length > maxRequests) {
-      throw new IckbError("too many markers", { code: "insufficient_capacity" });
+      return {
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+      };
     }
     if (requests.length === 0) {
       tx.addOutput({ capacity: FUNDED_CHANGE, lock: botRuntime().primaryLock }, "0x");
     }
-    return { tx, plannedFee: PLANNED_FEE };
+    return { ok: true, tx, plannedFee: PLANNED_FEE };
   };
 }
 

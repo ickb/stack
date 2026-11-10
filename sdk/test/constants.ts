@@ -10,6 +10,7 @@ import {
   ORDER,
   OWNED_OWNER,
 } from "../src/constants.ts";
+import { mustComplete } from "./conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
   headerLike as hashedHeader,
   system,
@@ -34,12 +35,14 @@ async function completeOn(
     0,
     false,
   ]);
-  const { tx } = await completeTransaction(ccc.Transaction.default(), {
-    signer,
-    system: system(),
-    receipts: [],
-    cells: [],
-  });
+  const { tx } = mustComplete(
+    await completeTransaction(ccc.Transaction.default(), {
+      signer,
+      system: system(),
+      receipts: [],
+      cells: [],
+    }),
+  );
   return tx;
 }
 

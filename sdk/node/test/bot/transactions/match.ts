@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { completeTransaction, IckbError } from "../../../../src/complete.ts";
+import { completeTransaction } from "../../../../src/complete.ts";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
 import { addMatch } from "../../../../src/order/order.ts";
 
@@ -173,7 +173,7 @@ describe("buildTransaction matching", () => {
     );
   });
 
-  it("propagates completion failures that are not about fundability", async () => {
+  it("propagates what the completion throws", async () => {
     const runtime = botRuntime({
       completeTransaction: async () => {
         await Promise.resolve();
@@ -268,7 +268,11 @@ describe("buildTransaction matching", () => {
     const unfunded = botRuntime({
       completeTransaction: async () => {
         await Promise.resolve();
-        throw new IckbError("no CKB for the fee", { code: "insufficient_capacity" });
+        return {
+          ok: false,
+          reason: "insufficient-capacity",
+          cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+        };
       },
     });
     await expect(buildTransaction(unfunded, state)).resolves.toMatchObject({

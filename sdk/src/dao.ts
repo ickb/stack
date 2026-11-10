@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { DAO } from "./constants.ts";
 
 /**
  * Maximum outputs accepted by deployed dao.c, not a general CKB consensus cap.
@@ -15,44 +16,20 @@ export const DAO_OUTPUT_LIMIT = 64;
 export const DAO_HEADER_INDEX_LIMIT = 256;
 
 /**
- * Error thrown when a transaction exceeds the deployed DAO script's output limit.
+ * Whether a transaction using the DAO script has more outputs than the deployed script
+ * accepts. An oversized transaction with an unresolved input counts too: whether it uses the
+ * DAO cannot be known, and the completion walk steps a plan down either way.
  */
-export class DaoOutputLimitError extends Error {
-  /**
-   * Creates an output-limit error for a transaction with too many outputs.
-   */
-  constructor(outputCount: number, options?: ErrorOptions) {
-    super(
-      `NervosDAO transaction has ${String(outputCount)} output cells, exceeding the limit of ${String(DAO_OUTPUT_LIMIT)}`,
-      options,
-    );
-    this.name = "DaoOutputLimitError";
-  }
-}
-
-/**
- * Throws when a transaction using the DAO script exceeds the Nervos DAO output limit. An
- * oversized transaction with an unresolved input is refused too: whether it uses the DAO
- * cannot be known, and the completion walk steps a plan down on this error either way.
- */
-export function assertDaoOutputLimit(
-  txLike: ccc.TransactionLike,
-  daoScriptLike: ccc.ScriptLike,
-): void {
+export function exceedsDaoOutputLimit(txLike: ccc.TransactionLike): boolean {
   const tx = ccc.Transaction.from(txLike);
-  if (tx.outputs.length <= DAO_OUTPUT_LIMIT) {
-    return;
-  }
-  const daoScript = ccc.Script.from(daoScriptLike);
-  if (
-    tx.inputs.some(
+  return (
+    tx.outputs.length > DAO_OUTPUT_LIMIT &&
+    (tx.inputs.some(
       (input) =>
-        input.cellOutput === undefined || input.cellOutput.type?.eq(daoScript) === true,
+        input.cellOutput === undefined || input.cellOutput.type?.eq(DAO) === true,
     ) ||
-    tx.outputs.some((output) => output.type?.eq(daoScript) === true)
-  ) {
-    throw new DaoOutputLimitError(tx.outputs.length);
-  }
+      tx.outputs.some((output) => output.type?.eq(DAO) === true))
+  );
 }
 
 /** The canonical DAO deposit data payload: a zero Uint64, eight zero bytes. */

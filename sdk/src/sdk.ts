@@ -2,7 +2,8 @@ import { ccc } from "@ckb-ccc/core";
 import {
   completeFirstFundable,
   completeTransaction,
-  type CompletedTransaction,
+  type CompleteTransactionResult,
+  type CompletionFailure,
 } from "./complete.ts";
 import { ORDER } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
@@ -13,7 +14,6 @@ import {
 import type {
   AccountState,
   ConversionTransactionContext,
-  ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
   SystemState,
@@ -172,7 +172,8 @@ export class IckbSdk {
    * their rebuilt remainder order) are completed most direct first and the first fundable one
    * wins, so a wallet short of CKB degrades to fewer direct actions plus a larger standing
    * order rather than failing. Failure results are
-   * expected planning outcomes; when no plan can be funded the last completion error throws.
+   * expected planning outcomes; when no plan can be funded the last shortfall is the result,
+   * `insufficient-capacity` or `insufficient-ickb`.
    * Misuse throws: a negative amount (`RangeError`), a direction that is neither of the two
    * (`TypeError`), and an amount of zero with nothing to collect, which
    * {@link hasCollectable} tells a caller beforehand.
@@ -215,10 +216,12 @@ export class IckbSdk {
       throw new Error("Nothing to collect");
     }
     const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
-    const completed = await this.completeConversion(tx, options);
+    const done = await this.completeConversion(tx, options);
+    if (!done.ok) {
+      return buildFailure(done);
+    }
     return {
-      ok: true,
-      ...completed,
+      ...done,
       // A collection takes only what is ready: it is done at the tip.
       estimatedMaturity: context.system.tip.timestamp,
       conversionKind: "collect-only",
@@ -238,11 +241,7 @@ export class IckbSdk {
         minimum: minimumOrderAmount(true, context.system),
       };
     }
-    const {
-      candidate: plan,
-      tx,
-      plannedFee,
-    } = await completeFirstFundable(
+    const done = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
@@ -266,6 +265,10 @@ export class IckbSdk {
       },
       async (partial) => this.completeConversion(partial, options),
     );
+    if (!done.ok) {
+      return buildFailure(done);
+    }
+    const { candidate: plan, tx, plannedFee } = done;
     return {
       ok: true,
       tx,
@@ -290,11 +293,7 @@ export class IckbSdk {
         minimum: minimumOrderAmount(false, context.system),
       };
     }
-    const {
-      candidate: plan,
-      tx,
-      plannedFee,
-    } = await completeFirstFundable(
+    const done = await completeFirstFundable(
       plans,
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context, {
@@ -313,6 +312,10 @@ export class IckbSdk {
       },
       async (partial) => this.completeConversion(partial, options),
     );
+    if (!done.ok) {
+      return buildFailure(done);
+    }
+    const { candidate: plan, tx, plannedFee } = done;
     const broadcastBefore = broadcastDeadline(
       plan.selectedDeposits.map(({ claimEpoch }) => claimEpoch),
       context.system.lockUp,
@@ -351,7 +354,7 @@ export class IckbSdk {
   private async completeConversion(
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
-  ): Promise<CompletedTransaction> {
+  ): Promise<CompleteTransactionResult> {
     const { signer, context } = options;
     const { system, receipts, cells } = context;
     return completeTransaction(tx, { signer, system, receipts, cells });
@@ -407,9 +410,23 @@ function isPastPar(group: OrderGroup, exchangeRatio: Ratio): boolean {
 }
 
 function conversionFailure(
-  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
+  reason: "insufficient-ckb" | "insufficient-ickb",
 ): ConversionTransactionResult {
   return { ok: false, reason };
+}
+
+/**
+ * The build's value for a failed completion: a shortfall is the caller's to show. The DAO
+ * output limit throws instead: a walk's last plans have at most four outputs, so ending on it
+ * is a defect.
+ */
+function buildFailure(
+  failure: CompletionFailure,
+): Exclude<CompletionFailure, { reason: "dao-output-limit" }> {
+  if (failure.reason === "dao-output-limit") {
+    throw new Error("The last plan exceeds the DAO output limit");
+  }
+  return failure;
 }
 
 /** A plan always carries a deposit or an order, else it would be a collection. */

@@ -4,6 +4,7 @@ import { completeTransaction } from "../../../src/complete.ts";
 import {
   baseTransactionFixture,
   fundedSigner,
+  mustComplete,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { readyWithdrawalGroup } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, headerLike, system } from "../base/support/sdk_core_support.ts";
@@ -28,12 +29,14 @@ describe("completeTransaction with collections", () => {
     expect(tx.inputs).toHaveLength(2);
     expect(tx.outputs).toHaveLength(0);
 
-    const { tx: completed, plannedFee } = await completeTransaction(tx, {
-      signer,
-      system: system({ feeRate }),
-      receipts: [],
-      cells: [],
-    });
+    const { tx: completed, plannedFee } = mustComplete(
+      await completeTransaction(tx, {
+        signer,
+        system: system({ feeRate }),
+        receipts: [],
+        cells: [],
+      }),
+    );
 
     expect(completed.inputs).toHaveLength(2);
     expect(completed.outputs).toHaveLength(1);
