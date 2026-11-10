@@ -207,8 +207,11 @@ export class OrderManager implements ScriptDeps {
     orders: OrderCell[],
   ): Promise<OrderGroup | undefined> {
     const origin = await this.findOrigin(client, master.cell.outPoint, blockNumber);
-    const order = origin?.resolve(orders);
-    if (origin === undefined || order === undefined) {
+    if (origin === undefined) {
+      return undefined;
+    }
+    const order = origin.resolve(orders);
+    if (order === undefined) {
       return undefined;
     }
     const group = OrderGroup.tryFrom(master, order, origin);
