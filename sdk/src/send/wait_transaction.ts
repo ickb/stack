@@ -35,7 +35,10 @@ export interface WaitTransactionOptions {
   timeout?: number;
   /** Delay in milliseconds between polls. Defaults to 2000. */
   interval?: number;
-  /** Stops waiting, including on in-flight operations; their transports may still finish. */
+  /**
+   * Stops waiting, including on in-flight operations, by rejecting with the signal's own
+   * reason, whatever it is; their transports may still finish.
+   */
   signal?: AbortSignal;
 }
 
@@ -120,7 +123,7 @@ function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitW
     stop.reject(timeoutError);
   }, timeout);
   const onAbort = (): void => {
-    stop.reject(abortReason(signal));
+    stop.reject(signal?.reason);
   };
   signal?.addEventListener("abort", onAbort, { once: true });
   // Only the operation currently racing this window consumes its rejection.
@@ -132,9 +135,7 @@ function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitW
     throwIfStopped: (): void => {
       // Only a promise currently racing the window observes its rejection, so
       // an abort landing outside a race has to be read from the signal itself.
-      if (signal?.aborted === true) {
-        throw abortReason(signal);
-      }
+      signal?.throwIfAborted();
     },
     close: (): void => {
       clearTimeout(timer);
@@ -145,12 +146,6 @@ function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitW
 
 function ignoreSettlement(): void {
   // Deliberately empty: the racing caller owns the outcome.
-}
-
-function abortReason(signal: AbortSignal | undefined): Error {
-  return signal?.reason instanceof Error
-    ? signal.reason
-    : new Error("Transaction wait aborted", { cause: signal?.reason });
 }
 
 async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promise<T> {

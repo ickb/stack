@@ -192,7 +192,7 @@ describe("waitTransaction window closing", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("reports a non-Error abort reason through the wait error cause", async () => {
+  it("rejects with a non-Error abort reason itself", async () => {
     const gate = Promise.withResolvers<boolean>();
     const controller = new AbortController();
     const { client, request } = jsonRpcClient({ status: "pending" }, gate.promise);
@@ -203,12 +203,7 @@ describe("waitTransaction window closing", () => {
     });
     controller.abort("polling stopped");
 
-    await expect(waiting).rejects.toEqual(
-      expect.objectContaining({
-        message: "Transaction wait aborted",
-        cause: "polling stopped",
-      }),
-    );
+    await expect(waiting).rejects.toBe("polling stopped");
     gate.resolve(true);
   });
 
