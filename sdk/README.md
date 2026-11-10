@@ -164,8 +164,6 @@ These examples live in [`test/readme_examples.ts`](test/readme_examples.ts), whi
 
 The [docs](docs/README.md) explain how each part works and why: the state read, node trust, the projection, the plan walk, funding, signing, confirmation and the estimates.
 
-Upgrading? The [changelog](CHANGELOG.md) lists what changed in each version and how to migrate.
-
 ## Licensing
 
 This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/stack/tree/master/sdk) and released under the [MIT License](../LICENSE).
