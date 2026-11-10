@@ -34,6 +34,8 @@ export interface IckbSdk {
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor intentionally share a name.
 export const IckbSdk: new () => IckbSdk = IckbSdkClass;
 
+export { IckbError } from "./complete.ts";
+export type { IckbErrorCode } from "./complete.ts";
 export type { SupportedChain } from "./constants.ts";
 export { projectConversionTransactionContext, readyAt } from "./conversion/projection.ts";
 export type {
@@ -68,8 +70,7 @@ export type {
   OwnerCell,
   WithdrawalGroup,
 } from "./owned_owner.ts";
-export { hasCollectable, IckbError } from "./sdk.ts";
-export type { IckbErrorCode } from "./sdk.ts";
+export { hasCollectable } from "./sdk.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,

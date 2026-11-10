@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { IckbError } from "../../../../src/complete.ts";
 import { DAO, ICKB_LOGIC } from "../../../../src/constants.ts";
 import { receiptPhase2Capacity } from "../../../../src/logic.ts";
-import { IckbError } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";

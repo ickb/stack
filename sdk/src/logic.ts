@@ -95,7 +95,7 @@ export function isDeposit(cell: ccc.Cell): boolean {
  * Adds `depositQuantity` DAO deposits of `depositCapacity` locked by iCKB Logic, then the
  * receipt that mints their iCKB in phase 2, locked by `lock`.
  *
- * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that resolves
+ * @remarks Completion (`completeTransaction`) adds the dep group that resolves
  * the iCKB Logic, DAO and xUDT scripts.
  */
 export function deposit(
@@ -141,7 +141,7 @@ export function deposit(
  * Adds receipt inputs and their deposit header deps for iCKB deposit completion.
  *
  * @remarks This prepares the phase-2 inputs; the iCKB they mint is completed by
- * `IckbSdk.completeTransaction`, which also adds the dep group.
+ * `completeTransaction`, which also adds the dep group.
  */
 export function completeDeposit(
   txLike: ccc.TransactionLike,

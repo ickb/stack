@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import type { CompletedTransaction } from "../../../../src/complete.ts";
 import {
   DAO,
   ICKB_LOGIC,
@@ -24,7 +25,7 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import { IckbSdk, type CompletedTransaction } from "../../../../src/sdk.ts";
+import { IckbSdk } from "../../../../src/sdk.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import {

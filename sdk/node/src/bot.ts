@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
+import { completeTransaction } from "../../src/complete.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
@@ -48,7 +49,7 @@ try {
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, { system, receipts, cells }) =>
-      sdk.completeTransaction(tx, { signer, system, receipts, cells }),
+      completeTransaction(tx, { signer, system, receipts, cells }),
     sendTransaction: async (built) => signAndSendTransaction(signer, built),
   };
   for (;;) {

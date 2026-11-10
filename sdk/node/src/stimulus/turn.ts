@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { completeTransaction, isFundabilityFailure } from "../../../src/complete.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import {
@@ -6,7 +7,7 @@ import {
   quoteConversion,
 } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
-import { hasCollectable, isFundabilityFailure } from "../../../src/sdk.ts";
+import { hasCollectable } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -172,7 +173,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   const tx = mint(base, runtime.primaryLock, info, amounts);
   try {
     return {
-      ...(await runtime.sdk.completeTransaction(tx, {
+      ...(await completeTransaction(tx, {
         signer: runtime.signer,
         system: state.system,
         receipts: state.context.receipts,

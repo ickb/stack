@@ -13,7 +13,8 @@ The script modules sit at the top of `src/`:
 
 The other files and folders hold one concern each:
 
-- `sdk.ts`: `IckbSdk`, which reads the account, walks the candidate plans and completes them.
+- `sdk.ts`: `IckbSdk`, which reads the account and walks the candidate plans.
+- `complete.ts`: completion, which funds a built transaction and pays its fee, and the walk that completes the first fundable candidate.
 - `order/`: limit orders and matching.
 - `conversion/`: the state projection, estimates, plans and the withdrawal ring.
 - `send/`: signing, broadcast and confirmation.

@@ -1,8 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  completeFirstFundable,
+  type CompletedTransaction,
+} from "../../../src/complete.ts";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
-import { completeFirstFundable, type CompletedTransaction } from "../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
   baseTip,
@@ -74,7 +77,7 @@ function conversion(
 
 describe("buildConversionTransaction fundable walk", () => {
   it("walks down the greedy prefixes until the real completer can fund one", async () => {
-    const fixture = baseTransactionFixture({ completion: "real" });
+    const fixture = baseTransactionFixture();
     // Two markers plus the order do not fit; one marker plus the rebuilt, larger order does.
     const userCkb = MARKER_CKB + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(4);
 
@@ -103,7 +106,7 @@ describe("buildConversionTransaction fundable walk", () => {
   });
 
   it("reports the order cells' occupied capacity apart from the CKB they convert", async () => {
-    const fixture = baseTransactionFixture({ completion: "real" });
+    const fixture = baseTransactionFixture();
     const lock = fixture.botLock;
     const amount = ccc.fixedPointFrom(1000);
     const cells = [
@@ -130,7 +133,7 @@ describe("buildConversionTransaction fundable walk", () => {
   });
 
   it("throws the last completion failure when no CKB-to-iCKB candidate can be funded", async () => {
-    const fixture = baseTransactionFixture({ completion: "real" });
+    const fixture = baseTransactionFixture();
     const lock = fixture.botLock;
     const cells = [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")];
 
@@ -148,7 +151,7 @@ describe("buildConversionTransaction fundable walk", () => {
   });
 
   it("throws the last completion failure when no candidate can be funded", async () => {
-    const fixture = baseTransactionFixture({ completion: "real" });
+    const fixture = baseTransactionFixture();
 
     await expect(
       fixture.sdk.buildConversionTransaction(

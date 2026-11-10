@@ -6,7 +6,7 @@ import {
   StubClient,
   transactionWithHeader,
 } from "@ickb/testkit";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 
 import { DAO, ICKB_LOGIC, ORDER } from "../../../../src/constants.ts";
 import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
@@ -27,30 +27,8 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 const GENESIS_AR = 10000000000000000n;
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-export function baseTransactionFixture(
-  options: {
-    completion?: "passthrough" | "real";
-  } = {},
-): BaseTransactionFixture {
-  return {
-    botLock: script("11"),
-    dao: DAO,
-    logic: ICKB_LOGIC,
-    sdk: withCompletion(new IckbSdk(), options.completion),
-  };
-}
-
-function withCompletion(
-  sdk: IckbSdk,
-  completion: "passthrough" | "real" = "passthrough",
-): IckbSdk {
-  if (completion === "passthrough") {
-    vi.spyOn(sdk, "completeTransaction").mockImplementation(async (txLike) => {
-      await Promise.resolve();
-      return { tx: ccc.Transaction.from(txLike), plannedFee: 0n };
-    });
-  }
-  return sdk;
+export function baseTransactionFixture(): BaseTransactionFixture {
+  return { botLock: script("11"), dao: DAO, logic: ICKB_LOGIC, sdk: new IckbSdk() };
 }
 
 export interface BaseTransactionFixture {
@@ -61,16 +39,11 @@ export interface BaseTransactionFixture {
 }
 
 /**
- * The SDK with the fixture lock. Completion is a passthrough unless `completion: "real"`, so
- * planning tests see the built transaction and walk tests see the real completer.
+ * The SDK with the fixture lock. A build test that wants the built transaction as is mocks
+ * completion with `passthroughCompletion`; walk tests run the real completer.
  */
-export function testSdk(
-  options: { completion?: "passthrough" | "real" } = {},
-): SdkFixture {
-  const lock = script("11");
-  const sdk = new IckbSdk();
-  withCompletion(sdk, options.completion);
-  return { sdk, lock };
+export function testSdk(): SdkFixture {
+  return { sdk: new IckbSdk(), lock: script("11") };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */

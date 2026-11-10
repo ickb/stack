@@ -1,9 +1,10 @@
 import type { ccc } from "@ckb-ccc/core";
+import type { CompletedTransaction } from "../../../src/complete.ts";
 import type { ConversionTransactionContext } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
-import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
+import type { IckbSdk } from "../../../src/sdk.ts";
 import type { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { completeTransaction, IckbError } from "../../../../src/complete.ts";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
 import { addMatch } from "../../../../src/order/order.ts";
-import { IckbError } from "../../../../src/sdk.ts";
 
 import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -83,7 +83,7 @@ describe("buildTransaction matching", () => {
       client,
       primaryLock,
       completeTransaction: async (tx, state) =>
-        runtime.sdk.completeTransaction(tx, { ...state, signer }),
+        completeTransaction(tx, { ...state, signer }),
     });
     const base = botState({});
 

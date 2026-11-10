@@ -10,6 +10,13 @@ import {
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
+// The built transaction as is: these tests read what the builders put in.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
+  (
+    await import("../deposits_and_limits/support/passthrough_completion.ts")
+  ).passthroughCompletion(await importOriginal()),
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -48,5 +55,33 @@ describe("IckbSdk.buildConversionTransaction", () => {
       udtValue: 100000n,
       info: { ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT },
     });
+  });
+
+  it("keeps direct withdrawals when an iCKB-to-CKB dust remainder needs quote-preserving Uint64 encoding", async () => {
+    const { sdk } = testSdk();
+    const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP - 1000000n);
+    const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 1n);
+    const exchangeRatio = Ratio.from({
+      ckbScale: 10000000000000000n,
+      udtScale: 11850413696044750n,
+    });
+    const amount = ICKB_DEPOSIT_CAP;
+
+    const result = await sdk.buildConversionTransaction({
+      direction: ICKB_TO_CKB,
+      amount,
+      signer: stubSigner,
+      context: conversionContext({
+        system: {
+          exchangeRatio,
+          feeRate: 33222n,
+          poolDeposits: [directDeposit, ringAnchor],
+        },
+        ckbAvailable: 0n,
+        ickbAvailable: amount,
+      }),
+    });
+
+    expectDirectPlusOrder(result, [directDeposit], { ckbValue: 0n, udtValue: 1000000n });
   });
 });

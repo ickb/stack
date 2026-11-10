@@ -1,10 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  completeTransaction,
+  IckbError,
+  type CompletedTransaction,
+} from "../../../src/complete.ts";
 import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
-import { IckbError, type CompletedTransaction } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -43,9 +47,15 @@ vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) 
   ...(await importOriginal()),
   waitTransaction: vi.fn(),
 }));
+// The real completer unless a test scripts one.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, completeTransaction: vi.fn(original.completeTransaction) };
+});
 
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
+const completeMock = vi.mocked(completeTransaction);
 const TX_HASH = byte32FromByte("46");
 const DEADLINE = { epoch: ccc.Epoch.from([5n, 0n, 1n]), tipMaxAgeMs: 1_800_000 };
 const identity: StimulusIdentity = {
@@ -78,6 +88,7 @@ beforeEach(() => {
   });
   waitMock.mockReset();
   waitMock.mockResolvedValue(undefined);
+  completeMock.mockReset();
 });
 
 afterEach(() => {
@@ -110,17 +121,15 @@ function sentOrder(call = 0): OrderCell {
   );
 }
 
-/** A completion that spends the funded cell and returns `change` CKB to the account. */
-function completing(change: bigint): Partial<Runtime["sdk"]> {
-  return {
-    completeTransaction: async (txLike): Promise<CompletedTransaction> => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      tx.addInput(plainCell(FUNDED_CKB, "b1"));
-      tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
-      return { tx, plannedFee: PLANNED_FEE };
-    },
-  };
+/** Completion from here on spends the funded cell and returns `change` CKB to the account. */
+function completing(change: bigint): void {
+  completeMock.mockImplementation(async (txLike): Promise<CompletedTransaction> => {
+    await Promise.resolve();
+    const tx = ccc.Transaction.from(txLike).clone();
+    tx.addInput(plainCell(FUNDED_CKB, "b1"));
+    tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
+    return { tx, plannedFee: PLANNED_FEE };
+  });
 }
 
 async function turn(target: Runtime, override: Override = {}): Promise<StimulusLog> {
@@ -213,11 +222,8 @@ describe("runStimulusTurn", () => {
 
   it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
-    const target = runtime({
-      account: fundedAccount,
-      orders: [fulfilled],
-      sdk: completing(5500n * CKB),
-    });
+    completing(5500n * CKB);
+    const target = runtime({ account: fundedAccount, orders: [fulfilled] });
 
     const log = await turn(target, orderDraw);
 
@@ -254,18 +260,14 @@ describe("runStimulusTurn", () => {
   });
 
   it("mints each direction's amount on its own side through the real mint", async () => {
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: completing(5500n * CKB),
-      }),
-      {
-        ...orderDraw,
-        direction: "ickb-to-ckb",
-        fee: 0n,
-      },
-    );
+    completing(5500n * CKB);
+    const log = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      direction: "ickb-to-ckb",
+      fee: 0n,
+    });
     lines = [];
+    completeMock.mockReset();
     // The real completer funds the CKB-to-iCKB order from the account's plain CKB.
     const completed = await turn(runtime({ account: fundedAccount }), orderDraw);
 
@@ -312,11 +314,12 @@ describe("runStimulusTurn", () => {
         conversionKind: "collect-only",
       };
     });
+    completing(500n * CKB);
     const log = await turn(
       runtime({
         account: fundedAccount,
         orders: [refused],
-        sdk: { ...completing(500n * CKB), buildConversionTransaction },
+        sdk: { buildConversionTransaction },
       }),
       { ...orderDraw, amount: 0n },
     );
@@ -335,7 +338,7 @@ describe("runStimulusTurn", () => {
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
     const build = vi.spyOn(target.sdk, "buildConversionTransaction");
-    vi.spyOn(target.sdk, "completeTransaction").mockRejectedValue(
+    completeMock.mockRejectedValue(
       new IckbError("no cells", { code: "insufficient_capacity" }),
     );
 
@@ -371,19 +374,10 @@ describe("runStimulusTurn", () => {
   });
 
   it("skips what the completer cannot fund, from either builder", async () => {
-    const insufficient = new IckbError("short", { code: "insufficient_capacity" });
-    const orderLog = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          completeTransaction: async () => {
-            await Promise.resolve();
-            throw insufficient;
-          },
-        },
-      }),
-      orderDraw,
+    completeMock.mockRejectedValue(
+      new IckbError("short", { code: "insufficient_capacity" }),
     );
+    const orderLog = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     const conversionLog = await turn(
       runtime({
@@ -444,18 +438,8 @@ describe("runStimulusTurn", () => {
       fee: DEFAULT_ORDER_FEE_BASE,
     });
     lines = [];
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          completeTransaction: async () => {
-            await Promise.resolve();
-            throw new TypeError("fetch failed");
-          },
-        },
-      }),
-      orderDraw,
-    );
+    completeMock.mockRejectedValue(new TypeError("fetch failed"));
+    const log = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(invalidFee).toMatchObject({
       outcome: "failed",
@@ -466,27 +450,19 @@ describe("runStimulusTurn", () => {
   });
 
   it("waits on the known hash after an ambiguous broadcast and reports the terminal status", async () => {
+    completing(5500n * CKB);
     sendMock.mockRejectedValue(new TransactionBroadcastError(TX_HASH, {}));
     waitMock.mockRejectedValue(new TransactionWaitError(TX_HASH, { status: "rejected" }));
-    const rejected = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
+    const rejected = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     process.exitCode = undefined;
     sendMock.mockRejectedValue(new TypeError("signer offline"));
-    const offline = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
+    const offline = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     process.exitCode = undefined;
     sendMock.mockResolvedValue(TX_HASH);
     waitMock.mockRejectedValue(new ccc.ErrorClientWaitTransactionTimeout(600_000));
-    const unresolved = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
+    const unresolved = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(rejected).toMatchObject({
       outcome: "rejected",

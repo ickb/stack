@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
+import { completeTransaction } from "../../../src/complete.ts";
 import {
   baseTransactionFixture,
   fundedSigner,
@@ -11,9 +12,7 @@ import { baseTip, headerLike, system } from "../base/support/sdk_core_support.ts
 // on its own, so an account with no plain cell still completes its collections.
 describe("completeTransaction with collections", () => {
   it("completes a withdrawal collection with zero plain cells", async () => {
-    const { botLock, sdk } = baseTransactionFixture({
-      completion: "real",
-    });
+    const { botLock, sdk } = baseTransactionFixture();
     const group = readyWithdrawalGroup({
       ownerLock: botLock,
       depositHeader: headerLike(10n),
@@ -29,7 +28,7 @@ describe("completeTransaction with collections", () => {
     expect(tx.inputs).toHaveLength(2);
     expect(tx.outputs).toHaveLength(0);
 
-    const { tx: completed, plannedFee } = await sdk.completeTransaction(tx, {
+    const { tx: completed, plannedFee } = await completeTransaction(tx, {
       signer,
       system: system({ feeRate }),
       receipts: [],

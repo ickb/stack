@@ -146,7 +146,7 @@ export function isOwned(cell: ccc.Cell): boolean {
  * Spends the deposits into DAO withdrawal requests locked by the Owned Owner script,
  * each followed by an owner marker locked by `lock` that points back at it.
  *
- * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that resolves
+ * @remarks Completion (`completeTransaction`) adds the dep group that resolves
  * the Owned Owner, DAO and xUDT scripts.
  */
 export function requestWithdrawal(
@@ -195,7 +195,7 @@ export function requestWithdrawal(
  *
  * @remarks The distinct deposit headers are moved to the front of the header deps and
  * the withdrawal headers appended, so a deposit header's index is its rank among the
- * collected withdrawals. Completion (`IckbSdk.completeTransaction`) adds the dep group.
+ * collected withdrawals. Completion (`completeTransaction`) adds the dep group.
  */
 export function withdraw(
   txLike: ccc.TransactionLike,

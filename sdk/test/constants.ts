@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { genesisHeader, headerLike, StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { completeTransaction } from "../src/complete.ts";
 import {
   CHAINS,
   DAO,
@@ -9,7 +10,6 @@ import {
   ORDER,
   OWNED_OWNER,
 } from "../src/constants.ts";
-import { IckbSdk } from "../src/sdk.ts";
 import {
   headerLike as hashedHeader,
   system,
@@ -34,7 +34,7 @@ async function completeOn(
     0,
     false,
   ]);
-  const { tx } = await new IckbSdk().completeTransaction(ccc.Transaction.default(), {
+  const { tx } = await completeTransaction(ccc.Transaction.default(), {
     signer,
     system: system(),
     receipts: [],

@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { completeTransaction } from "../../../../src/complete.ts";
 import { ICKB_UDT } from "../../../../src/constants.ts";
 import { minimumXudtCellCapacity } from "../../../../src/udt.ts";
 import { SignerCombined } from "../../../../src/utils/signer.ts";
@@ -37,7 +38,7 @@ describe("buildTransaction with a second key", () => {
       client,
       primaryLock,
       completeTransaction: async (tx, state) =>
-        runtime.sdk.completeTransaction(tx, { ...state, signer }),
+        completeTransaction(tx, { ...state, signer }),
     });
     const state = (cells: ccc.Cell[]): ReturnType<typeof botState> =>
       botState({

@@ -13,6 +13,13 @@ import {
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
+// The built transaction as is: these tests read what the builders put in.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
+  (
+    await import("../deposits_and_limits/support/passthrough_completion.ts")
+  ).passthroughCompletion(await importOriginal()),
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
 });

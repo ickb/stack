@@ -85,7 +85,7 @@ describe("ckbConvertible", () => {
   it.each(holdings)(
     "funds a CKB-to-iCKB conversion of all of it, holding %s",
     async (_, holding) => {
-      const fixture = baseTransactionFixture({ completion: "real" });
+      const fixture = baseTransactionFixture();
       const { botLock } = fixture;
       const { account: held, orders = [] } = holding(fixture);
       const account: AccountState = {

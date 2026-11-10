@@ -5,6 +5,13 @@ import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import { mintedOrders, stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
+// The built transaction as is: these tests read what the builders put in.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
+  (await import("./support/passthrough_completion.ts")).passthroughCompletion(
+    await importOriginal(),
+  ),
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
