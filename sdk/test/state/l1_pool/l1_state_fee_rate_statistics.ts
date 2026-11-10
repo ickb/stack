@@ -69,9 +69,9 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
         maxLockUp: ccc.Epoch.OneNervosDaoCycle.add(epoch(1n, 2n)),
       },
     ]) {
-      await expect(defaultL1Sdk().getL1AccountState(client, [], policy)).rejects.toThrow(
-        RangeError,
-      );
+      const read = defaultL1Sdk().getL1AccountState(client, [], policy);
+      await expect(read).rejects.toThrow(RangeError);
+      await expect(read).rejects.toThrow(/^lockUp must satisfy /);
     }
   });
 
