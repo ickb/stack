@@ -158,6 +158,7 @@ export function ickbValue(
   header: ccc.ClientBlockHeader,
 ): ccc.FixedPoint {
   let ickbAmount = udtFromCkb(ckbUnoccupiedCapacity, ickbAccountingRatio(header));
+  // Stryker disable next-line EqualityOperator: at exactly the cap the excess is zero, so the discount subtracts nothing either way.
   if (ICKB_DEPOSIT_CAP < ickbAmount) {
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
     ickbAmount -= (ickbAmount - ICKB_DEPOSIT_CAP) / 10n;

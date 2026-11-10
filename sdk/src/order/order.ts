@@ -100,6 +100,7 @@ export class OrderManager implements ScriptDeps {
         { lock: this.script, type: this.udtScript, capacity: ckbOut },
         OrderData.from({
           udtValue: udtOut,
+          // Stryker disable next-line StringLiteral: the encoder treats every type but "relative" as absolute, so the literal only satisfies the type checker.
           master: { type: "absolute", value: order.getMaster() },
           info: order.data.info,
         }).toBytes(),
