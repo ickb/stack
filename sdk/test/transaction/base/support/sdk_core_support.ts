@@ -62,7 +62,7 @@ export function system(overrides: Partial<SystemState> = {}): SystemState {
     tip: baseTip,
     exchangeRatio,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
-    orderPool: [],
+    orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
     ...overrides,

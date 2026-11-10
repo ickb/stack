@@ -6,7 +6,7 @@ How the SDK dates an order. The estimate models the [bot](../node/docs/policy.md
 
 `getL1AccountState` reads, at the parent of the sampled tip:
 
-- **`system.orderPool`:** every order past par on the book, the wallet own included, since the bot fills by price, not by owner. The scan drops dual-ratio orders: nothing in the stack places one, so they aren't matched, estimated, shown or melted here.
+- **`system.orderBook`:** every order past par on the book, the wallet own included, since the bot fills by price, not by owner. The scan drops dual-ratio orders: nothing in the stack places one, so they aren't matched, estimated, shown or melted here.
 - **`system.poolDeposits`:** every iCKB pool deposit, with its sampled claim epoch, read as its real claim date. A claim the bot can no longer request in time rolls a cycle, by the twenty-minute floor of `BOT_LOCK_UP`: the bot makes the requests, so its rule dates the supply, whatever the caller policy is. A deposit counts on its date, a week out or thirty.
 - **`blockNumber` of each order cell:** the block the scan reports for it. A fill replaces the order cell, so it's the last fill, or the mint while unfilled.
 

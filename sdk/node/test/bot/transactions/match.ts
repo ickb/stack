@@ -41,7 +41,7 @@ describe("buildTransaction matching", () => {
     });
     const state = (ckb: bigint): ReturnType<typeof botState> =>
       botState({
-        orderPool: [seller],
+        orderBook: [seller],
         ckbAvailable: ckb,
         ickbAvailable: BAND_ICKB_BALANCE,
       });
@@ -90,7 +90,7 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       runtime,
       botState({
-        orderPool: [seller],
+        orderBook: [seller],
         ckbAvailable: plain.cellOutput.capacity,
         ickbAvailable: BAND_ICKB_BALANCE,
         cells: [plain],
@@ -134,7 +134,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          orderPool: [buyer({ ckbScale: 1n, udtScale: 2n })],
+          orderBook: [buyer({ ckbScale: 1n, udtScale: 2n })],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: 0n,
         }),
@@ -151,7 +151,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          orderPool: [buyer({ ckbScale: 1n, udtScale: 1n })],
+          orderBook: [buyer({ ckbScale: 1n, udtScale: 1n })],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: ccc.fixedPointFrom(1000),
         }),
@@ -191,7 +191,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         runtime,
         botState({
-          orderPool: [buyer],
+          orderBook: [buyer],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: BAND_ICKB_BALANCE,
         }),
@@ -211,7 +211,7 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       botRuntime(),
       botState({
-        orderPool: [buyer],
+        orderBook: [buyer],
         ckbAvailable: ccc.fixedPointFrom(5000),
         ickbAvailable: BAND_ICKB_BALANCE,
       }),

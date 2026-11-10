@@ -74,7 +74,7 @@ describe("buildTransaction deposit", () => {
         await buildTransaction(
           runtime,
           botState({
-            orderPool: [buyer],
+            orderBook: [buyer],
             ckbAvailable: ckbAfterMatch - ccc.fixedPointFrom(200),
             ickbAvailable: ICKB_REFILL_BELOW + ccc.fixedPointFrom(50),
             system: { ...botSystem(), depositCapacity },

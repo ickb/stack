@@ -29,7 +29,7 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  if (state.system.orderPool.length === 0) {
+  if (state.system.orderBook.length === 0) {
     return "no_market_orders";
   }
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
@@ -116,7 +116,7 @@ export async function buildTransaction(
 
 function matchOutcome(state: BotState): MatchOutcome {
   const match = matchTurn({
-    orders: state.system.orderPool,
+    orders: state.system.orderBook,
     ckb: spendableCkb(state.ckbAvailable),
     udt: state.ickbAvailable,
     exchangeRatio: state.system.exchangeRatio,

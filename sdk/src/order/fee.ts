@@ -18,10 +18,10 @@ const PREPARED_PARTIAL_SERIALIZATION_OVERHEAD =
 /**
  * The mining fee one more matched order adds to a prepared transaction at the fee rate
  * (shannons per thousand bytes): its input, its replacement output with data, and its
- * empty witness, sized for the largest order of the pool.
+ * empty witness, sized for the largest of those groups.
  */
-export function partialOrderFee(orderPool: OrderGroup[], feeRate: ccc.Num): bigint {
-  const orderSize = orderPool.reduce(
+export function partialOrderFee(groups: OrderGroup[], feeRate: ccc.Num): bigint {
+  const orderSize = groups.reduce(
     (largest, group) => Math.max(largest, group.order.cell.occupiedSize),
     0,
   );

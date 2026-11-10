@@ -46,7 +46,7 @@ describe(ESTIMATE_SUITE, () => {
     // so the order reads the pool's last claim date, here the tip (timestamp zero), plus a turn.
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
-      system({ orderPool: [sittingSeller(0n)], tip: headerLike(1n) }),
+      system({ orderBook: [sittingSeller(0n)], tip: headerLike(1n) }),
       [],
     );
 

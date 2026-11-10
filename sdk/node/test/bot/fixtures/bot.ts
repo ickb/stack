@@ -272,23 +272,23 @@ export function botSystem(): SystemState {
     exchangeRatio,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     tip: BOT_TIP,
-    orderPool: [],
+    orderBook: [],
     poolDeposits: [],
     lockUp: BOT_LOCK_UP,
   };
 }
 
 /**
- * A bot state; `orderPool` and `poolDeposits` are shorthand for the system state's own,
+ * A bot state; `orderBook` and `poolDeposits` are shorthand for the system state's own,
  * which the bot reads.
  */
 export function botState({
-  orderPool,
+  orderBook,
   poolDeposits,
   system,
   ...overrides
 }: Partial<BotState> &
-  Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
+  Partial<Pick<SystemState, "orderBook" | "poolDeposits">>): BotState {
   return {
     ckbAvailable: 0n,
     ickbAvailable: 0n,
@@ -303,7 +303,7 @@ export function botState({
     system: {
       ...botSystem(),
       ...system,
-      ...(orderPool === undefined ? {} : { orderPool }),
+      ...(orderBook === undefined ? {} : { orderBook }),
       ...(poolDeposits === undefined ? {} : { poolDeposits }),
     },
   };

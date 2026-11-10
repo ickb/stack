@@ -148,7 +148,7 @@ function ickbToCkbOrderMaturity(
 
 /** The book orders the bot would take whole in the given direction. */
 function fillableOrders(system: SystemState, isCkb2Udt: boolean): OrderGroup[] {
-  return system.orderPool.filter((group) =>
+  return system.orderBook.filter((group) =>
     fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
   );
 }

@@ -121,7 +121,7 @@ export class IckbSdk {
         depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
         // One book, two filters: the market side is every order
         // past par, the wallet's own included, since the bot fills by price, not by owner.
-        orderPool: orders.filter((group) => isPastPar(group, exchangeRatio)),
+        orderBook: orders.filter((group) => isPastPar(group, exchangeRatio)),
         poolDeposits,
         lockUp,
       },

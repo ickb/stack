@@ -104,7 +104,7 @@ export function context(
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
       // A cap's 100,000 iCKB at one to one.
       depositCapacity: ccc.fixedPointFrom(100_000),
-      orderPool: [],
+      orderBook: [],
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
     },

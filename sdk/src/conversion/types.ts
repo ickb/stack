@@ -192,7 +192,7 @@ export interface SystemState {
   /** The CKB of one deposit worth `ICKB_DEPOSIT_CAP` iCKB at `exchangeRatio`. */
   depositCapacity: bigint;
   /** Every order past par on the book, the wallet's own included: what the bot can fill. */
-  orderPool: OrderGroup[];
+  orderBook: OrderGroup[];
   /** Every iCKB pool deposit with its claim epoch at this tip: the CKB supply. */
   poolDeposits: IckbDepositCell[];
   /** The caller's withdrawal timing rules, which every builder and the sender follow. */

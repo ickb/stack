@@ -165,7 +165,7 @@ function summarizeBotState(state: BotState): BotStateSummary {
       cellCount: state.cells.length,
     },
     counts: {
-      marketOrders: state.system.orderPool.length,
+      marketOrders: state.system.orderBook.length,
       receipts: state.receipts.length,
       readyWithdrawals: state.readyWithdrawals.length,
       pendingWithdrawals: state.notReadyWithdrawals.length,

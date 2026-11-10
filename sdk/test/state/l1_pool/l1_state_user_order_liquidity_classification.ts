@@ -46,7 +46,7 @@ describe("IckbSdk.getL1AccountState", () => {
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([ownerOrder.group]);
-    expect(state.system.orderPool).toEqual([marketOrder.group]);
+    expect(state.system.orderBook).toEqual([marketOrder.group]);
   });
 });
 
@@ -60,7 +60,7 @@ describe("IckbSdk.getL1AccountState system order liquidity", () => {
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([]);
-    expect(state.system.orderPool).toEqual([marketOrder.group]);
+    expect(state.system.orderBook).toEqual([marketOrder.group]);
   });
 
   it("leaves non-user orders outside liquidity when neither side beats midpoint", async () => {
@@ -72,7 +72,7 @@ describe("IckbSdk.getL1AccountState system order liquidity", () => {
     const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([]);
-    expect(state.system.orderPool).toEqual([]);
+    expect(state.system.orderBook).toEqual([]);
   });
 
   // The bot gains nothing filling an order at the DAO ratio.
@@ -87,7 +87,7 @@ describe("IckbSdk.getL1AccountState system order liquidity", () => {
 
       const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
 
-      expect(state.system.orderPool).toEqual([]);
+      expect(state.system.orderBook).toEqual([]);
     },
   );
 });

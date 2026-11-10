@@ -519,7 +519,7 @@ describe("readBotState", () => {
     });
     const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
     getL1AccountState.mockResolvedValue({
-      system: { ...botSystem(), tip: headerLike(), orderPool: [marketOrder] },
+      system: { ...botSystem(), tip: headerLike(), orderBook: [marketOrder] },
       userOrders: [ownOrder],
       account: {
         capacityCells: [capacityCell],
@@ -532,7 +532,7 @@ describe("readBotState", () => {
     const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
-    expect(state.system.orderPool).toEqual([marketOrder]);
+    expect(state.system.orderBook).toEqual([marketOrder]);
     expect(state.ckbAvailable).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );

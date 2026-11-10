@@ -97,7 +97,7 @@ describe("maturity of a seller", () => {
     expect(
       maturity(
         cheap,
-        system({ tip, orderPool: [sittingSeller(0n)], poolDeposits: [deposit] }),
+        system({ tip, orderBook: [sittingSeller(0n)], poolDeposits: [deposit] }),
       ),
     ).toBe(3000n + BOT_TURN_MS);
 
@@ -107,20 +107,20 @@ describe("maturity of a seller", () => {
       [sittingSeller(1n)],
       [sittingSeller(0n, { ckbScale: 2n, udtScale: 1n }, 10n)],
     ]) {
-      expect(maturity(cheap, system({ tip, orderPool: pool }))).toBe(100n + BOT_TURN_MS);
+      expect(maturity(cheap, system({ tip, orderBook: pool }))).toBe(100n + BOT_TURN_MS);
     }
     // An eighth of an 1800-block epoch is 225 blocks: fresh at 225, sitting at 226.
     const atEighth = (number: bigint): ccc.ClientBlockHeader =>
       headerLike(number, { timestamp: 100n, epoch: ccc.Epoch.from([1n, 0n, 1800n]) });
     expect(
-      maturity(cheap, system({ tip: atEighth(225n), orderPool: [sittingSeller(0n)] })),
+      maturity(cheap, system({ tip: atEighth(225n), orderBook: [sittingSeller(0n)] })),
     ).toBe(100n + BOT_TURN_MS);
     expect(
       maturity(
         cheap,
         system({
           tip: atEighth(226n),
-          orderPool: [sittingSeller(0n)],
+          orderBook: [sittingSeller(0n)],
           poolDeposits: [deposit],
         }),
       ),
@@ -140,11 +140,11 @@ describe("maturity of a seller", () => {
 
     for (const ahead of [cheaper, same]) {
       expect(
-        maturity(half, system({ tip, orderPool: [ahead], poolDeposits: [deposit] })),
+        maturity(half, system({ tip, orderBook: [ahead], poolDeposits: [deposit] })),
       ).toBe(3000n + BOT_TURN_MS);
     }
     expect(
-      maturity(half, system({ tip, orderPool: [dearer], poolDeposits: [deposit] })),
+      maturity(half, system({ tip, orderBook: [dearer], poolDeposits: [deposit] })),
     ).toBe(100n + BOT_TURN_MS);
   });
 
@@ -158,7 +158,7 @@ describe("maturity of a seller", () => {
     });
     const state = system({
       tip,
-      orderPool: [own, other],
+      orderBook: [own, other],
       poolDeposits: [
         projectionReadyDeposit(CAP, 3000n, { id: "44" }),
         projectionReadyDeposit(CAP, 5000n, { id: "45" }),
@@ -177,7 +177,7 @@ describe("maturity of a seller", () => {
 
     // Not ahead of itself, but a seller the bot keeps leaving shows the shortage too.
     expect(
-      maturity(own.order, system({ tip, orderPool: [own], poolDeposits: [deposit] })),
+      maturity(own.order, system({ tip, orderBook: [own], poolDeposits: [deposit] })),
     ).toBe(3000n + BOT_TURN_MS);
   });
 });
@@ -194,13 +194,13 @@ describe("maturity of a buyer", () => {
     const paysLess = fillableBuyer(CAP, { ckbScale: 4n, udtScale: 1n });
     const supply = sittingSeller(1n, { ckbScale: 2n, udtScale: 1n }, CAP);
 
-    expect(maturity(buyer(1n), system({ tip, orderPool: [paysMore] }))).toBe(
+    expect(maturity(buyer(1n), system({ tip, orderBook: [paysMore] }))).toBe(
       100n + 2n * BOT_TURN_MS,
     );
-    expect(maturity(buyer(1n), system({ tip, orderPool: [paysLess] }))).toBe(
+    expect(maturity(buyer(1n), system({ tip, orderBook: [paysLess] }))).toBe(
       100n + BOT_TURN_MS,
     );
-    expect(maturity(buyer(CAP), system({ tip, orderPool: [supply] }))).toBe(
+    expect(maturity(buyer(CAP), system({ tip, orderBook: [supply] }))).toBe(
       100n + BOT_TURN_MS,
     );
     // At twice the DAO price, an equal buyer is ahead; a fillable one paying less is not.
@@ -208,22 +208,22 @@ describe("maturity of a buyer", () => {
       info: Info.create(true, DOUBLE_PRICE),
       amounts: { ckbValue: 1n, udtValue: 0n },
     };
-    expect(maturity(atDouble, system({ tip, orderPool: [paysMore] }))).toBe(
+    expect(maturity(atDouble, system({ tip, orderBook: [paysMore] }))).toBe(
       100n + 2n * BOT_TURN_MS,
     );
     const paysBetween = fillableBuyer(CAP, { ckbScale: 2n, udtScale: 3n });
-    expect(maturity(atDouble, system({ tip, orderPool: [paysBetween] }))).toBe(
+    expect(maturity(atDouble, system({ tip, orderBook: [paysBetween] }))).toBe(
       100n + BOT_TURN_MS,
     );
     // Supply beyond the request leaves the one turn.
     expect(
       maturity(
         buyer(1n),
-        system({ tip, orderPool: [sittingSeller(1n, HALF_PRICE, 2n * CAP)] }),
+        system({ tip, orderBook: [sittingSeller(1n, HALF_PRICE, 2n * CAP)] }),
       ),
     ).toBe(100n + BOT_TURN_MS);
     // A buyer too small for the bot to take whole is not ahead of anyone.
-    expect(maturity(buyer(1n), system({ tip, orderPool: [fillableBuyer(10n)] }))).toBe(
+    expect(maturity(buyer(1n), system({ tip, orderBook: [fillableBuyer(10n)] }))).toBe(
       100n + BOT_TURN_MS,
     );
   });
