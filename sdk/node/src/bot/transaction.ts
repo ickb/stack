@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
-import { receiptPhase2Capacity } from "../../../src/logic.ts";
+import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
 import { addMatch } from "../../../src/order/order.ts";
 import {
   completeFirstFundable,
@@ -104,7 +104,7 @@ export async function buildTransaction(
   const broadcastBefore =
     core.kind === "withdraw"
       ? broadcastDeadline(
-          core.deposits.map((deposit) => deposit.claimEpoch),
+          core.deposits.map(({ claimEpoch }) => claimEpoch),
           state.system.lockUp,
         )
       : undefined;
@@ -188,12 +188,7 @@ function buildCore(
       : undefined,
   );
   if (core.kind === "deposit") {
-    tx = runtime.managers.ickbLogic.deposit(
-      tx,
-      1,
-      state.system.depositCapacity,
-      runtime.primaryLock,
-    );
+    tx = deposit(tx, 1, state.system.depositCapacity, runtime.primaryLock);
   }
   return tx;
 }

@@ -33,7 +33,6 @@ try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
-  const managers = getConfig(chain);
   const { signer, address, primaryLock, accountLocks } = await keyAccount(
     client,
     privateKeys,
@@ -42,11 +41,10 @@ try {
     type: "bot.chain.preflight",
     identity: { address, primaryLock, rpcEndpoints },
   });
-  const sdk = new IckbSdk(managers);
+  const sdk = new IckbSdk(getConfig(chain));
   const runtime: Runtime = {
     client,
     sdk,
-    managers,
     primaryLock,
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),

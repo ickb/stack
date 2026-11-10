@@ -1,5 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig, ORDER, type SdkManagers, type SupportedChain } from "./constants.ts";
+import {
+  DAO,
+  getConfig,
+  ORDER,
+  type SdkManagers,
+  type SupportedChain,
+} from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -19,11 +25,18 @@ import {
   broadcastDeadline,
   DaoHeaderIndexError,
   DaoOutputLimitError,
-  type LockUpPolicy,
   pushHeaderDep,
   tipMaxAgeMs,
+  type LockUpPolicy,
 } from "./dao.ts";
-import type { IckbDepositCell, LogicManager, ReceiptCell } from "./logic.ts";
+import {
+  completeDeposit,
+  deposit,
+  findDeposits,
+  receiptsFrom,
+  type IckbDepositCell,
+  type ReceiptCell,
+} from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { findOrders, melt, mint } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
@@ -98,11 +111,9 @@ type CollectSteps = Pick<
  */
 export class IckbSdk {
   private readonly ickbUdt: IckbUdt;
-  private readonly ickbLogic: LogicManager;
 
-  constructor({ ickbUdt, ickbLogic }: SdkManagers) {
+  constructor({ ickbUdt }: SdkManagers) {
     this.ickbUdt = ickbUdt;
-    this.ickbLogic = ickbLogic;
   }
 
   /** Creates the SDK for one chain's deployment. */
@@ -165,7 +176,7 @@ export class IckbSdk {
     assertFresh(tip, tipMaxAgeMs(lockUp));
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
-      this.ickbLogic.findDeposits(client, tip),
+      findDeposits(client, tip),
       findOrders(client),
       // CCC clamps the sampled median at the cap, the connector's chosen rate too. A given cap
       // replaces CCC's default ceiling, on purpose: the caller's cap is the ceiling; an absent
@@ -211,7 +222,7 @@ export class IckbSdk {
     });
     const cells = scanned.map(({ cell }) => cell);
     const [receipts, withdrawalGroups] = await Promise.all([
-      this.ickbLogic.receiptsFrom(client, scanned),
+      receiptsFrom(client, scanned),
       withdrawalGroupsFrom(client, scanned, tip),
     ]);
     return {
@@ -303,7 +314,7 @@ export class IckbSdk {
       (candidate) => {
         let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
         if (candidate.depositCount > 0) {
-          partial = this.ickbLogic.deposit(
+          partial = deposit(
             partial,
             candidate.depositCount,
             candidate.depositCapacity,
@@ -370,7 +381,7 @@ export class IckbSdk {
       async (partial) => this.completeConversion(partial, options),
     );
     const broadcastBefore = broadcastDeadline(
-      plan.selectedDeposits.map((deposit) => deposit.claimEpoch),
+      plan.selectedDeposits.map(({ claimEpoch }) => claimEpoch),
       context.system.lockUp,
     );
     return {
@@ -435,7 +446,7 @@ export class IckbSdk {
       tx = requestWithdrawal(tx, withdrawalRequest.deposits, withdrawalRequest.lock);
     }
     tx = melt(tx, steps.availableOrders);
-    tx = this.ickbLogic.completeDeposit(tx, steps.receipts);
+    tx = completeDeposit(tx, steps.receipts);
     return withdraw(tx, steps.readyWithdrawals);
   }
 
@@ -494,7 +505,7 @@ export class IckbSdk {
     pushHeaderDep(tx, system.tip.hash);
     await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
     const plannedFee = tx.estimateFee(feeRate);
-    assertDaoOutputLimit(tx, this.ickbLogic.dao.script);
+    assertDaoOutputLimit(tx, DAO);
     return { tx, plannedFee };
   }
 

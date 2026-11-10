@@ -8,31 +8,17 @@ import {
   placeholderReceipt,
   placeholderWithdrawal,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, hash } from "./support/sdk_core_support.ts";
+import { baseTip } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function cellInput(byte: string): ccc.CellInput {
-  return ccc.CellInput.from({
-    previousOutput: {
-      txHash: hash(byte),
-      index: 0n,
-    },
-  });
-}
-
 describe("IckbSdk.buildBaseTransaction", () => {
   it("requests withdrawals before input-only base activity", () => {
-    const { botLock, dao, logic, logicManager, sdk } = baseTransactionFixture();
+    const { botLock, dao, logic, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("80", logic, dao, baseTip, baseTip, {
       isReady: true,
-    });
-    vi.spyOn(logicManager, "completeDeposit").mockImplementation((txLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      tx.inputs.push(cellInput("72"));
-      return tx;
     });
 
     const tx = sdk.buildBaseTransaction(
@@ -51,7 +37,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
       requestedDeposit.cell.outPoint.toHex(),
       placeholderOrder.order.cell.outPoint.toHex(),
       placeholderOrder.master.cell.outPoint.toHex(),
-      cellInput("72").previousOutput.toHex(),
+      placeholderReceipt.cell.outPoint.toHex(),
       placeholderWithdrawal.owned.cell.outPoint.toHex(),
       placeholderWithdrawal.owner.cell.outPoint.toHex(),
     ]);

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import { DAO, OWNED_OWNER } from "../../src/constants.ts";
+import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../src/constants.ts";
 import {
   DAO_DEPOSIT_DATA,
   DAO_HEADER_INDEX_LIMIT,
@@ -25,7 +25,6 @@ import {
 } from "../../src/owned_owner.ts";
 import { ickbValue } from "../../src/udt.ts";
 
-const logic = script("22");
 const userLock = script("44");
 // Typed unknown so the matcher's `any` stays out of the asserted object.
 const anyError: unknown = expect.any(Error);
@@ -36,7 +35,7 @@ function depositOf(
 ): IckbDepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
-    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: DAO },
+    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: ICKB_LOGIC, type: DAO },
     outputData: DAO_DEPOSIT_DATA,
   });
   return {

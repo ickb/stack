@@ -8,7 +8,7 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import { getConfig, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { getConfig, ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
@@ -61,7 +61,7 @@ export function receipt(
     cellOutput: {
       capacity: ckbValue,
       lock: PRIMARY_LOCK,
-      type: getConfig("testnet").ickbLogic.script,
+      type: ICKB_LOGIC,
     },
     outputData: ccc.hexFrom(
       encodeReceiptData({ depositQuantity: 1n, depositAmount: udtValue }),

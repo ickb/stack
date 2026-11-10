@@ -11,7 +11,6 @@ import {
 } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
@@ -30,7 +29,6 @@ import {
   botSystem,
   hash,
   l1AccountState,
-  NO_DEPOSITS,
   PLANNED_FEE,
   readyDeposit,
   testMatch,
@@ -493,20 +491,13 @@ describe("readBotState pool snapshot", () => {
         withdrawalGroups: [],
       },
     });
-    const findDeposits = vi.fn(async (): Promise<IckbDepositCell[]> => {
-      await Promise.resolve();
-      return NO_DEPOSITS;
-    });
-    const runtime = botRuntime({
-      sdk: { getL1AccountState },
-      managers: { ickbLogic: { findDeposits } },
-    });
+    // The runtime's client is offline and fails any scan, so the read rescans no pool.
+    const runtime = botRuntime({ sdk: { getL1AccountState } });
 
     const state = await readBotState(runtime);
 
     expect(getL1AccountState).toHaveBeenCalledTimes(1);
     expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
-    expect(findDeposits).not.toHaveBeenCalled();
     expect(state.system.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });

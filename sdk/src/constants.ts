@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { LogicManager } from "./logic.ts";
 import { IckbUdt } from "./udt.ts";
 
 /** Nervos DAO type script. */
@@ -44,8 +43,6 @@ export const ICKB_UDT = IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC);
 export interface SdkManagers {
   /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
   ickbUdt: IckbUdt;
-  /** iCKB Logic manager for deposits and receipts. */
-  ickbLogic: LogicManager;
 }
 
 /** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
@@ -83,15 +80,11 @@ export function getConfig(chain: SupportedChain): SdkManagers {
   }
   const { depGroup } = DEPLOYMENTS[chain];
   const cellDeps = [ccc.CellDep.from({ outPoint: depGroup, depType: "depGroup" })];
-  const dao = { script: DAO, cellDeps };
   const ickbUdt = new IckbUdt({
     script: ICKB_UDT,
     cellDeps,
     logicScript: ICKB_LOGIC,
     daoScript: DAO,
   });
-  return {
-    ickbUdt,
-    ickbLogic: new LogicManager(ICKB_LOGIC, cellDeps, dao),
-  };
+  return { ickbUdt };
 }

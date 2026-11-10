@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { DAO } from "../../../../src/constants.ts";
 import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
 import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
@@ -25,11 +26,10 @@ afterEach(() => {
 
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
-  const daoScript = botRuntime().managers.ickbLogic.dao.script;
   return async (txLike): Promise<CompletedTransaction> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();
-    const requests = tx.outputs.filter((output) => output.type?.eq(daoScript) === true);
+    const requests = tx.outputs.filter((output) => output.type?.eq(DAO) === true);
     if (requests.length > maxRequests) {
       throw new IckbError("too many markers", { code: "insufficient_capacity" });
     }

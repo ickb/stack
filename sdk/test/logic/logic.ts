@@ -8,38 +8,34 @@ import {
   type StubCell,
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
+import { DAO, ICKB_LOGIC } from "../../src/constants.ts";
 import {
   DAO_DEPOSIT_DATA,
   DAO_OUTPUT_LIMIT,
   DaoOutputLimitError,
 } from "../../src/dao.ts";
 import {
+  completeDeposit,
   decodeReceiptData,
+  deposit,
   encodeReceiptData,
-  LogicManager,
+  findDeposits,
+  isDeposit,
+  isReceipt,
   receiptCell,
   receiptPhase2Capacity,
+  receiptsFrom,
   type ReceiptCell,
 } from "../../src/logic.ts";
 import { IckbUdt, ickbValue } from "../../src/udt.ts";
 
-const logic = script("11");
 // Typed unknown so the matcher's `any` stays out of the asserted object.
 const anyError: unknown = expect.any(Error);
-const daoDep = ccc.CellDep.from({
-  outPoint: { txHash: byte32FromByte("dd"), index: 0n },
-  depType: "code",
-});
-const dao = { script: script("22"), cellDeps: [daoDep] };
-
-function manager(cellDeps: ccc.CellDep[] = []): LogicManager {
-  return new LogicManager(logic, cellDeps, dao);
-}
 
 function receiptCellOf(
   txHashByte: string,
   outputData: ccc.Hex,
-  type = logic,
+  type = ICKB_LOGIC,
   lock = script("33"),
 ): ccc.Cell {
   return ccc.Cell.from({
@@ -56,10 +52,10 @@ function receiptData(
   return ccc.hexFrom(encodeReceiptData({ depositQuantity, depositAmount }));
 }
 
-function depositCellOf(txHashByte: string, lock = logic, index = 0n): ccc.Cell {
+function depositCellOf(txHashByte: string, lock = ICKB_LOGIC, index = 0n): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index },
-    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: dao.script },
+    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: DAO },
     outputData: DAO_DEPOSIT_DATA,
   });
 }
@@ -67,7 +63,7 @@ function depositCellOf(txHashByte: string, lock = logic, index = 0n): ccc.Cell {
 function receiptFor(
   txHashByte: string,
   header: ccc.ClientBlockHeader,
-  type = logic,
+  type = ICKB_LOGIC,
 ): ReceiptCell {
   const cell = receiptCellOf(txHashByte, receiptData(1n), type);
   return {
@@ -94,28 +90,20 @@ describe("receipt data", () => {
   });
 });
 
-describe("LogicManager.deposit", () => {
-  it("adds the deposits, their DAO deps, and a receipt sized for phase 2", () => {
+describe("deposit", () => {
+  it("adds the deposits and a receipt sized for phase 2", () => {
     const lock = script("44", "0x1234");
-    const dep = ccc.CellDep.from({
-      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-      depType: "code",
-    });
 
-    const tx = manager([dep]).deposit(
-      ccc.Transaction.default(),
-      2,
-      ccc.fixedPointFrom(100082),
-      lock,
-    );
+    const tx = deposit(ccc.Transaction.default(), 2, ccc.fixedPointFrom(100082), lock);
 
-    expect(tx.cellDeps).toEqual([dep, daoDep]);
+    // Completion, not the builder, adds the iCKB dep group.
+    expect(tx.cellDeps).toEqual([]);
     expect(tx.outputs).toHaveLength(3);
-    expect(tx.outputs[0]?.type?.eq(dao.script)).toBe(true);
-    expect(tx.outputs[0]?.lock.eq(logic)).toBe(true);
+    expect(tx.outputs[0]?.type?.eq(DAO)).toBe(true);
+    expect(tx.outputs[0]?.lock.eq(ICKB_LOGIC)).toBe(true);
     expect(tx.outputsData.slice(0, 2)).toEqual([DAO_DEPOSIT_DATA, DAO_DEPOSIT_DATA]);
     expect(tx.outputs[2]?.capacity).toBe(receiptPhase2Capacity(lock));
-    expect(tx.outputs[2]?.type?.eq(logic)).toBe(true);
+    expect(tx.outputs[2]?.type?.eq(ICKB_LOGIC)).toBe(true);
     expect(decodeReceiptData(tx.outputsData[2] ?? "0x")).toEqual({
       depositQuantity: 2n,
       depositAmount: ccc.fixedPointFrom(100000),
@@ -125,7 +113,7 @@ describe("LogicManager.deposit", () => {
   it("refuses a non-positive deposit quantity", () => {
     for (const quantity of [0, -1]) {
       expect(() =>
-        manager().deposit(
+        deposit(
           ccc.Transaction.default(),
           quantity,
           ccc.fixedPointFrom(100082),
@@ -153,46 +141,26 @@ describe("LogicManager.deposit", () => {
   it("keeps the protocol minimum and maximum on unoccupied capacity", () => {
     for (const capacity of [1082, 1000082]) {
       expect(() =>
-        manager().deposit(
-          ccc.Transaction.default(),
-          1,
-          ccc.fixedPointFrom(capacity),
-          script("44"),
-        ),
+        deposit(ccc.Transaction.default(), 1, ccc.fixedPointFrom(capacity), script("44")),
       ).not.toThrow();
     }
     expect(() =>
-      manager().deposit(
-        ccc.Transaction.default(),
-        1,
-        ccc.fixedPointFrom(1081),
-        script("44"),
-      ),
+      deposit(ccc.Transaction.default(), 1, ccc.fixedPointFrom(1081), script("44")),
     ).toThrow("iCKB deposit minimum is 1000 CKB free capacity");
     expect(() =>
-      manager().deposit(
-        ccc.Transaction.default(),
-        1,
-        ccc.fixedPointFrom(1000083),
-        script("44"),
-      ),
+      deposit(ccc.Transaction.default(), 1, ccc.fixedPointFrom(1000083), script("44")),
     ).toThrow("iCKB deposit maximum is 1000000 CKB free capacity");
   });
 
   it("rejects non-safe-integer deposit quantities before allocation", () => {
     expect(() =>
-      manager().deposit(
-        ccc.Transaction.default(),
-        1.5,
-        ccc.fixedPointFrom(100082),
-        script("44"),
-      ),
+      deposit(ccc.Transaction.default(), 1.5, ccc.fixedPointFrom(100082), script("44")),
     ).toThrow("iCKB deposit quantity must be a positive safe integer");
   });
 
   it("rejects deposit quantities that cannot fit in one DAO transaction", () => {
     const depositMany = (quantity: number): ccc.Transaction =>
-      manager().deposit(
+      deposit(
         ccc.Transaction.default(),
         quantity,
         ccc.fixedPointFrom(100082),
@@ -213,32 +181,24 @@ describe("LogicManager.deposit", () => {
       tx.addOutput({ capacity: 1n, lock: script("44") }, "0x");
     }
 
-    expect(() =>
-      manager().deposit(tx, 1, ccc.fixedPointFrom(100082), script("44")),
-    ).toThrow(DaoOutputLimitError);
-  });
-});
-
-describe("LogicManager cell shapes", () => {
-  it("identifies receipts and DAO deposits locked by the logic script", () => {
-    const target = manager();
-
-    expect(target.isDeposit(depositCellOf("44"))).toBe(true);
-    expect(target.isDeposit(depositCellOf("55", script("33")))).toBe(false);
-    expect(target.isReceipt(receiptCellOf("66", receiptData(1n)))).toBe(true);
-    expect(target.isReceipt(receiptCellOf("77", "0x1234"))).toBe(false);
-    expect(target.isReceipt(receiptCellOf("88", receiptData(1n), script("99")))).toBe(
-      false,
+    expect(() => deposit(tx, 1, ccc.fixedPointFrom(100082), script("44"))).toThrow(
+      DaoOutputLimitError,
     );
   });
 });
 
-describe("LogicManager.completeDeposit", () => {
+describe("iCKB Logic cell shapes", () => {
+  it("identifies receipts and DAO deposits locked by the logic script", () => {
+    expect(isDeposit(depositCellOf("44"))).toBe(true);
+    expect(isDeposit(depositCellOf("55", script("33")))).toBe(false);
+    expect(isReceipt(receiptCellOf("66", receiptData(1n)))).toBe(true);
+    expect(isReceipt(receiptCellOf("77", "0x1234"))).toBe(false);
+    expect(isReceipt(receiptCellOf("88", receiptData(1n), script("99")))).toBe(false);
+  });
+});
+
+describe("completeDeposit", () => {
   it("adds receipt inputs and unique receipt header deps", () => {
-    const dep = ccc.CellDep.from({
-      outPoint: { txHash: byte32FromByte("22"), index: 0n },
-      depType: "code",
-    });
     const firstHeader = headerLike({ hash: byte32FromByte("44") });
     const secondHeader = headerLike({ hash: byte32FromByte("55") });
     const receipts = [
@@ -247,14 +207,15 @@ describe("LogicManager.completeDeposit", () => {
       receiptFor("88", secondHeader),
     ];
 
-    const tx = manager([dep]).completeDeposit(ccc.Transaction.default(), receipts);
+    const tx = completeDeposit(ccc.Transaction.default(), receipts);
 
-    expect(tx.cellDeps).toEqual([dep]);
+    // Completion, not the builder, adds the iCKB dep group.
+    expect(tx.cellDeps).toEqual([]);
     expect(tx.headerDeps).toEqual([firstHeader.hash, secondHeader.hash]);
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       receipts.map((receipt) => receipt.cell.outPoint.toHex()),
     );
-    expect(manager([dep]).completeDeposit(ccc.Transaction.default(), [])).toEqual(
+    expect(completeDeposit(ccc.Transaction.default(), [])).toEqual(
       ccc.Transaction.default(),
     );
   });
@@ -263,15 +224,13 @@ describe("LogicManager.completeDeposit", () => {
     const header = headerLike({ hash: byte32FromByte("44") });
     const wrongType = receiptFor("66", header, script("77"));
 
-    expect(() =>
-      manager().completeDeposit(ccc.Transaction.default(), [wrongType]),
-    ).toThrow(
-      `Receipt ${wrongType.cell.outPoint.toHex()} is not an iCKB receipt for this logic script`,
+    expect(() => completeDeposit(ccc.Transaction.default(), [wrongType])).toThrow(
+      `Receipt ${wrongType.cell.outPoint.toHex()} is not an iCKB receipt`,
     );
   });
 });
 
-describe("LogicManager.receiptsFrom", () => {
+describe("receiptsFrom", () => {
   const header = headerLike({ dao: { c: 0n, ar: 10000000000000000n, s: 0n, u: 0n } });
 
   it("values only the receipts of a batch, ignoring trailing payload bytes", async () => {
@@ -294,7 +253,7 @@ describe("LogicManager.receiptsFrom", () => {
       },
     });
 
-    const receipts = await manager().receiptsFrom(client, [
+    const receipts = await receiptsFrom(client, [
       { cell: other, blockNumber: 1n },
       { cell: receipt, blockNumber: 1n },
     ]);
@@ -324,7 +283,7 @@ describe("LogicManager.receiptsFrom", () => {
       },
     });
 
-    const receiptsPromise = manager().receiptsFrom(client, [
+    const receiptsPromise = receiptsFrom(client, [
       { cell: first, blockNumber: 1n },
       { cell: second, blockNumber: 2n },
       { cell: twin, blockNumber: 1n },
@@ -364,12 +323,12 @@ describe("LogicManager.receiptsFrom", () => {
     });
 
     await expect(
-      manager().receiptsFrom(client, [{ cell: receipt, blockNumber: 7n }]),
+      receiptsFrom(client, [{ cell: receipt, blockNumber: 7n }]),
     ).rejects.toThrow("Header not found for block number 7");
   });
 });
 
-describe("LogicManager.findDeposits", () => {
+describe("findDeposits", () => {
   const tip = headerLike({ epoch: [170n, 0n, 1n], number: 3n });
   const depositHeader = headerLike({
     epoch: [1n, 0n, 1n],
@@ -378,13 +337,13 @@ describe("LogicManager.findDeposits", () => {
   });
 
   it("scans the logic lock for DAO deposits and values them at their deposit header", async () => {
-    const deposit = depositCellOf("44");
+    const depositCell = depositCellOf("44");
     const wrongLock = depositCellOf("55", script("77"));
     const queries: cccA.JsonRpcIndexerSearchKey[] = [];
     const client = new StubClient({
       cells: (query): readonly StubCell[] => {
         queries.push(query);
-        return [deposit, wrongLock].map((cell) => ({ cell, blockNumber: 1n }));
+        return [depositCell, wrongLock].map((cell) => ({ cell, blockNumber: 1n }));
       },
       getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader | undefined> => {
         await Promise.resolve();
@@ -392,15 +351,15 @@ describe("LogicManager.findDeposits", () => {
       },
     });
 
-    const deposits = await manager().findDeposits(client, tip);
+    const deposits = await findDeposits(client, tip);
 
     expect(queries).toEqual([
       {
-        script: cccA.JsonRpcTransformers.scriptFrom(logic),
+        script: cccA.JsonRpcTransformers.scriptFrom(ICKB_LOGIC),
         script_type: "lock",
         script_search_mode: "exact",
         filter: {
-          script: cccA.JsonRpcTransformers.scriptFrom(dao.script),
+          script: cccA.JsonRpcTransformers.scriptFrom(DAO),
           output_data: DAO_DEPOSIT_DATA,
           output_data_filter_mode: "exact",
         },
@@ -409,13 +368,13 @@ describe("LogicManager.findDeposits", () => {
     ]);
     expect(deposits).toHaveLength(1);
     expect(deposits[0]).toMatchObject({
-      cell: deposit,
+      cell: depositCell,
       header: depositHeader,
-      udtValue: ickbValue(deposit.capacityFree, depositHeader),
+      udtValue: ickbValue(depositCell.capacityFree, depositHeader),
     });
     expect(deposits[0]?.ckbValue).toBe(
-      deposit.cellOutput.capacity +
-        ccc.calcDaoProfit(deposit.capacityFree, depositHeader, tip),
+      depositCell.cellOutput.capacity +
+        ccc.calcDaoProfit(depositCell.capacityFree, depositHeader, tip),
     );
     expect(deposits[0]?.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, tip))).toBe(
       true,
@@ -423,8 +382,8 @@ describe("LogicManager.findDeposits", () => {
   });
 
   it("reads one header per deposit block", async () => {
-    const first = depositCellOf("44", logic, 0n);
-    const second = depositCellOf("45", logic, 0n);
+    const first = depositCellOf("44", ICKB_LOGIC, 0n);
+    const second = depositCellOf("45", ICKB_LOGIC, 0n);
     let headerCalls = 0;
     const client = new StubClient({
       cells: (): readonly StubCell[] => [first, second],
@@ -435,10 +394,10 @@ describe("LogicManager.findDeposits", () => {
       },
     });
 
-    const deposits = await manager().findDeposits(client, tip);
+    const deposits = await findDeposits(client, tip);
 
     expect(headerCalls).toBe(1);
-    expect(deposits.map((deposit) => deposit.cell.outPoint.txHash)).toEqual([
+    expect(deposits.map(({ cell }) => cell.outPoint.txHash)).toEqual([
       first.outPoint.txHash,
       second.outPoint.txHash,
     ]);

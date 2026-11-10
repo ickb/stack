@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ORDER } from "../../../src/constants.ts";
+import { ICKB_LOGIC, ORDER } from "../../../src/constants.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import { mintedOrders, stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
@@ -15,19 +15,8 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("plans CKB-to-iCKB direct deposits before fallback orders", async () => {
-    const { sdk, logicManager, lock } = testSdk();
+    const { sdk, lock } = testSdk();
     const remainder = ccc.fixedPointFrom(10000);
-    const deposit = vi
-      .spyOn(logicManager, "deposit")
-      .mockImplementation((txLike, quantity, depositCapacity, depositLock) => {
-        expect(quantity).toBe(2);
-        expect(depositCapacity).toBe(ICKB_DEPOSIT_CAP);
-        expect(depositLock).toEqual(lock);
-        const tx = ccc.Transaction.from(txLike);
-        tx.outputs.push(ccc.CellOutput.from({ capacity: 1n, lock }));
-        tx.outputsData.push("0x");
-        return tx;
-      });
 
     const result = await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,
@@ -43,26 +32,29 @@ describe("IckbSdk.buildConversionTransaction", () => {
       ok: true,
       conversionKind: DIRECT_PLUS_ORDER,
     });
-    expect(deposit).toHaveBeenCalledTimes(1);
     if (!result.ok) {
       throw new Error("Expected a conversion");
     }
-    // The deposit's output first, then the remainder order and its master.
+    // Two cap-sized deposits and their receipt first, then the remainder order and master.
     expect(result.tx.outputs.map(({ lock: outputLock }) => outputLock)).toEqual([
+      ICKB_LOGIC,
+      ICKB_LOGIC,
       lock,
       ORDER,
       lock,
     ]);
+    expect(result.tx.outputs.slice(0, 2).map(({ capacity }) => capacity)).toEqual([
+      ICKB_DEPOSIT_CAP,
+      ICKB_DEPOSIT_CAP,
+    ]);
+    expect(result.tx.outputs[2]?.type?.eq(ICKB_LOGIC)).toBe(true);
     expect(mintedOrders(result.tx)).toMatchObject([
       { ckbValue: remainder, udtValue: 0n },
     ]);
   });
 
   it("reports no order cell space for whole deposits alone", async () => {
-    const { sdk, logicManager } = testSdk();
-    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) =>
-      ccc.Transaction.from(txLike),
-    );
+    const { sdk } = testSdk();
 
     const result = await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,
@@ -79,10 +71,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     [conversionContext().system.depositCapacity, "direct"],
     [ccc.fixedPointFrom(10000), "order"],
   ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
-    const { sdk, logicManager } = testSdk();
-    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) =>
-      ccc.Transaction.from(txLike),
-    );
+    const { sdk } = testSdk();
 
     await expect(
       sdk.buildConversionTransaction({

@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script } from "@ickb/testkit";
-import { DAO, OWNED_OWNER } from "../../../../src/constants.ts";
+import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../../../src/constants.ts";
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
@@ -57,7 +57,7 @@ export function projectionReadyDeposit(
     outPoint: { txHash: hash(options.id ?? "aa"), index: maturityUnix },
     cellOutput: {
       capacity: 0n,
-      lock: script("22"),
+      lock: ICKB_LOGIC,
       type: DAO,
     },
     outputData: DAO_DEPOSIT_DATA,
@@ -81,8 +81,9 @@ export function receiptValue(
 ): ReceiptCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { capacity: ckbValue, lock: script("11"), type: script("22") },
-    outputData: "0x",
+    cellOutput: { capacity: ckbValue, lock: script("11"), type: ICKB_LOGIC },
+    // A well-formed receipt the builders accept; the projection reads only the given values.
+    outputData: encodeReceiptData({ depositQuantity: 1n, depositAmount: udtValue }),
   });
   return {
     cell,

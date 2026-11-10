@@ -13,7 +13,7 @@ import {
   readyWithdrawalGroup,
   receiptCell,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, dep, headerLike } from "./support/sdk_core_support.ts";
+import { baseTip, headerLike } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -23,7 +23,6 @@ interface RealBaseTransactionEffects {
   botLock: ccc.Script;
   dao: ccc.Script;
   depositHeader: ccc.ClientBlockHeader;
-  logicDep: ccc.CellDep;
   masterCell: ccc.Cell;
   orderCell: ccc.Cell;
   receipt: ReceiptCell;
@@ -60,12 +59,13 @@ function expectRealBaseTransactionEffects(
     options.receiptHeader.hash,
     options.withdrawalHeader.hash,
   ]);
-  expect(tx.cellDeps).toContainEqual(options.logicDep);
+  // Completion, not the builders, adds the iCKB dep group.
+  expect(tx.cellDeps).toEqual([]);
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
 describe("IckbSdk.buildBaseTransaction", () => {
-  it("combines real manager transaction effects", async () => {
+  it("combines the real builders' transaction effects", async () => {
     const { tx, ...effects } = await buildRealBaseTransactionCase();
 
     expectRealBaseTransactionEffects(tx, effects);
@@ -75,10 +75,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
 async function buildRealBaseTransactionCase(): Promise<
   RealBaseTransactionEffects & { tx: ccc.Transaction }
 > {
-  const logicDep = dep("d3");
-  const { botLock, dao, logic, sdk } = baseTransactionFixture({
-    logicDeps: [logicDep],
-  });
+  const { botLock, dao, logic, sdk } = baseTransactionFixture();
   const depositHeader = headerLike(10n);
   const receiptHeader = headerLike(11n);
   const withdrawalHeader = headerLike(12n);
@@ -113,7 +110,6 @@ async function buildRealBaseTransactionCase(): Promise<
     botLock,
     dao,
     depositHeader,
-    logicDep,
     masterCell,
     orderCell,
     receipt,

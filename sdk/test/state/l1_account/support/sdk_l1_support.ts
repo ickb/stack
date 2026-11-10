@@ -1,8 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { script, StubClient, type StubClientHandlers } from "@ickb/testkit";
+import { StubClient, type StubClientHandlers } from "@ickb/testkit";
 
-import { DAO } from "../../../../src/constants.ts";
-import { LogicManager } from "../../../../src/logic.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { headerLike } from "../../../transaction/base/support/sdk_core_support.ts";
@@ -37,15 +35,5 @@ export function anchoredAt(
 }
 
 export function defaultL1Sdk(): IckbSdk {
-  return new IckbSdk({
-    ickbUdt: fakeIckbUdt(),
-    ickbLogic: new LogicManager(script("22"), [], { script: DAO, cellDeps: [] }),
-  });
-}
-
-export function l1SdkWithManagers(options: { logicManager?: LogicManager }): IckbSdk {
-  const logicManager =
-    options.logicManager ??
-    new LogicManager(script("22"), [], { script: DAO, cellDeps: [] });
-  return new IckbSdk({ ickbUdt: fakeIckbUdt(), ickbLogic: logicManager });
+  return new IckbSdk({ ickbUdt: fakeIckbUdt() });
 }

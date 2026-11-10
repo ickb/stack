@@ -21,7 +21,7 @@ export interface BotTurnContext {
   /** Event emitter scoped to this bot run. */
   events: BotEventEmitter;
 
-  /** Runtime clients, signer, SDK, managers, and primary lock. */
+  /** Runtime clients, signer, SDK, and primary lock. */
   runtime: Runtime;
 }
 

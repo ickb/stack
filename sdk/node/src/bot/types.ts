@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { SdkManagers } from "../../../src/constants.ts";
 import type { ConversionTransactionContext } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
@@ -17,9 +16,6 @@ export interface Runtime {
 
   /** SDK instance for public state reads and partial transaction builders. */
   sdk: IckbSdk;
-
-  /** Lower-level managers from the selected deployment config. */
-  managers: SdkManagers;
 
   /** Primary lock controlled by the signer. */
   primaryLock: ccc.Script;

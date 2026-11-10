@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { DAO, ICKB_LOGIC } from "../../../../src/constants.ts";
 import { receiptPhase2Capacity } from "../../../../src/logic.ts";
 import { IckbError } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
@@ -25,7 +26,6 @@ const RICH_CKB = ccc.fixedPointFrom(500_000);
 describe("buildTransaction deposit", () => {
   it("deposits one cap-sized deposit when iCKB is under the refill line", async () => {
     const runtime = botRuntime();
-    const deposit = vi.spyOn(runtime.managers.ickbLogic, "deposit");
 
     const result = await buildTransaction(
       runtime,
@@ -36,12 +36,17 @@ describe("buildTransaction deposit", () => {
       }),
     );
 
-    expect(deposit).toHaveBeenCalledWith(
-      expect.anything(),
-      1,
-      ccc.fixedPointFrom(1100),
-      runtime.primaryLock,
-    );
+    if (result.kind !== "built") {
+      throw new Error("Expected a built transaction");
+    }
+    // One deposit of the state's capacity, its receipt at the primary lock, then change.
+    const [depositOutput, receipt] = result.tx.outputs;
+    expect(depositOutput?.capacity).toBe(ccc.fixedPointFrom(1100));
+    expect(depositOutput?.lock.eq(ICKB_LOGIC)).toBe(true);
+    expect(depositOutput?.type?.eq(DAO)).toBe(true);
+    expect(receipt?.lock.eq(runtime.primaryLock)).toBe(true);
+    expect(receipt?.type?.eq(ICKB_LOGIC)).toBe(true);
+    expect(result.tx.outputs).toHaveLength(3);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
@@ -88,14 +93,12 @@ describe("buildTransaction deposit", () => {
     const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP / 4n + 1n);
     // Sixty epochs out: another ring segment.
     const whale = readyDeposit("73", 31n * ICKB_DEPOSIT_CAP, 60n * 240n);
-    const daoScript = botRuntime().managers.ickbLogic.dao.script;
     const primaryLock = botRuntime().primaryLock;
     const completeTransaction = vi.fn(async (txLike: ccc.TransactionLike) => {
       await Promise.resolve();
       const tx = ccc.Transaction.from(txLike).clone();
       const isDeposit = (output: ccc.CellOutput): boolean =>
-        output.type?.eq(daoScript) === true &&
-        output.capacity === ccc.fixedPointFrom(100_000);
+        output.type?.eq(DAO) === true && output.capacity === ccc.fixedPointFrom(100_000);
       if (tx.outputs.some(isDeposit)) {
         throw new IckbError("no CKB for the deposit", { code: "insufficient_capacity" });
       }

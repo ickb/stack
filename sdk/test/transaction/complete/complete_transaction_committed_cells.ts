@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { DAO, ICKB_LOGIC } from "../../../src/constants.ts";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { SWEEP_INPUT_LIMIT } from "../../../src/sdk.ts";
 import {
@@ -271,14 +272,11 @@ function registerIckbTests(): void {
 
 function registerFailureTests(): void {
   it("fails typed instead of routing sub-minimum change into a protocol output", async () => {
-    const { sdk, logicManager, lock } = testSdk({ completion: "real" });
+    const { sdk, lock } = testSdk({ completion: "real" });
     const source = capacityCell(ccc.fixedPointFrom(50), lock, "84");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
-    tx.addOutput(
-      { capacity: ccc.fixedPointFrom(40), lock, type: logicManager.script },
-      "0x",
-    );
+    tx.addOutput({ capacity: ccc.fixedPointFrom(40), lock, type: ICKB_LOGIC }, "0x");
     const original = tx.toHex();
 
     await expect(
@@ -315,7 +313,7 @@ function registerFailureTests(): void {
   });
 
   it("rejects DAO output 65 rather than hiding change in an existing output", async () => {
-    const { sdk, logicManager, lock } = testSdk({ completion: "real" });
+    const { sdk, lock } = testSdk({ completion: "real" });
     const source = capacityCell(ccc.fixedPointFrom(10_000), lock, "85");
     const { signer } = fundedSigner([source], [lock]);
     const tx = transactionWithOutputs(64, lock);
@@ -323,7 +321,7 @@ function registerFailureTests(): void {
     if (first === undefined) {
       throw new Error("Expected DAO output");
     }
-    first.type = logicManager.dao.script;
+    first.type = DAO;
 
     await expect(
       sdk.completeTransaction(tx, {

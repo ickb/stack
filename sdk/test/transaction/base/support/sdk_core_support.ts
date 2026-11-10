@@ -14,13 +14,6 @@ export const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
 export const baseTip = headerLike(0n);
 export const baseClient = new StubClient();
 
-export function dep(byte: string): ccc.CellDep {
-  return ccc.CellDep.from({
-    outPoint: { txHash: hash(byte), index: 0n },
-    depType: "code",
-  });
-}
-
 /** A real header: its hash is computed from its fields, as the SDK checks every header it reads. */
 export function headerLike(
   number: bigint,

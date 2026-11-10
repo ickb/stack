@@ -24,7 +24,7 @@ describe("getConfig", () => {
   });
 
   it("builds the SDK from one coherent config object", async () => {
-    const { ickbUdt, ickbLogic } = getConfig("testnet");
+    const { ickbUdt } = getConfig("testnet");
     const sdk = IckbSdk.fromChain("testnet");
     const tx = ccc.Transaction.default();
     const client = offlineTestnetClient();
@@ -35,11 +35,10 @@ describe("getConfig", () => {
     ]);
 
     expect(sdk).toBeInstanceOf(IckbSdk);
-    expect(ickbUdt.daoScript.eq(ickbLogic.dao.script)).toBe(true);
-    // The managers run over the same fixed scripts the module functions use.
+    // The token runs over the same fixed scripts the module functions use.
     expect(ickbUdt.script.eq(ICKB_UDT)).toBe(true);
-    expect(ickbLogic.script.eq(ICKB_LOGIC)).toBe(true);
-    expect(ickbLogic.dao.script.eq(DAO)).toBe(true);
+    expect(ickbUdt.logicScript.eq(ICKB_LOGIC)).toBe(true);
+    expect(ickbUdt.daoScript.eq(DAO)).toBe(true);
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       system: system(),
@@ -55,7 +54,7 @@ describe("getConfig", () => {
 
 describe("getConfig defaults", () => {
   it("resolves mainnet defaults", () => {
-    const { ickbUdt, ickbLogic } = getConfig("mainnet");
+    const { ickbUdt } = getConfig("mainnet");
     const logicScript =
       "0x350000001000000030000000310000002a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd30200000000";
     const udtScript =
@@ -63,7 +62,7 @@ describe("getConfig defaults", () => {
     const depGroup =
       "0x621a6f38de3b9f453016780edac3b26bfcbfa3e2ecb47c2da275471a5d3ed1650000000001";
 
-    expect(ickbLogic.script.toHex()).toBe(logicScript);
+    expect(ICKB_LOGIC.toHex()).toBe(logicScript);
     expect(ickbUdt.logicScript.toHex()).toBe(logicScript);
     expect(OWNED_OWNER.toHex()).toBe(
       "0x35000000100000003000000031000000acc79e07d107831feef4c70c9e683dac5644d5993b9cb106dca6e74baa381bd00200000000",
@@ -73,8 +72,6 @@ describe("getConfig defaults", () => {
     );
     expect(ickbUdt.script.toHex()).toBe(udtScript);
     expect(ICKB_UDT.toHex()).toBe(udtScript);
-    for (const manager of [ickbUdt, ickbLogic.dao, ickbLogic]) {
-      expect(manager.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
-    }
+    expect(ickbUdt.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
   });
 });

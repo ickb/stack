@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import {
   DAO,
-  getConfig,
+  ICKB_LOGIC,
   ICKB_UDT,
   ORDER,
   OWNED_OWNER,
@@ -46,10 +46,6 @@ export interface BotRuntimeOptions {
   sendTransaction?: Runtime["sendTransaction"];
   sdk?: Partial<Pick<IckbSdk, "getL1AccountState">>;
   primaryLock?: ccc.Script;
-  managers?: {
-    ickbUdt?: Partial<Runtime["managers"]["ickbUdt"]>;
-    ickbLogic?: Partial<Runtime["managers"]["ickbLogic"]>;
-  };
 }
 
 export const hash = byte32FromByte;
@@ -75,15 +71,13 @@ export function readyDeposit(
   udtValue: bigint,
   minutesOut = 30n,
 ): IckbDepositCell {
-  const { ickbLogic: logic } = getConfig("testnet");
-  const { dao } = logic;
   const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100_082),
-      lock: logic.script,
-      type: dao.script,
+      lock: ICKB_LOGIC,
+      type: DAO,
     },
     outputData: DAO_DEPOSIT_DATA,
   });
@@ -103,7 +97,7 @@ export function testReceipt(byte: string): ReceiptCell {
     cellOutput: {
       capacity: ccc.fixedPointFrom(218),
       lock: script("11"),
-      type: getConfig("testnet").ickbLogic.script,
+      type: ICKB_LOGIC,
     },
     outputData: encodeReceiptData({
       depositQuantity: 1n,
@@ -233,23 +227,16 @@ export function testWithdrawal(
 }
 
 /**
- * The real testnet SDK and managers behind a stubbed L1 read, completion, and send: the
- * builders mutate transactions in place and assert their inputs, which is what the bot
- * tests must exercise.
+ * The real testnet SDK behind a stubbed L1 read, completion, and send: the builders mutate
+ * transactions in place and assert their inputs, which is what the bot tests must exercise.
  */
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   const client = overrides.client ?? new StubClient();
-  const config = getConfig("testnet");
   const primaryLock = overrides.primaryLock ?? script("11");
 
   return {
     client,
-    managers: {
-      ickbUdt: Object.assign(config.ickbUdt, overrides.managers?.ickbUdt),
-      ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
-    },
-    // The SDK over the same manager instances, so spies on those managers see the bot's calls.
-    sdk: Object.assign(new IckbSdk(config), {
+    sdk: Object.assign(IckbSdk.fromChain("testnet"), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
         await Promise.resolve();
         return l1AccountState();

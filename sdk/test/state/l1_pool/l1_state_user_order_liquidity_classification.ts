@@ -8,8 +8,8 @@ import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_supp
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   anchoredAt,
+  defaultL1Sdk,
   FeeRateStubClient,
-  l1SdkWithManagers,
 } from "../l1_account/support/sdk_l1_support.ts";
 
 // The order book is the test's input, not a scan the client serves.
@@ -26,7 +26,7 @@ describe("IckbSdk.getL1AccountState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
-    const sdk = l1SdkWithManagers({});
+    const sdk = defaultL1Sdk();
     const ownerOrder = makeOrderGroup({
       ownerLock: userLock,
       txHashByte: "a1",
@@ -106,12 +106,12 @@ function l1StateWithMarketOrder({
 }): {
   client: FeeRateStubClient;
   marketOrder: ReturnType<typeof makeOrderGroup>;
-  sdk: ReturnType<typeof l1SdkWithManagers>;
+  sdk: ReturnType<typeof defaultL1Sdk>;
   userLock: ReturnType<typeof script>;
 } {
   const userLock = script("11");
   const nonUserLock = script("12");
-  const sdk = l1SdkWithManagers({});
+  const sdk = defaultL1Sdk();
   const marketOrder = makeOrderGroup({
     ownerLock: nonUserLock,
     txHashByte,

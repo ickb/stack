@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OWNED_OWNER } from "../../../src/constants.ts";
+import { ICKB_LOGIC, OWNED_OWNER } from "../../../src/constants.ts";
+import { deposit } from "../../../src/logic.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, hash } from "./support/sdk_core_support.ts";
@@ -13,33 +14,25 @@ const NO_COLLECT = { availableOrders: [], receipts: [], readyWithdrawals: [] };
 
 describe("IckbSdk.buildBaseTransaction", () => {
   it("lets callers append a deposit after the withdrawal request path", () => {
-    const { botLock, dao, logic, logicManager, sdk } = baseTransactionFixture();
+    const { botLock, dao, logic, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("85", logic, dao, baseTip, baseTip, {
       isReady: true,
-    });
-
-    vi.spyOn(logicManager, "deposit").mockImplementation((txLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      // The withdrawal request and its owner marker.
-      expect(tx.outputs).toHaveLength(2);
-      tx.outputs.push(
-        ccc.CellOutput.from({
-          capacity: 2n,
-          lock: botLock,
-        }),
-      );
-      tx.outputsData.push("0x");
-      return tx;
     });
 
     let tx = sdk.buildBaseTransaction(ccc.Transaction.default(), NO_COLLECT, {
       deposits: [requestedDeposit],
       lock: botLock,
     });
-    tx = logicManager.deposit(tx, 1, 2n, botLock);
+    tx = deposit(tx, 1, ccc.fixedPointFrom(1082), botLock);
 
-    expect(tx.outputs.map(({ lock }) => lock)).toEqual([OWNED_OWNER, botLock, botLock]);
-    expect(tx.outputs[2]?.capacity).toBe(2n);
+    // The request and its owner marker, then the deposit and its receipt.
+    expect(tx.outputs.map(({ lock }) => lock)).toEqual([
+      OWNED_OWNER,
+      botLock,
+      ICKB_LOGIC,
+      botLock,
+    ]);
+    expect(tx.outputs[2]?.capacity).toBe(ccc.fixedPointFrom(1082));
   });
 
   it("lets DAO withdrawal own unbalanced caller prework rejection", () => {

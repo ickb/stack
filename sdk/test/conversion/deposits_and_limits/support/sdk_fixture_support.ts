@@ -2,9 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
 import { expect, vi } from "vitest";
 
-import { DAO, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { DAO, ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
-import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
+import type { IckbDepositCell } from "../../../../src/logic.ts";
 import { OrderCell } from "../../../../src/order/cells.ts";
 import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
@@ -24,26 +24,13 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 export function baseTransactionFixture(
   options: {
     completion?: "passthrough" | "real";
-    logicDeps?: ccc.CellDep[];
   } = {},
 ): BaseTransactionFixture {
-  const botLock = script("11");
-  const logic = script("22");
-  const dao = DAO;
-  const daoManager = { script: dao, cellDeps: [] };
-  const logicManager = new LogicManager(logic, options.logicDeps ?? [], daoManager);
   return {
-    botLock,
-    dao,
-    logic,
-    logicManager,
-    sdk: withCompletion(
-      new IckbSdk({
-        ickbUdt: fakeIckbUdt(logic),
-        ickbLogic: logicManager,
-      }),
-      options.completion,
-    ),
+    botLock: script("11"),
+    dao: DAO,
+    logic: ICKB_LOGIC,
+    sdk: withCompletion(new IckbSdk({ ickbUdt: fakeIckbUdt() }), options.completion),
   };
 }
 
@@ -64,23 +51,21 @@ export interface BaseTransactionFixture {
   botLock: ccc.Script;
   dao: ccc.Script;
   logic: ccc.Script;
-  logicManager: LogicManager;
   sdk: IckbSdk;
 }
 
 /**
- * SDK over fake managers. Completion is a passthrough unless `completion: "real"`, so
+ * SDK over the fake iCKB token. Completion is a passthrough unless `completion: "real"`, so
  * planning tests see the built transaction and walk tests see the real completer.
  */
 export function testSdk(
   options: { completion?: "passthrough" | "real" } = {},
 ): SdkFixture {
   const lock = script("11");
-  const logicManager = new LogicManager(script("22"), [], { script: DAO, cellDeps: [] });
   const ickbUdt = fakeIckbUdt();
-  const sdk = new IckbSdk({ ickbUdt, ickbLogic: logicManager });
+  const sdk = new IckbSdk({ ickbUdt });
   withCompletion(sdk, options.completion);
-  return { sdk, ickbUdt, logicManager, lock };
+  return { sdk, ickbUdt, lock };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */
@@ -141,16 +126,15 @@ export function fundedSigner(
 export interface SdkFixture {
   sdk: IckbSdk;
   ickbUdt: ReturnType<typeof fakeIckbUdt>;
-  logicManager: LogicManager;
   lock: ccc.Script;
 }
 
 /**
- * The iCKB token over the fixture's logic deposits, so completion values them; its type
- * is the real iCKB xUDT, so completion also balances the orders the real mint creates.
+ * The iCKB token over the real iCKB Logic deposits and receipts, so completion values them;
+ * its type is the real iCKB xUDT, so completion also balances the orders the mint creates.
  */
-export function fakeIckbUdt(logic = script("22")): IckbUdt {
-  return new TestIckbUdt(logic);
+export function fakeIckbUdt(): IckbUdt {
+  return new TestIckbUdt();
 }
 
 /** The CKB and iCKB each order output of the transaction offers, and its info. */
@@ -224,11 +208,11 @@ export function outPointsOf(deposits: IckbDepositCell[]): ccc.Hex[] {
 }
 
 class TestIckbUdt extends IckbUdt {
-  constructor(logic: ccc.Script) {
+  constructor() {
     super({
       script: ICKB_UDT,
       cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
-      logicScript: logic,
+      logicScript: ICKB_LOGIC,
       daoScript: DAO,
     });
   }

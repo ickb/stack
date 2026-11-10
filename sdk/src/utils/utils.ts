@@ -122,21 +122,6 @@ export interface ExchangeRatio {
 }
 
 /**
- * Script plus cell dependencies needed to build transactions that use it.
- */
-export interface ScriptDeps {
-  /**
-   * The lock or type script.
-   */
-  script: ccc.Script;
-
-  /**
-   * Cell dependencies required to resolve the script code.
-   */
-  cellDeps: ccc.CellDep[];
-}
-
-/**
  * True when a cell has no type script and no data payload.
  *
  * @remarks
