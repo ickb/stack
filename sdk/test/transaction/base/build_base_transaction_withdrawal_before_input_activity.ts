@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IckbDepositCell, LogicManager } from "../../../src/logic.ts";
-import type { OwnedOwnerManager } from "../../../src/owned_owner.ts";
+import { OWNED_OWNER } from "../../../src/constants.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderOrder } from "../../conversion/planning/support/sdk_order_support.ts";
 import {
@@ -15,56 +14,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mockBaseTransactionStepOrder(options: {
-  botLock: ccc.Script;
-  logicManager: LogicManager;
-  ownedOwnerManager: OwnedOwnerManager;
-  requestedDeposit: IckbDepositCell;
-  steps: string[];
-}): void {
-  const { botLock, logicManager, ownedOwnerManager, requestedDeposit, steps } = options;
-  vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(
-    (txLike, deposits, lock) => {
-      steps.push("request");
-      expect(deposits).toEqual([requestedDeposit]);
-      expect(lock).toEqual(botLock);
-      return appendInputAndOutput(txLike, hash("70"), botLock, 1n);
-    },
-  );
-  vi.spyOn(logicManager, "completeDeposit").mockImplementation((txLike) => {
-    steps.push("receipts");
-    const tx = ccc.Transaction.from(txLike);
-    // After the request's input and the melted order and master.
-    expect(tx.inputs).toHaveLength(3);
-    expect(tx.outputs).toHaveLength(1);
-    tx.inputs.push(cellInput("72"));
-    return tx;
-  });
-  vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
-    steps.push("withdrawals");
-    const tx = ccc.Transaction.from(txLike);
-    expect(tx.inputs).toHaveLength(4);
-    expect(tx.outputs).toHaveLength(1);
-    tx.inputs.push(cellInput("73"));
-    return tx;
-  });
-}
-
-function appendInputAndOutput(
-  txLike: ccc.TransactionLike,
-  txHash: ccc.Hex,
-  lock: ccc.Script,
-  capacity: bigint,
-): ccc.Transaction {
-  const tx = ccc.Transaction.from(txLike);
-  expect(tx.inputs).toHaveLength(0);
-  expect(tx.outputs).toHaveLength(0);
-  tx.inputs.push(ccc.CellInput.from({ previousOutput: { txHash, index: 0n } }));
-  tx.outputs.push(ccc.CellOutput.from({ capacity, lock }));
-  tx.outputsData.push("0x");
-  return tx;
-}
-
 function cellInput(byte: string): ccc.CellInput {
   return ccc.CellInput.from({
     previousOutput: {
@@ -76,18 +25,14 @@ function cellInput(byte: string): ccc.CellInput {
 
 describe("IckbSdk.buildBaseTransaction", () => {
   it("requests withdrawals before input-only base activity", () => {
-    const { botLock, dao, logic, logicManager, ownedOwnerManager, sdk } =
-      baseTransactionFixture();
-    const steps: string[] = [];
+    const { botLock, dao, logic, logicManager, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("80", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
-    mockBaseTransactionStepOrder({
-      botLock,
-      logicManager,
-      ownedOwnerManager,
-      requestedDeposit,
-      steps,
+    vi.spyOn(logicManager, "completeDeposit").mockImplementation((txLike) => {
+      const tx = ccc.Transaction.from(txLike);
+      tx.inputs.push(cellInput("72"));
+      return tx;
     });
 
     const tx = sdk.buildBaseTransaction(
@@ -100,16 +45,17 @@ describe("IckbSdk.buildBaseTransaction", () => {
       { deposits: [requestedDeposit], lock: botLock },
     );
 
-    expect(steps).toEqual(["request", "receipts", "withdrawals"]);
-    // The real melt spends the order and its master between the request and the receipts.
+    // The request spends the deposit first, then the melt takes the order and its master,
+    // the receipts follow, and the ready withdrawal and its owner come last.
     expect(tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual([
-      cellInput("70").previousOutput.toHex(),
+      requestedDeposit.cell.outPoint.toHex(),
       placeholderOrder.order.cell.outPoint.toHex(),
       placeholderOrder.master.cell.outPoint.toHex(),
       cellInput("72").previousOutput.toHex(),
-      cellInput("73").previousOutput.toHex(),
+      placeholderWithdrawal.owned.cell.outPoint.toHex(),
+      placeholderWithdrawal.owner.cell.outPoint.toHex(),
     ]);
-    expect(tx.outputs).toHaveLength(1);
-    expect(tx.outputsData).toEqual(["0x"]);
+    // Only the request adds outputs: the request at the deposit's index, then its marker.
+    expect(tx.outputs.map(({ lock }) => lock)).toEqual([OWNED_OWNER, botLock]);
   });
 });

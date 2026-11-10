@@ -1,10 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
-import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
+import type { IckbDepositCell, ReceiptCell } from "../logic.ts";
 import type { OrderGroup } from "../order/cells.ts";
 import type { Ratio } from "../order/ratio.ts";
-import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
-import type { IckbUdt } from "../udt.ts";
+import type { WithdrawalGroup } from "../owned_owner.ts";
 
 /**
  * Direction requested by a conversion transaction.
@@ -198,14 +197,4 @@ export interface SystemState {
   poolDeposits: IckbDepositCell[];
   /** The caller's withdrawal timing rules, which every builder and the sender follow. */
   lockUp: LockUpPolicy;
-}
-
-/** Manager set that builds one iCKB SDK instance. */
-export interface SdkManagers {
-  /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
-  ickbUdt: IckbUdt;
-  /** Owned-owner manager for withdrawal request and claim cells. */
-  ownedOwner: OwnedOwnerManager;
-  /** iCKB Logic manager for deposits and receipts. */
-  ickbLogic: LogicManager;
 }

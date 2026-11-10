@@ -1,13 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
-import { expect, vi, type MockInstance } from "vitest";
+import { expect, vi } from "vitest";
 
-import { ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { DAO, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
 import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
 import { OrderCell } from "../../../../src/order/cells.ts";
 import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
-import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
+import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP, IckbUdt } from "../../../../src/udt.ts";
 import {
@@ -23,33 +24,22 @@ const DIRECT_PLUS_ORDER = "direct-plus-order";
 export function baseTransactionFixture(
   options: {
     completion?: "passthrough" | "real";
-    daoDeps?: ccc.CellDep[];
     logicDeps?: ccc.CellDep[];
-    ownedOwnerDeps?: ccc.CellDep[];
   } = {},
 ): BaseTransactionFixture {
   const botLock = script("11");
   const logic = script("22");
-  const dao = script("33");
-  const ownedOwner = script("44");
-  const daoManager = { script: dao, cellDeps: options.daoDeps ?? [] };
+  const dao = DAO;
+  const daoManager = { script: dao, cellDeps: [] };
   const logicManager = new LogicManager(logic, options.logicDeps ?? [], daoManager);
-  const ownedOwnerManager = new OwnedOwnerManager(
-    ownedOwner,
-    options.ownedOwnerDeps ?? [],
-    daoManager,
-  );
   return {
     botLock,
     dao,
     logic,
     logicManager,
-    ownedOwner,
-    ownedOwnerManager,
     sdk: withCompletion(
       new IckbSdk({
-        ickbUdt: fakeIckbUdt(logic, daoManager),
-        ownedOwner: ownedOwnerManager,
+        ickbUdt: fakeIckbUdt(logic),
         ickbLogic: logicManager,
       }),
       options.completion,
@@ -75,8 +65,6 @@ export interface BaseTransactionFixture {
   dao: ccc.Script;
   logic: ccc.Script;
   logicManager: LogicManager;
-  ownedOwner: ccc.Script;
-  ownedOwnerManager: OwnedOwnerManager;
   sdk: IckbSdk;
 }
 
@@ -88,22 +76,11 @@ export function testSdk(
   options: { completion?: "passthrough" | "real" } = {},
 ): SdkFixture {
   const lock = script("11");
-  const logicManager = new LogicManager(script("22"), [], {
-    script: script("33"),
-    cellDeps: [],
-  });
-  const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], {
-    script: script("33"),
-    cellDeps: [],
-  });
+  const logicManager = new LogicManager(script("22"), [], { script: DAO, cellDeps: [] });
   const ickbUdt = fakeIckbUdt();
-  const sdk = new IckbSdk({
-    ickbUdt,
-    ownedOwner: ownedOwnerManager,
-    ickbLogic: logicManager,
-  });
+  const sdk = new IckbSdk({ ickbUdt, ickbLogic: logicManager });
   withCompletion(sdk, options.completion);
-  return { sdk, ickbUdt, logicManager, ownedOwnerManager, lock };
+  return { sdk, ickbUdt, logicManager, lock };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */
@@ -116,6 +93,7 @@ export const stubSigner: ccc.Signer = new ccc.SignerCkbScriptReadonly(
 export function fundedSigner(
   cells: readonly ccc.Cell[],
   locks: readonly ccc.Script[],
+  withdrawals: readonly WithdrawalGroup[] = [],
 ): { client: StubClient; signer: ccc.Signer; cells: ccc.Cell[] } {
   const client = new StubClient({
     cells: (): never => {
@@ -135,6 +113,23 @@ export function fundedSigner(
         }),
       );
     },
+    // CCC values each spent DAO withdrawal request at its two headers, so the node serves
+    // the request with its own header and its deposit header by number.
+    getCellWithHeader: async (outPoint): ReturnType<ccc.Client["getCellWithHeader"]> => {
+      await Promise.resolve();
+      const owned = withdrawals.find(({ owned: { cell } }) =>
+        cell.outPoint.eq(outPoint),
+      )?.owned;
+      return owned === undefined
+        ? undefined
+        : { cell: owned.cell, header: owned.headers[1] };
+    },
+    getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+      await Promise.resolve();
+      return withdrawals.find(
+        ({ owned: { headers } }) => headers[0].number === ccc.numFrom(number),
+      )?.owned.headers[0];
+    },
   });
   return {
     client,
@@ -147,7 +142,6 @@ export interface SdkFixture {
   sdk: IckbSdk;
   ickbUdt: ReturnType<typeof fakeIckbUdt>;
   logicManager: LogicManager;
-  ownedOwnerManager: OwnedOwnerManager;
   lock: ccc.Script;
 }
 
@@ -155,8 +149,8 @@ export interface SdkFixture {
  * The iCKB token over the fixture's logic deposits, so completion values them; its type
  * is the real iCKB xUDT, so completion also balances the orders the real mint creates.
  */
-export function fakeIckbUdt(logic = script("22"), dao?: { script: ccc.Script }): IckbUdt {
-  return new TestIckbUdt(logic, dao?.script ?? script("33"));
+export function fakeIckbUdt(logic = script("22")): IckbUdt {
+  return new TestIckbUdt(logic);
 }
 
 /** The CKB and iCKB each order output of the transaction offers, and its info. */
@@ -185,8 +179,9 @@ export function mintedOrders(
 export async function expectIckbToCkbDirectPlusOrder(options: {
   sdk: IckbSdk;
   deposits: IckbDepositCell[];
+  withdrawn: IckbDepositCell[];
   exchangeRatio: ReturnType<typeof Ratio.from>;
-  order: { ckbValue: bigint; udtValue: bigint };
+  order: object;
 }): Promise<void> {
   const result = await options.sdk.buildConversionTransaction({
     direction: ICKB_TO_CKB,
@@ -201,33 +196,40 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
       ickbAvailable: ICKB_DEPOSIT_CAP,
     }),
   });
+  expectDirectPlusOrder(result, options.withdrawn, options.order);
+}
+
+/** A direct-plus-order conversion: it requests `withdrawn` and mints the one `order`. */
+export function expectDirectPlusOrder(
+  result: ConversionTransactionResult,
+  withdrawn: IckbDepositCell[],
+  order: object,
+): void {
   expect(result).toMatchObject({ ok: true, conversionKind: DIRECT_PLUS_ORDER });
   if (!result.ok) {
     throw new Error("Expected a conversion");
   }
-  expect(mintedOrders(result.tx)).toMatchObject([options.order]);
+  expect(spentOutPoints(result.tx)).toEqual(outPointsOf(withdrawn));
+  expect(mintedOrders(result.tx)).toMatchObject([order]);
 }
 
-/** Requests the expected deposits' withdrawal without building it. */
-export function mockWithdrawalRequest(
-  ownedOwnerManager: OwnedOwnerManager,
-  expectedDeposits: unknown,
-): MockInstance<OwnedOwnerManager["requestWithdrawal"]> {
-  return vi
-    .spyOn(ownedOwnerManager, "requestWithdrawal")
-    .mockImplementation((txLike, deposits) => {
-      expect(deposits).toEqual(expectedDeposits);
-      return ccc.Transaction.from(txLike);
-    });
+/** The out points the transaction spends, in input order. */
+export function spentOutPoints(tx: ccc.Transaction): ccc.Hex[] {
+  return tx.inputs.map(({ previousOutput }) => previousOutput.toHex());
+}
+
+/** The deposits' out points, in the order given. */
+export function outPointsOf(deposits: IckbDepositCell[]): ccc.Hex[] {
+  return deposits.map(({ cell }) => cell.outPoint.toHex());
 }
 
 class TestIckbUdt extends IckbUdt {
-  constructor(logic: ccc.Script, daoScript: ccc.Script) {
+  constructor(logic: ccc.Script) {
     super({
       script: ICKB_UDT,
       cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
       logicScript: logic,
-      daoScript,
+      daoScript: DAO,
     });
   }
 

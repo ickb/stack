@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { script, StubClient, type StubClientHandlers } from "@ickb/testkit";
 
+import { DAO } from "../../../../src/constants.ts";
 import { LogicManager } from "../../../../src/logic.ts";
-import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { headerLike } from "../../../transaction/base/support/sdk_core_support.ts";
@@ -37,30 +37,15 @@ export function anchoredAt(
 }
 
 export function defaultL1Sdk(): IckbSdk {
-  const dao = script("33");
-  const logic = script("22");
-  const ownedOwner = script("44");
   return new IckbSdk({
     ickbUdt: fakeIckbUdt(),
-    ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
-    ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
+    ickbLogic: new LogicManager(script("22"), [], { script: DAO, cellDeps: [] }),
   });
 }
 
-export function l1SdkWithManagers(options: {
-  logicManager?: LogicManager;
-  ownedOwnerManager?: OwnedOwnerManager;
-}): IckbSdk {
-  const dao = script("33");
-  const ownedOwnerManager =
-    options.ownedOwnerManager ??
-    new OwnedOwnerManager(script("44"), [], { script: dao, cellDeps: [] });
+export function l1SdkWithManagers(options: { logicManager?: LogicManager }): IckbSdk {
   const logicManager =
     options.logicManager ??
-    new LogicManager(script("22"), [], { script: dao, cellDeps: [] });
-  return new IckbSdk({
-    ickbUdt: fakeIckbUdt(),
-    ownedOwner: ownedOwnerManager,
-    ickbLogic: logicManager,
-  });
+    new LogicManager(script("22"), [], { script: DAO, cellDeps: [] });
+  return new IckbSdk({ ickbUdt: fakeIckbUdt(), ickbLogic: logicManager });
 }

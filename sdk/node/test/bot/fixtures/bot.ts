@@ -1,5 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import {
+  DAO,
+  getConfig,
+  ICKB_UDT,
+  ORDER,
+  OWNED_OWNER,
+} from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
@@ -42,7 +48,6 @@ export interface BotRuntimeOptions {
   primaryLock?: ccc.Script;
   managers?: {
     ickbUdt?: Partial<Runtime["managers"]["ickbUdt"]>;
-    ownedOwner?: Partial<Runtime["managers"]["ownedOwner"]>;
     ickbLogic?: Partial<Runtime["managers"]["ickbLogic"]>;
   };
 }
@@ -187,8 +192,6 @@ export function testWithdrawal(
   distinct?: number,
   isReady = true,
 ): WithdrawalGroup {
-  const { ownedOwner } = getConfig("testnet");
-  const { dao } = ownedOwner;
   // `distinct` numbers the request and its deposit header past what one byte can, so a
   // test can hold more withdrawals than the DAO script addresses in one transaction.
   const txHash =
@@ -203,8 +206,8 @@ export function testWithdrawal(
     outPoint: { txHash, index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100_082),
-      lock: ownedOwner.script,
-      type: dao.script,
+      lock: OWNED_OWNER,
+      type: DAO,
     },
     outputData: ccc.hexFrom(ccc.numLeToBytes(1n, 8)),
   });
@@ -221,7 +224,7 @@ export function testWithdrawal(
       cellOutput: {
         capacity: ccc.fixedPointFrom(100),
         lock: script("11"),
-        type: ownedOwner.script,
+        type: OWNED_OWNER,
       },
       outputData: encodeOwnerData({ ownedDistance: -1n }),
     }),
@@ -243,7 +246,6 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
     client,
     managers: {
       ickbUdt: Object.assign(config.ickbUdt, overrides.managers?.ickbUdt),
-      ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
       ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
     },
     // The SDK over the same manager instances, so spies on those managers see the bot's calls.

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OWNED_OWNER } from "../../../src/constants.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
@@ -21,13 +22,10 @@ afterEach(() => {
 interface RealBaseTransactionEffects {
   botLock: ccc.Script;
   dao: ccc.Script;
-  daoDep: ccc.CellDep;
   depositHeader: ccc.ClientBlockHeader;
   logicDep: ccc.CellDep;
   masterCell: ccc.Cell;
   orderCell: ccc.Cell;
-  ownedDep: ccc.CellDep;
-  ownedOwner: ccc.Script;
   receipt: ReceiptCell;
   receiptHeader: ccc.ClientBlockHeader;
   requestedDeposit: IckbDepositCell;
@@ -49,10 +47,10 @@ function expectRealBaseTransactionEffects(
   ]);
   expect(tx.outputs).toHaveLength(2);
   expect(tx.outputs[0]?.capacity).toBe(options.requestedDeposit.cell.cellOutput.capacity);
-  expect(tx.outputs[0]?.lock.eq(options.ownedOwner)).toBe(true);
+  expect(tx.outputs[0]?.lock.eq(OWNED_OWNER)).toBe(true);
   expect(tx.outputs[0]?.type?.eq(options.dao)).toBe(true);
   expect(tx.outputs[1]?.lock.eq(options.botLock)).toBe(true);
-  expect(tx.outputs[1]?.type?.eq(options.ownedOwner)).toBe(true);
+  expect(tx.outputs[1]?.type?.eq(OWNED_OWNER)).toBe(true);
   expect(tx.outputsData).toEqual([
     ccc.hexFrom(ccc.mol.Uint64LE.encode(options.depositHeader.number)),
     ccc.hexFrom(encodeOwnerData({ ownedDistance: -1n })),
@@ -62,8 +60,6 @@ function expectRealBaseTransactionEffects(
     options.receiptHeader.hash,
     options.withdrawalHeader.hash,
   ]);
-  expect(tx.cellDeps).toContainEqual(options.daoDep);
-  expect(tx.cellDeps).toContainEqual(options.ownedDep);
   expect(tx.cellDeps).toContainEqual(options.logicDep);
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
@@ -79,13 +75,9 @@ describe("IckbSdk.buildBaseTransaction", () => {
 async function buildRealBaseTransactionCase(): Promise<
   RealBaseTransactionEffects & { tx: ccc.Transaction }
 > {
-  const daoDep = dep("d1");
-  const ownedDep = dep("d2");
   const logicDep = dep("d3");
-  const { botLock, dao, logic, ownedOwner, sdk } = baseTransactionFixture({
-    daoDeps: [daoDep],
+  const { botLock, dao, logic, sdk } = baseTransactionFixture({
     logicDeps: [logicDep],
-    ownedOwnerDeps: [ownedDep],
   });
   const depositHeader = headerLike(10n);
   const receiptHeader = headerLike(11n);
@@ -102,8 +94,6 @@ async function buildRealBaseTransactionCase(): Promise<
   const receipt = receiptCell("73", botLock, logic, receiptHeader);
   const withdrawalGroup = readyWithdrawalGroup({
     ownerLock: botLock,
-    ownedOwner,
-    dao,
     depositHeader,
     withdrawalHeader,
   });
@@ -122,13 +112,10 @@ async function buildRealBaseTransactionCase(): Promise<
     tx,
     botLock,
     dao,
-    daoDep,
     depositHeader,
     logicDep,
     masterCell,
     orderCell,
-    ownedDep,
-    ownedOwner,
     receipt,
     receiptHeader,
     requestedDeposit,

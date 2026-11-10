@@ -1,8 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import type {
-  ConversionTransactionContext,
-  SdkManagers,
-} from "../../../src/conversion/types.ts";
+import type { SdkManagers } from "../../../src/constants.ts";
+import type { ConversionTransactionContext } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import type { WithdrawalGroup } from "../../../src/owned_owner.ts";

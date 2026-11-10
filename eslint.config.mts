@@ -374,6 +374,8 @@ export default defineConfig(
           assertFunctionNames: [
             "expect",
             "expectDefaultPageSizeScan",
+            "expectDirectPlusOrder",
+            "expectIckbToCkbDirectPlusOrder",
             "expectRealBaseTransactionEffects",
             "expectSharedPageSizeForCapacityAndWithdrawalScans",
             "expectCustomPageSizeThroughL1StateLoading",

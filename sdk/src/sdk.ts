@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig, ORDER, type SupportedChain } from "./constants.ts";
+import { getConfig, ORDER, type SdkManagers, type SupportedChain } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -11,7 +11,6 @@ import type {
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
-  SdkManagers,
   SystemState,
 } from "./conversion/types.ts";
 import {
@@ -28,7 +27,7 @@ import type { IckbDepositCell, LogicManager, ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { findOrders, melt, mint } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
-import type { OwnedOwnerManager } from "./owned_owner.ts";
+import { requestWithdrawal, withdraw, withdrawalGroupsFrom } from "./owned_owner.ts";
 import {
   ckbFromUdt,
   ICKB_DEPOSIT_CAP,
@@ -99,12 +98,10 @@ type CollectSteps = Pick<
  */
 export class IckbSdk {
   private readonly ickbUdt: IckbUdt;
-  private readonly ownedOwner: OwnedOwnerManager;
   private readonly ickbLogic: LogicManager;
 
-  constructor({ ickbUdt, ownedOwner, ickbLogic }: SdkManagers) {
+  constructor({ ickbUdt, ickbLogic }: SdkManagers) {
     this.ickbUdt = ickbUdt;
-    this.ownedOwner = ownedOwner;
     this.ickbLogic = ickbLogic;
   }
 
@@ -215,7 +212,7 @@ export class IckbSdk {
     const cells = scanned.map(({ cell }) => cell);
     const [receipts, withdrawalGroups] = await Promise.all([
       this.ickbLogic.receiptsFrom(client, scanned),
-      this.ownedOwner.withdrawalGroupsFrom(client, scanned, tip),
+      withdrawalGroupsFrom(client, scanned, tip),
     ]);
     return {
       capacityCells: cells.filter(isPlainCapacityCell),
@@ -435,15 +432,11 @@ export class IckbSdk {
     // Each step returns the transaction unchanged when it has nothing to add.
     let tx = ccc.Transaction.from(txLike);
     if (withdrawalRequest !== undefined) {
-      tx = this.ownedOwner.requestWithdrawal(
-        tx,
-        withdrawalRequest.deposits,
-        withdrawalRequest.lock,
-      );
+      tx = requestWithdrawal(tx, withdrawalRequest.deposits, withdrawalRequest.lock);
     }
     tx = melt(tx, steps.availableOrders);
     tx = this.ickbLogic.completeDeposit(tx, steps.receipts);
-    return this.ownedOwner.withdraw(tx, steps.readyWithdrawals);
+    return withdraw(tx, steps.readyWithdrawals);
   }
 
   /**

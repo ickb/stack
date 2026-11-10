@@ -72,7 +72,6 @@ describe("buildTransaction withdrawal", () => {
     const third = readyDeposit("83", 5n, 40n);
     const completeTransaction = completingUpTo(2);
     const runtime = botRuntime({ completeTransaction });
-    const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
 
     const result = await buildTransaction(
       runtime,
@@ -83,7 +82,6 @@ describe("buildTransaction withdrawal", () => {
       }),
     );
 
-    expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([first, second]);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
@@ -92,11 +90,15 @@ describe("buildTransaction withdrawal", () => {
         core: { kind: "withdraw", attempts: 2 },
       },
     });
+    if (result.kind !== "built") {
+      throw new Error("Expected a built transaction");
+    }
+    // The longest prefix completion funds: the two oldest surplus deposits, in that order.
+    expect(result.tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual(
+      [first, second].map(({ cell }) => cell.outPoint.toHex()),
+    );
     // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
-    expect(
-      result.kind === "built" &&
-        result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
-    ).toBe(true);
+    expect(result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n]))).toBe(true);
   });
 
   it("starts the chain past a surplus deposit larger than the budget", async () => {

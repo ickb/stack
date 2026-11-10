@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DAO } from "../../../src/constants.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 
 import { LogicManager } from "../../../src/logic.ts";
-import { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -20,21 +20,14 @@ afterEach(() => {
 describe("IckbSdk.getL1AccountState", () => {
   it("carries the pool deposits, judged against the tip, as the CKB supply", async () => {
     const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const daoManager = { script: dao, cellDeps: [] };
-    const logicManager = new LogicManager(logic, [], daoManager);
-    const ownedOwnerManager = new OwnedOwnerManager(ownedOwner, [], daoManager);
-    const readyDeposit = depositCell("03", logic, dao, headerLike(0n), headerLike(0n), {
+    const logicManager = new LogicManager(logic, [], { script: DAO, cellDeps: [] });
+    const readyDeposit = depositCell("03", logic, DAO, headerLike(0n), headerLike(0n), {
       isReady: true,
     });
     const findDeposits = vi
       .spyOn(logicManager, "findDeposits")
       .mockResolvedValue([readyDeposit]);
-    const sdk = l1SdkWithManagers({
-      ownedOwnerManager,
-      logicManager,
-    });
+    const sdk = l1SdkWithManagers({ logicManager });
     const tip = headerLike(1n, {
       epoch: ccc.Epoch.from([181n, 0n, 1n]),
       timestamp: BigInt(Date.now()),

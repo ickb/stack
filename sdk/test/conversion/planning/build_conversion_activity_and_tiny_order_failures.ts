@@ -6,6 +6,7 @@ import {
   conversionContext,
 } from "../../transaction/base/support/sdk_core_support.ts";
 import {
+  spentOutPoints,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -97,29 +98,32 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns collect-only success when the collection has activity", async () => {
-    const { sdk, lock, ownedOwnerManager } = testSdk();
-    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      tx.addOutput({ lock }, "0x");
-      return tx;
+    const { sdk } = testSdk();
+
+    const result = await sdk.buildConversionTransaction({
+      direction: CKB_TO_ICKB,
+      amount: 0n,
+      signer: stubSigner,
+      context: conversionContext({
+        readyWithdrawals: [placeholderWithdrawal],
+        // A collection takes only what is ready, so it is done at the tip.
+        estimatedMaturity: 99n,
+      }),
     });
 
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        signer: stubSigner,
-        context: conversionContext({
-          readyWithdrawals: [placeholderWithdrawal],
-          // A collection takes only what is ready, so it is done at the tip.
-          estimatedMaturity: 99n,
-        }),
-      }),
-    ).resolves.toMatchObject({
+    expect(result).toMatchObject({
       ok: true,
       conversionKind: "collect-only",
       estimatedMaturity: baseTip.timestamp,
     });
+    if (!result.ok) {
+      throw new Error("Expected a collection");
+    }
+    // The collection spends the ready withdrawal request and its owner marker.
+    expect(spentOutPoints(result.tx)).toEqual([
+      placeholderWithdrawal.owned.cell.outPoint.toHex(),
+      placeholderWithdrawal.owner.cell.outPoint.toHex(),
+    ]);
   });
 
   it("finds nothing to do at amount zero without anything to collect", async () => {
@@ -146,10 +150,7 @@ describe("IckbSdk.buildConversionTransaction order-only paths", () => {
   it(
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {
-      const { sdk, ownedOwnerManager } = testSdk();
-      vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) =>
-        ccc.Transaction.from(txLike),
-      );
+      const { sdk } = testSdk();
 
       await expect(
         sdk.buildConversionTransaction({

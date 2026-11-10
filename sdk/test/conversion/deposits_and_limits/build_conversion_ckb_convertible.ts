@@ -69,13 +69,11 @@ const holdings: Array<[string, Holding]> = [
   ],
   [
     "a ready withdrawal",
-    ({ botLock, dao, ownedOwner }): Held => ({
+    ({ botLock }): Held => ({
       account: {
         withdrawalGroups: [
           readyWithdrawalGroup({
             ownerLock: botLock,
-            ownedOwner,
-            dao,
             depositHeader: headerLike(10n),
             withdrawalHeader: headerLike(12n),
           }),
@@ -100,7 +98,7 @@ describe("ckbConvertible", () => {
         ...held,
       };
       const cells = [...account.capacityCells, ...account.nativeUdtCells];
-      const { signer } = fundedSigner(cells, [botLock]);
+      const { signer } = fundedSigner(cells, [botLock], account.withdrawalGroups);
       // The largest witness counts in the fee completion prices.
       const prepare = signer.prepareTransaction.bind(signer);
       vi.spyOn(signer, "prepareTransaction").mockImplementation(async (txLike) => {

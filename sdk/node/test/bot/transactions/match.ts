@@ -239,7 +239,6 @@ describe("buildTransaction matching", () => {
 
   it("sends collections alone and counts them only when built", async () => {
     const runtime = botRuntime();
-    const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
     const state = botState({
       ckbAvailable: ccc.fixedPointFrom(5000),
       ickbAvailable: BAND_ICKB_BALANCE,
@@ -249,7 +248,16 @@ describe("buildTransaction matching", () => {
 
     const result = await buildTransaction(runtime, state);
 
-    expect(withdraw).toHaveBeenCalledTimes(1);
+    if (result.kind !== "built") {
+      throw new Error("Expected a built transaction");
+    }
+    // The receipt, then the ready withdrawal request and its owner marker.
+    const [withdrawal] = state.readyWithdrawals;
+    expect(result.tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual([
+      state.receipts[0]?.cell.outPoint.toHex(),
+      withdrawal?.owned.cell.outPoint.toHex(),
+      withdrawal?.owner.cell.outPoint.toHex(),
+    ]);
     expect(result).toMatchObject({
       kind: "built",
       decision: {

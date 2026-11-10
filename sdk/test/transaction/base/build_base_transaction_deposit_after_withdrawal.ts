@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OWNED_OWNER } from "../../../src/constants.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { depositCell } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import { baseTip, hash } from "./support/sdk_core_support.ts";
@@ -12,30 +13,15 @@ const NO_COLLECT = { availableOrders: [], receipts: [], readyWithdrawals: [] };
 
 describe("IckbSdk.buildBaseTransaction", () => {
   it("lets callers append a deposit after the withdrawal request path", () => {
-    const { botLock, dao, logic, logicManager, ownedOwnerManager, sdk } =
-      baseTransactionFixture();
-    const calls: string[] = [];
+    const { botLock, dao, logic, logicManager, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("85", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
 
-    vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation((txLike) => {
-      calls.push("request");
-      const tx = ccc.Transaction.from(txLike);
-      expect(tx.outputs).toHaveLength(0);
-      tx.outputs.push(
-        ccc.CellOutput.from({
-          capacity: 1n,
-          lock: botLock,
-        }),
-      );
-      tx.outputsData.push("0x");
-      return tx;
-    });
     vi.spyOn(logicManager, "deposit").mockImplementation((txLike) => {
-      calls.push("deposit");
       const tx = ccc.Transaction.from(txLike);
-      expect(tx.outputs).toHaveLength(1);
+      // The withdrawal request and its owner marker.
+      expect(tx.outputs).toHaveLength(2);
       tx.outputs.push(
         ccc.CellOutput.from({
           capacity: 2n,
@@ -52,8 +38,8 @@ describe("IckbSdk.buildBaseTransaction", () => {
     });
     tx = logicManager.deposit(tx, 1, 2n, botLock);
 
-    expect(calls).toEqual(["request", "deposit"]);
-    expect(tx.outputs).toHaveLength(2);
+    expect(tx.outputs.map(({ lock }) => lock)).toEqual([OWNED_OWNER, botLock, botLock]);
+    expect(tx.outputs[2]?.capacity).toBe(2n);
   });
 
   it("lets DAO withdrawal own unbalanced caller prework rejection", () => {

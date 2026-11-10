@@ -1,11 +1,10 @@
-import { ccc } from "@ckb-ccc/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  mintedOrders,
+  expectDirectPlusOrder,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -17,19 +16,11 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-const DIRECT_PLUS_ORDER = "direct-plus-order";
-
 describe("IckbSdk.buildConversionTransaction", () => {
   it("builds iCKB-to-CKB direct withdrawals plus dust remainder orders", async () => {
-    const { sdk, ownedOwnerManager } = testSdk();
+    const { sdk } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP);
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 1n);
-    const requestWithdrawal = vi
-      .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation((txLike, deposits) => {
-        expect(deposits).toEqual([directDeposit]);
-        return ccc.Transaction.from(txLike);
-      });
     const exchangeRatio = Ratio.from({
       ckbScale: 10000000000000000n,
       udtScale: 10008200000000000n,
@@ -52,20 +43,10 @@ describe("IckbSdk.buildConversionTransaction", () => {
       }),
     });
 
-    expect(result).toMatchObject({
-      ok: true,
-      conversionKind: DIRECT_PLUS_ORDER,
+    expectDirectPlusOrder(result, [directDeposit], {
+      ckbValue: 0n,
+      udtValue: 100000n,
+      info: { ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT },
     });
-    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
-    if (!result.ok) {
-      throw new Error("Expected a conversion");
-    }
-    expect(mintedOrders(result.tx)).toMatchObject([
-      {
-        ckbValue: 0n,
-        udtValue: 100000n,
-        info: { ckbMinMatchLog: CKB_MIN_MATCH_LOG_DEFAULT },
-      },
-    ]);
   });
 });

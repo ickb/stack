@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script } from "@ickb/testkit";
+import { DAO, OWNED_OWNER } from "../../../../src/constants.ts";
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
@@ -57,7 +58,7 @@ export function projectionReadyDeposit(
     cellOutput: {
       capacity: 0n,
       lock: script("22"),
-      type: script("33"),
+      type: DAO,
     },
     outputData: DAO_DEPOSIT_DATA,
   });
@@ -157,8 +158,6 @@ export function withdrawalValue(options: {
 
 export function readyWithdrawalGroup(options: {
   ownerLock: ccc.Script;
-  ownedOwner: ccc.Script;
-  dao: ccc.Script;
   depositHeader: ccc.ClientBlockHeader;
   withdrawalHeader: ccc.ClientBlockHeader;
 }): WithdrawalGroup {
@@ -166,8 +165,8 @@ export function readyWithdrawalGroup(options: {
     outPoint: { txHash: hash("75"), index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100082),
-      lock: options.ownedOwner,
-      type: options.dao,
+      lock: OWNED_OWNER,
+      type: DAO,
     },
     outputData: ccc.mol.Uint64LE.encode(options.depositHeader.number),
   });
@@ -177,7 +176,7 @@ export function readyWithdrawalGroup(options: {
       cellOutput: {
         capacity: ccc.fixedPointFrom(61),
         lock: options.ownerLock,
-        type: options.ownedOwner,
+        type: OWNED_OWNER,
       },
       outputData: encodeOwnerData({ ownedDistance: -1n }),
     }),
@@ -209,8 +208,8 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         outPoint: { txHash: hash(options.byte ?? "30"), index: 0n },
         cellOutput: {
           capacity: options.ckbValue,
-          lock: script("44"),
-          type: script("33"),
+          lock: OWNED_OWNER,
+          type: DAO,
         },
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
@@ -224,7 +223,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
       new OwnerCell(
         ccc.Cell.from({
           outPoint: { txHash: hash(options.byte ?? "30"), index: 1n },
-          cellOutput: { capacity: 0n, lock: script("11"), type: script("44") },
+          cellOutput: { capacity: 0n, lock: script("11"), type: OWNED_OWNER },
           outputData: encodeOwnerData({ ownedDistance: -1n }),
         }),
       ),

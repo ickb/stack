@@ -2,10 +2,10 @@ import { ccc } from "@ckb-ccc/core";
 import type { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { ICKB_UDT } from "../../../src/constants.ts";
+import { DAO, ICKB_UDT, OWNED_OWNER } from "../../../src/constants.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { encodeReceiptData, LogicManager } from "../../../src/logic.ts";
-import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts";
+import { encodeOwnerData } from "../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
@@ -17,12 +17,11 @@ describe("IckbSdk.getL1AccountState", () => {
   it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
     const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
+    const dao = DAO;
+    const ownedOwner = OWNED_OWNER;
     const udt = ICKB_UDT;
     const sdk = new IckbSdk({
       ickbUdt: fakeIckbUdt(),
-      ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
       ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
     });
     const plain = cell("81", accountLock, 3000n * CKB);

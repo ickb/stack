@@ -11,17 +11,15 @@ import { baseTip, headerLike, system } from "../base/support/sdk_core_support.ts
 // on its own, so an account with no plain cell still completes its collections.
 describe("completeTransaction with collections", () => {
   it("completes a withdrawal collection with zero plain cells", async () => {
-    const { botLock, dao, ownedOwner, sdk } = baseTransactionFixture({
+    const { botLock, sdk } = baseTransactionFixture({
       completion: "real",
     });
     const group = readyWithdrawalGroup({
       ownerLock: botLock,
-      ownedOwner,
-      dao,
       depositHeader: headerLike(10n),
       withdrawalHeader: headerLike(12n),
     });
-    const { signer } = fundedSigner([], [botLock]);
+    const { signer } = fundedSigner([], [botLock], [group]);
     const feeRate = 1000n;
     const tx = sdk.buildBaseTransaction(ccc.Transaction.default(), {
       availableOrders: [],

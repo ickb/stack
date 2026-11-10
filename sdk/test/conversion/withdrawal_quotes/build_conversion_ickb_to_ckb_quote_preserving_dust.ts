@@ -1,10 +1,9 @@
-import { ccc } from "@ckb-ccc/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  mintedOrders,
+  expectDirectPlusOrder,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -16,16 +15,11 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-const DIRECT_PLUS_ORDER = "direct-plus-order";
-
 describe("IckbSdk.buildConversionTransaction", () => {
   it("keeps direct withdrawals when an iCKB-to-CKB dust remainder needs quote-preserving Uint64 encoding", async () => {
-    const { sdk, ownedOwnerManager } = testSdk();
+    const { sdk } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP - 1000000n);
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 1n);
-    const requestWithdrawal = vi
-      .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation((txLike) => ccc.Transaction.from(txLike));
     const exchangeRatio = Ratio.from({
       ckbScale: 10000000000000000n,
       udtScale: 11850413696044750n,
@@ -47,14 +41,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
       }),
     });
 
-    expect(result).toMatchObject({
-      ok: true,
-      conversionKind: DIRECT_PLUS_ORDER,
-    });
-    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
-    if (!result.ok) {
-      throw new Error("Expected a conversion");
-    }
-    expect(mintedOrders(result.tx)).toMatchObject([{ ckbValue: 0n, udtValue: 1000000n }]);
+    expectDirectPlusOrder(result, [directDeposit], { ckbValue: 0n, udtValue: 1000000n });
   });
 });

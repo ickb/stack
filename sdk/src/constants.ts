@@ -1,7 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import type { SdkManagers } from "./conversion/types.ts";
 import { LogicManager } from "./logic.ts";
-import { OwnedOwnerManager } from "./owned_owner.ts";
 import { IckbUdt } from "./udt.ts";
 
 /** Nervos DAO type script. */
@@ -41,6 +39,14 @@ export const ORDER = ccc.Script.from({
 
 /** The iCKB xUDT type script: xUDT owned by iCKB Logic. */
 export const ICKB_UDT = IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC);
+
+/** Manager set that builds one iCKB SDK instance. */
+export interface SdkManagers {
+  /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
+  ickbUdt: IckbUdt;
+  /** iCKB Logic manager for deposits and receipts. */
+  ickbLogic: LogicManager;
+}
 
 /** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
 export type SupportedChain = "mainnet" | "testnet";
@@ -86,7 +92,6 @@ export function getConfig(chain: SupportedChain): SdkManagers {
   });
   return {
     ickbUdt,
-    ownedOwner: new OwnedOwnerManager(OWNED_OWNER, cellDeps, dao),
     ickbLogic: new LogicManager(ICKB_LOGIC, cellDeps, dao),
   };
 }
