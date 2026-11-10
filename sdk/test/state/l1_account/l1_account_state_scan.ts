@@ -7,7 +7,6 @@ import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { encodeReceiptData } from "../../../src/logic.ts";
 import { encodeOwnerData } from "../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../src/sdk.ts";
-import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { anchoredAt, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
@@ -20,7 +19,7 @@ describe("IckbSdk.getL1AccountState", () => {
     const dao = DAO;
     const ownedOwner = OWNED_OWNER;
     const udt = ICKB_UDT;
-    const sdk = new IckbSdk({ ickbUdt: fakeIckbUdt() });
+    const sdk = new IckbSdk();
     const plain = cell("81", accountLock, 3000n * CKB);
     const dataCell = cell("82", accountLock, 100n * CKB, undefined, "0xaa");
     const nativeUdt = cell("83", accountLock, 100n * CKB, udt, ccc.numLeToBytes(7n, 16));

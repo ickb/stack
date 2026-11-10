@@ -1,17 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { IckbUdt } from "./udt.ts";
 
 /** Nervos DAO type script. */
 export const DAO = ccc.Script.from({
   codeHash: "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
   hashType: "type",
-  args: "0x",
-});
-
-/** Raw xUDT type script; the iCKB args are computed by `IckbUdt.typeScriptFrom`. */
-const UDT = ccc.Script.from({
-  codeHash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
-  hashType: "data1",
   args: "0x",
 });
 
@@ -36,55 +28,49 @@ export const ORDER = ccc.Script.from({
   args: "0x",
 });
 
-/** The iCKB xUDT type script: xUDT owned by iCKB Logic. */
-export const ICKB_UDT = IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC);
-
-/** Manager set that builds one iCKB SDK instance. */
-export interface SdkManagers {
-  /** iCKB xUDT manager with receipt and DAO deposit aware completion. */
-  ickbUdt: IckbUdt;
-}
+/**
+ * The iCKB xUDT type script: xUDT in owner mode, its args iCKB Logic's script hash then the
+ * owner-mode flag 0x80000000 as four little-endian bytes.
+ */
+export const ICKB_UDT = ccc.Script.from({
+  codeHash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
+  hashType: "data1",
+  args: ccc.hexFrom(ccc.bytesConcat(ICKB_LOGIC.hash(), ccc.numLeToBytes(0x80000000n, 4))),
+});
 
 /** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
 export type SupportedChain = "mainnet" | "testnet";
 
 /**
- * Each network's iCKB dep group: it carries every iCKB script's code cell, xUDT's and
- * iCKB Logic's included, so one group dep resolves them all.
+ * Each network's genesis block hash, as CKB's mainnet.toml and testnet.toml specs give it,
+ * and its iCKB dep group: the group carries every iCKB script's code cell, xUDT's and iCKB
+ * Logic's included, so one group dep resolves them all.
  */
-const DEPLOYMENTS = {
+export const CHAINS = {
   mainnet: {
+    genesisHash: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5",
     depGroup: {
       txHash: "0x621a6f38de3b9f453016780edac3b26bfcbfa3e2ecb47c2da275471a5d3ed165",
       index: 0,
     },
   },
   testnet: {
+    genesisHash: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
     depGroup: {
       txHash: "0xf7ece4fb33d8378344cab11fcd6a4c6f382fd4207ac921cf5821f30712dcd311",
       index: 0,
     },
   },
-} as const satisfies Record<SupportedChain, { depGroup: ccc.OutPointLike }>;
+} as const satisfies Record<
+  SupportedChain,
+  { genesisHash: ccc.Hex; depGroup: ccc.OutPointLike }
+>;
 
-/**
- * The managers of one network's iCKB deployment.
- *
- * @remarks Builders still return partial transactions. `IckbSdk` owns the shared iCKB
- * completion path as `sdk.completeTransaction(...)`, which callers invoke before send.
- */
-export function getConfig(chain: SupportedChain): SdkManagers {
-  // The runtime check stands for callers outside TypeScript.
-  if (!Object.hasOwn(DEPLOYMENTS, chain)) {
-    throw new TypeError("unsupported iCKB network");
+/** The iCKB dep group of the chain whose genesis block has `genesisHash`. */
+export function ickbDepGroup(genesisHash: ccc.Hex): ccc.CellDep {
+  const chain = Object.values(CHAINS).find((known) => known.genesisHash === genesisHash);
+  if (chain === undefined) {
+    throw new Error("unsupported network");
   }
-  const { depGroup } = DEPLOYMENTS[chain];
-  const cellDeps = [ccc.CellDep.from({ outPoint: depGroup, depType: "depGroup" })];
-  const ickbUdt = new IckbUdt({
-    script: ICKB_UDT,
-    cellDeps,
-    logicScript: ICKB_LOGIC,
-    daoScript: DAO,
-  });
-  return { ickbUdt };
+  return ccc.CellDep.from({ outPoint: chain.depGroup, depType: "depGroup" });
 }

@@ -39,10 +39,8 @@ export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
 }
 export const savedConnectionRestoreMs = 800;
 
-const sdks = {
-  mainnet: IckbSdk.fromChain("mainnet"),
-  testnet: IckbSdk.fromChain("testnet"),
-};
+// One SDK serves both chains: completion reads the chain from the signer's client.
+const sdk = new IckbSdk();
 
 export function createRootConfig(
   chain: RootConfig["chain"],
@@ -57,6 +55,6 @@ export function createRootConfig(
       // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
       cccClient.cache = newClientCache();
     },
-    sdk: sdks[chain],
+    sdk,
   };
 }

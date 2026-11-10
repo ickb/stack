@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_UDT } from "../../../src/constants.ts";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type { AccountState } from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
@@ -40,7 +39,6 @@ const holdings: Array<[string, Holding]> = [
         nativeUdtCells: [
           nativeUdtCell(ccc.fixedPointFrom(100), {
             lock: botLock,
-            type: ICKB_UDT,
             capacity: ccc.fixedPointFrom(146),
             byte: "e1",
           }),

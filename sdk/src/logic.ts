@@ -9,7 +9,7 @@ import {
   pushHeaderDep,
   type LockUpPolicy,
 } from "./dao.ts";
-import { IckbUdt, ickbValue } from "./udt.ts";
+import { ickbValue, minimumXudtCellCapacity } from "./udt.ts";
 import { CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
 import {
   findCells,
@@ -278,5 +278,5 @@ export function receiptPhase2Capacity(lock: ccc.Script): ccc.FixedPoint {
   // Capacity is measured with the actual user lock. Lock args are wallet-specific
   // and can make both phase-2 outputs larger than protocol-only examples.
   const plainCellCapacity = BigInt(8 + lock.occupiedSize) * ccc.One;
-  return plainCellCapacity + IckbUdt.minimumXudtCellCapacity(lock) + phase2TxFeeReserve;
+  return plainCellCapacity + minimumXudtCellCapacity(lock) + phase2TxFeeReserve;
 }

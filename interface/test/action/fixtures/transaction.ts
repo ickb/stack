@@ -128,7 +128,7 @@ function testSdk(
     buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
   } = {},
 ): WalletConfig["sdk"] {
-  const sdk = IckbSdk.fromChain("testnet");
+  const sdk = new IckbSdk();
   vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
     options.buildConversionTransaction ??
       vi

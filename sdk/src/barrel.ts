@@ -1,7 +1,6 @@
 /** Every public name of the SDK, which the entry exports flat and as `ickb`. */
 
 import type { ccc } from "@ckb-ccc/core";
-import type { SupportedChain } from "./constants.ts";
 import type {
   AccountState,
   ConversionTransactionOptions,
@@ -31,9 +30,9 @@ export interface IckbSdk {
   }>;
 }
 
-/** Creates the SDK for one chain's deployment. */
-// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor namespace intentionally share a name.
-export const IckbSdk: { fromChain: (chain: SupportedChain) => IckbSdk } = IckbSdkClass;
+/** Creates the SDK: one serves every supported chain, which completion reads from the signer's client. */
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor intentionally share a name.
+export const IckbSdk: new () => IckbSdk = IckbSdkClass;
 
 export type { SupportedChain } from "./constants.ts";
 export { projectConversionTransactionContext, readyAt } from "./conversion/projection.ts";

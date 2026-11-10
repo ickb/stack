@@ -41,7 +41,7 @@ export function walletConfigForState(
 export function stateSdk(
   state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>,
 ): Parameters<typeof getL1State>[0]["sdk"] {
-  const sdk = IckbSdk.fromChain("testnet");
+  const sdk = new IckbSdk();
   vi.spyOn(sdk, "getL1AccountState").mockResolvedValue(state);
   vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
     ok: false,

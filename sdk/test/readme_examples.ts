@@ -21,7 +21,7 @@ export function setup(): { client: ccc.Client; sdk: ickb.IckbSdk } {
   const client = ccc.ClientPublicTestnet.open({
     cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
   }).value;
-  const sdk = ickb.IckbSdk.fromChain("testnet");
+  const sdk = new ickb.IckbSdk();
   return { client, sdk };
 }
 

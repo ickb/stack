@@ -6,6 +6,7 @@
 
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import { GENESIS_HEADERS } from "./genesis.ts";
 
 export {
   AR_0,
@@ -16,6 +17,7 @@ export {
   type OracleRatio,
   type OrderState,
 } from "./contract_oracle.ts";
+export { GENESIS_HEADERS, genesisHeader } from "./genesis.ts";
 
 export type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
@@ -78,11 +80,19 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 /**
  * Answers the SDK's raw reads from the stub's scripted handlers, so a test stubs one typed
  * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
- * from `transactionStatus`. Everything else is offline.
+ * from `transactionStatus`. The real testnet genesis answers header 0, since the stub is a
+ * testnet client and completion reads its chain there. Everything else is offline.
  */
 function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      if (
+        payload.method === "get_header_by_number" &&
+        Array.isArray(payload.params) &&
+        payload.params[0] === "0x0"
+      ) {
+        return { id: payload.id, jsonrpc: "2.0", result: GENESIS_HEADERS.testnet };
+      }
       if (payload.method === "get_cells" && scripted.cells !== undefined) {
         return {
           id: payload.id,

@@ -1,8 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import { describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP, WALLET_LOCK_UP } from "../../../src/dao.ts";
+import { IckbSdk } from "../../../src/sdk.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import { defaultL1Sdk, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
+import { FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
 
 describe("IckbSdk.getL1AccountState", () => {
   it("reads the tip once and anchors the whole read at its parent", async () => {
@@ -24,7 +25,7 @@ describe("IckbSdk.getL1AccountState", () => {
       cells: (): ccc.Cell[] => [],
     });
 
-    const state = await defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP);
+    const state = await new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP);
 
     expect(state.system.tip).toBe(parent);
     expect(getTipHeader).toHaveBeenCalledTimes(1);
@@ -45,7 +46,7 @@ describe("IckbSdk.getL1AccountState", () => {
     });
 
     await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+      new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP),
     ).rejects.toThrow(`Block 1 is not the parent of tip ${tip.hash}`);
   });
 
@@ -65,7 +66,7 @@ describe("IckbSdk.getL1AccountState", () => {
     });
 
     await expect(
-      defaultL1Sdk().getL1AccountState(client, [], BOT_LOCK_UP),
+      new IckbSdk().getL1AccountState(client, [], BOT_LOCK_UP),
     ).rejects.toThrow(`Block ${parent.hash} is more than 300000 ms old`);
   });
 });

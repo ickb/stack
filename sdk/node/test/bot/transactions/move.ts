@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { getConfig } from "../../../../src/constants.ts";
-import { IckbUdt } from "../../../../src/udt.ts";
+import { ICKB_UDT } from "../../../../src/constants.ts";
+import { minimumXudtCellCapacity } from "../../../../src/udt.ts";
 import { SignerCombined } from "../../../../src/utils/signer.ts";
 import { buildTransaction } from "../../../src/bot/transaction.ts";
 import { BAND_ICKB_BALANCE, botRuntime, botState, hash } from "../fixtures/bot.ts";
@@ -17,7 +17,6 @@ describe("buildTransaction with a second key", () => {
     ]);
     const { script: primaryLock } = await signer.getRecommendedAddressObj();
     const { script: secondLock } = await second.getRecommendedAddressObj();
-    const { ickbUdt } = getConfig("testnet");
     const plain = ccc.Cell.from({
       outPoint: { txHash: hash("71"), index: 0n },
       cellOutput: { capacity: ccc.fixedPointFrom(1000), lock: primaryLock },
@@ -27,9 +26,9 @@ describe("buildTransaction with a second key", () => {
       ccc.Cell.from({
         outPoint: { txHash: hash("72"), index: 0n },
         cellOutput: {
-          capacity: IckbUdt.minimumXudtCellCapacity(lock),
+          capacity: minimumXudtCellCapacity(lock),
           lock,
-          type: ickbUdt.script,
+          type: ICKB_UDT,
         },
         outputData: ccc.numLeToBytes(BAND_ICKB_BALANCE, 16),
       });
@@ -69,7 +68,7 @@ describe("buildTransaction with a second key", () => {
       plain.outPoint,
     ]);
     expect(tx.outputs.every(({ lock }) => lock.eq(primaryLock))).toBe(true);
-    expect(tx.getOutputsUdtBalance(ickbUdt.script)).toBe(BAND_ICKB_BALANCE);
+    expect(tx.getOutputsUdtBalance(ICKB_UDT)).toBe(BAND_ICKB_BALANCE);
     // Completion priced every key's witness: signing changes no size.
     const signed = await signer.signTransaction(tx.clone());
     expect(signed.estimateFee(1000n)).toBe(result.plannedFee);

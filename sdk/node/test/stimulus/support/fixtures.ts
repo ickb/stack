@@ -8,7 +8,7 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import { getConfig, ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
@@ -99,7 +99,7 @@ export function runtime({
   return {
     client,
     signer,
-    sdk: Object.assign(new IckbSdk(getConfig("testnet")), {
+    sdk: Object.assign(new IckbSdk(), {
       getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
         await Promise.resolve();
         return { system, userOrders: orders, account };

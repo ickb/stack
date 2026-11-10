@@ -1,6 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
-import { getConfig } from "../../src/constants.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
@@ -41,7 +40,7 @@ try {
     type: "bot.chain.preflight",
     identity: { address, primaryLock, rpcEndpoints },
   });
-  const sdk = new IckbSdk(getConfig(chain));
+  const sdk = new IckbSdk();
   const runtime: Runtime = {
     client,
     sdk,

@@ -6,6 +6,8 @@ import {
   capacityCell,
   committedTransactionResponse,
   composedClient,
+  GENESIS_HEADERS,
+  genesisHeader,
   headerLike,
   offlineTestnetClient,
   outPoint,
@@ -165,6 +167,17 @@ describe("StubClient network boundary", () => {
     await expect(client.findCellsPaged(searchKey, "asc", 1)).rejects.toThrow(
       "Offline test client received get_cells",
     );
+  });
+
+  it("answers header 0 with the real testnet genesis and no other header", async () => {
+    const client = new StubClient({});
+
+    await expect(client.getHeaderByNumber(0n)).resolves.toEqual(genesisHeader("testnet"));
+    await expect(client.getHeaderByNumber(1n)).rejects.toThrow(
+      "Offline test client received get_header_by_number",
+    );
+    expect(genesisHeader("testnet").hash).toBe(GENESIS_HEADERS.testnet.hash);
+    expect(genesisHeader("mainnet").hash).toBe(GENESIS_HEADERS.mainnet.hash);
   });
 
   it("keeps the offline client off the network", async () => {

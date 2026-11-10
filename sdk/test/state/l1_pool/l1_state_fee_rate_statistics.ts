@@ -3,15 +3,15 @@ import { cccA } from "@ckb-ccc/core/advanced";
 import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
+import { IckbSdk } from "../../../src/sdk.ts";
 import { headerHash } from "../../../src/utils/verified_client.ts";
-import { defaultL1Sdk } from "../l1_account/support/sdk_l1_support.ts";
 
 describe("IckbSdk.getL1State fee rate statistics", () => {
   it("uses CCC minimum fee rate when CKB returns null fee statistics", async () => {
     const feeRateStatistics = vi.fn(() => null);
     const client = clientWithFeeRateStatistics(feeRateStatistics);
 
-    const state = await defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP);
+    const state = await new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP);
 
     expect(feeRateStatistics).toHaveBeenCalledTimes(1);
     expect(state.system.feeRate).toBe(1000n);
@@ -24,10 +24,10 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     }));
 
     await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+      new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP),
     ).resolves.toMatchObject({ system: { feeRate: 500_000n } });
     await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, 2000n),
+      new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP, 2000n),
     ).resolves.toMatchObject({ system: { feeRate: 2000n } });
   });
 
@@ -36,7 +36,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     const client = clientWithFeeRateStatistics(() => ({ mean: median, median }));
 
     await expect(
-      defaultL1Sdk().getL1AccountState(
+      new IckbSdk().getL1AccountState(
         client,
         [],
         WALLET_LOCK_UP,
@@ -50,7 +50,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
 
     for (const cap of [0n, -5n]) {
       await expect(
-        defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP, cap),
+        new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP, cap),
       ).rejects.toThrow("maxFeeRate must be positive");
     }
   });
@@ -69,7 +69,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
         maxLockUp: ccc.Epoch.OneNervosDaoCycle.add(epoch(1n, 2n)),
       },
     ]) {
-      const read = defaultL1Sdk().getL1AccountState(client, [], policy);
+      const read = new IckbSdk().getL1AccountState(client, [], policy);
       await expect(read).rejects.toThrow(RangeError);
       await expect(read).rejects.toThrow(/^lockUp must satisfy /);
     }
@@ -84,7 +84,7 @@ describe("IckbSdk.getL1State fee rate statistics", () => {
     });
 
     await expect(
-      defaultL1Sdk().getL1AccountState(client, [], WALLET_LOCK_UP),
+      new IckbSdk().getL1AccountState(client, [], WALLET_LOCK_UP),
     ).rejects.toBe(feeRateError);
   });
 });

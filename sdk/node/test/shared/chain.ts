@@ -3,12 +3,11 @@ import { headerLike, StubClient } from "@ickb/testkit";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { CHAINS } from "../../../src/constants.ts";
 import { createPublicClient, verifyChainPreflight } from "../../src/shared/chain.ts";
 
-const TESTNET_GENESIS_HASH =
-  "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606";
-const MAINNET_GENESIS_HASH =
-  "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
+const TESTNET_GENESIS_HASH = CHAINS.testnet.genesisHash;
+const MAINNET_GENESIS_HASH = CHAINS.mainnet.genesisHash;
 
 /** A client that answers only the genesis header read, with `genesisHash`. */
 function preflightClient(genesisHash: `0x${string}`): ccc.Client {

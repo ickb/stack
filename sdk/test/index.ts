@@ -23,7 +23,6 @@ describe("sdk package barrel", () => {
       expect(sdk).toHaveProperty(name);
     }
     for (const name of [
-      "getConfig",
       "findOrders",
       "completeFirstFundable",
       "estimateConversionOrder",

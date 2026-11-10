@@ -73,7 +73,8 @@ describe("hook-based interface runtime", () => {
 
     expect(root).toMatchObject({ chain: "testnet", cccClient: client, queryClient });
     expect(root.sdk).toBeInstanceOf(IckbSdk);
-    expect(createRootConfig("mainnet", client).sdk).not.toBe(root.sdk);
+    // One SDK serves both chains: completion reads the chain from the signer's client.
+    expect(createRootConfig("mainnet", client).sdk).toBe(root.sdk);
     // A reset swaps the cache on the same client: no new client, so nothing keyed on it remounts.
     root.resetClient();
     expect(root.cccClient).toBe(client);

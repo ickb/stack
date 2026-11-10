@@ -236,7 +236,7 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
 
   return {
     client,
-    sdk: Object.assign(IckbSdk.fromChain("testnet"), {
+    sdk: Object.assign(new IckbSdk(), {
       getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
         await Promise.resolve();
         return l1AccountState();

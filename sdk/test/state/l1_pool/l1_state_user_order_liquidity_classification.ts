@@ -3,14 +3,11 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { findOrders } from "../../../src/order/order.ts";
+import { IckbSdk } from "../../../src/sdk.ts";
 import { ickbExchangeRatio } from "../../../src/udt.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
-import {
-  anchoredAt,
-  defaultL1Sdk,
-  FeeRateStubClient,
-} from "../l1_account/support/sdk_l1_support.ts";
+import { anchoredAt, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
 
 // The order book is the test's input, not a scan the client serves.
 vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => ({
@@ -26,7 +23,7 @@ describe("IckbSdk.getL1AccountState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
-    const sdk = defaultL1Sdk();
+    const sdk = new IckbSdk();
     const ownerOrder = makeOrderGroup({
       ownerLock: userLock,
       txHashByte: "a1",
@@ -106,12 +103,12 @@ function l1StateWithMarketOrder({
 }): {
   client: FeeRateStubClient;
   marketOrder: ReturnType<typeof makeOrderGroup>;
-  sdk: ReturnType<typeof defaultL1Sdk>;
+  sdk: IckbSdk;
   userLock: ReturnType<typeof script>;
 } {
   const userLock = script("11");
   const nonUserLock = script("12");
-  const sdk = defaultL1Sdk();
+  const sdk = new IckbSdk();
   const marketOrder = makeOrderGroup({
     ownerLock: nonUserLock,
     txHashByte,

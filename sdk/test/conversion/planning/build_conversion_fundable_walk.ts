@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ICKB_UDT } from "../../../src/constants.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
@@ -59,7 +58,6 @@ function conversion(
     plainCapacityCell(userCkb - UDT_CELL_CKB, lock, "f1"),
     nativeUdtCell(amount, {
       lock,
-      type: ICKB_UDT,
       capacity: UDT_CELL_CKB,
       byte: "f0",
     }),

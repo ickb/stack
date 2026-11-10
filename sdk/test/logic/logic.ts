@@ -27,7 +27,7 @@ import {
   receiptsFrom,
   type ReceiptCell,
 } from "../../src/logic.ts";
-import { IckbUdt, ickbValue } from "../../src/udt.ts";
+import { ickbValue, minimumXudtCellCapacity } from "../../src/udt.ts";
 
 // Typed unknown so the matcher's `any` stays out of the asserted object.
 const anyError: unknown = expect.any(Error);
@@ -134,7 +134,7 @@ describe("deposit", () => {
       receiptPhase2Capacity(shortLock),
     );
     expect(receiptPhase2Capacity(shortLock)).toBe(
-      plainCellCapacity(shortLock) + IckbUdt.minimumXudtCellCapacity(shortLock) + ccc.One,
+      plainCellCapacity(shortLock) + minimumXudtCellCapacity(shortLock) + ccc.One,
     );
   });
 

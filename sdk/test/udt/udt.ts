@@ -8,14 +8,18 @@ import {
 } from "@ickb/testkit";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { DAO, ICKB_LOGIC, ICKB_UDT } from "../../src/constants.ts";
 import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
 import { encodeReceiptData } from "../../src/logic.ts";
 import {
+  addChange,
   ckbFromUdt,
   ickbAccountingRatio,
   ickbExchangeRatio,
-  IckbUdt,
   ickbValue,
+  inputBalance,
+  isUdt,
+  minimumXudtCellCapacity,
   udtFromCkb,
 } from "../../src/udt.ts";
 
@@ -29,9 +33,7 @@ fc.configureGlobal({
   ...(seedText === undefined ? {} : { seed: Number(seedText) }),
 });
 
-const logic = script("33");
-const daoScript = script("44");
-const type = script("55");
+const type = ICKB_UDT;
 const lock = script("22");
 
 function headerLike(ar: bigint): ccc.ClientBlockHeader {
@@ -42,19 +44,10 @@ function headerLike(ar: bigint): ccc.ClientBlockHeader {
   });
 }
 
-function udt(): IckbUdt {
-  return new IckbUdt({
-    script: type,
-    cellDeps: [],
-    logicScript: logic,
-    daoScript,
-  });
-}
-
 function receiptCell(outputData: ccc.Hex, txHashByte = "11"): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
-    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: logic },
+    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock, type: ICKB_LOGIC },
     outputData,
   });
 }
@@ -78,10 +71,10 @@ function xudtCell(balance: ccc.Num, cellType = type, txHashByte = "99"): ccc.Cel
   });
 }
 
-function depositCell(txHashByte = "88", cellLock = logic): ccc.Cell {
+function depositCell(txHashByte = "88", cellLock = ICKB_LOGIC): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
-    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: cellLock, type: daoScript },
+    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: cellLock, type: DAO },
     outputData: DAO_DEPOSIT_DATA,
   });
 }
@@ -94,37 +87,34 @@ function transactionWithInputs(...cells: ccc.Cell[]): ccc.Transaction {
   return tx;
 }
 
-describe("IckbUdt.typeScriptFrom", () => {
+describe("iCKB xUDT script", () => {
   it("builds xUDT owner-mode args from the iCKB logic script hash", () => {
-    const rawUdt = script("aa");
-
-    const derived = IckbUdt.typeScriptFrom(rawUdt, logic);
-
-    expect(derived.codeHash).toBe(rawUdt.codeHash);
-    expect(derived.hashType).toBe(rawUdt.hashType);
-    expect(derived.args).toBe(`${logic.hash()}00000080`);
+    expect(ICKB_UDT.args).toBe(`${ICKB_LOGIC.hash()}00000080`);
   });
 
   it("sizes an xUDT cell from the lock's occupied size", () => {
     const shortLock = script("44");
     const longLock = script("44", `0x${"ab".repeat(40)}`);
 
-    expect(
-      IckbUdt.minimumXudtCellCapacity(longLock) -
-        IckbUdt.minimumXudtCellCapacity(shortLock),
-    ).toBe(40n * ccc.One);
+    // Capacity, the lock, the iCKB type and sixteen bytes of balance.
+    expect(minimumXudtCellCapacity(shortLock)).toBe(
+      BigInt(8 + shortLock.occupiedSize + ICKB_UDT.occupiedSize + 16) * ccc.One,
+    );
+    expect(minimumXudtCellCapacity(longLock) - minimumXudtCellCapacity(shortLock)).toBe(
+      40n * ccc.One,
+    );
   });
 });
 
-describe("IckbUdt cell deps and shapes", () => {
+describe("isUdt", () => {
   it("identifies only xUDT cells with UDT data", () => {
-    expect(udt().isUdt(xudtCell(1n))).toBe(true);
-    expect(udt().isUdt(xudtCell(1n, script("77")))).toBe(false);
-    expect(udt().isUdt({ cellOutput: { lock, type }, outputData: "0x01" })).toBe(false);
+    expect(isUdt(xudtCell(1n))).toBe(true);
+    expect(isUdt(xudtCell(1n, script("77")))).toBe(false);
+    expect(isUdt({ cellOutput: { lock, type }, outputData: "0x01" })).toBe(false);
   });
 });
 
-describe("IckbUdt.inputBalance", () => {
+describe("inputBalance", () => {
   it("values xUDT inputs and ignores unrelated or prefix-matching foreign cells", async () => {
     const foreign = xudtCell(7n, script("77"), "98");
     const plain = ccc.Cell.from({
@@ -134,7 +124,7 @@ describe("IckbUdt.inputBalance", () => {
     });
 
     await expect(
-      udt().inputBalance(
+      inputBalance(
         transactionWithInputs(xudtCell(5n), foreign, plain),
         new StubClient(),
         [],
@@ -151,7 +141,7 @@ describe("IckbUdt.inputBalance", () => {
     const tx = transactionWithInputs(receipt, deposit, foreign);
 
     await expect(
-      udt().inputBalance(tx, new StubClient(), [
+      inputBalance(tx, new StubClient(), [
         { cell: receipt, udtValue: 11n },
         { cell: deposit, udtValue: 4n },
         { cell: unspent, udtValue: 100n },
@@ -164,14 +154,14 @@ describe("IckbUdt.inputBalance", () => {
     const receipt = receiptCell(receiptOutputData(1n, ccc.fixedPointFrom(100000)));
 
     await expect(
-      udt().inputBalance(transactionWithInputs(receipt), new StubClient(), []),
+      inputBalance(transactionWithInputs(receipt), new StubClient(), []),
     ).rejects.toThrow(
       `iCKB input ${receipt.outPoint.toHex()} has no value from the state read`,
     );
   });
 });
 
-describe("IckbUdt outputs", () => {
+describe("addChange", () => {
   it("sums only iCKB outputs and adds change only for a positive surplus", () => {
     const tx = ccc.Transaction.from({
       outputs: [
@@ -188,9 +178,9 @@ describe("IckbUdt outputs", () => {
 
     expect(tx.getOutputsUdtBalance(type)).toBe(11n);
 
-    udt().addChange(tx, lock, 0n);
+    addChange(tx, lock, 0n);
     expect(tx.outputs).toHaveLength(3);
-    udt().addChange(tx, lock, 4n);
+    addChange(tx, lock, 4n);
     expect(tx.outputs).toHaveLength(4);
     expect(tx.getOutputsUdtBalance(type)).toBe(15n);
   });

@@ -1,8 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
-import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
+import {
+  genesisHeader,
+  headerLike,
+  script,
+  StubClient,
+  transactionWithHeader,
+} from "@ickb/testkit";
 import { expect, vi } from "vitest";
 
-import { DAO, ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { DAO, ICKB_LOGIC, ORDER } from "../../../../src/constants.ts";
 import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
 import { OrderCell } from "../../../../src/order/cells.ts";
@@ -10,7 +16,7 @@ import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
 import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
-import { ICKB_DEPOSIT_CAP, IckbUdt } from "../../../../src/udt.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import {
   baseClient,
   conversionContext,
@@ -30,7 +36,7 @@ export function baseTransactionFixture(
     botLock: script("11"),
     dao: DAO,
     logic: ICKB_LOGIC,
-    sdk: withCompletion(new IckbSdk({ ickbUdt: fakeIckbUdt() }), options.completion),
+    sdk: withCompletion(new IckbSdk(), options.completion),
   };
 }
 
@@ -55,17 +61,16 @@ export interface BaseTransactionFixture {
 }
 
 /**
- * SDK over the fake iCKB token. Completion is a passthrough unless `completion: "real"`, so
+ * The SDK with the fixture lock. Completion is a passthrough unless `completion: "real"`, so
  * planning tests see the built transaction and walk tests see the real completer.
  */
 export function testSdk(
   options: { completion?: "passthrough" | "real" } = {},
 ): SdkFixture {
   const lock = script("11");
-  const ickbUdt = fakeIckbUdt();
-  const sdk = new IckbSdk({ ickbUdt });
+  const sdk = new IckbSdk();
   withCompletion(sdk, options.completion);
-  return { sdk, ickbUdt, lock };
+  return { sdk, lock };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */
@@ -109,8 +114,12 @@ export function fundedSigner(
         ? undefined
         : { cell: owned.cell, header: owned.headers[1] };
     },
+    // Header 0 is the real testnet genesis, which completion reads for the chain's dep group.
     getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
       await Promise.resolve();
+      if (ccc.numFrom(number) === 0n) {
+        return genesisHeader("testnet");
+      }
       return withdrawals.find(
         ({ owned: { headers } }) => headers[0].number === ccc.numFrom(number),
       )?.owned.headers[0];
@@ -125,16 +134,7 @@ export function fundedSigner(
 
 export interface SdkFixture {
   sdk: IckbSdk;
-  ickbUdt: ReturnType<typeof fakeIckbUdt>;
   lock: ccc.Script;
-}
-
-/**
- * The iCKB token over the real iCKB Logic deposits and receipts, so completion values them;
- * its type is the real iCKB xUDT, so completion also balances the orders the mint creates.
- */
-export function fakeIckbUdt(): IckbUdt {
-  return new TestIckbUdt();
 }
 
 /** The CKB and iCKB each order output of the transaction offers, and its info. */
@@ -205,19 +205,4 @@ export function spentOutPoints(tx: ccc.Transaction): ccc.Hex[] {
 /** The deposits' out points, in the order given. */
 export function outPointsOf(deposits: IckbDepositCell[]): ccc.Hex[] {
   return deposits.map(({ cell }) => cell.outPoint.toHex());
-}
-
-class TestIckbUdt extends IckbUdt {
-  constructor() {
-    super({
-      script: ICKB_UDT,
-      cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
-      logicScript: ICKB_LOGIC,
-      daoScript: DAO,
-    });
-  }
-
-  public override isUdt(cell: ccc.Cell): boolean {
-    return cell.cellOutput.type?.eq(this.script) ?? false;
-  }
 }

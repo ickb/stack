@@ -27,7 +27,7 @@ Everything is exported twice, like `ccc`: `import { ickb } from "@ickb/sdk"` giv
 
 ## Quickstart
 
-Set up a client and the SDK for one chain:
+Set up a client for one chain and the SDK, which serves either: completion reads the chain from the signer's client.
 
 ```ts
 import { ccc } from "@ckb-ccc/core";
@@ -37,7 +37,7 @@ import { ickb } from "@ickb/sdk";
 const client = ccc.ClientPublicTestnet.open({
   cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
 }).value;
-const sdk = ickb.IckbSdk.fromChain("testnet");
+const sdk = new ickb.IckbSdk();
 ```
 
 `CACHE_SIZES` is just numbers in the constructor's order: cells, transactions, blocks. If the app reads other things through the same client, add its own needs on top.

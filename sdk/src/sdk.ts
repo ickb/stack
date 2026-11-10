@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import {
-  DAO,
-  getConfig,
-  ORDER,
-  type SdkManagers,
-  type SupportedChain,
-} from "./constants.ts";
+import { DAO, ICKB_UDT, ickbDepGroup, ORDER } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -42,10 +36,12 @@ import { findOrders, melt, mint } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import { requestWithdrawal, withdraw, withdrawalGroupsFrom } from "./owned_owner.ts";
 import {
+  addChange,
   ckbFromUdt,
   ICKB_DEPOSIT_CAP,
   ickbExchangeRatio,
-  type IckbUdt,
+  inputBalance,
+  isUdt,
   type ProtocolCell,
 } from "./udt.ts";
 import { compareBigInt, findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
@@ -110,17 +106,6 @@ type CollectSteps = Pick<
  * exposes the two conversion-workflow methods, and its assignment checks they agree.
  */
 export class IckbSdk {
-  private readonly ickbUdt: IckbUdt;
-
-  constructor({ ickbUdt }: SdkManagers) {
-    this.ickbUdt = ickbUdt;
-  }
-
-  /** Creates the SDK for one chain's deployment. */
-  public static fromChain(chain: SupportedChain): IckbSdk {
-    return new IckbSdk(getConfig(chain));
-  }
-
   // ---- State reads -------------------------------------------------------------------
 
   /**
@@ -227,7 +212,7 @@ export class IckbSdk {
     ]);
     return {
       capacityCells: cells.filter(isPlainCapacityCell),
-      nativeUdtCells: cells.filter((cell) => this.ickbUdt.isUdt(cell)),
+      nativeUdtCells: cells.filter((cell) => isUdt(cell)),
       receipts,
       withdrawalGroups,
     };
@@ -459,6 +444,8 @@ export class IckbSdk {
    * {@link SWEEP_INPUT_LIMIT} inputs, so every own transaction compacts the account.
    * Ordinary change is always a plain cell; existing outputs
    * are never reinterpreted or resized as fee change. This does not sign or send.
+   * The iCKB dep group is the one of the chain whose genesis header the signer's client
+   * serves, read with its hash checked; another chain's genesis throws "unsupported network".
    */
   public async completeTransaction(
     txLike: ccc.TransactionLike,
@@ -467,7 +454,12 @@ export class IckbSdk {
     const { signer, system } = options;
     const { feeRate } = system;
     const tx = ccc.Transaction.from(txLike).clone();
-    tx.addCellDeps(this.ickbUdt.cellDeps);
+    // The signer's chain picks the dep group: its genesis, checked against its own hash.
+    const genesis = await verifiedClient(signer.client).getHeaderByNumber(0n);
+    if (genesis === undefined) {
+      throw new Error("Missing genesis header");
+    }
+    tx.addCellDeps(ickbDepGroup(genesis.hash));
     const changeLock = (await signer.getRecommendedAddressObj()).script;
     // Inputs come from one state read, each cell once, and each action spends its own
     // cell kind, so a repeated out point is a builder bug: this is the one place that
@@ -482,7 +474,7 @@ export class IckbSdk {
     }
     const unspent = options.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
     const ickbCells = unspent
-      .filter((cell) => this.ickbUdt.isUdt(cell))
+      .filter((cell) => isUdt(cell))
       .toSorted((left, right) => compareBigInt(udtBalance(right), udtBalance(left)));
     const plainCells = unspent
       .filter(isPlainCapacityCell)
@@ -490,7 +482,7 @@ export class IckbSdk {
         compareBigInt(right.cellOutput.capacity, left.cellOutput.capacity),
       );
 
-    await this.completeIckb(
+    await completeIckb(
       tx,
       signer.client,
       changeLock,
@@ -508,31 +500,31 @@ export class IckbSdk {
     assertDaoOutputLimit(tx, DAO);
     return { tx, plannedFee };
   }
+}
 
-  /** iCKB: what the outputs need first, then the sweep while the limit allows, then change. */
-  private async completeIckb(
-    tx: ccc.Transaction,
-    client: ccc.Client,
-    changeLock: ccc.Script,
-    ickbCells: readonly ccc.Cell[],
-    protocolCells: readonly ProtocolCell[],
-  ): Promise<void> {
-    const required = tx.getOutputsUdtBalance(this.ickbUdt.script);
-    let balance = await this.ickbUdt.inputBalance(tx, client, protocolCells);
-    for (const cell of ickbCells) {
-      if (balance >= required && tx.inputs.length >= SWEEP_INPUT_LIMIT) {
-        break;
-      }
-      tx.addInput(cell);
-      balance += udtBalance(cell);
+/** iCKB: what the outputs need first, then the sweep while the limit allows, then change. */
+async function completeIckb(
+  tx: ccc.Transaction,
+  client: ccc.Client,
+  changeLock: ccc.Script,
+  ickbCells: readonly ccc.Cell[],
+  protocolCells: readonly ProtocolCell[],
+): Promise<void> {
+  const required = tx.getOutputsUdtBalance(ICKB_UDT);
+  let balance = await inputBalance(tx, client, protocolCells);
+  for (const cell of ickbCells) {
+    if (balance >= required && tx.inputs.length >= SWEEP_INPUT_LIMIT) {
+      break;
     }
-    if (balance < required) {
-      throw new IckbError(`Insufficient iCKB, need ${String(required - balance)} more`, {
-        code: "insufficient_ickb",
-      });
-    }
-    this.ickbUdt.addChange(tx, changeLock, balance - required);
+    tx.addInput(cell);
+    balance += udtBalance(cell);
   }
+  if (balance < required) {
+    throw new IckbError(`Insufficient iCKB, need ${String(required - balance)} more`, {
+      code: "insufficient_ickb",
+    });
+  }
+  addChange(tx, changeLock, balance - required);
 }
 
 /**

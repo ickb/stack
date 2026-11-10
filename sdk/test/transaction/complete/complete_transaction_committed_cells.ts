@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { DAO, ICKB_LOGIC } from "../../../src/constants.ts";
+import { CHAINS, DAO, ICKB_LOGIC, ICKB_UDT } from "../../../src/constants.ts";
 import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { SWEEP_INPUT_LIMIT } from "../../../src/sdk.ts";
 import {
@@ -117,10 +117,10 @@ function registerFundingTests(): void {
 
 function registerSweepTests(): void {
   it("sweeps every given cell largest first while the input limit allows", async () => {
-    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
+    const { sdk, lock } = testSdk({ completion: "real" });
     const small = capacityCell(ccc.fixedPointFrom(70), lock, "90");
     const large = capacityCell(ccc.fixedPointFrom(300), lock, "91");
-    const udt = udtCell("92", lock, ickbUdt.script, 5n);
+    const udt = udtCell("92", lock, ICKB_UDT, 5n);
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(61), lock }, "0x");
@@ -139,7 +139,7 @@ function registerSweepTests(): void {
     ]);
     // One plain change and one iCKB change carry the whole account.
     expect(completed.outputs).toHaveLength(3);
-    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(5n);
+    expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(5n);
   });
 
   it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
@@ -163,11 +163,9 @@ function registerSweepTests(): void {
   it("sweeps iCKB cells first and plain cells last, up to the input limit", async () => {
     // The limit may cut the sweep, so the iCKB cells go first and the plain cells left
     // behind can still fund a later transaction's fee.
-    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
+    const { sdk, lock } = testSdk({ completion: "real" });
     const { signer } = fundedSigner([], [lock]);
-    const ickb = ["a1", "a2", "a3"].map((byte) =>
-      udtCell(byte, lock, ickbUdt.script, 10n),
-    );
+    const ickb = ["a1", "a2", "a3"].map((byte) => udtCell(byte, lock, ICKB_UDT, 10n));
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
     const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
 
@@ -189,8 +187,8 @@ function registerSweepTests(): void {
   it.each([SWEEP_INPUT_LIMIT, SWEEP_INPUT_LIMIT + 1])(
     "funds %i iCKB units, then sweeps no further at the input limit",
     async (required) => {
-      const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-      const type = ickbUdt.script;
+      const { sdk, lock } = testSdk({ completion: "real" });
+      const type = ICKB_UDT;
       const { signer } = fundedSigner([], [lock]);
       const tx = ccc.Transaction.default();
       tx.addOutput(
@@ -211,15 +209,15 @@ function registerSweepTests(): void {
 
       // Funding at or past the limit; neither sweep adds a cell beyond it.
       expect(completed.inputs).toHaveLength(required);
-      expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(BigInt(required));
+      expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(BigInt(required));
     },
   );
 }
 
 function registerIckbTests(): void {
   it("funds iCKB outputs from the largest iCKB cells and returns the surplus as change", async () => {
-    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-    const type = ickbUdt.script;
+    const { sdk, lock } = testSdk({ completion: "real" });
+    const type = ICKB_UDT;
     const largest = udtCell("94", lock, type, 80n);
     const cells = [
       udtCell("93", lock, type, 30n),
@@ -241,13 +239,16 @@ function registerIckbTests(): void {
     });
 
     expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
-    expect(completed.getOutputsUdtBalance(ickbUdt.script)).toBe(110n);
-    expect(completed.cellDeps).toEqual(ickbUdt.cellDeps);
+    expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(110n);
+    // The signer's client serves the testnet genesis, so completion adds testnet's dep group.
+    expect(completed.cellDeps).toEqual([
+      ccc.CellDep.from({ outPoint: CHAINS.testnet.depGroup, depType: "depGroup" }),
+    ]);
   });
 
   it("fails typed when the given iCKB cells cannot cover the outputs", async () => {
-    const { sdk, ickbUdt, lock } = testSdk({ completion: "real" });
-    const type = ickbUdt.script;
+    const { sdk, lock } = testSdk({ completion: "real" });
+    const type = ICKB_UDT;
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
     tx.addOutput(

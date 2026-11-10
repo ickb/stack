@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script } from "@ickb/testkit";
-import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../../../src/constants.ts";
+import { DAO, ICKB_LOGIC, ICKB_UDT, OWNED_OWNER } from "../../../../src/constants.ts";
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
@@ -115,7 +115,7 @@ export function nativeUdtCell(
     cellOutput: {
       capacity: options.capacity ?? 0n,
       lock: options.lock ?? script("11"),
-      type: options.type ?? script("66"),
+      type: options.type ?? ICKB_UDT,
     },
     outputData: ccc.numLeToBytes(udtValue, 16),
   });

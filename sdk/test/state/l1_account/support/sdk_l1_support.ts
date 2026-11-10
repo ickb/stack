@@ -1,8 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { StubClient, type StubClientHandlers } from "@ickb/testkit";
 
-import { IckbSdk } from "../../../../src/sdk.ts";
-import { fakeIckbUdt } from "../../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { headerLike } from "../../../transaction/base/support/sdk_core_support.ts";
 
 export class FeeRateStubClient extends StubClient {
@@ -32,8 +30,4 @@ export function anchoredAt(
       return key === anchor.number ? anchor : headers.get(key);
     },
   };
-}
-
-export function defaultL1Sdk(): IckbSdk {
-  return new IckbSdk({ ickbUdt: fakeIckbUdt() });
 }

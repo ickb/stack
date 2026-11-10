@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { getConfig } from "../../src/constants.ts";
 import { IckbSdk } from "../../src/sdk.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { logExecution } from "./shared/logging.ts";
@@ -21,12 +20,11 @@ try {
     client,
     privateKeys,
   );
-  const managers = getConfig(chain);
   await runStimulusTurn({
     runtime: {
       client,
       signer,
-      sdk: new IckbSdk(managers),
+      sdk: new IckbSdk(),
       primaryLock,
       accountLocks,
     },

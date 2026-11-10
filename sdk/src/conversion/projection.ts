@@ -10,7 +10,7 @@ import {
 } from "../order/fee.ts";
 import { isCollectable } from "../order/fill.ts";
 import { WithdrawalGroup } from "../owned_owner.ts";
-import { IckbUdt } from "../udt.ts";
+import { minimumXudtCellCapacity } from "../udt.ts";
 import { ceilDiv } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
 import type {
@@ -104,7 +104,7 @@ function convertibleCkb(
     ORDER_CELL_SIZE,
     8 + lockSize + ORDER_SCRIPT_SIZE,
     8 + lockSize,
-    Number(IckbUdt.minimumXudtCellCapacity(changeLock) / ccc.One),
+    Number(minimumXudtCellCapacity(changeLock) / ccc.One),
   ];
   const occupied = outputSizes.reduce((sum, size) => sum + size, 0);
   const inputs =
