@@ -2,7 +2,11 @@ import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_UDT, ORDER } from "../../src/constants.ts";
-import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
+import {
+  estimateConversionOrder,
+  estimateIckbToCkbOrder,
+} from "../../src/conversion/estimate.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../src/order/conversion.ts";
 import { partialOrderFee } from "../../src/order/fee.ts";
 import type { Info } from "../../src/order/info.ts";
 import { OrderMatcher } from "../../src/order/matcher.ts";
@@ -89,17 +93,17 @@ describe(ESTIMATE_SUITE, () => {
     expect(result).toBeUndefined();
   });
 
-  it("throws a public representability error for unrepresentable direct estimates", () => {
-    expect(() =>
-      estimate(
+  it("returns no estimate for an unrepresentable direct quote", () => {
+    expect(
+      estimateConversionOrder(
         true,
         { ckbValue: 1n << 80n, udtValue: 0n },
         system({
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
         }),
-        { fee: 0n },
+        { fee: 0n, feeBase: DEFAULT_ORDER_FEE_BASE },
       ),
-    ).toThrow("Order conversion quote cannot be represented as Uint64 ratio");
+    ).toBeUndefined();
   });
 
   it("returns no iCKB-to-CKB estimate when default and dust quotes are unrepresentable", () => {

@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { completeTransaction, isFundabilityFailure } from "../../../src/complete.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
-import {
-  OrderConversionRepresentabilityError,
-  quoteConversion,
-} from "../../../src/order/conversion.ts";
+import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
 import { hasCollectable } from "../../../src/sdk.ts";
 import {
@@ -155,17 +152,13 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     draw.direction === "ckb-to-ickb"
       ? { ckbValue: draw.amount, udtValue: 0n }
       : { ckbValue: 0n, udtValue: draw.amount };
-  let info: ReturnType<typeof quoteConversion>["info"];
-  try {
-    info = quoteConversion(draw.direction, state.system.exchangeRatio, draw.amount, {
-      fee: draw.fee,
-    }).info;
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return { skip: { reason: "unrepresentable-amount" } };
-    }
-    throw error;
+  const quote = quoteOrder(draw.direction, state.system.exchangeRatio, draw.amount, {
+    fee: draw.fee,
+  });
+  if (!quote.ok) {
+    return { skip: { reason: "unrepresentable-amount" } };
   }
+  const { info } = quote;
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;

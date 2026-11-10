@@ -9,7 +9,6 @@ describe("sdk package barrel", () => {
       "IckbError",
       "hasCollectable",
       "IckbSdk",
-      "OrderConversionRepresentabilityError",
       "Ratio",
       "TransactionBroadcastError",
       "TransactionWaitError",
@@ -25,6 +24,8 @@ describe("sdk package barrel", () => {
     for (const name of [
       "findOrders",
       "completeFirstFundable",
+      "quoteOrder",
+      "OrderConversionRepresentabilityError",
       "estimateConversionOrder",
     ]) {
       expect(sdk).not.toHaveProperty(name);

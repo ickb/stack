@@ -52,20 +52,21 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
     const actual = await importOriginal<typeof ConversionModule>();
     return {
       ...actual,
-      quoteConversion: (
+      quoteOrder: (
         direction: string,
         _midpoint: unknown,
         _amount: unknown,
         options?: { fee?: bigint; feeBase?: bigint },
-      ): ReturnType<typeof actual.quoteConversion> => {
+      ): ReturnType<typeof actual.quoteOrder> => {
         if (
           direction === "ickb-to-ckb" &&
           options?.fee === blocked.fee &&
           options.feeBase === blocked.feeBase
         ) {
-          throw new actual.OrderConversionRepresentabilityError();
+          return { ok: false, reason: "unrepresentable" };
         }
         return {
+          ok: true,
           convertedAmount: 10n,
           // The default fee of a ten-unit order rounds to nothing; the dust search pays its fee.
           ckbFee: options?.feeBase === DEFAULT_ORDER_FEE_BASE ? 0n : (options?.fee ?? 0n),

@@ -3,8 +3,7 @@ import type { IckbDepositCell } from "../logic.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
-  OrderConversionRepresentabilityError,
-  quoteConversion,
+  quoteOrder,
 } from "../order/conversion.ts";
 import type { Info } from "../order/info.ts";
 import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
@@ -33,25 +32,21 @@ export function estimateConversionOrder(
   { fee, feeBase }: { fee: bigint; feeBase: bigint },
   takenDeposits: readonly IckbDepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
-  let quote: ReturnType<typeof quoteConversion>;
-  try {
-    quote = quoteConversion(
-      isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-      system.exchangeRatio,
-      isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
-      { fee, feeBase },
-    );
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return undefined;
-    }
-    throw error;
+  const quote = quoteOrder(
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+    system.exchangeRatio,
+    isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
+    { fee, feeBase },
+  );
+  if (!quote.ok) {
+    return undefined;
   }
+  const { convertedAmount, ckbFee, info } = quote;
   const estimatedMaturity =
-    quote.ckbFee >= estimateMaturityFeeThreshold(system)
-      ? maturity({ info: quote.info, amounts }, system, takenDeposits)
+    ckbFee >= estimateMaturityFeeThreshold(system)
+      ? maturity({ info, amounts }, system, takenDeposits)
       : undefined;
-  return { ...quote, maturity: estimatedMaturity };
+  return { convertedAmount, ckbFee, info, maturity: estimatedMaturity };
 }
 
 /**

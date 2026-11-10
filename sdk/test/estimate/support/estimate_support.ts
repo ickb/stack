@@ -7,7 +7,6 @@ import type { OrderGroup } from "../../../src/order/cells.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
-  OrderConversionRepresentabilityError,
 } from "../../../src/order/conversion.ts";
 import { Info } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
@@ -76,7 +75,7 @@ export function estimate(
     ...options,
   });
   if (result === undefined) {
-    throw new OrderConversionRepresentabilityError();
+    throw new Error("Expected an order ratio to represent the quote");
   }
   return result;
 }

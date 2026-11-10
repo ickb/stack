@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
-import { quoteConversion } from "../../src/order/conversion.ts";
+import { quoteOrder } from "../../src/order/conversion.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
@@ -21,11 +21,11 @@ describe(ESTIMATE_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
 
     expect(
-      quoteConversion("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
+      quoteOrder("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
         fee: 1n,
         feeBase: 100000n,
-      }).convertedAmount,
-    ).toBe(999990n);
+      }),
+    ).toMatchObject({ ok: true, convertedAmount: 999990n });
 
     const result = estimate(
       false,

@@ -57,9 +57,9 @@ export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
-  OrderConversionRepresentabilityError,
   quoteConversion,
 } from "./order/conversion.ts";
+export type { QuoteConversionResult } from "./order/conversion.ts";
 export type { Info, InfoLike } from "./order/info.ts";
 export type { Master, MasterLike } from "./order/master.ts";
 export type { OrderData, OrderDataLike } from "./order/order_data.ts";

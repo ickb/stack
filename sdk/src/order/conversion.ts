@@ -8,20 +8,6 @@ import { Ratio } from "./ratio.ts";
 const maxUint64 = (1n << 64n) - 1n;
 
 /**
- * Error thrown when an exact quote cannot be represented by the order ratio format.
- */
-export class OrderConversionRepresentabilityError extends Error {
-  /** Creates a representability error with the default public conversion message. */
-  constructor(
-    message = "Order conversion quote cannot be represented as Uint64 ratio",
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = "OrderConversionRepresentabilityError";
-  }
-}
-
-/**
  * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
  * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
  * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
@@ -46,15 +32,40 @@ export function isCkbToIckb(direction: ConversionDirection): boolean {
   }
 }
 
+/** A quote, or `unrepresentable` when no Uint64 order ratio reproduces it. */
+export type QuoteConversionResult =
+  | { ok: true; convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint }
+  | { ok: false; reason: "unrepresentable" };
+
+/**
+ * Quotes converting `amount` of the input side (CKB or iCKB, in shannons) at the SDK's
+ * default order fee: the output-side amount and the CKB fee.
+ */
+export function quoteConversion(
+  direction: ConversionDirection,
+  midpoint: ExchangeRatio,
+  amount: ccc.FixedPoint,
+): QuoteConversionResult {
+  const quote = quoteOrder(direction, midpoint, amount);
+  if (!quote.ok) {
+    return quote;
+  }
+  const { convertedAmount, ckbFee } = quote;
+  return { ok: true, convertedAmount, ckbFee };
+}
+
 /**
  * Quotes a new order for `amount` of the input side (CKB or iCKB, in shannons): the
  * output-side amount, the CKB fee, and the order info. Fee and fee base default to the SDK's.
  *
  * @remarks
- * The returned `Info` preserves the quoted amount after fee adjustment so the
- * minted order records the executable limit price.
+ * The returned `Info` carries the ratio that reproduces the quote exactly: the greatest
+ * Uint64 fraction at most `convertedAmount / amount`, which must still round the input up
+ * to the quoted output, so the minted order records the executable limit price. A zero
+ * amount, or a quote no such fraction reproduces, is `unrepresentable`; a negative amount
+ * throws.
  */
-export function quoteConversion(
+export function quoteOrder(
   direction: ConversionDirection,
   midpoint: ExchangeRatio,
   amount: ccc.FixedPoint,
@@ -62,7 +73,9 @@ export function quoteConversion(
     fee = DEFAULT_ORDER_FEE,
     feeBase = DEFAULT_ORDER_FEE_BASE,
   }: { fee?: ccc.Num; feeBase?: ccc.Num } = {},
-): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
+):
+  | { ok: true; convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info }
+  | { ok: false; reason: "unrepresentable" } {
   const isCkb2Udt = isCkbToIckb(direction);
   const base = Ratio.from(midpoint);
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
@@ -75,13 +88,33 @@ export function quoteConversion(
       : ckbFromUdt(amount, base) - convertedAmount;
   }
 
+  // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
+  if (amount < 0n) {
+    throw new Error("Order conversion amounts cannot be negative");
+  }
+  if (amount === 0n) {
+    return { ok: false, reason: "unrepresentable" };
+  }
+  const { numerator, denominator } = greatestBoundedFractionAtMost(
+    convertedAmount,
+    amount,
+    maxUint64,
+  );
+  // A zero numerator also lands here: the quote of a positive input is at least one.
+  if ((convertedAmount - 1n) * denominator >= amount * numerator) {
+    return { ok: false, reason: "unrepresentable" };
+  }
+
   // Every order this SDK creates carries the default minimum match, the one the bot's
   // remainder rule is sized to.
   const info = Info.create(
     isCkb2Udt,
-    quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
+    Ratio.from({
+      ckbScale: isCkb2Udt ? numerator : denominator,
+      udtScale: isCkb2Udt ? denominator : numerator,
+    }),
   );
-  return { convertedAmount, ckbFee, info };
+  return { ok: true, convertedAmount, ckbFee, info };
 }
 
 /** The direction's scales with the fee taken out of the output side, reduced. */
@@ -112,41 +145,6 @@ function feeAdjustedScales(
   bScale *= feeBase;
   const divisor = ccc.gcd(aScale, bScale);
   return { aScale: aScale / divisor, bScale: bScale / divisor };
-}
-
-/**
- * The ratio that reproduces the quote exactly: the greatest Uint64 fraction at most
- * `quotedOutput / inputAmount`, which must still round the input up to the quoted output.
- */
-function quotePreservingRatio(
-  inputAmount: ccc.FixedPoint,
-  quotedOutput: ccc.FixedPoint,
-  isCkb2Udt: boolean,
-): Ratio {
-  // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
-  if (inputAmount < 0n) {
-    throw new Error("Order conversion amounts cannot be negative");
-  }
-  if (inputAmount === 0n) {
-    throw new OrderConversionRepresentabilityError(
-      "Order conversion quote must have positive input and output",
-    );
-  }
-
-  const { numerator, denominator } = greatestBoundedFractionAtMost(
-    quotedOutput,
-    inputAmount,
-    maxUint64,
-  );
-  // A zero numerator also lands here: the quote of a positive input is at least one.
-  if ((quotedOutput - 1n) * denominator >= inputAmount * numerator) {
-    throw new OrderConversionRepresentabilityError();
-  }
-
-  return Ratio.from({
-    ckbScale: isCkb2Udt ? numerator : denominator,
-    udtScale: isCkb2Udt ? denominator : numerator,
-  });
 }
 
 /**

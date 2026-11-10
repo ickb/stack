@@ -1,5 +1,4 @@
 import {
-  OrderConversionRepresentabilityError,
   quoteConversion,
   type AccountAvailabilityProjection,
   type Ratio,
@@ -104,16 +103,10 @@ export function conversionQuote(
   amount: bigint,
   exchangeRatio: Ratio,
 ): bigint | undefined {
-  try {
-    return quoteConversion(
-      isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-      exchangeRatio,
-      amount,
-    ).convertedAmount;
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return undefined;
-    }
-    throw error;
-  }
+  const quote = quoteConversion(
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+    exchangeRatio,
+    amount,
+  );
+  return quote.ok ? quote.convertedAmount : undefined;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quoteConversion } from "../../src/order/conversion.ts";
+import { quoteOrder } from "../../src/order/conversion.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 
 const FEE_TOO_BIG = "Fee too big relative to feeBase";
@@ -17,7 +17,7 @@ describe("Ratio", () => {
 
   it("rejects a fee-bearing quote on an empty ratio", () => {
     expect(() =>
-      quoteConversion("ckb-to-ickb", Ratio.empty(), 1n, { fee: 1n, feeBase: 100000n }),
+      quoteOrder("ckb-to-ickb", Ratio.empty(), 1n, { fee: 1n, feeBase: 100000n }),
     ).toThrow("Invalid ExchangeRatio");
   });
 
@@ -26,16 +26,16 @@ describe("Ratio", () => {
     const amounts = { ckbValue: 1n, udtValue: 0n };
 
     expect(() =>
-      quoteConversion("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 1n, feeBase: 1n }),
+      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 1n, feeBase: 1n }),
     ).toThrow(FEE_TOO_BIG);
     expect(() =>
-      quoteConversion("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 2n, feeBase: 1n }),
+      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 2n, feeBase: 1n }),
     ).toThrow(FEE_TOO_BIG);
     expect(() =>
-      quoteConversion("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 0n, feeBase: 0n }),
+      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 0n, feeBase: 0n }),
     ).toThrow("Fee base must be positive");
     expect(() =>
-      quoteConversion("ckb-to-ickb", ratio, amounts.ckbValue, { fee: -1n, feeBase: 1n }),
+      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: -1n, feeBase: 1n }),
     ).toThrow("Fee cannot be negative");
   });
 
