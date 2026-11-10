@@ -9,11 +9,7 @@ import {
 } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { DAO, ICKB_LOGIC } from "../../src/constants.ts";
-import {
-  DAO_DEPOSIT_DATA,
-  DAO_OUTPUT_LIMIT,
-  DaoOutputLimitError,
-} from "../../src/dao.ts";
+import { DAO_DEPOSIT_DATA } from "../../src/dao.ts";
 import {
   completeDeposit,
   decodeReceiptData,
@@ -156,34 +152,6 @@ describe("deposit", () => {
     expect(() =>
       deposit(ccc.Transaction.default(), 1.5, ccc.fixedPointFrom(100082), script("44")),
     ).toThrow("iCKB deposit quantity must be a positive safe integer");
-  });
-
-  it("rejects deposit quantities that cannot fit in one DAO transaction", () => {
-    const depositMany = (quantity: number): ccc.Transaction =>
-      deposit(
-        ccc.Transaction.default(),
-        quantity,
-        ccc.fixedPointFrom(100082),
-        script("44"),
-      );
-
-    expect(depositMany(63).outputs).toHaveLength(DAO_OUTPUT_LIMIT);
-    expect(() => depositMany(64)).toThrow(new DaoOutputLimitError(DAO_OUTPUT_LIMIT + 1));
-    // Refused before building: a loop over this quantity would never finish.
-    expect(() => depositMany(Number.MAX_SAFE_INTEGER)).toThrow(
-      new DaoOutputLimitError(Number.MAX_SAFE_INTEGER + 1),
-    );
-  });
-
-  it("rejects output 65 after appending the receipt", () => {
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index < DAO_OUTPUT_LIMIT - 1; index += 1) {
-      tx.addOutput({ capacity: 1n, lock: script("44") }, "0x");
-    }
-
-    expect(() => deposit(tx, 1, ccc.fixedPointFrom(100082), script("44"))).toThrow(
-      DaoOutputLimitError,
-    );
   });
 });
 

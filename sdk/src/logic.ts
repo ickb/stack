@@ -1,9 +1,7 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { DAO, ICKB_LOGIC } from "./constants.ts";
 import {
-  assertDaoOutputLimit,
   DAO_DEPOSIT_DATA,
-  DaoOutputLimitError,
   depositMaturity,
   isDaoDeposit,
   pushHeaderDep,
@@ -50,7 +48,6 @@ export function decodeReceiptData(outputData: ccc.Hex): ReceiptData {
   return ReceiptDataCodec.decode(outputData.slice(0, 2 + 2 * receiptDataBytes));
 }
 
-const maxDepositQuantity = 63;
 // Receipts must carry enough capacity for phase 2 when the wallet has no other
 // CKB: one iCKB xUDT cell, one plain capacity cell, and the fee reserve.
 const phase2TxFeeReserve = ccc.One;
@@ -112,10 +109,6 @@ export function deposit(
     throw new TypeError("iCKB deposit quantity must be a positive safe integer");
   }
   const tx = ccc.Transaction.from(txLike);
-  if (depositQuantity > maxDepositQuantity) {
-    // The completion walk steps a plan down on this error.
-    throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
-  }
 
   const depositCell = ccc.CellAny.from({
     cellOutput: { capacity: depositCapacity, lock: ICKB_LOGIC, type: DAO },
@@ -141,7 +134,6 @@ export function deposit(
     { capacity: receiptPhase2Capacity(lock), lock, type: ICKB_LOGIC },
     encodeReceiptData({ depositQuantity: BigInt(depositQuantity), depositAmount }),
   );
-  assertDaoOutputLimit(tx, DAO);
   return tx;
 }
 

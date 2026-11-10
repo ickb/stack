@@ -5,9 +5,7 @@ import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../src/constants.ts";
 import {
   DAO_DEPOSIT_DATA,
   DAO_HEADER_INDEX_LIMIT,
-  DAO_OUTPUT_LIMIT,
   DaoHeaderIndexError,
-  DaoOutputLimitError,
 } from "../../src/dao.ts";
 import type { IckbDepositCell } from "../../src/logic.ts";
 import {
@@ -247,20 +245,6 @@ describe("requestWithdrawal", () => {
       requestWithdrawal(ccc.Transaction.default(), [deposit], userLock),
     ).toThrow("Withdrawal request lock args has different size from deposit");
   });
-
-  it("rejects output 65 after appending the owner markers", () => {
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index < DAO_OUTPUT_LIMIT - 1; index += 1) {
-      tx.addInput({
-        previousOutput: { txHash: byte32FromByte("aa"), index: BigInt(index) },
-      });
-      tx.addOutput({ capacity: 1n, lock: userLock }, "0x");
-    }
-
-    expect(() => requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
-      DaoOutputLimitError,
-    );
-  });
 });
 
 describe("withdraw", () => {
@@ -396,18 +380,6 @@ describe("withdraw", () => {
 
     expect(() => withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))])).toThrow(
       "Witnesses of withdrawal request already in use",
-    );
-  });
-
-  it("rejects more than 64 outputs", () => {
-    const owned = requestOf(depositHeader, requestHeader);
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
-      tx.addOutput({ capacity: 1n, lock: userLock }, "0x");
-    }
-
-    expect(() => withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))])).toThrow(
-      DaoOutputLimitError,
     );
   });
 

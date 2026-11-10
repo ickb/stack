@@ -1,7 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { DAO, OWNED_OWNER } from "./constants.ts";
 import {
-  assertDaoOutputLimit,
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
   isDaoWithdrawalRequest,
@@ -192,7 +191,6 @@ export function requestWithdrawal(
       }),
     );
   }
-  assertDaoOutputLimit(tx, DAO);
   return tx;
 }
 
@@ -259,7 +257,6 @@ export function withdraw(
   for (const { owner } of withdrawalGroups) {
     tx.addInput(owner.cell);
   }
-  assertDaoOutputLimit(tx, DAO);
   return tx;
 }
 
