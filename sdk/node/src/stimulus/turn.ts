@@ -137,7 +137,6 @@ async function stimulate(
       Object.assign(log, { outcome: "skipped" });
       return;
     }
-    // Stryker disable next-line StringLiteral: a zero amount builds the collection alone, which ignores the direction.
     const collection = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
     if ("skip" in collection) {
       Object.assign(log, { collectSkip: collection.skip, outcome: "skipped" });

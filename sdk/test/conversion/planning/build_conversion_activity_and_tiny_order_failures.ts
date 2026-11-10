@@ -29,7 +29,7 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 const AMOUNT_TOO_SMALL = "amount-too-small";
 const FULL_WORKSPACE_TIMEOUT_MS = 20_000;
 describe("IckbSdk.buildConversionTransaction", () => {
-  it("returns typed failures for invalid requested amounts", async () => {
+  it("refuses a negative amount and returns typed failures past the balance", async () => {
     const { sdk } = testSdk();
 
     await expect(
@@ -39,7 +39,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         signer: stubSigner,
         context: conversionContext(),
       }),
-    ).resolves.toMatchObject({ ok: false, reason: "amount-negative" });
+    ).rejects.toThrow(new RangeError("Conversion amount is negative"));
     await expect(
       sdk.buildConversionTransaction({
         direction: CKB_TO_ICKB,
@@ -58,20 +58,25 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ickb" });
   });
 
-  it("returns typed failures for no activity and tiny orders", async () => {
+  it("refuses a direction that is neither of the two, at any amount", async () => {
     const { sdk } = testSdk();
+    const sideways = new TypeError("Unknown conversion direction: sideways");
 
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        signer: stubSigner,
-        context: conversionContext(),
-      }),
-    ).resolves.toEqual({
-      ok: false,
-      reason: "nothing-to-do",
-    });
+    for (const amount of [0n, 1n]) {
+      await expect(
+        sdk.buildConversionTransaction({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- A plain-JS caller's typo, which TypeScript cannot see.
+          direction: JSON.parse('"sideways"'),
+          amount,
+          signer: stubSigner,
+          context: conversionContext({ ckbAvailable: 1n, ickbAvailable: 1n }),
+        }),
+      ).rejects.toThrow(sideways);
+    }
+  });
+
+  it("returns typed failures for tiny orders", async () => {
+    const { sdk } = testSdk();
 
     await expect(
       sdk.buildConversionTransaction({
@@ -133,7 +138,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     ]);
   });
 
-  it("finds nothing to do at amount zero without anything to collect", async () => {
+  it("refuses amount zero without anything to collect", async () => {
     const { sdk } = testSdk();
     const cell = ccc.Cell.from({
       outPoint: { txHash: `0x${"78".repeat(32)}`, index: 0 },
@@ -149,7 +154,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         signer: stubSigner,
         context: conversionContext({ cells: [cell] }),
       }),
-    ).resolves.toMatchObject({ ok: false, reason: "nothing-to-do" });
+    ).rejects.toThrow(new Error("Nothing to collect"));
   });
 });
 

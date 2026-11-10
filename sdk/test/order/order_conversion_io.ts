@@ -25,4 +25,11 @@ describe("order conversion and I/O", () => {
       });
     }).toThrow(OrderConversionRepresentabilityError);
   });
+
+  it("refuses a direction that is neither of the two", () => {
+    expect(() =>
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- A plain-JS caller's typo, which TypeScript cannot see.
+      quoteConversion(JSON.parse('"sideways"'), { ckbScale: 1n, udtScale: 1n }, 1n),
+    ).toThrow(new TypeError("Unknown conversion direction: sideways"));
+  });
 });

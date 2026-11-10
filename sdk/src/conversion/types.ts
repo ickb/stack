@@ -41,7 +41,7 @@ export interface ConversionTransactionOptions {
 
   /**
    * Requested input amount in the source asset; zero builds the collection alone, which
-   * ignores `direction`.
+   * does not use `direction` beyond checking it is one of the two.
    */
   amount: bigint;
 
@@ -59,11 +59,7 @@ export interface ConversionTransactionOptions {
  * Reason a conversion transaction could not be built without throwing.
  */
 export type ConversionTransactionFailureReason =
-  | "amount-negative"
-  | "insufficient-ckb"
-  | "insufficient-ickb"
-  | "amount-too-small"
-  | "nothing-to-do";
+  "insufficient-ckb" | "insufficient-ickb" | "amount-too-small";
 
 /** Composition category selected for a built conversion. */
 export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";

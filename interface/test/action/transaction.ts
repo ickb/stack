@@ -4,6 +4,7 @@ import {
   type ConversionKind,
   type ConversionTransactionFailureReason,
 } from "@ickb/sdk";
+import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
 import type { WalletConfig } from "../../src/shared/utils.ts";
@@ -76,7 +77,7 @@ describe("buildTransactionPreview", () => {
       });
 
       await expect(
-        buildTransactionPreview(context(), true, 0n, config),
+        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, config),
       ).resolves.toMatchObject({
         conversionKind: kind,
       });
@@ -89,7 +90,6 @@ describe("buildTransactionPreview failure messages", () => {
     const cases: Array<
       [Exclude<ConversionTransactionFailureReason, "amount-too-small">, string]
     > = [
-      ["amount-negative", "Amount cannot be negative"],
       ["insufficient-ckb", "More CKB than you have"],
       ["insufficient-ickb", "More iCKB than you have"],
     ];
@@ -132,23 +132,37 @@ describe("buildTransactionPreview failure messages", () => {
     }
   });
 
-  it("describes SDK no-op plans by requested amount", async () => {
-    for (const [amount, message] of [
-      [0n, "Nothing to do"],
-      [1n, "No conversion request available for this amount"],
-    ] as const) {
-      const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(
-            failedPlan("nothing-to-do"),
-          ),
-        },
-      });
+  it("says nothing to do at amount zero with nothing to collect, without the SDK", async () => {
+    // The SDK throws for that request: the screen asks hasCollectable first.
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
-      await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, amount, config),
-      ).resolves.toEqual({ ok: false, error: message });
-    }
+    await expect(
+      buildTransactionPreview(context({ ckbAvailable: 1n }), true, 0n, config),
+    ).resolves.toEqual({ ok: false, error: "Nothing to do" });
+    expect(buildConversionTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks the SDK for a collection when there is something to collect", async () => {
+    const receipt = {
+      cell: ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("ab"), index: 0n },
+        cellOutput: { capacity: 0n, lock: script("11") },
+        outputData: "0x",
+      }),
+      header: headerLike(),
+      ckbValue: 0n,
+      udtValue: 0n,
+    };
+    const buildConversionTransaction = buildConversionTransactionMock(
+      successfulPlan({ conversionKind: "collect-only" }),
+    );
+    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+
+    await expect(
+      buildTransactionPreview(context({ receipts: [receipt] }), true, 0n, config),
+    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
+    expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
   });
 });
 

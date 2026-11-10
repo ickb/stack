@@ -45,7 +45,7 @@ export function stateSdk(
   vi.spyOn(sdk, "getL1AccountState").mockResolvedValue(state);
   vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
     ok: false,
-    reason: "nothing-to-do",
+    reason: "insufficient-ckb",
   });
   return sdk;
 }

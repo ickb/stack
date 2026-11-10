@@ -27,6 +27,7 @@ import {
   type IckbDepositCell,
 } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
+import { isCkbToIckb } from "./order/conversion.ts";
 import { findOrders, melt, mint } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import { requestWithdrawal, withdraw, withdrawalGroupsFrom } from "./owned_owner.ts";
@@ -172,18 +173,23 @@ export class IckbSdk {
    * wins, so a wallet short of CKB degrades to fewer direct actions plus a larger standing
    * order rather than failing. Failure results are
    * expected planning outcomes; when no plan can be funded the last completion error throws.
+   * Misuse throws: a negative amount (`RangeError`), a direction that is neither of the two
+   * (`TypeError`), and an amount of zero with nothing to collect, which
+   * {@link hasCollectable} tells a caller beforehand.
    */
   public async buildConversionTransaction(
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
     const { amount, context, direction } = options;
     if (amount < 0n) {
-      return conversionFailure("amount-negative");
+      throw new RangeError("Conversion amount is negative");
     }
-    if (direction === "ckb-to-ickb" && amount > context.ckbAvailable) {
+    // Checked before the collection branch too: a misspelled direction is misuse at any amount.
+    const ckbToIckb = isCkbToIckb(direction);
+    if (ckbToIckb && amount > context.ckbAvailable) {
       return conversionFailure("insufficient-ckb");
     }
-    if (direction === "ickb-to-ckb" && amount > context.ickbAvailable) {
+    if (!ckbToIckb && amount > context.ickbAvailable) {
       return conversionFailure("insufficient-ickb");
     }
 
@@ -194,7 +200,7 @@ export class IckbSdk {
     if (amount === 0n) {
       return this.buildCollectOnlyConversion(resolved);
     }
-    return direction === "ckb-to-ickb"
+    return ckbToIckb
       ? this.buildCkbToIckbConversion(resolved)
       : this.buildIckbToCkbConversion(resolved);
   }
@@ -203,10 +209,10 @@ export class IckbSdk {
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
     const { context } = options;
-    // Nothing to collect is nothing to do: a transaction that would only compact the
-    // account is not worth its fee.
+    // A transaction that would only compact the account is not worth its fee, and the
+    // caller can tell beforehand with hasCollectable, so asking for one is misuse.
     if (!hasCollectable(context)) {
-      return conversionFailure("nothing-to-do");
+      throw new Error("Nothing to collect");
     }
     const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
     const completed = await this.completeConversion(tx, options);

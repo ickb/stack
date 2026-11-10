@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
+  hasCollectable,
   IckbError,
   type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
@@ -12,10 +13,9 @@ export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
 
 const conversionFailureMessages: Record<
-  Exclude<ConversionTransactionFailureReason, "nothing-to-do" | "amount-too-small">,
+  Exclude<ConversionTransactionFailureReason, "amount-too-small">,
   string
 > = {
-  "amount-negative": "Amount cannot be negative",
   "insufficient-ckb": "More CKB than you have",
   "insufficient-ickb": "More iCKB than you have",
 };
@@ -41,6 +41,10 @@ export async function buildTransactionPreview(
   amount: bigint,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
+  // The SDK refuses a collection with nothing to collect, which this screen offers anyway.
+  if (amount === 0n && !hasCollectable(context)) {
+    return txInfoWithError(noCollectionMessage);
+  }
   try {
     const result = await walletConfig.sdk.buildConversionTransaction({
       direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
@@ -49,7 +53,7 @@ export async function buildTransactionPreview(
       context,
     });
     if (!result.ok) {
-      return txInfoWithError(conversionFailureMessage(result, amount, isCkb2Udt));
+      return txInfoWithError(conversionFailureMessage(result, isCkb2Udt));
     }
 
     // The SDK returns the transaction completed and funded; only signing remains.
@@ -81,12 +85,8 @@ function txInfoWithError(error: string): TxInfo {
 
 function conversionFailureMessage(
   failure: Extract<ConversionTransactionResult, { ok: false }>,
-  amount: bigint,
   isCkb2Udt: boolean,
 ): string {
-  if (failure.reason === "nothing-to-do") {
-    return amount === 0n ? noCollectionMessage : noRequestMessage;
-  }
   if (failure.reason === "amount-too-small") {
     return `Enter at least ${ccc.fixedPointToString(roundUpToTwoDigits(failure.minimum))} ${isCkb2Udt ? "CKB" : "iCKB"}`;
   }

@@ -20,7 +20,7 @@ A destination lock chosen by the caller was removed. The change and up to 1,000 
 
 ## Amount zero
 
-An amount of zero builds the collection alone. `hasCollectable(context)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect it's `nothing-to-do`, since a transaction that would only compact the account isn't worth its fee.
+An amount of zero builds the collection alone. `hasCollectable(context)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb` and `amount-too-small` with its `minimum`.
 
 ## The plan walk
 

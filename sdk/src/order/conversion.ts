@@ -32,6 +32,21 @@ export const DEFAULT_ORDER_FEE = 10n;
 export const DEFAULT_ORDER_FEE_BASE = 100000n;
 
 /**
+ * Whether `direction` converts CKB to iCKB. Any value but the two throws a `TypeError`, so a
+ * plain-JS caller's typo is refused rather than read as iCKB to CKB.
+ */
+export function isCkbToIckb(direction: ConversionDirection): boolean {
+  switch (direction) {
+    case "ckb-to-ickb":
+      return true;
+    case "ickb-to-ckb":
+      return false;
+    default:
+      throw new TypeError(`Unknown conversion direction: ${String(direction)}`);
+  }
+}
+
+/**
  * Quotes a new order for `amount` of the input side (CKB or iCKB, in shannons): the
  * output-side amount, the CKB fee, and the order info. Fee and fee base default to the SDK's.
  *
@@ -48,7 +63,7 @@ export function quoteConversion(
     feeBase = DEFAULT_ORDER_FEE_BASE,
   }: { fee?: ccc.Num; feeBase?: ccc.Num } = {},
 ): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-  const isCkb2Udt = direction === "ckb-to-ickb";
+  const isCkb2Udt = isCkbToIckb(direction);
   const base = Ratio.from(midpoint);
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
   const convertedAmount = ceilDiv(amount * aScale, bScale);

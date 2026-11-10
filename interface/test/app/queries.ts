@@ -163,8 +163,9 @@ it("loads display balances from an SDK account snapshot", async () => {
     hasConverting: false,
     estimatedMaturity: 10n,
   });
+  // The fixture SDK refuses every build as short of CKB.
   await expect(state.txBuilder(true, 1n)).resolves.toMatchObject({
-    error: "No conversion request available for this amount",
+    error: "More CKB than you have",
   });
 });
 

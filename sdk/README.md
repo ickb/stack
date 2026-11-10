@@ -89,7 +89,7 @@ async function convert(
 }
 ```
 
-A failed build isn't an exception: `built.reason` says why, for example `insufficient-ckb`, or `amount-too-small` with `built.minimum`, the smallest amount that works.
+Expected outcomes come back as values: a failed build is `{ ok: false, reason, …that reason's fields }`, for example `insufficient-ckb`, or `amount-too-small` with `built.minimum`, the smallest amount that works. A `cause` appears only where a caught call's rejection is carried. A throw is a defect: a node that can't answer, an answer that fails a check, an unsupported network, or misuse such as a negative amount, an unknown direction or a collection with nothing to collect. An abort throws the signal's own reason.
 
 ## Recipes
 
@@ -106,7 +106,7 @@ function maxAmount(
 }
 ```
 
-**Collect only:** an amount of zero collects what's ready, without converting anything new. `ickb.hasCollectable(context)` tells you if there's anything, so you can enable the button:
+**Collect only:** an amount of zero collects what's ready, without converting anything new. `ickb.hasCollectable(context)` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
 
 ```ts
 await convert(sdk, signer, "ckb-to-ickb", 0n);
