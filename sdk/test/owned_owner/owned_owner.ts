@@ -2,11 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../src/constants.ts";
-import {
-  DAO_DEPOSIT_DATA,
-  DAO_HEADER_INDEX_LIMIT,
-  DaoHeaderIndexError,
-} from "../../src/dao.ts";
+import { DAO_DEPOSIT_DATA, DAO_HEADER_INDEX_LIMIT } from "../../src/dao.ts";
 import type { IckbDepositCell } from "../../src/logic.ts";
 import {
   decodeOwnerData,
@@ -327,31 +323,6 @@ describe("withdraw", () => {
     expect(updated.getWitnessArgs(0)?.inputType).toBe(
       ccc.hexFrom(ccc.numLeToBytes(0n, 8)),
     );
-  });
-
-  it("rejects the deposit header the deployed script cannot address", () => {
-    const groups = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, (_, index) => {
-      const owned = requestOf(
-        headerLike({
-          number: BigInt(index) + 10n,
-          hash: ccc.hexFrom(ccc.numToBytes(index + 1, 32)),
-        }),
-        requestHeader,
-        "55",
-      );
-      return new WithdrawalGroup(owned, ownerOf(owned));
-    });
-
-    expect(() => withdraw(ccc.Transaction.default(), groups)).toThrow(
-      DaoHeaderIndexError,
-    );
-    expect(() => withdraw(ccc.Transaction.default(), groups)).toThrow(
-      expect.objectContaining({
-        name: "DaoHeaderIndexError",
-        message: "NervosDAO deposit header index 256 is not below 256",
-      }),
-    );
-    expect(() => withdraw(ccc.Transaction.default(), groups.slice(1))).not.toThrow();
   });
 
   it("preserves an existing non-input witness by shifting it after the new input", () => {

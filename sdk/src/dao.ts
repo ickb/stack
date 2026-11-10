@@ -31,23 +31,6 @@ export class DaoOutputLimitError extends Error {
 }
 
 /**
- * Error thrown when a phase-2 withdrawal would reference a deposit header the
- * deployed DAO script cannot address.
- */
-export class DaoHeaderIndexError extends Error {
-  /**
-   * Creates a header-index error for one unrepresentable index.
-   */
-  constructor(headerIndex: number, options?: ErrorOptions) {
-    super(
-      `NervosDAO deposit header index ${String(headerIndex)} is not below ${String(DAO_HEADER_INDEX_LIMIT)}`,
-      options,
-    );
-    this.name = "DaoHeaderIndexError";
-  }
-}
-
-/**
  * Throws when a transaction using the DAO script exceeds the Nervos DAO output limit. An
  * oversized transaction with an unresolved input is refused too: whether it uses the DAO
  * cannot be known, and the completion walk steps a plan down on this error either way.

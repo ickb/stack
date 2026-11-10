@@ -17,7 +17,6 @@ import {
   assertDaoOutputLimit,
   assertFresh,
   broadcastDeadline,
-  DaoHeaderIndexError,
   DaoOutputLimitError,
   pushHeaderDep,
   tipMaxAgeMs,
@@ -632,7 +631,7 @@ export class IckbError extends Error {
  * @remarks
  * Only completion knows what a transaction costs once markers, remainder orders, change, and
  * fee are in, so no count is computed up front: each candidate is built and completed in turn.
- * Capacity, DAO output-limit and DAO header-index failures advance
+ * Capacity and DAO output-limit failures advance
  * the walk; transport, scan, signer, and malformed-transaction errors propagate. Exhausting
  * the candidates throws the last advancing failure.
  */
@@ -657,13 +656,12 @@ export async function completeFirstFundable<T>(
 
 /**
  * A failure the walk advances past: the candidate costs more than the account funds, or
- * needs more DAO outputs or deposit-header slots than one transaction has.
+ * needs more DAO outputs than one transaction has.
  */
 export function isFundabilityFailure(error: unknown): error is Error {
   return (
     error instanceof IckbError ||
     error instanceof ccc.ErrorTransactionInsufficientCapacity ||
-    error instanceof DaoOutputLimitError ||
-    error instanceof DaoHeaderIndexError
+    error instanceof DaoOutputLimitError
   );
 }

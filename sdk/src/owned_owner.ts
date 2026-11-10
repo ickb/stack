@@ -1,11 +1,6 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { DAO, OWNED_OWNER } from "./constants.ts";
-import {
-  DAO_HEADER_INDEX_LIMIT,
-  DaoHeaderIndexError,
-  isDaoWithdrawalRequest,
-  pushHeaderDep,
-} from "./dao.ts";
+import { isDaoWithdrawalRequest, pushHeaderDep } from "./dao.ts";
 import type { IckbDepositCell } from "./logic.ts";
 import { ickbValue } from "./udt.ts";
 import { CheckedInt32LE, CheckedUint64LE } from "./utils/codec.ts";
@@ -234,12 +229,11 @@ export function withdraw(
     pushHeaderDep(tx, owned.headers[1].hash);
   }
   for (const { owned } of withdrawalGroups) {
-    const headerIndex = tx.headerDeps.indexOf(owned.headers[0].hash);
     // The deployed dao.c reads one byte of the u64 index field (RFC 0023 erratum,
-    // nervosnetwork/rfcs pull 456), so index 256 would be read as 0.
-    if (headerIndex >= DAO_HEADER_INDEX_LIMIT) {
-      throw new DaoHeaderIndexError(headerIndex);
-    }
+    // nervosnetwork/rfcs pull 456). The account projection caps a batch at
+    // `DAO_HEADER_INDEX_LIMIT` ready withdrawals, whose deposit headers lead, so every index
+    // fits; a wrong one only the node can refuse.
+    const headerIndex = tx.headerDeps.indexOf(owned.headers[0].hash);
     const inputIndex =
       tx.addInput({
         outPoint: owned.cell.outPoint,

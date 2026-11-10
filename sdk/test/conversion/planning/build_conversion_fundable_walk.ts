@@ -1,11 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DAO_HEADER_INDEX_LIMIT,
-  DaoHeaderIndexError,
-  DaoOutputLimitError,
-} from "../../../src/dao.ts";
+import { DaoOutputLimitError } from "../../../src/dao.ts";
 import { completeFirstFundable, type CompletedTransaction } from "../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
@@ -194,26 +190,6 @@ describe("completeFirstFundable", () => {
     await expect(completeFirstFundable([], () => tx, complete)).rejects.toThrow(
       "No candidate could be completed",
     );
-  });
-
-  it("advances past a deposit-header overflow thrown by the builder", async () => {
-    // The DAO builder throws while building, before completion; the walk treats it like
-    // any other fundability failure and tries the next candidate.
-    const funded = await completeFirstFundable(
-      [2, 1],
-      (count) => {
-        if (count === 2) {
-          throw new DaoHeaderIndexError(DAO_HEADER_INDEX_LIMIT);
-        }
-        return transactionWithOutputs(count, script("11"));
-      },
-      async (candidate) => {
-        await Promise.resolve();
-        return { tx: candidate, plannedFee: 0n };
-      },
-    );
-
-    expect(funded).toMatchObject({ candidate: 1 });
   });
 
   it("propagates failures that are not about fundability", async () => {

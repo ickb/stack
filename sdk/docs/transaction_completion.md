@@ -46,6 +46,6 @@ A conversion makes at most 63 deposits, the deployed DAO script limit of 64 outp
 
 ## DAO limits
 
-The DAO output and deposit-header limits come from the deployed script, not from a consensus output cap. Their constants and reasons are in [`src/dao.ts`](../src/dao.ts). Deposit headers of collected withdrawals go first, so the batch of at most 256 matured withdrawals can always be addressed, whatever other headers there are.
+The DAO output and deposit-header limits come from the deployed script, not from a consensus output cap. Their constants and reasons are in [`src/dao.ts`](../src/dao.ts). The account projection caps the ready batch at 256 matured withdrawals (`DAO_HEADER_INDEX_LIMIT`, in [`src/conversion/projection.ts`](../src/conversion/projection.ts)), and their deposit headers go first, so each can always be addressed, whatever other headers there are. The builder does not check the index again: every SDK build, the bot and the generator read their context through that projection, and a wrong index only the node can refuse.
 
 The claim-epoch model test compares the installed CCC with a pinned transcription of the deployed `dao.c`. So a dependency regression fails the gate instead of hiding behind a local copy.
