@@ -27,7 +27,6 @@ try {
       client,
       signer,
       sdk: new IckbSdk(managers),
-      order: managers.order,
       primaryLock,
       accountLocks,
     },

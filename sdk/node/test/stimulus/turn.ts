@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getConfig } from "../../../src/constants.ts";
+import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
+import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
-import { Info } from "../../../src/order/info.ts";
 import { IckbError, type CompletedTransaction } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
@@ -85,6 +85,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The transaction the turn handed the sender on its `call`th send. */
+function sentTx(call = 0): ccc.Transaction {
+  const built = sendMock.mock.calls[call]?.[1];
+  if (built === undefined) {
+    throw new Error("Expected a sent transaction");
+  }
+  return ccc.Transaction.from(built.tx);
+}
+
+/** The order output of the `call`th sent transaction, its first output. */
+function sentOrder(call = 0): OrderCell {
+  const output = sentTx(call).getOutput(0);
+  if (output === undefined) {
+    throw new Error("Expected a sent order output");
+  }
+  return OrderCell.mustFrom(
+    ccc.Cell.from({
+      cellOutput: output.cellOutput,
+      outputData: output.outputData,
+      outPoint: { txHash: TX_HASH, index: 0n },
+    }),
+    0n,
+  );
+}
+
 /** A completion that spends the funded cell and returns `change` CKB to the account. */
 function completing(change: bigint): Partial<Runtime["sdk"]> {
   return {
@@ -112,8 +137,6 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    const orderManager = getConfig("testnet").order;
-    const mint = vi.spyOn(orderManager, "mint");
     const buildConversionTransaction = vi.fn<
       Runtime["sdk"]["buildConversionTransaction"]
     >(async (options) => {
@@ -136,12 +159,11 @@ describe("runStimulusTurn", () => {
         }),
         orders: live,
         sdk: { buildConversionTransaction },
-        order: orderManager,
       }),
       orderDraw,
     );
 
-    expect(mint).not.toHaveBeenCalled();
+    expect(sentTx().outputs.some(({ lock }) => lock.eq(ORDER))).toBe(false);
     // The SDK's broadcast deadline reaches the sender.
     expect(sendMock.mock.calls[0]?.[1].broadcastBefore).toBe(DEADLINE);
     expect(log).toMatchObject({
@@ -191,22 +213,10 @@ describe("runStimulusTurn", () => {
 
   it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
-    const orderManager = getConfig("testnet").order;
-    const mint = vi
-      .spyOn(orderManager, "mint")
-      .mockImplementation((txLike, _lock, info, amounts) => {
-        const tx = ccc.Transaction.from(txLike);
-        expect(Info.from(info).ckbToUdt.isPopulated()).toBe(true);
-        expect(amounts).toEqual({ ckbValue: 5n * CKB, udtValue: 0n });
-        tx.addOutput({ capacity: 200n * CKB, lock: PRIMARY_LOCK });
-        tx.addOutput({ capacity: 74n * CKB, lock: PRIMARY_LOCK });
-        return tx;
-      });
     const target = runtime({
       account: fundedAccount,
       orders: [fulfilled],
       sdk: completing(5500n * CKB),
-      order: orderManager,
     });
 
     const log = await turn(target, orderDraw);
@@ -226,20 +236,28 @@ describe("runStimulusTurn", () => {
     // The send refuses a fee above the one completion planned, the one journaled.
     expect(sendMock.mock.calls[0]?.[1].plannedFee).toBe(PLANNED_FEE);
     expect(log).not.toHaveProperty("skip");
+    const sent = sentTx();
     // The base carries the fulfilled order's two melt inputs before the mint.
-    expect(mint.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
+    expect(sent.inputs.slice(0, 2).map(({ previousOutput }) => previousOutput)).toEqual([
+      fulfilled.order.cell.outPoint,
+      fulfilled.master.cell.outPoint,
+    ]);
+    // The minted order offers the drawn CKB for iCKB, its master at the primary lock.
+    const minted = sentOrder();
+    expect(minted.cell.cellOutput.type?.eq(ICKB_UDT)).toBe(true);
+    expect(minted.data.info.ckbToUdt.isPopulated()).toBe(true);
+    expect([minted.ckbUnoccupied, minted.udtValue]).toEqual([5n * CKB, 0n]);
+    expect(sent.outputs[1]?.lock.eq(PRIMARY_LOCK)).toBe(true);
+    expect(sent.outputs[1]?.type?.eq(ORDER)).toBe(true);
     expect(waitMock).toHaveBeenCalledWith(target.client, TX_HASH, { timeout: 600_000 });
     expect(process.exitCode).toBeUndefined();
   });
 
   it("mints each direction's amount on its own side through the real mint", async () => {
-    const orderManager = getConfig("testnet").order;
-    const mint = vi.spyOn(orderManager, "mint");
     const log = await turn(
       runtime({
         account: fundedAccount,
         sdk: completing(5500n * CKB),
-        order: orderManager,
       }),
       {
         ...orderDraw,
@@ -249,10 +267,7 @@ describe("runStimulusTurn", () => {
     );
     lines = [];
     // The real completer funds the CKB-to-iCKB order from the account's plain CKB.
-    const completed = await turn(
-      runtime({ account: fundedAccount, order: orderManager }),
-      orderDraw,
-    );
+    const completed = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(log).toMatchObject({
       outcome: "committed",
@@ -260,9 +275,14 @@ describe("runStimulusTurn", () => {
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 1, outputs: 3 },
     });
-    expect(mint.mock.calls.map(([, , , amounts]) => amounts)).toEqual([
-      { ckbValue: 0n, udtValue: 5n * CKB },
-      { ckbValue: 5n * CKB, udtValue: 0n },
+    expect(
+      [sentOrder(0), sentOrder(1)].map(({ ckbUnoccupied, udtValue }) => [
+        ckbUnoccupied,
+        udtValue,
+      ]),
+    ).toEqual([
+      [0n, 5n * CKB],
+      [5n * CKB, 0n],
     ]);
     expect(completed).toMatchObject({
       outcome: "committed",

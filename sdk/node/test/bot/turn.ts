@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { OrderManager } from "../../../src/order/order.ts";
+import { addMatch } from "../../../src/order/order.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 
 import {
@@ -43,6 +43,12 @@ const BOT_TRANSACTION_BUILT = "bot.transaction.built";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
 const FETCH_FAILED = "fetch failed";
+
+// Calls through to the real builder unless a test injects a failure.
+vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, addMatch: vi.fn(original.addMatch) };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -323,7 +329,7 @@ it("propagates the read failure with nothing sent", async () => {
 });
 
 it("propagates a build failure after the state event", async () => {
-  vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
+  vi.mocked(addMatch).mockImplementationOnce(() => {
     throw new Error("deterministic build failure");
   });
   const harness = turnHarness();

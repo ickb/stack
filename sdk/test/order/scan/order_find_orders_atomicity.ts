@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { findOrders } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import type {
   GetTransactionHash,
@@ -11,7 +12,6 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  findOrdersFixture,
   masterCell,
   transactionResponse,
   transactionWithOutputs,
@@ -19,26 +19,24 @@ import {
 
 const ORIGIN_LOOKUP_FAILURE = "origin lookup failed";
 
-describe("OrderManager.findOrders resolution atomicity", () => {
+describe("findOrders resolution atomicity", () => {
   it("resolves every scanned group", async () => {
-    const { manager, client } = twoGroupScan({ failingMasterTxHash: undefined });
+    const { client } = twoGroupScan({ failingMasterTxHash: undefined });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(2);
   });
 
   it("yields no group when a later origin lookup fails", async () => {
-    const { manager, client, secondMasterTxHash } = twoGroupScan({
+    const { client, secondMasterTxHash } = twoGroupScan({
       failingMasterTxHash: undefined,
     });
-    const { manager: failingManager, client: failingClient } = twoGroupScan({
+    const { client: failingClient } = twoGroupScan({
       failingMasterTxHash: secondMasterTxHash,
     });
-    await expect(failingManager.findOrders(failingClient)).rejects.toThrow(
-      ORIGIN_LOOKUP_FAILURE,
-    );
-    await expect(manager.findOrders(client)).resolves.toHaveLength(2);
+    await expect(findOrders(failingClient)).rejects.toThrow(ORIGIN_LOOKUP_FAILURE);
+    await expect(findOrders(client)).resolves.toHaveLength(2);
   });
 });
 
@@ -54,13 +52,11 @@ function twoGroupScan({
 }: {
   failingMasterTxHash: ccc.Hex | undefined;
 }): {
-  manager: ReturnType<typeof findOrdersFixture>["manager"];
   client: ccc.Client;
   secondMasterTxHash: ccc.Hex;
 } {
-  const { manager, orderScript, ownerLock } = findOrdersFixture();
-  const first = groupFixture("71", "72", orderScript, ownerLock);
-  const second = groupFixture("73", "74", orderScript, ownerLock);
+  const first = groupFixture("71", "72");
+  const second = groupFixture("73", "74");
   const transactions = new Map([
     [first.masterTxHash, first.masterTransaction],
     [second.masterTxHash, second.masterTransaction],
@@ -81,22 +77,16 @@ function twoGroupScan({
       return transaction === undefined ? undefined : transactionResponse(transaction);
     },
   });
-  return { manager, client, secondMasterTxHash: second.masterTxHash };
+  return { client, secondMasterTxHash: second.masterTxHash };
 }
 
-function groupFixture(
-  masterByte: string,
-  liveOrderByte: string,
-  orderScript: ccc.Script,
-  ownerLock: ccc.Script,
-): GroupFixture {
+function groupFixture(masterByte: string, liveOrderByte: string): GroupFixture {
   const master = { txHash: byte32FromByte(masterByte), index: 1n };
   const origin = makeOrderCell({
     ckbUnoccupied: ccc.fixedPointFrom(100),
     udtValue: 0n,
     info: directionalInfo(),
     master: { type: "relative", value: Relative.create(1n) },
-    lock: orderScript,
     outPoint: { txHash: master.txHash, index: 0n },
   });
   const liveOrder = makeOrderCell({
@@ -104,10 +94,9 @@ function groupFixture(
     udtValue: 0n,
     info: directionalInfo(),
     master: { type: "absolute", value: master },
-    lock: orderScript,
     outPoint: { txHash: byte32FromByte(liveOrderByte), index: 0n },
   });
-  const liveMaster = masterCell(master, orderScript, ownerLock);
+  const liveMaster = masterCell(master);
   return {
     liveOrder: liveOrder.cell,
     liveMaster,

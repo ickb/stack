@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
-import { OrderManager } from "../../../../src/order/order.ts";
+import { addMatch } from "../../../../src/order/order.ts";
 import { IckbError } from "../../../../src/sdk.ts";
 
 import { StubClient } from "@ickb/testkit";
@@ -17,6 +17,12 @@ import {
   testReceipt,
   testWithdrawal,
 } from "../fixtures/bot.ts";
+
+// Calls through to the real builder unless a test injects a failure.
+vi.mock(import("../../../../src/order/order.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, addMatch: vi.fn(original.addMatch) };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -158,7 +164,7 @@ describe("buildTransaction matching", () => {
   });
 
   it("propagates unexpected match failures", async () => {
-    vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
+    vi.mocked(addMatch).mockImplementationOnce(() => {
       throw new Error("match failed");
     });
 

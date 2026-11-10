@@ -2,10 +2,9 @@ import { ccc } from "@ckb-ccc/core";
 import type { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { ICKB_UDT } from "../../../src/constants.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { encodeReceiptData, LogicManager } from "../../../src/logic.ts";
-
-import { OrderManager } from "../../../src/order/order.ts";
 import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../src/sdk.ts";
 import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
@@ -20,12 +19,11 @@ describe("IckbSdk.getL1AccountState", () => {
     const logic = script("22");
     const dao = script("33");
     const ownedOwner = script("44");
-    const udt = script("66");
+    const udt = ICKB_UDT;
     const sdk = new IckbSdk({
-      ickbUdt: fakeIckbUdt(udt),
+      ickbUdt: fakeIckbUdt(),
       ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
       ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
-      order: new OrderManager(script("55"), [], udt),
     });
     const plain = cell("81", accountLock, 3000n * CKB);
     const dataCell = cell("82", accountLock, 100n * CKB, undefined, "0xaa");

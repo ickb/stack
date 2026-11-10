@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 import { partialOrderFee } from "../../../src/order/fee.ts";
 import { OrderMatcher, type Match } from "../../../src/order/matcher.ts";
-import { OrderManager } from "../../../src/order/order.ts";
+import { addMatch } from "../../../src/order/order.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 
 function fullMatch(groups: Array<ReturnType<typeof resolvedOrderGroup>>): Match {
@@ -35,16 +35,11 @@ describe("prepared partial serialized size", () => {
   it("equals the measured serialization delta of one additional full partial", () => {
     const first = makeUdtToCkbOrder({ orderTxHashByte: "44", txHashByte: "33" });
     const second = makeUdtToCkbOrder({ orderTxHashByte: "55", txHashByte: "66" });
-    const udtScript = first.cell.cellOutput.type;
-    if (udtScript === undefined) {
-      throw new Error("expected a UDT type script");
-    }
-    const manager = new OrderManager(first.cell.cellOutput.lock, [], udtScript);
-    const one = manager.addMatch(
+    const one = addMatch(
       ccc.Transaction.default(),
       fullMatch([resolvedOrderGroup(first)]),
     );
-    const two = manager.addMatch(
+    const two = addMatch(
       ccc.Transaction.default(),
       fullMatch([resolvedOrderGroup(first), resolvedOrderGroup(second)]),
     );

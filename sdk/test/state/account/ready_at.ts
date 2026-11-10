@@ -17,8 +17,6 @@ describe("readyAt", () => {
     udtScale: bigint,
   ): ReturnType<typeof makeOrderGroup>["group"] =>
     makeOrderGroup({
-      orderScript: script("55"),
-      udtScript: script("66"),
       ownerLock: script("11"),
       txHashByte: byte,
       ratio: { ckbScale, udtScale },

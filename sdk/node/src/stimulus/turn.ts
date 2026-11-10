@@ -5,6 +5,7 @@ import {
   OrderConversionRepresentabilityError,
   quoteConversion,
 } from "../../../src/order/conversion.ts";
+import { mint } from "../../../src/order/order.ts";
 import { hasCollectable, isFundabilityFailure } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
@@ -168,7 +169,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
-  const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
+  const tx = mint(base, runtime.primaryLock, info, amounts);
   try {
     return {
       ...(await runtime.sdk.completeTransaction(tx, {

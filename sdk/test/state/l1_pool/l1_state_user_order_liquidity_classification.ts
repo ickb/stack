@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { OrderManager } from "../../../src/order/order.ts";
+import { findOrders } from "../../../src/order/order.ts";
 import { ickbExchangeRatio } from "../../../src/udt.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
@@ -12,6 +12,12 @@ import {
   l1SdkWithManagers,
 } from "../l1_account/support/sdk_l1_support.ts";
 
+// The order book is the test's input, not a scan the client serves.
+vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  findOrders: vi.fn(),
+}));
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -20,22 +26,12 @@ describe("IckbSdk.getL1AccountState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
-    const orderScript = script("55");
-    const udt = script("66");
-    const orderManager = new OrderManager(orderScript, [], udt);
-    const sdk = l1SdkWithManagers({
-      orderManager,
-      udt,
-    });
+    const sdk = l1SdkWithManagers({});
     const ownerOrder = makeOrderGroup({
-      orderScript,
-      udtScript: udt,
       ownerLock: userLock,
       txHashByte: "a1",
     });
     const marketOrder = makeOrderGroup({
-      orderScript,
-      udtScript: udt,
       ownerLock: nonUserLock,
       txHashByte: "a2",
       orderTxHashByte: "a3",
@@ -43,10 +39,7 @@ describe("IckbSdk.getL1AccountState", () => {
       orderCapacity: ccc.fixedPointFrom(300),
       udtValue: 1n,
     });
-    vi.spyOn(orderManager, "findOrders").mockResolvedValue([
-      ownerOrder.group,
-      marketOrder.group,
-    ]);
+    vi.mocked(findOrders).mockResolvedValue([ownerOrder.group, marketOrder.group]);
 
     const client = new FeeRateStubClient({
       ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),
@@ -118,13 +111,8 @@ function l1StateWithMarketOrder({
 } {
   const userLock = script("11");
   const nonUserLock = script("12");
-  const orderScript = script("55");
-  const udt = script("66");
-  const orderManager = new OrderManager(orderScript, [], udt);
-  const sdk = l1SdkWithManagers({ orderManager, udt });
+  const sdk = l1SdkWithManagers({});
   const marketOrder = makeOrderGroup({
-    orderScript,
-    udtScript: udt,
     ownerLock: nonUserLock,
     txHashByte,
     ratio,
@@ -132,7 +120,7 @@ function l1StateWithMarketOrder({
     orderCapacity: ccc.fixedPointFrom(300),
     udtValue: 1n,
   });
-  vi.spyOn(orderManager, "findOrders").mockResolvedValue([marketOrder.group]);
+  vi.mocked(findOrders).mockResolvedValue([marketOrder.group]);
 
   const client = new FeeRateStubClient({
     ...anchoredAt(headerLike(1n, { timestamp: BigInt(Date.now()) })),

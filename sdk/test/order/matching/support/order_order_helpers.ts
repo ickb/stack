@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
+import { ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import { OrderCell } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
@@ -63,17 +64,7 @@ export function makeOrderCell(options: {
     index: bigint;
   };
 }): OrderCell {
-  const orderScript = ccc.Script.from({
-    codeHash: byte32FromByte("11"),
-    hashType: "type",
-    args: "0x",
-  });
-  const udtScript = ccc.Script.from({
-    codeHash: byte32FromByte("22"),
-    hashType: "type",
-    args: "0x",
-  });
-  const lock = options.lock ?? orderScript;
+  const lock = options.lock ?? ORDER;
   const outputData = OrderData.from({
     udtValue: options.udtValue,
     master: options.master,
@@ -86,7 +77,7 @@ export function makeOrderCell(options: {
     },
     cellOutput: {
       lock,
-      type: udtScript,
+      type: ICKB_UDT,
     },
     outputData,
   });
@@ -97,7 +88,7 @@ export function makeOrderCell(options: {
       cellOutput: {
         capacity: minimalCell.cellOutput.capacity + options.ckbUnoccupied,
         lock,
-        type: udtScript,
+        type: ICKB_UDT,
       },
       outputData,
     }),

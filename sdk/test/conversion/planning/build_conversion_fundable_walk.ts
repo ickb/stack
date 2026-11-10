@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_UDT } from "../../../src/constants.ts";
 import {
   DAO_HEADER_INDEX_LIMIT,
   DaoHeaderIndexError,
@@ -30,10 +31,10 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 const DEPOSIT = ICKB_DEPOSIT_CAP;
-// Measured with the real managers: one owner marker for the fixture lock, and the
+// Measured with the real builders: one owner marker for the fixture lock, and the
 // remainder order's two cells.
 const MARKER_CKB = ccc.fixedPointFrom(78);
-const ORDER_CKB = ccc.fixedPointFrom(163 + 74);
+const ORDER_CKB = ccc.fixedPointFrom(199 + 74);
 const MIN_CHANGE_CKB = ccc.fixedPointFrom(61);
 const UDT_CELL_CKB = ccc.fixedPointFrom(146);
 
@@ -58,7 +59,7 @@ function conversion(
     plainCapacityCell(userCkb - UDT_CELL_CKB, lock, "f1"),
     nativeUdtCell(amount, {
       lock,
-      type: fixture.udt,
+      type: ICKB_UDT,
       capacity: UDT_CELL_CKB,
       byte: "f0",
     }),

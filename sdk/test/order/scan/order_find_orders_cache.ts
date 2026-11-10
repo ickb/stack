@@ -7,6 +7,7 @@ import {
 } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { Info } from "../../../src/order/info.ts";
+import { findOrders } from "../../../src/order/order.ts";
 import { OrderData } from "../../../src/order/order_data.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { Relative } from "../../../src/order/relative.ts";
@@ -16,25 +17,22 @@ import {
   makeOrderCell,
 } from "../matching/support/order_order_helpers.ts";
 import {
-  findOrdersFixture,
   masterCell,
   originLookupClient,
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
 
-const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
+const ORDER_MANAGER_FIND_ORDERS_SUITE = "findOrders";
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin skips parseable non-mint origins in the master transaction", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("55"), index: 2n };
     const forgedOrigin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(200),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 1n },
     });
     const trueOrigin = makeOrderCell({
@@ -52,10 +50,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("56"), index: 0n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const tx = transactionWithOutputs([trueOrigin.cell, forgedOrigin.cell, liveMaster]);
     const client = originLookupClient({
       liveOrder: liveOrder.cell,
@@ -70,7 +67,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
     }
     expect(trueOrigin.data.master.value.distance).toBe(2n);
     expect(trueOrigin.getMaster().eq(originMaster)).toBe(true);
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.origin.cell.outPoint.eq(trueOrigin.cell.outPoint)).toBe(true);
@@ -98,7 +95,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin requires a minted origin in the master transaction", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("65"), index: 1n };
     const fakeOrigin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -112,10 +108,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("67"), index: 0n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const tx = transactionWithOutputs([fakeOrigin.cell, liveMaster]);
     const client = originLookupClient({
       liveOrder: liveOrder.cell,
@@ -124,20 +119,18 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: tx,
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
 
   it("uses cached origin transactions before fetching from the client", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("69"), index: 1n };
     const { origin, liveOrder } = linkedOriginAndOrder({
       originMaster,
-      orderScript,
       liveOrderByte: "70",
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const cachedResponse = committedTransactionResponse(
       transactionWithOutputs([origin.cell, liveMaster]),
       { blockNumber: 5n },
@@ -155,21 +148,19 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(1);
     expect(fetched).toBe(false);
   });
 
   it("dates the order by its own cell's block and the origin by its master's", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("71"), index: 1n };
     const { origin, liveOrder } = linkedOriginAndOrder({
       originMaster,
-      orderScript,
       liveOrderByte: "72",
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const client = new StubClient({
       cells: (query): readonly StubCell[] => [
         query.script_type === "lock"
@@ -184,7 +175,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const [group] = await manager.findOrders(client);
+    const [group] = await findOrders(client);
 
     // A fill replaces the order cell, so its block is the last fill's.
     expect(group?.order.blockNumber).toBe(9n);
@@ -212,7 +203,6 @@ class TransactionResponseCache extends ccc.ClientCacheMemory {
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("findOrigin fails closed for multiple minted origins in the master transaction", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("66"), index: 2n };
     const firstOrigin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
@@ -222,7 +212,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         type: "relative",
         value: Relative.create(2n),
       },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 0n },
     });
     const secondOrigin = makeOrderCell({
@@ -233,7 +222,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         type: "relative",
         value: Relative.create(1n),
       },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 1n },
     });
     const liveOrder = makeOrderCell({
@@ -241,10 +229,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("68"), index: 0n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const tx = transactionWithOutputs([firstOrigin.cell, secondOrigin.cell, liveMaster]);
     const client = originLookupClient({
       liveOrder: liveOrder.cell,
@@ -255,7 +242,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
     expect(firstOrigin.getMaster().eq(originMaster)).toBe(true);
     expect(secondOrigin.getMaster().eq(originMaster)).toBe(true);
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -263,17 +250,15 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("reports a missing origin when the master transaction cannot be loaded", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("61"), index: 1n };
     const liveOrder = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("62"), index: 0n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const client = originLookupClient({
       liveOrder: liveOrder.cell,
       liveMaster,
@@ -281,20 +266,18 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: ccc.Transaction.default(),
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
 
   it("reports ambiguous descendant orders separately from missing descendants", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("63"), index: 1n };
     const origin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(1n) },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 0n },
     });
     const firstOrder = makeOrderCell({
@@ -302,7 +285,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("64"), index: 0n },
     });
     const secondOrder = makeOrderCell({
@@ -310,10 +292,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("64"), index: 1n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
@@ -325,7 +306,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -333,14 +314,12 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("reports missing descendant orders when no scanned order validates", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("6c"), index: 1n };
     const origin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(1n) },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 0n },
     });
     const liveOrder = makeOrderCell({
@@ -352,10 +331,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         ckbMinMatchLog: 0,
       }),
       master: { type: "absolute", value: originMaster },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("6d"), index: 0n },
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const client = originLookupClient({
       liveOrder: liveOrder.cell,
       liveMaster,
@@ -363,7 +341,7 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       originTransaction: transactionWithOutputs([origin.cell, liveMaster]),
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(0);
   });
@@ -371,7 +349,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
 
 function linkedOriginAndOrder(options: {
   originMaster: { txHash: `0x${string}`; index: bigint };
-  orderScript: ccc.Script;
   liveOrderByte: string;
 }): {
   origin: ReturnType<typeof makeOrderCell>;
@@ -382,7 +359,6 @@ function linkedOriginAndOrder(options: {
     udtValue: 0n,
     info: directionalInfo(),
     master: { type: "relative", value: Relative.create(1n) },
-    lock: options.orderScript,
     outPoint: { txHash: options.originMaster.txHash, index: 0n },
   });
   const liveOrder = makeOrderCell({
@@ -390,7 +366,6 @@ function linkedOriginAndOrder(options: {
     udtValue: 0n,
     info: directionalInfo(),
     master: { type: "absolute", value: options.originMaster },
-    lock: options.orderScript,
     outPoint: { txHash: byte32FromByte(options.liveOrderByte), index: 0n },
   });
   return { origin, liveOrder };

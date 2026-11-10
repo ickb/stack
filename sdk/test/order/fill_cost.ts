@@ -10,8 +10,8 @@ import { makeOrderCell } from "./matching/support/order_order_helpers.ts";
 describe("fillsWhole", () => {
   it("takes a buy once its fill returns more than ten fees of a partial its own size", () => {
     // The buy gives its CKB for half as much UDT, rounded up. At one shannon per byte a
-    // partial of this order costs 283 shannons, so its fill must gain over 2,830: 4,000
-    // shannons gain 2,000, 8,000 gain 4,000, 5,660 gain exactly 2,830 and 5,662 gain 2,831.
+    // partial of this order costs 319 shannons, so its fill must gain over 3,190: 4,000
+    // shannons gain 2,000, 8,000 gain 4,000, 6,380 gain exactly 3,190 and 6,382 gain 3,191.
     // The exchange ratio counts each unit of either side three times.
     const buy = (ckbUnoccupied: bigint): OrderGroup =>
       resolvedOrderGroup(
@@ -32,7 +32,7 @@ describe("fillsWhole", () => {
     expect(fillsWhole(buy(4000n), true, exchangeRatio, feeRate)).toBe(false);
     expect(fillsWhole(buy(8000n), true, exchangeRatio, feeRate)).toBe(true);
     // At the line, so a multiple of nine or eleven fees fails one of the two.
-    expect(fillsWhole(buy(5660n), true, exchangeRatio, feeRate)).toBe(false);
-    expect(fillsWhole(buy(5662n), true, exchangeRatio, feeRate)).toBe(true);
+    expect(fillsWhole(buy(6380n), true, exchangeRatio, feeRate)).toBe(false);
+    expect(fillsWhole(buy(6382n), true, exchangeRatio, feeRate)).toBe(true);
   });
 });

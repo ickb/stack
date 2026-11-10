@@ -1,17 +1,16 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, capacityCell, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { ORDER } from "../../../src/constants.ts";
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
-import { OrderManager } from "../../../src/order/order.ts";
+import { addMatch, isOrder, melt, mint } from "../../../src/order/order.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { makeUdtToCkbOrder, resolvedOrderGroup } from "./support/order_match_helpers.ts";
 import { makeOrderCell } from "./support/order_order_helpers.ts";
 
-const ORDER_SCRIPT = script("11");
-const UDT_SCRIPT = script("22");
 const OWNER_LOCK = script("33");
-const WRONG_MANAGER_ERROR = "does not match this order manager";
+const NOT_ICKB_ORDER_ERROR = "is not an iCKB order";
 const EXPECTED_MATCHER_ERROR = "Expected order to be matchable";
 
 describe("OrderMatcher", () => {
@@ -64,18 +63,8 @@ function registerOrderMatcherMinimumTests(): void {
   });
 }
 
-describe("OrderManager no-op transaction helpers", () => {
+describe("order no-op transaction helpers", () => {
   it("recognizes master cells and handles no-op matches and melts", () => {
-    const manager = new OrderManager(
-      ORDER_SCRIPT,
-      [
-        ccc.CellDep.from({
-          outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-          depType: "code",
-        }),
-      ],
-      UDT_SCRIPT,
-    );
     const master = masterCell();
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
@@ -85,25 +74,22 @@ describe("OrderManager no-op transaction helpers", () => {
       outPoint: { txHash: byte32FromByte("55"), index: 0n },
     });
 
-    expect(manager.isOrder(order.cell)).toBe(true);
-    expect(manager.isOrder(master)).toBe(false);
-    expect(manager.isOrder(capacityCell(61n, ORDER_SCRIPT, "57"))).toBe(false);
-    // Nothing to match or melt needs no order script dep either.
+    expect(isOrder(order.cell)).toBe(true);
+    expect(isOrder(master)).toBe(false);
+    expect(isOrder(capacityCell(61n, ORDER, "57"))).toBe(false);
     const empty = ccc.Transaction.default().toBytes();
     expect(
-      manager
-        .addMatch(ccc.Transaction.default(), {
-          ckbDelta: 0n,
-          udtDelta: 0n,
-          partials: [],
-        })
-        .toBytes(),
+      addMatch(ccc.Transaction.default(), {
+        ckbDelta: 0n,
+        udtDelta: 0n,
+        partials: [],
+      }).toBytes(),
     ).toEqual(empty);
-    expect(manager.melt(ccc.Transaction.default(), []).toBytes()).toEqual(empty);
+    expect(melt(ccc.Transaction.default(), []).toBytes()).toEqual(empty);
   });
 });
 
-describe("OrderManager match and melt transaction helpers", () => {
+describe("order match and melt transaction helpers", () => {
   registerMatchMeltSuccessTests();
   registerMintTransactionValidationTests();
   registerMatchAccountingValidationTests();
@@ -113,16 +99,6 @@ describe("OrderManager match and melt transaction helpers", () => {
 
 function registerMatchMeltSuccessTests(): void {
   it("adds match partials and melt inputs for selected groups", () => {
-    const manager = new OrderManager(
-      ORDER_SCRIPT,
-      [
-        ccc.CellDep.from({
-          outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-          depType: "code",
-        }),
-      ],
-      UDT_SCRIPT,
-    );
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 10n,
@@ -132,14 +108,16 @@ function registerMatchMeltSuccessTests(): void {
     });
     const group = resolvedOrderGroup(order);
 
-    const matched = manager.addMatch(ccc.Transaction.default(), {
+    const matched = addMatch(ccc.Transaction.default(), {
       ckbDelta: 0n,
       udtDelta: 0n,
       partials: [{ group, ckbOut: order.ckbValue, udtOut: order.udtValue }],
     });
-    const melted = manager.melt(ccc.Transaction.default(), [group]);
+    const melted = melt(ccc.Transaction.default(), [group]);
 
-    expect(matched.cellDeps).toHaveLength(1);
+    // Completion, not the builders, adds the iCKB dep group.
+    expect(matched.cellDeps).toEqual([]);
+    expect(melted.cellDeps).toEqual([]);
     expect(matched.inputs).toHaveLength(1);
     expect(matched.outputs).toHaveLength(1);
     expect(melted.inputs).toHaveLength(2);
@@ -148,10 +126,8 @@ function registerMatchMeltSuccessTests(): void {
 
 function registerMintTransactionValidationTests(): void {
   it("fails closed if mint output append cannot be observed", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
-
     expect(() => {
-      manager.mint(
+      mint(
         new UnobservableOutputTransaction(),
         OWNER_LOCK,
         Info.create(true, { ckbScale: 1n, udtScale: 1n }),
@@ -164,23 +140,22 @@ function registerMintTransactionValidationTests(): void {
   });
 
   it("rejects invalid mint data before adding order outputs", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const info = Info.create(true, { ckbScale: 1n, udtScale: 1n });
 
     expect(() =>
-      manager.mint(ccc.Transaction.default(), OWNER_LOCK, info, {
+      mint(ccc.Transaction.default(), OWNER_LOCK, info, {
         ckbValue: -1n,
         udtValue: 1n,
       }),
     ).toThrow("ckbValue invalid, negative");
     expect(() =>
-      manager.mint(ccc.Transaction.default(), OWNER_LOCK, info, {
+      mint(ccc.Transaction.default(), OWNER_LOCK, info, {
         ckbValue: 1n,
         udtValue: -1n,
       }),
     ).toThrow("udtValue invalid, negative");
     expect(() =>
-      manager.mint(
+      mint(
         ccc.Transaction.default(),
         OWNER_LOCK,
         Info.from({
@@ -196,7 +171,6 @@ function registerMintTransactionValidationTests(): void {
 
 function registerMatchAccountingValidationTests(): void {
   it("rejects mismatched aggregate deltas without mutating the transaction", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 10n,
@@ -212,7 +186,7 @@ function registerMatchAccountingValidationTests(): void {
       [0n, 1n],
     ] as const) {
       expect(() =>
-        manager.addMatch(tx, {
+        addMatch(tx, {
           ckbDelta,
           udtDelta,
           partials: [
@@ -231,7 +205,6 @@ function registerMatchAccountingValidationTests(): void {
 
 function registerMatchPartialValidationTests(): void {
   it("rejects fabricated match partials", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 10n,
@@ -251,16 +224,16 @@ function registerMatchPartialValidationTests(): void {
     const foreignGroup = resolvedOrderGroup(foreign);
 
     expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
+      addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
         partials: [
           { group: foreignGroup, ckbOut: foreign.ckbValue, udtOut: foreign.udtValue },
         ],
       }),
-    ).toThrow(WRONG_MANAGER_ERROR);
+    ).toThrow(NOT_ICKB_ORDER_ERROR);
     expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
+      addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
         partials: [{ group, ckbOut: -1n, udtOut: order.udtValue }],
@@ -268,14 +241,14 @@ function registerMatchPartialValidationTests(): void {
     ).toThrow("negative CKB output");
     // Only a negative amount is malformed here; the chain judges the capacity.
     expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
+      addMatch(ccc.Transaction.default(), {
         ckbDelta: order.ckbValue,
         udtDelta: 0n,
         partials: [{ group, ckbOut: 0n, udtOut: order.udtValue }],
       }),
     ).not.toThrow();
     expect(() =>
-      manager.addMatch(ccc.Transaction.default(), {
+      addMatch(ccc.Transaction.default(), {
         ckbDelta: 0n,
         udtDelta: 0n,
         partials: [{ group, ckbOut: order.ckbValue, udtOut: -1n }],
@@ -286,7 +259,6 @@ function registerMatchPartialValidationTests(): void {
 
 function registerMeltGroupValidationTests(): void {
   it("builds the transaction of a matcher's fill from the resolver's group", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
@@ -306,11 +278,10 @@ function registerMeltGroupValidationTests(): void {
     }
 
     expect(fill.partials).toHaveLength(1);
-    expect(manager.addMatch(ccc.Transaction.default(), fill).inputs).toHaveLength(1);
+    expect(addMatch(ccc.Transaction.default(), fill).inputs).toHaveLength(1);
   });
 
-  it("rejects melt groups from a different manager", () => {
-    const manager = new OrderManager(ORDER_SCRIPT, [], UDT_SCRIPT);
+  it("rejects melt groups that are not iCKB orders", () => {
     const foreignOrder = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(1000),
       udtValue: 0n,
@@ -321,8 +292,8 @@ function registerMeltGroupValidationTests(): void {
     });
     const foreignOrderGroup = resolvedOrderGroup(foreignOrder);
 
-    expect(() => manager.melt(ccc.Transaction.default(), [foreignOrderGroup])).toThrow(
-      WRONG_MANAGER_ERROR,
+    expect(() => melt(ccc.Transaction.default(), [foreignOrderGroup])).toThrow(
+      NOT_ICKB_ORDER_ERROR,
     );
   });
 }
@@ -330,7 +301,7 @@ function registerMeltGroupValidationTests(): void {
 function masterCell(): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte("66"), index: 1n },
-    cellOutput: { capacity: 61n, lock: OWNER_LOCK, type: ORDER_SCRIPT },
+    cellOutput: { capacity: 61n, lock: OWNER_LOCK, type: ORDER },
     outputData: "0x",
   });
 }

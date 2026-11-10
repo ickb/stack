@@ -2,7 +2,6 @@ import type { ccc } from "@ckb-ccc/core";
 import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "../logic.ts";
 import type { OrderGroup } from "../order/cells.ts";
-import type { OrderManager } from "../order/order.ts";
 import type { Ratio } from "../order/ratio.ts";
 import type { OwnedOwnerManager, WithdrawalGroup } from "../owned_owner.ts";
 import type { IckbUdt } from "../udt.ts";
@@ -209,6 +208,4 @@ export interface SdkManagers {
   ownedOwner: OwnedOwnerManager;
   /** iCKB Logic manager for deposits and receipts. */
   ickbLogic: LogicManager;
-  /** Limit order manager. */
-  order: OrderManager;
 }

@@ -6,7 +6,6 @@ import {
   conversionContext,
 } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  mockPassthroughMint,
   stubSigner,
   testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -147,8 +146,7 @@ describe("IckbSdk.buildConversionTransaction order-only paths", () => {
   it(
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {
-      const { sdk, orderManager, ownedOwnerManager } = testSdk();
-      mockPassthroughMint(orderManager);
+      const { sdk, ownedOwnerManager } = testSdk();
       vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) =>
         ccc.Transaction.from(txLike),
       );

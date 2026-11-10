@@ -11,8 +11,7 @@ afterEach(() => {
 
 describe("IckbSdk.buildBaseTransaction", () => {
   it("accepts withdrawal requests after balanced caller activity", () => {
-    const { botLock, dao, logic, orderManager, ownedOwnerManager, sdk } =
-      baseTransactionFixture();
+    const { botLock, dao, logic, ownedOwnerManager, sdk } = baseTransactionFixture();
     const requestedDeposit = depositCell("85", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
@@ -54,20 +53,6 @@ describe("IckbSdk.buildBaseTransaction", () => {
       tx.outputsData.push("0x");
       return tx;
     });
-    vi.spyOn(orderManager, "melt").mockImplementation((txLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      expect(tx.inputs).toHaveLength(2);
-      expect(tx.outputs).toHaveLength(2);
-      tx.inputs.push(
-        ccc.CellInput.from({
-          previousOutput: {
-            txHash: hash("82"),
-            index: 0n,
-          },
-        }),
-      );
-      return tx;
-    });
 
     const tx = sdk.buildBaseTransaction(
       baseTx,
@@ -75,7 +60,13 @@ describe("IckbSdk.buildBaseTransaction", () => {
       { deposits: [requestedDeposit], lock: botLock },
     );
 
-    expect(tx.inputs).toHaveLength(3);
+    // The melt spends the order and its master after the caller's and the request's inputs.
+    expect(tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual([
+      ccc.OutPoint.from({ txHash: hash("80"), index: 0n }).toHex(),
+      ccc.OutPoint.from({ txHash: hash("81"), index: 0n }).toHex(),
+      placeholderOrder.order.cell.outPoint.toHex(),
+      placeholderOrder.master.cell.outPoint.toHex(),
+    ]);
     expect(tx.outputs).toHaveLength(2);
     expect(tx.outputsData).toEqual(["0x", "0x"]);
   });

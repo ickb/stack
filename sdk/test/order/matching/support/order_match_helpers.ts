@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
+import { ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import { OrderMatcher } from "../../../../src/order/matcher.ts";
@@ -57,19 +58,7 @@ export function makeUdtToCkbOrder(options?: {
   txHashByte?: string;
   orderTxHashByte?: string;
   udtValue?: ccc.FixedPoint;
-  lockArgs?: ccc.Hex;
 }): OrderCell {
-  const orderScript = ccc.Script.from({
-    codeHash: byte32FromByte("11"),
-    hashType: "type",
-    args: options?.lockArgs ?? "0x",
-  });
-  const udtScript = ccc.Script.from({
-    codeHash: byte32FromByte("22"),
-    hashType: "type",
-    args: "0x",
-  });
-
   return OrderCell.mustFrom(
     ccc.Cell.from({
       outPoint: {
@@ -78,8 +67,8 @@ export function makeUdtToCkbOrder(options?: {
       },
       cellOutput: {
         capacity: ccc.fixedPointFrom(200),
-        lock: orderScript,
-        type: udtScript,
+        lock: ORDER,
+        type: ICKB_UDT,
       },
       outputData: OrderData.from({
         udtValue: options?.udtValue ?? ccc.fixedPointFrom(100),

@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_UDT } from "../../../src/constants.ts";
 import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
 import type { AccountState } from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
@@ -34,12 +35,12 @@ const holdings: Array<[string, Holding]> = [
   ["plain CKB alone", (): Held => ({ account: {} })],
   [
     "iCKB",
-    ({ botLock, udt }): Held => ({
+    ({ botLock }): Held => ({
       account: {
         nativeUdtCells: [
           nativeUdtCell(ccc.fixedPointFrom(100), {
             lock: botLock,
-            type: udt,
+            type: ICKB_UDT,
             capacity: ccc.fixedPointFrom(146),
             byte: "e1",
           }),
@@ -55,12 +56,10 @@ const holdings: Array<[string, Holding]> = [
   ],
   [
     "a refused order",
-    ({ botLock, order, udt }): Held => ({
+    ({ botLock }): Held => ({
       account: {},
       orders: [
         makeOrderGroup({
-          orderScript: order,
-          udtScript: udt,
           ownerLock: botLock,
           txHashByte: "e3",
           udtValue: 0n,

@@ -14,16 +14,13 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 
 describe("IckbSdk.buildConversionTransaction", () => {
   it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
-    const { sdk, logicManager, orderManager } = testSdk();
+    const { sdk, logicManager } = testSdk();
     const deposit = vi
       .spyOn(logicManager, "deposit")
       .mockImplementation((txLike, quantity) => {
         expect(quantity).toBe(maxDirectDeposits);
         return ccc.Transaction.from(txLike);
       });
-    vi.spyOn(orderManager, "mint").mockImplementation((txLike) =>
-      ccc.Transaction.from(txLike),
-    );
 
     await sdk.buildConversionTransaction({
       direction: CKB_TO_ICKB,

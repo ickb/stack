@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IckbDepositCell, LogicManager } from "../../../src/logic.ts";
-import type { OrderManager } from "../../../src/order/order.ts";
 import type { OwnedOwnerManager } from "../../../src/owned_owner.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderOrder } from "../../conversion/planning/support/sdk_order_support.ts";
@@ -19,19 +18,11 @@ afterEach(() => {
 function mockBaseTransactionStepOrder(options: {
   botLock: ccc.Script;
   logicManager: LogicManager;
-  orderManager: OrderManager;
   ownedOwnerManager: OwnedOwnerManager;
   requestedDeposit: IckbDepositCell;
   steps: string[];
 }): void {
-  const {
-    botLock,
-    logicManager,
-    orderManager,
-    ownedOwnerManager,
-    requestedDeposit,
-    steps,
-  } = options;
+  const { botLock, logicManager, ownedOwnerManager, requestedDeposit, steps } = options;
   vi.spyOn(ownedOwnerManager, "requestWithdrawal").mockImplementation(
     (txLike, deposits, lock) => {
       steps.push("request");
@@ -40,18 +31,11 @@ function mockBaseTransactionStepOrder(options: {
       return appendInputAndOutput(txLike, hash("70"), botLock, 1n);
     },
   );
-  vi.spyOn(orderManager, "melt").mockImplementation((txLike) => {
-    steps.push("orders");
-    const tx = ccc.Transaction.from(txLike);
-    expect(tx.inputs).toHaveLength(1);
-    expect(tx.outputs).toHaveLength(1);
-    tx.inputs.push(cellInput("71"));
-    return tx;
-  });
   vi.spyOn(logicManager, "completeDeposit").mockImplementation((txLike) => {
     steps.push("receipts");
     const tx = ccc.Transaction.from(txLike);
-    expect(tx.inputs).toHaveLength(2);
+    // After the request's input and the melted order and master.
+    expect(tx.inputs).toHaveLength(3);
     expect(tx.outputs).toHaveLength(1);
     tx.inputs.push(cellInput("72"));
     return tx;
@@ -59,7 +43,7 @@ function mockBaseTransactionStepOrder(options: {
   vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
     steps.push("withdrawals");
     const tx = ccc.Transaction.from(txLike);
-    expect(tx.inputs).toHaveLength(3);
+    expect(tx.inputs).toHaveLength(4);
     expect(tx.outputs).toHaveLength(1);
     tx.inputs.push(cellInput("73"));
     return tx;
@@ -92,7 +76,7 @@ function cellInput(byte: string): ccc.CellInput {
 
 describe("IckbSdk.buildBaseTransaction", () => {
   it("requests withdrawals before input-only base activity", () => {
-    const { botLock, dao, logic, orderManager, logicManager, ownedOwnerManager, sdk } =
+    const { botLock, dao, logic, logicManager, ownedOwnerManager, sdk } =
       baseTransactionFixture();
     const steps: string[] = [];
     const requestedDeposit = depositCell("80", logic, dao, baseTip, baseTip, {
@@ -101,7 +85,6 @@ describe("IckbSdk.buildBaseTransaction", () => {
     mockBaseTransactionStepOrder({
       botLock,
       logicManager,
-      orderManager,
       ownedOwnerManager,
       requestedDeposit,
       steps,
@@ -117,8 +100,15 @@ describe("IckbSdk.buildBaseTransaction", () => {
       { deposits: [requestedDeposit], lock: botLock },
     );
 
-    expect(steps).toEqual(["request", "orders", "receipts", "withdrawals"]);
-    expect(tx.inputs).toHaveLength(4);
+    expect(steps).toEqual(["request", "receipts", "withdrawals"]);
+    // The real melt spends the order and its master between the request and the receipts.
+    expect(tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual([
+      cellInput("70").previousOutput.toHex(),
+      placeholderOrder.order.cell.outPoint.toHex(),
+      placeholderOrder.master.cell.outPoint.toHex(),
+      cellInput("72").previousOutput.toHex(),
+      cellInput("73").previousOutput.toHex(),
+    ]);
     expect(tx.outputs).toHaveLength(1);
     expect(tx.outputsData).toEqual(["0x"]);
   });

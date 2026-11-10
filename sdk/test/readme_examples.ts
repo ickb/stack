@@ -127,8 +127,6 @@ describe("README examples", () => {
     const lock = script("11");
     // A sell the bot fills whole stays pending, dated at its estimate.
     const order = makeOrderGroup({
-      orderScript: script("55"),
-      udtScript: script("66"),
       ownerLock: lock,
       txHashByte: "71",
       ratio: { ckbScale: 2n, udtScale: 1n },

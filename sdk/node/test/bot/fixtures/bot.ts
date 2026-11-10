@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig } from "../../../../src/constants.ts";
+import { getConfig, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import type { SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
@@ -10,6 +10,7 @@ import {
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
+import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import {
@@ -41,7 +42,6 @@ export interface BotRuntimeOptions {
   primaryLock?: ccc.Script;
   managers?: {
     ickbUdt?: Partial<Runtime["managers"]["ickbUdt"]>;
-    order?: Partial<Runtime["managers"]["order"]>;
     ownedOwner?: Partial<Runtime["managers"]["ownedOwner"]>;
     ickbLogic?: Partial<Runtime["managers"]["ickbLogic"]>;
   };
@@ -139,7 +139,6 @@ export function marketOrder({
   ratio: { ckbScale: bigint; udtScale: bigint };
   ckbMinMatchLog?: number;
 }): OrderGroup {
-  const { script: orderLock, udtScript } = getConfig("testnet").order;
   // A mint order: its master sits one output later in the same transaction.
   const masterOutPoint = { txHash: hash(byte), index: 1n };
   const outputData = OrderData.from({
@@ -153,7 +152,7 @@ export function marketOrder({
   }).toBytes();
   const minimal = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const order = OrderCell.mustFrom(
@@ -161,8 +160,8 @@ export function marketOrder({
       outPoint: minimal.outPoint,
       cellOutput: {
         capacity: minimal.cellOutput.capacity + ckb,
-        lock: orderLock,
-        type: udtScript,
+        lock: ORDER,
+        type: ICKB_UDT,
       },
       outputData,
     }),
@@ -174,7 +173,7 @@ export function marketOrder({
       cellOutput: {
         capacity: ccc.fixedPointFrom(74),
         lock: script("54"),
-        type: orderLock,
+        type: ORDER,
       },
       outputData: "0x",
     }),
@@ -244,7 +243,6 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
     client,
     managers: {
       ickbUdt: Object.assign(config.ickbUdt, overrides.managers?.ickbUdt),
-      order: Object.assign(config.order, overrides.managers?.order),
       ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
       ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
     },
@@ -326,8 +324,6 @@ export function botState({
  * resolver because the builders accept nothing else; its master sits one output later.
  */
 async function testOrderGroup(byte: string): Promise<OrderGroup> {
-  const manager = getConfig("testnet").order;
-  const { script: orderLock, udtScript } = manager;
   const outputData = OrderData.from({
     udtValue: ccc.fixedPointFrom(1000),
     master: { type: "relative", value: { distance: 1n, padding: new Uint8Array(32) } },
@@ -339,21 +335,21 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   }).toBytes();
   const minimal = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 1n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const order = ccc.Cell.from({
     outPoint: minimal.outPoint,
     cellOutput: {
       capacity: minimal.cellOutput.capacity + ccc.fixedPointFrom(100),
-      lock: orderLock,
-      type: udtScript,
+      lock: ORDER,
+      type: ICKB_UDT,
     },
     outputData,
   });
   const master = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 2n },
-    cellOutput: { capacity: ccc.fixedPointFrom(74), lock: script("54"), type: orderLock },
+    cellOutput: { capacity: ccc.fixedPointFrom(74), lock: script("54"), type: ORDER },
     outputData: "0x",
   });
   const mint = ccc.Transaction.default();
@@ -373,7 +369,7 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
       return committedTransactionResponse(mint);
     },
   });
-  const groups = await manager.findOrders(client);
+  const groups = await findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");

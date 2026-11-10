@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { receiptPhase2Capacity } from "../../../src/logic.ts";
+import { addMatch } from "../../../src/order/order.ts";
 import {
   completeFirstFundable,
   hasCollectable,
@@ -50,7 +51,7 @@ export async function buildTransaction(
   runtime: Runtime,
   state: BotState,
 ): Promise<BuildTransactionResult> {
-  const matched = matchOutcome(runtime, state);
+  const matched = matchOutcome(state);
   const { match } = matched;
   const plan = planRebalance({
     tip: state.system.tip,
@@ -116,7 +117,7 @@ export async function buildTransaction(
   };
 }
 
-function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
+function matchOutcome(state: BotState): MatchOutcome {
   const match = matchTurn({
     orders: state.system.orderPool,
     ckb: spendableCkb(state.ckbAvailable),
@@ -125,7 +126,7 @@ function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
     feeRate: state.system.feeRate,
     seed: seedOf(state.system.tip.hash),
   });
-  return { match, tx: runtime.managers.order.addMatch(ccc.Transaction.default(), match) };
+  return { match, tx: addMatch(ccc.Transaction.default(), match) };
 }
 
 /**

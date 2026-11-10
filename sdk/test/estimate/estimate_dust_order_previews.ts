@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ICKB_UDT, ORDER } from "../../src/constants.ts";
 import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
 import { partialOrderFee } from "../../src/order/fee.ts";
 import type { Info } from "../../src/order/info.ts";
 import { OrderMatcher } from "../../src/order/matcher.ts";
-import { OrderManager } from "../../src/order/order.ts";
 import { OrderData } from "../../src/order/order_data.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
@@ -28,7 +28,6 @@ async function orderFromEstimate(
   if (info === undefined) {
     throw new Error("Expected order estimate info");
   }
-  const udtScript = script("66");
   const outputData = OrderData.from({
     udtValue: amounts.udtValue,
     master: {
@@ -39,24 +38,24 @@ async function orderFromEstimate(
   }).toBytes();
   const minimalCell = ccc.Cell.from({
     outPoint: { txHash: hash("78"), index: 0n },
-    cellOutput: { lock: script("55"), type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const orderCell = ccc.Cell.from({
     outPoint: { txHash: hash("78"), index: 0n },
     cellOutput: {
       capacity: minimalCell.cellOutput.capacity + amounts.ckbValue,
-      lock: script("55"),
-      type: udtScript,
+      lock: ORDER,
+      type: ICKB_UDT,
     },
     outputData,
   });
   const masterCell = ccc.Cell.from({
     outPoint: { txHash: hash("78"), index: 1n },
-    cellOutput: { lock: script("11"), type: script("55") },
+    cellOutput: { lock: script("11"), type: ORDER },
     outputData: "0x",
   });
-  return resolveOrderGroupFixture(new OrderManager(script("55"), [], udtScript), {
+  return resolveOrderGroupFixture({
     masterCell,
     orderCell,
     originCell: orderCell,

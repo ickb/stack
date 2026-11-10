@@ -8,11 +8,12 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import { getConfig } from "../../../../src/constants.ts";
+import { getConfig, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
+import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
@@ -87,13 +88,11 @@ export function runtime({
   account = accountState(),
   orders = [],
   sdk = {},
-  order = getConfig("testnet").order,
 }: {
   system?: SystemState;
   account?: AccountState;
   orders?: OrderGroup[];
   sdk?: Partial<Runtime["sdk"]>;
-  order?: Runtime["order"];
 } = {}): Runtime {
   const client = new StubClient();
   const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
@@ -107,7 +106,6 @@ export function runtime({
       },
       ...sdk,
     }),
-    order,
     primaryLock: PRIMARY_LOCK,
     accountLocks: [PRIMARY_LOCK],
   };
@@ -127,13 +125,11 @@ export async function order(
   blockNumber?: bigint,
 ): Promise<OrderGroup> {
   const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
-  const manager = getConfig("testnet").order;
-  const { udtScript, script: orderLock } = manager;
   const ckbValue = isMatchable ? 100n * CKB : 0n;
   const master = new MasterCell(
     ccc.Cell.from({
       outPoint: { txHash, index: 1n },
-      cellOutput: { lock: orderLock, type: orderLock },
+      cellOutput: { lock: ORDER, type: ORDER },
       outputData: "0x",
     }),
   );
@@ -148,7 +144,7 @@ export async function order(
   }).toBytes();
   const minimalCell = ccc.Cell.from({
     outPoint: { txHash, index: 0n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const orderCell = OrderCell.mustFrom(
@@ -156,8 +152,8 @@ export async function order(
       outPoint: { txHash, index: 0n },
       cellOutput: {
         capacity: minimalCell.cellOutput.capacity + ckbValue,
-        lock: orderLock,
-        type: udtScript,
+        lock: ORDER,
+        type: ICKB_UDT,
       },
       outputData,
     }),
@@ -180,7 +176,7 @@ export async function order(
       return committedTransactionResponse(transaction);
     },
   });
-  const groups = await manager.findOrders(client);
+  const groups = await findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");

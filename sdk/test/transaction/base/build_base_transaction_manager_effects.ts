@@ -26,7 +26,6 @@ interface RealBaseTransactionEffects {
   logicDep: ccc.CellDep;
   masterCell: ccc.Cell;
   orderCell: ccc.Cell;
-  orderDep: ccc.CellDep;
   ownedDep: ccc.CellDep;
   ownedOwner: ccc.Script;
   receipt: ReceiptCell;
@@ -66,7 +65,6 @@ function expectRealBaseTransactionEffects(
   expect(tx.cellDeps).toContainEqual(options.daoDep);
   expect(tx.cellDeps).toContainEqual(options.ownedDep);
   expect(tx.cellDeps).toContainEqual(options.logicDep);
-  expect(tx.cellDeps).toContainEqual(options.orderDep);
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
@@ -84,14 +82,11 @@ async function buildRealBaseTransactionCase(): Promise<
   const daoDep = dep("d1");
   const ownedDep = dep("d2");
   const logicDep = dep("d3");
-  const orderDep = dep("d4");
-  const { botLock, dao, logic, order, orderManager, ownedOwner, sdk, udt } =
-    baseTransactionFixture({
-      daoDeps: [daoDep],
-      logicDeps: [logicDep],
-      orderDeps: [orderDep],
-      ownedOwnerDeps: [ownedDep],
-    });
+  const { botLock, dao, logic, ownedOwner, sdk } = baseTransactionFixture({
+    daoDeps: [daoDep],
+    logicDeps: [logicDep],
+    ownedOwnerDeps: [ownedDep],
+  });
   const depositHeader = headerLike(10n);
   const receiptHeader = headerLike(11n);
   const withdrawalHeader = headerLike(12n);
@@ -99,13 +94,11 @@ async function buildRealBaseTransactionCase(): Promise<
     isReady: true,
   });
   const orderFixture = makeOrderGroup({
-    orderScript: order,
-    udtScript: udt,
     ownerLock: botLock,
     txHashByte: "72",
   });
   const { orderCell, masterCell } = orderFixture;
-  const orderGroup = await resolveOrderGroupFixture(orderManager, orderFixture);
+  const orderGroup = await resolveOrderGroupFixture(orderFixture);
   const receipt = receiptCell("73", botLock, logic, receiptHeader);
   const withdrawalGroup = readyWithdrawalGroup({
     ownerLock: botLock,
@@ -134,7 +127,6 @@ async function buildRealBaseTransactionCase(): Promise<
     logicDep,
     masterCell,
     orderCell,
-    orderDep,
     ownedDep,
     ownedOwner,
     receipt,

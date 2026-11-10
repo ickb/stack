@@ -1,7 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { offlineTestnetClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getConfig } from "../src/constants.ts";
+import {
+  DAO,
+  getConfig,
+  ICKB_LOGIC,
+  ICKB_UDT,
+  ORDER,
+  OWNED_OWNER,
+} from "../src/constants.ts";
 import { IckbSdk } from "../src/sdk.ts";
 import { system } from "./transaction/base/support/sdk_core_support.ts";
 
@@ -17,7 +24,7 @@ describe("getConfig", () => {
   });
 
   it("builds the SDK from one coherent config object", async () => {
-    const { ickbUdt, ickbLogic, order, ownedOwner } = getConfig("testnet");
+    const { ickbUdt, ickbLogic, ownedOwner } = getConfig("testnet");
     const sdk = IckbSdk.fromChain("testnet");
     const tx = ccc.Transaction.default();
     const client = offlineTestnetClient();
@@ -30,7 +37,11 @@ describe("getConfig", () => {
     expect(sdk).toBeInstanceOf(IckbSdk);
     expect(ickbLogic.dao.script.eq(ownedOwner.dao.script)).toBe(true);
     expect(ickbUdt.daoScript.eq(ickbLogic.dao.script)).toBe(true);
-    expect(order.udtScript.eq(ickbUdt.script)).toBe(true);
+    // The managers run over the same fixed scripts the module functions use.
+    expect(ickbUdt.script.eq(ICKB_UDT)).toBe(true);
+    expect(ickbLogic.script.eq(ICKB_LOGIC)).toBe(true);
+    expect(ownedOwner.script.eq(OWNED_OWNER)).toBe(true);
+    expect(ickbLogic.dao.script.eq(DAO)).toBe(true);
     const { tx: completed } = await sdk.completeTransaction(tx, {
       signer,
       system: system(),
@@ -46,7 +57,7 @@ describe("getConfig", () => {
 
 describe("getConfig defaults", () => {
   it("resolves mainnet defaults", () => {
-    const { ickbUdt, ickbLogic, order, ownedOwner } = getConfig("mainnet");
+    const { ickbUdt, ickbLogic, ownedOwner } = getConfig("mainnet");
     const logicScript =
       "0x350000001000000030000000310000002a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd30200000000";
     const udtScript =
@@ -59,12 +70,12 @@ describe("getConfig defaults", () => {
     expect(ownedOwner.script.toHex()).toBe(
       "0x35000000100000003000000031000000acc79e07d107831feef4c70c9e683dac5644d5993b9cb106dca6e74baa381bd00200000000",
     );
-    expect(order.script.toHex()).toBe(
+    expect(ORDER.toHex()).toBe(
       "0x3500000010000000300000003100000049dfb6afee5cc8ac4225aeea8cb8928b150caf3cd92fea33750683c74b13254a0200000000",
     );
     expect(ickbUdt.script.toHex()).toBe(udtScript);
-    expect(order.udtScript.toHex()).toBe(udtScript);
-    for (const manager of [ickbUdt, ickbLogic.dao, ickbLogic, ownedOwner, order]) {
+    expect(ICKB_UDT.toHex()).toBe(udtScript);
+    for (const manager of [ickbUdt, ickbLogic.dao, ickbLogic, ownedOwner]) {
       expect(manager.cellDeps.map((cellDep) => cellDep.toHex())).toEqual([depGroup]);
     }
   });

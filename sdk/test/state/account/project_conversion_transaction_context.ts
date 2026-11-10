@@ -79,8 +79,6 @@ describe("projectConversionTransactionContext", () => {
       ratio: { ckbScale: bigint; udtScale: bigint },
     ): OrderGroup =>
       makeOrderGroup({
-        orderScript: script("55"),
-        udtScript: script("66"),
         ownerLock: script("11"),
         txHashByte: byte,
         ratio,

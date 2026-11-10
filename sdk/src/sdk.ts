@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig, type SupportedChain } from "./constants.ts";
+import { getConfig, ORDER, type SupportedChain } from "./constants.ts";
 import { minimumOrderAmount } from "./conversion/estimate.ts";
 import {
   ckbToIckbConversionPlans,
@@ -26,7 +26,7 @@ import {
 } from "./dao.ts";
 import type { IckbDepositCell, LogicManager, ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
-import type { OrderManager } from "./order/order.ts";
+import { findOrders, melt, mint } from "./order/order.ts";
 import { Ratio } from "./order/ratio.ts";
 import type { OwnedOwnerManager } from "./owned_owner.ts";
 import {
@@ -101,13 +101,11 @@ export class IckbSdk {
   private readonly ickbUdt: IckbUdt;
   private readonly ownedOwner: OwnedOwnerManager;
   private readonly ickbLogic: LogicManager;
-  private readonly order: OrderManager;
 
-  constructor({ ickbUdt, ownedOwner, ickbLogic, order }: SdkManagers) {
+  constructor({ ickbUdt, ownedOwner, ickbLogic }: SdkManagers) {
     this.ickbUdt = ickbUdt;
     this.ownedOwner = ownedOwner;
     this.ickbLogic = ickbLogic;
-    this.order = order;
   }
 
   /** Creates the SDK for one chain's deployment. */
@@ -171,7 +169,7 @@ export class IckbSdk {
     const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
     const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
       this.ickbLogic.findDeposits(client, tip),
-      this.order.findOrders(client),
+      findOrders(client),
       // CCC clamps the sampled median at the cap, the connector's chosen rate too. A given cap
       // replaces CCC's default ceiling, on purpose: the caller's cap is the ceiling; an absent
       // one leaves that default.
@@ -316,7 +314,7 @@ export class IckbSdk {
           );
         }
         if (candidate.order !== undefined) {
-          partial = this.order.mint(
+          partial = mint(
             partial,
             lock,
             candidate.order.estimate.info,
@@ -363,7 +361,7 @@ export class IckbSdk {
           lock,
         });
         if (candidate.order !== undefined) {
-          partial = this.order.mint(
+          partial = mint(
             partial,
             lock,
             candidate.order.estimate.info,
@@ -402,7 +400,7 @@ export class IckbSdk {
     let occupied = 0n;
     for (const cell of tx.outputCells) {
       const { lock, type } = cell.cellOutput;
-      if (lock.eq(this.order.script) || type?.eq(this.order.script) === true) {
+      if (lock.eq(ORDER) || type?.eq(ORDER) === true) {
         occupied += ccc.fixedPointFrom(cell.occupiedSize);
       }
     }
@@ -443,7 +441,7 @@ export class IckbSdk {
         withdrawalRequest.lock,
       );
     }
-    tx = this.order.melt(tx, steps.availableOrders);
+    tx = melt(tx, steps.availableOrders);
     tx = this.ickbLogic.completeDeposit(tx, steps.receipts);
     return this.ownedOwner.withdraw(tx, steps.readyWithdrawals);
   }

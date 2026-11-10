@@ -6,9 +6,10 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
+import { ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
-import type { OrderManager } from "../../../../src/order/order.ts";
+import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
 
@@ -47,7 +48,7 @@ class ProjectionOrderGroup extends OrderGroup {
     const order = new ProjectionOrderCell(projection, {
       cell: ccc.Cell.from({
         outPoint: { txHash: hash("77"), index: 0n },
-        cellOutput: { capacity: projection.ckbValue, lock: script("55") },
+        cellOutput: { capacity: projection.ckbValue, lock: ORDER, type: ICKB_UDT },
         outputData: "0x",
       }),
       data: OrderData.from({
@@ -69,7 +70,7 @@ class ProjectionOrderGroup extends OrderGroup {
       new MasterCell(
         ccc.Cell.from({
           outPoint: { txHash: hash("77"), index: 1n },
-          cellOutput: { capacity: 0n, lock: script("11"), type: script("55") },
+          cellOutput: { capacity: 0n, lock: script("11"), type: ORDER },
           outputData: "0x",
         }),
       ),
@@ -89,8 +90,6 @@ class ProjectionOrderGroup extends OrderGroup {
 }
 
 export function makeOrderGroup(options: {
-  orderScript: ccc.Script;
-  udtScript: ccc.Script;
   ownerLock: ccc.Script;
   txHashByte: string;
   orderTxHashByte?: string;
@@ -112,8 +111,8 @@ export function makeOrderGroup(options: {
     outPoint: { txHash: hash(options.orderTxHashByte ?? "74"), index: 0n },
     cellOutput: {
       capacity: options.orderCapacity ?? ccc.fixedPointFrom(100),
-      lock: options.orderScript,
-      type: options.udtScript,
+      lock: ORDER,
+      type: ICKB_UDT,
     },
     outputData: OrderData.from({
       udtValue: options.udtValue ?? 0n,
@@ -129,7 +128,7 @@ export function makeOrderGroup(options: {
     cellOutput: {
       capacity: ccc.fixedPointFrom(61),
       lock: options.ownerLock,
-      type: options.orderScript,
+      type: ORDER,
     },
     outputData: "0x",
   });
@@ -156,10 +155,11 @@ export function makeOrderGroup(options: {
   };
 }
 
-export async function resolveOrderGroupFixture(
-  orderManager: OrderManager,
-  cells: { masterCell: ccc.Cell; orderCell: ccc.Cell; originCell: ccc.Cell },
-): Promise<OrderGroup> {
+export async function resolveOrderGroupFixture(cells: {
+  masterCell: ccc.Cell;
+  orderCell: ccc.Cell;
+  originCell: ccc.Cell;
+}): Promise<OrderGroup> {
   const originTransaction = ccc.Transaction.default();
   for (const cell of [cells.originCell, cells.masterCell]) {
     originTransaction.outputs.push(cell.cellOutput);
@@ -176,7 +176,7 @@ export async function resolveOrderGroupFixture(
         : undefined;
     },
   });
-  const groups = await orderManager.findOrders(client);
+  const groups = await findOrders(client);
   if (groups.length !== 1 || groups[0] === undefined) {
     throw new Error(
       `Expected one resolved order group, received ${groups.length.toString()}`,

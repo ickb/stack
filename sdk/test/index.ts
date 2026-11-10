@@ -24,7 +24,7 @@ describe("sdk package barrel", () => {
     }
     for (const name of [
       "getConfig",
-      "OrderManager",
+      "findOrders",
       "completeFirstFundable",
       "estimateConversionOrder",
     ]) {

@@ -6,7 +6,6 @@ import type {
 } from "../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { isCollectable } from "../../../src/order/fill.ts";
-import type { OrderManager } from "../../../src/order/order.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { Budgets } from "./draw.ts";
@@ -17,8 +16,6 @@ export interface Runtime {
   /** Signer over the key file's keys; signing is its only secret-bearing purpose. */
   signer: ccc.Signer;
   sdk: IckbSdk;
-  /** The order manager, for the mint the SDK's conversion workflow does not expose. */
-  order: OrderManager;
   primaryLock: ccc.Script;
   accountLocks: ccc.Script[];
 }

@@ -1,12 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import type { SdkManagers } from "./conversion/types.ts";
 import { LogicManager } from "./logic.ts";
-import { OrderManager } from "./order/order.ts";
 import { OwnedOwnerManager } from "./owned_owner.ts";
 import { IckbUdt } from "./udt.ts";
 
 /** Nervos DAO type script. */
-const DAO = ccc.Script.from({
+export const DAO = ccc.Script.from({
   codeHash: "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
   hashType: "type",
   args: "0x",
@@ -20,25 +19,28 @@ const UDT = ccc.Script.from({
 });
 
 /** iCKB Logic script. */
-const ICKB_LOGIC = ccc.Script.from({
+export const ICKB_LOGIC = ccc.Script.from({
   codeHash: "0x2a8100ab5990fa055ab1b50891702e1e895c7bd1df6322cd725c1a6115873bd3",
   hashType: "data1",
   args: "0x",
 });
 
 /** Owned Owner lock script. */
-const OWNED_OWNER = ccc.Script.from({
+export const OWNED_OWNER = ccc.Script.from({
   codeHash: "0xacc79e07d107831feef4c70c9e683dac5644d5993b9cb106dca6e74baa381bd0",
   hashType: "data1",
   args: "0x",
 });
 
 /** Order lock script. */
-const ORDER = ccc.Script.from({
+export const ORDER = ccc.Script.from({
   codeHash: "0x49dfb6afee5cc8ac4225aeea8cb8928b150caf3cd92fea33750683c74b13254a",
   hashType: "data1",
   args: "0x",
 });
+
+/** The iCKB xUDT type script: xUDT owned by iCKB Logic. */
+export const ICKB_UDT = IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC);
 
 /** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
 export type SupportedChain = "mainnet" | "testnet";
@@ -77,7 +79,7 @@ export function getConfig(chain: SupportedChain): SdkManagers {
   const cellDeps = [ccc.CellDep.from({ outPoint: depGroup, depType: "depGroup" })];
   const dao = { script: DAO, cellDeps };
   const ickbUdt = new IckbUdt({
-    script: IckbUdt.typeScriptFrom(UDT, ICKB_LOGIC),
+    script: ICKB_UDT,
     cellDeps,
     logicScript: ICKB_LOGIC,
     daoScript: DAO,
@@ -86,6 +88,5 @@ export function getConfig(chain: SupportedChain): SdkManagers {
     ickbUdt,
     ownedOwner: new OwnedOwnerManager(OWNED_OWNER, cellDeps, dao),
     ickbLogic: new LogicManager(ICKB_LOGIC, cellDeps, dao),
-    order: new OrderManager(ORDER, cellDeps, ickbUdt.script),
   };
 }

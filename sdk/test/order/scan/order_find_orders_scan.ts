@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
+import { findOrders } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import { defaultCellPageSize } from "../../../src/utils/utils.ts";
 import type {
@@ -15,14 +17,14 @@ import {
 } from "../matching/support/order_order_helpers.ts";
 import {
   dummyCell,
-  findOrdersFixture,
   masterCell,
+  OWNER_LOCK,
   transactionResponse,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
 
 const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
-const ORDER_MANAGER_FIND_ORDERS_SUITE = "OrderManager.findOrders";
+const ORDER_MANAGER_FIND_ORDERS_SUITE = "findOrders";
 
 describe(ORDER_CELL_RESOLVE_SUITE, () => {
   it("fails closed for ambiguous equal-progress non-mint candidates", () => {
@@ -116,14 +118,12 @@ describe(ORDER_CELL_RESOLVE_SUITE, () => {
 
 describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   it("scans exactly with data and reads only the origins of masters with orders", async () => {
-    const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
     const master = ccc.OutPoint.from({ txHash: byte32FromByte("3a"), index: 1n });
     const origin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(1n) },
-      lock: orderScript,
       outPoint: { txHash: master.txHash, index: 0n },
     });
     const order = absoluteOrderCell({
@@ -131,14 +131,10 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       outPointByte: "3b",
       info: directionalInfo(),
     });
-    const liveMaster = masterCell(master, orderScript, ownerLock);
-    const orphanMaster = masterCell(
-      { txHash: byte32FromByte("3c"), index: 0n },
-      orderScript,
-      ownerLock,
-    );
+    const liveMaster = masterCell(master);
+    const orphanMaster = masterCell({ txHash: byte32FromByte("3c"), index: 0n });
     // Locked and typed like an order, without order data: not an origin, and no failure.
-    const unparsable = dummyCell("3d", orderScript, udtScript);
+    const unparsable = dummyCell("3d", ORDER, ICKB_UDT);
     const tx = transactionWithOutputs([origin.cell, liveMaster, unparsable]);
     const queries: unknown[] = [];
     const reads: ccc.Hex[] = [];
@@ -155,18 +151,18 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    await expect(manager.findOrders(client)).resolves.toHaveLength(1);
+    await expect(findOrders(client)).resolves.toHaveLength(1);
     const scriptJson = (s: ccc.Script): object => ({
       code_hash: s.codeHash,
       hash_type: s.hashType,
       args: s.args,
     });
-    const scan = { script: scriptJson(orderScript), script_search_mode: "exact" };
+    const scan = { script: scriptJson(ORDER), script_search_mode: "exact" };
     expect(queries).toEqual([
       {
         ...scan,
         script_type: "lock",
-        filter: { script: scriptJson(udtScript) },
+        filter: { script: scriptJson(ICKB_UDT) },
         with_data: true,
       },
       { ...scan, script_type: "type", with_data: true },
@@ -175,7 +171,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   });
 
   it("accepts exact page-size order and master scans", async () => {
-    const { manager, orderScript, ownerLock, udtScript } = findOrdersFixture();
     const master = ccc.OutPoint.from({
       txHash: byte32FromByte("36"),
       index: 1n,
@@ -188,7 +183,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
         type: "relative",
         value: Relative.create(1n),
       },
-      lock: orderScript,
       outPoint: { txHash: master.txHash, index: 0n },
     });
     const order = makeOrderCell({
@@ -196,10 +190,9 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "absolute", value: master },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("37"), index: 0n },
     });
-    const liveMaster = masterCell(master, orderScript, ownerLock);
+    const liveMaster = masterCell(master);
     const tx = transactionWithOutputs([origin.cell, liveMaster]);
     const client = new StubClient({
       cache: new ccc.ClientCacheMemory(),
@@ -209,13 +202,13 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
           ? [
               order.cell,
               ...Array.from({ length: defaultCellPageSize - 1 }, () =>
-                dummyCell("38", orderScript, udtScript),
+                dummyCell("38", ORDER, ICKB_UDT),
               ),
             ]
           : [
               liveMaster,
               ...Array.from({ length: defaultCellPageSize - 1 }, () =>
-                dummyCell("39", ownerLock, orderScript),
+                dummyCell("39", OWNER_LOCK, ORDER),
               ),
             ],
       getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
@@ -224,31 +217,28 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    const groups = await manager.findOrders(client);
+    const groups = await findOrders(client);
 
     expect(groups).toHaveLength(1);
   });
 
   it("drops a dual-ratio order at the scan", async () => {
     // Valid on chain, placed by nothing in the stack: left to whoever placed it.
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const master = ccc.OutPoint.from({ txHash: byte32FromByte("36"), index: 1n });
     const order = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: ccc.fixedPointFrom(100),
       info: dualInfo(),
       master: { type: "absolute", value: master },
-      lock: orderScript,
       outPoint: { txHash: byte32FromByte("37"), index: 0n },
     });
-    const liveMaster = masterCell(master, orderScript, ownerLock);
+    const liveMaster = masterCell(master);
     const tx = transactionWithOutputs([
       makeOrderCell({
         ckbUnoccupied: ccc.fixedPointFrom(100),
         udtValue: ccc.fixedPointFrom(100),
         info: dualInfo(),
         master: { type: "relative", value: Relative.create(1n) },
-        lock: orderScript,
         outPoint: { txHash: master.txHash, index: 0n },
       }).cell,
       liveMaster,
@@ -264,6 +254,6 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
       },
     });
 
-    await expect(manager.findOrders(client)).resolves.toEqual([]);
+    await expect(findOrders(client)).resolves.toEqual([]);
   });
 });
