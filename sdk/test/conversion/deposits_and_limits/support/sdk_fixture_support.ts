@@ -137,17 +137,17 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
   exchangeRatio: ReturnType<typeof Ratio.from>;
   order: object;
 }): Promise<void> {
-  const result = await buildConversionTransaction({
-    direction: ICKB_TO_CKB,
-    amount: ICKB_DEPOSIT_CAP,
-    signer: stubSigner,
-    state: state({
+  const result = await buildConversionTransaction(
+    stubSigner,
+    state({
       exchangeRatio: options.exchangeRatio,
       poolDeposits: options.deposits,
       ckbAvailable: 0n,
       ickbAvailable: ICKB_DEPOSIT_CAP,
     }),
-  });
+    ICKB_TO_CKB,
+    ICKB_DEPOSIT_CAP,
+  );
   expectDirectPlusOrder(result, options.withdrawn, options.order);
 }
 

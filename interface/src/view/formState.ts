@@ -98,8 +98,8 @@ export function conversionQuote(
   exchangeRatio: ickb.ExchangeRatio,
 ): bigint | undefined {
   const quote = ickb.quoteConversion(
-    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
     exchangeRatio,
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
     amount,
   );
   return quote.ok ? quote.convertedAmount : undefined;

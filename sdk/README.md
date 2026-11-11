@@ -52,12 +52,7 @@ async function convert(
   amount: bigint, // the asset you give, in 8-decimal units
 ) {
   const state = await ickb.readState(signer);
-  const built = await ickb.buildConversionTransaction({
-    direction,
-    amount,
-    signer,
-    state,
-  });
+  const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
   if (!built.ok) {
     throw new Error(`Cannot convert: ${built.reason}`);
   }
@@ -100,7 +95,7 @@ await convert(signer, "ckb-to-ickb", 0n);
 ```ts
 function pendingDates(state: ickb.State) {
   return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
-    ickb.datesOf(position, state),
+    ickb.datesOf(state, position),
   );
 }
 ```

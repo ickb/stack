@@ -146,7 +146,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     draw.direction === "ckb-to-ickb"
       ? { ckbValue: draw.amount, udtValue: 0n }
       : { ckbValue: 0n, udtValue: draw.amount };
-  const quote = quoteOrder(draw.direction, state.exchangeRatio, draw.amount, {
+  const quote = quoteOrder(state.exchangeRatio, draw.direction, draw.amount, {
     fee: draw.fee,
   });
   if (!quote.ok) {
@@ -180,12 +180,12 @@ async function buildConversion(
   direction: Draw["direction"],
   amount: bigint,
 ): Promise<Built> {
-  const result = await buildConversionTransaction({
+  const result = await buildConversionTransaction(
+    runtime.signer,
+    state,
     direction,
     amount,
-    signer: runtime.signer,
-    state,
-  });
+  );
   return result.ok
     ? {
         tx: result.tx,

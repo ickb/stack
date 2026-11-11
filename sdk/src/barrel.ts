@@ -5,7 +5,6 @@ export { datesOf } from "./conversion/projection.ts";
 export type {
   ConversionDirection,
   ConversionKind,
-  ConversionTransactionOptions,
   ConversionTransactionResult,
   State,
 } from "./conversion/types.ts";
@@ -14,11 +13,7 @@ export { readHistory } from "./history.ts";
 export type { HistoryEntry, HistoryOperation } from "./history.ts";
 export type { DepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
-export {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-  quoteConversion,
-} from "./order/conversion.ts";
+export { quoteConversion } from "./order/conversion.ts";
 export type { QuoteConversionResult } from "./order/conversion.ts";
 export type { Info, InfoLike } from "./order/info.ts";
 export type { Master, MasterLike } from "./order/master.ts";

@@ -15,11 +15,9 @@ const AMOUNT_TOO_SMALL = "amount-too-small";
 describe("buildConversionTransaction", () => {
   it("returns a typed failure when bounded iCKB-to-CKB fee precision collapses", async () => {
     await expect(
-      buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 1n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           exchangeRatio: Ratio.from({
             ckbScale: (1n << 64n) - 1n,
             udtScale: 1n,
@@ -28,7 +26,9 @@ describe("buildConversionTransaction", () => {
           ckbAvailable: 0n,
           ickbAvailable: 1n,
         }),
-      }),
+        ICKB_TO_CKB,
+        1n,
+      ),
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,

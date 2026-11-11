@@ -11,30 +11,6 @@ import type { ExchangeRatio } from "../utils/utils.ts";
 export type ConversionDirection = "ckb-to-ickb" | "ickb-to-ckb";
 
 /**
- * Inputs and policy limits for building one conversion transaction.
- */
-export interface ConversionTransactionOptions {
-  /** Conversion direction to build. */
-  direction: ConversionDirection;
-
-  /**
-   * Requested input amount in the source asset; zero builds the collection alone, which
-   * does not use `direction` beyond checking it is one of the two.
-   */
-  amount: bigint;
-
-  /**
-   * Prepares the transaction for its lock while completion prices the fee, and names the
-   * chain through its client; the send signs with it. The cells the transaction is funded
-   * from and the change lock that owns its outputs come from `state`.
-   */
-  signer: ccc.Signer;
-
-  /** The state the conversion is planned from. */
-  state: State;
-}
-
-/**
  * Composition category selected for a built conversion. Every conversion mints an order,
  * beside direct deposits or withdrawals or alone; a collection mints none.
  */
@@ -140,7 +116,11 @@ export interface State {
    * compounded (sdk/docs/state_read.md).
    */
   apyPercent: number;
-  /** The caller's withdrawal timing rules, which every builder and the sender follow. */
+  /**
+   * The wallet's withdrawal timing rules, which every builder and the sender follow:
+   * `readState` takes no policy, so a state it reads always carries the wallet's. (The
+   * bot's internal read projects its own, `BOT_LOCK_UP`.)
+   */
   lockUp: LockUpPolicy;
   /**
    * The signer's recommended lock, read once with the state: it owns every output a

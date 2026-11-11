@@ -11,7 +11,7 @@ import {
   ickbToCkbConversionPlans,
 } from "./conversion/plans.ts";
 import type {
-  ConversionTransactionOptions,
+  ConversionDirection,
   ConversionTransactionResult,
   State,
 } from "./conversion/types.ts";
@@ -38,11 +38,20 @@ type CollectSteps = Pick<State, "availableOrders" | "receipts" | "readyWithdrawa
  * Misuse throws: a negative amount (`RangeError`), a direction that is neither of the two
  * (`TypeError`), and an amount of zero with nothing to collect, which
  * the state's `hasCollectable` tells a caller beforehand.
+ *
+ * @param signer - Prepares the transaction for its lock while completion prices the fee,
+ * and names the chain through its client; the send signs with it. The cells the
+ * transaction is funded from and the change lock that owns its outputs come from `state`.
+ * @param state - The state the conversion is planned from.
+ * @param amount - The input amount in the source asset; zero builds the collection alone,
+ * which does not use `direction` beyond checking it is one of the two.
  */
 export async function buildConversionTransaction(
-  options: ConversionTransactionOptions,
+  signer: ccc.Signer,
+  state: State,
+  direction: ConversionDirection,
+  amount: bigint,
 ): Promise<ConversionTransactionResult> {
-  const { amount, state, direction } = options;
   if (amount < 0n) {
     throw new RangeError("Conversion amount is negative");
   }
@@ -55,22 +64,22 @@ export async function buildConversionTransaction(
     return { ok: false, reason: "insufficient-ickb" };
   }
   if (amount === 0n) {
-    return buildCollectOnlyConversion(options);
+    return buildCollectOnlyConversion(signer, state);
   }
-  return buildConversion(options, ckbToIckb);
+  return buildConversion(signer, state, amount, ckbToIckb);
 }
 
 async function buildCollectOnlyConversion(
-  options: ConversionTransactionOptions,
+  signer: ccc.Signer,
+  state: State,
 ): Promise<ConversionTransactionResult> {
-  const { state } = options;
   // A transaction that would only compact the account is not worth its fee, and the
   // caller can tell beforehand with state.hasCollectable, so asking for one is misuse.
   if (!state.hasCollectable) {
     throw new Error("Nothing to collect");
   }
   const tx = buildBaseTransaction(ccc.Transaction.default(), state);
-  const done = await completeTransaction(tx, options);
+  const done = await completeTransaction(tx, { signer, state });
   if (!done.ok) {
     return buildFailure(done);
   }
@@ -90,15 +99,16 @@ async function buildCollectOnlyConversion(
  * both steps add nothing for an empty one.
  */
 async function buildConversion(
-  options: ConversionTransactionOptions,
+  signer: ccc.Signer,
+  state: State,
+  amount: bigint,
   ckbToIckb: boolean,
 ): Promise<ConversionTransactionResult> {
-  const { state } = options;
   const lock = state.changeLock;
   // A plan is dropped only for a remainder order that is zero or unrepresentable.
   const plans = ckbToIckb
-    ? ckbToIckbConversionPlans(options)
-    : ickbToCkbConversionPlans(options);
+    ? ckbToIckbConversionPlans(state, amount)
+    : ickbToCkbConversionPlans(state, amount);
   if (plans.length === 0) {
     return {
       ok: false,
@@ -119,7 +129,7 @@ async function buildConversion(
       }
       return mint(partial, lock, candidate.order.estimate.info, candidate.order.amounts);
     },
-    async (partial) => completeTransaction(partial, options),
+    async (partial) => completeTransaction(partial, { signer, state }),
   );
   if (!done.ok) {
     return buildFailure(done);

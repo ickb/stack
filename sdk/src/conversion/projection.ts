@@ -229,8 +229,8 @@ function convertibleCkb(
  * the tip.
  */
 export function datesOf(
-  position: OrderGroup | WithdrawalGroup | ReceiptCell,
   state: State,
+  position: OrderGroup | WithdrawalGroup | ReceiptCell,
 ): { createdAt: bigint; readyAt: bigint } {
   if (position instanceof OrderGroup) {
     const { outPoint } = position.master.cell;

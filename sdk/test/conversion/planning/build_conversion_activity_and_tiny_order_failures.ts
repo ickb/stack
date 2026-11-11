@@ -29,28 +29,23 @@ const FULL_WORKSPACE_TIMEOUT_MS = 20_000;
 describe("buildConversionTransaction", () => {
   it("refuses a negative amount and returns typed failures past the balance", async () => {
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: -1n,
-        signer: stubSigner,
-        state: state(),
-      }),
+      buildConversionTransaction(stubSigner, state(), CKB_TO_ICKB, -1n),
     ).rejects.toThrow(new RangeError("Conversion amount is negative"));
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 2n,
-        signer: stubSigner,
-        state: state({ ckbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ckbAvailable: 1n }),
+        CKB_TO_ICKB,
+        2n,
+      ),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ckb" });
     await expect(
-      buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 2n,
-        signer: stubSigner,
-        state: state({ ickbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ickbAvailable: 1n }),
+        ICKB_TO_CKB,
+        2n,
+      ),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ickb" });
   });
 
@@ -59,28 +54,28 @@ describe("buildConversionTransaction", () => {
 
     for (const amount of [0n, 1n]) {
       await expect(
-        buildConversionTransaction({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- A plain-JS caller's typo, which TypeScript cannot see.
-          direction: JSON.parse('"sideways"'),
+        buildConversionTransaction(
+          stubSigner,
+          state({ ckbAvailable: 1n, ickbAvailable: 1n }),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- A plain-JS caller's typo, which TypeScript cannot see.
+          JSON.parse('"sideways"'),
           amount,
-          signer: stubSigner,
-          state: state({ ckbAvailable: 1n, ickbAvailable: 1n }),
-        }),
+        ),
       ).rejects.toThrow(sideways);
     }
   });
 
   it("returns typed failures for tiny orders", async () => {
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 1n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),
-      }),
+        CKB_TO_ICKB,
+        1n,
+      ),
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -88,12 +83,12 @@ describe("buildConversionTransaction", () => {
       minimum: 110_000n,
     });
     await expect(
-      buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 1n,
-        signer: stubSigner,
-        state: state({ ickbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ickbAvailable: 1n }),
+        ICKB_TO_CKB,
+        1n,
+      ),
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -103,16 +98,23 @@ describe("buildConversionTransaction", () => {
   });
 
   it("returns collect-only success when the collection has activity", async () => {
-    const result = await buildConversionTransaction({
-      direction: CKB_TO_ICKB,
-      amount: 0n,
+    const collectable = state({
+      readyWithdrawals: [placeholderWithdrawal],
+      hasCollectable: true,
+      // A collection takes only what is ready, so it is done at the tip.
+      estimatedMaturity: 99n,
+    });
+    const result = await buildConversionTransaction(
+      stubSigner,
+      collectable,
+      CKB_TO_ICKB,
+      0n,
+    );
+
+    // Completed with the caller's signer and state, as every conversion is.
+    expect(completeTransaction).toHaveBeenCalledWith(expect.anything(), {
       signer: stubSigner,
-      state: state({
-        readyWithdrawals: [placeholderWithdrawal],
-        hasCollectable: true,
-        // A collection takes only what is ready, so it is done at the tip.
-        estimatedMaturity: 99n,
-      }),
+      state: collectable,
     });
 
     expect(result).toMatchObject({
@@ -139,12 +141,12 @@ describe("buildConversionTransaction", () => {
     });
 
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        signer: stubSigner,
-        state: state({ readyWithdrawals: [placeholderWithdrawal], hasCollectable: true }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ readyWithdrawals: [placeholderWithdrawal], hasCollectable: true }),
+        CKB_TO_ICKB,
+        0n,
+      ),
     ).resolves.toEqual({ ok: false, reason: "insufficient-capacity", cause });
   });
 
@@ -157,12 +159,7 @@ describe("buildConversionTransaction", () => {
 
     // Liquid cells alone would only be compacted, which is not worth a fee.
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        signer: stubSigner,
-        state: state({ cells: [cell] }),
-      }),
+      buildConversionTransaction(stubSigner, state({ cells: [cell] }), CKB_TO_ICKB, 0n),
     ).rejects.toThrow(new Error("Nothing to collect"));
   });
 });
@@ -172,15 +169,15 @@ describe("buildConversionTransaction order-only paths", () => {
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {
       await expect(
-        buildConversionTransaction({
-          direction: ICKB_TO_CKB,
-          amount: ccc.fixedPointFrom(1),
-          signer: stubSigner,
-          state: state({
+        buildConversionTransaction(
+          stubSigner,
+          state({
             readyWithdrawals: [placeholderWithdrawal],
             ickbAvailable: ccc.fixedPointFrom(1),
           }),
-        }),
+          ICKB_TO_CKB,
+          ccc.fixedPointFrom(1),
+        ),
       ).resolves.toMatchObject({ ok: true, conversionKind: "order" });
     },
     FULL_WORKSPACE_TIMEOUT_MS,

@@ -34,8 +34,8 @@ export function estimateConversionOrder(
   takenDeposits: readonly DepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
   const quote = quoteOrder(
-    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
     system.exchangeRatio,
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
     isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
     options,
   );

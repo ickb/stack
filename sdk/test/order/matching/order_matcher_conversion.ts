@@ -66,15 +66,15 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("quotes at the SDK's default fee when none is given", () => {
     const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
 
-    expect(quoteConversion("ckb-to-ickb", ratio, 100000n)).toMatchObject({ ckbFee: 10n });
-    expect(quoteOrder("ckb-to-ickb", ratio, 100000n, { fee: 20n })).toMatchObject({
+    expect(quoteConversion(ratio, "ckb-to-ickb", 100000n)).toMatchObject({ ckbFee: 10n });
+    expect(quoteOrder(ratio, "ckb-to-ickb", 100000n, { fee: 20n })).toMatchObject({
       ckbFee: 20n,
     });
   });
 
   it("reports UDT-to-CKB fee in CKB units", () => {
     const result = quoted(
-      quoteOrder("ickb-to-ckb", Ratio.from({ ckbScale: 2n, udtScale: 1n }), 100n, {
+      quoteOrder(Ratio.from({ ckbScale: 2n, udtScale: 1n }), "ickb-to-ckb", 100n, {
         fee: 1n,
         feeBase: 10n,
       }),
@@ -90,7 +90,7 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("reports no fee for a fee-free quote, whatever its rounding", () => {
     // One shannon buys a third of a UDT unit, quoted up to one.
     const result = quoted(
-      quoteOrder("ckb-to-ickb", Ratio.from({ ckbScale: 1n, udtScale: 3n }), 1n, {
+      quoteOrder(Ratio.from({ ckbScale: 1n, udtScale: 3n }), "ckb-to-ickb", 1n, {
         fee: 0n,
         feeBase: 10n,
       }),
@@ -109,7 +109,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     });
     const amounts = { ckbValue: 1000000n, udtValue: 0n };
     const result = quoted(
-      quoteOrder("ckb-to-ickb", exchangeRatio, amounts.ckbValue, {
+      quoteOrder(exchangeRatio, "ckb-to-ickb", amounts.ckbValue, {
         fee: 1n,
         feeBase: 100000n,
       }),
@@ -132,7 +132,7 @@ describe(ORDER_MATCHER_SUITE, () => {
     const fee = 1185042n;
     const feeBase = 1185043n;
     const result = quoted(
-      quoteOrder("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
+      quoteOrder(exchangeRatio, "ickb-to-ckb", amounts.udtValue, {
         fee,
         feeBase,
       }),
@@ -150,7 +150,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 describe(ORDER_MATCHER_SUITE, () => {
   it("finds zero-input quotes unrepresentable: they cannot mint a meaningful order ratio", () => {
     expect(
-      quoteOrder("ckb-to-ickb", Ratio.from({ ckbScale: 1n, udtScale: 1n }), 0n, {
+      quoteOrder(Ratio.from({ ckbScale: 1n, udtScale: 1n }), "ckb-to-ickb", 0n, {
         fee: 0n,
         feeBase: 100000n,
       }),
@@ -160,8 +160,8 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("finds quotes unrepresentable whose preserving interval has no Uint64 ratio", () => {
     expect(
       quoteOrder(
-        "ckb-to-ickb",
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
+        "ckb-to-ickb",
         2n ** 80n,
         { fee: 0n, feeBase: 100000n },
       ),
@@ -170,7 +170,7 @@ describe(ORDER_MATCHER_SUITE, () => {
 
   it("finds a quote unrepresentable whose only preserving ratio has a term just past Uint64", () => {
     expect(
-      quoteOrder("ckb-to-ickb", Ratio.from({ ckbScale: 1n << 64n, udtScale: 1n }), 1n, {
+      quoteOrder(Ratio.from({ ckbScale: 1n << 64n, udtScale: 1n }), "ckb-to-ickb", 1n, {
         fee: 0n,
         feeBase: 100000n,
       }),
@@ -182,8 +182,8 @@ describe(ORDER_MATCHER_SUITE, () => {
     // rounds 2^65 up to only 2^65 - 2.
     expect(
       quoteOrder(
-        "ckb-to-ickb",
         Ratio.from({ ckbScale: (1n << 65n) - 1n, udtScale: 1n << 65n }),
+        "ckb-to-ickb",
         1n << 65n,
         { fee: 0n, feeBase: 100000n },
       ),
@@ -193,8 +193,8 @@ describe(ORDER_MATCHER_SUITE, () => {
   it("finds a quote unrepresentable whose preserving fraction's terms cannot advance", () => {
     expect(
       quoteOrder(
-        "ckb-to-ickb",
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 96n }),
+        "ckb-to-ickb",
         1n << 96n,
         { fee: 0n, feeBase: 100000n },
       ),
@@ -206,8 +206,8 @@ describe(ORDER_MATCHER_SUITE, () => {
 
     expect(
       quoteOrder(
-        "ckb-to-ickb",
         Ratio.from({ ckbScale: maxUint64 * 2n + 1n, udtScale: 2n }),
+        "ckb-to-ickb",
         2n,
         { fee: 0n, feeBase: 100000n },
       ),

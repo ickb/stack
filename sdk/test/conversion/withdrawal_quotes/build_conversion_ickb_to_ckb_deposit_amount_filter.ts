@@ -35,17 +35,17 @@ describe("buildConversionTransaction", () => {
       id: "c2",
     });
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         poolDeposits: [oversized, fitting],
         ckbAvailable: 0n,
         ickbAvailable: amount,
       }),
-    });
+      ICKB_TO_CKB,
+      amount,
+    );
 
     expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
     if (!result.ok) {
@@ -60,17 +60,17 @@ describe("buildConversionTransaction", () => {
       id: "c2",
     });
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount: ICKB_DEPOSIT_CAP,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         poolDeposits: [fitting],
         ckbAvailable: 0n,
         ickbAvailable: ICKB_DEPOSIT_CAP,
       }),
-    });
+      ICKB_TO_CKB,
+      ICKB_DEPOSIT_CAP,
+    );
 
     // The only shorter prefix is none: the whole amount goes to the order.
     expect(result).toMatchObject({ ok: true, conversionKind: "order" });

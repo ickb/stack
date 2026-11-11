@@ -10,8 +10,6 @@ describe("sdk package barrel", () => {
 
   it("exports the conversion workflow and nothing of the layers beneath it", () => {
     for (const name of [
-      "DEFAULT_ORDER_FEE",
-      "DEFAULT_ORDER_FEE_BASE",
       "buildConversionTransaction",
       "datesOf",
       "readHistory",

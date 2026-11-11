@@ -69,7 +69,7 @@ function conversion(
   fixture: BaseTransactionFixture,
   amount: bigint,
   userCkb: bigint,
-): Parameters<typeof buildConversionTransaction>[0] {
+): Parameters<typeof buildConversionTransaction> {
   const lock = fixture.botLock;
   // The user's iCKB sits in one minimum-capacity cell; its capacity is taken off the
   // plain cell so the CKB arithmetic below stays the measured one.
@@ -81,16 +81,16 @@ function conversion(
       byte: "f0",
     }),
   ];
-  return {
-    direction: ICKB_TO_CKB,
-    amount,
-    signer: fundedSigner(cells, [lock]).signer,
-    state: state({
+  return [
+    fundedSigner(cells, [lock]).signer,
+    state({
       poolDeposits: readyPool(fixture),
       cells,
       ickbAvailable: amount,
     }),
-  };
+    ICKB_TO_CKB,
+    amount,
+  ];
 }
 
 describe("buildConversionTransaction fundable walk", () => {
@@ -113,12 +113,12 @@ describe("buildConversionTransaction fundable walk", () => {
       lock,
     );
 
-    const result = await buildConversionTransaction({
-      direction: "ckb-to-ickb",
-      amount: account.ckbConvertible,
-      signer: fundedSigner([], [lock]).signer,
-      state: account,
-    });
+    const result = await buildConversionTransaction(
+      fundedSigner([], [lock]).signer,
+      account,
+      "ckb-to-ickb",
+      account.ckbConvertible,
+    );
 
     if (!result.ok) {
       throw new Error(result.reason);
@@ -136,7 +136,7 @@ describe("buildConversionTransaction fundable walk", () => {
     const userCkb = MARKER_CKB + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(4);
 
     const result = await buildConversionTransaction(
-      conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
+      ...conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
     // Completion spends both offered liquid cells.
@@ -169,12 +169,12 @@ describe("buildConversionTransaction fundable walk", () => {
       ),
     ];
 
-    const result = await buildConversionTransaction({
-      direction: "ckb-to-ickb",
+    const result = await buildConversionTransaction(
+      fundedSigner(cells, [lock]).signer,
+      state({ cells, ckbAvailable: amount }),
+      "ckb-to-ickb",
       amount,
-      signer: fundedSigner(cells, [lock]).signer,
-      state: state({ cells, ckbAvailable: amount }),
-    });
+    );
 
     // The order cell holds the 1,000 CKB as well; only the cell space is reported.
     expect(result).toMatchObject({
@@ -190,15 +190,15 @@ describe("buildConversionTransaction fundable walk", () => {
     const cells = [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")];
 
     await expect(
-      buildConversionTransaction({
-        direction: "ckb-to-ickb",
-        amount: DEPOSIT,
-        signer: fundedSigner(cells, [lock]).signer,
-        state: state({
+      buildConversionTransaction(
+        fundedSigner(cells, [lock]).signer,
+        state({
           cells,
           ckbAvailable: DEPOSIT,
         }),
-      }),
+        "ckb-to-ickb",
+        DEPOSIT,
+      ),
     ).resolves.toEqual(INSUFFICIENT_CAPACITY);
   });
 
@@ -207,7 +207,7 @@ describe("buildConversionTransaction fundable walk", () => {
 
     await expect(
       buildConversionTransaction(
-        conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, ccc.fixedPointFrom(100)),
+        ...conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, ccc.fixedPointFrom(100)),
       ),
     ).resolves.toEqual(INSUFFICIENT_CAPACITY);
   });
@@ -220,12 +220,12 @@ describe("buildConversionTransaction fundable walk", () => {
     const cells = [plainCapacityCell(amount + ccc.fixedPointFrom(100_000), lock, "f4")];
     const completions = vi.spyOn(completion, "completeTransaction");
 
-    const result = await buildConversionTransaction({
-      direction: "ckb-to-ickb",
+    const result = await buildConversionTransaction(
+      fundedSigner(cells, [lock]).signer,
+      state({ cells, ckbAvailable: amount }),
+      "ckb-to-ickb",
       amount,
-      signer: fundedSigner(cells, [lock]).signer,
-      state: state({ cells, ckbAvailable: amount }),
-    });
+    );
 
     if (!result.ok) {
       throw new Error(result.reason);
@@ -248,12 +248,12 @@ describe("buildConversionTransaction fundable walk", () => {
       nativeUdtCell(DEPOSIT, { lock, capacity: UDT_CELL_CKB, byte: "f5" }),
     ];
 
-    const result = await buildConversionTransaction({
-      direction: "ckb-to-ickb",
+    const result = await buildConversionTransaction(
+      fundedSigner(cells, [lock]).signer,
+      state({ cells, ckbAvailable: amount }),
+      "ckb-to-ickb",
       amount,
-      signer: fundedSigner(cells, [lock]).signer,
-      state: state({ cells, ckbAvailable: amount }),
-    });
+    );
 
     if (!result.ok) {
       throw new Error(result.reason);
@@ -286,12 +286,12 @@ describe("buildConversionTransaction fundable walk", () => {
     ];
     const completions = vi.spyOn(completion, "completeTransaction");
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
+    const result = await buildConversionTransaction(
+      fundedSigner(cells, [lock]).signer,
+      state({ poolDeposits: pool, cells, ickbAvailable: amount + 1n }),
+      ICKB_TO_CKB,
       amount,
-      signer: fundedSigner(cells, [lock]).signer,
-      state: state({ poolDeposits: pool, cells, ickbAvailable: amount + 1n }),
-    });
+    );
 
     if (!result.ok) {
       throw new Error(result.reason);

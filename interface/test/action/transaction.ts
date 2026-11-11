@@ -44,12 +44,12 @@ describe("buildTransactionPreview", () => {
     const txInfo = await buildTransactionPreview(txState, true, 7n, config);
 
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toEqual({
-      direction: "ckb-to-ickb",
-      amount: 7n,
-      signer: config.signer,
-      state: txState,
-    });
+    expect(buildConversionTransaction).toHaveBeenCalledWith(
+      config.signer,
+      txState,
+      "ckb-to-ickb",
+      7n,
+    );
     expect(txInfo).toMatchObject({
       ok: true,
       tx,
@@ -65,10 +65,12 @@ describe("buildTransactionPreview", () => {
 
     await buildTransactionPreview(state({ ickbAvailable: 5n }), false, 5n, config);
 
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({
-      direction: "ickb-to-ckb",
-      amount: 5n,
-    });
+    expect(buildConversionTransaction).toHaveBeenCalledWith(
+      config.signer,
+      expect.anything(),
+      "ickb-to-ckb",
+      5n,
+    );
   });
 
   it.each<ickb.ConversionKind>(["collect-only", "order", "direct-plus-order"])(

@@ -21,7 +21,7 @@ describe(ESTIMATE_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
 
     expect(
-      quoteOrder("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
+      quoteOrder(exchangeRatio, "ickb-to-ckb", amounts.udtValue, {
         fee: 1n,
         feeBase: 100000n,
       }),
@@ -44,7 +44,7 @@ describe(ESTIMATE_SUITE, () => {
   it("prices an order whose default fee clears the threshold at that fee, not the dust one", () => {
     const amounts = { ckbValue: 0n, udtValue: 10n ** 12n };
     const system = state();
-    const quote = quoteOrder("ickb-to-ckb", system.exchangeRatio, amounts.udtValue);
+    const quote = quoteOrder(system.exchangeRatio, "ickb-to-ckb", amounts.udtValue);
 
     expect(quote.ok).toBe(true);
     expect(estimateIckbToCkbOrder(amounts, system, [])).toMatchObject(

@@ -32,12 +32,7 @@ export async function convert(
   amount: bigint,
 ): Promise<ccc.Hex> {
   const state = await ickb.readState(signer);
-  const built = await ickb.buildConversionTransaction({
-    direction,
-    amount,
-    signer,
-    state,
-  });
+  const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
   if (!built.ok) {
     throw new Error(`Cannot convert: ${built.reason}`);
   }
@@ -82,7 +77,7 @@ export function pendingDates(
   state: ickb.State,
 ): Array<{ createdAt: bigint; readyAt: bigint }> {
   return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
-    ickb.datesOf(position, state),
+    ickb.datesOf(state, position),
   );
 }
 
@@ -121,7 +116,7 @@ describe("README examples", () => {
     expect(maxAmount(state, "ckb-to-ickb")).toBe(state.ckbConvertible);
     expect(maxAmount(state, "ickb-to-ckb")).toBe(ccc.fixedPointFrom(100));
     expect(pendingDates(state)).toEqual([
-      ickb.datesOf(order, state),
+      ickb.datesOf(state, order),
       { createdAt: baseTip.timestamp, readyAt: 5000n },
     ]);
   });

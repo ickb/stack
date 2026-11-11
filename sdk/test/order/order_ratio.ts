@@ -17,7 +17,7 @@ describe("Ratio", () => {
 
   it("rejects a fee-bearing quote on an empty ratio", () => {
     expect(() =>
-      quoteOrder("ckb-to-ickb", Ratio.empty(), 1n, { fee: 1n, feeBase: 100000n }),
+      quoteOrder(Ratio.empty(), "ckb-to-ickb", 1n, { fee: 1n, feeBase: 100000n }),
     ).toThrow("Invalid ExchangeRatio");
   });
 
@@ -26,16 +26,16 @@ describe("Ratio", () => {
     const amounts = { ckbValue: 1n, udtValue: 0n };
 
     expect(() =>
-      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 1n, feeBase: 1n }),
+      quoteOrder(ratio, "ckb-to-ickb", amounts.ckbValue, { fee: 1n, feeBase: 1n }),
     ).toThrow(FEE_TOO_BIG);
     expect(() =>
-      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 2n, feeBase: 1n }),
+      quoteOrder(ratio, "ckb-to-ickb", amounts.ckbValue, { fee: 2n, feeBase: 1n }),
     ).toThrow(FEE_TOO_BIG);
     expect(() =>
-      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: 0n, feeBase: 0n }),
+      quoteOrder(ratio, "ckb-to-ickb", amounts.ckbValue, { fee: 0n, feeBase: 0n }),
     ).toThrow("Fee base must be positive");
     expect(() =>
-      quoteOrder("ckb-to-ickb", ratio, amounts.ckbValue, { fee: -1n, feeBase: 1n }),
+      quoteOrder(ratio, "ckb-to-ickb", amounts.ckbValue, { fee: -1n, feeBase: 1n }),
     ).toThrow("Fee cannot be negative");
   });
 

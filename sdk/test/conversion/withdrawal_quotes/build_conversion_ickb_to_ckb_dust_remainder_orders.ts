@@ -33,11 +33,9 @@ describe("buildConversionTransaction", () => {
     });
     const amount = ICKB_DEPOSIT_CAP + 100000n;
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         exchangeRatio,
         // The default fee pays 10 on this remainder; a threshold of 20 makes it a dust order.
         feeRate: 2n,
@@ -45,7 +43,9 @@ describe("buildConversionTransaction", () => {
         ckbAvailable: 0n,
         ickbAvailable: amount,
       }),
-    });
+      ICKB_TO_CKB,
+      amount,
+    );
 
     expectDirectPlusOrder(result, [directDeposit], {
       ckbValue: 0n,
@@ -63,18 +63,18 @@ describe("buildConversionTransaction", () => {
     });
     const amount = ICKB_DEPOSIT_CAP;
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         exchangeRatio,
         feeRate: 33222n,
         poolDeposits: [directDeposit, ringAnchor],
         ckbAvailable: 0n,
         ickbAvailable: amount,
       }),
-    });
+      ICKB_TO_CKB,
+      amount,
+    );
 
     expectDirectPlusOrder(result, [directDeposit], { ckbValue: 0n, udtValue: 1000000n });
   });

@@ -4,7 +4,7 @@
 
 ## Ready or converting
 
-The projection splits the account into what the next transaction collects and what stays converting. One internal `readyAt` owns that split, for every kind of position, and the public `datesOf(position, state)` reads the same formula, so a panel listing positions and the projection can't disagree. `datesOf` gives `{ createdAt, readyAt }` in unix ms:
+The projection splits the account into what the next transaction collects and what stays converting. One internal `readyAt` owns that split, for every kind of position, and the public `datesOf(state, position)` reads the same formula, so a panel listing positions and the projection can't disagree. `datesOf` gives `{ createdAt, readyAt }` in unix ms:
 
 - **An order:** created at its mint block, the master's. Ready at the tip when the bot would take it whole in neither direction, since the next transaction collects it; otherwise at its fill estimate, always past the tip.
 - **A withdrawal group:** created at its request block. Ready at its claim, which is at or before the tip exactly when it has matured.

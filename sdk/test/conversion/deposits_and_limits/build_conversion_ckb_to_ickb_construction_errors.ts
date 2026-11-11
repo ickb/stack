@@ -24,15 +24,15 @@ describe("buildConversionTransaction", () => {
     });
 
     await expect(
-      buildConversionTransaction({
-        direction: "ckb-to-ickb",
-        amount: ICKB_DEPOSIT_CAP * 2n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           ckbAvailable: ICKB_DEPOSIT_CAP * 2n,
           ickbAvailable: 0n,
         }),
-      }),
+        "ckb-to-ickb",
+        ICKB_DEPOSIT_CAP * 2n,
+      ),
     ).rejects.toThrow(RPC_FAILED);
 
     expect(deposit).toHaveBeenCalledTimes(1);

@@ -51,9 +51,9 @@ describe("datesOf", () => {
     });
     const sampled = state({ tip: TIP, pendingOrders: [fillable] });
 
-    expect(datesOf(fillable, sampled).createdAt).toBe(100n);
-    expect(datesOf(withdrawal, sampled).createdAt).toBe(200n);
-    expect(datesOf(receipt, sampled)).toEqual({ createdAt: 300n, readyAt: 300n });
+    expect(datesOf(sampled, fillable).createdAt).toBe(100n);
+    expect(datesOf(sampled, withdrawal).createdAt).toBe(200n);
+    expect(datesOf(sampled, receipt)).toEqual({ createdAt: 300n, readyAt: 300n });
   });
 
   it("dates readiness, never at 0: an estimate, the tip, a claim, the deposit", () => {
@@ -65,13 +65,13 @@ describe("datesOf", () => {
       availableOrders: [refused],
     });
     const claim = (maturityUnix: bigint): bigint =>
-      datesOf(withdrawalValue({ ckbValue: 1n, isReady: false, maturityUnix }), sampled)
+      datesOf(sampled, withdrawalValue({ ckbValue: 1n, isReady: false, maturityUnix }))
         .readyAt;
 
-    expect(datesOf(fillable, sampled).readyAt).toBe(maturity(fillable.order, sampled));
-    expect(datesOf(fillable, sampled).readyAt).toBeGreaterThan(TIP.timestamp);
+    expect(datesOf(sampled, fillable).readyAt).toBe(maturity(fillable.order, sampled));
+    expect(datesOf(sampled, fillable).readyAt).toBeGreaterThan(TIP.timestamp);
     // The next transaction collects a refused order: ready at the tip.
-    expect(datesOf(refused, sampled).readyAt).toBe(TIP.timestamp);
+    expect(datesOf(sampled, refused).readyAt).toBe(TIP.timestamp);
     expect(claim(5000n)).toBe(5000n);
     // A matured withdrawal is ready at its claim, already past.
     expect(claim(500n)).toBe(500n);
@@ -83,15 +83,15 @@ describe("datesOf", () => {
     const filled = sell(2n, 1n, { orderTxHashByte: "75", udtValue: 0n });
     const newer = state({ tip: TIP, availableOrders: [filled] });
 
-    expect(datesOf(older, newer)).toEqual({ createdAt: 100n, readyAt: TIP.timestamp });
+    expect(datesOf(newer, older)).toEqual({ createdAt: 100n, readyAt: TIP.timestamp });
     // A refetched copy dates as the state's own does.
-    expect(datesOf(sell(2n, 1n), state({ tip: TIP, orderBook: [older] }))).toEqual(
-      datesOf(older, state({ tip: TIP, orderBook: [older] })),
+    expect(datesOf(state({ tip: TIP, orderBook: [older] }), sell(2n, 1n))).toEqual(
+      datesOf(state({ tip: TIP, orderBook: [older] }), older),
     );
   });
 
   it("dates an order the state no longer holds as ready at its tip", () => {
-    expect(datesOf(sell(2n, 1n), state({ tip: TIP }))).toEqual({
+    expect(datesOf(state({ tip: TIP }), sell(2n, 1n))).toEqual({
       createdAt: 100n,
       readyAt: TIP.timestamp,
     });

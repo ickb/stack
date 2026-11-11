@@ -32,25 +32,25 @@ describe("buildConversionTransaction", () => {
     });
 
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: ICKB_DEPOSIT_CAP * 2n,
-        signer: stubSigner,
-        state: state({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
+        CKB_TO_ICKB,
+        ICKB_DEPOSIT_CAP * 2n,
+      ),
     ).rejects.toThrow(new Error("The last plan exceeds the DAO output limit"));
   });
 
   it("starts CKB-to-iCKB planning at the most deposits a conversion holds", async () => {
-    const result = await buildConversionTransaction({
-      direction: CKB_TO_ICKB,
-      amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         ckbAvailable: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
         ickbAvailable: 0n,
       }),
-    });
+      CKB_TO_ICKB,
+      ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
+    );
 
     if (!result.ok) {
       throw new Error("Expected a conversion");

@@ -38,12 +38,12 @@ export async function buildTransactionPreview(
     return txInfoWithError(noCollectionMessage);
   }
   try {
-    const result = await ickb.buildConversionTransaction({
-      direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
-      amount,
-      signer: walletConfig.signer,
+    const result = await ickb.buildConversionTransaction(
+      walletConfig.signer,
       state,
-    });
+      isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+      amount,
+    );
     if (!result.ok) {
       return txInfoWithError(conversionFailureMessage(result, isCkb2Udt));
     }

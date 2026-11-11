@@ -30,17 +30,17 @@ describe("buildConversionTransaction", () => {
     });
 
     await expect(
-      buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        // More than the extra deposit, so its plan carries an order and is built.
-        amount: unit + unit / 2n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           poolDeposits: [extra, protectedAnchor],
           ckbAvailable: 0n,
           ickbAvailable: unit + unit / 2n,
         }),
-      }),
+        ICKB_TO_CKB,
+        // More than the extra deposit, so its plan carries an order and is built.
+        unit + unit / 2n,
+      ),
     ).rejects.toThrow(WITHDRAWAL_FAILED);
   });
 });

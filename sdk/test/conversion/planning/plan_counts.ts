@@ -3,7 +3,6 @@ import { ckbToIckbConversionPlans } from "../../../src/conversion/plans.ts";
 import { DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
-import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 
 // The planner starts at the most deposits the deployed DAO output limit holds beside the
 // receipt, the order, its master and the change, and completion steps the count down; no
@@ -15,15 +14,13 @@ describe("deposit plan counts", () => {
     { caps: 100n, first: DAO_OUTPUT_LIMIT - 4 },
   ])("starts the walk at $first deposits for $caps caps", ({ caps, first }) => {
     const amount = ICKB_DEPOSIT_CAP * caps;
-    const plans = ckbToIckbConversionPlans({
-      direction: "ckb-to-ickb",
-      amount,
-      signer: stubSigner,
-      state: state({
+    const plans = ckbToIckbConversionPlans(
+      state({
         ckbAvailable: amount,
         ickbAvailable: 0n,
       }),
-    });
+      amount,
+    );
 
     expect(plans[0]?.depositCount).toBe(first);
     expect(plans.at(-1)?.depositCount).toBe(0);

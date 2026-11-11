@@ -27,15 +27,15 @@ describe("buildConversionTransaction", () => {
     const lock = script("11");
     const remainder = ccc.fixedPointFrom(10000);
 
-    const result = await buildConversionTransaction({
-      direction: CKB_TO_ICKB,
-      amount: ICKB_DEPOSIT_CAP * 2n + remainder,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         ckbAvailable: ICKB_DEPOSIT_CAP * 2n + remainder,
         ickbAvailable: 0n,
       }),
-    });
+      CKB_TO_ICKB,
+      ICKB_DEPOSIT_CAP * 2n + remainder,
+    );
 
     expect(result).toMatchObject({
       ok: true,
@@ -64,12 +64,12 @@ describe("buildConversionTransaction", () => {
 
   it("converts an exact multiple of the deposit with one deposit fewer and an order", async () => {
     const { depositCapacity } = state();
-    const result = await buildConversionTransaction({
-      direction: CKB_TO_ICKB,
-      amount: depositCapacity * 2n,
-      signer: stubSigner,
-      state: state({ ckbAvailable: depositCapacity * 2n }),
-    });
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({ ckbAvailable: depositCapacity * 2n }),
+      CKB_TO_ICKB,
+      depositCapacity * 2n,
+    );
 
     expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
     if (!result.ok) {
@@ -91,12 +91,12 @@ describe("buildConversionTransaction", () => {
     [ccc.fixedPointFrom(10000), "order"],
   ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
+      buildConversionTransaction(
+        stubSigner,
+        state({ ckbAvailable: amount }),
+        CKB_TO_ICKB,
         amount,
-        signer: stubSigner,
-        state: state({ ckbAvailable: amount }),
-      }),
+      ),
     ).resolves.toMatchObject({ ok: true, conversionKind: kind });
   });
 });

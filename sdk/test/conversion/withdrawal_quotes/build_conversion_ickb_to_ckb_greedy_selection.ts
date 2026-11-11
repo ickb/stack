@@ -41,11 +41,9 @@ describe("buildConversionTransaction", () => {
     });
     const withdrawn = [earlier];
 
-    const result = await buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount: ICKB_DEPOSIT_CAP,
-      signer: stubSigner,
-      state: state({
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
         poolDeposits: [laterHigherGain, earlier],
         ckbAvailable: 0n,
@@ -53,7 +51,9 @@ describe("buildConversionTransaction", () => {
         // What is already converting, a day out, does not date this conversion.
         estimatedMaturity: 24n * 60n * 60n * 1000n,
       }),
-    });
+      ICKB_TO_CKB,
+      ICKB_DEPOSIT_CAP,
+    );
 
     expect(result).toMatchObject({
       ok: true,

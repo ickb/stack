@@ -45,8 +45,8 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
     return {
       ...actual,
       quoteOrder: (
-        direction: string,
         _exchangeRatio: unknown,
+        direction: string,
         _amount: unknown,
         {
           fee = DEFAULT_ORDER_FEE,

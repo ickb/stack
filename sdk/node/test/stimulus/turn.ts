@@ -161,9 +161,9 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    buildMock.mockImplementation(async (options) => {
+    buildMock.mockImplementation(async (_signer, state, _direction, amount) => {
       await Promise.resolve();
-      expect(options).toMatchObject({ amount: 0n, state: { receipts: [{}] } });
+      expect({ amount, state }).toMatchObject({ amount: 0n, state: { receipts: [{}] } });
       return {
         ok: true,
         tx: ccc.Transaction.default(),
@@ -323,9 +323,9 @@ describe("runStimulusTurn", () => {
   it("falls back to collecting when the drawn action is refused", async () => {
     // A buy at par: the bot gains nothing on it, so it is collectable.
     const refused = await order("a3", true, systemState().exchangeRatio);
-    buildMock.mockImplementation(async (options) => {
+    buildMock.mockImplementation(async (_signer, state, _direction, amount) => {
       await Promise.resolve();
-      expect(options).toMatchObject({
+      expect({ amount, state }).toMatchObject({
         amount: 0n,
         state: { availableOrders: [refused] },
       });
@@ -372,7 +372,7 @@ describe("runStimulusTurn", () => {
       amount: ICKB_DEPOSIT_CAP + 1n,
     });
 
-    expect(buildMock.mock.calls.map(([options]) => options.amount)).toEqual([
+    expect(buildMock.mock.calls.map(([, , , amount]) => amount)).toEqual([
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);

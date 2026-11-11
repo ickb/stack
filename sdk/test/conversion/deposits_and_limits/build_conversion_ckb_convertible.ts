@@ -109,12 +109,12 @@ describe("ckbConvertible", () => {
       const sampled = state({ feeRate: 1_000_000n });
       const projected = projectState(sampled, account, orders, botLock);
 
-      const result = await buildConversionTransaction({
-        direction: "ckb-to-ickb",
-        amount: projected.ckbConvertible,
+      const result = await buildConversionTransaction(
         signer,
-        state: projected,
-      });
+        projected,
+        "ckb-to-ickb",
+        projected.ckbConvertible,
+      );
 
       expect(projected.ckbConvertible).toBeGreaterThan(0n);
       expect(result).toMatchObject({ ok: true });

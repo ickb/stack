@@ -17,11 +17,9 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 describe("buildConversionTransaction", () => {
   it("returns a typed failure when default iCKB-to-CKB fee precision exceeds Uint64", async () => {
     await expect(
-      buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 1n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           exchangeRatio: Ratio.from({
             ckbScale: (1n << 64n) - 1n,
             udtScale: (1n << 64n) - 2n,
@@ -30,7 +28,9 @@ describe("buildConversionTransaction", () => {
           ckbAvailable: 0n,
           ickbAvailable: 1n,
         }),
-      }),
+        ICKB_TO_CKB,
+        1n,
+      ),
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -39,11 +39,9 @@ describe("buildConversionTransaction", () => {
 
   it("returns a typed failure when default CKB-to-iCKB fee precision exceeds Uint64", async () => {
     await expect(
-      buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 1n,
-        signer: stubSigner,
-        state: state({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           exchangeRatio: Ratio.from({
             ckbScale: (1n << 64n) - 1n,
             udtScale: (1n << 64n) - 2n,
@@ -51,7 +49,9 @@ describe("buildConversionTransaction", () => {
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),
-      }),
+        CKB_TO_ICKB,
+        1n,
+      ),
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,

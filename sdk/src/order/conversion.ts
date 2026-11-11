@@ -44,11 +44,11 @@ export type QuoteConversionResult =
  * amount throws a `RangeError`, as the build's does.
  */
 export function quoteConversion(
-  direction: ConversionDirection,
   exchangeRatio: ExchangeRatio,
+  direction: ConversionDirection,
   amount: ccc.FixedPoint,
 ): QuoteConversionResult {
-  const quote = quoteOrder(direction, exchangeRatio, amount);
+  const quote = quoteOrder(exchangeRatio, direction, amount);
   if (!quote.ok) {
     return quote;
   }
@@ -68,8 +68,8 @@ export function quoteConversion(
  * throws a `RangeError`.
  */
 export function quoteOrder(
-  direction: ConversionDirection,
   exchangeRatio: ExchangeRatio,
+  direction: ConversionDirection,
   amount: ccc.FixedPoint,
   {
     fee = DEFAULT_ORDER_FEE,

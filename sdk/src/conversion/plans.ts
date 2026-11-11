@@ -8,7 +8,7 @@ import {
   type ConversionOrderEstimate,
 } from "./estimate.ts";
 import { sumUdt } from "./projection.ts";
-import type { ConversionTransactionOptions } from "./types.ts";
+import type { State } from "./types.ts";
 import {
   fitWithdrawalDeposits,
   ringSurplusDepositFilter,
@@ -50,16 +50,13 @@ const MAX_PLANNED_REQUESTS = (DAO_OUTPUT_LIMIT - 4) / 2;
  * is discounted 10%, and an order costs 0.01% at any size; the cap's CKB value grows with
  * the DAO rate, so the order stays cheaper until the cap is worth 820,000 CKB.
  */
-export function ckbToIckbConversionPlans(
-  options: ConversionTransactionOptions,
-): ConversionPlan[] {
-  const { amount, state } = options;
+export function ckbToIckbConversionPlans(state: State, amount: bigint): ConversionPlan[] {
   const { depositCapacity } = state;
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits = Number(ccc.numMin(depositQuotient, BigInt(MAX_PLANNED_DEPOSITS)));
   const plans: ConversionPlan[] = [];
   for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
-    const plan = ckbToIckbConversionPlan(options, depositCount);
+    const plan = ckbToIckbConversionPlan(state, amount, depositCount);
     if (plan !== undefined) {
       plans.push(plan);
     }
@@ -75,10 +72,7 @@ export function ckbToIckbConversionPlans(
  * The prefix shape keeps ring classification frozen: a prefix of surplus deposits stays
  * surplus with the same anchors pinned.
  */
-export function ickbToCkbConversionPlans(
-  options: ConversionTransactionOptions,
-): ConversionPlan[] {
-  const { amount, state } = options;
+export function ickbToCkbConversionPlans(state: State, amount: bigint): ConversionPlan[] {
   const { tip, lockUp, poolDeposits } = state;
   const ready = readyDeposits(poolDeposits, tip, lockUp);
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
@@ -89,7 +83,7 @@ export function ickbToCkbConversionPlans(
   );
   const plans: ConversionPlan[] = [];
   for (let count = deposits.length; count >= 0; count -= 1) {
-    const plan = ickbToCkbConversionPlan(options, deposits.slice(0, count));
+    const plan = ickbToCkbConversionPlan(state, amount, deposits.slice(0, count));
     if (plan !== undefined) {
       plans.push(plan);
     }
@@ -106,10 +100,10 @@ export function ickbToCkbConversionPlans(
  * fill. Collections and the bot's own transactions are not conversions and mint none.
  */
 function ckbToIckbConversionPlan(
-  options: ConversionTransactionOptions,
+  state: State,
+  amount: bigint,
   depositCount: number,
 ): ConversionPlan | undefined {
-  const { amount, state } = options;
   // A zero remainder quotes as unrepresentable (quoteOrder), so this drops the plan too.
   const amounts = {
     ckbValue: amount - state.depositCapacity * BigInt(depositCount),
@@ -129,10 +123,10 @@ function ckbToIckbConversionPlan(
 }
 
 function ickbToCkbConversionPlan(
-  options: ConversionTransactionOptions,
+  state: State,
+  amount: bigint,
   selectedDeposits: DepositCell[],
 ): ConversionPlan | undefined {
-  const { amount, state } = options;
   let estimatedMaturity = state.tip.timestamp;
   // Selected deposits are ready, so their sampled claim is their date: depositMaturity
   // never reads a rolled claim as ready, whatever the policy window.
