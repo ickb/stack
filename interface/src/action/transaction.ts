@@ -4,6 +4,10 @@ import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.
 
 export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
+// iCKB past Max but within the balance: only the share of one transaction binds there. On
+// the CKB side Max also sets aside the cells and the fee every transaction pays again, so
+// that gap isn't about the share and keeps its own message.
+const tooBigForOneMessage = "More than one transaction can convert";
 
 const conversionFailureMessages: Record<
   Exclude<
@@ -45,7 +49,14 @@ export async function buildTransactionPreview(
       amount,
     );
     if (!result.ok) {
-      return txInfoWithError(conversionFailureMessage(result, isCkb2Udt));
+      return txInfoWithError(
+        !isCkb2Udt &&
+          result.reason !== "amount-too-small" &&
+          state.ickbConvertible < amount &&
+          amount <= state.ickbAvailable
+          ? tooBigForOneMessage
+          : conversionFailureMessage(result, isCkb2Udt),
+      );
     }
 
     // The SDK returns the transaction completed and funded; only signing remains.

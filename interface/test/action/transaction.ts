@@ -104,7 +104,12 @@ describe("buildTransactionPreview failure messages", () => {
       });
 
       await expect(
-        buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, config),
+        buildTransactionPreview(
+          state({ ckbAvailable: 1n, ckbConvertible: 1n }),
+          true,
+          1n,
+          config,
+        ),
       ).resolves.toEqual({ ok: false, error: message });
     }
   });
@@ -221,7 +226,54 @@ describe("buildTransactionPreview thrown failures", () => {
     });
 
     await expect(
-      buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, config),
+      buildTransactionPreview(
+        state({ ckbAvailable: 1n, ckbConvertible: 1n }),
+        true,
+        1n,
+        config,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Not enough spare CKB for the cells and the fee",
+    });
+  });
+
+  it("names an iCKB amount past Max but within the balance as too big for one transaction", async () => {
+    const config = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock(
+        failedPlan("insufficient-ickb"),
+      ),
+    });
+    const held = state({ ickbAvailable: 10n, ickbConvertible: 5n });
+
+    await expect(buildTransactionPreview(held, false, 6n, config)).resolves.toEqual({
+      ok: false,
+      error: "More than one transaction can convert",
+    });
+    // At Max, or past the balance, the reason keeps its own message.
+    await expect(buildTransactionPreview(held, false, 5n, config)).resolves.toEqual({
+      ok: false,
+      error: "More iCKB than you have",
+    });
+    await expect(buildTransactionPreview(held, false, 11n, config)).resolves.toEqual({
+      ok: false,
+      error: "More iCKB than you have",
+    });
+    // CKB past Max is the cells and the fee every transaction pays: its own message.
+    const ckb = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+      }),
+    });
+    await expect(
+      buildTransactionPreview(
+        state({ ckbAvailable: 10n, ckbConvertible: 5n }),
+        true,
+        6n,
+        ckb,
+      ),
     ).resolves.toEqual({
       ok: false,
       error: "Not enough spare CKB for the cells and the fee",

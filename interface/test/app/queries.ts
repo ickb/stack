@@ -113,7 +113,10 @@ describe("getL1State", () => {
 });
 
 it("serves the signer's read with the app's preview and converting flag", async () => {
-  const read = sampledState({ ckbAvailable: ccc.fixedPointFrom(50) });
+  const read = sampledState({
+    ckbAvailable: ccc.fixedPointFrom(50),
+    ckbConvertible: ccc.fixedPointFrom(50),
+  });
   const walletConfig = walletConfigReading(read);
 
   const state = await getL1State(walletConfig);
