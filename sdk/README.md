@@ -96,7 +96,7 @@ function maxAmount(state: ickb.State, direction: ickb.ConversionDirection) {
 }
 ```
 
-**Collect only:** an amount of zero collects what's ready, without converting anything new. `ickb.hasCollectable(state)` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
+**Collect only:** an amount of zero collects what's ready, without converting anything new. `state.hasCollectable` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
 
 ```ts
 await convert(sdk, signer, "ckb-to-ickb", 0n);

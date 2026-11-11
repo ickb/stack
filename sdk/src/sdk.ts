@@ -173,7 +173,7 @@ export class IckbSdk {
    * `insufficient-capacity` or `insufficient-ickb`.
    * Misuse throws: a negative amount (`RangeError`), a direction that is neither of the two
    * (`TypeError`), and an amount of zero with nothing to collect, which
-   * {@link hasCollectable} tells a caller beforehand.
+   * the state's `hasCollectable` tells a caller beforehand.
    */
   public async buildConversionTransaction(
     options: ConversionTransactionOptions,
@@ -208,8 +208,8 @@ export class IckbSdk {
   ): Promise<ConversionTransactionResult> {
     const { state } = options;
     // A transaction that would only compact the account is not worth its fee, and the
-    // caller can tell beforehand with hasCollectable, so asking for one is misuse.
-    if (!hasCollectable(state)) {
+    // caller can tell beforehand with state.hasCollectable, so asking for one is misuse.
+    if (!state.hasCollectable) {
       throw new Error("Nothing to collect");
     }
     const tx = this.buildBaseTransaction(ccc.Transaction.default(), state);
@@ -381,18 +381,6 @@ export class IckbSdk {
     tx = completeDeposit(tx, steps.receipts);
     return withdraw(tx, steps.readyWithdrawals);
   }
-}
-
-/**
- * Whether the state holds anything the collect steps take, so that a zero-amount
- * conversion, `buildBaseTransaction` alone, has something to collect.
- */
-export function hasCollectable(state: State): boolean {
-  return (
-    state.availableOrders.length > 0 ||
-    state.receipts.length > 0 ||
-    state.readyWithdrawals.length > 0
-  );
 }
 
 /** An order the market can fill at a gain: priced past the DAO ratio on its matchable side. */

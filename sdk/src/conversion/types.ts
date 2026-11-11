@@ -152,6 +152,12 @@ export interface State {
   /** Order groups still on the book, or ready but past the cap and collected in a later turn. */
   pendingOrders: OrderGroup[];
   /**
+   * Whether the next transaction has anything to collect: an available order, a receipt or a
+   * ready withdrawal. A conversion of amount zero is that collection alone; with nothing to
+   * collect it throws.
+   */
+  hasCollectable: boolean;
+  /**
    * CKB in the account's liquid cells, plain and iCKB alike: what the wallet shows and what
    * the next transaction spends, before the change cells, an order's master cell and the
    * fee it must fund on top.

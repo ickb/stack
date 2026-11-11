@@ -1,5 +1,4 @@
 import {
-  hasCollectable,
   ickbExchangeRatio,
   projectState,
   Ratio,
@@ -19,7 +18,6 @@ import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 export interface L1StateType extends State {
   stateId: string;
   txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
-  hasCollectable: boolean;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
   hasConverting: boolean;
 }
@@ -108,7 +106,6 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     stateId: String(objectIdentityKey(sdkState)),
     txBuilder: async (isCkb2Udt, amount) =>
       buildTransactionPreview(state, isCkb2Udt, amount, walletConfig),
-    hasCollectable: hasCollectable(state),
     hasConverting: state.pendingOrders.length > 0 || state.pendingWithdrawals.length > 0,
   };
 }

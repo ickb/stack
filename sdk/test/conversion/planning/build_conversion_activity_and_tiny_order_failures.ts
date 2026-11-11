@@ -116,6 +116,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       signer: stubSigner,
       state: state({
         readyWithdrawals: [placeholderWithdrawal],
+        hasCollectable: true,
         // A collection takes only what is ready, so it is done at the tip.
         estimatedMaturity: 99n,
       }),
@@ -150,7 +151,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
-        state: state({ readyWithdrawals: [placeholderWithdrawal] }),
+        state: state({ readyWithdrawals: [placeholderWithdrawal], hasCollectable: true }),
       }),
     ).resolves.toEqual({ ok: false, reason: "insufficient-capacity", cause });
   });

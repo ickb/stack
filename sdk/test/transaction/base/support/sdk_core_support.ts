@@ -35,7 +35,8 @@ export function transactionWithOutputs(count: number, lock: ccc.Script): ccc.Tra
 
 /**
  * A state of an empty account at `baseTip`, one to one, with every field the test names
- * replaced: totals are not derived from the positions, so a test sets the ones it reads.
+ * replaced: totals and `hasCollectable` are not derived from the positions, so a test sets
+ * the ones it reads.
  */
 export function state(overrides: Partial<State> = {}): State {
   const exchangeRatio = overrides.exchangeRatio ?? ratio;
@@ -53,6 +54,7 @@ export function state(overrides: Partial<State> = {}): State {
     pendingWithdrawals: [],
     availableOrders: [],
     pendingOrders: [],
+    hasCollectable: false,
     ckbNative: 0n,
     ickbNative: 0n,
     ckbAvailable: 0n,

@@ -20,7 +20,7 @@ A destination lock chosen by the caller was removed. The change and up to 1,000 
 
 ## Amount zero
 
-An amount of zero builds the collection alone. `hasCollectable(state)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb`, `amount-too-small` with its `minimum`, and from completion `insufficient-capacity` with CCC's capacity error as its `cause`.
+An amount of zero builds the collection alone. The projection sets `state.hasCollectable` when there's anything to collect (an available order, a receipt or a ready withdrawal): the interface, the generator and the bot read that one field. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb`, `amount-too-small` with its `minimum`, and from completion `insufficient-capacity` with CCC's capacity error as its `cause`.
 
 ## The plan walk
 

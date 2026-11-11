@@ -66,7 +66,6 @@ export type {
   OwnerCell,
   WithdrawalGroup,
 } from "./owned_owner.ts";
-export { hasCollectable } from "./sdk.ts";
 export {
   signAndSendTransaction,
   TransactionBroadcastError,

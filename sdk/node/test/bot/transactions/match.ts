@@ -243,6 +243,7 @@ describe("buildTransaction matching", () => {
       ickbAvailable: BAND_ICKB_BALANCE,
       receipts: [testReceipt("37")],
       readyWithdrawals: [testWithdrawal("33")],
+      hasCollectable: true,
     });
 
     const result = await buildTransaction(runtime, state);

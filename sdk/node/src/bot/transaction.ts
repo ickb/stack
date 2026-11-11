@@ -6,7 +6,6 @@ import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.t
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
 import { addMatch } from "../../../src/order/order.ts";
-import { hasCollectable } from "../../../src/sdk.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
@@ -68,7 +67,7 @@ export async function buildTransaction(
   );
   const cores = candidateCores(
     plan,
-    match.partials.length > 0 || hasCollectable(state) || hasMove,
+    match.partials.length > 0 || state.hasCollectable || hasMove,
   );
   const decision = (
     core: Core,

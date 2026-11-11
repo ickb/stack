@@ -152,7 +152,11 @@ describe("buildTransaction withdrawal", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ ...state, readyWithdrawals: [testWithdrawal("88")] }),
+        botState({
+          ...state,
+          readyWithdrawals: [testWithdrawal("88")],
+          hasCollectable: true,
+        }),
       ),
     ).resolves.toMatchObject({
       kind: "built",

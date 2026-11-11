@@ -107,6 +107,7 @@ export function state(overrides: Partial<State> = {}): State {
     pendingWithdrawals: [],
     availableOrders: [],
     pendingOrders: [],
+    hasCollectable: false,
     ckbNative: 0n,
     ickbNative: 0n,
     ckbAvailable: 0n,

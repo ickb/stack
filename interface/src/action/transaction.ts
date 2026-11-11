@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  hasCollectable,
-  type ConversionTransactionFailureReason,
-  type ConversionTransactionResult,
-  type State,
+import type {
+  ConversionTransactionFailureReason,
+  ConversionTransactionResult,
+  State,
 } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 
@@ -36,7 +35,7 @@ export async function buildTransactionPreview(
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
   // The SDK refuses a collection with nothing to collect, which this screen offers anyway.
-  if (amount === 0n && !hasCollectable(state)) {
+  if (amount === 0n && !state.hasCollectable) {
     return txInfoWithError(noCollectionMessage);
   }
   try {

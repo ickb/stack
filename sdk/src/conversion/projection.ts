@@ -63,6 +63,10 @@ export function projectState(
     pendingWithdrawals,
     availableOrders,
     pendingOrders,
+    hasCollectable:
+      availableOrders.length > 0 ||
+      account.receipts.length > 0 ||
+      readyWithdrawals.length > 0,
     ckbNative,
     ickbNative,
     ckbAvailable,

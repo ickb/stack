@@ -4,7 +4,6 @@ import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
-import { hasCollectable } from "../../../src/sdk.ts";
 import {
   signAndSendTransaction,
   TransactionBroadcastError,
@@ -130,7 +129,7 @@ async function stimulate(
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built) {
     Object.assign(log, { skip: built.skip });
-    if (!hasCollectable(state)) {
+    if (!state.hasCollectable) {
       Object.assign(log, { outcome: "skipped" });
       return;
     }

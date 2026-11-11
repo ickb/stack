@@ -105,6 +105,7 @@ describe("projectState", () => {
       pendingWithdrawals: [pendingWithdrawal],
       availableOrders: [matchable],
       pendingOrders: [],
+      hasCollectable: true,
       ckbNative: liquidCkb,
       ickbNative: 7n,
       ckbAvailable: liquidCkb + 41n + 11n + 31n,

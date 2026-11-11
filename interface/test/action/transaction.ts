@@ -154,7 +154,12 @@ describe("buildTransactionPreview failure messages", () => {
     const config = walletConfigWith({ sdk: { buildConversionTransaction } });
 
     await expect(
-      buildTransactionPreview(state({ receipts: [receipt] }), true, 0n, config),
+      buildTransactionPreview(
+        state({ receipts: [receipt], hasCollectable: true }),
+        true,
+        0n,
+        config,
+      ),
     ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
   });

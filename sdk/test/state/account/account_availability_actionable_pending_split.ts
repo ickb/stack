@@ -143,6 +143,39 @@ describe("projectState account values", () => {
     expect(projection.ickbBalance).toBe(37n);
   });
 
+  it("has something to collect from any of its three sources, and nothing from liquid cells", () => {
+    const sources: Array<Partial<AccountState>> = [
+      { receipts: [receiptValue(41n, 43n)] },
+      {
+        withdrawalGroups: [
+          withdrawalValue({ ckbValue: 11n, udtValue: 13n, isReady: true, byte: "32" }),
+        ],
+      },
+    ];
+    for (const account of sources) {
+      expect(project(account).hasCollectable).toBe(true);
+    }
+    const order = projectionOrderGroup({
+      ckbValue: 23n,
+      udtValue: 29n,
+      isDualRatio: false,
+      isMatchable: false,
+    });
+    expect(project({}, [order]).hasCollectable).toBe(true);
+
+    // A pending withdrawal and liquid cells are not collectable: a collection would only
+    // compact the account.
+    expect(
+      project({
+        capacityCells: [plainCapacityCell(ccc.fixedPointFrom(50))],
+        nativeUdtCells: [nativeUdtCell(7n)],
+        withdrawalGroups: [
+          withdrawalValue({ ckbValue: 17n, udtValue: 19n, isReady: false, byte: "33" }),
+        ],
+      }).hasCollectable,
+    ).toBe(false);
+  });
+
   it("does not count withdrawal UDT as available or pending iCKB", () => {
     const nativeUdt = nativeUdtCell(7n, { byte: "45" });
 
